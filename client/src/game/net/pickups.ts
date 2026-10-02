@@ -29,7 +29,10 @@ export function wirePickups(ctx: NetCtx): void {
     dd: new THREE.MeshBasicMaterial({ color: 0xff4422 }),
   };
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
-    if (pickupMeshes.has(id)) return;
+    // A re-spawn for a live id is a blast-knock rest spot — the server's
+    // truth lands where the tumble ended; snap the mesh there.
+    const live = pickupMeshes.get(id);
+    if (live) { live.mesh.position.set(pos.x, pos.y + 0.8, pos.z); return; }
     const m = new THREE.Mesh(pickupGeos[kind], pickupMats[kind]);
     m.position.set(pos.x, pos.y + 0.8, pos.z);
     deps.lazyScene().add(m);

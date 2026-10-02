@@ -61,6 +61,7 @@ export interface CombatDeps {
   /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
    *  rooms without structures (offline-style lobbies). */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
   /** A bot chat line hit the wire — Room relays it as a 'reply' notice
    *  so squadmates can answer back. */
   onBotSpoke?: (id: string) => void;

@@ -72,6 +72,7 @@ export interface RoomInfo {
   onRepair?: (playerId: string, targetId: number) => void;
   /** AOE blast sink for deployables — Room.deployables.applyBlast. */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
   onSkillUse?: (playerId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
@@ -136,6 +137,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     onBotSpoke: roomInfo?.onBotSpoke,
     mode: roomInfo?.mode,
     deployBlast: roomInfo?.deployBlast,
+    pickupsKnock: roomInfo?.pickupsKnock,
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
     creatureArmor: roomInfo?.creatureArmor,

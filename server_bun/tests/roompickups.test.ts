@@ -80,7 +80,7 @@ describe('RoomPickups', () => {
   it('full nuggets funnel: creature kill → gem drop → touch → teamScore', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     const p = addAt(room, 'hunter', 'alpha', 10, 0);
-    // BallSim routes kills through creatureKill — the gem must actually
+    // BallSim routes kills through nonPlayerKill — the gem must actually
     // materialize at the corpse for the mode to have a loop at all.
     room.ballSim.onKilled!('hunter', { x: 10, y: 0, z: 0 }, 0);
     expect(room.pickups!.snapshot().length).toBeGreaterThanOrEqual(1);
@@ -103,7 +103,7 @@ describe('RoomPickups', () => {
   it('expired gems despawn', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     room.pickups!.spawn({ x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 700; i++) room.pickups!.tick(0.05); // 35s > 30s TTL
+    for (let i = 0; i < 1300; i++) room.pickups!.tick(0.05); // 65s > 60s TTL
     expect(room.pickups!.snapshot().length).toBe(0);
   });
 

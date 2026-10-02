@@ -31,6 +31,7 @@ import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
+import { botRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY } from '../../shared/movement.ts';
@@ -175,7 +176,7 @@ export class Room {
       (data) => this.connections.broadcastBinaryReliable(data),
     );
     if (this.spec.balls) this.ballSim.population = this.spec.balls;
-    this.ballSim.onKilled = (by, pos, variant) => this.scoring.creatureKill(by, pos, variant);
+    this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
@@ -221,7 +222,7 @@ export class Room {
       this.messages.mineBlast('environment', pos, b.biteDamage, b.blastRadius, 14);
       this.pushNoise(pos); // bots hear the pop like any other blast
     };
-    creatureSim.onKilled = (by, pos) => this.scoring.creatureKill(by, pos, 0);
+    creatureSim.onKilled = (by, pos) => this.scoring.nonPlayerKill(by, pos, 0);
     this.messages.setCreatureSim(creatureSim);
     if (field) creatureSim.attachField(field);
     return creatureSim;
@@ -378,6 +379,7 @@ export class Room {
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
+      pickupsKnock: (at, radius, force) => this.pickups?.knock(at, radius, force),
       creatureArmor: (pos, amount, radius) => {
         this.ballSim.armorBlast(pos, radius, amount);
         this.creatureSim.armorBlast(pos, radius, amount);
@@ -448,6 +450,21 @@ export class Room {
         this.pickups?.clear();
         this.deployables.clearAll();
         this.players.resetStats();
+      },
+      reshuffleBots: () => {
+        const bots = [...this.players.getAllPlayers().values()].filter((p) => p.isBot);
+        if (bots.length < 2 || !this.modeSpec?.teams) return;
+        // Fisher-Yates on botRand so harness replays stay deterministic,
+        // then alternate alpha/bravo — sizes stay even, loyalties don't.
+        for (let i = bots.length - 1; i > 0; i--) {
+          const j = Math.floor(botRand() * (i + 1));
+          [bots[i], bots[j]] = [bots[j]!, bots[i]!];
+        }
+        bots.forEach((p, i) => { p.team = i % 2 === 0 ? 'alpha' : 'bravo'; });
+        for (const p of bots) {
+          this.players.respawnPlayer(p.id);
+          this.broadcast({ type: 'teamUpdate', playerId: p.id, team: p.team! });
+        }
       },
       rotate: () => this.onRotate?.() ?? null,
       applySpec: (s) => this.applySpec(s),
