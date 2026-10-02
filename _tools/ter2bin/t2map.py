@@ -40,7 +40,26 @@ import numpy as np
 from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
+# Porter config remembers where the T2 install lives so future sessions
+# don't rediscover it — `_tools/ter2bin/t2porter.json` {"t2_base": ...}.
+# Resolution order: --base flag > T2_BASE env > config > this default.
+CONFIG = Path(__file__).resolve().parent / "t2porter.json"
 T2_BASE = Path(r"D:\[Games]\Tribes2\GameData\base")
+
+
+def load_base() -> Path:
+    cfg_base = None
+    try:
+        cfg_base = json.loads(CONFIG.read_text()).get("t2_base")
+    except Exception:
+        pass
+    return Path(__import__("os").environ.get("T2_BASE") or cfg_base or T2_BASE)
+
+
+def save_base(base: Path) -> None:
+    CONFIG.write_text(json.dumps({"t2_base": str(base)}, indent=2) + "\n")
+
+
 OUT = REPO / "maps" / "t2"
 
 GRID = 256
@@ -280,11 +299,18 @@ def parse_mis(name: str):
                     "team": team_of(m.start()),
                 })
         return out
-    # Team subtrees — objects inside SimGroup(TeamN) belong to that team.
+    # Team subtrees — objects inside a SimGroup(TeamN) belong to that
+    # team. Naming isn't stable across maps (Team1/Team2 on Slapdash,
+    # team0/Team1 on SunDried), so whichever TWO TeamN groups exist get
+    # alpha/bravo in file order; extra TeamN groups fold into the first
+    # two rather than inventing more sides.
+    team_groups = [(tm.start(), subtree_end(tm.end()))
+                   for tm in re.finditer(r"new SimGroup\((Team\d|team\d)\)", text)]
     team_ranges = {}
-    for tm in re.finditer(r"new SimGroup\((Team\d|team\d)\)", text):
-        team_ranges["alpha" if tm.group(1).lower() in ("team1", "team0") else "bravo"] = \
-            (tm.start(), subtree_end(tm.end()))
+    for i, rng in enumerate(team_groups):
+        key = "alpha" if i == 0 else "bravo"
+        if key not in team_ranges:
+            team_ranges[key] = rng
 
     def team_of(i):
         for k, (a, b) in team_ranges.items():
@@ -292,19 +318,58 @@ def parse_mis(name: str):
                 return k
         return None
 
-    flags = {}
-    # Flags: 'new Item(){ dataBlock="Flag" }' or Katabatic-style
-    # 'new Item(Team1Flag1)'. Case-insensitive — Surreal uses "FLAG".
-    for m in re.finditer(r"new Item\(([^)]*)\)\s*\{(.*?)\};", text, re.S):
-        name, body = m.group(1), m.group(2)
-        is_flag = re.search(r'dataBlock\s*=\s*"flag"', body, re.I) or "flag" in name.lower()
-        if not is_flag:
-            continue
+    def pos_of(body):
         p = re.search(r'position\s*=\s*"([^"]+)"', body)
+        return tuple(float(v) for v in p.group(1).split()) if p else None
+
+    def parent_group_name(i):
+        # Innermost enclosing 'new SimGroup(<name>)' — for objects whose
+        # team shows up in the group name (base0/base1, TeamN) rather
+        # than a TeamN subtree.
+        name = None
+        depth = 0
+        for m in re.finditer(r"new SimGroup\(([^)]*)\)|[{}]", text[:i]):
+            g = m.group(0)
+            if g == "{":
+                depth += 1
+            elif g == "}":
+                depth -= 1
+                if depth <= 0:
+                    name = None
+            else:
+                name = m.group(1)
+                depth += 1
+        return name
+
+    def group_team(i):
+        for nm in (parent_group_name(i), ""):
+            if nm:
+                digits = re.search(r"(?:team|base)(\d)", nm, re.I)
+                if digits:
+                    return "alpha" if digits.group(1) in ("0", "1") else "bravo"
+        return None
+
+    flags = {}
+    stands = {}
+    # Flag items: 'new Item(){ dataBlock="Flag" }' or Katabatic-style
+    # 'new Item(Team1Flag1)' — parens optional (SunDried uses a bare one).
+    # ExteriorFlagStand StaticShapes anchor each team's stand and cover
+    # maps whose flag item is missing/ambiguous. Case-insensitive —
+    # Surreal uses "FLAG".
+    for m in re.finditer(r"new (Item|StaticShape)(?:\(([^)]*)\))?\s*\{(.*?)\};", text, re.S):
+        kind, name, body = m.group(1), m.group(2) or "", m.group(3)
+        is_flag = re.search(r'dataBlock\s*=\s*"flag"', body, re.I) or "flag" in name.lower()
+        is_stand = re.search(r'dataBlock\s*=\s*"ExteriorFlagStand"', body, re.I)
+        if not (is_flag or is_stand):
+            continue
+        p = pos_of(body)
         if not p:
             continue
-        our = team_of(m.start()) or ("alpha" if "1" in name else "bravo")
-        flags.setdefault(our, tuple(float(v) for v in p.group(1).split()))
+        our = team_of(m.start()) or group_team(m.start()) or ("alpha" if "1" in name else "bravo")
+        (flags if is_flag else stands).setdefault(our, p)
+    # A team with a stand but no flag item still caps at its stand.
+    for our, p in stands.items():
+        flags.setdefault(our, p)
 
     # Flag-less missions (CnH/FFA variants): fabricate bases at the two
     # most-separated player spawn spheres — playtest anchors, not real
@@ -343,7 +408,7 @@ def parse_mis(name: str):
                 "rot": [float(v) for v in r.group(1).split()] if r else [0,0,0,0],
                 "scale": [float(v) for v in s.group(1).split()] if s else [1,1,1],
             })
-    return text, flags, spawns(), interiors
+    return text, flags, all_sp, interiors
 
 
 def sxz(p):
@@ -363,10 +428,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("maps", nargs="+")
     ap.add_argument("--vl2", default="missions.vl2")
-    ap.add_argument("--base", type=Path, default=T2_BASE)
+    ap.add_argument("--base", type=Path, default=None,
+                    help="T2 GameData/base dir — remembered in t2porter.json once used")
     ap.add_argument("--vscale", type=float, default=0.0)
     ap.add_argument("--res", type=int, default=ALBEDO_RES)
     args = ap.parse_args()
+
+    args.base = args.base or load_base()
+    if not (args.base / args.vl2).exists():
+        raise SystemExit(f"no {args.vl2} under {args.base} — pass --base or set T2_BASE")
+    save_base(args.base)  # keep the location remembered for next time
 
     mis_vl2 = zipfile.ZipFile(args.base / args.vl2)
     VL2S[args.vl2] = mis_vl2
