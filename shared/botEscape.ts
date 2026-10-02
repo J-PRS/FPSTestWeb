@@ -48,7 +48,13 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
   if (s.goalWinT >= 4) {
     s.goalWinT = 0;
     const gd = Math.hypot(s.goal.x - pos.x, s.goal.z - pos.z);
-    if (s.progressGoalD > 20 && s.progressGoalD - gd < 4) {
+    // Same posted exemption as the pinned check below: an anchor
+    // holding inside its leash isn't circling a wall, and the escape
+    // burst this streak arms is exactly how a posted hof kept getting
+    // flung 60-100m off post (hof-away probe: dest ~82m during home).
+    if (s.progressGoalD > 20 && s.progressGoalD - gd < 4
+      && !(ctx.posted && ctx.objective
+        && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12))) {
       s.stuckStreak++;
       // A 1.1s burst buys ~10m of climb — a wall that eats it and stays
       // up is met every 4s with the same sip, which top-dresses the
