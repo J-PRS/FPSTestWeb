@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { markProbe } from '../core/fxDiag.js';
+import { CapGovernor } from '../core/poolPolicy.js';
 
 /**
  * Instanced swarm renderer — the draw-call fix for massive enemy counts.
@@ -42,9 +43,7 @@ export class SpeciesSwarm {
   private live = 0;
 
   private readonly initCap: number;
-  // Occupancy idle clock — reset whenever live reaches half of capacity;
-  // a quarter-occupancy streak past IDLE_SHRINK_MS triggers compaction.
-  private idleAt = 0;
+  private capGov = new CapGovernor();
 
   constructor(scene: THREE.Scene, parts: SwarmPart[], capacity: number) {
     this.initCap = capacity;
@@ -105,11 +104,10 @@ export class SpeciesSwarm {
    *  under a quarter for IDLE_SHRINK_MS — a wave spike shouldn't pin
    *  peak memory forever. Dense slots make truncation lossless. */
   checkShrink(now: number): void {
-    if (this.live * 4 >= this.owners.length) { this.idleAt = now; return; }
-    if (this.owners.length <= this.initCap || now - this.idleAt < IDLE_SHRINK_MS) return;
-    const cap = Math.max(this.initCap, Math.ceil((this.live * 2) / this.initCap) * this.initCap);
-    if (cap < this.owners.length) this.resize(cap);
-    this.idleAt = now;
+    const cap = this.capGov.shrinkTarget(this.live, this.owners.length, this.initCap, now);
+    if (cap === null) return;
+    this.resize(cap);
+    this.capGov.shrunk(now);
   }
 
   /** Returns a slot index; grows the swarm instead of ever returning -1. */
@@ -199,7 +197,7 @@ const SHADOW_CAPACITY = 1024; // initial size — grows on demand
 // Held under quarter-occupancy this long → capacity contracts to the
 // nearest initCap multiple covering 2× live. Same contract as the
 // quarks pool keep-alive window.
-const IDLE_SHRINK_MS = 30_000;
+
 
 const shadowVert = /* glsl */ `
   attribute float aOpacity;
@@ -260,7 +258,7 @@ export class InstancedBlobShadows {
   /** Aim probe: which owner's blob a shadow instance is. */
   ownerAt(slot: number): SwarmSlotOwner | undefined { return this.owners[slot]; }
 
-  private idleAt = 0;
+  private capGov = new CapGovernor();
 
   /** Realloc instance buffers at `cap` — the owners table is the source
    *  of truth for capacity, so a full pool grows instead of silently
@@ -282,11 +280,10 @@ export class InstancedBlobShadows {
 
   /** Same idle-shrink contract as SpeciesSwarm — dense slots, lossless. */
   checkShrink(now: number): void {
-    if (this.live * 4 >= this.owners.length) { this.idleAt = now; return; }
-    if (this.owners.length <= SHADOW_CAPACITY || now - this.idleAt < IDLE_SHRINK_MS) return;
-    const cap = Math.max(SHADOW_CAPACITY, Math.ceil((this.live * 2) / SHADOW_CAPACITY) * SHADOW_CAPACITY);
-    if (cap < this.owners.length) this.resize(cap);
-    this.idleAt = now;
+    const cap = this.capGov.shrinkTarget(this.live, this.owners.length, SHADOW_CAPACITY, now);
+    if (cap === null) return;
+    this.resize(cap);
+    this.capGov.shrunk(now);
   }
 
   get liveCount(): number { return this.live; }

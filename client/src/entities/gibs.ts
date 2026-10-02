@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from '../core/config.js';
 import { markProbe } from '../core/fxDiag.js';
+import { CapGovernor } from '../core/poolPolicy.js';
 import type { Terrain } from '../world/terrain.js';
 import type { SpeciesSwarm } from './swarm.js';
 
@@ -26,7 +27,7 @@ const GIB_CAP = 192;
 // Held under quarter-occupancy this long → buffers contract back to the
 // nearest GIB_CAP multiple covering 2× live (same keep-alive contract
 // as the quarks pool).
-const IDLE_SHRINK_MS = 30_000;
+
 const UP_BIAS = 2.0;
 const IMPULSE_CARRY = 6.0; // matches Debris — the shot's push travels through
 
@@ -55,8 +56,7 @@ class GibMeshPool {
   private bodyR = new Float32Array(GIB_CAP); // world-space radius for terrain hits
   live = 0;
   get cap(): number { return this.freeIdx.length + this.live; }
-  // Occupancy idle clock — reset whenever live reaches half of capacity.
-  private idleAt = 0;
+  private capGov = new CapGovernor();
 
   constructor(scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, per: number) {
     this.per = per;
@@ -109,10 +109,8 @@ class GibMeshPool {
    *  remap pass, not a truncate. */
   checkShrink(now: number): void {
     const cap = this.freeIdx.length + this.live;
-    if (this.live * 4 >= cap) { this.idleAt = now; return; }
-    if (cap <= GIB_CAP || now - this.idleAt < IDLE_SHRINK_MS) return;
-    const target = Math.max(GIB_CAP, Math.ceil((this.live * 2) / GIB_CAP) * GIB_CAP);
-    if (target >= cap) { this.idleAt = now; return; }
+    const target = this.capGov.shrinkTarget(this.live, cap, GIB_CAP, now);
+    if (target === null) return;
     // Repack: live slots (life > 0) move down in index order.
     const remap = new Int32Array(cap).fill(-1);
     let next = 0;
@@ -158,7 +156,7 @@ class GibMeshPool {
     this.freeIdx = [];
     for (let i = target - 1; i >= this.live; i--) this.freeIdx.push(i);
     this.mesh.count = Math.max(this.mesh.count, this.live);
-    this.idleAt = now;
+    this.capGov.shrunk(now);
   }
 
   /** Take a gib slot at this exact world transform/color; grows when full. */
