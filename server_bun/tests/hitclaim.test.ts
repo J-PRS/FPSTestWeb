@@ -29,12 +29,13 @@ function rocketProjectile(over: Partial<TrackedProjectile> = {}): TrackedProject
 }
 
 describe('aoeDamage / aoeImpulse', () => {
-  it('full at center, zero at and beyond radius, linear between', () => {
-    expect(aoeDamage(40, 0, 10)).toBe(40);
-    expect(aoeDamage(40, 5, 10)).toBe(20);
+  it('banded: 75/50/25 rings, zero at and beyond radius', () => {
+    expect(aoeDamage(40, 0, 10)).toBe(30);   // inner band = 75%
+    expect(aoeDamage(40, 5, 10)).toBe(20);   // mid band = 50%
+    expect(aoeDamage(40, 8, 10)).toBe(10);   // outer band = 25%
     expect(aoeDamage(40, 10, 10)).toBe(0);
     expect(aoeDamage(40, 12, 10)).toBe(0);
-    expect(aoeImpulse(28, 3, 6)).toBeCloseTo(14);
+    expect(aoeImpulse(28, 3, 6)).toBeCloseTo(14); // knockback stays linear
   });
 });
 

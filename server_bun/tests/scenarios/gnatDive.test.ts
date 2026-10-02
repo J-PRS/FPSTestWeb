@@ -5,7 +5,7 @@ describe('scenario: gnat dives a player', () => {
   it('a gnat orbits, darts down, and lands a nip on a bot', () => {
     const room = mkRoom({ creatures: { gnat: 4 }, bots: 1 });
     const w = watch(room);
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.health = 500;
     room.creatureSim.step(0.05);
     const gnatId = room.creatureSim.roster()[0]!.id;

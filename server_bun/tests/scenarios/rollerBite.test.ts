@@ -5,7 +5,7 @@ describe('scenario: roller hunts a player', () => {
   it('a roller spawned near a bot rolls in and lands a contact bite', () => {
     const room = mkRoom({ creatures: { roller: 3 }, bots: 1 });
     const w = watch(room);
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.health = 500;
     room.creatureSim.step(0.05);
     const roller = room.creatureSim.roster()[0]!;

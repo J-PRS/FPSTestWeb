@@ -10,7 +10,7 @@ import { mkRoom, freeze } from './harness.ts';
 describe('yourHealth cap-out echo', () => {
   it('crossing to maxHealth echoes even inside the cadence window', () => {
     const room = mkRoom({ bots: 1 });
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     freeze(room, id, { x: 0, y: 60, z: 0 });
     const p = room.players.getPlayer(id)!;
     // One mend tick shy of max — the next tick caps.

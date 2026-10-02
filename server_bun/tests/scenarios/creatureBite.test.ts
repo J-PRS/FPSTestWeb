@@ -5,7 +5,7 @@ describe('scenario: creature hunts a player', () => {
   it('a crawler spawned near a bot approaches and lands a bite', () => {
     const room = mkRoom({ creatures: { crawler: 3 }, bots: 1 });
     const w = watch(room);
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.health = 500; // survive long enough for several pounces
     // Creatures seed on the first tick near players — step once so the
     // roster isn't empty, then park the bot next to a real crawler. A

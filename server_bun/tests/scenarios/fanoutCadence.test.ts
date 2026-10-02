@@ -10,7 +10,7 @@ import { mkRoom, pin } from './harness.ts';
 describe('fanout cadence', () => {
   it('an all-suppressed tick still ships an (empty) frame', () => {
     const room = mkRoom({ bots: 1 });
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     pin(room, id, { x: 0, y: 60, z: 0 });
     let frames = 0;
     room.connections.sendBinaryToPlayer = () => { frames++; return 'sent' as const; };

@@ -8,7 +8,7 @@ import { mkRoom, freeze, step } from './harness.ts';
 describe('quiet bot respawn upkeep', () => {
   it('a quiet bot respawning reseats the shadow and clears the meter', () => {
     const room = mkRoom({ bots: 1 });
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     freeze(room, id, { x: 0, y: 60, z: 0 });
     room.bots.debugSetSheep(id, 55);
     const p = room.players.getPlayer(id)!;

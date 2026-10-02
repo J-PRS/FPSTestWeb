@@ -75,11 +75,12 @@ describe('scenario: weapon matchups at near band (10m)', () => {
 });
 
 describe('scenario: weapon matchups at mid band (25m)', () => {
-  it('the disc out-duels the cannon — an upset worth knowing', () => {
-    // Paper says cannon (170 dps) shreds disc (65 dps); the sim says the
-    // disc's 1.5x direct-hit aoe bonus + fatter proxy wins it 5/5. If
-    // this flips, the disc advantage was tuned away.
-    expect(wins(series(KIT.beam, KIT.bruiser, 25), 'a')).toBe(5);
+  it('the cannon owns the disc duel — banded splash flipped it', () => {
+    // Used to be disc's upset win via fatter proxy + 1.5x direct-bloom.
+    // Banded splash pays 75/50/25% of the DIRECT hit — cannon's 70dmg
+    // shell splashes up to 52 where the old linear aoeDamage gave ~15.
+    // Observed: cannon 5/5. A disc comeback means the band table moved.
+    expect(wins(series(KIT.beam, KIT.bruiser, 25), 'b')).toBeGreaterThanOrEqual(4);
   });
 
   it('plasma cannon edges the support plinker', () => {
@@ -92,16 +93,18 @@ describe('scenario: weapon matchups at mid band (25m)', () => {
 describe('scenario: weapon matchups at far band (43m — BOT_FIRE_RANGE cap)', () => {
   it('railgun precision beats mortar splash — an upset worth knowing', () => {
     // Expected the 18m mortar aoe to out-poke the railgun; the sim says
-    // the hitscan rail lands its kills first, 5/5.
-    expect(wins(series(KIT.beam, KIT.artillery, 43), 'a')).toBe(5);
+    // the hitscan rail lands its kills first. Banded splash buffs the
+    // mortar (90 direct -> up to 67 inner) enough to steal a seed — 4/5.
+    expect(wins(series(KIT.beam, KIT.artillery, 43), 'a')).toBeGreaterThanOrEqual(4);
   });
 
-  it('railgun vs rocket is a genuine coin flip', () => {
-    // Both far-band picks trade kills (observed 3/5 rail). Asserting
-    // contested-ness keeps the test honest if one side later dominates.
+  it('railgun vs rocket: hitscan owns the shrunken wake', () => {
+    // Was a coin flip (3/5 rail) until the rocket's wake proxy capped at
+    // 0.5m — at 43m near-misses no longer count, so precision beat splash
+    // 5/0. Asserting rail dominance keeps the test honest if the wake
+    // or the aim point moves again.
     const r = series(KIT.bruiser, KIT.chaser, 43);
-    expect(wins(r, 'a')).toBeGreaterThanOrEqual(2);
-    expect(wins(r, 'b')).toBeGreaterThanOrEqual(1);
+    expect(wins(r, 'a')).toBeGreaterThanOrEqual(3);
   });
 });
 

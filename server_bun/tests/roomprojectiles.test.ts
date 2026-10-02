@@ -3,10 +3,14 @@ import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { CONFIG } from '../src/config.ts';
 
 const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 const FLOOR = hmHeight(flat, 0, 0);
+// position.y is the EYE point — a standing medium's eye rides its
+// eyeHeight above the terrain, so pins park at FLOOR + eye, not FLOOR.
+const EYE = FLOOR + CLASS_STATS.medium.eyeHeight;
 
 function arena() {
   const room = new Room('t', flat, '', resolveMapSpec({ mode: 'dm' }));
@@ -21,8 +25,8 @@ function arena() {
 describe('RoomProjectiles', () => {
   it('a bolt fired at a still target damages it', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
-    target.position = { x: 20, y: FLOOR, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    target.position = { x: 20, y: EYE, z: 0 };
     const dir = { x: 1, y: 0, z: 0 }; // level shot, chest height on target
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, dir, { x: 0, y: 0, z: 0 });
@@ -34,8 +38,8 @@ describe('RoomProjectiles', () => {
 
   it('a bolt over a target\'s head whiffs — no fake damage', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR, z: 0 };
-    target.position = { x: 20, y: FLOOR, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    target.position = { x: 20, y: EYE, z: 0 };
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 8, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 10; i++) room.projectiles.tick(0.05);
@@ -44,8 +48,8 @@ describe('RoomProjectiles', () => {
 
   it('terrain contact detonates: a shell aimed into the ground splashes', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR, z: 0 };
-    target.position = { x: 10, y: FLOOR, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    target.position = { x: 10, y: EYE, z: 0 };
     // Downward lob that lands ~10m out — right at the target's feet.
     room.projectiles.spawn(shooter.id, WeaponType.BoltLauncher,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: -0.1, z: 0 }, { x: 0, y: 0, z: 0 });
@@ -70,8 +74,8 @@ describe('RoomProjectiles', () => {
 
   it('remote railgun discharges its beam along the velocity line', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
-    target.position = { x: 30, y: FLOOR, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    target.position = { x: 30, y: EYE, z: 0 };
     const stats = getWeaponStats(WeaponType.RemoteRailgun);
     // The beam inherits the shell's velocity line — flat flight now, so a
     // throw aimed down 1.4m over the 30m gap lands level on the target.
@@ -93,7 +97,7 @@ describe('RoomProjectiles', () => {
     const s2 = room2.players.addPlayer('BOT-VEKTOR-01'); s2.isBot = true;
     const t2 = room2.players.addPlayer('human');
     s2.protectedUntil = 0; t2.protectedUntil = 0;
-    t2.position = { x: 40, y: hmHeight(berm, 40, 0), z: 0 };
+    t2.position = { x: 40, y: hmHeight(berm, 40, 0) + CLASS_STATS.medium.eyeHeight, z: 0 };
     room2.projectiles.spawn(s2.id, WeaponType.RemoteRailgun,
       { x: 0, y: hmHeight(berm, 0, 0) + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 20; i++) room2.projectiles.tick(0.05);
@@ -103,8 +107,8 @@ describe('RoomProjectiles', () => {
 
   it('terrain scheduling never skips a real hit — high arc still lands', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR, z: 0 };
-    target.position = { x: 25, y: FLOOR, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    target.position = { x: 25, y: EYE, z: 0 };
     // Mortar-style lob: climbs far above the field ceiling (terrain sweep
     // skipped for most of the flight), then descends into the ground at
     // the target. If scheduling lied, the pop never happens.
@@ -124,10 +128,10 @@ describe('RoomProjectiles', () => {
 
   it('a slow-moving player closing in still gets hit', () => {
     const { room, shooter, target } = arena();
-    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
     // Target stands outside the initial capsule but sprints into the
     // shell's path — the sphere reject must budget for his velocity.
-    target.position = { x: 22, y: FLOOR, z: 0 };
+    target.position = { x: 22, y: EYE, z: 0 };
     target.velocity = { x: -40, y: 0, z: 0 };
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
@@ -140,7 +144,7 @@ describe('RoomProjectiles', () => {
 
   it('a sticky blast cooks a sibling bomb in its radius', () => {
     const { room, shooter } = arena();
-    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
+    shooter.position = { x: 0, y: EYE, z: 0 };
     let pops = 0;
     const orig = room.broadcast.bind(room);
     const tap = ((m: { type: string }) => {

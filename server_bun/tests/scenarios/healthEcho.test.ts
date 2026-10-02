@@ -14,7 +14,7 @@ describe('yourHealth echo', () => {
 
   it('a mending player gets throttled yourHealth echoes', () => {
     const room = mkRoom({ bots: 1 });
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     pin(room, id, { x: 0, y: 60, z: 0 });
     const p = room.players.getPlayer(id)!;
     p.health = 50;
@@ -34,7 +34,7 @@ describe('yourHealth echo', () => {
 
   it('a full-health player never echoes — nothing to converge', () => {
     const room = mkRoom({ bots: 1 });
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     pin(room, id, { x: 0, y: 60, z: 0 });
     const sent: ServerMessage[] = [];
     drain(room, sent, id);

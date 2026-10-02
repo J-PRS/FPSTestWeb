@@ -64,7 +64,9 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const armor0 = victim.armor;
     for (let i = 0; i < 6; i++) {
       bots.arsenal.testAdvance(60); // LG tick 50ms — stay legal
-      bots.arsenal.fireAt(b, 'victim', { x: 10, y: 32, z: 0 });
+      // Aim at the capsule's axis midpoint — pos.y is the eye, so the
+      // body center sits ~0.9m under it for a medium.
+      bots.arsenal.fireAt(b, 'victim', { x: 10, y: 30.1, z: 0 });
     }
     expect(victim.health < hp0 || victim.armor < armor0).toBe(true);
   });

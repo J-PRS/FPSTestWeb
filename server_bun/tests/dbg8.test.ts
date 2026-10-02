@@ -4,7 +4,7 @@ import { resolveMapSpec } from '../../shared/mapSpec.ts';
 const flat = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 it('dbg8', () => {
   const room = new Room('t', flat, '', resolveMapSpec({ creatures: { baneling: 1 }, bots: 1 }));
-  const bot = room.players.getPlayer('BOT-t1')!;
+  const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
   bot.position = { x: 0, y: 31, z: 0 };
   room.creatureSim.step(0.05);
   for (let i = 0; i < 600; i++) {

@@ -5,7 +5,7 @@ describe('scenario: snake hunts a player', () => {
   it('a snake coils, lunges, and lands a bite on a nearby bot', () => {
     const room = mkRoom({ creatures: { snake: 3 }, bots: 1 });
     const w = watch(room);
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.health = 500;
     room.creatureSim.step(0.05);
     const snake = room.creatureSim.roster()[0]!;

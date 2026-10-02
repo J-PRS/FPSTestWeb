@@ -4,7 +4,7 @@ import { mkRoom } from './harness.ts';
 describe('scenario: baneling detonates on its victim', () => {
   it('a baneling reaching a pinned bot detonates and hurts them', () => {
     const room = mkRoom({ creatures: { baneling: 2 }, bots: 1 });
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.health = 500;
     // Put the bot on the ground BEFORE the first step — the fuse measures
     // distance to the retarget snapshot, so the bot's y has to be real by

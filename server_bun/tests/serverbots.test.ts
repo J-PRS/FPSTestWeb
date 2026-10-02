@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
+import { BOT_NAMES } from '../../shared/botNames.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
 // A real field turns on the MoveSim path — bots then integrate through the
@@ -16,7 +17,7 @@ describe('ServerBots', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 4 }));
     expect(room.bots.count).toBe(4);
     expect(room.players.getPlayerCount()).toBe(4);
-    expect(room.players.getPlayer('BOT-t1')?.isBot).toBe(true);
+    expect(room.players.getPlayer('BOT-VEKTOR-01')?.isBot).toBe(true);
   });
 
   it('balances bots across teams in team modes', () => {
@@ -42,7 +43,7 @@ describe('ServerBots', () => {
 
   it('moves bots toward waypoints on tick', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
-    const p = room.players.getPlayer('BOT-t1')!;
+    const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     const before = { ...p.position };
     for (let i = 0; i < 20; i++) room.bots.tick(0.05);
     const moved = Math.hypot(p.position.x - before.x, p.position.z - before.z);
@@ -52,7 +53,7 @@ describe('ServerBots', () => {
 
   it('heartbeats lastSeen so the idle reaper skips socketless bots', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
-    const p = room.players.getPlayer('BOT-t1')!;
+    const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     p.lastSeen = 0;
     room.bots.tick(0.05);
     expect(p.lastSeen).toBeGreaterThan(0);
@@ -60,8 +61,8 @@ describe('ServerBots', () => {
 
   it('untrack stops ticking a removed bot', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
-    room.bots.untrack('BOT-t1');
-    const p = room.players.getPlayer('BOT-t1')!;
+    room.bots.untrack('BOT-VEKTOR-01');
+    const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     const before = { ...p.position };
     room.bots.tick(0.05);
     expect(p.position).toEqual(before);
@@ -70,7 +71,7 @@ describe('ServerBots', () => {
 
   it('dead bots stop moving and firing', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
-    const p = room.players.getPlayer('BOT-t1')!;
+    const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     p.isDead = true;
     const before = { ...p.position };
     const seq = p.lastSeq;
@@ -81,7 +82,7 @@ describe('ServerBots', () => {
 
   it('bots integrate through the move shadow when a field is attached', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     expect(room.moveSim.simState(id)).not.toBeNull();
     const p = room.players.getPlayer(id)!;
     const before = { ...p.position };
@@ -95,18 +96,18 @@ describe('ServerBots', () => {
 
   it('skill intents drain the shadow tank like a human claim', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 1, mode: 'dm' }));
-    const p = room.players.getPlayer('BOT-t1')!;
+    const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     p.health = 10; // hurt — the brain picks mend/shield, and the sim charges it
-    const full = room.moveSim.energyOf('BOT-t1')!;
+    const full = room.moveSim.energyOf('BOT-VEKTOR-01')!;
     for (let i = 0; i < 40; i++) { room.bots.tick(0.05); room.moveSim.tick(0.05); }
-    expect(room.moveSim.energyOf('BOT-t1')!).toBeLessThan(full);
+    expect(room.moveSim.energyOf('BOT-VEKTOR-01')!).toBeLessThan(full);
   });
 
   it('assigns each bot a loadout perk at spawn', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
     const perks = ['featherjets', 'bombardier', 'plated', 'overcharge'];
     for (let i = 1; i <= 4; i++) {
-      const p = room.players.getPlayer(`BOT-t${i}`)!;
+      const p = room.players.getPlayer(`BOT-${BOT_NAMES[i - 1]}-0${i}`)!;
       expect(perks).toContain(p.perk);
       // vitality-style perks would shift maxHealth — ours don't, so just
       // assert the perk reached both the roster and the move shadow.
@@ -119,7 +120,7 @@ describe('ServerBots', () => {
     room.players.addPlayer('human').position = { x: 21, y: 0, z: 0 };
     const msgs: { type: string; weaponType?: number }[] = [];
     room.broadcast = (m: never) => { msgs.push(m); };
-    const bot = room.players.getPlayer('BOT-t1')!;
+    const bot = room.players.getPlayer('BOT-VEKTOR-01')!;
     bot.position = { x: -21, y: 0, z: 0 }; // 42m — inside sight, far band
     for (let i = 0; i < 80; i++) { room.bots.tick(0.05); room.moveSim.tick(0.05); }
     // Guard against a vacuous run — the bot must have fired at all.
@@ -133,7 +134,7 @@ describe('ServerBots', () => {
 
   it('respawning a bot reseats the shadow at the new position', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
-    const id = 'BOT-t1';
+    const id = 'BOT-VEKTOR-01';
     const p = room.players.getPlayer(id)!;
     p.isDead = true;
     room.bots.tick(0.05); // marks the bot in deadSet
