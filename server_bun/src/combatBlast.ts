@@ -36,6 +36,7 @@ export interface BlastHost {
   playerManager: PlayerManager;
   deps: {
     deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+    pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
     creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
     moveImpulse?: (playerId: string, dv: Vec3) => void;
     dropFlagCarrier?: (playerId: string) => void;
@@ -192,11 +193,13 @@ export class BlastRunner {
       // Self-propulsion still pays blood: the cost fades with distance
       // inside the blast radius — a feet blast lands near SELF_SPLASH_MAX,
       // a rim graze costs scraps. Continuous, so no cliff-edge price.
-      // Feet blasts pay the full disc-jump price; past 2m the cost
-      // falls off quadratically to the rim — a stray shell popping a
-      // few meters out grazes instead of taking a third of the bar.
-      const near = Math.max(0, 1 - Math.max(0, dist - 2) / Math.max(1, ctx.radius - 2));
-      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near * near;
+      // Feet blasts pay the full disc-jump price; past 3m the cost
+      // falls off linearly to the rim — a stray shell popping a
+      // few meters out still costs a real chunk, not a third of
+      // the bar (fully quadratic read sterile — humans self-frag
+      // sloppier than ~0.5% of kills).
+      const near = Math.max(0, 1 - Math.max(0, dist - 3) / Math.max(1, ctx.radius - 3));
+      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
         this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
@@ -267,6 +270,8 @@ export class BlastRunner {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.aoeRadius <= 0) return;
     this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true);
+    // Live nuggets are fair game too — a shell near a gem can punt it.
+    this.h.deps.pickupsKnock?.(position, stats.aoeRadius, stats.knockbackForce);
   }
 
   /** Server-owned mine blast — owner is the shooter for scoring/friendly
@@ -275,6 +280,7 @@ export class BlastRunner {
   mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
     const owner = this.h.playerManager.getPlayer(ownerId);
     const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
+    this.h.deps.pickupsKnock?.(pos, radius, knockback);
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
       const dx = target.position.x - pos.x;

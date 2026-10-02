@@ -123,16 +123,17 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
     expect(target.health).toBeLessThan(after2);
   });
 
-  it('self-splash displaces without damaging (rocket jumps)', () => {
+  it('self-splash pays blood (rocket jumps cost health)', () => {
     const { players, combat } = harness();
     const self = players.getPlayer('a1')!;
-    // Self-blasts never damage a human shooter (server skips the self-shove
-    // too — the client self-predicts its own rocket-jump impulse).
+    // Self-propulsion pays blood on server truth for humans too — a
+    // feet blast costs up to SELF_SPLASH_MAX (the client self-predicts
+    // the rocket-jump impulse; server only owns the damage).
     spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot', position: { x: 0, y: 9, z: 0 },
       weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
     });
-    expect(self.health).toBe(CONFIG.playerMaxHealth);
+    expect(self.health).toBeLessThan(CONFIG.playerMaxHealth);
   });
 });
