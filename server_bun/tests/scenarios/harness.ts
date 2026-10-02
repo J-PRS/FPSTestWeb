@@ -18,14 +18,14 @@ export function lcg(seed = 42): () => number {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
 }
 
-export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAuthority = false): Room {
+export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAuthority = false, field: Heightfield = flat): Room {
   // Squad heuristics (brains/hunts/goals/taunts) share one injectable
   // stream — ambient in production, seeded here so staged shots replay.
   // Seeded BEFORE construction: brain constructor fields (temper, orbit,
   // builder rolls) draw from this stream at `new Room` time, so injecting
   // after would leave them on the previous room's leftovers.
   botRng(lcg(seed + 3));
-  const room = new Room('t', flat, mode, resolveMapSpec(spec), moveAuthority);
+  const room = new Room('t', field, mode, resolveMapSpec(spec), moveAuthority);
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);

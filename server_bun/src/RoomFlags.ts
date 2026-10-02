@@ -37,6 +37,10 @@ export class RoomFlags {
   private readonly room: Room;
   /** Accrues between flag broadcasts — cadence is cheap since state is tiny. */
   private dirty = true;
+  /** Last-tick positions for the sweep — a stand touch is a fast graze,
+   *  not a park: at 60m/s a capper crosses the pickup ring between two
+   *  20Hz frames, so the check must test the path, not the snapshot. */
+  private prevPos = new Map<string, Vec3>();
 
   constructor(room: Room, bases: { alpha: Vec3; bravo: Vec3 }) {
     this.room = room;
@@ -102,6 +106,14 @@ export class RoomFlags {
     if (this.dirty) {
       this.dirty = false;
       this.room.broadcast({ type: 'flagUpdate', flags: this.snapshot() });
+    }
+    // Snapshot AFTER the rules pass — the next tick's sweep segment
+    // starts exactly where this one ended.
+    for (const p of this.room.players.getAllPlayers().values()) {
+      this.prevPos.set(p.id, { ...p.position });
+    }
+    for (const id of this.prevPos.keys()) {
+      if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);
     }
     return captureBy;
   }
@@ -184,13 +196,22 @@ export class RoomFlags {
     let best: { id: string; team?: string; d: number } | null = null;
     for (const p of this.room.players.getAllPlayers().values()) {
       if (p.isDead || !p.team) continue;
-      // Planar grab — the flag rides at ground height but players jump/ski
-      // past it; a hop shouldn't put the flag out of reach. Steep vertical
-      // separation (a real jet flyover) still doesn't count.
-      const dx = p.position.x - f.pos.x, dz = p.position.z - f.pos.z;
-      const dy = Math.abs(p.position.y - f.pos.y);
-      if (dy > 6) continue;
-      const d = Math.sqrt(dx * dx + dz * dz);
+      // Swept capsule: closest point on the player's path segment to the
+      // flag, so a full-speed graze can't tunnel through the ring the
+      // way a snapshot check does. Planar reach + vertical cap keep a
+      // real jet flyover from counting — the capsule is the touch.
+      const a = this.prevPos.get(p.id) ?? p.position;
+      const b = p.position;
+      const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+      const len2 = abx * abx + aby * aby + abz * abz;
+      let t = 0;
+      if (len2 > 0) {
+        t = Math.min(1, Math.max(0,
+          ((f.pos.x - a.x) * abx + (f.pos.y - a.y) * aby + (f.pos.z - a.z) * abz) / len2));
+      }
+      const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
+      if (Math.abs(cy - f.pos.y) > 6) continue;
+      const d = Math.hypot(cx - f.pos.x, cz - f.pos.z);
       if (d <= FLAG_PICKUP_R * perkMods(p.perk).pickupRadius && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
     }
     return best;

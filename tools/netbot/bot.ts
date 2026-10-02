@@ -244,7 +244,11 @@ export class NetBot {
       // a bot crawling valleys the fake kinematics used to skip over.
       // The vertical term stands alone: a stand parked overhead has
       // ~zero XZ distance, so gating it on d strands bots underneath.
-      jet: !!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4,
+      // The diveRun cut matches botMoves: inside graze range with the
+      // target at deck level, thrust is what holds the body airborne —
+      // cut it and let momentum graze the stand.
+      jet: (!!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4)
+        && !(d < 45 && out.dest.y < nc.self.pos.y + 4),
       jump: !!out.move?.jump,
     };
     if (!nc.surface) {

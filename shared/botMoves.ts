@@ -45,7 +45,14 @@ export class BotMoves {
     if (this.wantJet(ctx, pos, dest, rise, speed, gd) && tanked) {
       this.jetHold = Math.max(this.jetHold, 0.45 + botRand() * 0.4);
     }
-    const jet = (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
+    // The dive: a destination at or below the bot within graze range
+    // wants gravity, not thrust — a capper jets to the stand's zip code,
+    // then lets momentum carry the touch. Without this the boost read
+    // (speed < 12) kept orbiting bodies airborne above the very stand
+    // they were told to land on.
+    const diveRun = gd < 45 && dest.y < pos.y + 4;
+    if (diveRun) this.jetHold = 0;
+    const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
       // be. Momentum is life — a bot that only skis downhill reads as a
