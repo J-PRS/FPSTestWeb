@@ -15,6 +15,7 @@ import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
+import { dist3 } from '../../shared/botVec.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
@@ -38,11 +39,13 @@ export class ServerBotSenses {
    *  Nothing dispatches "a crowd" — the chattiness is emergent. */
   private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
   private noticed = new Map<string, number>();
+  private routeHold = new Map<string, { stand: BotVec; pos: BotVec }>();
 
   /** Bot left the room — drop its notice receipt so the map can't grow
    *  one entry per retired bot for the room's life. */
   forget(id: string): void {
     this.noticed.delete(id);
+    this.routeHold.delete(id);
   }
 
   /** Room code reports an event worth a reaction (flag cap/grab/return/
@@ -253,52 +256,38 @@ export class ServerBotSenses {
       for (const q of this.room.players.getAllPlayers().values()) {
         if (!q.isDead && q.team && q.team !== me) foes.push({ x: q.position.x, z: q.position.z });
       }
-      if (dStand > (capper ? 90 : 40)) {
-        let best = enemyStand, bestScore = -Infinity;
-        for (let a = 0; a < 24; a++) {
-          // Three radii: close entries are cheap, a closed rim wall
-          // only breaks further out — a plateau stand needs the far
-          // rings to find the saddle where its massif opens.
-          const ring = a < 8 ? 85 : a < 16 ? 170 : 300;
-          const ang = ((a % 8) / 8) * Math.PI * 2 + (a < 8 ? 0 : (a < 16 ? Math.PI / 8 : Math.PI / 4));
-          const ex = enemyStand.x + Math.cos(ang) * ring;
-          const ez = enemyStand.z + Math.sin(ang) * ring;
-          const ey = hmHeight(this.field, ex, ez);
+      // Stay live until the last hop: snapping the goal to the raw
+      // stand at 90m beelines the bot into the rim wall it probed its
+      // way around — presses end 8m below the flag at the wall's foot.
+      if (dStand > (capper ? 25 : 20)) {
+        // Route hysteresis: the probe re-scores every think from live
+        // foe positions, and without commitment the "best" entry flips
+        // back and forth — the bot zigzags, never builds ski momentum,
+        // and the trail reads as crawling, not dying. The incumbent
+        // entry gets a margin bonus so it only loses to a clearly
+        // better route.
+        const inc = this.routeHold.get(p.id);
+        const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
+        const scoreEntry = (ex: number, ey: number, ez: number): number => {
           const high = ey - enemyStand.y;
           const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
-          // Elevated over the stand = a dive-in entry — worth a lot to
-          // a capper, little to a fighter. An entry the bot must CLIMB
-          // to costs the whole advantage either way.
           let score = high * (capper ? 1.2 : 0.3) - Math.max(0, ey - p.position.y) * 2 - Math.max(0, detour) * 0.8;
-          // An entry behind a rim wall is dead — a plateau base sits
-          // exactly like this, with stand height close to the rim and
-          // every approach rising. Trace the line bot→entry and charge
-          // for ridge height above the straight climb; an open slope
-          // has ridge ≈ linear, a wall route peaks higher.
           let ridge = 0;
           for (let s = 1; s < 8; s++) {
             const t = s / 8;
             const lx = p.position.x + (ex - p.position.x) * t;
             const lz = p.position.z + (ez - p.position.z) * t;
-            const lh = hmHeight(this.field, lx, lz);
-            ridge = Math.max(ridge, lh - (p.position.y + (ey - p.position.y) * t));
+            ridge = Math.max(ridge, hmHeight(this.field!, lx, lz) - (p.position.y + (ey - p.position.y) * t));
           }
           score -= ridge * 2.5;
-          // The last leg is where plateau rims hide: the entry may be
-          // reachable while entry→stand crosses a sheer lip. Same trace,
-          // entry→stand — terrain ABOVE the straight chord is a wall.
           let lip = 0;
           for (let s = 1; s < 8; s++) {
             const t = s / 8;
             const lx = ex + (enemyStand.x - ex) * t;
             const lz = ez + (enemyStand.z - ez) * t;
-            const lh = hmHeight(this.field, lx, lz);
-            lip = Math.max(lip, lh - (ey + (enemyStand.y - ey) * t));
+            lip = Math.max(lip, hmHeight(this.field!, lx, lz) - (ey + (enemyStand.y - ey) * t));
           }
           score -= lip * 3;
-          // DMZ toll: the bot→entry chord crossing live enemies pays per
-          // foe inside ~80m — a flanking entry with an empty corridor
-          // beats the "optimal" one that skis through a firefight.
           for (const e of foes) {
             for (let s = 1; s < 8; s++) {
               const t = s / 8;
@@ -308,9 +297,27 @@ export class ServerBotSenses {
               if (ed < 80) { score -= (80 - ed) * 0.05; break; }
             }
           }
+          return score;
+        };
+        let best = enemyStand, bestScore = -Infinity;
+        if (incLive) {
+          bestScore = scoreEntry(incLive.pos.x, incLive.pos.y, incLive.pos.z) + 12;
+          best = incLive.pos;
+        }
+        for (let a = 0; a < 24; a++) {
+          // Three radii: close entries are cheap, a closed rim wall
+          // only breaks further out — a plateau stand needs the far
+          // rings to find the saddle where its massif opens.
+          const ring = a < 8 ? 85 : a < 16 ? 170 : 300;
+          const ang = ((a % 8) / 8) * Math.PI * 2 + (a < 8 ? 0 : (a < 16 ? Math.PI / 8 : Math.PI / 4));
+          const ex = enemyStand.x + Math.cos(ang) * ring;
+          const ez = enemyStand.z + Math.sin(ang) * ring;
+          const ey = hmHeight(this.field, ex, ez);
+          const score = scoreEntry(ex, ey, ez);
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
         goalPos = best;
+        this.routeHold.set(p.id, { stand: enemyStand, pos: best });
       }
     }
     // Cloak intent only for the infiltrator: the drain is speed-scaled,

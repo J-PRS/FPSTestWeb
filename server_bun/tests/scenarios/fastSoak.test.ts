@@ -4,6 +4,8 @@ import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
+import { weaponStats } from '../../src/weaponStats.ts';
+import { WeaponType } from '../../../shared/weaponTable.ts';
 
 // FPS_TRAIL=<file.bmp> plots every bot's XZ track (alpha=red, bravo=
 // blue) top-down over the 1500m terrain wrap at 512x512 — hotspots and
@@ -284,6 +286,17 @@ describe('scenario: fast-forward soak throughput', () => {
       console.log(`  propels: heel=${heel} pull=${pull} crest=${crest}; top ${byBot.slice(0, 3).map(([id, s]) => `${fmtId(id)} ${s.heel}/${s.pull}/${s.crest}`).join(' ')}`);
     }
     console.log(`  energy: ${eLine}`);
+    // Per-weapon lethality — the ranking table the chaser-kit question
+    // needs: which guns actually convert hits to kills in real traffic.
+    // weaponStats keys sources 'w<weaponType>' plus labels for turret/
+    // mine/env; print everything that killed, damage-ordered.
+    const wrows = weaponStats.snapshot().byMode[room.mode] ?? {};
+    const wline = Object.entries(wrows)
+      .filter(([, r]) => r.kills > 0)
+      .sort((a, b) => b[1].kills - a[1].kills)
+      .map(([w, r]) => `${w.startsWith('w') && WeaponType[+w.slice(1)] !== undefined ? WeaponType[+w.slice(1)] : w} ${r.kills}K/${r.hits}hits/${r.damage.toFixed(0)}dmg`)
+      .join('  ');
+    console.log(`  weapons: ${wline || 'no credited kills'}`);
     console.log(
       `  match: score ${score}; kills ${kills} (alpha ${killsByTeam.alpha ?? 0} / bravo ${killsByTeam.bravo ?? 0}); ` +
       `press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '—'}m(dy${pressY.alpha >= 0 ? '+' : ''}${pressY.alpha.toFixed(0)})/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '—'}m(dy${pressY.bravo >= 0 ? '+' : ''}${pressY.bravo.toFixed(0)}); ` +
