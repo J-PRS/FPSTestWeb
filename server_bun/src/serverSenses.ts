@@ -523,6 +523,8 @@ export class ServerBotSenses {
       imapQuietDir: (v: BotVec) =>
         this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
       imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),
+      imapDanger: (v: BotVec) =>
+        this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
       notice: this.noticeFor(id, p.team, now),
       repair: this.repairJob(p),
       now,

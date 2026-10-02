@@ -1,7 +1,9 @@
 /**
- * botGoals — idle-goal selection for BotBrain: the priority ladder
- * (revenge > rally > objective > pickup > heard fight > wander) plus the
- * wander roll, rally fold, and heard-noise probe. Runs on the slow think
+ * botGoals — idle-goal selection for BotBrain. Reflex overrides run
+ * first (revenge, rally, the cloak-fuel errand), then the goal itself is
+ * utility-scored: every candidate — objective, gem, heard fight, wander —
+ * gets weight × distance-falloff × danger-discount, argmax wins with a
+ * hysteresis margin so goals don't dither. Runs on the slow think
  * cadence; botBrain keeps the per-tick destination resolution. The
  * picker writes into the brain-owned GoalState bag, so the mutable
  * fields stay private to the brain while the ordering lives here.
@@ -54,39 +56,48 @@ export class BotGoals {
     if (ctx.infiltrating && ctx.energy !== undefined && ctx.energy < ENERGY.cloakCost + 30 && ctx.pickup) {
       s.goal = { ...ctx.pickup }; return;
     }
-    if (ctx.objective) { s.goal = { ...ctx.objective }; return; }
-    if (ctx.pickup) { s.goal = { ...ctx.pickup }; return; }
-    if (ctx.sounds && ctx.sounds.length > 0) {
-      const heard = this.heardGoal(ctx, pos);
-      if (heard) { s.goal = heard; return; }
-      // No objective on the board: the fight IS the goal. The curiosity
-      // roll said no, but a dutiful bot in a DM still drifts toward the
-      // nearest heard shot instead of skiing scenery — second-chance
-      // pull scaled by duty, never a sure thing (that keeps it human).
-      if (!ctx.objective && botRand() < this.duty() * 0.4) {
-        let hot: BotVec | null = null, hd = Infinity;
-        for (const snd of ctx.sounds) {
-          const d = distSq(pos, snd);
-          if (d < hd) { hd = d; hot = snd; }
-        }
-        if (hot) {
-          const t = Math.min(1, 55 / Math.sqrt(hd || 1));
-          s.goal = { x: pos.x + (hot.x - pos.x) * t, y: pos.y, z: pos.z + (hot.z - pos.z) * t };
-        }
-      }
-      // Noise in earshot holds the attention slot even when both rolls
-      // pass on it — wandering off mid-fight sounds next door is how
-      // bots used to read as deaf tourists.
+    // Utility pick — nothing is first-past-the-post anymore: a gem 30m
+    // out can outscore a flag 400m off, a distant objective beats a
+    // death-scented fight. duty tempers the danger discount (dutiful
+    // bots press through scent, sightseers route around it); weight is
+    // each drive's pull; distance folds to a falloff curve.
+    const wander = this.wanderCandidate(ctx, pos);
+    const heard = this.heardGoal(ctx, pos);
+    const cands: Array<{ goal: BotVec; score: number }> = [];
+    const offer = (goal: BotVec | null | undefined, weight: number) => {
+      if (!goal) return;
+      const d = Math.sqrt(distSq(pos, goal));
+      const reach = 1 / (1 + d / 140);
+      const scent = Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())));
+      cands.push({ goal, score: weight * reach * (1 - scent) });
+    };
+    offer(ctx.objective, 1.0);
+    offer(ctx.pickup, 0.8);
+    if (heard) offer(heard, 0.2 + this.duty() * 0.5);
+    if (wander) offer(wander, 0.35);
+    if (cands.length > 0) {
+      let best = cands[0]!;
+      for (const c of cands) if (c.score > best.score) best = c;
+      // Hysteresis: the incumbent needs beating by a margin — flipping
+      // goals on a 1% re-score reads as bot dithering, not judgment.
+      const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25);
+      s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : { ...best.goal };
       return;
     }
+    // Wander always offers a candidate, so an empty board only happens
+    // when even the roll produced nothing — hold the line.
+  }
+
+  /** The wander slot as a utility candidate — a fresh roll when the
+   *  pacing clock says so, else the leg already underway. */
+  private wanderCandidate(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    const s = this.s();
     if (s.wanderT <= 0 || distSq(pos, s.wanderWp) < 9) {
       s.wanderT = (3 + botRand() * 4) / this.wanderlust();
       const best = this.rollWander(ctx, pos);
-      if (best) {
-        s.wanderWp = best;
-        s.goal = { ...s.wanderWp };
-      }
+      if (best) s.wanderWp = best;
     }
+    return s.wanderWp;
   }
 
   /** Roll a few candidate waypoints; downhill lines win — picking the

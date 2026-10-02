@@ -149,6 +149,9 @@ export interface BrainCtx {
    *  within ~190m (fights, gems, flag events). Absent without a map. */
   imapQuietDir?(pos: BotVec): { x: number; z: number };
   imapHottest?(pos: BotVec): { x: number; z: number; v: number } | null;
+  /** Raw danger scent at a spot on the caller's team layer — utility
+   *  scoring reads it to discount goals in graveyards. */
+  imapDanger?(pos: BotVec): number;
 }
 
 export interface BrainOut {
