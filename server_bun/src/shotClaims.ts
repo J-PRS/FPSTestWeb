@@ -1,6 +1,7 @@
 import type { ClientMessage } from './types.ts';
 import type { PlayerState } from './types.ts';
-import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_MIN_TICK_S, HEALBEAM_ENERGY, BELT_THROW_WEAPONS, BELT_THROW_COST } from '../../shared/weapons.ts';
+import { healPool } from './healPool.ts';
 import { validateHitClaim, pointToCapsuleDistance } from '../../shared/combat.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -33,6 +34,13 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // honest lag, and nothing is won by forging it either way.
     if (target.isDead) {
       h.hb('drop.deadTarget');
+      return;
+    }
+    // Heal beam claims name a FRIEND — handle before the friendly-fire
+    // gate (which would reject the whole archetype). The client latch
+    // decides whom it pinned; range/energy/tick law is re-derived here.
+    if (msg.weaponType === WeaponType.HealBeam) {
+      healBeamClaim(h, playerId, player, targetId, target);
       return;
     }
     // Friendly fire: no damage (and no playerHit) between teammates.
@@ -101,6 +109,48 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
       const acc = h.chargeBank.of(target);
       if (acc > 0) h.chargeBank.discharge(playerId, target, Math.min(acc, shotDamage));
     }
+  }
+
+  /** Heal-beam claim: friendly target only, server re-derives the tick
+   *  cadence and the jet-energy cost — claims carry no amounts, so a
+   *  doctored client can at most waste its own energy budget faster
+   *  than the tick law allows (which the rate map blocks anyway). */
+function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, targetId: string, target: PlayerState): void {
+    if (!h.friendly(playerId, targetId)) {
+      h.hb('drop.healFoe'); // zapping an enemy with the med gun — no payload
+      return;
+    }
+    // Tick law, same shape as the repair beam: one heal tick per
+    // shooter+target pair per window — 15% slack for ping jitter.
+    const key = `${playerId}|${targetId}`;
+    const now = Date.now();
+    const last = h.healTicks.get(key) ?? 0;
+    if (now - last < HEALBEAM_MIN_TICK_S * 850) {
+      h.hb('drop.healRate');
+      return;
+    }
+    // Range against the target's rewound position — a skiing ally
+    // outran the beam on the server clock is honest lag, not a cheat.
+    const tpos = rewindPos(target, clampPing(player.ping));
+    const at = rewindPos(player, clampPing(player.ping));
+    const d = Math.hypot(tpos.x - at.x, tpos.y - at.y, tpos.z - at.z);
+    if (d > HEALBEAM_RANGE * 1.5) {
+      h.reject(playerId, 'Shot', `heal reach ${d.toFixed(1)}m > ${HEALBEAM_RANGE}m`, targetId, WeaponType.HealBeam);
+      return;
+    }
+    // Energy is the ammo: a dry tank can't tick — drops silent, the
+    // shooter's HUD already sees the empty meter.
+    const tank = h.deps.energyOf?.(playerId);
+    if (tank !== undefined && tank !== null && tank < HEALBEAM_ENERGY) {
+      h.hb('drop.healDry');
+      return;
+    }
+    h.deps.drainEnergy?.(playerId, HEALBEAM_ENERGY);
+    h.healTicks.set(key, now);
+    healPool(target, HEALBEAM_PER_TICK);
+    h.hb('heal.beam');
+    target.forceSendUntil = now + FORCE_SEND_MS;
+    h.deps.onFire?.(playerId);
   }
 
   /** A claim with no target: a miss. If it carries spawn coordinates it
@@ -181,6 +231,16 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
     if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
       h.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
       return;
+    }
+    // Belt throws are ordnance, not trigger pulls — a dry pocket can't
+    // spawn one. Deduct on the spawn claim only: hit/blast claims ride
+    // the registered shell and never re-pay.
+    if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
+      if (player.beltCharges < BELT_THROW_COST) {
+        h.hb('drop.beltDry');
+        return;
+      }
+      player.beltCharges -= BELT_THROW_COST;
     }
     const projectileId = h.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity, msg.shotId);
     // A registered shell may satisfy claims that arrived out of order —

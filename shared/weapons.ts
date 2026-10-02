@@ -57,6 +57,29 @@ export const REPAIR_ARMOR_MULT = 2;    // armor cap = this × the deployable's b
 export const ARMORNADE_ARMOR = 50;     // flat armor each blast grants
 export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
 
+// Heal-kit economy — the beam's ammo is jet energy, so pocket-healing a
+// push taxes the healer's own mobility. Claims carry no amounts: the
+// server re-derives the tick and the energy cost.
+export const HEALBEAM_RANGE = 22;         // beam reach (m)
+export const HEALBEAM_PER_TICK = 4;       // hp per fire tick → ~40 hp/s at 0.1s rate
+export const HEALBEAM_MIN_TICK_S = 0.07;  // min seconds between claims per shooter+target
+export const HEALBEAM_ENERGY = 6;         // jet energy per heal tick — a full tank is ~16s of beam
+export const HEALNADE_HEAL = 60;          // flat heal on allies caught in the nade blast
+
+// Belt economy — one charge pool feeds every belt throw AND every pack
+// deploy: the nuggets you pick up ARE the ordnance you carry.
+export const BELT_MAX = 5;        // spawn stock AND the pickup cap
+export const BELT_THROW_COST = 1; // per belt toss
+export const DEPLOY_COST = 2;     // per pack item (turret/mine/station/drone/shield)
+// WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
+// one pays BELT_THROW_COST. Sticky is deliberately absent: the launcher
+// fires the same weaponType, so the wire can't tell toss from launcher.
+export const BELT_THROW_WEAPONS = new Set<number>([
+  WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
+  WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
+  WeaponType.ArmorGrenade, WeaponType.HealGrenade,
+]);
+
 /** Biggest legal single damage claim vs a creature: table max
  *  (direct+splash) with perk headroom. creatureHit/crawlerHit claims
  *  carry no weapon ref, so this is the widest honest ceiling — anything
@@ -91,6 +114,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Sticky]: 0.8,
   [WeaponType.PlasmaGun]: 0.13,
   [WeaponType.Sprinkler]: 0.11,
+  [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate
   [WeaponType.Melee]: 0.5,
   [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
 };

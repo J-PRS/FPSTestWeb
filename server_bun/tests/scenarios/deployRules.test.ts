@@ -7,6 +7,7 @@ describe('scenario: deploy rules', () => {
     const w = watch(room);
     const bot = firstPlayer(room);
     pin(room, bot.id, { x: 40, y: 31, z: 0 });
+    bot.beltCharges = 99; // cap-recycling test — fund the belt, don't test the economy here
     room.deployables.handleDeploy(bot.id, 'turret', { x: 40, y: 31, z: 2 });
     room.deployables.handleDeploy(bot.id, 'turret', { x: 40, y: 31, z: 4 });
     room.deployables.handleDeploy(bot.id, 'turret', { x: 40, y: 31, z: 6 });

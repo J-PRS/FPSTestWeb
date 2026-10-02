@@ -34,6 +34,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY } from '../../shared/movement.ts';
+import { BELT_MAX } from '../../shared/weapons.ts';
 import { chatKindFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { ServerWebSocket } from 'bun';
@@ -238,14 +239,17 @@ export class Room {
       const p = this.players.getPlayer(pid);
       if (!p) return;
       if (kind === 'gem' || kind === 'tag') {
-        // Gems back the collector's next heal claim; kill-confirmed tags
-        // are pure score — no resource bundled into the same pickup.
+        // Gems also back the collector's next heal claim; both kinds pay
+        // one belt charge below — the nuggets ARE the ordnance economy.
         if (kind === 'gem') {
           p.healCredit += 25;
           // Client refills half the energy tank on a gem — the shadow
           // must too or the next jet run diverges for honest reasons.
           this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
         }
+        // Score pickups are the belt economy's income: one charge per
+        // nugget, capped at the spawn stock.
+        p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
         const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);
         return;
@@ -346,6 +350,12 @@ export class Room {
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
       moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
+      dropFlagCarrier: (pid) => this.flags?.dropIfCarrier(pid),
+      drainEnergy: (pid, n) => this.moveSim.drainEnergy(pid, n),
+      // Instant-skill claim: the client already spent the energy locally —
+      // mirror the same ante on the shadow or the tank drifts 50 apart.
+      onSkillUse: (pid) => this.moveSim.drainEnergy(pid, ENERGY.skillCost),
+      energyOf: (pid) => this.moveSim.energyOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy) => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
         // Resync re-anchors the shadow — also refresh the class speed

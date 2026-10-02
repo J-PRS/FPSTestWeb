@@ -47,6 +47,9 @@ export const ENERGY = {
   cloakDrainMin: 1, cloakDrainMax: 10, cloakDrainSpeedMps: 100,
   shieldCost: 20, shieldDrain: 5,
   mendCost: 20, mendDrain: 15,
+  // One-shot skills (blink/dash/slam/warp/bounce) ante the whole burst —
+  // priced against the jet tank so a trick always trades mobility.
+  skillCost: 50,
   shieldDmgPerEnergy: 10, // absorbed damage burns this much of a point
 } as const;
 

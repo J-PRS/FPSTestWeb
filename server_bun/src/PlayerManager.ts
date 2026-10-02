@@ -4,6 +4,7 @@ import { STATUS } from '../../shared/status.ts';
 import { perkMods, effectiveResist } from '../../shared/perks.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
+import { BELT_MAX } from '../../shared/weapons.ts';
 import { ENERGY } from '../../shared/movement.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
@@ -91,6 +92,7 @@ export class PlayerManager {
       forceSendUntil: 0,
       protectedUntil: simNow() + PlayerManager.SPAWN_PROTECT_MS,
       healCredit: 0,
+      beltCharges: BELT_MAX,
       armor: 0,
       regenUntil: 0,
       ddUntil: 0,
@@ -292,6 +294,7 @@ export class PlayerManager {
     player.regenUntil = 0;
     player.ddUntil = 0;
     player.charge = 0;
+    player.beltCharges = BELT_MAX;
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

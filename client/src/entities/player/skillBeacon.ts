@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getGlowTexture } from '../../effects/glowTexture.js';
 import { GRAVITY } from '../../core/config.js';
+import { ENERGY } from '../../../../shared/movement.js';
 import type { SkillsCtx } from './skills.js';
 
 // Warp beacon — Q-down throws the anchor; it flies/arcs/bounces while Q
@@ -61,6 +62,9 @@ export class WarpBeacon {
     this.beacon = null;
     if (!b) return;
     if (this.mesh) this.mesh.visible = false;
+    // The throw is free — the WARP is what costs: no energy, no teleport.
+    if (!this.ctx.spendEnergy(ENERGY.skillCost)) return;
+    this.ctx.skillUsed();
     // Land the player just over the beacon — never inside terrain
     const gy = this.ctx.terrain.getHeight(b.pos.x, b.pos.z);
     const from = this.ctx.pos.clone();

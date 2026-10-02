@@ -26,7 +26,7 @@ import { DeployAdopter } from './deployAdopt.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';
-import { WeaponType, REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
+import { WeaponType, REPAIR_ARMOR_MULT, DEPLOY_COST } from '../../../shared/weapons.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
@@ -154,6 +154,9 @@ export class Deployables {
     const p = this.deps.lazyPlayer();
     const def = this.selDef;
     if (p.throwLockT > 0) return; // mid-throw — the gun hand is busy
+    // Pack gear pays from the belt pool — the server bills handleDeploy
+    // the same DEPLOY_COST when the pod seats.
+    if (p.beltCharges < DEPLOY_COST) return;
     // Belt-throw ceremony: weapon lowers, pod releases at THROW_RELEASE.
     p.throwLockT = THROW_TOTAL;
     this.deps.lazyViewModel?.()?.startThrow();
@@ -293,6 +296,7 @@ export class Deployables {
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
     sfx.land(impact);
+    this.deps.lazyPlayer().beltCharges = Math.max(0, this.deps.lazyPlayer().beltCharges - DEPLOY_COST);
     this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);
   }
 

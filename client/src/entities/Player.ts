@@ -19,6 +19,7 @@ import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
+import { BELT_MAX } from '../../../shared/weapons.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { ChildLogger } from '../core/Logger.js';
 
@@ -98,6 +99,7 @@ export class Player {
     this.buffUntil.regen = 0;
     this.buffUntil.dd = 0;
     this.lastDamageSource = '';
+    this.beltCharges = BELT_MAX;
     this.vel.set(0, 0, 0);
   }
 
@@ -257,6 +259,11 @@ export class Player {
   onWarp: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null; // the warp itself
   onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
   onBelt: ((e: FireEvent, item: BeltItem) => void) | null = null;
+  /** Instant-skill ante mirror → NetworkManager.sendSkillUse. */
+  onSkillUse: (() => void) | null = null;
+  /** Belt/pack charge mirror — BELT_MAX on respawn, server owns the truth.
+   *  Belt throw −1, pack deploy −2, nugget +1 (shared/weapons.ts). */
+  beltCharges = BELT_MAX;
   onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */

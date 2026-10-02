@@ -743,6 +743,13 @@ export class NetworkManager {
     this.send({ type: 'repair', targetId });
   }
 
+  /** Instant-skill ante mirror — skills.ts already spent the energy
+   *  locally; the server applies the same drain to its shadow tank. */
+  sendSkillUse(): void {
+    if (!this.connected) return;
+    this.send({ type: 'skillUse' });
+  }
+
   /** Loadout class pick mid-match — the server banks it for the next
    *  respawn (same rule the client applies locally). */
   sendClassUpdate(armorClass: string): void {

@@ -95,6 +95,9 @@ export interface PlayerState {
   // server-observed gem touch (+25 per gem). Without it the self-heal
   // claim (clamped 25/call) is a free-invincibility lever.
   healCredit: number;
+  // Belt/pack charges: BELT_MAX on spawn, −1 per belt toss, −2 per pack
+  // deploy, +1 per nugget (gem/tag) touch — one pool, shared/weapons.ts.
+  beltCharges: number;
   // Powerup state (creature drops): armor absorbs POWERUP.armorAbsorb of
   // incoming damage until depleted; regen/dd are expiry timestamps.
   armor: number;

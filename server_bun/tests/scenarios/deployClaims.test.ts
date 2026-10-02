@@ -32,6 +32,7 @@ describe('scenario: deploy claims', () => {
     const w = watch(room);
     // Two gates stack here: deploy is rate-limited to 4/s, and the
     // per-kind cap is 6 — claims 5+ die at the rate gate first.
+    p.beltCharges = 99; // cap-recycling test — fund the belt, don't test the economy here
     for (let i = 0; i < 7; i++) {
       room.messages.handleMessage(p.id, { type: 'deploy', kind: 'mine', position: { x: i + 1, y: 31, z: i } });
     }

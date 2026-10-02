@@ -16,6 +16,7 @@ import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deploy
 
 export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
+import { DEPLOY_COST } from '../../shared/weapons.ts';
 import { simNow } from './simClock.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
@@ -98,8 +99,15 @@ export class RoomDeployables {
     const player = this.room.players.getPlayer(playerId);
     if (!player || player.isDead || !KINDS.has(kind as DeployKind)) return;
     const k = kind as DeployKind;
+    // Pack gear costs belt charges — the same nugget pool the throws drink
+    // from, so a builder pays real economy for every stand it fortifies.
+    if (player.beltCharges < DEPLOY_COST) {
+      logger.debug('Deploy blocked: dry belt', { owner: playerId, kind: k });
+      return;
+    }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return;
+    player.beltCharges -= DEPLOY_COST;
     const owned = [...this.items.values()].filter((d) => d.owner === playerId && d.kind === k);
     // At cap: recycle the oldest rather than refuse — Tribes remote-arms
     // behavior, keeps the feel without an unbounded pile.

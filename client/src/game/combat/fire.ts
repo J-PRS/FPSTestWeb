@@ -17,7 +17,7 @@ import { poissonDisc } from '../../utils/poissonSpread.js';
 import {
   EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
 } from '../../core/config.js';
-import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, BELT_THROW_COST } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
@@ -115,11 +115,20 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
 };
 
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
+  const p = deps.lazyPlayer();
+  // Ordnance economy: a dry belt can't throw — server enforces the same
+  // rule on the spawn claim, this gate just saves the animation/no-op.
+  if (p.beltCharges < BELT_THROW_COST) return;
   deps.lazyViewModel()?.startThrow();
   const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
   // Dying mid wind-up must not release — the server rejects dead-player
   // claims, leaving a local ghost projectile.
-  setTimeout(() => { if (!deps.lazyPlayer().isDead) spawnProjectile(deps, config, freshFireArgs(deps)); }, THROW_RELEASE * 1000);
+  setTimeout(() => {
+    const pl = deps.lazyPlayer();
+    if (pl.isDead || pl.beltCharges < BELT_THROW_COST) return;
+    pl.beltCharges -= BELT_THROW_COST;
+    spawnProjectile(deps, config, freshFireArgs(deps));
+  }, THROW_RELEASE * 1000);
 }
 
 // Pellet fan (flak/shotgun): one trigger = a poisson-disc spread of

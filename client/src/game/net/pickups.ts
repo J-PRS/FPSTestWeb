@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
+import { BELT_MAX } from '../../../../shared/weapons.js';
 
 export function wirePickups(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
@@ -53,6 +54,12 @@ export function wirePickups(ctx: NetCtx): void {
     const e = pickupMeshes.get(id);
     if (e) { deps.lazyScene().remove(e.mesh); pickupMeshes.delete(id); }
     if (by === nm().getLocalPlayerId()) {
+      // Nuggets are the belt economy's income — gem or tag, one charge
+      // back, capped at the spawn stock. Server owns the truth count.
+      if (e?.kind === 'gem' || e?.kind === 'tag') {
+        const p = deps.lazyPlayer();
+        p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
+      }
       if (e?.kind === 'tag') {
         chat.add(null, 'tag confirmed +1');
       } else if (e?.kind === 'gem') {

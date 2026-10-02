@@ -82,6 +82,10 @@ export type ClientMessage =
   // Repair-tool beam tick: the server re-derives range, LOS, team and the
   // heal amount itself — the claim carries only WHICH deployable.
   | { type: 'repair'; targetId: number }
+  // One-shot skill activation (blink/dash/slam/warp/bounce): the client
+  // already spent ENERGY.skillCost locally — this claim only mirrors the
+  // ante into the server's shadow tank. Carries nothing else.
+  | { type: 'skillUse' }
   | { type: 'snapshotRequest' }
   // Catch-up resync — ask for a fresh world-state replay (gameState +
   // rosters) without a room hop or reconnect, e.g. after an alt-tab

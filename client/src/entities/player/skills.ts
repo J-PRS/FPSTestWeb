@@ -60,6 +60,8 @@ export interface SkillsCtx {
   energy(): number;
   /** Atomic check+deduct: false leaves the pool untouched. */
   spendEnergy(n: number): boolean;
+  /** Mirrors the instant-skill ante on the server shadow (skillUse claim). */
+  skillUsed(): void;
   /** Unconditional drain — nugget jet-boost does NOT subsidize cloak. */
   drainEnergy(n: number): void;
 }
@@ -139,6 +141,14 @@ export class PlayerSkills {
   updateMend(dt: number): void { this.chan.updateMend(dt); }
   updateBeacon(dt: number): void { this.warp.updateBeacon(dt); }
 
+  /** The instant-skill ante: spend the energy AND tell the server shadow.
+   *  False = the tank can't cover it and the skill fizzles. */
+  private paySkill(): boolean {
+    if (!this.ctx.spendEnergy(ENERGY.skillCost)) return false;
+    this.ctx.skillUsed();
+    return true;
+  }
+
   private tryBlink(): void {
     if (this.blinkActive || this.blinkCooldown > 0) return;
 
@@ -155,6 +165,7 @@ export class PlayerSkills {
       dist = d;
     }
     if (dist < 2) return; // wall in the face — fizzle, no cooldown
+    if (!this.paySkill()) return; // dry tank — the trick costs real mobility
 
     this.blinkFrom.copy(pos);
     this.blinkTo.copy(dir).multiplyScalar(dist).add(pos);
@@ -185,6 +196,7 @@ export class PlayerSkills {
 
   private tryDash(): void {
     if (this.dashCooldown > 0) return;
+    if (!this.paySkill()) return;
     this.dashCooldown = DASH_COOLDOWN;
     const dir = this.ctx.aimDir();
     this.ctx.vel.addScaledVector(dir, DASH_IMPULSE);
@@ -194,6 +206,7 @@ export class PlayerSkills {
 
   private trySlam(): void {
     if (this.ctx.isOnGround() || this.slamCooldown > 0) return; // airborne only
+    if (!this.paySkill()) return;
     this.slamActive = true;
     this.slamCooldown = SLAM_COOLDOWN;
     this.ctx.vel.y = -SLAM_SPEED; // keep horizontal momentum — spike the vertical
@@ -210,7 +223,7 @@ export class PlayerSkills {
     if (this.bounceHeld && !onGround) this.bounceArmed = true;
     if (this.bounceArmed && !wasOnGround && onGround) {
       const speed = ctx.vel.length();
-      if (speed > 0.01) {
+      if (speed > 0.01 && this.paySkill()) {
         const dir = ctx.aimDir();
         ctx.vel.copy(dir).multiplyScalar(speed);
         ctx.syncMovement();

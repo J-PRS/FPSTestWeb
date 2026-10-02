@@ -259,6 +259,12 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     return { success: true, data: { type: 'deploy', kind, position: dpos.data } };
   },
 
+  // Mirror-only claim: the server re-derives the energy ante itself —
+  // the message deliberately carries no amount or skill id.
+  skillUse: () => {
+    return { success: true, data: { type: 'skillUse' } };
+  },
+
   snapshotRequest: () => {
     return { success: true, data: { type: 'snapshotRequest' } };
   },
