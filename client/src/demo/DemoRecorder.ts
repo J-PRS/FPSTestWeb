@@ -251,8 +251,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
     ev.recordBounce(this, projectileId, position, velocity, surfaceNormal);
   }
-  recordHit(projectileId: number, position: Vec3, targetId: number): void {
-    ev.recordHit(this, projectileId, position, targetId);
+  recordHit(projectileId: number, position: Vec3, targetId: number, weaponType: number): void {
+    ev.recordHit(this, projectileId, position, targetId, weaponType);
   }
   recordDestroyed(projectileId: number, position: Vec3): void {
     ev.recordDestroyed(this, projectileId, position);
@@ -287,7 +287,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 export interface IProjectileEventRecorder {
   recordFired(position: Vec3, velocity: Vec3, weaponType: number): number;
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void;
-  recordHit(projectileId: number, position: Vec3, targetId: number): void;
+  recordHit(projectileId: number, position: Vec3, targetId: number, weaponType: number): void;
   recordDestroyed(projectileId: number, position: Vec3): void;
 }
 

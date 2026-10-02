@@ -49,14 +49,16 @@ export function recordBounce(b: DemoRecorder, projectileId: number, position: Ve
     b.projectileEvents.push(e);
   }
 
-export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3, targetId: number): void {
+export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3, targetId: number, weaponType: number): void {
     if (projectileId === 0 || !b.recording || !checkEventRate(b)) return;
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Hit;
     e.timestamp = b.elapsedTime;
     e.posX = position.x; e.posY = position.y; e.posZ = position.z;
     e.velX = 0; e.velY = 0; e.velZ = 0;
-    e.projectileId = projectileId; e.weaponType = 0;
+    // Seek reconstruction rebuilds the terminal explosion from this — the
+    // shell itself is already gone, so the Hit must carry its own config id.
+    e.projectileId = projectileId; e.weaponType = weaponType;
     e.surfaceNormalX = 0; e.surfaceNormalY = 0; e.surfaceNormalZ = 0;
     e.targetId = targetId; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;

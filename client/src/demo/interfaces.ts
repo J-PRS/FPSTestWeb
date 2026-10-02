@@ -22,7 +22,7 @@ export interface IInputProvider {
 export interface IProjectileEventSource {
   recordFired(position: Vec3, velocity: Vec3, weaponType: number): number;
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void;
-  recordHit(projectileId: number, position: Vec3, targetId: number): void;
+  recordHit(projectileId: number, position: Vec3, targetId: number, weaponType: number): void;
   recordDestroyed(projectileId: number, position: Vec3): void;
 }
 

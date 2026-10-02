@@ -30,7 +30,7 @@ describe('projectile event spool', () => {
   it('id 0 is the dead sentinel — dependents never record it', () => {
     const b = host();
     recordBounce(b, 0, V, V, V);
-    recordHit(b, 0, V, 7);
+    recordHit(b, 0, V, 7, 1);
     recordDestroyed(b, 0, V);
     expect(b.projectileEvents.length).toBe(0);
   });
@@ -46,7 +46,7 @@ describe('projectile event spool', () => {
     const b = host();
     const id = recordFired(b, V, V, 4);
     recordBounce(b, id, V, V, { x: 0, y: 1, z: 0 });
-    recordHit(b, id, V, 42);
+    recordHit(b, id, V, 42, 1);
     recordDestroyed(b, id, V);
     const types = b.projectileEvents.map((e) => e.eventType);
     expect(types).toEqual([

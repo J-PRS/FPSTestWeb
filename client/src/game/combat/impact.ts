@@ -13,7 +13,7 @@ import { burstGibs } from '../../entities/swarms.js';
 import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
 import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE } from '../../core/config.js';
-import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../../../shared/weapons.js';
+import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats } from '../../../../shared/weapons.js';
 import { isBotId } from '../../../../shared/botNames.js';
 import { lgDischarge } from './lightning.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
@@ -54,8 +54,8 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // so sending it ahead of the aoeShot/shot claims above used to make
   // every blast arrive at a projectile the server no longer knew
   // ("blast with no known projectile" — splash silently never applied).
-  if (p.serverProjectileId) {
-    deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId);
+  if (p.serverProjectileId || p.shotId) {
+    deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
   }
 }
 
@@ -96,9 +96,9 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Untracked client-local children (cluster bomblets) skip the claim —
   // their damage is the server's WeaponStats.cluster scatter, so a claim
   // would just bounce off projectile resolution.
-  const sendAOE = p.config.needsServerTracking === false || p.serverProjectileId === null
-    // No server id means the shell was fired before we (re)connected —
-    // a blast claim can never resolve and only earns a reject warn.
+  const sendAOE = p.config.needsServerTracking === false || (p.serverProjectileId === null && p.shotId === null)
+    // Neither id means the shell predates the connection — a blast claim
+    // can never resolve and only earns a reject warn.
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
@@ -107,14 +107,16 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
       // (terrain, fuse) — 0 isn't nullish, so `??` never fell back and
       // claims went out with airtime=0 → reach check rejected them all.
       projectileId: p.serverProjectileId ?? null, airtime: p.hitAge > 0 ? p.hitAge : p.age,
-      directHit: p.directHit || undefined,
+      directHit: p.directHit || undefined, shotId: p.shotId ?? undefined,
     });
   processProjectileExplosion(c, {
     pos: p.hitPointValid ? p.hitPoint : p.pos,
     radius: p.config.aoeRadius * bloom * deps.lazyPlayer().mods.aoeRadius,   // gameplay radius = server truth (incl. perk)
     force: p.force,
     forceMode: p.forceMode,
-    aoeDamage: p.config.aoeDamage,
+    // Splash amount = the direct hit's damage (banded by ring in shared
+    // aoeDamage) — the stat-block aoeDamage only backs zero-direct specials.
+    aoeDamage: getWeaponStats(weaponType).directDamage || p.config.aoeDamage,
     falloffMultiplier: p.config.falloffMultiplier,
     collisionMultiplier: p.config.collisionMultiplier,
     forceMultiplier: p.config.forceMultiplier,
@@ -125,6 +127,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     explosionTint: p.config.damageColor,
     vfxRadius: p.explosionRadius * bloom, // VFX dome grows with the damage area
     weaponType,
+    shooterId: p.shooterId ?? undefined, // authorship — without it a bot's blast reads as MINE (marker/numbers/self-splash scale)
   });
 }
 
@@ -182,7 +185,7 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && p.demoProjectileId) {
     const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
-    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId);
+    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType);
   }
   // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
   // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
@@ -280,7 +283,8 @@ export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../en
 
 export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
   const deps = c.deps;
-  const dmg = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
+  // Airtime ramp is body-contact only — wake hits pay flat directDamage.
+  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
   if (p.config.weaponType === WeaponType.Chaingun) chaingunBank(c, p, ball);
   deps.reportTargetDamage?.(ball, dmg);
   const destroyed = ball.takeDamage(dmg);
@@ -306,7 +310,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   const deps = c.deps;
   const targetPlayer = deps.world.remotePlayers.get(playerId);
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
-  const directDamage = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
+  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
   // Personal feedback (numbers/marker/score) is for shells I fired — a
   // bot-authored hit isn't my frag. Player shells leave shooterId unset.
   const mine = !p.shooterId;
@@ -319,6 +323,10 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
     : false;
   logHitScore(c, p, 'player', airborne);
 
+  // 'local' is a client sentinel — the server can't resolve it, so the
+  // claim would only earn a reject. Self-damage reports through the
+  // blast's env-damage channel instead (blastForce handles it once).
+  if (playerId === 'local') return;
   const networkManager = deps.lazyNetworkManager();
   // A bot-authored shell has no business claiming as the local player —
   // server/P2P authority resolves bot damage on its own end.
@@ -328,9 +336,9 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
       position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
       velocity: { x: p.vel.x, y: p.vel.y, z: p.vel.z },
       timestamp: Date.now(), projectileId: p.serverProjectileId,
-      weaponType: p.config.weaponType, airtime: p.hitAge,
+      weaponType: p.config.weaponType, airtime: p.hitAge, shotId: p.shotId ?? undefined,
     });
-    deps.logger.info(`[Shot] Sent to server: player=${playerId} proj=${p.serverProjectileId} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);
+    deps.logger.info(`[Shot] hit claim -> ${playerId} dmg=${Math.round(directDamage)} proj=${p.serverProjectileId} shot=${p.shotId ?? '-'} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);
   }
 }
 
