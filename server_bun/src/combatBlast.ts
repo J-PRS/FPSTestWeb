@@ -1,7 +1,8 @@
 import type { ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL } from '../../shared/weapons.ts';
+import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
 import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
@@ -37,6 +38,7 @@ export interface BlastHost {
     deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
     creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
     moveImpulse?: (playerId: string, dv: Vec3) => void;
+    dropFlagCarrier?: (playerId: string) => void;
     health?: Map<string, number>;
   };
   sendToPlayer: (playerId: string, msg: ServerMessage) => void;
@@ -88,6 +90,9 @@ export class BlastRunner {
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
+    // Heal burst — allies caught get the strong heal; enemies got their
+    // sting through the normal splash sweep above.
+    if (weapon === WeaponType.HealGrenade) this.healAll(playerId, position, radius, ctx.ping);
   }
 
   /** Cheat prevention: bound the blast to plausible projectile range —
@@ -134,6 +139,25 @@ export class BlastRunner {
     this.h.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
   }
 
+  /** Heal-grenade sweep: allies only — a heal that tops off the enemy
+   *  squad is strictly worse than a mortar. Heal fades with distance
+   *  like damage does, same lag-comp + occlusion rules. */
+  private healAll(playerId: string, position: Vec3, radius: number, ping: number): void {
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (target.isDead || !this.h.friendly(playerId, targetId)) continue;
+      const tpos = rewindPos(target, clampPing(ping));
+      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      if (d > radius) continue;
+      if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
+      // Center-of-blast heals full, the rim heals half — worth leading
+      // the throw, not just tossing it over the wall.
+      healPool(target, HEALNADE_HEAL * (1 - 0.5 * (d / radius)));
+      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      this.h.hb('heal.nade');
+      logger.debug('Heal grenade', { shooter: playerId, target: targetId, hp: target.health });
+    }
+  }
+
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number): void {
@@ -168,6 +192,9 @@ export class BlastRunner {
     if (this.h.friendly(ctx.shooterId, targetId)) return;
     const result = this.h.playerManager.applyDamage(targetId, damage);
     this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
+    // Concussion payload: the impact nade's whole job is stripping the
+    // flag — a carrier clipped by the blast fumbles it like in T2.
+    if (ctx.weapon === WeaponType.ImpactGrenade) this.h.deps.dropFlagCarrier?.(targetId);
   }
 
   /** One blast shove: velocity impulse + knockback wire notify + the

@@ -32,6 +32,8 @@ import type { BotRole } from '../../shared/flagGoals.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
 import { simNow } from './simClock.ts';
+import { botRand } from '../../shared/botRand.ts';
+import { WeaponType, HEALBEAM_ENERGY, HEALBEAM_RANGE, BELT_MAX, BELT_THROW_COST } from '../../shared/weapons.ts';
 
 /** Tribes-flavored squad roles — the type and the objective rules live in
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
@@ -192,12 +194,27 @@ export class ServerBots {
     p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
   }
 
+  /** Value-tiered ordnance gate: high-value spends (propel, heals,
+   *  plants, saboteur work) pay whenever the pocket covers them; casual
+   *  tosses keep a reserve so a bot doesn't dump its whole belt into
+   *  speculative arcs. Two relaxations: a FULL pocket may always spend
+   *  (the next nugget's +1 would overflow anyway), and income in reach
+   *  lowers the reserve — the refill is already planned. */
+  private spendOk(id: string, cost: number, highValue: boolean, nuggetNear: boolean): boolean {
+    const c = this.room.players.getPlayer(id)?.beltCharges ?? 0;
+    if (c < cost) return false;
+    if (highValue) return true;
+    const reserve = c >= BELT_MAX ? 0 : nuggetNear ? 1 : 2;
+    return c - cost >= reserve;
+  }
+
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null, nuggetNear: boolean): void {
     if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
-    if (out.belt) this.arsenal.throwBelt(p);
+    // The generic hunt lob is the definition of a low-value toss.
+    if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) this.arsenal.throwBelt(p);
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence — the same legal path humans use
@@ -205,7 +222,9 @@ export class ServerBots {
     const saboteur = this.roster.roleInfo.get(id) === 'infiltrator';
     const ready = (this.gearLobT.get(id) ?? 0) <= now;
     const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur) : null;
-    if (gear) {
+    // Wrecking gear IS the infiltrator's job — high value for it,
+    // opportunistic chip damage for everyone else.
+    if (gear && this.spendOk(id, BELT_THROW_COST, saboteur, nuggetNear)) {
       this.arsenal.lobAt(p, gear);
       // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
       // At 8s a turret effectively outlived the lobber's attention.
@@ -245,6 +264,106 @@ export class ServerBots {
     return this.sheep.coverageDebit(id, p, hasDest, simMs);
   }
 
+
+  /** Support plating: an ArmorGrenade carrier lobs a nade at a teammate
+   *  worth coating — flag carriers staging near the base get it first
+   *  (a plated capper survives the run), then hurt allies in reach, and
+   *  anyone pressing in. Technicians do it eagerly; other support kits
+   *  toss one now and then — a guideline, not a reflex. */
+  private supportNade(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number, nuggetNear: boolean): void {
+    if (!p.team) return;
+    const belt = this.loadouts.get(id)?.belt;
+    if (belt !== WeaponType.ArmorGrenade) return;
+    const tech = this.roster.roleInfo.get(id) === 'technician';
+    if ((this.supportT.get(id) ?? 0) > now) return;
+    // Plating is a nice-to-have, never worth the reserve — a real carrier
+    // target still lobs freely, speculative coats wait for income.
+    if (!this.spendOk(id, BELT_THROW_COST, tech, nuggetNear)) return;
+    // Scoring: carrier > hurt > nearby — the blast radius coats the
+    // cluster around the throw point too, so one nade plates a group.
+    let best: { pos: Vec3; vel: Vec3; score: number } | null = null;
+    const flags = this.room.flags;
+    for (const [aid, a] of this.room.players.getAllPlayers()) {
+      if (aid === id || a.team !== p.team || a.isDead) continue;
+      const d = Math.hypot(a.position.x - p.position.x, a.position.z - p.position.z);
+      if (d > 45) continue;
+      const carrying = flags ? [...flags.flags.values()].some((f) => f.carrier === aid) : false;
+      const hurt = a.health < a.maxHealth * 0.8;
+      const score = (carrying ? 60 : 0) + (hurt ? 30 : 0) + (45 - d);
+      if (score >= 25 && (!best || score > best.score)) best = { pos: a.position, vel: a.velocity, score };
+    }
+    // No target worth plating → keep the fuse. Duty-scaled chance keeps
+    // it a lean: a slack tech forgets to plate, a keen one rarely does.
+    if (!best || (!tech && botRand() > 0.45 * brain.dutyLevel)) return;
+    this.supportT.set(id, now + 5000 + botRand() * 3000);
+    // Lead the lob a touch — the ally is usually running through.
+    const aim = { x: best.pos.x + best.vel.x * 0.4, y: best.pos.y, z: best.pos.z + best.vel.z * 0.4 };
+    this.arsenal.lobAt(p, aim);
+  }
+
+  private supportT = new Map<string, number>();
+  private healBeamT = new Map<string, number>();
+  private healNadeT = new Map<string, number>();
+
+  /** Medic work, keyed off what the bot CARRIES not its role tag: any
+   *  kit holding the beam zaps hurt allies in reach, a HealGrenade belt
+   *  lobs at a hurt cluster — the dedicated 'medic' does both eagerly,
+   *  hybrids only when duty says so and the tank has a reserve. The
+   *  beam's ammo IS jet energy, so pocket-healing spends mobility. */
+  private healAlly(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number): void {
+    if (!p.team) return;
+    const lo = this.loadouts.get(id);
+    if (!lo) return;
+    const hasBeam = lo.near === WeaponType.HealBeam || lo.side === WeaponType.HealBeam || lo.mid === WeaponType.HealBeam || lo.far === WeaponType.HealBeam;
+    const hasNade = lo.belt === WeaponType.HealGrenade;
+    if (!hasBeam && !hasNade) return;
+    const medic = this.roster.roleInfo.get(id) === 'medic';
+    if (!medic && botRand() > 0.45 * brain.dutyLevel) return;
+    const energy = this.room.moveSim.energyOf(id);
+    // Keep a mobility reserve — a medic that drains dry on allies can't
+    // jet out of the counter-push. Dedicated medics push the tank lower.
+    const floor = medic ? HEALBEAM_ENERGY * 2 : HEALBEAM_ENERGY * 5;
+    if (energy !== null && energy < floor) return;
+    let best: { id: string; a: { position: Vec3; velocity: Vec3; health: number; maxHealth: number }; score: number } | null = null;
+    let hurtCount = 0;
+    const flags = this.room.flags;
+    for (const [aid, a] of this.room.players.getAllPlayers()) {
+      if (aid === id || a.team !== p.team || a.isDead || a.health >= a.maxHealth * 0.85) continue;
+      const d = Math.hypot(a.position.x - p.position.x, a.position.y - p.position.y, a.position.z - p.position.z);
+      if (d > HEALBEAM_RANGE * 1.4) continue;
+      hurtCount++;
+      const carrying = flags ? [...flags.flags.values()].some((f) => f.carrier === aid) : false;
+      const missing = a.maxHealth - a.health;
+      const score = missing + (carrying ? 40 : 0) - d;
+      if (!best || score > best.score) best = { id: aid, a, score };
+    }
+    if (best && hasBeam && (this.healBeamT.get(id) ?? 0) <= now) {
+      this.healBeamT.set(id, now + 110); // ~0.1s tick — matches WEAPON_FIRE_INTERVAL_S[HealBeam]
+      this.room.messages.botAttack(id, best.id, WeaponType.HealBeam);
+      // Beam visual for observers — a speedless bolt from muzzle to patient.
+      const dx = best.a.position.x - p.position.x, dz = best.a.position.z - p.position.z;
+      const dl = Math.hypot(dx, dz) || 1;
+      this.room.messages.botFire(id, null,
+        { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
+        { x: (dx / dl) * 220, y: (best.a.position.y - p.position.y) / dl * 40, z: (dz / dl) * 220 },
+        WeaponType.HealBeam, false);
+    }
+    // Burst for the pack: two+ hurt in the blast envelope, or one badly
+    // hurt past beam reach — the nade covers what the latch can't.
+    if (hasNade && (this.healNadeT.get(id) ?? 0) <= now) {
+      const crowded = hurtCount >= 2;
+      const far = best ? Math.hypot(best.a.position.x - p.position.x, best.a.position.z - p.position.z) > HEALBEAM_RANGE : false;
+      if (best && (crowded || far || (medic && hurtCount >= 1))) {
+        this.healNadeT.set(id, now + 6000 + botRand() * 3000);
+        const aim = {
+          x: best.a.position.x + best.a.velocity.x * 0.5,
+          y: best.a.position.y,
+          z: best.a.position.z + best.a.velocity.z * 0.5,
+        };
+        this.arsenal.lobAt(p, aim);
+      }
+    }
+  }
 
   tick(dt: number): void {
     this.roster.maintain(simNow());
@@ -291,6 +410,10 @@ export class ServerBots {
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
         const goal = this.sense.flagGoal(p, brain.dutyLevel);
         const ctx = this.sense.build(id, p, goal, now, brain.skill);
+        // Income in reach — a nugget the bot could realistically touch
+        // lowers the spend reserve (refill is basically planned).
+        const pk = ctx.pickup;
+        const nuggetNear = !!pk && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
@@ -299,7 +422,9 @@ export class ServerBots {
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);
-        this.firePhase(id, p, out, goal, now, sh0);
+        this.firePhase(id, p, out, goal, now, sh0, nuggetNear);
+        this.supportNade(id, p, brain, now, nuggetNear);
+        this.healAlly(id, p, brain, now);
         this.lastOut.set(id, out);
       }
       const sh = this.room.moveSim.simState(id);

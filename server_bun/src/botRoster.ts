@@ -184,6 +184,29 @@ export class BotRoster {
             this.loadouts.set(donor, { ...lo, belt: WeaponType.DiscPull });
           }
         }
+        // The medic role is the DEDICATED kit — a fighter carrying a
+        // heal nade is a hybrid, the medic carries the whole archetype.
+        if (want === 'medic') {
+          const lo = this.loadouts.get(donor);
+          if (lo) this.loadouts.set(donor, { ...lo, near: WeaponType.HealBeam, belt: WeaponType.HealGrenade });
+        }
+        // The chaser (LD) lives or dies on catching 30-45 m/s carriers —
+        // a mortar or rocket rack can't lead that, and a shotgun can't
+        // reach it. Swap only the anti-pursuit slots, keep the rest of
+        // the drawn kit (personality over uniformity).
+        if (want === 'ldefense') {
+          const lo = this.loadouts.get(donor);
+          if (lo) {
+            const slowFar = new Set([WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.PlasmaCannon]);
+            const closeNear = new Set([WeaponType.Shotgun, WeaponType.Flak, WeaponType.HealBeam]);
+            const far = slowFar.has(lo.far) ? WeaponType.Railgun : lo.far;
+            // Beam over spray: tracking a jinking carrier favors the
+            // lightning gun's hold-on-target model; chaingun when the
+            // kit doesn't field beam mechanics anyway.
+            const near = closeNear.has(lo.near) ? WeaponType.Lightning : lo.near;
+            if (far !== lo.far || near !== lo.near) this.loadouts.set(donor, { ...lo, far, near });
+          }
+        }
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
         have++;
       }

@@ -45,6 +45,13 @@ export interface CombatDeps {
   /** Movement shadow sim — gets the same impulse deltas we apply to
    *  target.velocity so a legit blast doesn't read as divergence. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
+  /** Concussion payload hook — RoomFlags.dropIfCarrier; absent = no
+   *  flag sim, so the strip is a no-op outside CTF rooms. */
+  dropFlagCarrier?: (playerId: string) => void;
+  /** Jet-tank access for heal-beam ammo — the beam burns movement energy,
+   *  server-side truth so a bot/client can't heal for free. */
+  drainEnergy?: (playerId: string, amount: number) => void;
+  energyOf?: (playerId: string) => number | null;
   /** Server-driven respawn is a declared discontinuity — reseat the
    *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
@@ -94,6 +101,9 @@ export class CombatHandler {
    *  gating — the ledger already caps them at one per registered
    *  projectile. */
   fireWindows = new Map<string, { start: number; count: number; lastTs?: number }>();
+  /** Heal-beam tick law — per `shooter|patient` pair last-tick stamp,
+   *  the same rate shape the repair beam enforces. */
+  healTicks = new Map<string, number>();
   /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
   chargeBank: ChargeBank; // public — aoeClaims banks LG ticks through it

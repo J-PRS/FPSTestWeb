@@ -72,6 +72,8 @@ export interface RoomInfo {
   onRepair?: (playerId: string, targetId: number) => void;
   /** AOE blast sink for deployables — Room.deployables.applyBlast. */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
+  onSkillUse?: (playerId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
   /** Returns false when the event is stale (seq regression on an
@@ -82,6 +84,10 @@ export interface RoomInfo {
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
+  dropFlagCarrier?: (playerId: string) => void;
+  /** Jet-tank access for heal-beam ammo — energy is server truth. */
+  drainEnergy?: (playerId: string, amount: number) => void;
+  energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat landed — Room relays it as a 'reply' notice to the squad. */
   onBotSpoke?: (id: string) => void;
@@ -123,6 +129,9 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     teams: roomInfo?.teams,
     friendlyFire: roomInfo?.friendlyFire,
     moveImpulse: roomInfo?.moveImpulse,
+    dropFlagCarrier: roomInfo?.dropFlagCarrier,
+    drainEnergy: roomInfo?.drainEnergy,
+    energyOf: roomInfo?.energyOf,
     moveResync: roomInfo?.moveResync,
     onBotSpoke: roomInfo?.onBotSpoke,
     mode: roomInfo?.mode,
@@ -202,6 +211,7 @@ export class MessageHandler {
       heal: (id, m) => this.combat.handleHeal(id, m),
       deploy: (id, m) => this.roomInfo.onDeploy?.(id, m.kind, m.position),
       repair: (id, m) => this.roomInfo.onRepair?.(id, m.targetId),
+      skillUse: (id) => this.roomInfo.onSkillUse?.(id),
       creatureHit: (id, m) => {
         this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
       },

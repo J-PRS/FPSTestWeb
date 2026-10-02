@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
+import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 
 // FPS_TRAIL=<file.bmp> plots every bot's XZ track (alpha=red, bravo=
@@ -77,6 +78,10 @@ describe('scenario: fast-forward soak throughput', () => {
     const pressY = { alpha: 0, bravo: 0 };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
+    // Movement-energy telemetry — specific mechanical energy ½v²+g·h
+    // (h = height above terrain, J/kg), the "are they skiing like Tribes
+    // or walking like llamas" meter. Sampled per batch per live bot.
+    const eStats = new Map<string, { team: string; sum: number; max: number; n: number }>();
     const wasDead = new Map<string, boolean>();
     while (performance.now() - t0 < wallBudgetMs) {
       // Advance the room's clock first, then step every sim — the
@@ -102,6 +107,13 @@ describe('scenario: fast-forward soak throughput', () => {
           if (d < press.bravo) { press.bravo = d; pressY.bravo = p.position.y - standY; }
         }
         wasDead.set(p.id, false);
+        if (p.team) {
+          const v2 = p.velocity.x ** 2 + p.velocity.y ** 2 + p.velocity.z ** 2;
+          const e = 0.5 * v2 - GRAVITY * Math.max(0, p.position.y - hmHeight(field, p.position.x, p.position.z));
+          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0 };
+          s.sum += e; s.n++; if (e > s.max) s.max = e;
+          eStats.set(p.id, s);
+        }
         if (TRAIL_PATH && p.team) {
           const carrying = [...room.flags!.flags.values()].some((f) => f.carrier === p.id);
           trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying });
@@ -222,15 +234,38 @@ describe('scenario: fast-forward soak throughput', () => {
       byRole.set(role, r);
     }
     const roleLine = [...byRole.entries()].sort().map(([r, s]) => `${r}:${s.n}x ${s.k}K/${s.d}D`).join('  ');
+    // Energy report: per-bot avg + peak E. Team means + fleet median
+    // answer "does the whole match move like Tribes"; the top mover
+    // shows what good looks like in the same run.
+    const eRows = [...eStats.entries()].filter(([, s]) => s.n > 0)
+      .map(([id, s]) => ({ id, team: s.team, avg: s.sum / s.n, max: s.max }));
+    const medOf = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); return a.length ? a[a.length >> 1]! : 0; };
+    const eLine = eRows.length
+      ? `median avgE=${medOf(eRows.map((r) => r.avg)).toFixed(0)} ` +
+        `alpha=${(eRows.filter((r) => r.team === 'alpha').reduce((n, r) => n + r.avg, 0) / Math.max(1, eRows.filter((r) => r.team === 'alpha').length)).toFixed(0)} ` +
+        `bravo=${(eRows.filter((r) => r.team === 'bravo').reduce((n, r) => n + r.avg, 0) / Math.max(1, eRows.filter((r) => r.team === 'bravo').length)).toFixed(0)}; ` +
+        `top ${eRows.sort((a, b) => b.avg - a.avg).slice(0, 3).map((r) => `${fmtId(r.id)} ${r.avg.toFixed(0)}/${r.max.toFixed(0)}`).join(' ')}`
+      : 'no samples';
     // KPI: machine-readable single line for A/B diffing runs.
     console.log(
       `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
       `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0}` +
       `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
+      `,e_med=${medOf(eRows.map((r) => r.avg)).toFixed(0)}` +
       (caps.length ? `,fastest_s=${(fastest.holdMs / 1000).toFixed(1)}` : ''),
     );
     console.log(`  roles: ${roleLine}`);
+    // Launch telemetry — a soak that reports avgE without launches can't
+    // tell whether bots ever disc-jump.
+    const prop = room.bots?.arsenal.propels;
+    if (prop?.size) {
+      let heel = 0, pull = 0, crest = 0;
+      const byBot = [...prop.entries()].sort((a, b) => (b[1].heel + b[1].pull + b[1].crest) - (a[1].heel + a[1].pull + a[1].crest));
+      for (const [, s] of prop) { heel += s.heel; pull += s.pull; crest += s.crest; }
+      console.log(`  propels: heel=${heel} pull=${pull} crest=${crest}; top ${byBot.slice(0, 3).map(([id, s]) => `${fmtId(id)} ${s.heel}/${s.pull}/${s.crest}`).join(' ')}`);
+    }
+    console.log(`  energy: ${eLine}`);
     console.log(
       `  match: score ${score}; kills ${kills} (alpha ${killsByTeam.alpha ?? 0} / bravo ${killsByTeam.bravo ?? 0}); ` +
       `press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '—'}m(dy${pressY.alpha >= 0 ? '+' : ''}${pressY.alpha.toFixed(0)})/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '—'}m(dy${pressY.bravo >= 0 ? '+' : ''}${pressY.bravo.toFixed(0)}); ` +

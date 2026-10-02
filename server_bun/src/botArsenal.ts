@@ -8,7 +8,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
@@ -36,6 +36,13 @@ export class BotArsenal implements BeamHost {
   /** Sim clock — the rate gate compares in sim-ms, not wall time, so
    *  scenario tests and slow-tick servers measure the same cadence. */
   private clock = 0;
+  /** Launch telemetry per bot: heel blast / pull surf / crest pop —
+   *  the soak report reads this to prove disc-jumps actually fire. */
+  readonly propels = new Map<string, { heel: number; pull: number; crest: number }>();
+  private propelMark(id: string, kind: 'heel' | 'pull' | 'crest'): void {
+    const s = this.propels.get(id) ?? { heel: 0, pull: 0, crest: 0 };
+    s[kind]++; this.propels.set(id, s);
+  }
 
   constructor(
     public room: Room,
@@ -140,6 +147,11 @@ export class BotArsenal implements BeamHost {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     if (!stats || stats.speed <= 0) return;
+    // The belt pool pays for every toss — a dry bot's lob intents quietly
+    // fizzle until a nugget restocks it (brains see ctx.pickup for that).
+    const body = this.room.players.getPlayer(p.id);
+    if (body && body.beltCharges < BELT_THROW_COST) return;
+    if (body) body.beltCharges -= BELT_THROW_COST;
     const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     const d = Math.hypot(dx, dz) || 1;
     // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
@@ -182,25 +194,51 @@ export class BotArsenal implements BeamHost {
    *  the self-shove lands via processAOE's bot-only branch, so the speed is
    *  real physics, not a cheat impulse. Pull-belt carriers ride forward
    *  instead: lob the implosion ahead and let the pop drag them. Gated to
-   *  launches worth a fuse (long run, low speed, tank for the climb) and
-   *  never mid-firefight. */
+   *  launches worth a fuse (long run, low speed, tank for the climb);
+   *  distant pursuits may boost mid-volley since out-shooting never
+   *  closes ground on a fleeing carrier. */
   tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec } | null, sh: MoveState | null, now: number): void {
-    if (!goal || !sh?.onGround || out.fire) return;
+    if (!goal || !sh) return;
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
     if (dist < 35) return;
+    const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
+    if (!sh.onGround) {
+      // Crest blast: jetting up a face, the hill drops away under the
+      // bot — a straight-down shot at its own feet banks the blast as
+      // pure height, the T2 "lose contact, shoot the floor" trick.
+      if (!this.room.field || dist < 60) return;
+      const floor = hmHeight(this.room.field, p.position.x, p.position.z);
+      if (floor > p.position.y - 4) return;          // still on the slope — the grounded path owns this
+      if (floor < p.position.y - 18) return;         // too high already — blast can't reach the dirt
+      if (Math.hypot(sh.vel.x, sh.vel.z) < 8) return; // needs real run speed to mean anything
+      if (sh.vel.y < -2) return;                      // falling — the moment passed
+      const wt = this.propelWeapon(lo);
+      this.room.projectiles.spawn(id, wt,
+        { x: p.position.x, y: p.position.y + 0.2, z: p.position.z },
+        { x: 0, y: -1, z: 0 }, p.velocity);
+      this.propelT.set(id, now + 8000);
+      this.propelMark(id, 'crest');
+      logger.info('Bot crest blast', { id });
+      return;
+    }
+    // A long pursuit is allowed to boost mid-engagement — a chaser that
+    // must choose between shooting and disc-jumping never catches a
+    // carrier. Close goals still don't trade fire for speed.
+    if (out.fire && dist < 60) return;
     if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
     if ((this.room.moveSim.energyOf(id) ?? 0) < 30) return;
-    // Don't buy with a fuse what gravity sells for free: a start that
-    // already descends skis to speed without the launch, and the blast's
-    // fixed up-share is just wasted hang time on a falling route.
+    // Don't buy with a fuse what gravity sells for free: a mild descent
+    // skis to speed without the launch, and the blast's fixed up-share
+    // is just wasted hang time. A STEEP face is different — the
+    // speed-disc geometry fires nearly flat and trades almost no up-pop.
     if (this.room.field) {
       const nx0 = dx / dist, nz0 = dz / dist;
       const ahead = hmHeight(this.room.field, p.position.x + nx0 * 40, p.position.z + nz0 * 40);
-      if (ahead < p.position.y - 6) return;
+      const drop40 = p.position.y - ahead;
+      if (drop40 > 6 && drop40 < 14) return;
     }
-    const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
     const nx = dx / dist, nz = dz / dist;
     // Pull-preference isn't exclusive: the main-gun heel blast stays in
     // the toolkit — a pull surfer still disc-jumps off the spinfusor a
@@ -211,15 +249,26 @@ export class BotArsenal implements BeamHost {
       // Implosion ~18m ahead — the bot's own approach speed puts it in
       // the pull envelope when the disc pops.
       this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 });
+      this.propelMark(id, 'pull');
     } else {
-      // Classic disc-jump: shell into the heels, blast pushes forward+up.
+      // Classic disc-jump, angled by the slope: firing back-and-low
+      // behind the heels on a descent puts the shove mostly horizontal
+      // into the ski line (pure speed), while flat/uphill starts aim
+      // under the body so the blast banks as height.
       const wt = this.propelWeapon(lo);
       const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-      const hx = p.position.x - nx * 1.8 - muzzle.x;
-      const hy = p.position.y - classCapsule(p.armorClass).eye - muzzle.y;
-      const hz = p.position.z - nz * 1.8 - muzzle.z;
+      let back = 1.8, drop = classCapsule(p.armorClass).eye;
+      if (this.room.field) {
+        const aheadH = hmHeight(this.room.field, p.position.x + nx * 20, p.position.z + nz * 20);
+        const slope = p.position.y - aheadH; // >0 means the route falls away
+        if (slope > 4) { back = 3.0; drop *= 0.55; } // speed-disc geometry
+      }
+      const hx = p.position.x - nx * back - muzzle.x;
+      const hy = p.position.y - drop - muzzle.y;
+      const hz = p.position.z - nz * back - muzzle.z;
       const len = Math.hypot(hx, hy, hz) || 1;
       this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
+      this.propelMark(id, 'heel');
     }
     this.propelT.set(id, now + 8000);
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
