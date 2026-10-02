@@ -308,6 +308,13 @@ export class BotBrain {
     return this.h.hunt?.id ?? null;
   }
 
+  /** Where the hunt was last actually seen — the only legal aim point
+   *  for a lobbed throw (live position would be a wallhack on a
+   *  cloaked or occluded target). */
+  get currentHuntSeen(): BotVec | null {
+    return this.h.hunt ? { ...this.h.lastSeen } : null;
+  }
+
   /** Jet-gate telemetry for the cap-run harness — which gate armed the
    *  last burn plus the latches that could outlive it. */
   get jetDebug(): { why: string; escapeT: number; out: boolean; hold: number } {

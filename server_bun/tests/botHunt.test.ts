@@ -62,9 +62,9 @@ describe('pickHunt', () => {
   it('sight line acquires at Tribes range — 90m hunts, beyond sight does not', () => {
     const st = newHuntState(P);
     pickHunt(st, flat({ enemies: [foe(90, 0)] }), P, 0, mood, () => {});
-    expect(st.hunt?.id).toBe('p:1'); // inside the 160m sight band
+    expect(st.hunt?.id).toBe('p:1'); // inside the 300m sight band
     const st2 = newHuntState(P);
-    pickHunt(st2, flat({ enemies: [foe(200, 0)] }), P, 0, mood, () => {});
+    pickHunt(st2, flat({ enemies: [foe(400, 0)] }), P, 0, mood, () => {});
     expect(st2.hunt).toBeNull(); // past the eye line
   });
 

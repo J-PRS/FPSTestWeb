@@ -50,6 +50,7 @@ export class BotArsenal implements BeamHost {
     public room: Room,
     public loadouts: Map<string, BotLoadout>,
     private lastHuntCb: (botId: string) => string | null,
+    private huntSeenCb: (botId: string) => BotVec | null = () => null,
     /** The shooter brain's skill matrix — biases the draw toward the
      *  gun the bot is actually good with (same bias the senses use,
      *  so advertised weaponSpeed and fired weapon agree). */
@@ -171,14 +172,18 @@ export class BotArsenal implements BeamHost {
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
-   *  spawn path as the plasma bolt: RoomProjectiles owns the flight. */
+   *  spawn path as the plasma bolt: RoomProjectiles owns the flight.
+   *  Aims at lastSeen, never the live body — a cloaked or occluded
+   *  target is only as findable as memory says. */
   throwBelt(p: BotBody): void {
-    const hunt = this.room.players.getPlayer(this.lastHunt(p.id) ?? '');
-    if (hunt) this.lobAt(p, hunt.position);
+    if (!this.lastHunt(p.id)) return;
+    const seen = this.huntSeenCb(p.id);
+    if (seen) this.lobAt(p, seen);
   }
 
   /** Lob the belt weapon at an explicit point — used for hunt targets
-   *  and for hostile emplacements blocking the bot's objective. */
+   *  (the last-seen spot) and for hostile emplacements blocking the
+   *  bot's objective. */
   lobAt(p: BotBody, aim: Vec3): void {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);

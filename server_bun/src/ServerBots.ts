@@ -78,7 +78,7 @@ export class ServerBots {
     this.field = field;
     this.watchdog = new BotWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
-    this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id), (id) => this.brains.get(id)?.skill);
+    this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id), (id) => this.brains.get(id)?.currentHuntSeen ?? null, (id) => this.brains.get(id)?.skill);
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id) => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
   }
