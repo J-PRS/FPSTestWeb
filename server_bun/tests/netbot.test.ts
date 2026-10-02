@@ -107,6 +107,21 @@ describe('netbot — real clients over real sockets', () => {
     }
   }, 30000);
 
+  it('a deploy claim lands on every observer — deploySpawn/deployables wire coverage', async () => {
+    env = bootServer();
+    await spawn(3, { pingMs: 20, jitterMs: 120, lossRate: 0 });
+    await sleep(1500); // joined + field loaded
+    const planter = bots[0].nc;
+    planter.send({ type: 'deploy', kind: 'mine', position: { ...planter.self.pos } });
+    await sleep(800);
+    // Every client — planter included — should see the same deployable
+    // set; a dropped deploySpawn leaves the world permanently forked.
+    for (const b of bots) {
+      const owned = [...b.nc.deployables.values()].filter((d) => d.owner === planter.id && d.kind === 'mine');
+      expect(owned.length).toBe(1);
+    }
+  }, 30000);
+
   it('a mid-match room hop keeps hits flowing (per-room seq reset)', async () => {
     env = bootServer();
     await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { hopEveryMs: 4000 });

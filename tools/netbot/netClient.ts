@@ -62,6 +62,9 @@ export class NetClient {
   roster = new Map<string, RemoteEntry>();
   /** shotId → server projectile id, learned from projectileCreated echoes. */
   projectiles = new Map<string, string>();
+  /** Deployables visible in this room — deploySpawn/Gone/Hp plus the
+   *  gameState snapshot, same lifecycle as the browser's deploy layer. */
+  deployables = new Map<number, { owner: string; kind: string; pos: Vec3; hp: number }>();
   /** Per-room hit seq watermark — same rule as the browser client: reset
    *  on every gameState so a room hop can't drop the new seq space. */
   private lastHitSeq = 0;
@@ -234,11 +237,18 @@ export class NetClient {
           this.self.health = m.localPlayerState.health;
           this.self.isDead = m.localPlayerState.isDead;
         }
+        this.deployables.clear();
+        for (const d of m.deployables ?? []) this.deployables.set(d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp ?? 0 });
         if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
         break;
       }
+      case 'deploySpawn':
+        this.deployables.set(m.id, { owner: m.owner, kind: m.kind, pos: { ...m.pos }, hp: 0 });
+        break;
+      case 'deployGone': this.deployables.delete(m.id); break;
+      case 'deployHp': { const d = this.deployables.get(m.id); if (d) d.hp = m.hp; break; }
       case 'playerJoined': {
         this.roster.set(m.playerId, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, team: m.team });
         break;
