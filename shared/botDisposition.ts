@@ -20,7 +20,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       b.flinchT -= dt;
       const fx = pos.x - b.flinchFrom.x, fz = pos.z - b.flinchFrom.z;
       const l = Math.hypot(fx, fz) || 1;
-      return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
+      // An 8m panic knock on a ~3m leash drops the anchor three leashes
+      // out — the flinch shrinks to a sidestep for posted feet, same as
+      // the dodge hop already does.
+      const step = ctx.posted ? FLINCH_DIST * 0.3 : FLINCH_DIST;
+      const dx = pos.x + (fx / l) * step, dz = pos.z + (fz / l) * step;
+      if (ctx.posted && ctx.objective) {
+        const ox = dx - ctx.objective.x, oz = dz - ctx.objective.z;
+        const od = Math.hypot(ox, oz);
+        if (od > ctx.posted) {
+          const k = ctx.posted / od;
+          return { x: ctx.objective.x + ox * k, y: pos.y, z: ctx.objective.z + oz * k };
+        }
+      }
+      return { x: dx, y: pos.y, z: dz };
     }
     // Carrying the objective: the run is the job — engaging whoever the
     // hunt found converts the carrier into a duelist mid-route (orbit
