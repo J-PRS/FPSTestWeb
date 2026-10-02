@@ -1,9 +1,11 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
+import { RtcServer } from '../src/RtcServer.ts';
 import type { WebSocketData } from '../src/types.ts';
 import { NetClient } from '../../tools/netbot/netClient.ts';
 import { NetBot } from '../../tools/netbot/bot.ts';
 import { LatencyLink, type LatencyOpts } from '../../tools/netbot/latency.ts';
+import type { NdModule } from '../../tools/netbot/rtcSocket.ts';
 
 // Real-socket tier: an actual Bun.serve + actual WebSocket clients, so the
 // join/tick/claim pipeline runs the same code path a browser would — the
@@ -12,19 +14,20 @@ import { LatencyLink, type LatencyOpts } from '../../tools/netbot/latency.ts';
 // makes claims race their spawn registrations.
 function bootServer() {
   const gs = new GameServer();
+  const rtc = new RtcServer(gs);
   const server = Bun.serve<WebSocketData>({
     port: 0,
     websocket: {
       data: {} as WebSocketData,
-      open(ws) { gs.onOpen(ws); },
-      message(ws, m) { gs.onMessage(ws, m as string | ArrayBuffer); },
-      close(ws) { gs.onClose(ws); },
-      drain(ws) { gs.onDrain(ws); },
+      open(ws) { ws.data.rtcs ? rtc.onOpen(ws) : gs.onOpen(ws); },
+      message(ws, m) { (ws.data.rtcs ? rtc : gs).onMessage(ws, m as string | ArrayBuffer); },
+      close(ws) { ws.data.rtcs ? rtc.onClose(ws) : gs.onClose(ws); },
+      drain(ws) { if (!ws.data.rtcs) gs.onDrain(ws); },
     },
     fetch(req, srv) {
       const url = new URL(req.url);
-      if (url.pathname === '/ws') {
-        if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now() } })) return undefined;
+      if (url.pathname === '/ws' || url.pathname === '/rtcs') {
+        if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtcs: url.pathname === '/rtcs' } })) return undefined;
         return new Response('upgrade failed', { status: 400 });
       }
       return new Response('nf', { status: 404 });
@@ -35,6 +38,10 @@ function bootServer() {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// node-datachannel resolves from server_bun/node_modules — injected into
+// netbot's RTC transport rather than imported inside tools/.
+const nd = await import('node-datachannel').then((m) => ((m as { default?: NdModule }).default ?? m) as NdModule).catch(() => null);
 
 describe('netbot — real clients over real sockets', () => {
   let env: ReturnType<typeof bootServer> | null = null;
@@ -47,9 +54,10 @@ describe('netbot — real clients over real sockets', () => {
     env = null;
   });
 
-  const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number } = {}) => {
+  const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number; transports?: ('ws' | 'rtc')[] } = {}) => {
     for (let i = 0; i < n; i++) {
-      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link));
+      const transport = opts.transports?.[i % opts.transports.length] ?? 'ws';
+      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined });
       const bot = new NetBot(nc, opts);
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
@@ -145,6 +153,24 @@ describe('netbot — real clients over real sockets', () => {
     // The bug this pins: a stale gameStates>0 used to un-gate gameplay
     // before the new handshake — the server would 1008 the socket and
     // rejects would never even arrive to count.
+    expect(rejects).toBe(0);
+  }, 30000);
+
+  it('ws and rtc clients fight in the same room — SCTP lanes resolve claims too', async () => {
+    if (!nd) return; // native addon unavailable in this environment
+    env = bootServer();
+    await spawn(4, { pingMs: 20, jitterMs: 80, lossRate: 0 }, { transports: ['ws', 'rtc'] });
+    await sleep(9000);
+    await sleep(400);
+
+    for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
+    const rtcBots = bots.filter((_, i) => i % 2 === 1);
+    const rtcDealt = rtcBots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);
+    const rejects = totalRejects();
+    if (rejects) console.log(`  rejects: ${rejectsOf()}`);
+
+    expect(rtcBots.length).toBe(2);
+    expect(rtcDealt).toBeGreaterThan(0); // the SCTP lane dealt damage
     expect(rejects).toBe(0);
   }, 30000);
 });

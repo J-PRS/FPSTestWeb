@@ -12,7 +12,7 @@ import { WEAPONS } from '../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';
-import type { Vec3 } from '../../shared/protocol.ts';
+import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
 import type { NetClient } from './netClient.ts';
 
 const THINK_S = 0.3;
@@ -39,6 +39,11 @@ export class NetBot {
   private brain: BotBrain;
   private loadout = BOT_LOADOUTS[Math.floor(Math.random() * BOT_LOADOUTS.length)] ?? BOT_LOADOUTS[0]!;
   private shells: Shell[] = [];
+  /** Spawn claims awaiting their projectileCreated echo — a client on a
+   *  lossy transport retransmits (the server dedups by shotId, so resends
+   *  are idempotent); on reliable lanes the echo always beats the timer
+   *  and this stays empty. */
+  private spawns = new Map<string, { msg: ClientMessage; at: number }>();
   private shotN = 0;
   private thinkTimer: ReturnType<typeof setInterval> | null = null;
   private lastFireAt = 0;
@@ -172,12 +177,15 @@ export class NetBot {
     };
     const dl = Math.hypot(dir.x, dir.y, dir.z) || 1;
     const shotId = `${nc.id}-s${++this.shotN}`;
-    nc.send({
+    const spawnMsg: ClientMessage = {
       type: 'shot', targetId: null, weaponType,
       position: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       velocity: { x: (dir.x / dl) * w.speed, y: (dir.y / dl) * w.speed, z: (dir.z / dl) * w.speed },
       shotId,
-    });
+      timestamp: Date.now(), // client fire clock — the fire-rate gate's jitter escape hatch
+    };
+    nc.send(spawnMsg);
+    this.spawns.set(shotId, { msg: spawnMsg, at: Date.now() });
     nc.tel.shots++;
     const flightS = dist / w.speed;
     // Lead the claim like a real client does — the shell lands where
@@ -202,6 +210,12 @@ export class NetBot {
   private settle(): void {
     const nc = this.nc;
     const now = Date.now();
+    // Retransmit spawns the server never acked — the projectileCreated
+    // echo is the ack. Beyond ~2s the shell's flight is over anyway.
+    for (const [shotId, sp] of this.spawns) {
+      if (nc.projectiles.has(shotId) || now - sp.at > 2000) { this.spawns.delete(shotId); continue; }
+      if (now - sp.at > 400) { nc.send(sp.msg); sp.at = now - 200; }
+    }
     this.shells = this.shells.filter((sh) => {
       if (now < sh.impactAt) return true;
       if (sh.rolled) return false;
@@ -221,7 +235,19 @@ export class NetBot {
         // honest players splash those, they only body-claim the slow
         // ones. Sprinting targets take the blast branch instead.
         const speed = Math.hypot(target.vel.x, target.vel.z);
-        if (speed > 15) {
+        const leadS = nc.pingMs / 2000 + 0.05;
+        const hitPos = {
+          x: target.pos.x + target.vel.x * leadS,
+          y: target.pos.y + target.vel.y * leadS,
+          z: target.pos.z + target.vel.z * leadS,
+        };
+        // Even slow targets get dodged: a juking player ends up meters
+        // from where the shell lands, and a real client sees that whiff —
+        // it never claims the hit. Only claim when the impact point still
+        // overlaps the capsule our own model renders, else take the miss
+        // branch like the real impact path does.
+        const contact = Math.hypot(sh.impactPos.x - target.pos.x, sh.impactPos.y - target.pos.y, sh.impactPos.z - target.pos.z);
+        if (speed > 15 || contact > 1.0) {
           if (aoe) {
             nc.send({
               type: 'aoeShot', position: { ...target.pos }, weaponType: sh.weaponType,
@@ -235,12 +261,6 @@ export class NetBot {
           }
           return false;
         }
-        const leadS = nc.pingMs / 2000 + 0.05;
-        const hitPos = {
-          x: target.pos.x + target.vel.x * leadS,
-          y: target.pos.y + target.vel.y * leadS,
-          z: target.pos.z + target.vel.z * leadS,
-        };
         nc.send({ type: 'shot', targetId: sh.targetId, weaponType: sh.weaponType, position: hitPos, projectileId: projId ?? null, shotId: sh.shotId, airtime });
         nc.tel.claims++;
         if (aoe) {

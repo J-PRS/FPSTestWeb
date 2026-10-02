@@ -92,7 +92,7 @@ export class CombatHandler {
    *  claims (fan weapons fire all pellets in one pull); hits don't need
    *  gating — the ledger already caps them at one per registered
    *  projectile. */
-  fireWindows = new Map<string, { start: number; count: number }>();
+  fireWindows = new Map<string, { start: number; count: number; lastTs?: number }>();
   /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
   chargeBank: ChargeBank; // public — aoeClaims banks LG ticks through it

@@ -30,9 +30,14 @@ const STAGGER = arg('--stagger', 50, num);
 
 console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}ms jitter=${JITTER}ms loss=${LOSS}${ROOM ? ` room=${ROOM}/${MODE}` : ''})`);
 
+// Unique ids per run — the server pins each playerId to an HMAC identity
+// token permanently (anti-impersonation), so reusing netbot_N across runs
+// gets 'Player ID claimed' rejections. A browser survives this because
+// localStorage keeps the token; a soak gets a fresh tag.
+const RUN_TAG = Date.now().toString(36);
 const bots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < BOTS; i++) {
-  const nc = new NetClient(URL_, `netbot_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), ROOM ? { room: ROOM, mode: MODE } : {});
+  const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), ROOM ? { room: ROOM, mode: MODE } : {});
   const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined });
   bots.push({ nc, bot });
 }

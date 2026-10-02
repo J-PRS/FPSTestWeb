@@ -7,6 +7,7 @@
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
 import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
 import { LatencyLink } from './latency.ts';
+import { RtcGameSocket, type BotSocket, type NdModule } from './rtcSocket.ts';
 
 export interface RemoteEntry {
   pos: Vec3;
@@ -32,9 +33,19 @@ export interface NetTelemetry {
 
 const EVENT_TYPES = new Set(['playerHit', 'playerKill', 'playerRespawn', 'shotRejected', 'correction', 'yourHealth']);
 
+// Minimal structural socket — a real WebSocket and RtcGameSocket both fit.
+// Handler props are `unknown` so each side can keep its own event shape;
+// connect() assigns them once with locally-typed callbacks.
+type AnySocket = BotSocket & {
+  onopen: unknown;
+  onmessage: unknown;
+  onclose: unknown;
+  onerror: unknown;
+};
+
 export class NetClient {
   readonly id: string;
-  ws: WebSocket | null = null;
+  ws: AnySocket | null = null;
   link: LatencyLink;
   tel: NetTelemetry = {
     hitsDealt: 0, hitsTaken: 0, kills: 0, deaths: 0,
@@ -71,24 +82,31 @@ export class NetClient {
   closed = false;
   closeInfo = '';
 
-  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string } = {}) {
+  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string; transport?: 'ws' | 'rtc'; rtc?: { nd: NdModule; iceServers?: { hostname: string; port: number; relayer?: boolean }[] } } = {}) {
     this.id = id;
     this.link = link ?? new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 });
   }
 
-  connect(): Promise<void> {
+  async connect(): Promise<void> {
+    const transport = this.joinOpts.transport ?? 'ws';
+    const ws: AnySocket = transport === 'rtc'
+      ? await this.dialRtc()
+      : new WebSocket(this.url);
+    if (ws instanceof WebSocket) ws.binaryType = 'arraybuffer';
+    this.ws = ws;
+    this.joined = false;
+    this.closed = false;
+    this.closeInfo = '';
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.url);
-      ws.binaryType = 'arraybuffer';
-      this.ws = ws;
-      this.joined = false;
-      this.closed = false;
-      this.closeInfo = '';
+      // RTC fires per-channel open (game + ctrl) — arm the handshake once.
+      let opened = false;
       ws.onopen = () => {
+        if (opened) return;
+        opened = true;
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
         // the same failure a real client's retry button papers over.
-        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws', token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode });
+        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport, token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode });
         ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
@@ -103,13 +121,22 @@ export class NetClient {
         this.pingTimer = setInterval(() => this.send({ type: 'ping', timestamp: Date.now() }), 2000);
         resolve();
       };
-      ws.onmessage = (ev) => {
+      ws.onmessage = (ev: { data: string | ArrayBuffer }) => {
         if (typeof ev.data === 'string') this.onMessage(JSON.parse(ev.data) as ServerMessage);
         else this.onBinary(new Uint8Array(ev.data as ArrayBuffer));
       };
-      ws.onclose = (ev) => { this.closed = true; this.closeInfo = `${ev.code} ${ev.reason}`; };
-      ws.onerror = () => reject(new Error(`netbot ${this.id} ws error`));
+      ws.onclose = (ev: { code: number; reason: string }) => { this.closed = true; this.closeInfo = `${ev.code} ${ev.reason}`; };
+      ws.onerror = () => reject(new Error(`netbot ${this.id} ${transport} error`));
+      // RtcGameSocket.dial resolves only after a channel opened — the open
+      // event fired before these handlers existed, so re-arm manually.
+      if (ws.readyState === 1) (ws.onopen as () => void)?.();
     });
+  }
+
+  private async dialRtc(): Promise<RtcGameSocket> {
+    const rtc = this.joinOpts.rtc;
+    if (!rtc) throw new Error('netbot rtc transport needs joinOpts.rtc.nd injected');
+    return RtcGameSocket.dial(this.url.replace(/\/ws$/, '/rtcs'), rtc.nd, rtc.iceServers ?? []);
   }
 
   /** All outbound traffic flows through the latency shim — combat claims

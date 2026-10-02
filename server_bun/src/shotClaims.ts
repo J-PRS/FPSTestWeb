@@ -111,6 +111,26 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       return;
     }
 
+    // Idempotent resend: a client on a lossy transport retransmits spawns
+    // until the projectileCreated echo lands. Dedup by spawn nonce BEFORE
+    // the gates — a resend must re-ack, not consume a fire-window slot or
+    // register a phantom twin.
+    if (msg.shotId) {
+      const known = h.ledger.idForClientShot(playerId, msg.shotId);
+      if (known) {
+        h.broadcast({
+          type: 'projectileCreated',
+          projectileId: known,
+          ownerId: playerId,
+          position: msg.position,
+          velocity: msg.velocity,
+          weaponType: msg.weaponType,
+          shotId: msg.shotId,
+        });
+        return;
+      }
+    }
+
     // Fire-rate validation (the UE ServerFire_Validate pattern) on the
     // SPAWN claim — hit claims don't need it: the ledger already caps them
     // at one per registered projectile, so bounding spawns bounds damage.
@@ -122,13 +142,21 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       const key = `${playerId}:${msg.weaponType}`;
       const win = h.fireWindows.get(key);
       if (win && now - win.start < interval * 850) {
-        if (win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
+        // Jitter compresses arrival spacing — two spawns fired a legal
+        // interval apart can land inside one window on an unordered
+        // transport. The claim's own fire timestamp is the escape hatch:
+        // legal spacing on the client's clock still counts as one shot
+        // (the ledger's per-projectile claim cap bounds damage anyway).
+        const tsGapOk = msg.timestamp !== undefined && win.lastTs !== undefined
+          && msg.timestamp - win.lastTs >= interval * 850;
+        if (!tsGapOk && win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
           h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType);
           return;
         }
         win.count++;
+        if (msg.timestamp !== undefined) win.lastTs = msg.timestamp;
       } else {
-        h.fireWindows.set(key, { start: now, count: 1 });
+        h.fireWindows.set(key, { start: now, count: 1, lastTs: msg.timestamp });
       }
     }
 

@@ -75,8 +75,18 @@ export class ClaimLedger {
    *  before the projectileCreated echo lands (or instead of it). */
   private clientIds = new Map<string, string>();
 
-  /** Track a newly spawned projectile; returns the server-assigned id. */
+  /** Track a newly spawned projectile; returns the server-assigned id.
+   *  Idempotent on (ownerId, clientShotId): a client on a lossy transport
+   *  retransmits unacked spawns, and without this dedup each resend
+   *  registers a phantom twin (and trips the fire-window gate). */
   register(ownerId: string, weaponType: number, position: Vec3, velocity: Vec3, clientShotId?: string): string {
+    if (clientShotId) {
+      // Live OR spent id both dedup — a spent id binds to the tombstone
+      // (claims still resolve per-kind consumed), a live id to the shell;
+      // only a fully swept record may re-register.
+      const existing = this.idForClientShot(ownerId, clientShotId);
+      if (existing) return existing;
+    }
     const id = `proj_${++this.counter}`;
     this.projectiles.set(id, {
       ownerId,
