@@ -126,6 +126,8 @@ export function syncLocalTeam(m: MatchHost): void {
     b.team = other;
     m.teamOf.set(b.playerId, other);
     b.setGizmoColor(TEAM_COLORS[other]);
+    // Defectors flip to the enemy side — recolor the debug hitbox too.
+    b.setColliderColor(other === lt ? 0x00ff00 : 0xff3333);
     m.hooks.killFeed(other === 'alpha' ? 'ALPHA' : 'BRAVO', `${b.playerId.replace('bot:', '')} defects`, false, false);
   }
 }

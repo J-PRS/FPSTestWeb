@@ -21,7 +21,7 @@ import { registerDiag } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import {
   vfxPressure, vfxReady, vfxBatcher,
-  live, pools, pooled, takeSystem, activateSystem,
+  live, pools, takeSystem, activateSystem, returnSystem,
   queueIfCold, buildQueue, activeTrailPs, trailStats,
   poolDump,
 } from './vfxRuntime.js';
@@ -301,10 +301,7 @@ export class QuarksTrail {
     activeTrailPs.delete(ps);
     liveQuarks.delete(this);
     ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
-    const pool = pools.get(this.key) ?? [];
-    pool.push({ ps, idleAt: performance.now() });
-    pooled.add(ps);
-    pools.set(this.key, pool);
+    returnSystem(ps, this.key);
   }
 }
 
@@ -338,7 +335,10 @@ interface PuffParticle extends BlastParticle { startSpeed: number; }
  *  objects, not N meshes+materials+draw calls. */
 class PuffEmitter {
   readonly type = 'puff';
+  // spec is re-seeded on every pooled checkout — pos/velMin/velMax/shed
+  // are velocity-coupled per call, so they must NOT live in the pool key.
   constructor(private spec: PuffSpec) { }
+  setSpec(s: PuffSpec): void { this.spec = s; }
   update(): void { }
   initialize(p: PuffParticle): void {
     const s = this.spec, h = s.pos;
@@ -359,6 +359,10 @@ class PuffEmitter {
   clone(): PuffEmitter { return new PuffEmitter(this.spec); }
 }
 
+// Pooled puff systems keep their constructed emitter — like BlastEmitter's
+// liveDir, the velocity-coupled spec fields are re-seeded on checkout.
+const puffOf = new WeakMap<ParticleSystem, PuffEmitter>();
+
 /** One small effect call → one batched burst. Replicates the pooled
  *  particle lifecycle: alpha always faded t·0.6 (the old update loop
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
@@ -372,12 +376,17 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
   if (Math.random() > pressure * pressure) return;
   const ss = spec.sizeScale ?? 1;
   const count = Math.max(1, Math.round(spec.count * pressure));
-  // The whole spec is baked into the build (colors, life ranges, emitter
-  // shape, material) — pool per spec signature so reuse only ever sees
-  // its own config. Call sites pass near-constant specs, so a handful of
-  // kinds covers every puff.
-  const kind = `puff:${spec.count}:${spec.lifeMin}:${spec.lifeMax}:${ss}:${spec.additive ? 1 : 0}:${spec.gravity === false ? 0 : 1}:${spec.colA.join(',')}:${spec.colB.join(',')}:${spec.velMin.join(',')}:${spec.velMax.join(',')}:${spec.pos?.join(',') ?? ''}:${spec.shed?.join(',') ?? ''}`;
-  const ps = takeSystem(kind, () => new ParticleSystem({
+  // The key covers only what the build bakes into generators/behaviors
+  // (life range, size, colors, material, gravity) — quantized so near-equal
+  // specs share a bucket. pos/velMin/velMax/shed/count are velocity-coupled
+  // per call: they're re-seeded via PuffEmitter.setSpec / emissionBursts on
+  // checkout. Keying on them fragmented the freelist into 8.4k one-entry
+  // buckets (~30k parked systems) — the 13ms vfx frame.
+  const kind = `puff:${_q(spec.lifeMin, 0.1)}:${_q(spec.lifeMax, 0.1)}:${_q(ss, 0.1)}` +
+    `:${spec.additive ? 1 : 0}:${spec.gravity === false ? 0 : 1}:${_qc(spec.colA)}:${_qc(spec.colB)}`;
+  const ps = takeSystem(kind, () => {
+    const em = new PuffEmitter(spec);
+    const sys = new ParticleSystem({
     duration: spec.lifeMax + 0.05,
     looping: false,
     startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
@@ -388,7 +397,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
     startRotation: new IntervalValue(0, Math.PI * 2),
     emissionOverTime: new ConstantValue(0),
     emissionBursts: [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }],
-    shape: new PuffEmitter(spec),
+    shape: em,
     material: spec.additive ? impactMat() : normalMat(),
     renderMode: RenderMode.BillBoard,
     worldSpace: true,
@@ -403,7 +412,13 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
       new SizeOverLife(new FnValue(t => 0.3 + (1 - t) * 1.4)),
       new RotationOverLife(new IntervalValue(-2, 2)),
     ],
-  }));
+    });
+    puffOf.set(sys, em);
+    return sys;
+  });
+  // Re-seed the runtime spec — the pooled system's emitter was built with
+  // a different call's pos/velMin/velMax/shed.
+  puffOf.get(ps)?.setSpec(spec);
   // count is baked at build but pressure-scaled per call — a pooled
   // reuse would replay the first build's crowd size.
   ps.emissionBursts[0]!.count = new ConstantValue(count);

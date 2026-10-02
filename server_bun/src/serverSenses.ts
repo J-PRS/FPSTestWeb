@@ -47,6 +47,9 @@ export class ServerBotSenses {
    *  stand floods BEFORE the runner lands — the same "capper's 10 out"
    *  call humans make on comms. Legal: the caller's own ETA, not intel. */
   private pushAt = new Map<TeamId, { pos: BotVec; at: number }>();
+  /** Times each team's push-call was (re)posted — soak visibility into
+   *  how often the flood call actually fires. */
+  readonly pushCalls = new Map<TeamId, number>();
   private static readonly PUSH_ETA_S = 10;
   private static readonly PUSH_HOLD_MS = 8000;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
@@ -313,6 +316,10 @@ export class ServerBotSenses {
       const spd = qp ? Math.hypot(qp.velocity.x, qp.velocity.z) : 0;
       const eta = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) / Math.max(12, spd);
       if (eta < ServerBotSenses.PUSH_ETA_S) {
+        const prev = this.pushAt.get(me);
+        if (!prev || simNow() - prev.at > ServerBotSenses.PUSH_HOLD_MS) {
+          this.pushCalls.set(me, (this.pushCalls.get(me) ?? 0) + 1);
+        }
         this.pushAt.set(me, { pos: { ...enemyStand }, at: simNow() });
       }
     }
@@ -355,7 +362,19 @@ export class ServerBotSenses {
         // this the probe kept re-picking entries behind the bot — cappers
         // entered the 80m ring, rerouted outward, and left ungrazed.
         const committed = capper && dStand < 80 && wall < 12;
-        if (wall < 6 || committed) { goalPos = enemyStand; } else {
+        if (wall < 6 || committed) {
+          // A ballistic runner can't dive — aiming AT the flag from +20y
+          // lands it 30m past the stand at speed. Humans aim the landing
+          // instead: touch down short, skim through the flag at grab
+          // height. Pull the target toward the bot by how high it is.
+          const dy = p.position.y - enemyStand.y;
+          const pull = Math.max(0, Math.min(24, (dy - 5) * 1.6));
+          goalPos = pull > 1
+            ? { x: enemyStand.x - ((enemyStand.x - p.position.x) / dStand) * pull,
+                y: enemyStand.y,
+                z: enemyStand.z - ((enemyStand.z - p.position.z) / dStand) * pull }
+            : enemyStand;
+        } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —
         // but switching is expensive: the incumbent only loses when a

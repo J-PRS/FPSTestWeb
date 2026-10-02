@@ -174,6 +174,11 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
 // always red. Tint applies only when the wire team changes.
 function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
     playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
+  // Debug hitbox wireframe — friendly green, everyone else red. Runs every
+  // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
+  // constructor's default green.
+  const friendly = !!theirTeam && theirTeam === deps.world.localTeam;
+  remotePlayer.setColliderColor(friendly ? 0x00ff00 : ENEMY_RED);
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) return;
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);

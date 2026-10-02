@@ -372,6 +372,10 @@ export class Ball {
   }
 
   dispose(): void {
+    // Always leave the census — the drained-dead path (updateBallDead)
+    // frees FX itself and splices without dispose(), so without this a
+    // corpse stays in Ball.live forever and the dump fills with dead rows.
+    if (this._disposed) { Ball.live.delete(this); return; }
     Ball.live.delete(this);
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
     this.trails.dispose();

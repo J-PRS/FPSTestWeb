@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER,
+  
   KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE, WeaponType } from '../../../shared/weapons.js';
@@ -22,8 +22,6 @@ export const DISC_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[1].hitMin,
   hitMax: WEAPONS[1].hitMax,
   hitGrow: WEAPONS[1].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DISC,
-  collisionMultiplier: EXPLOSION_COLLISION_MULTIPLIER,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[1].aoeDamage,
   aoeRadius: WEAPONS[1].aoeRadius,

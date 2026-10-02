@@ -68,8 +68,6 @@ export interface ExplosionArgs {
   force: number;
   forceMode: 'push' | 'pull';
   aoeDamage: number;
-  falloffMultiplier: number;
-  collisionMultiplier: number;
   forceMultiplier: number;
   shooterId?: string;
   directHit?: boolean;

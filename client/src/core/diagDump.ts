@@ -122,6 +122,7 @@ interface TrailDump {
   inst?: unknown;
   swarm?: unknown;
   fx?: unknown;
+  geoNaN?: Record<string, unknown>[];
   ballDots?: Record<string, unknown>[];
   balls?: { viewPos?: string; rows?: Record<string, unknown>[] };
 }
@@ -170,6 +171,9 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   if (td.inst) lines.push(`instPools: ${JSON.stringify(td.inst)}`);
   if (td.swarm) lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
   if (td.fx) lines.push(`fx: ${JSON.stringify(td.fx)}`);
+  // NaN-geometry sniffer rows — owner path + attr signature, so the next
+  // "radius is NaN" console burst already names its source.
+  if (td.geoNaN?.length) lines.push(`geoNaN: ${td.geoNaN.map(h => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);
   pushBallCensus(lines, td);
   pushShellAudit(lines, ctx);
 }

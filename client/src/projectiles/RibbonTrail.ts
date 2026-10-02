@@ -104,6 +104,10 @@ export class RibbonTrail {
   }
 
   private static liveSet = new Set<RibbonTrail>();
+  // Non-finite inputs rejected before they could poison the shared batch
+  // buffers — surfaced in the ribbons census (see registerDiag below).
+  static nanPushes = 0;
+  static nanSides = 0;
   /** Debug dump for __trailDump — one row per live ribbon. */
   static dump(): Record<string, unknown>[] {
     const now = performance.now();
@@ -164,6 +168,19 @@ export class RibbonTrail {
     }
     return { count: rows.length, slots, rows };
   }
+  /** Done ribbons whose owner stopped updating them — a real slot leak
+   *  (unlike orphans(), which also flags live ones mid-frame stall).
+   *  sweepStale() reclaims them; reapedStale counts it in the census. */
+  static reapedStale = 0;
+  static sweepStale(staleMs = 2000): void {
+    const now = performance.now();
+    for (const r of RibbonTrail.liveSet) {
+      if (!r.done || now - r.lastUpdateAt <= staleMs) continue;
+      r.dispose();
+      RibbonTrail.reapedStale++;
+    }
+  }
+
   static litAudit = litAudit;
   static sweepLit = sweepLit;
   // Live-binding getter — a static field would freeze the count at init.
@@ -179,7 +196,14 @@ export class RibbonTrail {
     };
   }
 
+  // Pool-residency flag — dispose() is NOT safe to call twice (it would
+  // push the same instance into the free pool twice, handing one ribbon
+  // to two owners). The stale-owner reaper in sweepStale makes a second
+  // dispose possible, so the guard lives here, not at the call sites.
+  private inPool = false;
+
   private claimSlot(scene: THREE.Scene): void {
+    this.inPool = false;
     this.batch = claimableBatch(scene);
     this.slot = this.batch.free.pop()!;
     RibbonTrail.liveSet.add(this);
@@ -241,6 +265,14 @@ export class RibbonTrail {
   /** Record a new sample at the projectile's current position/facing. */
   push(pos: THREE.Vector3, vel: THREE.Vector3): void {
     if (this.stopped) return;
+    // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
+    // forever: every later sideFor/glueBoundary reuses it and the whole
+    // slot's verts go NaN (the "radius is NaN" console spam).
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z) ||
+        !Number.isFinite(vel.x) || !Number.isFinite(vel.y) || !Number.isFinite(vel.z)) {
+      RibbonTrail.nanPushes++;
+      return;
+    }
     _dir.copy(vel);
     if (_dir.lengthSq() < 1e-6) { this.starvedPushes++; return; }
     _dir.normalize();
@@ -402,7 +434,9 @@ export class RibbonTrail {
     let sy = this.dz[s] * vx - this.dx[s] * vz;
     let sz = this.dx[s] * vy - this.dy[s] * vx;
     const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
-    if (len <= 1e-6) return null;
+    // isFinite, not just >eps: NaN len passes `<=` comparisons (NaN < x
+    // is false), so a NaN cross product used to normalize into NaN verts.
+    if (!Number.isFinite(len) || len <= 1e-6) { RibbonTrail.nanSides++; return null; }
     const o = RibbonTrail._s3;
     o[0] = sx / len; o[1] = sy / len; o[2] = sz / len;
     return o;
@@ -410,6 +444,8 @@ export class RibbonTrail {
 
   /** Release back to the pool — buffers/slot kept for reuse. */
   dispose(): void {
+    if (this.inPool) return;
+    this.inPool = true;
     this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);
@@ -424,6 +460,8 @@ registerDiag('ribbons', () => ({
   ribbonOrphans: RibbonTrail.orphans(),
   litAudit: litAudit(),
   reapedLit,
+  reapedStale: RibbonTrail.reapedStale,
+  nanReject: { pushes: RibbonTrail.nanPushes, sides: RibbonTrail.nanSides },
 }));
 
 /** Shared 'stop → update until done → dispose' drain — detonation paths

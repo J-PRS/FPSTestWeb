@@ -294,7 +294,7 @@ export class BotArsenal implements BeamHost {
     // the pursuit is already lost without the launch, so it may still
     // pay blood. Never enough to outright suicide on the pad.
     const hp = this.room.players.getAllPlayers().get(id)?.health ?? 100;
-    if (hp < 65) {
+    if (hp < 45) {
       const me = this.room.players.getAllPlayers().get(id);
       const thief = [...(this.room.flags?.flags.values() ?? [])]
         .map((f) => f.carrier)
@@ -314,10 +314,9 @@ export class BotArsenal implements BeamHost {
         urgent = sep || pulling;
       }
       // Even a lost chase doesn't buy a funeral: the feet blast costs
-      // ~a third of a bar after falloff — under that, the "launch" is
-      // just a suicide with extra steps (selfK probe: these deaths
-      // happen with the nearest enemy ~120m away — nobody's chasing).
-      if (!urgent || hp < 55) return;
+      // up to SELF_SPLASH_MAX — under that plus a hair, the "launch" is
+      // just a suicide with extra steps.
+      if (!urgent || hp <= SELF_SPLASH_MAX + 5) return;
     }
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;

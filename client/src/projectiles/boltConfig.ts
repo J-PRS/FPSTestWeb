@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -20,8 +20,6 @@ export const BOLT_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[0].hitMin,
   hitMax: WEAPONS[0].hitMax,
   hitGrow: WEAPONS[0].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0, // ball radius + explosion radius
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[0].aoeDamage,
   aoeRadius: WEAPONS[0].aoeRadius,

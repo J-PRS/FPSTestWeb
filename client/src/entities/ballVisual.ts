@@ -83,10 +83,12 @@ export function updateBallDead(b: Ball, dt: number, viewPos: THREE.Vector3): voi
     b.trails.fade(dt);
     for (const r of b.ribbons) r.update(dt, viewPos);
     if (b.trails.size === 0 && b.ribbons.every(r => r.done)) {
-      // Final cleanup — caller splices on `disposed` without dispose()
+      // Final cleanup — caller splices on `disposed` without dispose(),
+      // so dispose() is invoked here only to leave Ball.live.
       b.trails.dispose();
       for (const r of b.ribbons) r.dispose();
       b._disposed = true;
+      b.dispose();
     }
   }
 

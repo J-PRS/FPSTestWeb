@@ -97,7 +97,10 @@ describe('pickFire', () => {
 
   it('leads a moving target along its velocity', () => {
     const st = armed();
-    st.lastSeenVel = { x: 10, y: 0, z: 0 }; // running +x
+    // The lagged opponent model is what leads shots now — lastSeenVel
+    // only feeds aim-error sizing.
+    st.leadVel = { x: 10, y: 0, z: 0 }; // running +x
+    st.lastSeenVel = { x: 10, y: 0, z: 0 };
     botRng(() => 0.5); // zero scatter
     const f = pickFire(st, 1, flat({ weaponSpeed: () => 60 }), P, 0, mood);
     expect(f?.targetId).toBe('p:1');

@@ -19,7 +19,6 @@ export function wirePlayers(ctx: NetCtx): void {
 function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const logger = deps.logger;
-  const streak = { v: 0 }; // kills since last local death — reset inside the kill handler
 
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number) => {
     if (deps.world.playbackMode) return;
@@ -189,7 +188,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     void velocity; // next tick record carries it — no need to touch internals
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId, weapon) => onPlayerKill(ctx, streak, shooterId, targetId, weapon);
+  networkManager.onPlayerKill = (shooterId, targetId, weapon) => onPlayerKill(ctx, shooterId, targetId, weapon);
 }
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */

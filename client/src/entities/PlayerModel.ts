@@ -55,6 +55,8 @@ export class PlayerModel {
    *  callers skip the reverse-playback/strafe-lean fallbacks then. */
   dirClipActive = false;
   private colliderGizmo: THREE.Mesh | null = null;
+  private colliderMat: THREE.MeshBasicMaterial | null = null;
+  private colliderHex = 0x00ff00;
   // Aim-pitch bones: quaternion pitch stacked on top of the animated pose.
   // lastPitch is un-applied before the mixer runs so it never accumulates
   // (the mixer skips bones whose track value didn't change).
@@ -267,14 +269,14 @@ export class PlayerModel {
     // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
     // Model is scaled by 0.5, so divide by scale to get correct world size
     const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, CAPSULE_CYLINDER_HEIGHT / this.modelScale, 4, 16);
-    const colliderMat = new THREE.MeshBasicMaterial({
-      color: 0x00ff00,
+    this.colliderMat = new THREE.MeshBasicMaterial({
+      color: this.colliderHex,
       wireframe: true,
       transparent: true,
       opacity: 0.3,
       depthTest: false // Always render on top
     });
-    this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
+    this.colliderGizmo = new THREE.Mesh(colliderGeo, this.colliderMat);
     // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
     // Model origin is at feet, model is scaled by 0.5
     // So local y = CAPSULE_CENTER_Y / 0.5
@@ -919,6 +921,15 @@ export class PlayerModel {
     this.ghostBaseline = null;
   }
 
+  /** Friend-or-foe tint on the debug hitbox — remotes recolor on team
+   *  assign; untouched models stay the default friendly green. The hex is
+   *  cached so a call landing before the GLB load still tints the capsule
+   *  when it's built. */
+  setColliderColor(hex: number): void {
+    this.colliderHex = hex;
+    this.colliderMat?.color.setHex(hex);
+  }
+
   setColliderVisible(visible: boolean): void {
     if (this.colliderGizmo) {
       this.colliderGizmo.visible = visible && urlParams.debug;
@@ -968,6 +979,7 @@ export class PlayerModel {
       this.colliderGizmo.geometry.dispose();
       (this.colliderGizmo.material as THREE.Material).dispose();
       this.colliderGizmo = null;
+      this.colliderMat = null;
     }
   }
 }

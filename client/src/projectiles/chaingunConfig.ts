@@ -17,8 +17,6 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[3].hitMin,
   hitMax: WEAPONS[3].hitMax, // tight proxy cap — slugs get a small wake, not the 8m shell drag
   hitGrow: WEAPONS[3].hitGrow,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 0,
   aoeDamage: 1.5, // unused (aoeRadius 0, noExplosion) — kept at 1/10 of rocket AOE for consistency
   aoeRadius: 0,

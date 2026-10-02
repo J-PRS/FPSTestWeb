@@ -99,7 +99,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
   const radius = Math.min(LG_POP_RADIUS_MIN + acc * 0.12, LG_POP_RADIUS_MAX);
   hooks.processExplosion({
     pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
-    falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+    forceMultiplier: 1,
     // Server sees a normal Lightning blast for remote-player prediction;
     // the scaled damage is the PvE fantasy side (enemies are client-run)
     sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
@@ -329,7 +329,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     }
     // Splash sweep still runs for bystander knockback; the named victim is
     // skipped so the pin + predict above isn't double-applied.
-    hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: hitPlayerId, falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1 });
+    hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: hitPlayerId, forceMultiplier: 1 });
   }
 
 

@@ -261,6 +261,12 @@ export class RemotePlayer {
     this.gizmo?.setColor(hex);
   }
 
+  /** Debug hitbox wireframe tint — green friendly / red enemy, set from
+   *  the same team verdict as the name gizmo. */
+  setColliderColor(hex: number): void {
+    this._model.setColliderColor(hex);
+  }
+
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
     resetCorpse(this.corpse);

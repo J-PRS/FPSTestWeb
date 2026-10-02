@@ -126,7 +126,10 @@ export class BotSheepMeter {
         this.maxed.add(id);
         if (this.simMs - (this.maxWarnedAt.get(id) ?? -600_000) >= 600_000) {
           this.maxWarnedAt.set(id, this.simMs);
-          logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
+          // Ledger sums are charge points, not seconds — each channel's
+          // share of the fill (pedestrian ticks / refused shots / one
+          // patch of ground), so the dominant channel reads at a glance.
+          logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
         }
       }
       return;

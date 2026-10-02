@@ -117,8 +117,6 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     // Splash amount = the direct hit's damage (banded by ring in shared
     // aoeDamage) — the stat-block aoeDamage only backs zero-direct specials.
     aoeDamage: getWeaponStats(weaponType).directDamage || p.config.aoeDamage,
-    falloffMultiplier: p.config.falloffMultiplier,
-    collisionMultiplier: p.config.collisionMultiplier,
     forceMultiplier: p.config.forceMultiplier,
     directHit: p.directHit,
     directHitTargetId: p.hitPlayerId,

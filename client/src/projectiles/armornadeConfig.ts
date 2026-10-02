@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE, WeaponType } from '../../../shared/weapons.js';
 
@@ -23,8 +23,6 @@ export const ARMORNADE_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[WeaponType.ArmorGrenade].hitMin,
   hitMax: WEAPONS[WeaponType.ArmorGrenade].hitMax,
   hitGrow: WEAPONS[WeaponType.ArmorGrenade].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[WeaponType.ArmorGrenade].aoeDamage,
   aoeRadius: WEAPONS[WeaponType.ArmorGrenade].aoeRadius,

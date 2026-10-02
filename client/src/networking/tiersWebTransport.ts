@@ -111,7 +111,9 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
   // without a CA install. Absent/disabled → no tier.
   try {
     const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
-    const info = await (await fetch(`${httpBase}/wthash`)).json();
+    // Bounded — a flapping tunnel left this fetch hanging forever, which
+    // stalled the whole re-probe and the session never recovered.
+    const info = await (await fetch(`${httpBase}/wthash`, { signal: AbortSignal.timeout(4000) })).json();
     if (!info?.enabled || !info.port || !info.sha256) return null;
     // Chrome resolves `localhost` to ::1 but the QUIC listener is IPv4 —
     // normalized here (the pvptest adapter does the same) or loopback WT

@@ -110,6 +110,22 @@ class ServerRtcTransport implements GameTransport {
     // disconnect when nothing is left to talk on.
     dc.addEventListener('close', () => this.checkDead('game'));
     ctrl?.addEventListener('close', () => this.checkDead('ctrl'));
+    // ICE watchdog lives here (was in tryWebRTC): it calls declareDead
+    // directly, so a dead association reconnects even if the datachannel
+    // 'close' events never dispatch — 'disconnected' is a grace state
+    // that often recovers; 'failed'/'closed' are terminal.
+    pc?.addEventListener('iceconnectionstatechange', () => {
+      logger.warn(`rtc ice: ${pc.iceConnectionState}`);
+      const s = pc.iceConnectionState;
+      if (s === 'failed' || s === 'closed') {
+        this.killLanes(`ice ${s}`);
+      } else if (s === 'disconnected') {
+        setTimeout(() => {
+          const now = pc.iceConnectionState;
+          if (now === 'disconnected' || now === 'failed') this.killLanes(`ice ${now}`);
+        }, 2500);
+      }
+    });
     ctrl?.addEventListener('message', (ev) => {
       const data = ev.data;
       // Binary CAN arrive here — the server pushes ball segments down the
@@ -129,6 +145,13 @@ class ServerRtcTransport implements GameTransport {
   }
   send(data: string | Uint8Array): boolean {
     if (!this.open) return false;
+    // Last-ditch detector: if neither lane is open the pipe is dead —
+    // declare it so a silent SCTP teardown still triggers the reconnect,
+    // even if neither 'close' nor an ICE transition ever fired.
+    if (this.dc.readyState !== 'open' && this.ctrl?.readyState !== 'open') {
+      this.declareDead('rtc lanes dead (send probe)');
+      return false;
+    }
     if (this.ctrl?.readyState === 'open') {
       if (typeof data === 'string') this.ctrl.send(data);
       else this.ctrl.send(new Uint8Array(data));
@@ -139,19 +162,36 @@ class ServerRtcTransport implements GameTransport {
     else this.dc.send(new Uint8Array(data));
     return true;
   }
+  private dead = false;
+  /** The single disconnect declaration — lane-close events AND the ICE
+   *  watchdog both land here so either detection path reconnects. */
+  private declareDead(reason: string): void {
+    if (this.dead) return;
+    this.dead = true;
+    this.open = false;
+    this.config.onDisconnect?.(1000, reason);
+  }
   private checkDead(lane: 'game' | 'ctrl'): void {
     // A lane 'close' event can precede its readyState flip — check both.
     const gameOpen = this.dc.readyState === 'open';
     const ctrlOpen = this.ctrl?.readyState === 'open';
     if (gameOpen || ctrlOpen) return;
-    this.open = false;
-    this.config.onDisconnect?.(1000, `rtc closed (${lane} last)`);
+    this.declareDead(`rtc closed (${lane} last)`);
+  }
+  /** ICE verdict is the authority — SCTP teardown doesn't reliably fire
+   *  datachannel 'close', which left dead lanes reporting half-open and
+   *  the reconnect probe never armed. */
+  private killLanes(reason: string): void {
+    try { this.dc.close(); } catch { /* gone */ }
+    try { this.ctrl?.close(); } catch { /* gone */ }
+    this.declareDead(reason);
   }
   connected(): boolean {
     return this.open && (this.dc.readyState === 'open' || this.ctrl?.readyState === 'open');
   }
   disconnect(): void {
     this.open = false;
+    this.dead = true; // muted/losing-probe teardown must not declare dead
     try { this.dc.close(); } catch { /* gone */ }
     try { this.pc?.close(); } catch { /* gone */ }
   }
@@ -165,7 +205,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
     // deployment property, not a client constant; LAN/dev needs neither.
     const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
-    const iceServers = await fetch(`${httpBase}/rtcconfig`)
+    const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
       .then((r) => r.json())
       .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
       .catch(() => []);
@@ -216,29 +256,8 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     });
     await conn.setRemoteDescription(answer);
     signal.close();
-    // ICE diagnostics live on the transport so a flap-loop log shows the
-    // association's own verdict (failed/disconnected/checking) beside
-    // the lane closes — a channel reset and an ICE failure read
-    // identically without it.
-    conn.addEventListener('iceconnectionstatechange', () => {
-      logger.warn(`rtc ice: ${conn.iceConnectionState}`);
-      // A dead SCTP association leaves the datachannels reporting 'open'
-      // — send() then swallows claims into a pipe that delivers nothing
-      // (the "half my hits don't apply" phantom). 'disconnected' is a
-      // grace state that often recovers on its own; 'failed'/'closed'
-      // are terminal. Either way, past the grace the lanes go down so
-      // TieredTransport's onDisconnect re-probes a live tier.
-      const s = conn.iceConnectionState;
-      if (s === 'failed' || s === 'closed') {
-        try { dc.close(); ctrl.close(); } catch { /* gone */ }
-      } else if (s === 'disconnected') {
-        setTimeout(() => {
-          if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed') {
-            try { dc.close(); ctrl.close(); } catch { /* gone */ }
-          }
-        }, 2500);
-      }
-    });
+    // ICE diagnostics/watchdog live on the transport — it can declare the
+    // session dead directly instead of hoping channel 'close' events fire.
     return new ServerRtcTransport(dc, config, conn, ctrl);
   } catch {
     // Failed probe — the ICE/DTLS machinery keeps running without this.

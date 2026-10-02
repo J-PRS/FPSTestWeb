@@ -287,6 +287,11 @@ export class ServerBots {
     return this.lastOut.get(id)?.dest ?? null;
   }
 
+  /** Test hook — how many push-calls each team posted this match. */
+  debugPushCalls(team: string): number {
+    return this.sense.pushCalls.get(team as 'alpha' | 'bravo') ?? 0;
+  }
+
   /** Test hook — seed the meter directly; accrual tests shouldn't need
    *  to park a bot for 30 simulated seconds to fill the meter. */
   debugSetSheep(id: string, v: number): void {

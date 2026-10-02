@@ -91,6 +91,7 @@ export class HUD {
     this.killFeed = d.killFeed;
     this.connBanner = d.connBanner;
     this.sheepReadout = d.sheepReadout;
+    this.energyReadout = d.energyReadout;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
@@ -99,8 +100,10 @@ export class HUD {
   killFeed: HTMLDivElement;
   connBanner: HTMLDivElement;
   sheepReadout: HTMLDivElement;
+  energyReadout: HTMLDivElement;
 
   private lastSheepShown = -1;
+  private lastEnergyShown = -1;
   /** Own sheep score under the crosshair — same thresholds/colors as the
    *  bot indicator badges so the number reads identically everywhere. */
   setSheep(shown: number): void {
@@ -109,6 +112,20 @@ export class HUD {
     if (shown <= 0) { this.sheepReadout.textContent = ''; return; }
     this.sheepReadout.textContent = `${shown}`;
     this.sheepReadout.style.color = shown >= 60 ? '#ff6b6b' : shown >= 30 ? '#ffd166' : '#7ddf7d';
+  }
+
+  /** Total mechanical energy (KE+PE) as equivalent flat-ground speed —
+   *  ½v² + g·h reads in m²/s², but "42 E" where E is sqrt(2·E) keeps the
+   *  number in the same m/s head-units as the speedo. Suffix shows the
+   *  split so height↔speed conversion is visible mid-ski. */
+  setEnergy(parts: { ke: number; pe: number; mech: number } | undefined): void {
+    const shown = parts ? Math.round(Math.sqrt(2 * parts.mech)) : 0;
+    if (shown === this.lastEnergyShown) return;
+    this.lastEnergyShown = shown;
+    if (!parts || shown <= 0) { this.energyReadout.textContent = ''; return; }
+    const k = Math.round(Math.sqrt(2 * parts.ke));
+    const p = Math.round(Math.sqrt(2 * parts.pe));
+    this.energyReadout.textContent = `E ${shown} (${k}k ${p}p)`;
   }
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed

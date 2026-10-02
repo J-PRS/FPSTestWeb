@@ -21,8 +21,6 @@ export const LIGHTNING_CONFIG: ProjectileConfig = {
   hitMin: 0,
   hitMax: 0,
   hitGrow: 0,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 1.0,
   aoeDamage: S.aoeDamage,
   aoeRadius: S.aoeRadius,

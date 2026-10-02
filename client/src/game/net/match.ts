@@ -58,6 +58,9 @@ export function wireMatchEvents(ctx: NetCtx): void {
   };
   networkManager.onMatchStart = (mode) => {
     releaseScoreboard();
+    // New match = new life record — a streak banked last round must not
+    // roll over or the first frag of the round reads as a spree.
+    deps.world.killStreak = 0;
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };

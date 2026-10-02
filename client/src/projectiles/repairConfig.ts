@@ -19,8 +19,6 @@ export const REPAIR_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[26].hitMin,
   hitMax: WEAPONS[26].hitMax,
   hitGrow: WEAPONS[26].hitGrow,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,

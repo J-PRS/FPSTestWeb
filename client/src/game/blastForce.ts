@@ -42,8 +42,6 @@ export interface BlastArgs {
   radius: number;
   force: number;
   forceMode: 'push' | 'pull';
-  falloffMultiplier: number;
-  collisionMultiplier: number;
   forceMultiplier: number;
   aoeDamage: number;
   directHitTargetId: string | null;
@@ -77,14 +75,14 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     a: BlastArgs,
     applyTo: (t: Forceable, f: number) => void
   ): void {
-    const { pos, radius, forceMode, collisionMultiplier, aoeDamage, weaponType } = a;
+    const { pos, radius, aoeDamage, weaponType } = a;
     for (const ball of deps.targets) {
       if (ball.dead) continue;
       const db = ball.pos.distanceTo(pos);
       const br = ball.hitRadius ?? ball.radius;
-      const threshold = forceMode === 'push'
-        ? radius + br
-        : radius * collisionMultiplier + br;
+      // One envelope for every blast effect — the creature's own body
+      // radius still counts (a surface graze is contact, like players).
+      const threshold = radius + br;
       if (db >= threshold || occluded(pos, ball.pos)) continue;
       applyTo(ball, a.force * a.forceMultiplier);
       // Splash actually hurts enemies — falloff-scaled like players, with
@@ -114,10 +112,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
-      // Match server damage exactly: 1 - dist/radius inside radius, 0 outside.
-      // (The wider falloffAt curve is for knockback reach only — using it here
-      // predicts splash damage the server never applies, and the health bar
-      // snaps back to full on the next authoritative update.)
+      // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
+      // knockback uses the same envelope (aoeImpulse), so nothing predicts
+      // damage or shove the server never applies.
       const dist = rp.position.distanceTo(pos);
       const impulse = Math.min(aoeImpulse(force, dist, radius) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
       if (impulse <= 0) continue;
@@ -141,15 +138,18 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
 
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
-    const { pos, radius, force, forceMode, falloffMultiplier, forceMultiplier, aoeDamage } = a;
-    const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
+    const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
 
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
-    if (dpx < radius * falloffMultiplier && !occluded(pos, player.pos)) {
-      applyTo(player, force * KNOCKBACK_SCALE * falloffAt(dpx) * player.mods.knockbackTaken);
+    // Knockback reach = damage reach: the blast ends at aoeRadius, same
+    // bound the server applies and the ?debug gizmo draws. The old
+    // falloffMultiplier stretched the zero-crossing 2.5-3× — a
+    // local-player-only shove nobody else felt.
+    if (dpx < radius && !occluded(pos, player.pos)) {
+      applyTo(player, aoeImpulse(force, dpx, radius) * KNOCKBACK_SCALE * player.mods.knockbackTaken);
       // Stamp the prediction — the server echoes this same shove back as a
       // `knockback` message ~RTT later; net/players.ts consumes the stamp
       // so the blast can't land twice.

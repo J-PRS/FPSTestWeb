@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import {
   GL_BOUNCE_RESTITUTION, GL_BOUNCE_FRICTION,
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -25,8 +25,6 @@ export const GL_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[5].hitMin,
   hitMax: WEAPONS[5].hitMax, // tight proxy — bouncing shells shouldn't drag a huge wake
   hitGrow: WEAPONS[5].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[5].aoeDamage,
   aoeRadius: WEAPONS[5].aoeRadius,

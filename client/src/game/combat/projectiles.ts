@@ -83,7 +83,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-  c.applyExplosionForce({ pos, radius, force, forceMode, falloffMultiplier: a.falloffMultiplier, collisionMultiplier: a.collisionMultiplier, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId });
+  c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId });
 
   // Armor grenade: predict the plating the server grants so the HUD armor
   // jumps with the blast, not on the next tick. Enemy plating stays
@@ -121,7 +121,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
     force: stats.knockbackForce * power,
     forceMode: stats.forceMode,
     aoeDamage: stats.aoeDamage * power,
-    falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+    forceMultiplier: 1,
     // no directHit — slam has no proxy-hit bonus layer
     sendAOE,
     explosionTint: 0xffcc66,               // hot slam flash
@@ -209,6 +209,10 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   // (a path that skipped releaseSlot) gets blacked out before it can sit
   // as a frozen streak — the count surfaces in the Alt+Q dump.
   RibbonTrail.sweepLit();
+  // Owner-side counterpart of sweepLit: a done ribbon nobody updates any
+  // more (orphan path that skipped dispose) still holds its slot + liveSet
+  // entry forever — reclaim it so the pool and census reflect reality.
+  RibbonTrail.sweepStale();
   for (let i = deps.world.projectiles.length - 1; i >= 0; i--) {
     const p = deps.world.projectiles[i];
     p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
@@ -244,7 +248,7 @@ function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void
   processProjectileExplosion(c, {
     pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
     aoeDamage: BOLT_MEGA_DAMAGE,
-    falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+    forceMultiplier: 1,
     directHit: true, explosionTint: 0xffaa44, vfxRadius: BOLT_MEGA_RADIUS,
     shooterId, // a bot's interception reads as the bot's blast, not mine
   });

@@ -22,8 +22,6 @@ export const FLAK_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[6].hitMin,
   hitMax: WEAPONS[6].hitMax,
   hitGrow: WEAPONS[6].hitGrow,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,

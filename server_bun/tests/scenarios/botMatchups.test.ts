@@ -68,8 +68,11 @@ const wins = (results: ('a' | 'b' | '-')[], who: 'a' | 'b') => results.filter((r
 
 describe('scenario: weapon matchups at near band (10m)', () => {
   it('shotgun out-bursts the lightning hose', () => {
-    // 100 nominal dps vs 80 tick-dps — observed 5/5 for the bruiser.
-    expect(wins(series(KIT.bruiser, KIT.beam, 10), 'a')).toBe(5);
+    // 100 nominal dps vs 80 tick-dps. Was a 5/5 stomp because the beam
+    // bot used to draw its aoe Disc at 10m — the self-splash penalty now
+    // pulls it onto Lightning, the right gun, so the margin narrows to a
+    // real duel. Shotgun should still edge it, not sweep it.
+    expect(wins(series(KIT.bruiser, KIT.beam, 10), 'a')).toBeGreaterThanOrEqual(3);
   });
 
   it('the heavy flanker face-tanks the light chaingun', () => {

@@ -46,6 +46,7 @@ export class PlayerSheep {
   }
 
   get shown(): number { return Math.round(this.body.sheepShown); }
+  get energy(): { ke: number; pe: number; mech: number } | undefined { return this.meter.energyOf(this.playerIdOf()); }
 
   /** 45m enemy brawl range — same evidence the meter gives bots and
    *  wire humans; LOS stays out of it since a human owns the sneak. */

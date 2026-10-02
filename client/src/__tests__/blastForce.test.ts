@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { createBlastForce, type BlastArgs } from '../game/blastForce.js';
 import type { CombatDeps } from '../game/combat.js';
 import type { Targetable } from '../entities/balls.js';
-const SELF_AOE_SCALE = 0.15; // mirrors blastForce.ts — rocket jumps are nominal, not lethal
 
 interface Rig {
   deps: CombatDeps;
@@ -67,8 +66,6 @@ const args = (over: Partial<BlastArgs> = {}): BlastArgs => ({
   radius: 10,
   force: 20,
   forceMode: 'push',
-  falloffMultiplier: 1,
-  collisionMultiplier: 1,
   forceMultiplier: 1,
   aoeDamage: 40,
   directHitTargetId: null,

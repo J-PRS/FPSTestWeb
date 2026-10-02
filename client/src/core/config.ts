@@ -467,9 +467,6 @@ export const EMIT_GAIN = 3;
 
 
 // Explosion physics constants
-export const EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT = 2.5; // default explosive falloff — most weapons share it, disc is sharper
-export const EXPLOSION_FALLOFF_MULTIPLIER_DISC = 3.0; // Disc explosion falloff multiplier
-export const EXPLOSION_COLLISION_MULTIPLIER = 2.0; // Collision detection multiplier
 export const KNOCKBACK_MULTIPLIER = 0.4; // Knockback force multiplier
 export const PULL_MULTIPLIER = 0.5; // Pull force multiplier
 

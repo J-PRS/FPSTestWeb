@@ -600,6 +600,9 @@ export class NetworkManager {
   }
 
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
+    // A kill IS the confirm — the fatal blow arrives as playerKill, not
+    // playerHit, so the pending ledger would warn phantom otherwise.
+    if (data.shooterId === this.localPlayerId) this.confirmPendingHit(data.targetId);
     // Update REMOTE player state (local player death handled by callback)
     this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
     this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon);

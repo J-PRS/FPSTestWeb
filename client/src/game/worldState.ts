@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Projectile } from '../projectiles/Projectile.js';
 import type { BallDebris, PlayerDebris } from '../effects/debris.js';
@@ -22,6 +23,10 @@ export interface WorldState {
    *  hooks are wired by createRemotes once the deps exist. */
   remotePlayers: RemoteSet<RemotePlayer, RemotePlayerState>;
   killCounts: Map<string, number>;
+  /** Kills since last local death — drives the SPREE/RAMPAGE subtitle.
+   *  Lives on world (not a handler closure) so match boundaries can zero
+   *  it: a new match is a new streak, not a continuation. */
+  killStreak: number;
   projectiles: Projectile[];
   projectileRegistry: ProjectileRegistry;
   debrisList: BallDebris[];
@@ -41,6 +46,10 @@ export interface WorldState {
   respawnMs: number;
   /** CTF flag status per team — HUD chips (home/carried/dropped). */
   flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
+  /** Wire CTF flag meshes + carrier ids — the per-frame loop projects
+   *  these into HUD diamonds; flags.ts owns the entries (set on
+   *  flagUpdate, deleted on roster prune). */
+  flagMarkers: Map<TeamId, { mesh: THREE.Group; carrier: string | null }>;
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.
@@ -64,6 +73,7 @@ export function createWorldState(): WorldState {
     // world-creation time; createRemotes replaces them before first use.
     remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: () => undefined, isLive: () => true }),
     killCounts: new Map(),
+    killStreak: 0,
     projectiles: [],
     projectileRegistry: createProjectileRegistry(),
     debrisList: [],
@@ -77,6 +87,7 @@ export function createWorldState(): WorldState {
     matchEndsAt: null,
     respawnMs: 3000,
     flagStates: {},
+    flagMarkers: new Map(),
     playbackMode: false,
     selfBlastStamps: [],
     selfCharge: 0,

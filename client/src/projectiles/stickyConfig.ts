@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -24,8 +24,6 @@ export const STICKY_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[18].hitMin,
   hitMax: WEAPONS[18].hitMax,
   hitGrow: WEAPONS[18].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[18].aoeDamage,
   aoeRadius: WEAPONS[18].aoeRadius,

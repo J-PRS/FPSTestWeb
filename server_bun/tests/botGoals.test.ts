@@ -42,7 +42,10 @@ describe('BotGoals.pick — priority ladder', () => {
 
   it('objective outranks pickup and wander', () => {
     const { s, g } = kit();
-    g.pick(flat({ objective: { x: 40, y: 0, z: 40 }, pickup: { x: 5, y: 0, z: 5 } }), pos);
+    // Utility scoring, not a tier: at the SAME distance the objective's
+    // heavier weight still wins the argmax. (A close gem legitimately
+    // beats a far flag now — that trade is the point of the scoring.)
+    g.pick(flat({ objective: { x: 40, y: 0, z: 40 }, pickup: { x: 40, y: 0, z: -40 } }), pos);
     expect(s.goal).toEqual({ x: 40, y: 0, z: 40 });
   });
 
@@ -64,11 +67,14 @@ describe('BotGoals.pick — priority ladder', () => {
 
   it('heard fight pulls only on a curiosity roll', () => {
     const { s, g } = kit({ wanderlust: 1 });
+    // Pre-commit the wander slot so no rolls precede the curiosity one:
+    // the wander candidate runs before heardGoal every pick.
+    s.wanderT = 50; s.wanderWp = { x: 60, y: 0, z: 60 };
     const c = flat({ sounds: [{ x: 8, y: 0, z: 8 }] });
-    botRng(() => 0.9); // fails the roll → no goal change
+    botRng(() => 0.9); // fails the roll → the heard drive never offers
     g.pick(c, pos);
-    expect(s.goal).toEqual({ x: 0, y: 0, z: 0 });
-    botRng(() => 0.1); // curious → investigate
+    expect(s.goal).toEqual({ x: 60, y: 0, z: 60 }); // falls to the wander leg
+    botRng(() => 0.1); // curious → the heard fight outscores the wander
     g.pick(c, pos);
     expect(s.goal).toEqual({ x: 8, y: 0, z: 8 });
   });

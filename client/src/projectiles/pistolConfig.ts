@@ -19,8 +19,6 @@ export const PISTOL_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[16].hitMin,
   hitMax: WEAPONS[16].hitMax,
   hitGrow: WEAPONS[16].hitGrow,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,

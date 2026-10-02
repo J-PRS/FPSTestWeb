@@ -35,6 +35,13 @@ export class SheepMeter {
    *  brief ground contact mid-ski doesn't zero the credit the kinetic
    *  peak just earned. */
   private eSm = new Map<string, number>();
+  /** Last tick's KE/PE split — the HUD readout shows the same numbers
+   *  the bleed probe and tribesing credit just reasoned about. */
+  private eParts = new Map<string, { ke: number; pe: number; mech: number }>();
+
+  energyOf(id: string): { ke: number; pe: number; mech: number } | undefined {
+    return this.eParts.get(id);
+  }
 
   /** Sim-ms until which a body's last proven play still counts — the
    *  credibility window: demonstrated high-E play keeps refills slow
@@ -71,6 +78,7 @@ export class SheepMeter {
   clear(id: string): void {
     this.eLast.delete(id);
     this.eSm.delete(id);
+    this.eParts.delete(id);
     this.provenUntil.delete(id);
     this.why.delete(id);
     this.maxedSet.delete(id);
@@ -144,7 +152,9 @@ export class SheepMeter {
     const v = bot.vel;
     const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
     const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
-    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
+    const pe = speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0;
+    const mech = 0.5 * speedSq + pe;
+    this.eParts.set(bot.playerId, { ke: 0.5 * speedSq, pe, mech });
     const ePrev = this.eSm.get(bot.playerId) ?? mech;
     const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
     this.eSm.set(bot.playerId, eSm);

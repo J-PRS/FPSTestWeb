@@ -147,6 +147,9 @@ export class TeamBots {
           bot.team = bot.playerId;
           this.ffaScores.set(bot.playerId, 0);
         }
+        // Debug hitbox tint matches the name-gizmo verdict — squadmates
+        // green, everything else red (FFA pseudo-teams never match 'local').
+        bot.setColliderColor(bot.team === this.teamOf.get('local') ? 0x00ff00 : 0xff3333);
         this.bots.push(bot);
         this.teamOf.set(bot.playerId, bot.team);
         deps.world.remotePlayers.adopt(bot.playerId, bot);

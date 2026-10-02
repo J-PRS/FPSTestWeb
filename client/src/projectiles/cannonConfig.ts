@@ -1,6 +1,6 @@
 import {
   CANNON_BOUNCE_RESTITUTION, CANNON_BOUNCE_FRICTION,
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -23,8 +23,6 @@ export const CANNON_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[14].hitMin,
   hitMax: WEAPONS[14].hitMax,
   hitGrow: WEAPONS[14].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[14].aoeDamage,
   aoeRadius: WEAPONS[14].aoeRadius,

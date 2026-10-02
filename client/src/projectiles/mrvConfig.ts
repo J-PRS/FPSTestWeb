@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
   MRV_BOUNCE_RESTITUTION, MRV_BOUNCE_FRICTION,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
@@ -37,8 +37,6 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   hitMin: WB.hitMin,
   hitMax: WB.hitMax,
   hitGrow: WB.hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WB.aoeDamage,
   aoeRadius: WB.aoeRadius,
@@ -94,8 +92,6 @@ export const MRV_CONFIG: ProjectileConfig = {
   hitMin: W.hitMin,
   hitMax: W.hitMax,
   hitGrow: W.hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-  collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: W.aoeDamage,
   aoeRadius: W.aoeRadius,

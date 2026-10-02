@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -32,8 +32,6 @@ function beltBall(wt: number, shell: number, glow: number, extra: Partial<Projec
     hitMin: w.hitMin,
     hitMax: w.hitMax,
     hitGrow: w.hitGrow,
-    falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
-    collisionMultiplier: 1.0,
     forceMultiplier: KNOCKBACK_MULTIPLIER,
     aoeDamage: w.aoeDamage,
     aoeRadius: w.aoeRadius,

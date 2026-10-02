@@ -20,8 +20,6 @@ export const SHOTGUN_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[13].hitMin,
   hitMax: WEAPONS[13].hitMax,
   hitGrow: WEAPONS[13].hitGrow,
-  falloffMultiplier: 1.0,
-  collisionMultiplier: 1.0,
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,

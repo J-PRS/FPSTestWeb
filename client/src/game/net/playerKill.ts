@@ -12,15 +12,16 @@ import { noteKill } from '../../core/stateDebug.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
 
-/** Tribes streak titles by kills-since-death — subtitle under the frag
- *  headline at 3/5/7/10. */
+/** UT-style streak ladder — one title per 5 kills since your last death.
+ *  Ordered high→low; matched with `===` so each announces once. */
 const STREAK_NAMES: [number, string][] = [
-  [10, 'GODLIKE'], [7, 'UNSTOPPABLE'], [5, 'RAMPAGE'], [3, 'KILLING SPREE'],
+  [30, 'WICKED SICK'], [25, 'GODLIKE'], [20, 'UNSTOPPABLE'], [15, 'DOMINATING'],
+  [10, 'RAMPAGE'], [5, 'KILLING SPREE'],
 ];
 
 /** A kill landed somewhere: feed row for everyone, death overlay when it's
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
-export function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, targetId: string, weapon?: number): void {
+export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number): void {
   const { deps, nm } = ctx;
   const logger = deps.logger;
   if (deps.world.playbackMode) return;
@@ -35,7 +36,7 @@ export function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: stri
     player.health = 0;
     deps.lazyHud().hide();
     deps.lazyHud().setDeathOverlay(true);
-    streak.v = 0;
+    deps.world.killStreak = 0;
     deps.fragMessages.show(shooterId === 'environment'
       ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
       : shooterId === targetId
@@ -44,9 +45,12 @@ export function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: stri
     return;
   }
 
-  // Streak counts run-kills since your last death (reset in the branch above).
+  // Streak counts run-kills since your last death (reset above) and
+  // match boundaries (match.ts) — a new match never continues the count.
   if (shooterId === localId) {
-    const streakName = STREAK_NAMES.find(([n]) => ++streak.v >= n)?.[1];
+    // Announce only on the crossing kill — `>=` repeated the title on
+    // every frag past the threshold, so a 4-kill life yelled SPREE twice.
+    const streakName = STREAK_NAMES.find(([n]) => ++deps.world.killStreak === n)?.[1];
     const name = targetId.replace(/^bot:/, '');
     deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();

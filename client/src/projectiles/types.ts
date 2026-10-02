@@ -13,8 +13,6 @@ export interface ProjectileConfig {
   hitMin: number;
   hitMax: number;
   hitGrow: number;
-  falloffMultiplier: number;
-  collisionMultiplier: number;
   forceMultiplier: number;
   aoeDamage: number;
   aoeRadius: number;

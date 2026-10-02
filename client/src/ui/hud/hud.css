@@ -157,6 +157,17 @@
   text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
   pointer-events: none;
 }
+/* Own total energy — mechanical E under the sheep meter, same units as
+   * the speedo so height↔speed conversion reads intuitively. */
+#energy-readout {
+  position: absolute; top: calc(50% + 34px); left: 50%;
+  transform: translateX(-50%);
+  font: 600 12px 'Rajdhani', 'Segoe UI', sans-serif;
+  letter-spacing: 0.5px;
+  color: #8fd3ff;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
+  pointer-events: none;
+}
 #hit-marker {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);

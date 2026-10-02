@@ -17,6 +17,7 @@ import { screenShake } from '../effects/screenShake.js';
 import { Explosion } from '../effects/explosion.js';
 import { updateVfx } from '../effects/vfx.js';
 import { collectDiag } from '../core/fxDiag.js';
+import { installGeoNaNWatch } from '../core/geoNaN.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
 import type { NetworkManager } from '../networking/NetworkManager.js';
@@ -371,6 +372,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   if (playerSheep) {
     playerSheep.tick(dt, player, terrain, deps.world.remotePlayers, deps.world.localTeam);
     hud.setSheep(playerSheep.shown);
+    hud.setEnergy(playerSheep.energy);
   }
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
   budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
@@ -465,6 +467,9 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
   window.__scene = deps.sceneSetup.scene;
   window.__renderer = deps.rendererSetup.renderer;
+  // geoNaN watch — names the owner of any buffer whose bounding sphere
+  // computes NaN (the spam was ownerless before this probe existed).
+  installGeoNaNWatch(deps.sceneSetup.scene);
   // __trailDump — merged census of every self-registered FX diag section
   // (ribbons/vfx/inst/swarm…). Sections come from registerDiag() in the
   // owning modules, so new censuses never touch this wiring.

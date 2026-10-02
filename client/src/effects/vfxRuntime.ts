@@ -97,14 +97,35 @@ const kindOf = new Map<ParticleSystem, string>();
 // POOL_FLOOR so a burst spike doesn't pin capacity forever.
 export const pools = new Map<string, { ps: ParticleSystem; idleAt: number }[]>();
 const attached = new WeakSet<ParticleSystem>();
-// Systems parked in a pool stay attached but dead — starve-reaping would
-// otherwise dispose them each bookkeeping pass and the pool never fills.
+// Systems parked in a pool are detached from the batcher — an idle system
+// still iterates in batcher.update when attached, and ~30k parked systems
+// was ~13ms of pure wasted sim per frame. The set only marks "owned by a
+// pool" so the starve reaper never disposes one.
 export const pooled = new WeakSet<ParticleSystem>();
 // Dynamic-pool shrink: an entry idle this long beyond the floor is pure
-// cost — every pooled system stays attached and iterates in
-// batcher.update each frame. The floor keeps a warm minimum per kind.
+// cost — the floor keeps a warm minimum per kind.
 const POOL_IDLE_MS = 30_000;
 const POOL_FLOOR = 4;
+// Hard ceiling across ALL pools — the floor is per-key, so key
+// fragmentation (thousands of one-shot buckets) can't pin capacity again.
+const POOL_MAX_TOTAL = 1500;
+
+function detachSystem(ps: ParticleSystem): void {
+  batcher?.deleteSystem(ps);
+  scene?.remove(ps.emitter);
+  attached.delete(ps);
+}
+
+/** The ONE pool-return path: park the system OUT of the batcher so it
+ *  costs nothing per frame, then record it for reuse. Checkout re-attaches
+ *  through activateSystem → attachSystem. */
+export function returnSystem(ps: ParticleSystem, key: string): void {
+  const pool = pools.get(key) ?? [];
+  pool.push({ ps, idleAt: performance.now() });
+  pooled.add(ps);
+  pools.set(key, pool);
+  detachSystem(ps);
+}
 
 export function attachSystem(ps: ParticleSystem): void {
   if (attached.has(ps)) return;
@@ -192,9 +213,7 @@ function reapStarved(ps: IParticleSystem): void {
   }
   const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
   if (starved > STARVE_LIMIT) {
-    batcher?.deleteSystem(ps);
-    scene?.remove((ps as ParticleSystem).emitter);
-    attached.delete(ps as ParticleSystem); // else attachSystem's guard makes re-attach a silent no-op
+    detachSystem(ps as ParticleSystem); // else attachSystem's guard makes re-attach a silent no-op
     starveFrames.delete(ps);
   } else if (starved) starveFrames.set(ps, starved);
   else starveFrames.delete(ps);
@@ -272,19 +291,11 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
     if (ps.time >= ps.duration && ps.particleNum === 0) {
       const kind = kindOf.get(ps);
       if (kind) {
-        const pool = pools.get(kind) ?? [];
-        // Pooled systems stay attached to the batcher — a dead system
-        // sims ~0 particles, so detach+reattach would only rebuy the
-        // batch slice that restart() repopulates for free.
-        pool.push({ ps, idleAt: performance.now() });
-        pooled.add(ps);
-        pools.set(kind, pool);
+        returnSystem(ps, kind);
         live.delete(ps);
         continue;
       }
-      batcher?.deleteSystem(ps);
-      scene?.remove(ps.emitter);
-      attached.delete(ps);
+      detachSystem(ps);
       live.delete(ps);
     }
   }
@@ -295,20 +306,40 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
 // The contract half of the dynamic pool: entries idle past the keep-alive
 // window are retired back toward POOL_FLOOR — capacity tracks demand
 // instead of staying pinned at the all-time peak.
+function retirePooled(ps: ParticleSystem): void {
+  pooled.delete(ps);
+  ps.dispose();
+}
+
 function shrinkPools(now: number): void {
+  let total = 0;
   for (const [kind, pool] of pools) {
     for (let i = pool.length - 1; i >= POOL_FLOOR; i--) {
       if (now - pool[i]!.idleAt <= POOL_IDLE_MS) continue;
       const ps = pool[i]!.ps;
       pool[i] = pool[pool.length - 1]!;
       pool.pop();
-      batcher?.deleteSystem(ps);
-      scene?.remove(ps.emitter);
-      attached.delete(ps);
-      pooled.delete(ps);
-      ps.dispose();
+      retirePooled(ps);
     }
     if (!pool.length) pools.delete(kind);
+    else total += pool.length;
+  }
+  // Global ceiling: evict the oldest idle entries when the pool census
+  // exceeds POOL_MAX_TOTAL — a fragmented key space must not convert into
+  // unbounded parked systems again.
+  if (total > POOL_MAX_TOTAL) {
+    type Entry = { ps: ParticleSystem; idleAt: number; pool: { ps: ParticleSystem; idleAt: number }[] };
+    const all: Entry[] = [];
+    for (const pool of pools.values())
+      for (const e of pool) all.push({ ps: e.ps, idleAt: e.idleAt, pool });
+    all.sort((a, b) => a.idleAt - b.idleAt);
+    for (let i = 0; i < all.length - POOL_MAX_TOTAL; i++) {
+      const e = all[i]!;
+      const idx = e.pool.findIndex(x => x.ps === e.ps);
+      if (idx >= 0) e.pool.splice(idx, 1);
+      retirePooled(e.ps);
+    }
+    for (const [kind, pool] of pools) if (!pool.length) pools.delete(kind);
   }
 }
 

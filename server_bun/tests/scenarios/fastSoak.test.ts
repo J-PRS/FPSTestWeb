@@ -362,9 +362,11 @@ describe('scenario: warp soak throughput', () => {
           capRoute.ticks++;
           if (dest) {
             const dDest = Math.hypot(dest.x - foeFlag.pos.x, dest.z - foeFlag.pos.z);
-            if (dDest < 12) capRoute.on++;
             if (dDest < 340) capRoute.route++;
           }
+          // 'on' counts the bot inside graze range — the committed aim
+          // pulls short of the stand, so dest distance can't measure it.
+          if (dd < 12) capRoute.on++;
           capRoute.bands[dd < 25 ? 0 : dd < 80 ? 1 : dd < 160 ? 2 : dd < 300 ? 3 : 4]!++;
         }
         wasDead.set(p.id, false);
@@ -538,7 +540,7 @@ describe('scenario: warp soak throughput', () => {
     row('flags', `grabs ${grabsBy.alpha ?? 0}-${grabsBy.bravo ?? 0}   caps ${caps.length}${caps.length ? ` (fastest ${(fastest.holdMs / 1000).toFixed(1)}s)` : ''}   press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '-'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '-'}m`);
     row('approach', `closest: any ${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(0) : '-'}m(+${flagGap.alpha[1].toFixed(0)}y @${flagGap.alpha[2].toFixed(0)}mps) / ${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(0) : '-'}m(+${flagGap.bravo[1].toFixed(0)}y @${flagGap.bravo[2].toFixed(0)}mps)   cappers ${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(0) : '-'}m/${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(0) : '-'}m   flag deaths ${fdie('alpha')}/${fdie('bravo')}`);
     row('ring', `died inside ${ringSurv.died.length} (${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s avg)   left ${ringSurv.left.length}   capper pushes ${capStop.entries} -> ${capStop.grabs} grabs, ${capStop.died} died, ${capStop.left} repelled${capStop.dSpd.length ? ` (lost ${medOf(capStop.dSpd).toFixed(1)}mps ${medOf(capStop.dHp).toFixed(0)}hp)` : ''}`);
-    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · committed ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   time at <25m ${capRoute.bands[0]} · <80m ${capRoute.bands[1]} · <160m ${capRoute.bands[2]} · <300m ${capRoute.bands[3]} · 300m+ ${capRoute.bands[4]} ticks`);
+    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <25m ${capRoute.bands[0]} · <80m ${capRoute.bands[1]} · <160m ${capRoute.bands[2]} · <300m ${capRoute.bands[3]} · 300m+ ${capRoute.bands[4]} ticks`);
     row('economy', `nugs: ${nug.spawn} spawned · ${nug.bankHot + nug.bankCold} banked (${nug.bankHot} hot) · ${nug.decay} decayed · ${nug.die} died-for`);
     row('fight', `kills: attack ${killZone.attack} · defense ${killZone.defense} · midfield ${killZone.mid}   hunting ${huntN ? Math.round((huntSum / huntN) * 100) : 0}%   cloak ${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%   in sight ${huntN ? Math.round((inSightSum / huntN) * 100) : 0}%   nearest foe ${huntN ? (nearFoeSum / huntN).toFixed(0) : '-'}m   med energy ${medOf(eRows.map((r) => r.avg)).toFixed(0)}`);
     row('macro', `goal output ${goalOut.nA ? (goalOut.alpha / goalOut.nA).toFixed(0) : '-'}/${goalOut.nB ? (goalOut.bravo / goalOut.nB).toFixed(0) : '-'}   progress ${progRows.alpha.cnt ? (progRows.alpha.sum / progRows.alpha.cnt).toFixed(1) : '-'}/${progRows.bravo.cnt ? (progRows.bravo.sum / progRows.bravo.cnt).toFixed(1) : '-'}m/win   goal flips ${flips.size ? ([...flips.values()].reduce((n, f) => n + f.n, 0) / flips.size).toFixed(0) : '-'}/bot   aim align ${align.n ? (align.sum / align.n).toFixed(2) : '-'}`);

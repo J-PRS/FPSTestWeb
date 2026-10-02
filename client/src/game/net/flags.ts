@@ -7,7 +7,6 @@ import * as sfx from '../../core/sfx.js';
 import { Explosion } from '../../effects/explosion.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 
-const _flagMarker = new THREE.Vector3();
 const _burstPos = new THREE.Vector3();
 
 export function wireFlags(ctx: NetCtx): void {
@@ -31,7 +30,7 @@ export function wireFlags(ctx: NetCtx): void {
       new THREE.MeshBasicMaterial({ color: team === 'alpha' ? 0x55aaff : 0xff8855 }));
     banner.position.set(0.55, 3.4, 0);
     g.add(pole, banner);
-    g.onBeforeRender = (_renderer, _scene, camera) => {
+    g.onBeforeRender = () => {
       const carrier = flagCarriers.get(team);
       if (carrier) {
         if (carrier === networkManager.getLocalPlayerId()) {
@@ -42,11 +41,10 @@ export function wireFlags(ctx: NetCtx): void {
         }
         g.position.y += 0.4; // ride the shoulders, not the boots
       }
-      // Flag marker — the through-terrain diamond. DOM overlay, so this is
-      // legal inside the render callback (position is final by now).
-      // The indicator path adds +1.0 for a player capsule; the flag wants
-      // its diamond at the pole tip (~4m), so lift the anchor 3.4 more.
-      deps.lazyHud().updateFlagIndicator(`flag:${team}`, _flagMarker.set(g.position.x, g.position.y + 3.4, g.position.z), camera, team);
+      // NOTE: the HUD diamond is NOT updated here — onBeforeRender only
+      // fires while the mesh is inside the frustum, so an off-screen flag
+      // froze its marker forever. remotes.ts projects flagMarkers every
+      // frame instead, same as player indicators.
     };
     deps.lazyScene().add(g);
     flagMeshes.set(team, g);
@@ -113,6 +111,7 @@ export function wireFlags(ctx: NetCtx): void {
       flagMeshes.delete(team);
       flagCarriers.delete(team);
       prevState.delete(team);
+      deps.world.flagMarkers.delete(team as TeamId);
       deps.lazyHud().removePlayerIndicator(`flag:${team}`);
       delete deps.world.flagStates[team as TeamId];
     }
@@ -123,6 +122,10 @@ export function wireFlags(ctx: NetCtx): void {
       if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
       else flagCarriers.delete(f.team);
       deps.world.flagStates[f.team] = f.state;
+      // Per-frame HUD diamond reads this — the carrier follow in
+      // onBeforeRender only moves the mesh, markers need the raw carrier
+      // id so the tick can anchor on the rendered body even off-screen.
+      deps.world.flagMarkers.set(f.team, { mesh: g, carrier: flagCarriers.get(f.team) ?? null });
     }
   };
 }
