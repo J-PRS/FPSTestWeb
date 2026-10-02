@@ -205,8 +205,12 @@ export class BotArsenal implements BeamHost {
     const foes = [...this.room.players.getAllPlayers().values()]
       .filter((q) => q.id !== shooterId && !q.isDead && (!shooterTeam || q.team !== shooterTeam));
     let bodyHit: { health: number } | null = null;
-    const dt = 0.02;
+    // Flight pops on segments; this march samples points — a razor lip
+    // apex between two samples is invisible to the check but real to
+    // the sim (residual lip selfK @4-5m). Fine-march the blast envelope
+    // where a pop is lethal, coarse-march the rest of the flight.
     for (let stepN = 0; stepN < 400 && travelled < 80; stepN++) {
+      const dt = travelled < aoer + 3 ? 0.005 : 0.02;
       vy += g * dt;
       px += vx * dt; py += vy * dt; pz += vz * dt;
       flightT += dt;
