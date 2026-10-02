@@ -78,7 +78,7 @@ try {
   const wsClient = await launchClient(stack.clientUrl('&room=e2esmoke-ws&bots=2&net=ws'));
   try {
     await wsClient.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
-    const wsTier = await wsClient.test(`t.networkManager.getTransportTier()`);
+    const wsTier = await wsClient.test<string>(`t.networkManager.getTransportTier()`);
     ok(wsTier === 'ws', `forced ws tier negotiated (got ${wsTier})`);
     const w0 = await wsClient.test<number>(`t.networkManager.lastTickSeq`);
     await sleep(2000);

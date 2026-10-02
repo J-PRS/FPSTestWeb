@@ -64,10 +64,14 @@ export async function launchClient(clientUrl: string): Promise<Client> {
   // the page loads faster than the dev-server socket — dev-server noise,
   // not game code. Keep real page errors loud.
   page.on('pageerror', (e) => {
-    if (!e.message.includes('WebSocket closed without opened')) console.error('[pageerror]', e.message);
+    const m = e instanceof Error ? e.message : String(e);
+    if (!m.includes('WebSocket closed without opened')) console.error('[pageerror]', m);
+  });
+  page.on('response', (r) => {
+    if (r.status() >= 400) console.error(`[http ${r.status()}]`, r.url().slice(0, 200));
   });
   page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
+    if (m.type() !== 'error' && m.type() !== 'warn') return;
     const t = m.text();
     if (t.includes('WebSocket closed without opened') || t.includes('THREE.WebGLRenderer: Context Lost')) return;
     console.error(`[console.${m.type()}]`, t.slice(0, 600));

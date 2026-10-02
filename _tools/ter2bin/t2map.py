@@ -28,6 +28,7 @@ Usage:
 """
 
 import argparse
+import io
 import json
 import re
 import struct
@@ -206,9 +207,26 @@ def extract_sky(mis_text, dest: Path):
     # order px=r, nx=l, py=top, ny=down, pz=back, nz=front.
     if len(raw_faces) < 6:
         return []
+    # Cube faces must share one resolution in GL — T2 ships 4x4
+    # placeholders for the never-seen down face, which corrupts the
+    # cubemap upload. Decode and resize everything up to the max.
+    imgs = []
+    for face, blob in raw_faces[:6]:
+        try:
+            imgs.append((face, Image.open(io.BytesIO(blob)).convert("RGB")))
+        except Exception:
+            return []
+    side = max(im.width for im in (i[1] for i in imgs))
     faces = {}
-    for (face, blob), cube in zip(raw_faces[:6], ("nz", "px", "pz", "nx", "py", "ny")):
-        (dest / f"{cube}.png").write_bytes(blob)
+    for (face, im), cube in zip(imgs, ("nz", "px", "pz", "nx", "py", "ny")):
+        if im.width != side:
+            im = im.resize((side, side), Image.NEAREST)
+        # T2's right face is stored upside-down vs the GL cubemap
+        # convention — unflipped, its dark below-horizon half renders as
+        # a wedge across the upper sky.
+        if cube == "px":
+            im = im.transpose(Image.FLIP_TOP_BOTTOM)
+        im.save(dest / f"{cube}.png")
         faces[cube] = face
     return faces
 
@@ -243,13 +261,24 @@ def parse_mis(name: str):
         return obs_range and obs_range[0] < i < obs_range[1]
 
     def spawns():
+        # SpawnSpheres are weighted VOLUMES — keep radius + sphereWeight
+        # or every spawn lands on the sphere center. team_of attributes
+        # each sphere to the SimGroup(TeamN) that contains it.
         out = []
         for m in re.finditer(r"new SpawnSphere\([^)]*\)\s*\{(.*?)\};", text, re.S):
             if in_obs(m.start()):
                 continue
-            p = re.search(r'position\s*=\s*"([^"]+)"', m.group(1))
+            body = m.group(1)
+            p = re.search(r'position\s*=\s*"([^"]+)"', body)
             if p:
-                out.append(tuple(float(v) for v in p.group(1).split()))
+                r = re.search(r'radius\s*=\s*"([^"]+)"', body)
+                w = re.search(r'sphereWeight\s*=\s*"([^"]+)"', body)
+                out.append({
+                    "pos": tuple(float(v) for v in p.group(1).split()),
+                    "r": float(r.group(1)) if r else 0.0,
+                    "w": float(w.group(1)) if w else 100.0,
+                    "team": team_of(m.start()),
+                })
         return out
     # Team subtrees — objects inside SimGroup(TeamN) belong to that team.
     team_ranges = {}
@@ -284,7 +313,7 @@ def parse_mis(name: str):
     for our in ("alpha", "bravo"):
         if our in flags:
             continue
-        pts = all_sp
+        pts = [s["pos"] for s in all_sp]
         if len(pts) < 2 or (max(abs(a[0]-b[0])+abs(a[1]-b[1]) for a in pts for b in pts) < 50):
             # co-located spawns (CnH pads) — spread anchors over every
             # positioned object in the Teams subtree instead
@@ -319,6 +348,15 @@ def parse_mis(name: str):
 
 def sxz(p):
     return {"x": round(p[0] * XZ_SCALE, 1), "y": 0, "z": round(p[1] * XZ_SCALE, 1)}
+
+
+def ssphere(s):
+    out = sxz(s["pos"])
+    if s["r"] > 0:
+        out["r"] = round(s["r"] * XZ_SCALE, 1)
+    if s["w"] != 100.0:
+        out["w"] = s["w"]
+    return out
 
 
 def main():
@@ -383,7 +421,12 @@ def main():
             "bots": 8,
             "botFill": 10,
             "bases": {k: sxz(v) for k, v in flags.items()},
-            "spawns": [sxz(s) for s in spawns],
+            "spawns": [ssphere(s) for s in spawns],
+            "teamSpawns": {
+                t: [ssphere(s) for s in spawns if s["team"] == t]
+                for t in ("alpha", "bravo")
+                if any(s["team"] == t for s in spawns)
+            },
             "terrain": f"t2/{key}/terrain.bin",
             "terrainTex": f"t2/{key}/albedo.png",
             **({"sky": f"t2/{key}/sky"} if faces else {}),

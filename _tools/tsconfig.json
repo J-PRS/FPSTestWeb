@@ -1,0 +1,22 @@
+{
+  // IDE/typecheck config for the Bun-run tool scripts. The repo has no
+  // root tsconfig, so editors fell back to browser defaults and flagged
+  // node:fs / process / catch-unknown. Runtime is Bun — types borrowed
+  // from server_bun's node_modules rather than installing duplicates.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun", "node"],
+    "typeRoots": ["../server_bun/node_modules/@types"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "useUnknownInCatchVariables": false,
+    "noEmit": true
+  },
+  "include": ["e2e/**/*.ts"],
+  "exclude": ["node_modules", "io_dif"]
+}
