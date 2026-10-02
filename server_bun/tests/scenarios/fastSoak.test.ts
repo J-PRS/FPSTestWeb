@@ -22,7 +22,7 @@ const TRAIL_PATH = process.env.FPS_TRAIL;
 // FPS_SHEEP_LOG overrides where they go; deleting it restores console warns.
 process.env.FPS_SHEEP_LOG ??= TRAIL_PATH
   ? dirname(TRAIL_PATH) + '/soak.log'
-  : 'run/soak.log';
+  : `${import.meta.dir}/../../../run/soak.log`;
 
 /** Lossless RGB PNG — zlib from node, no image deps. */
 function pngWrite(path: string, w: number, h: number, px: Uint8Array): void {
@@ -245,7 +245,7 @@ describe('scenario: warp soak throughput', () => {
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
     // (h = height above terrain, J/kg), the "are they skiing like Tribes
     // or walking like llamas" meter. Sampled per batch per live bot.
-    const eStats = new Map<string, { team: string; sum: number; max: number; n: number; spd: number }>();
+    const eStats = new Map<string, { team: string; sum: number; max: number; n: number; spd: number; post: number }>();
     // Per-bot lifetimes: respawn→death spans, role table's survival column.
     const lifeStart = new Map<string, number>();
     const lifeSpans = new Map<string, number[]>();
@@ -440,9 +440,11 @@ describe('scenario: warp soak throughput', () => {
         if (p.team) {
           const v2 = p.velocity.x ** 2 + p.velocity.y ** 2 + p.velocity.z ** 2;
           const e = 0.5 * v2 - GRAVITY * Math.max(0, p.position.y - hmHeight(field, p.position.x, p.position.z));
-          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0, spd: 0 };
+          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0, spd: 0, post: 0 };
           s.sum += e; s.n++; if (e > s.max) s.max = e;
           s.spd += Math.hypot(p.velocity.x, p.velocity.z);
+          const home = room.flags?.flags.get(p.team)?.home;
+          if (home && Math.hypot(p.position.x - home.x, p.position.z - home.z) < 15) s.post++;
           eStats.set(p.id, s);
         }
         if (TRAIL_PATH && p.team) {
@@ -626,14 +628,14 @@ describe('scenario: warp soak throughput', () => {
     console.log('');
     const roleOf = (id: string) => room.bots.roleOf(id);
     const sumFor = (r: string, m: Map<string, number>) => { let s = 0; for (const [id, v] of m) if (roleOf(id) === r) s += v; return s; };
-    console.log('  — K/D kills·deaths · dmg dealt · gr grabs · cp caps · rt returns · cK carrier-kills · spd avg speed · avgE avg energy · life avg lifespan —');
-    console.log('  role           bots   K / D    dmg   gr cp rt cK   spd   avgE  life(s)');
+    console.log('  — K/D kills·deaths · dmg dealt · gr grabs · cp caps · rt returns · cK carrier-kills · spd avg speed · avgE avg energy · life avg lifespan · post% ticks within 15m of own stand —');
+    console.log('  role           bots   K / D    dmg   gr cp rt cK   spd   avgE  life(s)  post%');
     for (const [r, s] of [...byRole.entries()].sort()) {
       // Per-role means of per-bot means — one hot bot can't skew a role.
-      let spd = 0, en = 0, life = 0, cnt = 0;
+      let spd = 0, en = 0, life = 0, post = 0, cnt = 0;
       for (const [id, es] of eStats) {
         if (roleOf(id) !== r || es.n === 0) continue;
-        spd += es.spd / es.n; en += es.sum / es.n; cnt++;
+        spd += es.spd / es.n; en += es.sum / es.n; post += es.post / es.n; cnt++;
         const spans = [...(lifeSpans.get(id) ?? [])];
         const born = lifeStart.get(id);
         // The life still running counts too — a bot that died at 7s and
@@ -644,7 +646,7 @@ describe('scenario: warp soak throughput', () => {
       const gr = (room.flags?.grabLog ?? []).filter((g) => g.at >= runStart && roleOf(g.by) === r).length;
       const cp = (room.flags?.capLog ?? []).filter((c) => c.capAt >= runStart && roleOf(c.by) === r).length;
       const rt = (room.flags?.retLog ?? []).filter((x) => x.at >= runStart && roleOf(x.by) === r).length;
-      console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d} ${String(Math.round(sumFor(r, botDmg))).padStart(6)} ${String(gr).padStart(3)} ${String(cp).padStart(2)} ${String(rt).padStart(2)} ${String(sumFor(r, botCk)).padStart(2)}   ${cnt ? (spd / cnt).toFixed(1).padStart(4) : '   -'} ${cnt ? (en / cnt).toFixed(0).padStart(5) : '    -'} ${cnt ? (life / cnt).toFixed(0).padStart(6) : '     -'}`);
+      console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d} ${String(Math.round(sumFor(r, botDmg))).padStart(6)} ${String(gr).padStart(3)} ${String(cp).padStart(2)} ${String(rt).padStart(2)} ${String(sumFor(r, botCk)).padStart(2)}   ${cnt ? (spd / cnt).toFixed(1).padStart(4) : '   -'} ${cnt ? (en / cnt).toFixed(0).padStart(5) : '    -'} ${cnt ? (life / cnt).toFixed(0).padStart(6) : '     -'} ${cnt ? ((post / cnt) * 100).toFixed(0).padStart(4) : '   -'}`);
     }
     console.log(
       `  kpi-csv: score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
