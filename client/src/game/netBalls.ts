@@ -168,7 +168,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // fires immediately, repeats within 2s are counted and folded into the
   // next line as ×N — a desyncing ball would otherwise drown every other
   // warn stream (and client_warning.log) at ~10 lines/sec.
-  const _segPos = new THREE.Vector3();
   const _truthPos = new THREE.Vector3();
   const rbLastWarn = new Map<number, number>();
   const rbSuppressed = new Map<number, number>();
@@ -179,7 +178,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
    *  per-kind warnAt means prediction genuinely diverged — that one's a
    *  bug signal, not lag. Per-ball throttle folds repeats into ×N. */
   function rubberbandCheck(b: Ball, m: { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number }): void {
-    _segPos.set(m.position.x, m.position.y, m.position.z);
     const age = ballEventAge(m.t);
     const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
     _truthPos.set(
@@ -187,7 +185,11 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.position.y + m.velocity.y * age,
       m.position.z + m.velocity.z * age,
     );
-    const err = _segPos.distanceTo(_truthPos);
+    // Predicted replay position vs the event's truth advanced to now —
+    // the metric the header comment describes. (It previously compared
+    // the stamped pos to itself-plus-lead, which is just speed·age and
+    // fired on every fast ball regardless of real divergence.)
+    const err = b.pos.distanceTo(_truthPos);
     const kind = m.kind ?? 'segment';
     if (err <= rubberbandWarnAt(kind, speed)) {
       if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
