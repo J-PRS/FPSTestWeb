@@ -686,16 +686,17 @@ describe('scenario: warp soak throughput', () => {
     // struck. ~0 = clipped a lip (aim-clearance misses); >2m over open
     // ground = entity intercept or a fuse/lob pop the clearance ray
     // can't see.
-    const popKinds = { lip: 0, prey: 0, near: 0, air: 0 };
+    const popKinds = { lip: 0, prey: 0, foe: 0, near: 0, air: 0 };
     selfKillImpactPos.forEach((pos, i) => {
       const prey = selfKillPrey[i];
       if (prey && Math.min(prey.ball, prey.crawler) < 3) { popKinds.prey++; return; }
+      if (prey && prey.foe < 4) { popKinds.foe++; return; }
       const clear = pos.y - Math.max(hmHeight(field, pos.x, pos.z), room.moveSim.structureTop(pos.x, pos.z));
       if (clear < 2) popKinds.lip++; else if (clear < 6) popKinds.near++; else popKinds.air++;
     });
     const selfLine = [...selfByW.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' ') +
       ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m foe@${(selfFoe[selfFoe.length >> 1] ?? 0).toFixed(0)}m ${selfKillTrades.trades}traded` +
-      ` pops lip:${popKinds.lip} prey:${popKinds.prey} near:${popKinds.near} air:${popKinds.air}`;
+      ` pops lip:${popKinds.lip} prey:${popKinds.prey} foe:${popKinds.foe} near:${popKinds.near} air:${popKinds.air}`;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');

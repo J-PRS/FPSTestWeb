@@ -78,7 +78,7 @@ export interface CombatDeps {
   /** Distance of the nearest ball / crawler to a point — self-frag
    *  autopsy discriminates a terrain lip from a body that hopped into
    *  the shell. */
-  preyNear?: (pos: Vec3) => { ball: number; crawler: number };
+  preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
   /** Armor-grenade plating sweep — grants `amount` armor to every sim
    *  creature inside `radius` of the blast point (overcap health). */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;

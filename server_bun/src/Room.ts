@@ -456,13 +456,23 @@ export class Room {
         const p = this.players.getPlayer(pid);
         return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
       },
-      preyNear: (pos) => {
+      preyNear: (pos, shooterId) => {
         let crawler = Infinity;
         for (const c of this.creatureSim.crawlers.values()) {
           const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
           if (d < crawler) crawler = d;
         }
-        return { ball: this.ballSim.nearestBallDist(pos.x, pos.y, pos.z), crawler };
+        // Nearest enemy body to the pop — a foe eating the shell at 5m
+        // reads as a 'lip' in the autopsy otherwise, masking body
+        // intercepts as terrain clips.
+        const team = shooterId ? this.players.getPlayer(shooterId)?.team : undefined;
+        let foe = Infinity;
+        for (const q of this.players.getAllPlayers().values()) {
+          if (q.id === shooterId || q.isDead || (team && q.team === team)) continue;
+          const d = Math.hypot(q.position.x - pos.x, q.position.y - pos.y, q.position.z - pos.z);
+          if (d < foe) foe = d;
+        }
+        return { ball: this.ballSim.nearestBallDist(pos.x, pos.y, pos.z), crawler, foe };
       },
     };
   }

@@ -120,7 +120,7 @@ export interface RoomInfo {
    *  claims far past melee range get flagged, not silently eaten. */
   envRange?: (playerId: string) => number;
   /** Nearest ball / crawler to a point — self-frag autopsy. */
-  preyNear?: (pos: Vec3) => { ball: number; crawler: number };
+  preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
   /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
   /** A legit fire claim passed the gates — the sheep meter's human

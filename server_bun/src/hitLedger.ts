@@ -7,7 +7,7 @@ export const selfKillImpactDist: number[] = [];
 export const selfKillImpactPos: { x: number; y: number; z: number }[] = [];
 /** Nearest ball / crawler distance at each self-frag — a pop <2m over
  *  ground is still a body intercept if a crawler is standing there. */
-export const selfKillPrey: { ball: number; crawler: number }[] = [];
+export const selfKillPrey: { ball: number; crawler: number; foe: number }[] = [];
 /** Nearest-enemy range at the moment of self-frag — separates the
  *  "enemy on top of me" splash from the "shell clipped a lip" kind. */
 export const selfKillFoeDist: number[] = [];
@@ -69,7 +69,7 @@ export class HitLedger {
     if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
     if (shooterId === targetId && impactPos) {
       selfKillImpactPos.push({ x: impactPos.x, y: impactPos.y, z: impactPos.z });
-      const near = c.deps.preyNear?.(impactPos);
+      const near = c.deps.preyNear?.(impactPos, shooterId);
       if (near) selfKillPrey.push(near);
     }
     if (shooterId === targetId) {
