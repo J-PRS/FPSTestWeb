@@ -16,6 +16,7 @@ import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deploy
 
 export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
+import { simNow } from './simClock.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
 const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120 };
@@ -214,7 +215,7 @@ export class RoomDeployables {
     if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return; // 1.5× slack
     if (!losClear(this, p.position, d.pos)) return;
     const key = `${playerId}:${targetId}`;
-    const now = Date.now() / 1000;
+    const now = simNow() / 1000;
     if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return;
     this.lastRepair.set(key, now);
     const hpCap = HP[d.kind];

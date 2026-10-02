@@ -38,6 +38,7 @@ import { chatKindFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
+import { simNow } from './simClock.ts';
 
 export class Room {
   readonly name: string;
@@ -337,7 +338,7 @@ export class Room {
         this.creatureSim.armorBlast(pos, radius, amount);
       },
       deployables: () => this.deployables.snapshot(),
-      matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,
+      matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
       moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
         forward: i.forward, right: i.right,
         jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
@@ -459,7 +460,7 @@ export class Room {
   /** Blasts detonate server-side without a broadcast position — the sim
    *  reports them here so bots hear explosions as well as muzzle fire. */
   pushNoise(pos: Vec3): void {
-    const now = Date.now();
+    const now = simNow();
     while (this.noises.length && now - this.noises[0]!.at > Room.NOISE_TTL) this.noises.shift();
     this.noises.push({ pos: { ...pos }, at: now });
     if (this.noises.length > Room.NOISE_MAX) this.noises.shift();
@@ -467,7 +468,7 @@ export class Room {
 
   /** Recent noise positions within earshot of pos (no LOS required). */
   noisesNear(pos: Vec3, radius: number): Vec3[] {
-    const now = Date.now();
+    const now = simNow();
     const out: Vec3[] = [];
     for (const n of this.noises) {
       if (now - n.at > Room.NOISE_TTL) continue;

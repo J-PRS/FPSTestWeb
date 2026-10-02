@@ -19,6 +19,7 @@ import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import { simNow } from './simClock.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -47,7 +48,7 @@ export class ServerBotSenses {
   /** Room code reports an event worth a reaction (flag cap/grab/return/
    *  drop). Actor's own line is separate — the actor never gets a notice. */
   notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
-    this.pendingNotice = { kind, actorId, actorTeam, stamp: Date.now() };
+    this.pendingNotice = { kind, actorId, actorTeam, stamp: simNow() };
   }
 
   /** Translate the pending event into THIS bot's side of it — allies

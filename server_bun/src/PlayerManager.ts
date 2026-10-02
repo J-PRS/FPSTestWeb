@@ -8,6 +8,7 @@ import { ENERGY } from '../../shared/movement.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import { simNow } from './simClock.ts';
 
 let internalIdCounter = 0;
 
@@ -88,7 +89,7 @@ export class PlayerManager {
       status: 0,
       history: [],
       forceSendUntil: 0,
-      protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
+      protectedUntil: simNow() + PlayerManager.SPAWN_PROTECT_MS,
       healCredit: 0,
       armor: 0,
       regenUntil: 0,
@@ -220,7 +221,7 @@ export class PlayerManager {
     if (!target || target.isDead) {
       return { killed: false, newHealth: 0, newArmor: 0 };
     }
-    if (Date.now() < target.protectedUntil) {
+    if (simNow() < target.protectedUntil) {
       return { killed: false, newHealth: target.health, newArmor: target.armor };
     }
     // Energy shield: while the flag is up the hit routes to the player's
@@ -304,7 +305,7 @@ export class PlayerManager {
     // hit validation and muzzle checks would rewind to the death site.
     player.history.length = 0;
     player.history.push({ t: Date.now(), x: spawn.x, y: spawn.y, z: spawn.z });
-    player.protectedUntil = Date.now() + PlayerManager.SPAWN_PROTECT_MS;
+    player.protectedUntil = simNow() + PlayerManager.SPAWN_PROTECT_MS;
 
     return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };
   }

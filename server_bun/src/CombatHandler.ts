@@ -18,6 +18,7 @@ import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
 import { hitClaim, registerMiss } from './shotClaims.ts';
+import { simNow } from './simClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -389,7 +390,7 @@ export class CombatHandler {
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.
   // Applies to every path that already routes through applyHit.
   ddMult(shooter: PlayerState): number {
-    return shooter.ddUntil > Date.now() ? POWERUP.ddMult : 1;
+    return shooter.ddUntil > simNow() ? POWERUP.ddMult : 1;
   }
 
   applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {

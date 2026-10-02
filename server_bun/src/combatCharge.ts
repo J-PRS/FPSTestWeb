@@ -1,5 +1,6 @@
 import type { PlayerState } from './types.ts';
 import { lgChargeAt, lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
+import { simNow } from './simClock.ts';
 
 /** The LG charge economy: beam ticks bank withheld damage onto the victim
  *  as a walking bomb; any later hit — or death — detonates the bank as a
@@ -16,7 +17,7 @@ export class ChargeBank {
   constructor(private pop: (ownerId: string, target: PlayerState, amount: number) => void) {}
 
   step(shooterId: string, targetId: string | null): number {
-    const now = Date.now() / 1000;
+    const now = simNow() / 1000;
     const st = this.ramp.get(shooterId);
     const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
     this.ramp.set(shooterId, { targetId, t: now, n });
@@ -27,20 +28,20 @@ export class ChargeBank {
    *  The bank drains lazily at 5× fill rate once the beam leaves them,
    *  matching the client's shroud shrink exactly. */
   bank(target: PlayerState, withheld: number): void {
-    const now = Date.now() / 1000;
+    const now = simNow() / 1000;
     target.charge = lgChargeAt(target.charge, target.chargeT, now) + withheld * LG_POP_CHARGE_MULT;
     target.chargeT = now;
   }
 
   of(target: PlayerState): number {
-    return lgChargeAt(target.charge, target.chargeT, Date.now() / 1000);
+    return lgChargeAt(target.charge, target.chargeT, simNow() / 1000);
   }
 
   /** Detonate `amount` worth of a victim's banked charge as a real
    *  blast — the remainder keeps smoldering. Credit goes to the
    *  detonating shooter through the pop callback. */
   discharge(ownerId: string, target: PlayerState, amount: number): void {
-    const now = Date.now() / 1000;
+    const now = simNow() / 1000;
     target.charge = lgChargeAt(target.charge, target.chargeT, now) - amount;
     target.chargeT = now;
     this.pop(ownerId, target, amount);

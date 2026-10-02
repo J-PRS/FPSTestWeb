@@ -1,6 +1,7 @@
 import { weaponStats } from './weaponStats.ts';
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
+import { simNow } from './simClock.ts';
 
 // The hit funnel tail — every damage path converges here so shot/AOE/
 // environment can't drift: telemetry (weapon spread, death spot, TTK),
@@ -34,7 +35,7 @@ export class HitLedger {
     weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
-      this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? Date.now());
+      this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());
       if (this.duelStart.size > 512) this.pruneStaleDuels();
       return;
     }
@@ -45,7 +46,7 @@ export class HitLedger {
       victim?.velocity ?? null);
     // Duel engagement: first-hit→kill time per shooter+victim pair.
     const started = this.duelStart.get(duelKey);
-    if (started !== undefined) weaponStats.recordTtk(modeTag, src, Date.now() - started);
+    if (started !== undefined) weaponStats.recordTtk(modeTag, src, simNow() - started);
     this.duelStart.delete(duelKey);
   }
 
@@ -54,7 +55,7 @@ export class HitLedger {
   // TTK anchor no matter how many pairs are tracked. Iteration order is
   // insertion order, which approximates age order.
   private pruneStaleDuels(): void {
-    const cutoff = Date.now() - 60_000;
+    const cutoff = simNow() - 60_000;
     for (const [k, t] of this.duelStart) {
       if (t > cutoff) break;
       this.duelStart.delete(k);

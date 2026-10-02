@@ -30,6 +30,7 @@ import { BotSheepMeter } from './botSheep.ts';
 import { ServerBotSenses } from './serverSenses.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
+import { simNow } from './simClock.ts';
 
 /** Tribes-flavored squad roles — the type and the objective rules live in
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
@@ -240,12 +241,12 @@ export class ServerBots {
 
 
   tick(dt: number): void {
-    this.roster.maintain(Date.now());
+    this.roster.maintain(simNow());
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
     this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
     this.meterHumans(dt);
     if (this.brains.size === 0) return;
-    const now = Date.now();
+    const now = simNow();
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
       if (!p) continue;
@@ -319,7 +320,7 @@ export class ServerBots {
    *  and a live human always counts as having a destination (coverage
    *  stall applies — standing around is the thing being measured). */
   private meterHumans(dt: number): void {
-    const now = Date.now();
+    const now = simNow();
     const players = this.room.players.getAllPlayers();
     for (const [id, p] of players) {
       if (p.isBot || p.isDead) continue;

@@ -15,6 +15,7 @@ import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, TEAMS, type TeamId } from '..
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { simNow } from './simClock.ts';
 
 export type FlagState = 'home' | 'carried' | 'dropped';
 
@@ -83,7 +84,7 @@ export class RoomFlags {
       f.carrier = null;
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
-      f.droppedAt = Date.now();
+      f.droppedAt = simNow();
       this.dirty = true;
     }
   }
@@ -145,7 +146,7 @@ export class RoomFlags {
       logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
       this.room.messages.killFeed.say(carrier.id, 'flagcap');
       this.room.bots?.notice('flagcap', carrier.id, carrier.team);
-      if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', Date.now() - f.carriedAt);
+      if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', simNow() - f.carriedAt);
       f.state = 'home';
       f.pos = { ...f.home };
       f.carrier = null;
@@ -160,7 +161,7 @@ export class RoomFlags {
   private tickDropped(f: RoomFlag, dt: number): void {
     f.dropT -= dt;
     if (f.dropT > 0) return;
-    if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
+    if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
     f.state = 'home';
     f.pos = { ...f.home };
     f.droppedAt = 0;
@@ -176,7 +177,7 @@ export class RoomFlags {
       logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flagreturn');
       this.room.bots?.notice('flagreturn', t.id, t.team);
-      if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
+      if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
       f.state = 'home';
       f.pos = { ...f.home };
       f.droppedAt = 0;
@@ -187,7 +188,7 @@ export class RoomFlags {
       this.room.bots?.notice('flaggrab', t.id, t.team);
       f.state = 'carried';
       f.carrier = t.id;
-      f.carriedAt = Date.now();
+      f.carriedAt = simNow();
       this.dirty = true;
     }
   }

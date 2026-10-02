@@ -14,6 +14,7 @@ import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
+import { simNow } from './simClock.ts';
 
 /** Strict-tier roles — the only slots that re-fit a donor's body.
  *  HoF is literally "heavy on flag" and the technician carries the
@@ -62,7 +63,7 @@ export class BotRoster {
       this.applyClass(p, cls);
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
-      p.lastSeen = Date.now();
+      p.lastSeen = simNow();
       this.room.assignTeam(p);
       this.room.broadcast({
         type: 'playerJoined',

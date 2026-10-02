@@ -1,6 +1,7 @@
 import type { ServerMessage } from '../../shared/protocol.ts';
 import type { ModeSpec, TeamScores } from '../../shared/teams.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
+import { simNow } from './simClock.ts';
 
 /** The pieces of Room the match lifecycle touches — typed as an
  *  interface so RoomMatchClock stays a leaf (no Room import cycle). */
@@ -36,7 +37,7 @@ export class MatchClock {
 
   /** ms until the horn; 0 when the clock isn't armed. */
   timeLeftMs(): number {
-    return this.endsAt ? Math.max(0, this.endsAt - Date.now()) : 0;
+    return this.endsAt ? Math.max(0, this.endsAt - simNow()) : 0;
   }
 
   tick(now: number): void {
@@ -123,7 +124,7 @@ export class MatchClock {
     // Re-arm only with an audience: an empty room's clock should stay
     // unarmed (endsAt=0) so the next joiner gets a fresh match instead
     // of inheriting whatever an unwatched countdown burned down to.
-    this.endsAt = host.getHumanCount() > 0 ? Date.now() + spec.timeLimitS * 1000 : 0;
+    this.endsAt = host.getHumanCount() > 0 ? simNow() + spec.timeLimitS * 1000 : 0;
     this.warned = false;
     this.overtime = false;
     host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores } });

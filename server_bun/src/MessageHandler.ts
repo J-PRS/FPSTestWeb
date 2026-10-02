@@ -146,6 +146,10 @@ export class MessageHandler {
   private combat: CombatHandler;
   /** Room/flag code reads killFeed for situation chatter (bot 'say' events). */
   get killFeed(): KillFeed { return this.combat.killFeed; }
+  /** Fast-forward driver seam: lapses sim-timed respawn deadlines when
+   *  sim-time outruns wall time. Live rooms never call it — the wall
+   *  timers fire first there, so this is a no-op shadow. */
+  respawnTick(now: number): void { this.combat.respawner.tick(now); }
   // Server-owned creatures (balls). Optional — a missing/unloadable
   // heightmap must not take down the whole game server.
   private ballSim: BallSim | null = null;

@@ -9,6 +9,7 @@ import {
   DRONE_HOVER_UP, DRONE_RANGE, DRONE_DAMAGE, DRONE_FIRE_INTERVAL,
 } from './RoomDeployables.ts';
 import { healPool } from './healPool.ts';
+import { simNow } from './simClock.ts';
 
 // Per-kind deployable ticks — drone escort scan, proximity-mine fuse,
 // resupply-pad pulse, structure LOS, sentry fire. RoomDeployables owns
@@ -29,7 +30,7 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead || pid === d.owner) continue;
       if (owner.team && p.team === owner.team) continue;
-      if (p.protectedUntil > Date.now()) continue;
+      if (p.protectedUntil > simNow()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= bestD2) continue;
@@ -108,7 +109,7 @@ export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead || pid === d.owner) continue;
       if (owner?.team && p.team === owner.team) continue;
-      if (p.protectedUntil > Date.now()) continue;
+      if (p.protectedUntil > simNow()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= bestD2) continue;

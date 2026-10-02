@@ -10,6 +10,7 @@ import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickup
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { healPool } from './healPool.ts';
+import { simNow } from './simClock.ts';
 
 // Score/kill economy — every path that turns a death or a touch into
 // points, pickups, or the match horn. Split from Room.ts so the room file
@@ -79,7 +80,7 @@ export class RoomScore {
    *  never claim regen/dd it didn't touch. Bots collect too: they read
    *  the fields directly, no wire message needed for them. */
   applyPowerup(p: PlayerState, kind: PowerupKind): void {
-    const now = Date.now();
+    const now = simNow();
     const buff: Extract<ServerMessage, { type: 'buff' }> = { type: 'buff', kind };
     if (kind === 'heal') {
       healPool(p, POWERUP.heal);
