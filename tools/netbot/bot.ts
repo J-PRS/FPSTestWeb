@@ -92,11 +92,17 @@ export class NetBot {
     }
     // Creatures join the foe list like the server sense does — hunting
     // them is the actual objective in nuggets rooms, and the creatureHit
-    // wire path only gets exercised if wire bots shoot them.
+    // wire path only gets exercised if wire bots shoot them. Engagement
+    // range caps the list: a knocked-high or roaming ball across the map
+    // would otherwise soak the fire slot and reach the range gate as a
+    // forever-unreachable target.
+    const me = this.nc.self.pos;
     for (const [bid, b] of this.nc.balls) {
+      if ((b.pos.x - me.x) ** 2 + (b.pos.y - me.y) ** 2 + (b.pos.z - me.z) ** 2 > 200 * 200) continue;
       out.push({ id: `b:${bid}`, pos: { x: b.pos.x, y: b.pos.y, z: b.pos.z }, vel: { x: b.vel.x, y: b.vel.y, z: b.vel.z }, alive: true });
     }
     for (const [cid, c] of this.nc.crawlers) {
+      if ((c.pos.x - me.x) ** 2 + (c.pos.y - me.y) ** 2 + (c.pos.z - me.z) ** 2 > 200 * 200) continue;
       out.push({ id: `c:${cid}`, pos: { x: c.pos.x, y: c.pos.y, z: c.pos.z }, vel: { x: c.vel.x, y: c.vel.y, z: c.vel.z }, alive: true });
     }
     return out;
@@ -184,10 +190,15 @@ export class NetBot {
    *  reject it as a doctored-client claim. Fall back to the sidearm. */
   private legalWeapon(dist: number): number {
     const w = pickBotWeapon(this.loadout, dist, dist, (t) => aimSkillFor(this.brain.skill, t, 0));
-    // Hitscan/beam kinds have no projectile claim shape — a bot that
-    // draws Lightning would hold it and never claim; sidearm instead.
-    if (HEAVY_ONLY_WEAPONS.has(w) || (WEAPONS[w]?.speed ?? 0) <= 0) return this.loadout.side;
-    return w;
+    if (!HEAVY_ONLY_WEAPONS.has(w) && (WEAPONS[w]?.speed ?? 0) > 0) return w;
+    // Beam/throw picks have no projectile claim shape — a bot that draws
+    // Lightning would hold it and never claim. Fall to the nearest
+    // claimable slot (splash mid > near > far > side) so the draw still
+    // produces wire traffic.
+    for (const alt of [this.loadout.mid, this.loadout.near, this.loadout.far, this.loadout.side]) {
+      if (!HEAVY_ONLY_WEAPONS.has(alt) && (WEAPONS[alt]?.speed ?? 0) > 0) return alt;
+    }
+    return this.loadout.side;
   }
 
   private think(): void {
@@ -198,7 +209,9 @@ export class NetBot {
     // The brain's objective goals ignore enemies it can't see, and a
     // 8s test can't wait for spawns 250m apart to wander into LOS —
     // steer toward the nearest live enemy when the brain isn't firing.
-    if (!out.fire) {
+    // An objective (flag route) outranks the steer though: a capper
+    // detouring to every near enemy never reaches the stand.
+    if (!out.fire && !this.flagObjective()) {
       let nearest: BotEnemy | null = null;
       let nd = Infinity;
       for (const e of this.ctx().enemies) {
@@ -224,7 +237,9 @@ export class NetBot {
       right: d > 8 ? Math.sin(this.strafePhase) * 0.6 : 0,
       // Real players jet the flats and the uphills — skiing alone leaves
       // a bot crawling valleys the fake kinematics used to skip over.
-      jet: !!out.move?.jet || d > 60 || (d > 30 && out.dest.y > nc.self.pos.y + 4),
+      // The vertical term stands alone: a stand parked overhead has
+      // ~zero XZ distance, so gating it on d strands bots underneath.
+      jet: !!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4,
       jump: !!out.move?.jump,
     };
     if (!nc.surface) {
