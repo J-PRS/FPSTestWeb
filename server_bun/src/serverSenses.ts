@@ -21,6 +21,7 @@ import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
+import { botRand } from '../../shared/botRand.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -47,12 +48,40 @@ export class ServerBotSenses {
   private pushAt = new Map<TeamId, { pos: BotVec; at: number }>();
   private static readonly PUSH_ETA_S = 10;
   private static readonly PUSH_HOLD_MS = 8000;
+  /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
+   *  wanders its own mini-route instead of parking. */
+  private waitSpot = new Map<string, { pos: BotVec; at: number }>();
+  private static readonly WAIT_TTL_MS = 15_000;
+
+  /** Neutron shell around home for a flag carrier waiting out a stolen
+   *  flag: ~50% of rolls land inside 50m of the stand, ~10% reach the
+   *  50-100m sweep, a rare ~1% pulls a big 200m patrol. Azimuth is free
+   *  — the bot picks its own circuit. */
+  private waitSpotFor(id: string, home: BotVec, duty: number): BotVec {
+    const now = simNow();
+    const cur = this.waitSpot.get(id);
+    if (cur && now - cur.at < ServerBotSenses.WAIT_TTL_MS) return cur.pos;
+    const u = botRand();
+    const slack = 1 + (1 - duty);               // slack carriers roam wider
+    const r = u < 0.5 ? (15 + botRand() * 35)
+      : u < 0.6 ? (50 + botRand() * 50)
+      : u < 0.61 ? (100 + botRand() * 100)
+      : (20 + botRand() * 40);
+    const a = botRand() * Math.PI * 2;
+    const x = home.x + Math.cos(a) * r * slack;
+    const z = home.z + Math.sin(a) * r * slack;
+    const y = this.field ? hmHeight(this.field, x, z) : home.y;
+    const pos = { x, y, z };
+    this.waitSpot.set(id, { pos, at: now });
+    return pos;
+  }
 
   /** Bot left the room — drop its notice receipt so the map can't grow
    *  one entry per retired bot for the room's life. */
   forget(id: string): void {
     this.noticed.delete(id);
     this.routeHold.delete(id);
+    this.waitSpot.delete(id);
   }
 
   /** Room code reports an event worth a reaction (flag cap/grab/return/
@@ -214,20 +243,15 @@ export class ServerBotSenses {
       // cap window — a carrier that can reach it goes for the touch.
       if (own.state === 'dropped') return { pos: own.pos, infiltrating: false, running: true, runner: true };
       // The cap line is blocked while our own flag is in the field —
-      // standing on the stand just paints a target. Fall back to a
-      // covered wait-spot behind the base and re-approach when the
-      // flag comes home. The lean scales with duty: a slack carrier
-      // still edges toward the stand.
+      // standing on the stand just paints a target. Hover a defensive
+      // circuit around home instead: re-roll a wait waypoint every
+      // ~15s on a neutron shell — mostly tight orbits over the stand,
+      // occasional wide sweeps — so the carrier keeps moving, stays a
+      // hard target, and is close enough to dive in the moment our
+      // flag returns. A slack carrier draws the wider shells.
       if (own.state === 'carried') {
-        const ref = enemy.home;
-        const dx = own.home.x - ref.x, dz = own.home.z - ref.z;
-        const d = Math.hypot(dx, dz);
-        if (d > 1) {
-          const back = 90 + 60 * (1 - duty);
-          const wx = own.home.x + (dx / d) * back, wz = own.home.z + (dz / d) * back;
-          const wy = this.field ? hmHeight(this.field, wx, wz) : own.home.y;
-          return { pos: { x: wx, y: wy, z: wz }, infiltrating: false, running: true, runner: true };
-        }
+        const w = this.waitSpotFor(p.id, own.home, duty);
+        return { pos: w, infiltrating: false, running: true, runner: true };
       }
       return { pos: own.home, infiltrating: false, running: true, runner: true };
     }
@@ -280,6 +304,19 @@ export class ServerBotSenses {
       // stand at 90m beelines the bot into the rim wall it probed its
       // way around — presses end 8m below the flag at the wall's foot.
       if (dStand > (capper ? 25 : 20)) {
+        // …unless the straight line to the stand is already open. Ring
+        // entries only earn their detour when terrain actually rises
+        // into the approach; without this check a bot on the anchor
+        // ring hops entry-to-entry ~60m out forever, never taking the
+        // last hop that was clean all along.
+        let wall = 0;
+        for (let s = 1; s < 8; s++) {
+          const t = s / 8;
+          wall = Math.max(wall, hmHeight(this.field, p.position.x + (enemyStand.x - p.position.x) * t,
+            p.position.z + (enemyStand.z - p.position.z) * t)
+            - (p.position.y + (enemyStand.y - p.position.y) * t));
+        }
+        if (wall < 6) { goalPos = enemyStand; } else {
         // Re-scored EVERY think — the route stays live to foe movement —
         // but switching is expensive: the incumbent only loses when a
         // challenger beats it by a decisive gap, not when scores jitter
@@ -348,6 +385,7 @@ export class ServerBotSenses {
           this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
         }
         goalPos = best;
+        }
       }
     }
     // Cloak intent only for the infiltrator: the drain is speed-scaled,
@@ -424,8 +462,11 @@ export class ServerBotSenses {
       running: goal?.running ?? false,
       runner: goal?.runner ?? false,
       // Team rooms drop nuggets on creature kills — bots farm them too,
-      // which is what keeps a bot-filled match's scoreboard moving.
-      pickup: this.room.pickups?.nearest(p.position) ?? undefined,
+      // which is what keeps a bot-filled match's scoreboard moving. The
+      // chase is weighed like a player weighs it: only gems in real
+      // reach, and a contested gem costs a hurt bot nothing but a death
+      // walk — a healthy one fights through for it.
+      pickup: this.pickupFor(p) ?? undefined,
       // Gem-economy rooms make hunting creatures the actual objective;
       // on any map that spawns real creatures they're threats worth
       // shooting too. Structureless-free: pops is {} where spec doesn't
@@ -492,11 +533,51 @@ export class ServerBotSenses {
   private static readonly SPOT_MS = 5000;
 
   private updateSpots(ctx: BrainCtx, p: { team?: string; position: Vec3 }): void {
+    // Cloaking burns your callout — the whole point of the shimmer is
+    // that every eye loses you at once, so a stale spot can't keep
+    // feeding lastSeen to a squad that no longer sees anything.
+    for (const [id, s] of this.spots) {
+      const q = this.room.players.getPlayer(s.e.id.replace(/^p:/, ''));
+      if (q?.status && (q.status & STATUS.CLOAK)) this.spots.delete(id);
+    }
     for (const e of ctx.enemies) {
       if (!e.alive || e.id.startsWith('b:') || dist3(p.position, e.pos) >= ServerBotSenses.SPOT_M) continue;
       if (!losClear(ctx, p.position, e.pos)) continue;
       this.spots.set(e.id, { e, team: p.team, at: ctx.now });
     }
+  }
+
+  /** Which gem to chase: nearest within real reach, unless the bot is so
+   *  hurt the contested walk is suicide. Enemies near the GEM camp the
+   *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
+  private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }): BotVec | null {
+    const snaps = this.room.pickups?.snapshot();
+    if (!snaps?.length) return null;
+    const foes = this.enemiesOf(p);
+    // Greedy like the capper's roam shell, not a wall: close gems always
+    // pull, far ones only sometimes — acceptance odds fall with distance
+    // so a nuggets map spreads the fleet over the field instead of every
+    // brain locking the same nearest gem. Elsewhere it's opportunism.
+    const nuggets = this.room.mode === 'nuggets';
+    const worthIt = (d: number) => nuggets
+      ? d < 160 || botRand() < (d < 260 ? 0.6 : d < 320 ? 0.3 : 0.08)
+      : d < 140;
+    let best: BotVec | null = null, bestD = Infinity;
+    for (const g of snaps) {
+      const d = dist3(p.position, g.pos);
+      if (d >= bestD || !worthIt(d)) continue;
+      const hurt = p.maxHealth > 0 && p.health / p.maxHealth < 0.4;
+      if (hurt) {
+        let camped = false;
+        for (const f of foes) {
+          if (!f.alive) continue;
+          if (Math.hypot(f.pos.x - g.pos.x, f.pos.z - g.pos.z) < 35) { camped = true; break; }
+        }
+        if (camped && d > 12) continue; // close enough to sneeze on it anyway
+      }
+      bestD = d; best = g.pos;
+    }
+    return best;
   }
 
   private spotsFor(me: string | undefined, now: number): BotEnemy[] {
