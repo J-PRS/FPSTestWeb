@@ -175,8 +175,9 @@ export class CoolShotManager {
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
   trimList(): void {
-    this.coolShots.toSorted((a, b) => b.projectileLifetime - a.projectileLifetime);
-    const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
+    // toSorted returns a copy — it used to be discarded, so "top by
+    // lifetime" quietly kept insertion order instead.
+    const topIds = new Set([...this.coolShots].toSorted((a, b) => b.projectileLifetime - a.projectileLifetime).slice(0, 10).map(s => s.id));
     const recentIds = new Set([...this.coolShots].toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
     this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
   }
