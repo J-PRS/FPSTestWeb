@@ -694,6 +694,20 @@ const GYM_EXCLUDE = new Set<number>([
   WeaponType.ArmorGrenade, WeaponType.Javelin, WeaponType.ImpactGrenade,
 ]);
 
+// Low-arc ballistic solve: elevation that lands a shell of speed v on
+// the target after g drop — flat-fired gravity lanes fell short of the
+// wall before this. Falls back to 45° when v can't reach the range.
+function ballisticVel(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, v: number, g: number) {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const R = Math.hypot(dx, dz) || 1;
+  const h = to.y - from.y;
+  const v2 = v * v;
+  const disc = v2 * v2 - g * (g * R * R + 2 * h * v2);
+  const th = disc > 0 ? Math.atan((v2 - Math.sqrt(disc)) / (g * R)) : Math.PI / 4;
+  const cos = Math.cos(th), sin = Math.sin(th);
+  return { x: dx / R * v * cos, y: v * sin, z: dz / R * v * cos };
+}
+
 function weaponGym(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const lanes = Object.keys(WeaponType)
@@ -725,10 +739,15 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   });
 
   const fireLane = (l: (typeof laneFx)[number]) => {
+    const from = { x: l.x, y: 2, z: -40 };
+    const to = { x: l.x, y: 5, z: 54 };
+    const vel = l.st.gravity
+      ? ballisticVel(from, to, l.st.speed, GRAVITY)
+      : { x: 0, y: 0, z: l.st.speed };
     const s = spawnShell({
       weaponType: l.wt,
-      pos: { x: l.x, y: 2, z: -40 },
-      vel: { x: 0, y: 0, z: l.st.speed },
+      pos: from,
+      vel,
       gravity: l.st.gravity ? GRAVITY : 0,
       maxAge: l.st.maxLifetime ?? 30,
       walls: [{ axis: 'z', at: 54 }],
