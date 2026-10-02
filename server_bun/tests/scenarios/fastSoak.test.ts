@@ -71,9 +71,16 @@ describe('scenario: fast-forward soak throughput', () => {
       alpha: mapJson.teamSpawns?.alpha ?? [{ ...mapJson.bases!.alpha, r: 50, w: 90 }],
       bravo: mapJson.teamSpawns?.bravo ?? [{ ...mapJson.bases!.bravo, r: 50, w: 90 }],
     } : undefined;
-    const mode = ctf ? 'ctf' : (mapJson as { mode?: string }).mode ?? 'tdm';
+    // FPS_SOAK_MODE overrides the authored mode — e.g. tdm on a ctf map
+    // measures pure combat density on that terrain (flags stay on the
+    // field as scenery, probes just report zero).
+    const mode = process.env.FPS_SOAK_MODE ?? (ctf ? 'ctf' : (mapJson as { mode?: string }).mode ?? 'tdm');
     const room = mkRoom({
       mode, bots: 16, botFill: 16,
+      // Economy sims off by default in the combat soak — ball/creature
+      // kills ride the same weapon-kill ledger and poison duel stats.
+      // FPS_SOAK_ECO=1 re-enables for economy probes.
+      ...(process.env.FPS_SOAK_ECO ? {} : { balls: { base: 0, perPlayer: 0, max: 0 }, creatures: {} }),
       ...(ctf ? {
         bases: { alpha: baseAt(mapJson.bases!.alpha.x, mapJson.bases!.alpha.z), bravo: baseAt(mapJson.bases!.bravo.x, mapJson.bases!.bravo.z) },
         teamSpawns: Object.fromEntries(
@@ -86,7 +93,7 @@ describe('scenario: fast-forward soak throughput', () => {
     let simTicks = 0;
     const dt = 0.05;                      // 20Hz — matches the live tick
     const w = watch(room, () => simTicks * dt);
-    if (ctf) expect(room.flags).not.toBeNull();
+    if (mode === 'ctf') expect(room.flags).not.toBeNull();
 
     const wallBudgetMs = WALL_BUDGET_MS;
     const runStart = simNow();
@@ -402,6 +409,11 @@ describe('scenario: fast-forward soak throughput', () => {
     const fragger = [...players].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)[0];
     const kd = [...players].sort((a, b) => (b.kills / Math.max(1, b.deaths)) - (a.kills / Math.max(1, a.deaths)))[0];
     const kills = players.reduce((n, p) => n + p.kills, 0);
+    // Self-blast credit check: playerKill broadcasts carry shooter/target —
+    // a suicide counts once as scoreboard-zero but still hits the weapon
+    // ledger, so selfK reconciles kills_a+b vs the weapons table.
+    const pkMsgs = w.msgs.filter((m) => m.type === 'playerKill') as unknown as { shooterId: string; targetId: string }[];
+    const selfKills = pkMsgs.filter((m) => m.shooterId === m.targetId).length;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');
@@ -443,7 +455,7 @@ describe('scenario: fast-forward soak throughput', () => {
     }
     console.log(
       `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
-      `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0}` +
+      `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0},pkEv=${pkMsgs.length},selfK=${selfKills}` +
       `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
       `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'}(${flagGap.alpha[0].toFixed(1)}+${flagGap.alpha[1].toFixed(1)}y@${flagGap.alpha[2].toFixed(0)}mps),flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}(${flagGap.bravo[0].toFixed(1)}+${flagGap.bravo[1].toFixed(1)}y@${flagGap.bravo[2].toFixed(0)}mps)` +
       `,capA=${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(1) : '-'},capB=${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(1) : '-'}` +
