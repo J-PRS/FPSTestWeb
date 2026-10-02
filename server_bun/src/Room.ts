@@ -276,7 +276,35 @@ export class Room {
         ...v,
         y: standTop(v.x, v.z),
       });
-      this.flags = new RoomFlags(this, { alpha: snap(bases.alpha), bravo: snap(bases.bravo) });
+      // Unreachable-shelf rescue: a flag snapped onto a mesa or pad that
+      // towers over every approach is a flag nobody can touch — walk it
+      // downhill toward the gentlest ring neighbor until some side is a
+      // jet-able climb (~18m over 60m) instead of a wall.
+      const deShelf = (v: { x: number; y: number; z: number }) => {
+        let x = v.x, z = v.z;
+        for (let i = 0; i < 10; i++) {
+          const top = standTop(x, z);
+          // Reachable when SOME side offers a jet-able approach (~18m
+          // over 60m); a big flat mesa reads correctly this way — local
+          // flatness doesn't fake accessibility, the far ring does.
+          let bestTop = -Infinity, bx = x, bz = z;
+          for (let a = 0; a < 8; a++) {
+            const px = x + Math.cos((a / 8) * Math.PI * 2) * 60;
+            const pz = z + Math.sin((a / 8) * Math.PI * 2) * 60;
+            const t = standTop(px, pz);
+            if (t > bestTop) { bestTop = t; bx = px; bz = pz; }
+          }
+          if (top - bestTop <= 18) break;
+          const dx = bx - x, dz = bz - z, dd = Math.hypot(dx, dz) || 1;
+          x += (dx / dd) * 15; z += (dz / dd) * 15;
+        }
+        return { x, z };
+      };
+      const snapBase = (v: { x: number; y: number; z: number }) => {
+        const p = deShelf(v);
+        return snap({ x: p.x, y: v.y, z: p.z });
+      };
+      this.flags = new RoomFlags(this, { alpha: snapBase(bases.alpha), bravo: snapBase(bases.bravo) });
     }
   }
 
