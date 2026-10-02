@@ -26,16 +26,36 @@ export class BotLines {
   private wp: BotVec | null = null;
   private wpGoal: BotVec | null = null;
   private lineT = 0;
+  private lastGd = Infinity;
+  private stale = 0;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     const gd = Math.hypot(dest.x - pos.x, dest.z - pos.z);
     this.lineT -= dt;
-    if (gd < MIN_GD) { this.wp = null; return dest; }
+    if (gd < MIN_GD) { this.wp = null; this.lastGd = Infinity; this.stale = 0; return dest; }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > REDEST : true;
     if (this.wp && this.lineT > 0 && wpD > ARRIVE && !drifted) return this.wp;
+
+    // Stagnation meter: a route that re-plans without closing ground is
+    // in an orbit trap — on a massif the energy-play exemption keeps
+    // picking lateral downhill pockets and the bot laps the contour at
+    // fixed radius forever (soak: bravo capper orbited the stand at
+    // ~750m for the whole match). Two dead rolls drop the exemption;
+    // the third gives up on terrain scoring entirely and beelines —
+    // humans grind the climb when carving stops paying.
+    if (gd > this.lastGd - 8) this.stale++; else this.stale = 0;
+    this.lastGd = gd;
+    if (this.stale >= 3) {
+      const reach = Math.min(40, gd);
+      this.wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+      this.wpGoal = { ...dest };
+      this.lineT = COMMIT_S;
+      this.stale = 0;
+      return this.wp;
+    }
 
     this.wp = this.roll(ctx, pos, dest, gd);
     this.wpGoal = { ...dest };
@@ -105,7 +125,7 @@ export class BotLines {
         // setup, not a loop). Without the floor a deep side valley
         // always outscores the route and the bot orbits midfield
         // forever (soak: align=0.00, prog=0).
-        if (gained < d * 0.4 && eScore <= 12) continue;
+        if (gained < d * 0.4 && (eScore <= 12 || this.stale >= 2)) continue;
         // Apex setup (last leg, runners only): a landing above the goal
         // banks altitude the dive converts back into arrival speed —
         // the flank-crest-and-drop that makes a flag run survivable.

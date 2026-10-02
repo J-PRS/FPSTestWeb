@@ -48,13 +48,14 @@ export class ServerBotSenses {
    *  call humans make on comms. Legal: the caller's own ETA, not intel. */
   private pushAt = new Map<TeamId, { pos: BotVec; at: number }>();
   private routePrefs = new Map<string, number>();
-  /** A bot's habitual entry bearing — stable per id, no RNG draw. */
+  /** A bot's habitual route lean — a bearing offset around its own
+   *  approach side, stable per id, no RNG draw. */
   private routePref(id: string): number {
     let a = this.routePrefs.get(id);
     if (a === undefined) {
       let h = 0;
       for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-      a = (h % 1000) / 1000 * Math.PI * 2;
+      a = ((h % 1000) / 1000 - 0.5) * 1.8;
       this.routePrefs.set(id, a);
     }
     return a;
@@ -445,9 +446,12 @@ export class ServerBotSenses {
         // Route temperament: two runners reading the same terrain pick
         // the same entry — mirrored runs joust head-on mid-field (the
         // capper autopsy: enemy cappers are each other's top killer).
-        // A stable per-bot preferred bearing tilts the pick toward a
-        // lane without vetoing a clearly-better route.
-        const pref = this.routePref(p.id);
+        // A stable per-bot bearing OFFSET fans them out around their
+        // own approach side — a fixed world bearing sent runners
+        // around the massif to a far-side entry they could never reach
+        // (the bravo capper's 750m contour orbit).
+        const pref = Math.atan2(p.position.z - enemyStand.z, p.position.x - enemyStand.x)
+          + this.routePref(p.id);
         const prefW = process.env.FPS_NOPREF ? 0 : 18;
         let best = enemyStand, bestScore = -Infinity;
         for (let a = 0; a < 24; a++) {
