@@ -31,7 +31,21 @@ function bmpWrite(path: string, w: number, h: number, px: Uint8Array): void {
 // whole room runs on the warp clock — respawns, spawn shields, flag and
 // match timers all lapse in sim-time, not wall-time, so minutes of
 // combat in seconds is actually minutes of combat.
-const field = hmParseBin(new Uint8Array(readFileSync(`${import.meta.dir}/../../../maps/katabatic.bin`)));
+// FPS_SOAK_MAP=<name> picks the terrain (default katabatic). Stands and
+// spawn spheres come from the map's own JSON (real T2 placements for the
+// t2 ports — equinox/surreal/riverdance/... — home-authored elsewhere),
+// and a team with no authored spheres synthesizes one at its own base so
+// respawns stay near home, not midfield.
+const MAP = process.env.FPS_SOAK_MAP ?? 'katabatic';
+const mapJson = JSON.parse(readFileSync(`${import.meta.dir}/../../../maps/${MAP === 'katabatic' ? 'katabatic_bare' : MAP}.json`, 'utf8')) as {
+  bases?: { alpha: { x: number; z: number }; bravo: { x: number; z: number } };
+  teamSpawns?: Record<string, { x: number; z: number; r?: number; w?: number }[]>;
+  terrain?: string;
+};
+// t2 ports store the heightfield under maps/t2/<name>/terrain.bin — honor
+// the JSON's own terrain path instead of assuming maps/<name>.bin.
+const field = hmParseBin(new Uint8Array(readFileSync(
+  `${import.meta.dir}/../../../maps/${mapJson.terrain ?? (MAP === 'katabatic' ? 'katabatic' : MAP) + '.bin'}`)));
 
 // FPS_SOAK_MS=<ms> runs a longer warp from the CLI for profiling.
 const WALL_BUDGET_MS = Number(process.env.FPS_SOAK_MS ?? 10_000);
@@ -44,16 +58,20 @@ describe('scenario: fast-forward soak throughput', () => {
     // flags at all, and a flagless soak just measures wandering.
     const baseAt = (x: number, z: number) => ({ x, y: hmHeight(field, x, z), z });
     const spawnAt = (x: number, z: number, r: number, w: number) => ({ x, y: hmHeight(field, x, z), z, r, w });
+    if (!mapJson.bases) throw new Error(`maps/${MAP}.json has no bases`);
+    // Per-team fallback: a map may give spheres for one side only
+    // (SunDried's 4 spheres are shared neutrals) — the missing side
+    // still gets a sphere at its own base rather than midfield.
+    const teamSpawns: Record<string, { x: number; z: number; r?: number; w?: number }[]> = {
+      alpha: mapJson.teamSpawns?.alpha ?? [{ ...mapJson.bases.alpha, r: 50, w: 90 }],
+      bravo: mapJson.teamSpawns?.bravo ?? [{ ...mapJson.bases.bravo, r: 50, w: 90 }],
+    };
     const room = mkRoom({
       mode: 'ctf', bots: 16, botFill: 16,
-      bases: { alpha: baseAt(236.85, -127.11), bravo: baseAt(-423.57, 281.67) },
-      // Real T2 spawn spheres from the katabatic map — without them the
-      // room falls back to the center ring and both teams respawn
-      // midfield, ~400m from the flags they're supposed to fight over.
-      teamSpawns: {
-        alpha: [spawnAt(239.42, -123.43, 73.24, 90), spawnAt(-188.62, -38.98, 54.93, 30)],
-        bravo: [spawnAt(-422.19, 280.64, 73.24, 90), spawnAt(45.99, 210.2, 47.61, 30)],
-      },
+      bases: { alpha: baseAt(mapJson.bases.alpha.x, mapJson.bases.alpha.z), bravo: baseAt(mapJson.bases.bravo.x, mapJson.bases.bravo.z) },
+      teamSpawns: Object.fromEntries(
+        Object.entries(teamSpawns).map(([t, ss]) => [t, ss.map((s) => spawnAt(s.x, s.z, s.r ?? 50, s.w ?? 90))]),
+      ),
     }, 'ctf', 4242, false, field);
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
@@ -70,7 +88,7 @@ describe('scenario: fast-forward soak throughput', () => {
     // Per-side stand pressure: closest any team's bot ever got to the
     // ENEMY stand — catches "one direction is unroutable" before the
     // grab count does (grab==0 can be a routing wall or no press).
-    const alphaStand = { x: 236.85, z: -127.11 }, bravoStand = { x: -423.57, z: 281.67 };
+    const alphaStand = { x: mapJson.bases.alpha.x, z: mapJson.bases.alpha.z }, bravoStand = { x: mapJson.bases.bravo.x, z: mapJson.bases.bravo.z };
     const press = { alpha: Infinity, bravo: Infinity };
     // Vertical gap at the closest XZ approach — pickup needs |dy|<=6,
     // so a press that stalls on a plateau rim shows up as press small
