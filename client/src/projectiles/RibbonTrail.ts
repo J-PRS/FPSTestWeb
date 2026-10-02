@@ -120,6 +120,13 @@ export class RibbonTrail {
         lit: r.slot >= 0 && slotLit(r.batch, r.slot),
         starved: r.starvedPushes,
         time: +r.time.toFixed(1),
+        // First vert actually sitting in the shared buffer — a lit slot
+        // whose buffer verts are all zero/NaN is a write-vs-upload break,
+        // invisible no matter how healthy the ribbon looks.
+        v0: r.slot >= 0 ? (() => {
+          const o = r.slot * RIBBON_FLOATS_PER_SLOT;
+          return `${r.batch.pos[o]!.toFixed(1)},${r.batch.pos[o + 1]!.toFixed(1)},${r.batch.pos[o + 2]!.toFixed(1)}`;
+        })() : '-',
         head: r.head >= 0
           ? `${r.px[r.head].toFixed(0)},${r.py[r.head].toFixed(0)},${r.pz[r.head].toFixed(0)}` : '-',
         mid: `${(cx / n).toFixed(0)},${(cy / n).toFixed(0)},${(cz / n).toFixed(0)}`,

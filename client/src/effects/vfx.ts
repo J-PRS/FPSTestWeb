@@ -268,6 +268,18 @@ export class QuarksTrail {
       attached: ps ? !!vfxBatcher()?.systemToBatchIndex.has(ps) : false,
       paused: ps?.paused ?? false,
       waiting: +((ps?.emissionState as { waitEmiting?: number } | undefined)?.waitEmiting ?? 0).toFixed(2),
+      // Emitter WORLD position vs the first live particle's spawn point —
+      // particles drifting far from the emitter mean the distance deposit
+      // landed at a stale matrixWorld (parked-teleport burst elsewhere),
+      // not at the muzzle.
+      emW: ps ? (() => {
+        const e = ps.emitter.matrixWorld.elements;
+        return `${e[12]!.toFixed(1)},${e[13]!.toFixed(1)},${e[14]!.toFixed(1)}`;
+      })() : '-',
+      p0: ps && ps.particleNum > 0 ? (() => {
+        const p = (ps as unknown as { particles: { position: THREE.Vector3 }[] }).particles[0]!;
+        return `${p.position.x.toFixed(1)},${p.position.y.toFixed(1)},${p.position.z.toFixed(1)}`;
+      })() : '-',
     };
   }
 
