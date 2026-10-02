@@ -61,7 +61,16 @@ export class BotSheepMeter {
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
-    const base = this.charge(m, tribesing, bonusSpeed, jetting, why);
+    // Holding the post is work, not sheep: a HoF parked ON its stand
+    // dest or a technician beside its gear looks identical to a llama
+    // from speed alone. "Arrived" gets a trickle charge — it still
+    // maxes eventually if the bot truly sleeps on a stale waypoint
+    // (wander goals re-roll on arrival, so a real guard's dest stays
+    // its post while a drifter's dest moves on).
+    const atPost = m.hasDest && Math.hypot(
+      p.position.x - m.out.dest.x,
+      p.position.z - m.out.dest.z) < 14;
+    const base = this.charge(m, tribesing, bonusSpeed, jetting, atPost, why);
     let meter = prev + base;
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it
@@ -116,10 +125,10 @@ export class BotSheepMeter {
    *  The drain is rate-capped: a high-E burst (say a 60m/s plummet) used
    *  to bleed a full meter to zero inside a second, reading as a reset.
    *  Faster play still drains faster — just never in a single step. */
-  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, why: { idle: number }): number {
+  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, atPost: boolean, why: { idle: number }): number {
     const base = m.dt * (tribesing
       ? -Math.min(10 + speedXZ * 0.5 + (jetting ? 15 : 0), 25)
-      : m.hasDest ? 9 : 18);
+      : atPost ? 2 : m.hasDest ? 9 : 18);
     if (base > 0) why.idle += base;
     return base;
   }

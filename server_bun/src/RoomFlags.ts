@@ -38,6 +38,10 @@ export class RoomFlags {
   private readonly room: Room;
   /** Accrues between flag broadcasts — cadence is cheap since state is tiny. */
   private dirty = true;
+  /** Per-cap telemetry: carrier, hold ms, cap sim-time — soak/reporting
+   *  reads real caps here instead of diffing flagUpdate broadcasts
+   *  (match resets fake the same carried→home transition). */
+  readonly capLog: { by: string; team: string; holdMs: number; capAt: number }[] = [];
   /** Last-tick positions for the sweep — a stand touch is a fast graze,
    *  not a park: at 60m/s a capper crosses the pickup ring between two
    *  20Hz frames, so the check must test the path, not the snapshot. */
@@ -146,7 +150,11 @@ export class RoomFlags {
       logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
       this.room.messages.killFeed.say(carrier.id, 'flagcap');
       this.room.bots?.notice('flagcap', carrier.id, carrier.team);
-      if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', simNow() - f.carriedAt);
+      if (f.carriedAt) {
+        const holdMs = simNow() - f.carriedAt;
+        weaponStats.recordFlag(this.room.mode, 'cap', holdMs);
+        this.capLog.push({ by: carrier.id, team: f.team, holdMs, capAt: simNow() });
+      }
       f.state = 'home';
       f.pos = { ...f.home };
       f.carrier = null;

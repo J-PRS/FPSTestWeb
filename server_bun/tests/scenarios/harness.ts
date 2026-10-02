@@ -74,10 +74,14 @@ export function freeze(room: Room, playerId: string, pos: Vec3): void {
   pin(room, playerId, pos);
 }
 
-/** Record every broadcast by type. Call `.count(type)` after stepping. */
-export function watch(room: Room): { count: (type: string, kind?: string) => number; msgs: ServerMessage[] } {
+/** Record every broadcast by type. Call `.count(type)` after stepping.
+ *  Pass `now()` to stamp each message with `_s` (sim seconds) so
+ *  post-run analysis can time transitions (grab→cap deltas). */
+export function watch(room: Room, now?: () => number): { count: (type: string, kind?: string) => number; msgs: ServerMessage[] } {
   const msgs: ServerMessage[] = [];
-  room.connections.broadcast = (m: ServerMessage) => { msgs.push(m); };
+  room.connections.broadcast = now
+    ? (m: ServerMessage) => { msgs.push({ ...m, _s: now() } as ServerMessage); }
+    : (m: ServerMessage) => { msgs.push(m); };
   return {
     msgs,
     count: (type, kind) =>
