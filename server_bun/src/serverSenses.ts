@@ -66,7 +66,11 @@ export class ServerBotSenses {
   // The call has to outlive the flood's transit: wave members tasked
   // from midfield start ~180m out — an 8s window dies ~5s before they
   // land, which reads as a call that summons nobody.
-  private static readonly PUSH_ETA_S = 30;
+  // Wave transit is ~180m at ~12m/s ≈ 15s minimum — a 30s window only
+  // armed once the capper was already inside ~360m at speed, and the
+  // soak reads him dead ~150m out first (calls 1-3/team, sup@1). At 45s
+  // the flood launches when the approach does, not when it's already dying.
+  private static readonly PUSH_ETA_S = 45;
   private static readonly PUSH_HOLD_MS = 14000;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
    *  wanders its own mini-route instead of parking. */
