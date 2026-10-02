@@ -259,6 +259,11 @@ export class BotArsenal implements BeamHost {
     // for zero enemy damage (soak: point-blank selfK @5m, foe@140m).
     // Enemy bodies stay legal — a point-blank trade is a trade.
     const to = { x: muzzle.x + dir.x * aoer, y: muzzle.y + dir.y * aoer, z: muzzle.z + dir.z * aoer };
+    // Enemy domes eat the shell at the field edge — the flight sweep
+    // models them (projContact.shieldBlock), the clearance march can't
+    // miss what flight will hit: a bot firing across a dome edge pops
+    // his own shell inside his own blast envelope.
+    if (this.room.deployables.shieldBlock(muzzle, to, shooterId ?? '') !== null) return true;
     if (this.room.ballSim?.sweepHit(muzzle, to, 1)) return true;
     if (this.room.creatureSim?.sweepHit(muzzle, to, 1)) return true;
     for (const q of this.room.players.getAllPlayers().values()) {
