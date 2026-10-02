@@ -36,7 +36,14 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // A builder with hands free welds the stand's wounded gear before
       // wandering on — same "nobody close enough to interrupt" gate the
       // emplacement pick uses (a weld under fire is a feeding run).
-      if (b.builder && !fearing && ctx.repair) return ctx.repair.pos;
+      // Builders weld what's in reach — but each hop makes the next
+      // damaged emplacement "nearest", so an ungated weld daisy-chains
+      // an anchor 100m+ off post (the hof excursion probe caught
+      // exactly this: 123m median dest while the flag sat home).
+      if (b.builder && !fearing && ctx.repair
+        && !(ctx.posted && ctx.objective && dist3(ctx.repair.pos, ctx.objective) > ctx.posted)) {
+        return ctx.repair.pos;
+      }
       // Quiet-map drift: with no hunt, no objective and no gem, pull the
       // wander toward wherever the action last scented — fleets that
       // only walk nav lines never meet. A pull, not a commit: the roam
@@ -44,6 +51,18 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // Posted anchors don't drift toward fight scent — the idle
       // blend is what pulled a HoF 35% toward every rumor of a fight
       // three hills over, reading as wander on the heatmap.
+      // Posted idle isn't a statue: a defender sweeps the stand in a
+      // slow patrol arc inside his leash — planted, never frozen. The
+      // HoF keeps the tightest ring; his post is the flag itself.
+      if (ctx.posted && ctx.objective && dist3(pos, ctx.objective) < ctx.posted * 0.5) {
+        b.orbitA += dt * 0.3;
+        const r = ctx.posted <= 6 ? 2.2 : Math.min(8, ctx.posted * 0.15);
+        return {
+          x: ctx.objective.x + Math.cos(b.orbitA) * r,
+          y: ctx.objective.y,
+          z: ctx.objective.z + Math.sin(b.orbitA) * r,
+        };
+      }
       const hot = ctx.posted ? null : ctx.imapHottest?.(pos);
       if (hot && hot.v > 0.3) {
         return {
