@@ -27,6 +27,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
+import { aoeDamage } from '../../shared/combat.ts';
 import { healPool } from './healPool.ts';
 
 const TICK_DT = 0.05;
@@ -190,6 +191,19 @@ export class CreatureSim {
       const d2 = (c.x - pos.x) ** 2 + (c.y - pos.y) ** 2 + (c.z - pos.z) ** 2;
       if (d2 > r2) continue;
       healPool(c, amount, c.maxHealth * ARMORNADE_OVERCAP);
+    }
+  }
+
+  /** Splash into the pack — same falloff the ball swarm gets, so a disc
+   *  landing among crawlers wounds the crowd instead of only the direct
+   *  hit. skipId keeps a direct-hit crawler from eating blast twice. */
+  splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {
+    for (const c of this.crawlers.values()) {
+      if (c.dead || c.id === skipId) continue;
+      const reach = 'radius' in c ? c.radius : 1.4;
+      const d = Math.max(0, Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z) - reach);
+      const dmg = aoeDamage(maxDamage, d, radius);
+      if (dmg >= 1) this.handleHit(ownerId, c.id, dmg);
     }
   }
 

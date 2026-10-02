@@ -210,6 +210,7 @@ export class RoomProjectiles {
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
     if (proj.stats.aoeRadius > 0) {
       this.room.ballSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, ballId);
+      this.room.creatureSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, crawlerId);
     }
 
     // Sticky chain: a blast cooks every sibling bomb in its radius — the
