@@ -363,17 +363,30 @@ export class ServerBotSenses {
         // entered the 80m ring, rerouted outward, and left ungrazed.
         const committed = capper && dStand < 80 && wall < 12;
         if (wall < 6 || committed) {
-          // A ballistic runner can't dive — aiming AT the flag from +20y
-          // lands it 30m past the stand at speed. Humans aim the landing
-          // instead: touch down short, skim through the flag at grab
-          // height. Pull the target toward the bot by how high it is.
+          // Two human corrections on the final run:
+          // - Altitude pull: a ballistic runner can't dive, so aim the
+          //   landing short of the flag and skim through it at grab height.
+          // - Track lead: momentum lags yaw, so the velocity ray misses
+          //   the pole by meters. Shift the aim point by the measured
+          //   miss vector so the converged path crosses the flag.
           const dy = p.position.y - enemyStand.y;
           const pull = Math.max(0, Math.min(24, (dy - 5) * 1.6));
-          goalPos = pull > 1
-            ? { x: enemyStand.x - ((enemyStand.x - p.position.x) / dStand) * pull,
-                y: enemyStand.y,
-                z: enemyStand.z - ((enemyStand.z - p.position.z) / dStand) * pull }
-            : enemyStand;
+          const ux = (enemyStand.x - p.position.x) / dStand;
+          const uz = (enemyStand.z - p.position.z) / dStand;
+          const vel = this.room.players.getPlayer(p.id)?.velocity;
+          const spd = vel ? Math.hypot(vel.x, vel.z) : 0;
+          let mx = 0, mz = 0;
+          if (vel && spd > 6) {
+            const t = Math.max(0, ((enemyStand.x - p.position.x) * vel.x +
+              (enemyStand.z - p.position.z) * vel.z) / spd);
+            mx = enemyStand.x - (p.position.x + (vel.x / spd) * t);
+            mz = enemyStand.z - (p.position.z + (vel.z / spd) * t);
+            const mLen = Math.hypot(mx, mz), cap = 15;
+            if (mLen > cap) { mx *= cap / mLen; mz *= cap / mLen; }
+          }
+          goalPos = { x: enemyStand.x + mx - ux * pull,
+                      y: enemyStand.y,
+                      z: enemyStand.z + mz - uz * pull };
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —

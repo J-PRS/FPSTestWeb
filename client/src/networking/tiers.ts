@@ -288,6 +288,7 @@ export class TieredTransport implements GameTransport {
   private closed = false;
   private attempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectedAt = 0;
   /** Connect-attempt epoch — losing-tier probes and stale reconnect timers
    *  fire callbacks too; only the CURRENT generation may re-arm a probe or
    *  claim the inner slot, or a loser's teardown orphans a live session
@@ -320,6 +321,13 @@ export class TieredTransport implements GameTransport {
         if (gen !== this.gen) return;
         this.config.onDisconnect?.(code, reason);
         if (this.closed) return;
+        // Flap breaker: a tier that dies seconds after connecting is worse
+        // than not having it — mark the miss so the re-probe skips it and
+        // the session lands on WS instead of connect/disconnect looping.
+        if (this.inner?.tier === 'rtc' && Date.now() - this.connectedAt < 10_000) {
+          missUntil.rtc = Date.now() + MISS_CACHE_MS;
+          logger.warn('rtc session flapped — tier benched for 30s', { code, reason });
+        }
         // WebSocketConnection runs its own reconnect loop — reprobing here
         // would double-schedule connections.
         if (this.inner instanceof WebSocketConnection) return;
@@ -333,6 +341,7 @@ export class TieredTransport implements GameTransport {
       onConnect: () => {
         if (gen !== this.gen) return;
         this.attempts = 0;
+        this.connectedAt = Date.now();
         this.config.onConnect?.();
       },
       onMessage: (data) => { if (gen === this.gen) this.config.onMessage?.(data); },

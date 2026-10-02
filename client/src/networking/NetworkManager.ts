@@ -215,7 +215,7 @@ export class NetworkManager {
               localStorage.setItem('fps-player-id', this.localPlayerId);
               logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
             }
-            logger.info('Disconnected');
+            logger.info('Disconnected', { code, reason });
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
             this.pendingHits.clear(); // claims sent on the dead lane are

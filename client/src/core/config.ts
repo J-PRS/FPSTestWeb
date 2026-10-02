@@ -41,6 +41,7 @@ export const LG_CHAIN_DMG_SCALE = 0.5;
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
 export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
+export const SCORCH_MAX = 48;          // terrain char decals — oldest evicted first
 
 
 

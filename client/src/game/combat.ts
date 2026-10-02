@@ -32,6 +32,8 @@ export interface CombatDeps extends GameContext {
   lazyDamageNumbers(): DamageNumberManager;
   /** Deployable registry — the repair beam's heal targets live here. */
   lazyDeployables?: () => import('./deployables.js').Deployables;
+  /** Optional — melee swing whoosh rides the speed-lines surge path. */
+  lazySpeedLines?: () => import('../effects/speedLines.js').SpeedLines;
   fragMessages: FragMessages;
   inputTracking: ReturnType<typeof setupInputTracking>;
   explosionTracker: ExplosionTracker;

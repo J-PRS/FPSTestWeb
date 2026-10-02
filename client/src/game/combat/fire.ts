@@ -15,8 +15,10 @@ import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
 import {
-  EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
+  EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE, SCORCH_MAX,
 } from '../../core/config.js';
+import { ScorchDecal } from '../../effects/scorch.js';
+import { fxPuff } from '../../effects/vfx.js';
 import { getWeaponStats, WeaponType, BELT_THROW_COST } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
@@ -29,6 +31,7 @@ const _flakUp0 = new THREE.Vector3(0, 1, 0);
 const _flakDir = new THREE.Vector3();
 const _meleeHitPos = new THREE.Vector3();
 const _meleeToT = new THREE.Vector3();
+const _meleeProbe = new THREE.Vector3();
 
 export interface FireHooks {
   onTargetDestroyed: (t: Targetable, impulse?: THREE.Vector3, weaponType?: number) => void;
@@ -176,6 +179,48 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
   spawnProjectile(deps, def.config, e);
 }
 
+// Terrain contact: march the fist ray against the heightfield. A swing
+// that reaches dirt relocates the whole punch FX to the contact point —
+// punching the ground should read as punching the ground, not air near it.
+function meleeGroundContact(playerPos: THREE.Vector3, dir: THREE.Vector3, terrain: ReturnType<CombatDeps['lazyTerrain']>): THREE.Vector3 | null {
+  for (let d = 0.4; d <= MELEE_RANGE; d += 0.4) {
+    _meleeProbe.copy(playerPos).addScaledVector(dir, d);
+    if (_meleeProbe.y - terrain.getHeight(_meleeProbe.x, _meleeProbe.z) < 0.4) {
+      return _meleeProbe.clone();
+    }
+  }
+  return null;
+}
+
+// Swing presentation: fist puff at the resolved contact point, a fist-mark
+// scorch + dirt spray + thud on terrain hits, and a speed-line whoosh that
+// sells the arc without an arm animation (same trick as the blink surge).
+// All visuals — the damage/force side stays in melee() below.
+function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groundHit: THREE.Vector3 | null): void {
+  const player = deps.lazyPlayer();
+  const stats = getWeaponStats(WeaponType.Melee);
+  deps.lazyViewModel()?.punch(); // weapon sweeps aside — no recoil kick
+  deps.world.explosions.push(new Explosion(
+    deps.lazyScene(), fxPos, true, 0, deps.lazyTerrain(),
+    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
+  ));
+  screenShake.blast(fxPos, stats.aoeRadius, player.pos);
+  if (groundHit) {
+    if (deps.world.scorches.length >= SCORCH_MAX) deps.world.scorches.shift()!.dispose();
+    deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), groundHit, 1.4));
+    // Dirt spray kicked up off the fist — brown, gravity-bound, short.
+    fxPuff(groundHit, {
+      count: 14, pos: [0.4, 0.1, 0.4],
+      velMin: [-3.5, 2.5, -3.5], velMax: [3.5, 8, 3.5],
+      lifeMin: 0.25, lifeMax: 0.7, sizeScale: 1.6,
+      colA: [0.32, 0.26, 0.18], colB: [0.5, 0.42, 0.3],
+    });
+    sfx.at(groundHit, 'slam_thud', 0.9);
+    screenShake.add(0.28);
+  }
+  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xaaddff, 8);
+}
+
 // Melee sweep — the arc check happens around a point pushed forward
 // centered ahead of the fist so the puncher is outside its own radius.
 function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
@@ -184,13 +229,8 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   sfx.shoot(WeaponType.Melee);
   _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
 
-  // Weapon sweeps aside for the punch — no recoil kick, reads as melee
-  deps.lazyViewModel()?.punch();
-  deps.world.explosions.push(new Explosion(
-    deps.lazyScene(), _meleeHitPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
-  ));
-  screenShake.blast(_meleeHitPos, stats.aoeRadius, player.pos);
+  const groundHit = meleeGroundContact(player.pos, e.dir, deps.lazyTerrain());
+  meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit);
 
   let connected: THREE.Vector3 | null = null;
   for (const t of deps.targets) {
@@ -209,7 +249,19 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     connected ??= t.pos;
   }
   // The crack that sells it — positional impact only when the punch lands
-  if (connected) { sfx.at(connected, 'impact', 1); sfx.hitMarker(true); }
+  if (connected) {
+    sfx.at(connected, 'impact', 1);
+    sfx.hitMarker(true);
+    // Contact sparks + a shake bump — feedback that says HOW HARD, fired
+    // only on a confirmed hit so whiffs stay soft.
+    fxPuff(connected, {
+      count: 10, pos: [0.3, 0.3, 0.3],
+      velMin: [-5, 1, -5], velMax: [5, 6, 5],
+      lifeMin: 0.12, lifeMax: 0.35, sizeScale: 1.0,
+      colA: [0.6, 0.85, 1.0], colB: [0.3, 0.5, 0.9], additive: true,
+    });
+    screenShake.add(0.22);
+  }
 
   // Players go through the authoritative AOE claim; the swing itself
   // rides the cosmetic fire relay so observers see/hear the punch.

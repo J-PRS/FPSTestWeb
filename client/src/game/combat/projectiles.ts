@@ -14,14 +14,12 @@ import { Implosion } from '../../effects/implosion.js';
 import { ScorchDecal } from '../../effects/scorch.js';
 import * as sfx from '../../core/sfx.js';
 import { screenShake } from '../../effects/screenShake.js';
-import { EXPLOSION_VFX_RADIUS } from '../../core/config.js';
+import { EXPLOSION_VFX_RADIUS, SCORCH_MAX } from '../../core/config.js';
 import { urlParams } from '../../core/params.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR } from '../../../../shared/weapons.js';
 import { POWERUP } from '../../../../shared/pickups.js';
 import { handleProjectileImpact } from './impact.js';
 import type { CombatCtx, ExplosionArgs } from '../combat.js';
-
-const SCORCH_MAX = 48;
 
 // Turret-bolt interception: clip a lobbed shell with an explosive and it
 // cooks off mid-air — huge blast (the shell's own payload going off), so

@@ -190,6 +190,10 @@ export class BlastRunner {
     if (!shoveOnly || target.isBot) {
       this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
     }
+    if (shoveOnly && ctx.weapon === WeaponType.Melee) return;
+    // A swing is not a feet-blast — the punch point sits inside its own
+    // envelope by design, so the self-splash tax charged every punch.
+    // Slam keeps paying: diving into the ground IS a self-blast.
     if (shoveOnly) {
       // Self-propulsion still pays blood: the cost fades with distance
       // inside the blast radius — a feet blast lands near SELF_SPLASH_MAX,

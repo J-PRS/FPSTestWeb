@@ -124,6 +124,9 @@
   text-align: right; line-height: 1;
 }
 #ent-counts {
+  /* Debug census — hidden until the ` (backquote) debug row is toggled on,
+   * same toggle as the stats.js charts + perfHud. */
+  display: none;
   position: fixed; bottom: var(--z-br-1); right: 24px; text-align: right;
   font-size: 0.78rem; color: #ccc; line-height: 1.55;
   font-variant-numeric: tabular-nums; white-space: pre;

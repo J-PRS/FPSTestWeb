@@ -143,6 +143,12 @@ export class HUD {
       `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   }
 
+  /** Entity census row is a debug panel — shown by the ` toggle that
+   *  drives stats.js + perfHud, hidden in normal play. */
+  setEntCountsVisible(v: boolean): void {
+    this.ballCountEl.style.display = v ? 'block' : 'none';
+  }
+
   /** Live ball count — DOM write only on change */
   setBallCount(n: number): void {
     if (n === this.lastBallCount) return;

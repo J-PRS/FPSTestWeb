@@ -494,6 +494,8 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
         (s.dom as HTMLElement).style.display = show ? 'block' : 'none';
       }
       perf.setVisible(show);
+      // Bottom-right entity census is debug data too — same toggle.
+      deps.lazyHud().setEntCountsVisible(show);
     }
   });
 }

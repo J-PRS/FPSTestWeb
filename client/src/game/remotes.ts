@@ -22,6 +22,7 @@ const ENEMY_RED = 0xff3333;
 const _frustum = new THREE.Frustum();
 const _projScreen = new THREE.Matrix4();
 const _sphere = new THREE.Sphere();
+const _flagAnchor = new THREE.Vector3();
 
 export interface RemotesDeps {
   lazyNetworkManager: () => NetworkManager;
@@ -182,6 +183,21 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) return;
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
+}
+
+/** CTF flag diamonds — projected every frame like player indicators.
+ *  A carried flag anchors on the carrier's rendered body (the mesh only
+ *  follows inside the frustum), home/dropped flags read the mesh spot. */
+function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
+    playerPos: THREE.Vector3, hud: HUD, cam: THREE.PerspectiveCamera): void {
+  for (const [team, marker] of deps.world.flagMarkers) {
+    const c = marker.carrier;
+    const anchor = c === localPlayerId ? playerPos
+      : c ? (deps.world.remotePlayers.get(c)?.pos ?? marker.mesh.position)
+      : marker.mesh.position;
+    hud.updateFlagIndicator(`flag:${team}`,
+      _flagAnchor.set(anchor.x, anchor.y + 3.4, anchor.z), cam, team);
+  }
 }
 
 // Remove disconnected players and dead players that have shrunk to 0
@@ -351,6 +367,7 @@ export function createRemotes(deps: RemotesDeps) {
         hud.updatePlayerIndicator(id, rp.position, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass });
       }
     }
+    tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);
     cleanupRemotePlayers(deps, players);
 
     if (deps.world.remotePlayers.size !== previousRemoteCount) {
