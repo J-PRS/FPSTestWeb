@@ -323,6 +323,10 @@ export class ServerBots {
     const players = this.room.players.getAllPlayers();
     for (const [id, p] of players) {
       if (p.isBot || p.isDead) continue;
+      // A closed socket freezes the last position but the player is
+      // gone — charging sheep to a corpse-of-a-session just spams
+      // maxed warns through the grace window.
+      if (now - p.lastSeen > 2000) continue;
       const sh = this.room.moveSim.simState(id);
       const ground = Math.max(
         this.room.moveSim.structureTop(p.position.x, p.position.z),

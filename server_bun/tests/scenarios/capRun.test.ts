@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { BOT_LOADOUTS } from '../../../shared/botLoadouts.ts';
+import { WeaponType } from '../../../shared/weapons.ts';
 import type { PlayerState } from '../../src/types.ts';
 
 // Cap-run telemetry: a real-terrain CTF match where the capper's speed
@@ -46,7 +47,9 @@ describe('scenario: capper run on real terrain (300m stands)', () => {
       roster: { roles: Map<string, string>; refitClass(id: string): void };
       brains: Map<string, { jetDebug: { why: string; escapeT: number; out: boolean; hold: number } }>;
     };
-    ctl.loadouts.set(capper.id, BOT_LOADOUTS[0]!); // chaser — featherjets
+    // Chaser base + the roster's capper belt swap: the pull disc is
+    // what a real capper carries for the forward-implosion launch.
+    ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
     ctl.roster.refitClass(capper.id);
     ctl.roster.roles.set(capper.id, 'capper');
     // Pure route metric: every other body freezes — respawn timers run on

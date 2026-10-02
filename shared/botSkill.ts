@@ -24,6 +24,10 @@ export interface BotSkill {
   /** Form multiplier: >1 in the zone, <1 tilted. Random-walked each
    *  think; hits knock it down. */
   form: number;
+  /** Preferred launch tool: pull-disc surfers lob the implosion ahead
+   *  (no heel-shot turnaround); others ride the classic push blast. A
+   *  personality draw, not a skill — both styles top out the same. */
+  beltPull: boolean;
   /** Private stream — form drift consumes it, not the shared botRand. */
   rng: () => number;
 }
@@ -56,6 +60,7 @@ export function rollSkill(spawn: BotVec): BotSkill {
     axes: { snap: axis(), track: axis(), arcLead: axis(), arcJudge: axis() },
     movement: clamp(0.7 + rng() * 0.8),
     form: 1,
+    beltPull: rng() < 0.45,
     rng,
   };
 }

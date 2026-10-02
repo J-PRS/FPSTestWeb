@@ -10,8 +10,10 @@ import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
+import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
+import { botRand } from '../../shared/botRand.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost } from './botBeam.ts';
 
@@ -190,9 +192,22 @@ export class BotArsenal implements BeamHost {
     if (dist < 35) return;
     if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
     if ((this.room.moveSim.energyOf(id) ?? 0) < 30) return;
+    // Don't buy with a fuse what gravity sells for free: a start that
+    // already descends skis to speed without the launch, and the blast's
+    // fixed up-share is just wasted hang time on a falling route.
+    if (this.room.field) {
+      const nx0 = dx / dist, nz0 = dz / dist;
+      const ahead = hmHeight(this.room.field, p.position.x + nx0 * 40, p.position.z + nz0 * 40);
+      if (ahead < p.position.y - 6) return;
+    }
     const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
     const nx = dx / dist, nz = dz / dist;
-    if (getWeaponStats(lo.belt)?.forceMode === 'pull') {
+    // Pull-preference isn't exclusive: the main-gun heel blast stays in
+    // the toolkit — a pull surfer still disc-jumps off the spinfusor a
+    // share of the time like a human mixing techniques.
+    const wantsPull = getWeaponStats(lo.belt)?.forceMode === 'pull'
+      && botRand() < ((this.skillOfCb(id)?.beltPull ?? false) ? 0.8 : 0.4);
+    if (wantsPull) {
       // Implosion ~18m ahead — the bot's own approach speed puts it in
       // the pull envelope when the disc pops.
       this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 });

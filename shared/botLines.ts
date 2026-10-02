@@ -98,7 +98,7 @@ export class BotLines {
         // above what E affords reads as spent, keeping the run inside
         // its real budget instead of over-climbing.
         const vEndSq = vNow * vNow + 56 * (pos.y - drops[p]!);
-        const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * 0.4 : 0;
+        const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * 0.2 : 0;
         const score =
           gained * 0.9 +                      // progress toward the goal
           drop * dropW +                      // downhill buys ski speed

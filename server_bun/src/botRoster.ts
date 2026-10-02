@@ -7,7 +7,7 @@
 import type { Room } from './Room.ts';
 import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
-import { WeaponType } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
@@ -171,6 +171,16 @@ export class BotRoster {
         // Technician is the only role that promises the deploy kit —
         // pin its builder trait instead of trusting the spawn roll.
         if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
+        // A capper who PREFERS pull rides the implosion disc — the
+        // forward launch needs no heel-shot turnaround. Push-style
+        // cappers keep their drawn belt and blast off their heels;
+        // lobbies want both kinds of runner.
+        if (want === 'capper') {
+          const lo = this.loadouts.get(donor);
+          if (lo && this.brains.get(donor)?.skill.beltPull && getWeaponStats(lo.belt)?.forceMode !== 'pull') {
+            this.loadouts.set(donor, { ...lo, belt: WeaponType.DiscPull });
+          }
+        }
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
         have++;
       }
