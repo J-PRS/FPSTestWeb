@@ -213,10 +213,16 @@ function applyPlaybackProjectileEvent(world: PlaybackWorld, ev: ProjectileEvent)
     r.pos.set(ev.posX, ev.posY, ev.posZ);
     r.explode();
     applyPlaybackProjectileHit(world, ev, r);
+    // Terminal event — drop the lookup entries so a long demo doesn't
+    // accumulate dead shells forever (same contract as netCrawlerById).
+    world.playbackProjectileById.delete(ev.projectileId);
+    world.playbackProjectileOrigin.delete(ev.projectileId);
   } else if (ev.eventType === ProjectileEventType.Destroyed) {
     // Remove projectile without explosion (e.g. timeout)
     r.pos.set(ev.posX, ev.posY, ev.posZ);
     r.explode();
+    world.playbackProjectileById.delete(ev.projectileId);
+    world.playbackProjectileOrigin.delete(ev.projectileId);
   }
 }
 

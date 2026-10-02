@@ -27,6 +27,8 @@ import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRA
 //   v2: added projectileLifetime (float32) at end of header
 //   v3: added room/mode/playerName strings at end of header, plus roster
 //       (player names) and remoteFrames sections after targetEvents
+//   v4: appended weaponType (u8) to each frame record — older files read
+//       at the 48-byte record size and default weaponType to 0
 // ---------------------------------------------------------------------------
 
 // Reader half of the demo codec — bounds-checked cursor + record readers

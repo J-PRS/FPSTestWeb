@@ -103,9 +103,11 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
     world.damageNumberManager.spawn(ball.pos, 1, '#ffffff', world.camera);
+    if (ball.dead) playbackBallById.delete(ev.targetId);
   } else if (ev.eventType === TargetEventType.Destroyed) {
     ball.dead = true;
     world.debrisList.push(new BallDebris(scene, terrain, ball.pos, ball.color, ball.scale));
+    playbackBallById.delete(ev.targetId);
   }
 }
 
