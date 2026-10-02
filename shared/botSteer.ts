@@ -12,6 +12,7 @@
  */
 import type { BotVec, BrainCtx } from './botBrain.ts';
 import { wrapAngleDelta } from './angles.ts';
+import { botRand } from './botRand.ts';
 
 // --- context steering senses ---
 const SLOTS = 16;        // directions sampled around the circle
@@ -26,6 +27,9 @@ export class BotSteer {
   private heading = { x: 1, z: 0 };
   private memory: { x: number; z: number; t: number }[] = [];
   private memT = 0;
+  /** Holding a point: humans sway on the spot, never stand a perfect
+   *  statue — a slow small orbit around the goal, per-bot phase. */
+  private swayT = botRand() * Math.PI * 2;
 
   /** Committed wander lines read off the same heading the steerer keeps —
    *  the cone roll needs "current facing", which is the heading state. */
@@ -36,6 +40,20 @@ export class BotSteer {
     let gx = dest.x - pos.x, gz = dest.z - pos.z;
     const gd = Math.hypot(gx, gz);
     if (gd < 0.5) return dest;
+    // Arrived: drift a lazy figure around the point instead of freezing
+    // — statues are how bots out themselves on a held position. The
+    // radius breathes so it's a wander, not a metronome circle. Not on
+    // the objective's doorstep: a flag touch is worth a still beat.
+    if (gd < 4 && (!ctx.objective || Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) > 15)) {
+      this.swayT += dt * 0.5;
+      const r = 1.5 + Math.sin(this.swayT * 0.31) * 1.0;
+      const ax = dest.x + Math.cos(this.swayT) * r - pos.x;
+      const az = dest.z + Math.sin(this.swayT) * r - pos.z;
+      const al = Math.hypot(ax, az) || 1;
+      const step0 = Math.min(al, STEP * 0.3);
+      this.heading.x = ax / al; this.heading.z = az / al;
+      return { x: pos.x + (ax / al) * step0, y: pos.y, z: pos.z + (az / al) * step0 };
+    }
     gx /= gd; gz /= gd;
     const g0 = ctx.groundY(pos.x, pos.z);
     // Committed final approach: a runner inside the last stretch aims
