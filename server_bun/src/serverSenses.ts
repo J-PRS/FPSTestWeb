@@ -417,13 +417,25 @@ export class ServerBotSenses {
           const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
           let score = high * (capper ? 1.2 : 0.3) - Math.max(0, ey - p.position.y) * 2 - Math.max(0, detour) * 0.8;
           let ridge = 0;
+          let prevH = p.position.y;
+          let climb = 0;
           for (let s = 1; s < 8; s++) {
             const t = s / 8;
             const lx = p.position.x + (ex - p.position.x) * t;
             const lz = p.position.z + (ez - p.position.z) * t;
-            ridge = Math.max(ridge, hmHeight(this.field!, lx, lz) - (p.position.y + (ey - p.position.y) * t));
+            const lh = hmHeight(this.field!, lx, lz);
+            ridge = Math.max(ridge, lh - (p.position.y + (ey - p.position.y) * t));
+            if (lh > prevH) climb += lh - prevH;
+            prevH = lh;
           }
           score -= ridge * 2.5;
+          // Climb budget: ridge prices the tallest hump, but a wall of
+          // rolling +10m ascents drains the tank just the same — the
+          // massif face reads ~50m cumulative, more than a light kit's
+          // full burn, so the capper Sisyphus-orbits it for the match.
+          // Tax total ascent: a saddle route that spreads the same
+          // climb over dips beats the sheer face.
+          score -= climb * 2;
           let lip = 0;
           for (let s = 1; s < 8; s++) {
             const t = s / 8;

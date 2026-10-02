@@ -70,7 +70,13 @@ export class BotLines {
     // Runners read the terrain farther out: a 300m massif on the line
     // is invisible at normal reach, and skiing over it costs more than
     // the long way around.
-    const reach = Math.min(REACH * (ctx.runner ? 2.2 : 1), gd);
+    // Far goals get far eyes: capped at ~128m a runner facing a
+    // massif-crossing leg can only probe the wall in front of it —
+    // the saddle pass sits beyond reach, so every roll lands another
+    // pocket on the same face (the bravo capper's match-long orbit).
+    // At long range extend the probe to ~half the remaining leg so the
+    // pass shows up in the fan at all.
+    const reach = Math.min(gd, ctx.runner && gd > 300 ? Math.max(REACH * 2.2, gd * 0.45) : REACH * (ctx.runner ? 2.2 : 1));
     // Runners (carriers, cappers) get a wider fan and harder downhill
     // pull — a momentum run arcs around climbs rather than over them.
     const cone = CONE * (ctx.runner ? 2.0 : 1);

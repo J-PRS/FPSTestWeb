@@ -352,7 +352,11 @@ export class BotArsenal implements BeamHost {
     // carrier. Close goals still don't trade fire for speed.
     if (out.fire && dist < 60) return;
     if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
-    if ((this.room.moveSim.energyOf(id) ?? 0) < 30) return;
+    // A heel blast costs ammo + hp, NOT jet fuel — gating it on a
+    // charged tank stranded every trapped climber whose tank was dry
+    // from the climb (the massif-pocket soak orbit). Players disc-jump
+    // on an empty tank precisely because it's the fuel-free launch.
+    if ((this.room.moveSim.energyOf(id) ?? 0) < 10) return;
     // Don't buy with a fuse what gravity sells for free: a mild descent
     // skis to speed without the launch, and the blast's fixed up-share
     // is just wasted hang time. A STEEP face is different — the

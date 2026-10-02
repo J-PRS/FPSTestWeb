@@ -50,7 +50,12 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     const gd = Math.hypot(s.goal.x - pos.x, s.goal.z - pos.z);
     if (s.progressGoalD > 20 && s.progressGoalD - gd < 4) {
       s.stuckStreak++;
-      s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+      // A 1.1s burst buys ~10m of climb — a wall that eats it and stays
+      // up is met every 4s with the same sip, which top-dresses the
+      // treadmill instead of cresting it (soak: capper cycling y45→81
+      // →45 on a ~50m face all match). Consecutive failures escalate
+      // the burn so the bot commits real fuel to a real climb.
+      s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.stuckStreak * 0.7, 3.0));
       if (s.detourT <= 0) {
         const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
         const gl = Math.hypot(gx, gz) || 1;
