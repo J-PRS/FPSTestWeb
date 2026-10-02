@@ -92,6 +92,19 @@ describe('netbot — real clients over real sockets', () => {
     // absorb reorders — a healthy session produces zero rejects.
     expect(dealt).toBeGreaterThan(0);
     expect(rejects).toBe(0);
+
+    // State correctness, not just flow: two observers of the same player
+    // should agree on what the server told them. Both read the same
+    // ordered tick/event streams, so divergence means a broadcast bug —
+    // not a latency artifact.
+    for (const [id, a] of bots[0].nc.roster) {
+      for (const other of bots.slice(1)) {
+        const b = other.nc.roster.get(id);
+        if (!b) continue;
+        expect(b.health).toBe(a.health);
+        expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)).toBeLessThan(2);
+      }
+    }
   }, 30000);
 
   it('a mid-match room hop keeps hits flowing (per-room seq reset)', async () => {
