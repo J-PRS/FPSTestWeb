@@ -136,8 +136,14 @@ export class BotMoves {
       // ceiling is ~12m/s of slide speed while a human hop-chains
       // down the route at 30+ (soak: pushes arrived at ~15m/s and
       // died inside the ring; speed IS the capper's armor).
+      // The gd floor exists so a walker doesn't hop past its goal —
+      // but for a runner the overshoot IS the play: a capper flies
+      // through the flag and grabs on the way past, then turns
+      // around outside the ring. Dropping the hop at 60m read as a
+      // decelerated 10m/s walk-in that fed every defender (soak:
+      // pushes arrived @10-18m/s, died inside the ring in ~6s).
       jump: (uphill && speed < 3 && !airborne)
-        || (!ctx.posted && !airborne && speed > 6 && gd > 60 && rise <= 3),
+        || (!ctx.posted && !airborne && speed > 6 && (gd > 60 ? rise <= 3 : (ctx.runner && gd > 12))),
     };
   }
 
