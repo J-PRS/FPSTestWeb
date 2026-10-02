@@ -44,6 +44,30 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
   { role: 'infiltrator', want: 1, minSquad: 7 },
 ];
 
+/** Roles a wire-side bot can actually play — no deploy kit and no
+ *  cloak intent on that runtime, so technician/infiltrator stay
+ *  server-side. */
+export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense'];
+
+/** Deterministic squad assignment: every peer sorts the same roster and
+ *  walks the same fill order, so each bot computes the team's layout
+ *  locally and lands on its own slot — squad coordination with zero
+ *  coordinator messages. Teammates ahead in sort order take the
+ *  specialist slots; the tail fills with offense/defense alternation. */
+export function assignRole(myId: string, teammateIds: string[], playable: BotRole[] = WIRE_ROLES): BotRole {
+  const ids = [...teammateIds].sort();
+  const me = ids.indexOf(myId);
+  if (me < 0) return 'offense';
+  const slots: BotRole[] = [];
+  for (const { role, want, minSquad } of ROLE_PRIORITY) {
+    if (!playable.includes(role)) continue;
+    if (ids.length < minSquad) continue;
+    for (let i = 0; i < want; i++) slots.push(role);
+  }
+  while (slots.length < ids.length) slots.push(slots.length % 3 === 2 ? 'defense' : 'offense');
+  return slots[me] ?? 'offense';
+}
+
 /** Where a role should run given the current flag situation. Returns the
  *  situation slot picked — callers compare against their own slots (e.g.
  *  `result === s.enemyStand` ⇒ the bot is pressing the stand, which the

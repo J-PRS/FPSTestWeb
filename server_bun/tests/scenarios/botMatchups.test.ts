@@ -91,20 +91,20 @@ describe('scenario: weapon matchups at mid band (25m)', () => {
 });
 
 describe('scenario: weapon matchups at far band (43m — BOT_FIRE_RANGE cap)', () => {
-  it('railgun precision beats mortar splash — an upset worth knowing', () => {
-    // Expected the 18m mortar aoe to out-poke the railgun; the sim says
-    // the hitscan rail lands its kills first. Banded splash buffs the
-    // mortar (90 direct -> up to 67 inner) enough to steal a seed — 4/5.
-    expect(wins(series(KIT.beam, KIT.artillery, 43), 'a')).toBeGreaterThanOrEqual(4);
+  it('railgun vs mortar: a coin flip since humanized aim', () => {
+    // Hitscan owned this duel 4/5 until aim humanization — now the rail
+    // pays the perpendicular-motion penalty while the mortar's 18m splash
+    // forgives scatter, so it's a toss-up. The property to pin: the duel
+    // still resolves (nobody is unkillable), not who wins it.
+    const r = series(KIT.beam, KIT.artillery, 43);
+    expect(r.filter((x) => x !== '-').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('railgun vs rocket: hitscan owns the shrunken wake', () => {
-    // Was a coin flip (3/5 rail) until the rocket's wake proxy capped at
-    // 0.5m — at 43m near-misses no longer count, so precision beat splash
-    // 5/0. Asserting rail dominance keeps the test honest if the wake
-    // or the aim point moves again.
+  it('railgun vs rocket: a coin flip since humanized aim', () => {
+    // Was rail dominance (5/0) after the wake proxy shrank; the strafe
+    // penalty at 43m brought it back to even. Pin resolution, not winner.
     const r = series(KIT.bruiser, KIT.chaser, 43);
-    expect(wins(r, 'a')).toBeGreaterThanOrEqual(3);
+    expect(r.filter((x) => x !== '-').length).toBeGreaterThanOrEqual(4);
   });
 });
 

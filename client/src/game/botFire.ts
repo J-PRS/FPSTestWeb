@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { GameBot, BOT_DMG } from './botBrain.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
+import { aimSkillFor } from '../../../shared/botSkill.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../weapons.js';
@@ -64,7 +65,7 @@ export class BotFire {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    const wt = pickBotWeapon(lo, Math.hypot(dx, dz), dist);
+    const wt = pickBotWeapon(lo, Math.hypot(dx, dz), dist, bot.skill ? (t) => aimSkillFor(bot.skill, t, 0) : undefined);
     const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
     if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) return;
     const cfg = melee ? undefined : getProjectileConfig(wt);

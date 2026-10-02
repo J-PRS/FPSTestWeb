@@ -12,6 +12,7 @@ import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
+import { aimSkillFor } from '../../../shared/botSkill.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
@@ -115,6 +116,8 @@ export class GameBot extends RemotePlayer {
   status = 0;
   /** Shared brain's current hunt target — belt throws arc at its spot. */
   get huntTargetId(): string | null { return this.brain.currentHuntId; }
+  /** The brain's skill matrix — the fire resolver biases the draw with it. */
+  get skill() { return this.brain.skill; }
   /** MoveSim grounded flag — propel only launches from a stand. */
   get grounded(): boolean { return this.moveState.onGround; }
 
@@ -198,6 +201,7 @@ export class GameBot extends RemotePlayer {
     const gyc = sharedGroundYCache;
     const out = this.brain.think(dt, {
       pos,
+      vel: this.velocity,
       enemies: ctx.enemies,
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
@@ -234,13 +238,17 @@ export class GameBot extends RemotePlayer {
       energy: this.energy,
       healthFrac: this.botHp / this.botMaxHp,
       // Aim lead uses the muzzle speed of the weapon this bot would
-      // pick at that range — mirrors the server's senses hook.
+      // pick at that range — mirrors the server's senses hook. The
+      // draw is skill-biased: phenoms reach for their gun, and the
+      // aim error scores the same matrix so pick and aim agree.
       weaponSpeed: (d) => {
-        const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d);
+        const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0));
         return getWeaponStats(wt).speed || 60;
       },
       weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d)).gravity,
+        getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0))).gravity,
+      aimSkill: (d, targetSpeed) =>
+        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)), targetSpeed),
     });
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);

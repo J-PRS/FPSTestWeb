@@ -11,6 +11,7 @@
 
 import { botRand } from './botRand.ts';
 import { GRAVITY } from './movement.ts';
+import { rollSkill, type BotSkill } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -54,9 +55,24 @@ export interface HuntState {
   burstLeft: number;
   /** Combat spot from the last replan — null means "hold and shoot". */
   fightPos: BotVec | null;
+  /** Aim humanization state — reaction delay stamps per target id in
+   *  think-ticks (the brain's own cadence, so sim-time harnesses see
+   *  the same delay as wall-clock play — 1-2 pickHunt cycles ≈ human
+   *  reaction time; flickered re-acquires keep their original stamp).
+   *  lastHitAt feeds the flinch error spike. */
+  acquiredAt: Map<string, number>;
+  huntTick: number;
+  lastHitAt: number;
+  readonly reactTicks: number; // acquisition → first shot, per-bot nerves
+  readonly leadSkew: number; // under/over-leads the intercept, per-bot
+  readonly jitter: number;   // steady-hand scale on aim error, per-bot
   readonly temper: number;   // per-bot fire-cadence scale
   readonly orbitFar: number;
   readonly orbitClose: number;
+  /** The skill matrix — rolled once, drifts via form. Weapon pick and
+   *  aim error both read it, so a chaingun phenom draws the chaingun
+   *  and lands it. */
+  readonly skill: BotSkill;
 }
 
 export function newHuntState(spawn: BotVec): HuntState {
@@ -66,9 +82,16 @@ export function newHuntState(spawn: BotVec): HuntState {
     lastSeenVel: { x: 0, y: 0, z: 0 },
     lastSeenAt: 0,
     lastAimY: CENTER_AIM_Y,
+    skill: rollSkill(spawn),
     fireT: 0,
     burstLeft: 0,
     fightPos: null,
+    acquiredAt: new Map(),
+    huntTick: 0,
+    lastHitAt: -1e9,
+    reactTicks: 1 + Math.round(botRand()),
+    leadSkew: 0.9 + botRand() * 0.2,
+    jitter: 0.7 + botRand() * 0.6,
     temper: 0.7 + botRand() * 0.6,
     orbitFar: ORBIT_FAR * (0.85 + botRand() * 0.3),
     orbitClose: ORBIT_TOO_CLOSE * (0.85 + botRand() * 0.3),
@@ -113,7 +136,16 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // close enough to matter — farther out the objective goal still
   // walks it toward the carrier without it firing blind.
   const thief = best ? null : thiefBeacon(ctx, pos);
-  st.hunt = best ?? thief;
+  const next = best ?? thief;
+  st.huntTick++;
+  // New contact starts the reaction clock — a human doesn't shoot the
+  // instant a target enters the eye line. Stamped per id so losing the
+  // eye line for a tick doesn't reset the nerves.
+  if (next && !st.acquiredAt.has(next.id)) {
+    st.acquiredAt.set(next.id, st.huntTick);
+    if (st.acquiredAt.size > 6) st.acquiredAt.delete(st.acquiredAt.keys().next().value!);
+  }
+  st.hunt = next;
   const seen = best ?? thief;
   if (seen) {
     st.lastSeen = { ...seen.pos };
@@ -148,6 +180,8 @@ function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
 export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }): BrainOut['fire'] {
   const { hero, fearing } = mood;
   if (!st.hunt || now - st.lastSeenAt > STALE_MS) return undefined;
+  const acq = st.acquiredAt.get(st.hunt.id);
+  if (acq !== undefined && st.huntTick - acq < st.reactTicks) return undefined;
   st.fireT -= dt;
   if (st.fireT > 0) return undefined;
   if (st.burstLeft <= 0) st.burstLeft = 5;
@@ -165,18 +199,41 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // prediction than a 0.6s disc at the same range.
   let err = 0.5 + Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
+  err *= st.jitter;
+  // The skill matrix: hosts that know which weapon will actually fire
+  // report it via aimSkill — a snap phenom threads rails, a mortar
+  // artist plants the stand, a potato sprays and prays.
+  if (ctx.aimSkill) err /= ctx.aimSkill(d, Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z));
+  // The shooter's own motion: projectile velocity inheritance makes
+  // shots ACROSS your line of travel the hardest (the impact point
+  // drags sideways with you), while firing along your velocity is
+  // actually easier — the shell inherits the speed and the lead
+  // shrinks. Movement-phenom bots handle their own speed better.
+  if (ctx.vel) {
+    const ax = st.lastSeen.x - pos.x, az = st.lastSeen.z - pos.z;
+    const ad = Math.hypot(ax, az) || 1;
+    const perp = Math.abs(ctx.vel.x * (az / ad) - ctx.vel.z * (ax / ad));
+    const along = (ctx.vel.x * ax + ctx.vel.z * az) / ad;
+    err *= 1 + (perp * 0.05) / Math.max(0.6, st.skill.movement) - Math.max(0, along) * 0.01;
+  }
+  // Getting shot throws the aim off — decaying spike, not a toggle.
+  const hitAgo = now - st.lastHitAt;
+  if (hitAgo < 800) err *= 1 + (1 - hitAgo / 800) * 0.9;
+  // Humans under- and over-lead differently — per-bot skew on the
+  // intercept so tracers don't all converge on the same math.
+  const leadFlight = flight * st.leadSkew;
   // Ballistic intercept: the target keeps falling while the shell
   // travels — a skier mid-air arcs down, and a flat lead overshoots
   // high. Clamp at terrain so a grounded runner isn't predicted
   // under the map.
-  const px = st.lastSeen.x + st.lastSeenVel.x * flight;
-  const pz = st.lastSeen.z + st.lastSeenVel.z * flight;
+  const px = st.lastSeen.x + st.lastSeenVel.x * leadFlight;
+  const pz = st.lastSeen.z + st.lastSeenVel.z * leadFlight;
   // `pos` is the eye point — the capsule's axis midpoint sits `aimY`
   // below it, so center-mass aim means the bolt crosses the fattest
   // legal radius even before its wake proxy grows.
   const py = Math.max(
     ctx.groundY(px, pz),
-    st.lastSeen.y + st.lastAimY + st.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
+    st.lastSeen.y + st.lastAimY + st.lastSeenVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.

@@ -49,9 +49,11 @@ describe('BotBrain senses', () => {
   it('acquires and fires on a visible enemy', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
-    const out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));
-    expect(out.fire).toBeDefined();
-    expect(out.fire!.targetId).toBe('e1');
+    // Reaction delay: a human doesn't shoot the frame an enemy appears —
+    // acquisition stamps a hunt tick and reactTicks (up to 2) must elapse.
+    let out: ReturnType<typeof b.think> | undefined;
+    for (let i = 0; i < 5 && !out?.fire; i++) out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));
+    expect(out?.fire?.targetId).toBe('e1');
   });
 
   it('ignores an enemy behind a hill — no wallhack', () => {

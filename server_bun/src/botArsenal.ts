@@ -11,6 +11,7 @@ import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost } from './botBeam.ts';
 
@@ -38,6 +39,10 @@ export class BotArsenal implements BeamHost {
     public room: Room,
     public loadouts: Map<string, BotLoadout>,
     private lastHuntCb: (botId: string) => string | null,
+    /** The shooter brain's skill matrix — biases the draw toward the
+     *  gun the bot is actually good with (same bias the senses use,
+     *  so advertised weaponSpeed and fired weapon agree). */
+    private skillOfCb: (botId: string) => BotSkill | undefined = () => undefined,
   ) {}
 
   /** BeamHost surface — botBeam resolves super-bot contact through it. */
@@ -91,7 +96,7 @@ export class BotArsenal implements BeamHost {
     // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const wt = this.pickWeapon(lo, distXZ, dist);
+    const wt = this.pickWeapon(lo, distXZ, dist, p.id);
     if (!this.rateOk(p.id, wt)) return;
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
@@ -115,8 +120,9 @@ export class BotArsenal implements BeamHost {
     }
   }
 
-  pickWeapon(lo: BotLoadout, distXZ: number, dist: number): number {
-    return pickBotWeapon(lo, distXZ, dist);
+  pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
+    const s = botId ? this.skillOfCb(botId) : undefined;
+    return pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined);
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same

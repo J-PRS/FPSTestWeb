@@ -28,8 +28,31 @@ export const BOT_LOADOUTS: BotLoadout[] = [
 ];
 
 /** Range-band weapon select — shared by player and creature targets so
- *  the visible tracer reads as the kit the bot would really draw. */
-export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number): number {
-  return distXZ < BOT_MELEE_M ? WeaponType.Melee
-    : dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid;
+ *  the visible tracer reads as the kit the bot would really draw.
+ *  `skill` (from the bot's matrix) lets competence bias the draw: a
+ *  chaingun phenom reaches for it even at the band's edge, while the
+ *  utility of a splash weapon still wins at clearly right ranges —
+ *  specialists use their best gun MOST of the time, not always. */
+export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skill?: (w: number) => number): number {
+  if (distXZ < BOT_MELEE_M) return WeaponType.Melee;
+  if (!skill) return dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid;
+  // Triangular band fit: a slot scores 1 dead-center of its range,
+  // decaying to 0 one band away — then multiplied by how good the bot
+  // is with that gun. Utility (right range) and skill (right weapon)
+  // trade off instead of the band being a hard wall.
+  const fit = (slot: 'side' | 'near' | 'mid' | 'far'): number => {
+    switch (slot) {
+      case 'side': return Math.max(0, 1 - dist / (BOT_NEAR_M * 1.2));
+      case 'near': return Math.max(0, 1 - Math.abs(dist - BOT_NEAR_M * 0.7) / 14);
+      case 'mid': return Math.max(0, 1 - Math.abs(dist - (BOT_NEAR_M + BOT_FAR_M) / 2) / 25);
+      case 'far': return dist < BOT_NEAR_M ? Math.max(0, dist / BOT_NEAR_M - 0.4) : Math.min(1, dist / BOT_FAR_M);
+    }
+  };
+  let best: { w: number; s: number } = { w: lo.mid, s: 0 };
+  for (const slot of ['side', 'near', 'mid', 'far'] as const) {
+    const w = lo[slot];
+    const s = fit(slot) * Math.max(0.1, skill(w));
+    if (s > best.s) best = { w, s };
+  }
+  return best.w;
 }

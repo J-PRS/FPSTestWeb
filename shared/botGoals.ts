@@ -30,6 +30,7 @@ export class BotGoals {
     private wanderlust: () => number,
     private headingVec: () => { x: number; z: number },
     private nearDeath: (p: { x: number; z: number }) => boolean,
+    private duty: () => number = () => 1,
   ) {}
 
   /** Idle-goal selection, in priority order: revenge > rally > objective >
@@ -51,7 +52,25 @@ export class BotGoals {
     if (ctx.pickup) { s.goal = { ...ctx.pickup }; return; }
     if (ctx.sounds && ctx.sounds.length > 0) {
       const heard = this.heardGoal(ctx, pos);
-      if (heard) s.goal = heard;
+      if (heard) { s.goal = heard; return; }
+      // No objective on the board: the fight IS the goal. The curiosity
+      // roll said no, but a dutiful bot in a DM still drifts toward the
+      // nearest heard shot instead of skiing scenery — second-chance
+      // pull scaled by duty, never a sure thing (that keeps it human).
+      if (!ctx.objective && botRand() < this.duty() * 0.4) {
+        let hot: BotVec | null = null, hd = Infinity;
+        for (const snd of ctx.sounds) {
+          const d = distSq(pos, snd);
+          if (d < hd) { hd = d; hot = snd; }
+        }
+        if (hot) {
+          const t = Math.min(1, 55 / Math.sqrt(hd || 1));
+          s.goal = { x: pos.x + (hot.x - pos.x) * t, y: pos.y, z: pos.z + (hot.z - pos.z) * t };
+        }
+      }
+      // Noise in earshot holds the attention slot even when both rolls
+      // pass on it — wandering off mid-fight sounds next door is how
+      // bots used to read as deaf tourists.
       return;
     }
     if (s.wanderT <= 0 || distSq(pos, s.wanderWp) < 9) {
@@ -112,7 +131,9 @@ export class BotGoals {
       const d = distSq(pos, s);
       if (d < ld) { ld = d; loudest = s; }
     }
-    return loudest && botRand() < this.wanderlust() * 0.5 ? { ...loudest } : null;
+    // Duty tempers wanderlust: the professional hears the fight, the
+    // tourist hears the call of the mountain.
+    return loudest && botRand() < (0.15 + this.duty() * 0.5) ? { ...loudest } : null;
   }
 }
 

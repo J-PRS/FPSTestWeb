@@ -13,6 +13,7 @@ import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { STATUS } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
@@ -241,7 +242,10 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean } | null, now: number): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
+    // Competence-biased draw: the weapon pick and the aim error read
+    // the same matrix, so a phenom both reaches for its gun and lands it.
+    const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
     return {
       pos: p.position,
       vel: p.velocity,
@@ -272,12 +276,18 @@ export class ServerBotSenses {
       // Aim lead uses the muzzle speed of the weapon this bot would
       // pick at that range — same band select fireAt runs.
       weaponSpeed: (d) => {
-        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d);
+        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias);
         return getWeaponStats(w).speed || 60;
       },
       // Lobbed shells need the arc's drop added back on the aim point.
       weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d)).gravity,
+        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias)).gravity,
+      // The bot's skill matrix scored against the weapon it would
+      // actually draw at that range — pick and aim stay consistent.
+      ...(skill ? {
+        aimSkill: (d: number, targetSpeed: number) =>
+          aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias), targetSpeed),
+      } : {}),
       // Wall occlusion for the LOS sense — bots stop wasting ammo on
       // targets behind structures they'd never see through anyway.
       solids: this.room.ballSim.colliders,

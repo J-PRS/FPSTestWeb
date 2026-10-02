@@ -14,6 +14,7 @@
 import { botRand } from './botRand.ts';
 import type { ChatterKind } from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
+import { BotLines } from './botLines.ts';
 import { BotGoals } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
 import type { ColliderIndex } from './solidWorld.ts';
@@ -23,6 +24,7 @@ import {
   STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
+import { driftForm, type BotSkill } from './botSkill.ts';
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
@@ -121,6 +123,11 @@ export interface BrainCtx {
    *  gravity-bent — the aim point gets the drop added back so lobbed
    *  shells don't land short. Omit → flat trajectories. */
   weaponGravity?(dist: number): boolean;
+  /** Host hook: the bot's skill multiplier for the weapon it would pick
+   *  at `dist`, against a target moving at `targetSpeed` — feeds the
+   *  skill matrix (snap/track/arc axes, moving vs still split, form).
+   *  Omit → every bot shoots at 1×. */
+  aimSkill?(dist: number, targetSpeed: number): number;
 }
 
 export interface BrainOut {
@@ -189,6 +196,9 @@ export class BotBrain {
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
   private readonly steerer = new BotSteer();
+  // Meso-scale terrain routing lives in botLines.ts — turns a raw goal
+  // into a committed landing spot so the steerer walks ski lines.
+  private readonly lines = new BotLines();
   // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
   // reads/writes so the brain's goal/wander/revenge fields stay private.
   readonly goalS: import('./botGoals.ts').GoalState = {
@@ -203,6 +213,7 @@ export class BotBrain {
     () => this.wanderlust,
     () => this.steerer.headingVec(),
     (p) => this.nearDeath(p),
+    () => this.duty,
   );
   // Ski/jet/jump hint intents live in botMoves.ts — host closures read
   // the escape burst latch and the live hunt target.
@@ -257,6 +268,11 @@ export class BotBrain {
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
   private readonly wanderlust = 0.7 + botRand() * 0.6;
+  /** How much this bot minds the objective vs the scenery — high duty
+   *  chases heard fights and holds roles, low duty goes sightseeing.
+   *  Independent of wanderlust: a hyper tourist and a lazy pro both
+   *  exist in a real lobby. */
+  private readonly duty = 0.5 + botRand() * 0.9;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
@@ -275,11 +291,19 @@ export class BotBrain {
     return this.h.hunt?.id ?? null;
   }
 
+  /** The bot's skill matrix — hosts read it to bias weapon selection
+   *  (a phenom draws its good gun) and to build the aimSkill ctx hook. */
+  get skill(): BotSkill {
+    return this.h.skill;
+  }
+
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
     this.hitSay = true;
     this.flinchFrom = { ...from };
+    this.h.lastHitAt = this.now;
+    this.h.skill.form = Math.max(0.85, this.h.skill.form - 0.03); // tilt
     this.goalS.revengeT = 2.5;
     this.goalS.revengeFrom = { ...from };
   }
@@ -357,6 +381,7 @@ export class BotBrain {
     const pos = ctx.pos;
     const now = ctx.now;
     this.now = now;
+    driftForm(this.h.skill, dt);
 
     const { hurtEdge, hero, fearing } = this.mood(ctx, dt);
 
@@ -379,6 +404,9 @@ export class BotBrain {
 
     // --- choose the step destination ---
     let dest = pickDest(this, dt, ctx, pos, fearing, hero);
+
+    // --- line planning: commit to a terrain-sampled landing spot ---
+    dest = this.lines.plan(dt, ctx, pos, dest);
 
     // --- context steering: senses score every direction ---
     dest = this.steerer.steer(dt, ctx, pos, dest);
