@@ -38,6 +38,17 @@ export class BotSteer {
     if (gd < 0.5) return dest;
     gx /= gd; gz /= gd;
     const g0 = ctx.groundY(pos.x, pos.z);
+    // Committed final approach: a runner inside the last stretch aims
+    // dead at the objective. Slot scoring deflects it — a defender
+    // standing on the flag repels via personal space, and the 4 rad/s
+    // turn cap makes a fast arrival circle the point instead of
+    // correcting (soak: 37m/s flybys orbiting at ~20-60m, zero touches).
+    const objD = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
+    if (objD < (ctx.runner ? 60 : 40)) {
+      this.heading.x = gx; this.heading.z = gz;
+      const step0 = Math.min(gd, STEP);
+      return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };
+    }
     const now = ctx.now;
 
     // Lay the trail, then drop crumbs that are stale or out of range.

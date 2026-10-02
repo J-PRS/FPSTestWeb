@@ -107,7 +107,7 @@ describe('scenario: fast-forward soak throughput', () => {
     // missing piece is speed; if the capper stalls like the rest, the
     // route itself is the problem.
     const capNear = { alpha: Infinity, bravo: Infinity };
-    const flagGap: { alpha: [number, number]; bravo: [number, number] } = { alpha: [0, 0], bravo: [0, 0] };
+    const flagGap: { alpha: [number, number, number]; bravo: [number, number, number] } = { alpha: [0, 0, 0], bravo: [0, 0, 0] };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
@@ -217,10 +217,14 @@ describe('scenario: fast-forward soak throughput', () => {
           const k = p.team === 'alpha' ? 'alpha' : 'bravo';
           if (fd < flagNear[k]) {
             flagNear[k] = fd;
-            // Planar vs vertical at the closest moment — 2.2m planar +
-            // |dy|<=6 is the touch test, so a "near" miss that's all
-            // height is a stand-geometry problem, not a routing one.
-            flagGap[k] = [Math.hypot(p.position.x - foeFlag.pos.x, p.position.z - foeFlag.pos.z), p.position.y - foeFlag.pos.y];
+            // Planar vs vertical + arrival speed at the closest moment —
+            // 2.2m planar + |dy|<=6 is the touch test, and a slow arrival
+            // is a dead arrival: Tribes runs survive on momentum.
+            flagGap[k] = [
+              Math.hypot(p.position.x - foeFlag.pos.x, p.position.z - foeFlag.pos.z),
+              p.position.y - foeFlag.pos.y,
+              Math.hypot(p.velocity.x, p.velocity.z),
+            ];
           }
           if (room.bots.roleOf(p.id) === 'capper' && fd < capNear[k]) capNear[k] = fd;
         }
@@ -376,7 +380,7 @@ describe('scenario: fast-forward soak throughput', () => {
       `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
       `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0}` +
       `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
-      `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'}(${flagGap.alpha[0].toFixed(1)}+${flagGap.alpha[1].toFixed(1)}y),flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}(${flagGap.bravo[0].toFixed(1)}+${flagGap.bravo[1].toFixed(1)}y)` +
+      `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'}(${flagGap.alpha[0].toFixed(1)}+${flagGap.alpha[1].toFixed(1)}y@${flagGap.alpha[2].toFixed(0)}mps),flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}(${flagGap.bravo[0].toFixed(1)}+${flagGap.bravo[1].toFixed(1)}y@${flagGap.bravo[2].toFixed(0)}mps)` +
       `,capA=${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(1) : '-'},capB=${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(1) : '-'}` +
       `,fdieA=${flagDeaths.alpha.length}@${flagDeaths.alpha.length ? (flagDeaths.alpha.reduce((s, v) => s + v, 0) / flagDeaths.alpha.length).toFixed(0) : '-'}m,fdieB=${flagDeaths.bravo.length}@${flagDeaths.bravo.length ? (flagDeaths.bravo.reduce((s, v) => s + v, 0) / flagDeaths.bravo.length).toFixed(0) : '-'}m` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
