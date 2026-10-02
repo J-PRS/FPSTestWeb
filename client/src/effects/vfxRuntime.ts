@@ -147,7 +147,13 @@ export function resyncEmission(ps: IParticleSystem, em: THREE.Object3D): void {
   };
   st.travelDistance = 0;
   st.waitEmiting = 0;
-  (st.previousWorldPos ??= new THREE.Vector3()).copy(em.position);
+  // emit() distances previousWorldPos against emitter.matrixWorld — a
+  // stale matrix (previous owner's parked transform, or a position just
+  // written this frame) cashes the whole teleport as one giant deposit.
+  // Refresh it so position and matrix agree before the next emit.
+  em.updateMatrixWorld(true);
+  const e = em.matrixWorld.elements;
+  (st.previousWorldPos ??= new THREE.Vector3()).set(e[12]!, e[13]!, e[14]!);
 }
 
 function reapStarved(ps: IParticleSystem): void {
