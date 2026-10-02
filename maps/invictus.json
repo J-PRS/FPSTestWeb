@@ -21,9 +21,11 @@
     {
       "x": -175.2,
       "y": 0,
-      "z": 15.6
+      "z": 15.6,
+      "r": 219.7
     }
   ],
+  "teamSpawns": {},
   "terrain": "t2/invictus/terrain.bin",
   "terrainTex": "t2/invictus/albedo.png",
   "sky": "t2/invictus/sky",
@@ -162,7 +164,7 @@
       }
     }
   ],
-  "_t2": "ported from Tribes 2 'Invictus' - relief 225m -> 125m",
+  "_t2": "ported from Tribes 2 'invictus' - relief 225m -> 125m",
   "_interiors": [
     {
       "file": "bbunk9.dif",

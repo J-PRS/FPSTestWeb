@@ -21,14 +21,38 @@
     {
       "x": 60.1,
       "y": 0,
-      "z": 64.0
+      "z": 64.0,
+      "r": 91.6,
+      "w": 500.0
     },
     {
       "x": 52.8,
       "y": 0,
-      "z": 65.9
+      "z": 65.9,
+      "r": 91.6,
+      "w": 500.0
     }
   ],
+  "teamSpawns": {
+    "alpha": [
+      {
+        "x": 60.1,
+        "y": 0,
+        "z": 64.0,
+        "r": 91.6,
+        "w": 500.0
+      }
+    ],
+    "bravo": [
+      {
+        "x": 52.8,
+        "y": 0,
+        "z": 65.9,
+        "r": 91.6,
+        "w": 500.0
+      }
+    ]
+  },
   "terrain": "t2/equinox/terrain.bin",
   "terrainTex": "t2/equinox/albedo.png",
   "sky": "t2/equinox/sky",
@@ -205,7 +229,7 @@
       }
     }
   ],
-  "_t2": "ported from Tribes 2 'Equinox' - relief 225m -> 125m",
+  "_t2": "ported from Tribes 2 'equinox' - relief 225m -> 125m",
   "_interiors": [
     {
       "file": "btowr2.dif",

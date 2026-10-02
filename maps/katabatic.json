@@ -40,6 +40,8 @@
     }
   ],
   "terrain": "katabatic.bin",
+  "terrainTex": "t2/katabatic/albedo.png",
+  "sky": "t2/katabatic/sky",
   "_t2": "ported from Tribes 2 'Katabatic' \u2014 relief 225m -> 125m",
   "interiors": [
     {
