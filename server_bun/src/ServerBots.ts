@@ -74,7 +74,7 @@ export class ServerBots {
     this.field = field;
     this.watchdog = new BotWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
-    this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id));
+    this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id), (id) => this.brains.get(id)?.skill);
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id) => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
   }
@@ -283,7 +283,7 @@ export class ServerBots {
       let out = this.lastOut.get(id);
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
         const goal = this.sense.flagGoal(p);
-        const ctx = this.sense.build(id, p, goal, now);
+        const ctx = this.sense.build(id, p, goal, now, brain.skill);
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
@@ -341,14 +341,20 @@ export class ServerBots {
   }
 
   /** 45m brawl-range enemy in eye-line — same evidence the bot senses
-   *  give the meter; a human parked in a firefight and not shooting is
-   *  the exact tell this debits. */
-  private humanFoeNear(id: string, p: { position: Vec3; team?: string }, players: Map<string, { position: Vec3; team?: string; isDead?: boolean }>): boolean {
+   *  give the meter (bots count a foe only inside their ~113° view
+   *  cone; a human backing into a duel they can't see isn't ignoring
+   *  it either), so facing gets the same cone gate. */
+  private humanFoeNear(id: string, p: { position: Vec3; rotation: { yaw: number }; team?: string }, players: Map<string, { position: Vec3; team?: string; isDead?: boolean }>): boolean {
+    const fx = Math.sin(p.rotation.yaw), fz = Math.cos(p.rotation.yaw);
     for (const [qid, q] of players) {
       if (qid === id || q.isDead) continue;
       if (q.team && p.team && q.team === p.team) continue;
-      const d = Math.hypot(q.position.x - p.position.x, q.position.y - p.position.y, q.position.z - p.position.z);
-      if (d < 45) return true;
+      const dx = q.position.x - p.position.x, dz = q.position.z - p.position.z;
+      const d = Math.hypot(dx, q.position.y - p.position.y, dz);
+      if (d >= 45) continue;
+      const gd = Math.hypot(dx, dz) || 1;
+      if ((dx * fx + dz * fz) / gd < -0.4) continue;
+      return true;
     }
     return false;
   }
