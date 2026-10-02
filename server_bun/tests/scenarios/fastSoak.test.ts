@@ -113,6 +113,14 @@ describe('scenario: fast-forward soak throughput', () => {
     // median is seconds, grabs need coordinated clearing, not routing.
     const ringIn = new Map<string, number>();
     const ringSurv: { died: number[]; left: number[] } = { died: [], left: [] };
+    // HoF-denial probe: a capper crossing the enemy flag's 80m ring
+    // records entry speed+health; on resolution (grab / died / repelled)
+    // we measure how much momentum and HP defense stripped. "stopped"
+    // = died or left ring without grabbing; the deltas say whether the
+    // stop was a kill or a slowdown.
+    const ringCap = new Map<string, { t: number; spd: number; hp: number }>();
+    const capStop = { entries: 0, grabs: 0, died: 0, left: 0, dSpd: [] as number[], dHp: [] as number[] };
+    const killZone = { attack: 0, defense: 0, mid: 0 };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
@@ -198,6 +206,13 @@ describe('scenario: fast-forward soak throughput', () => {
           wasDead.set(p.id, true);
           const tin = ringIn.get(p.id);
           if (tin !== undefined) { ringSurv.died.push(simTicks * dt - tin); ringIn.delete(p.id); }
+          const rc = ringCap.get(p.id);
+          if (rc !== undefined) {
+            capStop.died++;
+            capStop.dSpd.push(Math.hypot(p.velocity.x, p.velocity.z) - rc.spd);
+            capStop.dHp.push(Math.max(0, p.health) - rc.hp);
+            ringCap.delete(p.id);
+          }
           // Near-flag deaths: how close to the ENEMY flag each kill
           // landed — dying at 15m means the stand kill-zone eats runs,
           // dying at 300m means routes never arrived.
@@ -205,6 +220,19 @@ describe('scenario: fast-forward soak throughput', () => {
           if (foeF && p.team) {
             const fd = Math.hypot(p.position.x - foeF.pos.x, p.position.z - foeF.pos.z);
             if (fd < 60) (p.team === 'alpha' ? flagDeaths.alpha : flagDeaths.bravo).push(fd);
+          }
+          // Kill geography: died inside OWN flag's 80m ring (defense),
+          // inside the ENEMY ring (attack), or in the midfield between.
+          if (p.team) {
+            const ownF2 = room.flags!.flags.get(p.team);
+            const foeF2 = room.flags!.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha');
+            if (ownF2 && foeF2) {
+              const do_ = Math.hypot(p.position.x - ownF2.pos.x, p.position.z - ownF2.pos.z);
+              const df_ = Math.hypot(p.position.x - foeF2.pos.x, p.position.z - foeF2.pos.z);
+              if (df_ < 80) killZone.attack++;
+              else if (do_ < 80) killZone.defense++;
+              else killZone.mid++;
+            }
           }
           continue;
         }
@@ -215,6 +243,21 @@ describe('scenario: fast-forward soak throughput', () => {
             const inside = rd < 80;
             if (inside && !ringIn.has(p.id)) ringIn.set(p.id, simTicks * dt);
             else if (!inside && ringIn.has(p.id)) { ringSurv.left.push(simTicks * dt - ringIn.get(p.id)!); ringIn.delete(p.id); }
+            if (room.bots.roleOf(p.id) === 'capper') {
+              const carrying = foeF0.carrier === p.id;
+              if (inside && !ringCap.has(p.id) && !carrying) {
+                ringCap.set(p.id, { t: simTicks * dt, spd: Math.hypot(p.velocity.x, p.velocity.z), hp: Math.max(0, p.health) });
+                capStop.entries++;
+              } else if (carrying && ringCap.has(p.id)) {
+                capStop.grabs++; ringCap.delete(p.id);
+              } else if (!inside && !carrying && ringCap.has(p.id)) {
+                const rc = ringCap.get(p.id)!;
+                capStop.left++;
+                capStop.dSpd.push(Math.hypot(p.velocity.x, p.velocity.z) - rc.spd);
+                capStop.dHp.push(Math.max(0, p.health) - rc.hp);
+                ringCap.delete(p.id);
+              }
+            }
           }
         }
         const standY = p.team === 'alpha' ? hmHeight(field, bravoStand.x, bravoStand.z) : hmHeight(field, alphaStand.x, alphaStand.z);
@@ -400,6 +443,9 @@ describe('scenario: fast-forward soak throughput', () => {
       `,capA=${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(1) : '-'},capB=${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(1) : '-'}` +
       `,fdieA=${flagDeaths.alpha.length}@${flagDeaths.alpha.length ? (flagDeaths.alpha.reduce((s, v) => s + v, 0) / flagDeaths.alpha.length).toFixed(0) : '-'}m,fdieB=${flagDeaths.bravo.length}@${flagDeaths.bravo.length ? (flagDeaths.bravo.reduce((s, v) => s + v, 0) / flagDeaths.bravo.length).toFixed(0) : '-'}m` +
       `,ringD=${ringSurv.died.length}@${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s,ringL=${ringSurv.left.length}` +
+      `,capStop=${capStop.entries}e/${capStop.grabs}g/${capStop.died}d/${capStop.left}l` +
+      (capStop.dSpd.length ? ` Δspd=${medOf(capStop.dSpd).toFixed(1)} Δhp=${medOf(capStop.dHp).toFixed(0)}` : '') +
+      `,kzA=${killZone.attack},kzD=${killZone.defense},kzM=${killZone.mid}` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
       `,e_med=${medOf(eRows.map((r) => r.avg)).toFixed(0)}` +
       `,hunt=${huntN ? Math.round((huntSum / huntN) * 100) : 0}%,cloak=${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%` +

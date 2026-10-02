@@ -40,6 +40,13 @@ export class ServerBotSenses {
   private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
   private noticed = new Map<string, number>();
   private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number }>();
+  /** Squad push-call: a capper within ETA of the enemy stand posts it
+   *  here; teammates' goal ladders read it for a few seconds so the
+   *  stand floods BEFORE the runner lands — the same "capper's 10 out"
+   *  call humans make on comms. Legal: the caller's own ETA, not intel. */
+  private pushAt = new Map<TeamId, { pos: BotVec; at: number }>();
+  private static readonly PUSH_ETA_S = 10;
+  private static readonly PUSH_HOLD_MS = 8000;
 
   /** Bot left the room — drop its notice receipt so the map can't grow
    *  one entry per retired bot for the room's life. */
@@ -236,8 +243,21 @@ export class ServerBotSenses {
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
       threat: this.standThreat(own.home, me),
+      push: this.pushFor(me),
     }, duty);
     const role = this.roles.get(p.id);
+    // Post the push-call when THIS bot is the capper closing in. ETA
+    // prices actual ground speed (floor 12 m/s — a bot standing still
+    // next to the stand shouldn't keep re-announcing); posted early so
+    // the squad's response travels ahead of the runner's arrival.
+    if (role === 'capper' && pick === enemyStand && enemyStand) {
+      const qp = this.room.players.getPlayer(p.id);
+      const spd = qp ? Math.hypot(qp.velocity.x, qp.velocity.z) : 0;
+      const eta = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) / Math.max(12, spd);
+      if (eta < ServerBotSenses.PUSH_ETA_S) {
+        this.pushAt.set(me, { pos: { ...enemyStand }, at: simNow() });
+      }
+    }
     // A presser doesn't beeline to the stand — it attacks from a side
     // the terrain actually opens on. Cappers want the high side for a
     // downhill graze at speed; everyone pressing a rimmed stand still
@@ -335,6 +355,22 @@ export class ServerBotSenses {
     // and arrives with no jet fuel — infiltration is the saboteur's job.
     return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
       && role === 'infiltrator', runner: role === 'capper' };
+  }
+
+  /** The team's active push target for non-goal consumers (the stand
+   *  bombardment volley in ServerBots reads it directly). */
+  pushTarget(me: string | undefined): BotVec | null {
+    return me ? this.pushFor(me as TeamId) : null;
+  }
+
+  /** Live push-call for this team, or null once it ages out — the
+   *  window is short so a dead capper's call doesn't trap the squad
+   *  on a stand press long after the run collapsed. */
+  private pushFor(me: TeamId): BotVec | null {
+    const c = this.pushAt.get(me);
+    if (!c) return null;
+    if (simNow() - c.at > ServerBotSenses.PUSH_HOLD_MS) { this.pushAt.delete(me); return null; }
+    return c.pos;
   }
 
   /** A teammate carrying the enemy flag is the escort point — the

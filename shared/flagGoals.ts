@@ -35,6 +35,10 @@ export interface FlagSituation {
   /** Nearest enemy pressing OUR stand — the HoF's body-block anchor.
    *  Only populated for hostiles inside the home ring's reach. */
   threat: { x: number; y: number; z: number } | null;
+  /** A teammate capper is seconds from the enemy stand — the squad
+   *  floods ahead of it: attackers clear defenders, shellers lob.
+   *  Carries the stand pos so a push can be joined from anywhere. */
+  push?: { x: number; y: number; z: number } | null;
 }
 
 /** Role-priority table, core before luxury — the row unlocks when the
@@ -198,6 +202,9 @@ function bombardierGoal(s: FlagSituation) {
  *  even when nobody's home so the cloak keeps covering the breach. */
 function infiltratorGoal(s: FlagSituation) {
   if (s.escort) return s.escort;
+  // The push call outranks a routine stand press — the breach is timed
+  // to the capper's arrival, not whenever the saboteur wandered up.
+  if (s.push) return s.push;
   if (s.enemyStand) return s.enemyStand;
   if (s.thief) return s.thief;
   return s.home;
@@ -228,6 +235,10 @@ function medicGoal(s: FlagSituation) {
  *  then press the enemy stand to clear it for the capper. */
 function offenseGoal(s: FlagSituation) {
   if (s.thief) return s.thief;
+  // A called push drops routine jobs (escort/dropped read below it):
+  // the capper is ~10s out, so offense floods the stand NOW to eat
+  // the HoF/defense that would otherwise kill it at the flag.
+  if (s.push) return s.push;
   if (s.escort) return s.escort;
   if (s.dropped) return s.dropped;
   if (s.enemyStand) return s.enemyStand;

@@ -242,6 +242,18 @@ export class ServerBots {
       this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
       logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
     }
+    // Push volley: a capper's call turns the stand into a shelling
+    // target for the window — whoever's in lob range (the bombardier's
+    // perch sits ~90m out, mediums closing in closer) throws ordnance
+    // AT the stand, so the flag arrives to a cleared pad, not fresh
+    // defense. Same cadence discipline as the gear lob.
+    const push = ready || !gear ? this.sense.pushTarget(p.team) : null;
+    if (push && !gear && Math.hypot(push.x - p.position.x, push.z - p.position.z) < 95
+        && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) {
+      this.arsenal.lobAt(p, push);
+      this.gearLobT.set(id, now + 2500);
+      logger.debug('Push lob', { id, x: +push.x.toFixed(1), z: +push.z.toFixed(1) });
+    }
     // Deploy claims run the same handleDeploy a human's message does —
     // kind, plant distance, and per-player cap are all re-validated.
     if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
