@@ -77,7 +77,7 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     // sidearm, the bold keep the launcher (a mutual splash is still a
     // play). Dist-scaled so the rule fades in as the foe closes.
     const aoe = getWeaponStats(w).aoeRadius;
-    if (aoe > 0 && dist < aoe * 0.6) s *= 0.08 + courage * 0.7;
+    if (aoe > 0 && dist < aoe * 0.8) s *= 0.08 + courage * 0.5;
     if (s > best.s) best = { w, s };
   }
   return best.w;

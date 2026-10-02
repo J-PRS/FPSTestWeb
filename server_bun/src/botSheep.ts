@@ -55,9 +55,13 @@ export class BotSheepMeter {
   check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, _now: number): void {
     const bonusSpeed = this.energy(id, p.velocity, m.dt, m.height ?? 0);
     const jetting = !!m.out.move?.jet;
+    // Tribesing = holding/converting real E: bonusSpeed covers KE and
+    // any height a moving body is carrying. Bare airborne doesn't
+    // qualify — a low-speed hop is pedestrian motion that left the
+    // ground; jetting does (tank→potential conversion IS the work).
     // Welding the stand's gear is honest work — a parked welder is
     // productive, not a pedestrian.
-    const tribesing = bonusSpeed > 14 || m.airborne || jetting || !!m.out.repair;
+    const tribesing = bonusSpeed > 14 || jetting || !!m.out.repair;
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }

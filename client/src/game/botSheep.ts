@@ -118,18 +118,15 @@ export class SheepMeter {
    *  Potential counts at half gravity past a 2m deadband — and only
    *  while moving: a parked body at altitude isn't holding energy to
    *  convert, it's sleeping on the deposit. */
-  private energy(bot: SheepBody, dt: number, terrain: Terrain): { mech: number; bonusSpeed: number; grounded: boolean } {
+  private energy(bot: SheepBody, dt: number, terrain: Terrain): { mech: number; bonusSpeed: number } {
     const v = bot.vel;
     const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
     const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
-    // A stationary body is grounded whatever the altitude — parked on a
-    // tower or frozen mid-air, it isn't airborne, it's sleeping.
-    const grounded = height < 2 || speedSq < 4;
     const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
     const ePrev = this.eSm.get(bot.playerId) ?? mech;
     const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
     this.eSm.set(bot.playerId, eSm);
-    return { mech, bonusSpeed: Math.sqrt(Math.max(0, 2 * eSm)), grounded };
+    return { mech, bonusSpeed: Math.sqrt(Math.max(0, 2 * eSm)) };
   }
 
   private maxed(bot: SheepBody): void {
@@ -172,10 +169,12 @@ export class SheepMeter {
     return w;
   }
 
-  /** Counts as Tribesing while it's holding or converting energy —
-   *  bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed so a
-   *  cruising bot pays, a dawdling one charges. */
-  private static isTribesing(bonusSpeed: number, grounded: boolean): boolean {
-    return bonusSpeed > 14 || !grounded;
+  /** Tribesing = holding or converting real mechanical energy, nothing
+   *  else. bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed, so
+   *  a body cruising, diving, or riding height↔speed converts drains —
+   *  while a low-E hop or a slow fall is just pedestrian motion that
+   *  happens to be off the ground. */
+  private static isTribesing(bonusSpeed: number): boolean {
+    return bonusSpeed > 14;
   }
 }
