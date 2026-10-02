@@ -110,7 +110,12 @@ export class BotMoves {
     const tgtY = Math.max(dest.y, ctx.objective?.y ?? -Infinity);
     const drop = pos.y - tgtY;
     const runway = 45 + Math.max(0, drop) * 2 + speed * 0.5;
-    const diveRun = gd < runway && tgtY < pos.y + 4 && this.jetWhy !== 'prey';
+    // A level stand isn't a dive — gravity buys nothing across the flat
+    // apron, which is exactly where soaks show pushes bleeding to
+    // ~10-14m/s and dying in the ring. A runner keeps the burn on a
+    // flat approach: thrust is the only accelerator left out there.
+    const flatRun = ctx.runner === true && drop < 6;
+    const diveRun = gd < runway && tgtY < pos.y + 4 && this.jetWhy !== 'prey' && !flatRun;
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;
@@ -177,7 +182,16 @@ export class BotMoves {
     // cap run showed a featherjets bot jetting 200m up on spawn);
     // burn already fast in the air just empties the tank.
     const boost = speed < 12 && gd > 15 && comfy && rise <= 1.5 && !airborne;
-    this.jetWhy = rise > 2 ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : boost ? 'boost' : '-';
+    // Run-in burn: a committed runner closing on a near-level objective
+    // keeps thrusting to ~26m/s — the human play is arriving through
+    // the flag at speed, not floating in at hop-chain pace. Jets add
+    // forward thrust too, so the burn buys real m/s on the flat.
+    // Airborne is fine — the hop chain spends most of the approach off
+    // the deck, and dir thrust buys speed mid-hop too (the AGL ceiling
+    // above already vetoes a burn that would balloon).
+    const runIn = ctx.runner === true && gd > 12 && gd < 90 &&
+      (ctx.objective?.y ?? dest.y) - pos.y < 4 && speed < 26 && comfy;
+    this.jetWhy = rise > 2 ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
   }
 }
