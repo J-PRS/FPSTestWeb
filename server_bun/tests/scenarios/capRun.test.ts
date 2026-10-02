@@ -43,6 +43,7 @@ describe('scenario: capper run on real terrain (300m stands)', () => {
     const ctl = room.bots as unknown as {
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
       roster: { roles: Map<string, string>; refitClass(id: string): void };
+      brains: Map<string, { jetDebug: { why: string; escapeT: number; out: boolean; hold: number } }>;
     };
     ctl.loadouts.set(capper.id, BOT_LOADOUTS[0]!); // chaser — featherjets
     ctl.roster.refitClass(capper.id);
@@ -91,6 +92,14 @@ describe('scenario: capper run on real terrain (300m stands)', () => {
           stat.avgSpeed = stat.carryT > 0 ? stat.pathM / stat.carryT : 0;
           break;
         }
+      }
+      if (i % 40 === 0 && simT < 45) {
+        const jd = ctl.brains.get(capper.id)?.jetDebug;
+        console.log(
+          `    t=${simT.toFixed(0)}s y=${capper.position.y.toFixed(0)} ` +
+          `v=${Math.hypot(capper.velocity.x, capper.velocity.z).toFixed(0)} vy=${capper.velocity.y.toFixed(0)} ` +
+          `jet=${jd?.why ?? '?'}/${jd?.out ? '1' : '0'} hold=${jd?.hold.toFixed(1) ?? '?'} esc=${jd?.escapeT.toFixed(1) ?? '?'}`,
+        );
       }
       if (i % 400 === 0) {
         console.log(

@@ -23,6 +23,12 @@ export class BotMoves {
    *  probes flicker mid-climb and the jet strobes on/off, which reads
    *  as buzzing instead of thrusting. */
   private jetHold = 0;
+  /** Last gate that armed a burn — harness telemetry reads this to tell
+   *  climbs apart from boosts without parsing behavior logs. */
+  jetWhy = '-';
+  /** Last computed jet bit — what actually reached the input layer. */
+  jetOut = false;
+  holdFor(): number { return this.jetHold; }
 
   hints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
@@ -42,7 +48,7 @@ export class BotMoves {
     this.jetHold = Math.max(0, this.jetHold - dt);
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
-    if (this.wantJet(ctx, pos, dest, rise, speed, gd) && tanked) {
+    if (this.wantJet(ctx, pos, dest, rise, speed, gd, airborne) && tanked) {
       this.jetHold = Math.max(this.jetHold, 0.45 + botRand() * 0.4);
     }
     // The dive: a destination at or below the bot within graze range
@@ -53,6 +59,7 @@ export class BotMoves {
     const diveRun = gd < 45 && dest.y < pos.y + 4;
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
+    this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
       // be. Momentum is life — a bot that only skis downhill reads as a
@@ -68,9 +75,13 @@ export class BotMoves {
   /** Whether the situation calls for a burn: genuine climbs, airborne
    *  prey, a high destination — or discretionary speed plays when the
    *  tank is comfortable. */
-  private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number): boolean {
+  private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number, airborne: boolean): boolean {
     const targetHigh = (this.host.huntPos()?.y ?? -Infinity) - pos.y > 6;
     const destHigh = dest.y - pos.y > 3;
+    // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
+    // featherjets turned a shallow hop chain into a 250m balloon ride.
+    // High prey still earns altitude; everything else glides back down.
+    if (!targetHigh && pos.y - ctx.groundY(pos.x, pos.z) > 30) return false;
     // Discretionary spending asks for a healthier tank — boosting to
     // speed is nice-to-have, climbing out of a hole is not.
     const comfy = ctx.energy === undefined || ctx.energy > 30;
@@ -79,9 +90,12 @@ export class BotMoves {
     // into speed. A bot that only jets on cliffs never gets dynamic.
     const hop = rise > 0.5 && rise <= 3;
     // The anti-sheep move: a bot at walking pace with ground to cover
-    // jets to build momentum — jet thrust pushes forward too, so this
-    // converts fuel into travel speed instead of plodding.
-    const boost = speed < 12 && gd > 15 && comfy;
-    return rise > 2 || targetHigh || destHigh || hop || boost;
+    // jets to build momentum — but only flat-or-downhill from the
+    // deck. Burn while facing uphill buys altitude, not speed (the
+    // cap run showed a featherjets bot jetting 200m up on spawn);
+    // burn already fast in the air just empties the tank.
+    const boost = speed < 12 && gd > 15 && comfy && rise <= 1.5 && !airborne;
+    this.jetWhy = rise > 2 ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : boost ? 'boost' : '-';
+    return this.jetWhy !== '-';
   }
 }

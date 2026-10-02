@@ -47,11 +47,19 @@ export class BotLines {
   private roll(ctx: BrainCtx, pos: BotVec, dest: BotVec, gd: number): BotVec | null {
     const g0 = ctx.groundY(pos.x, pos.z);
     const gx = (dest.x - pos.x) / gd, gz = (dest.z - pos.z) / gd;
-    const reach = Math.min(REACH, gd);
+    // Runners read the terrain farther out: a 300m massif on the line
+    // is invisible at normal reach, and skiing over it costs more than
+    // the long way around.
+    const reach = Math.min(REACH * (ctx.runner ? 2.2 : 1), gd);
+    // Runners (carriers, cappers) get a wider fan and harder downhill
+    // pull — a momentum run arcs around climbs rather than over them.
+    const cone = CONE * (ctx.runner ? 2.0 : 1);
+    const dropW = ctx.runner ? 2.0 : 1.4;
+    const straightW = ctx.runner ? 4 : 8;
 
     let best: BotVec | null = null, bestScore = 0;
     for (let r = 0; r < RAYS; r++) {
-      const a = (r / (RAYS - 1) - 0.5) * 2 * CONE;
+      const a = (r / (RAYS - 1) - 0.5) * 2 * cone;
       const dx = gx * Math.cos(a) - gz * Math.sin(a);
       const dz = gx * Math.sin(a) + gz * Math.cos(a);
 
@@ -81,11 +89,11 @@ export class BotLines {
         const drop = g0 - drops[p]!;
         const score =
           gained * 0.9 +                      // progress toward the goal
-          drop * 1.4 +                        // downhill buys ski speed
+          drop * dropW +                      // downhill buys ski speed
           Math.min(0, drop + 4) * 1.8 +       // climbs past ~4m get taxed hard
           (p === PTS - 1 ? 3 : 0) -           // prefer committing long when tied
           earlyClimb * 26 -                   // a climb in the first stretch kills the run
-          Math.abs(a) * 8;                    // straighter lines beat carving sideways
+          Math.abs(a) * straightW;            // straighter lines beat carving sideways
         if (score > bestScore) {
           bestScore = score;
           best = { x: wx, y: pos.y, z: wz };

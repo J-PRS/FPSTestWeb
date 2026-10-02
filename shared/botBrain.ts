@@ -58,6 +58,10 @@ export interface BrainCtx {
    *  the route rules the feet — hunt press/orbit yields to the line,
    *  while fire stays live for opportunistic shots on the way. */
   running?: boolean;
+  /** Route-first movement (carrier or capper): the line planner may
+   *  swing wider and weight downhill harder — momentum preservation
+   *  beats directness, which is how real cap routes arc roundabout. */
+  runner?: boolean;
   /** The objective is an enemy-held position this bot is pressing —
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
@@ -293,6 +297,12 @@ export class BotBrain {
    *  so hosts resolve the throw's arc off this. */
   get currentHuntId(): string | null {
     return this.h.hunt?.id ?? null;
+  }
+
+  /** Jet-gate telemetry for the cap-run harness — which gate armed the
+   *  last burn plus the latches that could outlive it. */
+  get jetDebug(): { why: string; escapeT: number; out: boolean; hold: number } {
+    return { why: this.moves.jetWhy, escapeT: this.escapeS.escapeJetT, out: this.moves.jetOut, hold: this.moves.holdFor() };
   }
 
   /** The bot's skill matrix — hosts read it to bias weapon selection

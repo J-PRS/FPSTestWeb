@@ -191,14 +191,14 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean; running?: boolean } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
-    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false, running: true };
+    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false, running: true, runner: true };
 
     const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
     // One role table for both runtimes — shared/flagGoals.ts.
@@ -211,11 +211,37 @@ export class ServerBotSenses {
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
     });
+    const role = this.roles.get(p.id);
+    // A capper doesn't beeline to the stand — it attacks from the high
+    // side so the last leg is a downhill graze at speed. The entry point
+    // is probed live off the terrain every goal cycle: no baked routes,
+    // and it re-plans as the bot moves (the arc emerges per-mountain).
+    let goalPos: BotVec = pick;
+    if (role === 'capper' && pick === enemyStand && enemyStand !== null && this.field) {
+      const dStand = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z);
+      if (dStand > 90) {
+        let best = enemyStand, bestScore = -Infinity;
+        for (let a = 0; a < 8; a++) {
+          const ang = (a / 8) * Math.PI * 2;
+          const ex = enemyStand.x + Math.cos(ang) * 85;
+          const ez = enemyStand.z + Math.sin(ang) * 85;
+          const ey = hmHeight(this.field, ex, ez);
+          const high = ey - enemyStand.y;
+          const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
+          // Elevated over the stand = a dive-in entry, but an entry the
+          // bot must CLIMB to costs the whole advantage — favor height
+          // the terrain hands out between here and the stand instead.
+          const score = high * 1.2 - Math.max(0, ey - p.position.y) * 2 - Math.max(0, detour) * 0.8;
+          if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
+        }
+        goalPos = best;
+      }
+    }
     // Cloak intent only for the infiltrator: the drain is speed-scaled,
     // so a light capper burning RMB-to-stand empties its tank mid-route
     // and arrives with no jet fuel — infiltration is the saboteur's job.
-    return { pos: pick, infiltrating: pick === enemyStand && enemyStand !== null
-      && this.roles.get(p.id) === 'infiltrator' };
+    return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
+      && role === 'infiltrator', runner: role === 'capper' };
   }
 
   /** A teammate carrying the enemy flag is the escort point — the
@@ -242,7 +268,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -253,6 +279,7 @@ export class ServerBotSenses {
       objective: goal?.pos ?? null,
       infiltrating: goal?.infiltrating ?? false,
       running: goal?.running ?? false,
+      runner: goal?.runner ?? false,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving.
       pickup: this.room.pickups?.nearest(p.position) ?? undefined,
