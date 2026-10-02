@@ -68,6 +68,13 @@ export function diagLines(ctx: StateDebugContext): string[] {
     lines.push('battleLog:');
     for (const k of battleLog.slice(-15)) lines.push(`  ${k}`);
   }
+  // Sim lab: the scenario's own rows (hp/fires/lanes) — registered by
+  // labView only while the lab is actually open.
+  const ld = (window as { __labDump?: () => [string, [string, string][]] | undefined }).__labDump?.();
+  if (ld) {
+    lines.push(`lab: ${ld[0]}`);
+    for (const [k, v] of ld[1]) lines.push(`  ${k}: ${v}`);
+  }
   return lines;
 }
 
@@ -115,6 +122,8 @@ interface TrailDump {
   inst?: unknown;
   swarm?: unknown;
   fx?: unknown;
+  ballDots?: Record<string, unknown>[];
+  balls?: { viewPos?: string; rows?: Record<string, unknown>[] };
 }
 
 // Trail census — dead-trail bugs need attached/particles/slot per live
@@ -152,6 +161,14 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   if (td.inst) lines.push(`instPools: ${JSON.stringify(td.inst)}`);
   if (td.swarm) lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
   if (td.fx) lines.push(`fx: ${JSON.stringify(td.fx)}`);
+  pushBallCensus(lines, td);
+  pushShellAudit(lines, ctx);
+}
+
+// Projectile audit — the oldest-shell line surfaces the next immortal
+// early; the offWorld count catches shells that escaped the sane-bounds
+// box (a garbage trail census usually traces back to one of these).
+function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
   const aged = ctx.projectiles.toSorted((a, b) => b.age - a.age).slice(0, 5);
   if (aged.length) {
     lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
@@ -161,6 +178,17 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
     if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) offWorld++;
   }
   if (offWorld) lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);
+}
+
+// Ball trail census — emit gates (speed >0.7, cam <200m) vs outputs
+// (live dots, ribbon samples). "spd=0 dots=0" everywhere = the shared
+// starvation case; "dots>0 but no sparkle" = a render/batch break.
+function pushBallCensus(lines: string[], td: TrailDump): void {
+  if (td.ballDots) lines.push(`ballDots: ${JSON.stringify(td.ballDots)}`);
+  if (td.balls) {
+    lines.push(`balls: ${td.balls.rows?.length ?? 0} live viewPos=${td.balls.viewPos ?? '?'}`);
+    for (const r of td.balls.rows ?? []) lines.push(`  ball ${JSON.stringify(r)}`);
+  }
 }
 
 function pushWorld(lines: string[], w: StateDebugContext['world']): void {

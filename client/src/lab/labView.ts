@@ -98,6 +98,12 @@ class LabView {
 
   get open(): boolean { return this.root.classList.contains('open'); }
 
+  /** Active scenario's dump rows for the Alt+Q clipboard — undefined
+   *  when the lab is closed or nothing is running. */
+  dumpRows(): [string, [string, string][]] | undefined {
+    return this.instance ? [this.activeId, this.instance.dump()] : undefined;
+  }
+
   /** The scene the lab renders — the game's VFX-owning scene when it
    *  exists (real quarks/ribbons live there), else a private fallback. */
   private world(): THREE.Scene { return vfxScene() ?? this.fallbackScene; }
@@ -212,11 +218,18 @@ class LabView {
 
 let lab: LabView | null = null;
 
+// Alt+Q hooks the active scenario dump through the same window-provider
+// convention __trailDump uses — diagDump stays decoupled from the lab.
+declare global {
+  interface Window { __labDump?: () => [string, [string, string][]] | undefined }
+}
+
 /** Wire the SIM LAB button in the ESC menu. One call from overlayInput —
  *  that's the whole blast radius outside this module. */
 export function wireLabButton(): void {
   const btn = document.getElementById('lab-open');
   if (!btn) return;
+  window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);
   btn.addEventListener('click', () => {
     lab ??= new LabView();
     lab.toggle();
