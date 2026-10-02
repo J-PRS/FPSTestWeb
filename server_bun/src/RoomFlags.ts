@@ -42,6 +42,10 @@ export class RoomFlags {
    *  reads real caps here instead of diffing flagUpdate broadcasts
    *  (match resets fake the same carried→home transition). */
   readonly capLog: { by: string; team: string; holdMs: number; capAt: number }[] = [];
+  /** Same ground truth for returns — who touched the dropped flag home. */
+  readonly retLog: { by: string; team: string; at: number }[] = [];
+  /** And for grabs — the stand-touch that starts a run. */
+  readonly grabLog: { by: string; team: string; at: number }[] = [];
   /** Last-tick positions for the sweep — a stand touch is a fast graze,
    *  not a park: at 60m/s a capper crosses the pickup ring between two
    *  20Hz frames, so the check must test the path, not the snapshot. */
@@ -188,6 +192,7 @@ export class RoomFlags {
       this.room.messages.killFeed.say(t.id, 'flagreturn');
       this.room.bots?.notice('flagreturn', t.id, t.team);
       if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
+      this.retLog.push({ by: t.id, team: f.team, at: simNow() });
       f.state = 'home';
       f.pos = { ...f.home };
       f.droppedAt = 0;
@@ -199,6 +204,7 @@ export class RoomFlags {
       f.state = 'carried';
       f.carrier = t.id;
       f.carriedAt = simNow();
+      this.grabLog.push({ by: t.id, team: f.team, at: simNow() });
       // A grab is the loudest objective scent — it starts the chase.
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;

@@ -145,6 +145,14 @@ describe('scenario: warp soak throughput', () => {
     // is it in? Separates "brain rerouted off the run" (low on%) from
     // "legs point at the stand but never close" (on% high, stuck band).
     const capRoute = { ticks: 0, on: 0, route: 0, bands: [0, 0, 0, 0, 0] as number[] };
+    // Are a capper's kills stand-clearing (victim inside its own flag
+    // ring) or transit fights (everywhere else)?
+    const capKills = { near: 0, far: 0 };
+    // Role-table feed: per-bot damage dealt (playerHit), carrier kills
+    // (victim held a flag at the kill), plus grab/cap/return logs.
+    const botDmg = new Map<string, number>();
+    const botCk = new Map<string, number>();
+    const carriers = new Map<string, string>(); // flag team -> carrier id
     const killZone = { attack: 0, defense: 0, mid: 0 };
     // Nugget risk probe — JP's model: going for a gem telegraphs your
     // position, so a grab under enemy pressure is a trade. Track live
@@ -168,8 +176,12 @@ describe('scenario: warp soak throughput', () => {
       for (; msgCur < w.msgs.length; msgCur++) {
         const m = w.msgs[msgCur]! as unknown as {
           type: string; id?: number; by?: string | null; pos?: { x: number; z: number };
-          targetId?: string; shooterId?: string;
+          targetId?: string; shooterId?: string; damage?: number;
+          flags?: { team: string; carrier?: string | null }[];
         };
+        if (m.type === 'playerHit' && m.shooterId && m.damage) {
+          botDmg.set(m.shooterId, (botDmg.get(m.shooterId) ?? 0) + m.damage);
+        }
         if (m.type === 'pickupSpawn' && m.id !== undefined && m.pos) {
           liveNugs.set(m.id, m.pos); nug.spawn++;
         } else if (m.type === 'pickupGone' && m.id !== undefined) {
@@ -186,6 +198,18 @@ describe('scenario: warp soak throughput', () => {
           if (v) for (const np of liveNugs.values()) {
             if (Math.hypot(v.position.x - np.x, v.position.z - np.z) < 15) { nug.die++; break; }
           }
+          if (m.shooterId && [...carriers.values()].includes(m.targetId)) {
+            botCk.set(m.shooterId, (botCk.get(m.shooterId) ?? 0) + 1);
+          }
+          // Capper kill map: a kill inside the victim's own stand ring is
+          // approach-clearing; anywhere else is a midfield transit fight.
+          if (v?.team && m.shooterId && room.bots?.roleOf(m.shooterId) === 'capper') {
+            const home = room.flags?.flags.get(v.team)?.home;
+            if (home) {
+              const d = Math.hypot(v.position.x - home.x, v.position.z - home.z);
+              if (d < 40) capKills.near++; else capKills.far++;
+            }
+          }
         }
       }
     };
@@ -194,7 +218,10 @@ describe('scenario: warp soak throughput', () => {
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
     // (h = height above terrain, J/kg), the "are they skiing like Tribes
     // or walking like llamas" meter. Sampled per batch per live bot.
-    const eStats = new Map<string, { team: string; sum: number; max: number; n: number }>();
+    const eStats = new Map<string, { team: string; sum: number; max: number; n: number; spd: number }>();
+    // Per-bot lifetimes: respawn→death spans, role table's survival column.
+    const lifeStart = new Map<string, number>();
+    const lifeSpans = new Map<string, number[]>();
     // Engagement density — mean share of brains with a live hunt target,
     // sampled per batch. The single number that separates "nobody ever
     // finds a fight" from "fights never finish".
@@ -218,6 +245,13 @@ describe('scenario: warp soak throughput', () => {
     const align = { sum: 0, n: 0 };
     const wasDead = new Map<string, boolean>();
     while (performance.now() - t0 < wallBudgetMs) {
+      // Carrier truth BEFORE the step — a carrier killed inside the
+      // batch has already dropped by the time kill msgs drain, so the
+      // pre-step snapshot is what a carrier-kill counts against.
+      carriers.clear();
+      for (const f of room.flags?.flags.values() ?? []) {
+        if (f.carrier) carriers.set(f.team, f.carrier);
+      }
       // Advance the room's clock first, then step every sim — the
       // order mirrors a live tick (timers lapse, then sims move).
       simNowAdvance(dt * 1000 * BATCH);
@@ -272,6 +306,11 @@ describe('scenario: warp soak throughput', () => {
           // Corpses can't press or carry — but the kill spot still feeds
           // the death heatmap.
           if (TRAIL_PATH && p.team && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team });
+          if (wasDead.get(p.id) === false) {
+            const born = lifeStart.get(p.id);
+            if (born !== undefined) (lifeSpans.get(p.id) ?? lifeSpans.set(p.id, []).get(p.id)!).push(simTicks * dt - born);
+            lifeStart.delete(p.id);
+          }
           wasDead.set(p.id, true);
           const tin = ringIn.get(p.id);
           if (tin !== undefined) { ringSurv.died.push(simTicks * dt - tin); ringIn.delete(p.id); }
@@ -369,12 +408,14 @@ describe('scenario: warp soak throughput', () => {
           if (dd < 12) capRoute.on++;
           capRoute.bands[dd < 25 ? 0 : dd < 80 ? 1 : dd < 160 ? 2 : dd < 300 ? 3 : 4]!++;
         }
+        if (wasDead.get(p.id) !== false) lifeStart.set(p.id, simTicks * dt);
         wasDead.set(p.id, false);
         if (p.team) {
           const v2 = p.velocity.x ** 2 + p.velocity.y ** 2 + p.velocity.z ** 2;
           const e = 0.5 * v2 - GRAVITY * Math.max(0, p.position.y - hmHeight(field, p.position.x, p.position.z));
-          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0 };
+          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0, spd: 0 };
           s.sum += e; s.n++; if (e > s.max) s.max = e;
+          s.spd += Math.hypot(p.velocity.x, p.velocity.z);
           eStats.set(p.id, s);
         }
         if (TRAIL_PATH && p.team) {
@@ -540,14 +581,31 @@ describe('scenario: warp soak throughput', () => {
     row('flags', `grabs ${grabsBy.alpha ?? 0}-${grabsBy.bravo ?? 0}   caps ${caps.length}${caps.length ? ` (fastest ${(fastest.holdMs / 1000).toFixed(1)}s)` : ''}   press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '-'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '-'}m`);
     row('approach', `closest: any ${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(0) : '-'}m(+${flagGap.alpha[1].toFixed(0)}y @${flagGap.alpha[2].toFixed(0)}mps) / ${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(0) : '-'}m(+${flagGap.bravo[1].toFixed(0)}y @${flagGap.bravo[2].toFixed(0)}mps)   cappers ${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(0) : '-'}m/${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(0) : '-'}m   flag deaths ${fdie('alpha')}/${fdie('bravo')}`);
     row('ring', `died inside ${ringSurv.died.length} (${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s avg)   left ${ringSurv.left.length}   capper pushes ${capStop.entries} -> ${capStop.grabs} grabs, ${capStop.died} died, ${capStop.left} repelled${capStop.dSpd.length ? ` (lost ${medOf(capStop.dSpd).toFixed(1)}mps ${medOf(capStop.dHp).toFixed(0)}hp)` : ''}`);
-    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <25m ${capRoute.bands[0]} · <80m ${capRoute.bands[1]} · <160m ${capRoute.bands[2]} · <300m ${capRoute.bands[3]} · 300m+ ${capRoute.bands[4]} ticks`);
+    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <25m ${capRoute.bands[0]} · <80m ${capRoute.bands[1]} · <160m ${capRoute.bands[2]} · <300m ${capRoute.bands[3]} · 300m+ ${capRoute.bands[4]} ticks   capper kills ${capKills.near + capKills.far} (${capKills.near} at stand)`);
     row('economy', `nugs: ${nug.spawn} spawned · ${nug.bankHot + nug.bankCold} banked (${nug.bankHot} hot) · ${nug.decay} decayed · ${nug.die} died-for`);
     row('fight', `kills: attack ${killZone.attack} · defense ${killZone.defense} · midfield ${killZone.mid}   hunting ${huntN ? Math.round((huntSum / huntN) * 100) : 0}%   cloak ${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%   in sight ${huntN ? Math.round((inSightSum / huntN) * 100) : 0}%   nearest foe ${huntN ? (nearFoeSum / huntN).toFixed(0) : '-'}m   med energy ${medOf(eRows.map((r) => r.avg)).toFixed(0)}`);
     row('macro', `goal output ${goalOut.nA ? (goalOut.alpha / goalOut.nA).toFixed(0) : '-'}/${goalOut.nB ? (goalOut.bravo / goalOut.nB).toFixed(0) : '-'}   progress ${progRows.alpha.cnt ? (progRows.alpha.sum / progRows.alpha.cnt).toFixed(1) : '-'}/${progRows.bravo.cnt ? (progRows.bravo.sum / progRows.bravo.cnt).toFixed(1) : '-'}m/win   goal flips ${flips.size ? ([...flips.values()].reduce((n, f) => n + f.n, 0) / flips.size).toFixed(0) : '-'}/bot   aim align ${align.n ? (align.sum / align.n).toFixed(2) : '-'}`);
     console.log('');
-    console.log('  role           bots   K / D');
+    const roleOf = (id: string) => room.bots.roleOf(id);
+    const sumFor = (r: string, m: Map<string, number>) => { let s = 0; for (const [id, v] of m) if (roleOf(id) === r) s += v; return s; };
+    console.log('  role           bots   K / D    dmg   gr cp rt cK   spd   avgE  life(s)');
     for (const [r, s] of [...byRole.entries()].sort()) {
-      console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d}`);
+      // Per-role means of per-bot means — one hot bot can't skew a role.
+      let spd = 0, en = 0, life = 0, cnt = 0;
+      for (const [id, es] of eStats) {
+        if (roleOf(id) !== r || es.n === 0) continue;
+        spd += es.spd / es.n; en += es.sum / es.n; cnt++;
+        const spans = [...(lifeSpans.get(id) ?? [])];
+        const born = lifeStart.get(id);
+        // The life still running counts too — a bot that died at 7s and
+        // survived the rest of the match isn't a 7-second player.
+        if (born !== undefined) spans.push(simTicks * dt - born);
+        life += spans.length ? spans.reduce((a, b) => a + b, 0) / spans.length : 0;
+      }
+      const gr = (room.flags?.grabLog ?? []).filter((g) => g.at >= runStart && roleOf(g.by) === r).length;
+      const cp = (room.flags?.capLog ?? []).filter((c) => c.capAt >= runStart && roleOf(c.by) === r).length;
+      const rt = (room.flags?.retLog ?? []).filter((x) => x.at >= runStart && roleOf(x.by) === r).length;
+      console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d} ${String(Math.round(sumFor(r, botDmg))).padStart(6)} ${String(gr).padStart(3)} ${String(cp).padStart(2)} ${String(rt).padStart(2)} ${String(sumFor(r, botCk)).padStart(2)}   ${cnt ? (spd / cnt).toFixed(1).padStart(4) : '   -'} ${cnt ? (en / cnt).toFixed(0).padStart(5) : '    -'} ${cnt ? (life / cnt).toFixed(0).padStart(6) : '     -'}`);
     }
     console.log(
       `  kpi-csv: score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
@@ -600,9 +658,10 @@ describe('scenario: warp soak throughput', () => {
       });
     console.log('');
     if (wtable.length) {
-      console.log('  weapon            K  hits  shots   dmg  K/tr-s  K/s');
+      console.log('  weapon            K  hits  shots   acc%   dmg  K/tr-s  K/s');
       for (const { name, r, trigKps, duelKps } of wtable) {
-        console.log(`  ${name.padEnd(14)} ${String(r.kills).padStart(3)} ${String(r.hits).padStart(5)} ${String(r.shots).padStart(6)} ${String(Math.round(r.damage)).padStart(5)} ${trigKps.padStart(7)} ${duelKps.padStart(6)}`);
+        const acc = r.shots > 0 ? ((r.hits / r.shots) * 100).toFixed(0) : '-';
+        console.log(`  ${name.padEnd(14)} ${String(r.kills).padStart(3)} ${String(r.hits).padStart(5)} ${String(r.shots).padStart(6)} ${acc.padStart(5)} ${String(Math.round(r.damage)).padStart(5)} ${trigKps.padStart(7)} ${duelKps.padStart(6)}`);
       }
     } else console.log('  weapon       no credited kills');
     console.log('');
