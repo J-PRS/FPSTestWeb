@@ -88,7 +88,7 @@ export class SheepMeter {
     const proven = this.simMs < (this.provenUntil.get(bot.playerId) ?? 0);
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
-    const delta = this.charge(bot, mech, bonusSpeed, tribesing, proven, { foe, ignoring, hasDest, busy, moving, dt }, why);
+    const delta = this.charge({ bot, mech, bonusSpeed, tribesing, proven, foe, ignoring, hasDest, busy, moving, dt, why });
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
@@ -97,6 +97,39 @@ export class SheepMeter {
     // until proven), so a fresh spawn at the cap isn't a maxed event.
     if (bot.sheep >= 100 && sheepPrev < 100) this.maxed(bot);
     else if (bot.sheep < 100) this.maxedSet.delete(bot.playerId);
+  }
+
+  /** The four charge channels plus the drain/fill rate — split from
+   *  tick() so each branch reads as a named debit on the ledger. */
+  private charge(a: {
+    bot: SheepBody; mech: number; bonusSpeed: number; tribesing: boolean; proven: boolean;
+    foe: boolean; ignoring: boolean; hasDest: boolean; busy: boolean; moving: boolean; dt: number;
+    why: { idle: number; ignore: number; bleed: number; cover: number };
+  }): number {
+    // Drain is rate-capped like the server meter — a high-E burst
+    // (60m/s plummet) used to zero the meter in a second, reading as
+    // a reset. Proven players get the trickle rate when they pause —
+    // slowing down isn't proof of llama-hood, the grace just expires.
+    let delta = a.tribesing ? -Math.min(12 + a.bonusSpeed * 0.6, 30) : a.proven ? 2 : a.moving ? 9 : 18;
+    if (!a.tribesing) a.why.idle += delta * a.dt;
+    // Parked within reach of a visible enemy and holding fire — the
+    // fastest tell. Only counts while NOT tribesing: a bot that's
+    // skiing or repositioning is playing even with its finger off.
+    if (a.foe && a.ignoring && !a.tribesing) { delta += 40; a.why.ignore += 40 * a.dt; }
+    // Bleeding total energy without a fight on screen is the deadstop
+    // signature — Tribes play is converting height↔speed losslessly,
+    // so E stays flat through clean skiing and only drops on
+    // face-plants, wall hits, and pedestrian friction.
+    const bleed = this.energyBleed(a.bot, a.mech, a.foe);
+    a.why.bleed += bleed;
+    a.bot.sheep += bleed;
+    // Coverage is the ground truth — gate it on the weld exemption, not
+    // tribesing: a bot going nowhere accrues even if a stale velocity or
+    // altitude leak is still crediting it energy.
+    const cover = a.busy ? 0 : this.coverageDebit(a.bot, a.hasDest);
+    a.why.cover += cover;
+    a.bot.sheep += cover;
+    return delta;
   }
 
   /** Total mechanical energy (kinetic + potential) is the Tribes

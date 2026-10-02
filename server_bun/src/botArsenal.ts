@@ -196,7 +196,15 @@ export class BotArsenal implements BeamHost {
       const nerve = (s?.courage ?? 0.5);
       // Two self-splashes frag anyone under ~2×SELF_SPLASH_MAX — trading
       // a point-blank disc is only a win while it can't kill you twice.
-      if (wstats?.aoeRadius && dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) {
+      // A stray shell popped early — terrain lip, wandering ball, body
+      // block — lands inside the blast edge regardless of target range.
+      // Below roughly one self-blast's price, ANY aoe primary is a
+      // loaded gun pointed at the holster: swap to a non-explosive.
+      // Nerve scales the floor: heroes fly launchers into the grave.
+      const woundedGate = wstats?.aoeRadius && (
+        (dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) ||
+        hp <= SELF_SPLASH_MAX * (1.5 - nerve));
+      if (woundedGate) {
         for (const slot of ['side', 'near', 'mid', 'far'] as const) {
           const alt = lo[slot];
           if (alt !== wt && alt !== WeaponType.HealBeam && !getWeaponStats(alt)?.aoeRadius) return alt;
@@ -212,6 +220,12 @@ export class BotArsenal implements BeamHost {
    *  target is only as findable as memory says. */
   throwBelt(p: BotBody): void {
     if (!this.lastHunt(p.id)) return;
+    // Same wounded-explosive gate as the primary pick: a bot under one
+    // self-blast's price doesn't throw ordnance that can pop short.
+    const s = this.skillOfCb(p.id);
+    const nerve = s?.courage ?? 0.5;
+    const hp = this.room.players.getAllPlayers().get(p.id)?.health ?? 100;
+    if (hp <= SELF_SPLASH_MAX * (1.5 - nerve)) return;
     const seen = this.huntSeenCb(p.id);
     if (seen) this.lobAt(p, seen);
   }
