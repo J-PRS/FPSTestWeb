@@ -28,6 +28,12 @@ export class BotMoves {
   jetWhy = '-';
   /** Last computed jet bit — what actually reached the input layer. */
   jetOut = false;
+  /** Catch-breath state: a climber with an empty tank perches on the
+   *  face (walk key released, friction holds the slide) while the tank
+   *  refills — staged climbing, the human ledge-rest. Without it the
+   *  held forward input pushes him down the whole face each cycle and
+   *  a ~70m wall reads as an absolute ceiling (katabatic moat). */
+  private breath = false;
   holdFor(): number { return this.jetHold; }
 
   hints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
@@ -65,6 +71,16 @@ export class BotMoves {
     // Jet when the way ahead climbs faster than running covers — or the
     // hunt target is clearly airborne and pursuit needs altitude.
     const uphill = rise > 2;
+    // Catch breath mid-face: tank dry on a steep uphill with the goal
+    // still above → stand the wall (park releases the walk key so ground
+    // friction fights the slide instead of pushing downhill) until the
+    // tank refills, then burn again. Each cycle banks net altitude.
+    const tgtAbove = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > 8;
+    if (!ctx.posted && ctx.energy !== undefined && !airborne && rise > 3 && tgtAbove) {
+      if (this.breath) this.breath = ctx.energy < 38;
+      else this.breath = ctx.energy < 12;
+      if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
+    } else this.breath = false;
     // Jet respects the tank — below the reserve the bot saves energy for
     // skills rather than hovering dry at the wall.
     const tanked = ctx.energy === undefined || ctx.energy > 15;
