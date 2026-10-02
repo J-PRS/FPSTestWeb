@@ -15,6 +15,7 @@ import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
 import {
   spawnBall, spawnCrawler, spawnFlyer, spawnRoller, spawnSlither,
+  spawnBaneling, spawnTotem,
   spawnBolt, spawnMover, spawnShell,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
 } from './simKit.js';
@@ -443,6 +444,96 @@ function speciesPack(scene: THREE.Scene): LabInstance {
   lab.sync = () => {
     world.target!.x = Math.cos(world.time * 0.3) * 18;
     world.target!.z = Math.sin(world.time * 0.5) * 18;
+    baseSync();
+    preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
+  };
+  const baseDispose = lab.dispose.bind(lab);
+  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  return lab;
+}
+
+/* ------------------------------------------------------------------ */
+/* Totem field — real creatureTotem: aim → charge (locked line shows)   */
+/* → fire → blink relocate. The beam drawn is the sim's committed lock. */
+/* ------------------------------------------------------------------ */
+
+function totemField(scene: THREE.Scene): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
+  const events = new Map<string, number>();
+  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const totems = [
+    spawnTotem({ id: 1, pos: { x: -20, y: 0, z: -10 }, onEvent }, world),
+    spawnTotem({ id: 2, pos: { x: 22, y: 0, z: -6 }, onEvent }, world),
+    spawnTotem({ id: 3, pos: { x: 0, y: 0, z: 26 }, uber: true, onEvent }, world),
+  ];
+
+  const preyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x5ad0ff }),
+  );
+  scene.add(preyMesh);
+
+  const lab = labOf(totems, world, {
+    dump() {
+      const rows: [string, string][] = [
+        ['totems', String(totems.length)],
+        ['charging', String(totems.filter(t => t.sim.state === 'charge').length)],
+        ['shots', String(totems.reduce((n, t) => n + t.sim.shotsFired, 0))],
+      ];
+      for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
+      return rows;
+    },
+  });
+  const baseSync = lab.sync.bind(lab);
+  lab.sync = () => {
+    world.target!.x = Math.cos(world.time * 0.3) * 14;
+    world.target!.z = Math.sin(world.time * 0.45) * 14;
+    baseSync();
+    preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
+  };
+  const baseDispose = lab.dispose.bind(lab);
+  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  return lab;
+}
+
+/* ------------------------------------------------------------------ */
+/* Baneling rush — real creatureBaneling: fuse-lit charge at the prey,  */
+/* pop events counted as they go off.                                   */
+/* ------------------------------------------------------------------ */
+
+function banelingRush(scene: THREE.Scene): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
+  const events = new Map<string, number>();
+  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const pack = Array.from({ length: 7 }, (_, i) => {
+    const a = (i / 7) * Math.PI * 2;
+    return spawnBaneling({
+      id: i, uber: i === 0,
+      pos: { x: Math.cos(a) * 28, y: 0, z: Math.sin(a) * 28 },
+      onEvent,
+    }, world);
+  });
+
+  const preyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x5ad0ff }),
+  );
+  scene.add(preyMesh);
+
+  const lab = labOf(pack, world, {
+    dump() {
+      const rows: [string, string][] = [
+        ['pack', String(pack.filter(b => !b.sim.dead).length)],
+        ['chasing', String(pack.filter(b => b.sim.state === 'chase').length)],
+      ];
+      for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
+      return rows;
+    },
+  });
+  const baseSync = lab.sync.bind(lab);
+  lab.sync = () => {
+    world.target!.x = Math.cos(world.time * 0.35) * 15;
+    world.target!.z = Math.sin(world.time * 0.5) * 15;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
@@ -902,5 +993,7 @@ export const SCENARIOS: LabScenario[] = [
   { id: 'crawler-pack', name: 'CRAWLER PACK', blurb: 'real creatureSim hunt: wander/chase/windup/pounce', create: crawlerPack },
   { id: 'flyer-ring', name: 'FLYER RING', blurb: 'real creatureFlyer: rakks + gnats orbit/dive/climb a prey point', create: flyerRing },
   { id: 'species-pack', name: 'SPECIES PACK', blurb: 'all ground families hunting one prey: crawler/roller/snake', create: speciesPack },
+  { id: 'totem-field', name: 'TOTEM FIELD', blurb: 'real totemSim: charge telegraph → locked beam fire → blink relocate', create: totemField },
+  { id: 'baneling-rush', name: 'BANELING RUSH', blurb: 'real banelingSim: fuse-lit rush + pop on the prey point', create: banelingRush },
   { id: 'ski-run', name: 'SKI RUN', blurb: 'real MoveSim skiing a heightfield hill', create: skiRun },
 ];

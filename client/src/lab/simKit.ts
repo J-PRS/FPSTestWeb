@@ -11,6 +11,8 @@ import { makeSimCrawler, stepCrawler, commitTarget, type SimCrawler } from '../.
 import { makeSimFlyer, stepFlyer, type SimFlyer } from '../../../shared/creatureFlyer.js';
 import { makeSimRoller, stepRoller, type SimRoller } from '../../../shared/creatureRoller.js';
 import { makeSimSlither, stepSlither, type SimSlither } from '../../../shared/creatureSlither.js';
+import { makeSimBaneling, stepBaneling, type SimBaneling } from '../../../shared/creatureBaneling.js';
+import { makeSimTotem, stepTotem, TOTEM_SIM, type SimTotem } from '../../../shared/creatureTotem.js';
 import { projStep, segFieldHit, type SimProjectile } from '../../../shared/projSim.js';
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
@@ -279,6 +281,69 @@ export function spawnSlither(o: { id: number; pos: { x: number; y: number; z: nu
     commitTarget(s, 'prey', w.target);
     return stepSlither(s, dt, w.field, w.target, true);
   }, mesh, 0x7ad68f, world, o.onEvent);
+}
+
+export function spawnBaneling(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimBaneling } {
+  const c = makeSimBaneling(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'baneling');
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.7, 9, 9), new THREE.MeshBasicMaterial({ color: 0xc8e04d }));
+  return groundSimSpawn(c, (s, dt, w) => {
+    commitTarget(s, 'prey', w.target);
+    return stepBaneling(s, dt, w.field, w.target, true);
+  }, mesh, 0xc8e04d, world, o.onEvent);
+}
+
+/* ---------------------------------- */
+/* Totem — the committed-beam sniper: charge telegraphs the locked      */
+/* line, 'fire' discharges it, blink relocates. The lab draws the       */
+/* committed lockDir/lockDist — exactly what authority + predictors see. */
+/* ---------------------------------- */
+
+const TOTEM_STATE_COLOR: Record<string, number> = {
+  aim: 0x8aa0b5, charge: 0xffd24d, blinkOut: 0x5a4d6a, blinkIn: 0x9a86c8,
+};
+
+export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimTotem } {
+  const c = makeSimTotem(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'totem');
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 1.0, 4.4, 4),
+    new THREE.MeshBasicMaterial({ color: TOTEM_STATE_COLOR.aim! }),
+  );
+  world.scene.add(body);
+  const beamGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const beam = new THREE.Line(beamGeo, new THREE.LineBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0 }));
+  beam.frustumCulled = false;
+  world.scene.add(beam);
+  let flash = 0;
+  return {
+    sim: c, mesh: body,
+    tick(dt, w) {
+      commitTarget(c, 'prey', w.target);
+      const ev = stepTotem(c, dt, w.field, w.target, true);
+      if (ev) { o.onEvent?.(ev); if (ev === 'fire') flash = 0.35; }
+      flash = Math.max(0, flash - dt);
+    },
+    sync() {
+      body.position.set(c.x, c.y + 2.2 * c.radius, c.z);
+      body.rotation.y = Math.PI / 4;
+      body.scale.setScalar(c.radius);
+      (body.material as THREE.MeshBasicMaterial).color.setHex(
+        c.dead ? 0x333a44 : TOTEM_STATE_COLOR[c.state] ?? 0x8aa0b5);
+      // Eye rides at EYE_HEIGHT·radius — same origin the client renders.
+      const eye = { x: c.x, y: c.y + TOTEM_SIM.EYE_HEIGHT * c.radius, z: c.z };
+      const pts = beamGeo.attributes.position!;
+      pts.setXYZ(0, eye.x, eye.y, eye.z);
+      pts.setXYZ(1, eye.x + c.lockDirX * c.lockDist, eye.y + c.lockDirY * c.lockDist, eye.z + c.lockDirZ * c.lockDist);
+      pts.needsUpdate = true;
+      (beam.material as THREE.LineBasicMaterial).opacity =
+        c.state === 'charge' ? 0.45 : flash > 0 ? 1 : 0;
+    },
+    dump: () => [['state', c.state], ['shots', String(c.shotsFired)]],
+    dispose() {
+      world.scene.remove(body, beam);
+      body.geometry.dispose();
+      beamGeo.dispose();
+    },
+  };
 }
 
 /* ---------------------------------- */
