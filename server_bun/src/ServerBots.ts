@@ -105,6 +105,9 @@ export class ServerBots {
   private lastOut = new Map<string, BrainOut>();
   /** Visible-enemy-present flag from the last think (epoch ms expiry). */
   readonly foeNear = new Map<string, number>();
+  /** FPS_BOT_PROF=1 stage timers — flagGoal/build/think/fire/drive.
+   *  Read-only accumulate; the soak prints the rollup. */
+  readonly stageProf = process.env.FPS_BOT_PROF ? new Array<number>(5).fill(0) : null;
   private thinkCounter = 0;
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
@@ -473,13 +476,18 @@ export class ServerBots {
       this.thinkCounter = (this.thinkCounter + 1) % ServerBots.THINK_DIV;
       let out = this.lastOut.get(id);
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
+        const prof = this.stageProf;
+        let tm = prof ? performance.now() : 0;
         const goal = this.sense.flagGoal(p, brain.dutyLevel);
+        if (prof) { prof[0]! += performance.now() - tm; tm = performance.now(); }
         const ctx = this.sense.build(id, p, goal, now, brain.skill);
+        if (prof) { prof[1]! += performance.now() - tm; tm = performance.now(); }
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
         const pk = ctx.pickup;
         const nuggetNear = !!pk && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
+        if (prof) { prof[2]! += performance.now() - tm; tm = performance.now(); }
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
         // as a remark rather than spam.
@@ -488,13 +496,16 @@ export class ServerBots {
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, goal, now, sh0, nuggetNear);
+        if (prof) { prof[3]! += performance.now() - tm; tm = performance.now(); }
         this.supportNade(id, p, brain, now, nuggetNear);
         this.healAlly(id, p, brain, now);
         this.lastOut.set(id, out);
       }
+      const tm2 = this.stageProf ? performance.now() : 0;
       const sh = this.room.moveSim.simState(id);
       if (sh) this.driveMove(id, p, out, sh, dt, now);
       else if (this.legacyMove(id, p, out.dest, dt)) continue;
+      if (this.stageProf) this.stageProf[4]! += performance.now() - tm2;
 
       this.checkStuck(id, p, brain, now);
 

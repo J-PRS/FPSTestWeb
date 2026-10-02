@@ -128,6 +128,24 @@ describe('scenario: warp soak throughput', () => {
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
     let simTicks = 0;
+    // FPS_SIM_PROF=1: per-sim wall-time rollup — room.sims entries are
+    // anonymous arrows, so labels ride the construction order in Room.ts
+    // (bots/flags/pickups/arena/deployables/projectiles/moveSim/health).
+    const simProf = process.env.FPS_SIM_PROF
+      ? (() => {
+        const names = ['bots', 'flags', 'pickups', 'arena', 'deployables', 'projectiles', 'moveSim', 'health'];
+        const acc = new Array<number>(room.sims.length + 2).fill(0);
+        room.sims.forEach((s, i) => {
+          const inner = s.tick.bind(s);
+          s.tick = (d: number) => { const t = performance.now(); inner(d); acc[i]! += performance.now() - t; };
+        });
+        const cs = room.creatureSim.step.bind(room.creatureSim);
+        room.creatureSim.step = (d: number) => { const t = performance.now(); cs(d); acc[room.sims.length]! += performance.now() - t; };
+        const bs = room.ballSim.step.bind(room.ballSim);
+        room.ballSim.step = (d: number) => { const t = performance.now(); bs(d); acc[room.sims.length + 1]! += performance.now() - t; };
+        return { acc, names: [...names.slice(0, room.sims.length), 'creatureSim', 'ballSim'] };
+      })()
+      : null;
     const dt = 0.05;                      // 20Hz — matches the live tick
     const w = watch(room, () => simTicks * dt);
     if (mode === 'ctf') expect(room.flags).not.toBeNull();
@@ -840,6 +858,18 @@ describe('scenario: warp soak throughput', () => {
       `(${(simSecs / 60).toFixed(1)} sim-min) in ${(wallMs / 1000).toFixed(1)} wall-s ` +
       `— ${ratio.toFixed(0)}x real-time; ${alive}/${respawned} alive`,
     );
+    if (simProf) {
+      const total = simProf.acc.reduce((s, v) => s + v, 0) || 1;
+      console.log('  simProf ' + simProf.names
+        .map((n, i) => `${n} ${(simProf.acc[i]! / total * 100).toFixed(0)}%`)
+        .join(' · '));
+    }
+    const botProf = room.bots?.stageProf;
+    if (botProf) {
+      const bt = botProf.reduce((s, v) => s + v, 0) || 1;
+      const bn = ['flagGoal', 'build', 'think', 'fire', 'drive'];
+      console.log('  botProf ' + bn.map((n, i) => `${n} ${(botProf[i]! / bt * 100).toFixed(0)}%`).join(' · '));
+    }
     // Per-role stat lines — tuning needs "do cappers cap" and "does the
     // bombardier kill the stand guards", not team totals. roleInfo is
     // the live assignment map the rebalance owns.

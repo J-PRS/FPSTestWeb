@@ -159,20 +159,6 @@ export class ServerBotSenses {
     return out;
   }
 
-  /** Live teammates only — the rally channel. An enemy body is the
-   *  worst place a hurt bot could fold onto, so separation keeps
-   *  reading `others` while retreat reads this. FFA → empty (nobody
-   *  to rally to). */
-  private alliesOf(p: { id: string; team?: string }): Vec3[] {
-    if (!p.team) return [];
-    const out: Vec3[] = [];
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead || q.team !== p.team) continue;
-      out.push(q.position);
-    }
-    return out;
-  }
-
   /** Positions of every other live player — the brain's separation
    *  sense, so a squad spreads instead of stacking on one slot. */
   othersOf(p: { id: string }): Vec3[] {
@@ -182,6 +168,27 @@ export class ServerBotSenses {
       out.push(q.position);
     }
     return out;
+  }
+
+  /** One pass producing all three per-think lists — build() ran the
+   *  same player scan three times (enemies/allies/others); that's the
+   *  top line of the bot-tick profile (~29% of room wall-time). */
+  private partiesOf(p: { id: string; team?: string }): { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[] } {
+    const enemies: BotEnemy[] = [], allies: Vec3[] = [], others: Vec3[] = [];
+    const teams = !!this.room.modeSpec?.teams;
+    for (const q of this.room.players.getAllPlayers().values()) {
+      if (q.id === p.id || q.isDead) continue;
+      others.push(q.position);
+      if (teams ? q.team !== p.team : !q.isBot) {
+        if (!(q.status & STATUS.CLOAK))
+          enemies.push({ id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff });
+      } else if (p.team && q.team === p.team) allies.push(q.position);
+    }
+    for (const b of this.room.ballSim.roster())
+      enemies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
+    for (const c of this.room.creatureSim.roster())
+      enemies.push({ id: `c:${c.id}`, pos: c.position, vel: c.velocity, alive: true, aimY: 0 });
+    return { enemies, allies, others };
   }
 
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
@@ -641,11 +648,12 @@ export class ServerBotSenses {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
+    const parties = this.partiesOf(p);
     const ctx: BrainCtx = {
       id: p.id,
       pos: p.position,
       vel: p.velocity,
-      enemies: this.enemiesOf(p),
+      enemies: parties.enemies,
       objective: goal?.pos ?? null,
       infiltrating: goal?.infiltrating ?? false,
       running: goal?.running ?? false,
@@ -671,8 +679,8 @@ export class ServerBotSenses {
         this.field ? hmHeight(this.field, x, z) : p.position.y,
         this.room.moveSim.structureTop(x, z),
       ),
-      others: this.othersOf(p),
-      allies: this.alliesOf(p),
+      others: parties.others,
+      allies: parties.allies,
       // Mortar heavies acquire siege-range targets; everyone else holds
       // the duel band. The shared brain takes max(FIRE_RANGE, this).
       engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,
