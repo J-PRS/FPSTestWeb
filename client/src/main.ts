@@ -42,7 +42,8 @@ import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
-import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap } from './game/net/world.js';
+import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, type MapSnapshot } from './game/net/world.js';
+import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
@@ -181,7 +182,7 @@ async function init(): Promise<void> {
   // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
-  const mode = urlParams.mode;
+  const mode = urlParams.mode ?? undefined;
   // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic';
@@ -204,27 +205,7 @@ async function init(): Promise<void> {
   profiler.markTime('networkInit');
   wireNetworkLocal();
 
-  // Initialize demo system with player/input data providers
-  demoManager = new DemoManager();
-  const httpUrl = (await serverEndpoints).httpUrl;
-  Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
-  demoManager.setServerUrl(httpUrl);
-  const { playerData, inputData } = playerProviders(player);
-  demoManager.setDataProviders(playerData, inputData);
-
-  // Wire cool shots panel
-  const _coolShots = new CoolShotsPanel({
-    demoManager,
-    overlay,
-    requestLock,
-  });
-  void _coolShots;
-
-  // Demo playback lifecycle: owns playback registries + all onPlayback* handlers
-  demoLifecycle = makeDemoLifecycle();
-  demoLifecycle.wireDemoHandlers(demoManager, () => {
-    demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
-  });
+  await initDemo();
 
   hud = new HUD();
   // Team-score strip only in team modes — dm painted a permanent
@@ -273,17 +254,53 @@ async function init(): Promise<void> {
     entities: () => entities,
   });
 
-  // Connect to server (non-blocking for offline mode). Classic is a solo
-  // ruleset — connecting would hand ball ownership to the server sim,
-  // which enrages and spawns the full roster behind your back.
-  // MODE=OFF is solo too: the picker labels it "(solo)", but the empty
-  // mode still joined the default room and the server's move judge kept
-  // correcting the player — the warp complaints. Only a ?room= link or a
-  // ?p2p= code pulls a no-mode session online.
+  await connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
+
+
+  // Frame loop — everything mutable is passed via deps getters
+  gameLoop = makeGameLoop();
+  profiler.markTime('initComplete');
+
+  profiler.printSummary();
+
+  gameLoop.start();
+}
+
+/** Demo recorder + cool-shots panel + playback lifecycle — everything
+ *  capture-related hangs off this one wiring pass. */
+async function initDemo(): Promise<void> {
+  demoManager = new DemoManager();
+  const httpUrl = (await serverEndpoints).httpUrl;
+  Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
+  demoManager.setServerUrl(httpUrl);
+  const { playerData, inputData } = playerProviders(player);
+  demoManager.setDataProviders(playerData, inputData);
+
+  const _coolShots = new CoolShotsPanel({
+    demoManager,
+    overlay,
+    requestLock,
+  });
+  void _coolShots;
+
+  demoLifecycle = makeDemoLifecycle();
+  demoLifecycle.wireDemoHandlers(demoManager, () => {
+    demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
+  });
+}
+
+/** Connect to server (non-blocking for offline mode). Classic is a solo
+ *  ruleset — connecting would hand ball ownership to the server sim,
+ *  which enrages and spawns the full roster behind your back.
+ *  MODE=OFF is solo too: the picker labels it "(solo)", but the empty
+ *  mode still joined the default room and the server's move judge kept
+ *  correcting the player — the warp complaints. Only a ?room= link or a
+ *  ?p2p= code pulls a no-mode session online. */
+async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classicMode: boolean, mode: string | undefined): Promise<void> {
   const soloMode = !mode && !urlParams.room && !urlParams.p2p;
   // The probed saved map was already primed as boot terrain — apply its
   // structures/arena/interiors/sky now that the net ctx exists.
-  if (!classicMode && !soloMode) bootApplySavedMap(netCtx, bootSaved?.map ?? null);
+  if (!classicMode && !soloMode) bootApplySavedMap(netCtx, savedMap);
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
@@ -298,15 +315,6 @@ async function init(): Promise<void> {
   // Auto-start demo recording so cool shots are captured seamlessly
   demoManager?.startRecording();
   demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
-
-
-  // Frame loop — everything mutable is passed via deps getters
-  gameLoop = makeGameLoop();
-  profiler.markTime('initComplete');
-
-  profiler.printSummary();
-
-  gameLoop.start();
 }
 
 // Offline death path — the server's kill+respawn round-trip replicated

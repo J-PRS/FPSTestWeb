@@ -8,8 +8,10 @@ import type { WebGLRenderer } from 'three';
 export function createPerfHud() {
   const el = document.createElement('pre');
   el.style.cssText =
-    // Sits directly above the stats.js chart row (40px + 48px chart height).
-    'position:fixed;bottom:94px;right:20px;z-index:10000;display:none;' +
+    // Sits directly above the stats.js chart row — both offsets are
+    // reserved debug zones in hud.css (--z-br-3/-4) so the panel can't
+    // land on the entity-counts or shot-feed rows.
+    'position:fixed;bottom:var(--z-br-4);right:20px;z-index:10000;display:none;' +
     'color:#8f8;background:rgba(0,0,0,0.55);padding:4px 8px;font:11px/1.35 monospace;' +
     'margin:0;pointer-events:none;text-align:right;';
   document.body.appendChild(el);

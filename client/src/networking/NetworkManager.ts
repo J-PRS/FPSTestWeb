@@ -65,12 +65,12 @@ export class NetworkManager {
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
-  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => void) | null = null;
+  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string) => void) | null = null;
   /** Server refused a claim — `health` is the authoritative resync value
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
-  public onProjectileDestroyed: ((projectileId: string) => void) | null = null;
+  public onProjectileDestroyed: ((projectileId: string, shotId?: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
@@ -321,9 +321,9 @@ export class NetworkManager {
     knockback: (data) => this.onKnockback?.(data.position, data.force, data.pull),
     jump: (data) => this.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data) => this.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data) => this.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType),
+    projectileCreated: (data) => this.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId),
     playerShot: (data) => this.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
-    projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId),
+    projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
     correction: (data) => this.handleCorrection(data),
@@ -630,7 +630,7 @@ export class NetworkManager {
   sendShot(a: {
     targetId: string | null; position?: { x: number; y: number; z: number };
     velocity?: { x: number; y: number; z: number }; timestamp?: number;
-    projectileId?: string | null; weaponType?: number; airtime?: number;
+    projectileId?: string | null; weaponType?: number; airtime?: number; shotId?: string;
   }): void {
     this.send({ type: 'shot', ...a });
   }
@@ -643,7 +643,7 @@ export class NetworkManager {
   sendAOEShot(a: {
     position: { x: number; y: number; z: number }; weaponType: number;
     excludeTargetId?: string | null; projectileId?: string | null;
-    airtime?: number; power?: number; directHit?: boolean;
+    airtime?: number; power?: number; directHit?: boolean; shotId?: string;
   }): void {
     this.send({
       type: 'aoeShot',
@@ -668,8 +668,8 @@ export class NetworkManager {
     this.send({ type: 'shotFired', ...a });
   }
 
-  sendProjectileDestroy(projectileId: string): void {
-    this.send({ type: 'projectileDestroy', projectileId });
+  sendProjectileDestroy(projectileId: string, shotId?: string): void {
+    this.send({ type: 'projectileDestroy', projectileId, shotId });
   }
 
   /** Deployable plant claim — sent when the pod lands and seats, so the
@@ -707,6 +707,10 @@ export class NetworkManager {
    *  clamps and applies it, then broadcasts the authoritative health. */
   sendEnvironmentDamage(amount: number, attacker?: string): void {
     if (!this.connected) { this.localAuthority?.envDamage(amount); return; }
+    // Every self-reported damage claim logs — this channel carries blast
+    // self-splash, creature bites, and bot melee, so the buffer answers
+    // "did the client even claim it?" before any server-side question.
+    logger.info(`envDamage claim: ${Math.round(amount * 10) / 10}`, { attacker });
     this.send({ type: 'environmentDamage', amount, attacker });
   }
 
@@ -723,7 +727,14 @@ export class NetworkManager {
     this.send({ type: 'crawlerHit', id, damage, kx, ky, kz });
   }
 
+  private creatureHitLogN = 0;
   sendCreatureHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    // Sampled claim log (1-in-16): chaingun-rate creature fire would flood
+    // the buffer; a periodic line still proves claims are flowing and
+    // carries the damage values being asserted.
+    if ((this.creatureHitLogN++ & 15) === 0) {
+      logger.info(`creatureHit claim x${this.creatureHitLogN}`, { id, damage });
+    }
     this.send({ type: 'creatureHit', id, damage, kx, ky, kz });
   }
 

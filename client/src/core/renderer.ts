@@ -15,7 +15,7 @@ import {
 import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
-import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL } from './rendererShaders.js';
+import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL } from './rendererShaders.js';
 
 export interface RendererSetup {
   renderer: THREE.WebGLRenderer;
@@ -210,10 +210,19 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
 // explosions, nuggets) push the brightest colors, the lit terrain and sky
 // stay under it, so bloom never washes the frame. (A second composer and
 // SelectiveBloomEffect both proved fragile here — keep the simple one.)
+// SafeBloomEffect: same BloomEffect, but the merge shader zeroes
+// non-finite bloom-texture samples instead of letting a NaN write black
+// through the SCREEN blend — see BLOOM_MERGE_GLSL.
+class SafeBloomEffect extends BloomEffect {
+  constructor(opts: ConstructorParameters<typeof BloomEffect>[0]) {
+    super(opts);
+    this.setFragmentShader(BLOOM_MERGE_GLSL);
+  }
+}
 function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     camera: THREE.PerspectiveCamera, modes: RenderModes) {
   const { bloomEnabled, postproEnabled, pmode, dirtOff } = modes;
-  const bloomEffect = new BloomEffect({
+  const bloomEffect = new SafeBloomEffect({
     mipmapBlur: true,
     // HDR linear frame: authored/emitting pixels sit at or above ~1
     // luminance (sun disc runs far past it) — 1.2 + a wide knee keeps

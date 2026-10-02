@@ -71,7 +71,7 @@ export const SPRINKLER_SPREAD = 0.05; // per-shot cone jitter (dir-offset units,
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
 export const CANNON_RATE = 0.55; // Serious Sam cadence — satisfying thump-thump
-export const RKT_RATE = 0.85; // RPG cadence — deliberate, each missile is an event
+export const RKT_RATE = 2.5; // RPG cadence — slower than mortar, one missile IS the event
 // Hold-out sidearms (G/T/B) — pulled while the key is held, holstered on release
 export const PISTOL_RATE = 0.22;  // snappy semi-auto — ~4.5 rps while held
 export const REVOLVER_RATE = 0.6; // hand-cannon cadence — deliberate thumps

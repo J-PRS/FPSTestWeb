@@ -239,6 +239,31 @@ export const SANITIZE_GLSL = /* glsl */ `
     }
   `;
 
+// Bloom merge shader — postprocessing's stock version is one line:
+// `outputColor = texture2D(map, uv) * intensity`, SCREEN-blended over the
+// frame. A NaN anywhere in the mipmap-blur texture (Inf-Inf inside a blur
+// tap, a stale mip level, driver UB on garbage input) therefore writes a
+// NaN pixel — pure black, often a huge diamond where one bad deep-mip
+// texel upsamples. Guard the SAMPLE, not the frame: fold non-finite
+// channels to 0 so the region just loses its halo instead of going black.
+// This is identical to bloom_default otherwise.
+export const BLOOM_MERGE_GLSL = /* glsl */ `
+    #ifdef FRAMEBUFFER_PRECISION_HIGH
+    uniform mediump sampler2D map;
+    #else
+    uniform lowp sampler2D map;
+    #endif
+    uniform float intensity;
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      vec4 t = texture2D(map, uv);
+      t.r = t.r >= 0.0 ? min(t.r, 64.0) : 0.0;
+      t.g = t.g >= 0.0 ? min(t.g, 64.0) : 0.0;
+      t.b = t.b >= 0.0 ? min(t.b, 64.0) : 0.0;
+      t.a = t.a >= 0.0 ? t.a : 0.0;
+      outputColor = t * intensity;
+    }
+  `;
+
 // Lens dirt (Unity's Bloom Dirtiness): a screen-fit smudge/dust texture
 // multiplied by the POST-bloom luminance — the merged frame already
 // carries the halo, so excess-over-threshold re-boosts exactly where

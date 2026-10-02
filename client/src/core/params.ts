@@ -47,4 +47,8 @@ export const urlParams = {
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */
   get net() { return live().get('net'); },
+  /** ?fxfull — debug A/B: batched FX buffers (ribbon trails, ball dots)
+   *  upload the whole attribute instead of the marked range. If trails
+   *  appear with this set, the partial-upload path is the break. */
+  get fxfull() { return live().has('fxfull'); },
 };
