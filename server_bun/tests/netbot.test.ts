@@ -3,7 +3,7 @@ import { GameServer } from '../src/GameServer.ts';
 import type { WebSocketData } from '../src/types.ts';
 import { NetClient } from '../../tools/netbot/netClient.ts';
 import { NetBot } from '../../tools/netbot/bot.ts';
-import { LatencyLink } from '../../tools/netbot/latency.ts';
+import { LatencyLink, type LatencyOpts } from '../../tools/netbot/latency.ts';
 
 // Real-socket tier: an actual Bun.serve + actual WebSocket clients, so the
 // join/tick/claim pipeline runs the same code path a browser would — the
@@ -47,9 +47,9 @@ describe('netbot — real clients over real sockets', () => {
     env = null;
   });
 
-  const spawn = async (n: number, jitter: number, opts: { hopEveryMs?: number } = {}) => {
+  const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number } = {}) => {
     for (let i = 0; i < n; i++) {
-      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink({ pingMs: 20, jitterMs: jitter, lossRate: 0 }));
+      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link));
       const bot = new NetBot(nc, opts);
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
@@ -61,9 +61,12 @@ describe('netbot — real clients over real sockets', () => {
     for (const b of bots) b.bot.start();
   };
 
+  const rejectsOf = () => bots.map((b) => `${b.nc.id}: ${[...b.nc.tel.rejects.entries()].map(([r, n]) => `${r} x${n}`).join(', ') || 'none'}`).join(' | ');
+  const totalRejects = () => bots.reduce((a, b) => a + [...b.nc.tel.rejects.values()].reduce((p, q) => p + q, 0), 0);
+
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {
     env = bootServer();
-    await spawn(4, 150); // heavy jitter: claims race spawns constantly
+    await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }); // heavy jitter: claims race spawns constantly
     await sleep(8000);
     await sleep(400); // let in-flight claims land
 
@@ -85,7 +88,7 @@ describe('netbot — real clients over real sockets', () => {
 
   it('a mid-match room hop keeps hits flowing (per-room seq reset)', async () => {
     env = bootServer();
-    await spawn(4, 60, { hopEveryMs: 4000 });
+    await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { hopEveryMs: 4000 });
     await sleep(9000);
 
     const hopped = bots.some((b) => b.nc.tel.hops > 0);
@@ -99,5 +102,49 @@ describe('netbot — real clients over real sockets', () => {
     // Stale-seq drops across a hop mean the watermark never reset — the
     // session-long damage blackout this suite exists to prevent.
     expect(dedupStorms).toBeLessThan(4);
+  }, 30000);
+
+  it('a harsh WAN (100ms + 300 jitter + 5% loss) still resolves every claim it sees', async () => {
+    env = bootServer();
+    await spawn(4, { pingMs: 100, jitterMs: 300, lossRate: 0.05 });
+    await sleep(9000);
+    await sleep(600); // drain the deep in-flight window
+
+    const dealt = bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);
+    const rejects = bots.reduce((a, b) => a + [...b.nc.tel.rejects.values()].reduce((p, q) => p + q, 0), 0);
+    const lost = bots.reduce((a, b) => a + b.nc.link.dropped, 0);
+
+    // Loss drops messages before the server ever sees them — rejects
+    // should still be zero because nothing malformed survives, only
+    // vanished. Assert the link actually dropped (guard against a
+    // silently off loss knob).
+    expect(lost).toBeGreaterThan(0);
+    expect(dealt).toBeGreaterThan(0);
+    if (rejects) console.log(`  rejects: ${rejectsOf()}`);
+    expect(rejects).toBe(0);
+  }, 30000);
+
+  it('a dropped socket rejoins cleanly — post-reconnect claims resolve', async () => {
+    env = bootServer();
+    await spawn(2, { pingMs: 20, jitterMs: 60, lossRate: 0 });
+    await sleep(3500);
+
+    const victim = bots[0]!;
+    const gsBefore = victim.nc.tel.gameStates;
+    victim.nc.ws?.close();
+    await sleep(300);
+    await victim.nc.connect();
+    await sleep(3500);
+    await sleep(300);
+
+    const rejects = totalRejects();
+    if (rejects) console.log(`  rejects: ${rejectsOf()}`);
+    expect(victim.nc.tel.gameStates).toBeGreaterThan(gsBefore);
+    expect(victim.nc.closed).toBe(false);
+    expect(bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0)).toBeGreaterThan(0);
+    // The bug this pins: a stale gameStates>0 used to un-gate gameplay
+    // before the new handshake — the server would 1008 the socket and
+    // rejects would never even arrive to count.
+    expect(rejects).toBe(0);
   }, 30000);
 });

@@ -56,6 +56,15 @@ export class NetClient {
    *  sends during the gap carry the OLD room's position, which the new
    *  room's server rightly rejects as an implausible spawn. */
   private pendingRoom = false;
+  /** True only after a gameState arrives on THIS socket — tel.gameStates
+   *  is cumulative across reconnects, so gating join/gameplay on it
+   *  would let a fresh socket emit gameplay before its handshake and
+   *  get closed on the spot. */
+  private joined = false;
+  /** Server-issued seat token — reclaiming a grace-period slot (or any
+   *  already-claimed id) requires presenting it in the next join, same
+   *  as the browser client's localStorage 'fps-session-token' path. */
+  private sessionToken?: string;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private joinTimer: ReturnType<typeof setInterval> | null = null;
   pingMs = 0;
@@ -72,19 +81,23 @@ export class NetClient {
       const ws = new WebSocket(this.url);
       ws.binaryType = 'arraybuffer';
       this.ws = ws;
+      this.joined = false;
+      this.closed = false;
+      this.closeInfo = '';
       ws.onopen = () => {
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
         // the same failure a real client's retry button papers over.
-        ws.send(JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws' }));
+        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws', token: this.sessionToken });
+        ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
-          if (this.tel.gameStates > 0 || ++tries > 10) { if (this.joinTimer) clearInterval(this.joinTimer); return; }
+          if (this.joined || ++tries > 10) { if (this.joinTimer) clearInterval(this.joinTimer); return; }
           // The handshake bypasses the latency link — jittering the join
           // would let gameplay messages beat it, and the server rightly
           // closes any socket whose first word isn't 'join'.
           if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws' }));
+            ws.send(joinMsg);
           }
         }, 400);
         this.pingTimer = setInterval(() => this.send({ type: 'ping', timestamp: Date.now() }), 2000);
@@ -107,7 +120,7 @@ export class NetClient {
     // Gameplay sends are gated on the join handshake landing — the server
     // closes any socket whose first word isn't 'join', so a jittered ping
     // or position arriving early would kill the connection outright.
-    if (!this.ws || this.tel.gameStates === 0 || (this.pendingRoom && msg.type !== 'switchRoom')) return;
+    if (!this.ws || !this.joined || (this.pendingRoom && msg.type !== 'switchRoom')) return;
     this.link.send(this.ws, JSON.stringify(msg), steady);
   }
 
@@ -143,6 +156,7 @@ export class NetClient {
     switch (m.type) {
       case 'gameState': {
         this.tel.gameStates++;
+        this.joined = true;
         this.pendingRoom = false;
         // Per-room seq spaces restart at 1 — the bug class this whole
         // harness exists to catch lived in forgetting this.
@@ -158,6 +172,7 @@ export class NetClient {
           this.self.health = m.localPlayerState.health;
           this.self.isDead = m.localPlayerState.isDead;
         }
+        if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
         break;
       }
