@@ -39,7 +39,9 @@ const WANT: Record<CommandKind, number> = {
   chase: 2,
   return: 1,
   escort: 2,
-  push: 3,
+  // A called push wants a real flood — three bodies reads as a patrol,
+  // not a wave; four is most of the eligible pool arriving together.
+  push: 4,
 };
 
 /** Which roles volunteer for which job — defenders chase and return,
