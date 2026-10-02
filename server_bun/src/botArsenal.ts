@@ -182,7 +182,7 @@ export class BotArsenal implements BeamHost {
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
     const s = botId ? this.skillOfCb(botId) : undefined;
-    const wt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined);
+    const wt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined, s?.courage);
     // Self-preservation with nerve: a blast inside its own radius can
     // cost up to SELF_SPLASH_MAX health — cautious bots (low courage
     // draw) swap to a non-explosive slot early, heroes ride the

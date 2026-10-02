@@ -518,17 +518,23 @@ export class ServerBotSenses {
       // Aim lead uses the muzzle speed of the weapon this bot would
       // pick at that range — same band select fireAt runs.
       weaponSpeed: (d) => {
-        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias);
+        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
         return getWeaponStats(w).speed || 60;
       },
       // Lobbed shells need the arc's drop added back on the aim point.
       weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias)).gravity,
+        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage)).gravity,
+      // Blast geometry of the same pick — the self-splash read prices
+      // what this shell would do to its own shooter.
+      weaponAoe: (d) => {
+        const w = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
+        return { r: w.aoeRadius ?? 0, dmg: w.aoeDamage ?? 0 };
+      },
       // The bot's skill matrix scored against the weapon it would
       // actually draw at that range — pick and aim stay consistent.
       ...(skill ? {
         aimSkill: (d: number, targetSpeed: number) =>
-          aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias), targetSpeed),
+          aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
       } : {}),
       // Wall occlusion for the LOS sense — bots stop wasting ammo on
       // targets behind structures they'd never see through anyway.

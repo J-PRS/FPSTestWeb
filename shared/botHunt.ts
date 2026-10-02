@@ -297,6 +297,32 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // the lagged estimate is what a human's prediction actually tracks.
   const px = st.lastSeen.x + st.leadVel.x * leadFlight;
   const pz = st.lastSeen.z + st.leadVel.z * leadFlight;
+  // Self-splash read: when the predicted blast lands closer to the
+  // shooter than the target, the shot costs more than it earns — a
+  // human holds that disc. Courage draws the exception: heroic bots
+  // sometimes take the mutual-splash shot anyway.
+  const aoe = ctx.weaponAoe?.(d);
+  if (aoe && aoe.r > 0) {
+    const selfD = Math.hypot(px - pos.x, pz - pos.z);
+    const foeD = Math.hypot(px - st.lastSeen.x, pz - st.lastSeen.z);
+    // A blast landing nearer me than him costs more than it earns —
+    // humans hold that disc. Courage draws the exception: heroic bots
+    // sometimes take the mutual-splash shot anyway.
+    if (selfD < aoe.r * 0.9 && selfD < foeD * 0.9 && botRand() > st.skill.courage) {
+      st.fireT = 0.3;
+      return undefined;
+    }
+    // The lethal read: a shot that would kill ME only earns when the
+    // enemy is nearer its center — dying to take him down is a play,
+    // dying while he grazes is a waste. Self-damage follows the same
+    // falloff the server applies (full in the core, fading to the rim).
+    const selfDmg = selfD < 3 ? aoe.dmg : aoe.dmg * Math.max(0, 1 - (selfD - 3) / Math.max(1, aoe.r - 3));
+    const lethal = selfDmg >= (ctx.healthFrac ?? 1) * 120 * 0.8;
+    if (lethal && selfD < aoe.r && foeD > selfD * 0.8 && botRand() > st.skill.courage) {
+      st.fireT = 0.3;
+      return undefined;
+    }
+  }
   // `pos` is the eye point — the capsule's axis midpoint sits `aimY`
   // below it, so center-mass aim means the bolt crosses the fattest
   // legal radius even before its wake proxy grows.

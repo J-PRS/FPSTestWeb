@@ -5,7 +5,7 @@ import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
-import { selfKillImpactDist } from '../../src/hitLedger.ts';
+import { selfKillImpactDist, selfKillTrades } from '../../src/hitLedger.ts';
 import { WeaponType } from '../../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 
@@ -472,7 +472,7 @@ describe('scenario: warp soak throughput', () => {
     }
     const selfImpact = [...selfKillImpactDist].sort((a, b) => a - b);
     const selfLine = [...selfByW.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' ') +
-      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m`;
+      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m ${selfKillTrades.trades}traded`;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');

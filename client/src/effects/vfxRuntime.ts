@@ -332,8 +332,21 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
  *  system shows as depth with broken renders. paused/pooled/starved/
  *  buildQueue expose the suspended-work surface the plain counts hide. */
 export function poolDump(): Record<string, unknown> {
-  const keys: Record<string, number> = {};
-  for (const [k, v] of pools) keys[k] = v.length;
+  // Per-kind rollups stay small; the raw key->count map exploded the
+  // diag paste (config-fingerprint keys run hundreds of chars). Keep the
+  // distinct-key count and the deepest few pools instead — a stuck pool
+  // still shows up by depth.
+  const byKind: Record<string, { pools: number; depth: number }> = {};
+  const top: { k: string; n: number }[] = [];
+  for (const [k, v] of pools) {
+    const kind = k.split(/[:,]/, 1)[0] ?? k;
+    const roll = byKind[kind] ?? (byKind[kind] = { pools: 0, depth: 0 });
+    roll.pools++;
+    roll.depth += v.length;
+    top.push({ k, n: v.length });
+  }
+  top.sort((a, b) => b.n - a.n);
+  const topPools = top.slice(0, 8).map(t => `${t.n}x ${t.k.slice(0, 80)}`);
   let paused = 0, pooledN = 0;
   if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {
@@ -349,6 +362,8 @@ export function poolDump(): Record<string, unknown> {
     starveWatch: starveFrames.size,
     buildQueue: buildQueue.length,
     activeTrails: activeTrailPs.size,
-    poolDepth: keys,
+    poolKeys: pools.size,
+    poolKinds: byKind,
+    topPools,
   };
 }

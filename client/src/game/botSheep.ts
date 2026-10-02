@@ -74,10 +74,10 @@ export class SheepMeter {
   tick(bot: SheepBody, dt: number, terrain: Terrain, s: { foe?: boolean; ignoring?: boolean; hasDest?: boolean; busy?: boolean } = {}): void {
     const { foe = false, ignoring = false, hasDest = false, busy = false } = s;
     const v = bot.vel;
-    const { mech, bonusSpeed, grounded } = this.energy(bot, dt, terrain);
+    const { mech, bonusSpeed } = this.energy(bot, dt, terrain);
     // Welding a stand's gear is honest work — a parked welder is
     // productive, not a pedestrian (mirrors the server meter).
-    const tribesing = SheepMeter.isTribesing(bonusSpeed, grounded) || busy;
+    const tribesing = SheepMeter.isTribesing(bonusSpeed) || busy;
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
     // Drain is rate-capped like the server meter — a high-E burst

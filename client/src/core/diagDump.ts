@@ -126,6 +126,15 @@ interface TrailDump {
   balls?: { viewPos?: string; rows?: Record<string, unknown>[] };
 }
 
+// Row dumps are per-live-entity — bound them or a busy fight turns the
+// paste into a novel. Totals stay exact; rows beyond the cap get an
+// omitted count.
+function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24): void {
+  const rows = arr ?? [];
+  for (const r of rows.slice(0, cap)) lines.push(`  ${label} ${JSON.stringify(r)}`);
+  if (rows.length > cap) lines.push(`  … ${rows.length - cap} more ${label}s`);
+}
+
 // Trail census — dead-trail bugs need attached/particles/slot per live
 // trail, not just the projectile count.
 function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
@@ -133,7 +142,7 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   if (!td) return;
   if (td.stats) lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   if (td.pools) lines.push(`pools: ${JSON.stringify(td.pools)}`);
-  for (const t of td.trails ?? []) lines.push(`  trail ${JSON.stringify(t)}`);
+  pushCapped(lines, 'trail', td.trails);
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
@@ -142,7 +151,7 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
     lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
-    for (const o of orphans.rows) lines.push(`  orphan ${JSON.stringify(o)}`);
+    pushCapped(lines, 'orphan', orphans.rows);
   } else {
     lines.push('ribbonOrphans: 0');
   }

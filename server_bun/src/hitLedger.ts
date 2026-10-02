@@ -2,6 +2,11 @@ import { weaponStats } from './weaponStats.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
 export const selfKillImpactDist: number[] = [];
+/** Traded self-frags: the same shooter killed an enemy within the same
+ *  blast window — human sacrifice; the rest are pure waste. */
+export const selfKillTrades: { trades: number } = { trades: 0 };
+const recentKills: { t: number; shooterId: string }[] = [];
+const TRADE_MS = 300;
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
@@ -53,6 +58,17 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
     if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
+    // Trade accounting runs both directions of the batch: a self-frag
+    // after a same-window enemy kill, or the enemy kill landing first.
+    const now0 = simNow();
+    if (shooterId === targetId) {
+      if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) selfKillTrades.trades++;
+      recentKills.push({ t: now0, shooterId });
+    } else if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) {
+      selfKillTrades.trades++;
+    }
+    recentKills.push({ t: now0, shooterId });
+    if (recentKills.length > 256) recentKills.splice(0, recentKills.length - 256);
     weaponStats.recordKillSpeed(modeTag,
       c.playerManager.getPlayer(shooterId)?.velocity ?? null,
       victim?.velocity ?? null);

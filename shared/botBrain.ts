@@ -138,6 +138,9 @@ export interface BrainCtx {
    *  gravity-bent — the aim point gets the drop added back so lobbed
    *  shells don't land short. Omit → flat trajectories. */
   weaponGravity?(dist: number): boolean;
+  /** Blast of the weapon the pick would take at `dist` — feeds the
+   *  self-splash read (r=0 for hitscan/melee). */
+  weaponAoe?(dist: number): { r: number; dmg: number };
   /** Host hook: the bot's skill multiplier for the weapon it would pick
    *  at `dist`, against a target moving at `targetSpeed` — feeds the
    *  skill matrix (snap/track/arc axes, moving vs still split, form).
