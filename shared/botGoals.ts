@@ -42,9 +42,13 @@ export class BotGoals {
     const s = this.s();
     if (s.revengeT > 0) {
       // Hit from somewhere unseen: push toward the shooter rather than
-      // continue a patrol — the flinch already spent the recoil.
-      s.goal = { ...s.revengeFrom };
-      return;
+      // continue a patrol — the flinch already spent the recoil. A
+      // posted anchor doesn't take the bait: the revenge push is what
+      // shelled HoFs off their stand — he answers with fire, not feet.
+      if (!(ctx.posted && ctx.objective && Math.sqrt(distSq(s.revengeFrom, ctx.objective)) > ctx.posted)) {
+        s.goal = { ...s.revengeFrom };
+        return;
+      }
     }
     if ((ctx.healthFrac ?? 1) < 0.15 && ctx.allies && ctx.allies.length > 0) {
       const rally = this.rallyGoal(ctx, pos);
@@ -81,8 +85,13 @@ export class BotGoals {
     // while the feet keep the line — humans run and shoot.
     offer(ctx.objective, ctx.runner ? 3.5 : 1.0);
     offer(ctx.pickup, 0.8);
-    if (heard) offer(heard, 0.2 + this.duty() * 0.5);
-    if (wander) offer(wander, 0.35);
+    // A posted defender hears the same gunfire — he just doesn't go
+    // look. Beyond the leash it's someone else's job; wandering is
+    // off the table entirely, feet stay on the post.
+    if (heard && !(ctx.posted && ctx.objective && distSq(heard, ctx.objective) > ctx.posted * ctx.posted)) {
+      offer(heard, 0.2 + this.duty() * 0.5);
+    }
+    if (wander && !ctx.posted) offer(wander, 0.35);
     if (cands.length > 0) {
       let best = cands[0]!;
       for (const c of cands) if (c.score > best.score) best = c;

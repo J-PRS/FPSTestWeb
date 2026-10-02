@@ -34,6 +34,15 @@ export class BotMoves {
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
     const gd = Math.hypot(dx, dz);
     if (gd < 0.5) return { ski: false, jet: false, jump: false };
+    const spd0 = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+    // The parking brake: a posted anchor that arrives at stand speed
+    // overshoots the pole by 10-20m and orbits it forever — soaks read
+    // ~3% inside the flag hitbox while hovering the 15m ring. Inside
+    // the leash he drops ski so friction bleeds the run; at walking
+    // pace he steps the rest of the way in and plants.
+    if (ctx.posted && spd0 > 4 && gd < ctx.posted + 4) {
+      return { ski: false, jet: false, jump: false };
+    }
     const nx = dx / gd, nz = dz / gd;
     const g0 = ctx.groundY(pos.x, pos.z);
     const rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;

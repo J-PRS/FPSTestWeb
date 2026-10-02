@@ -41,7 +41,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // wander toward wherever the action last scented — fleets that
       // only walk nav lines never meet. A pull, not a commit: the roam
       // goal still leads, the scent just bends it.
-      const hot = ctx.imapHottest?.(pos);
+      // Posted anchors don't drift toward fight scent — the idle
+      // blend is what pulled a HoF 35% toward every rumor of a fight
+      // three hills over, reading as wander on the heatmap.
+      const hot = ctx.posted ? null : ctx.imapHottest?.(pos);
       if (hot && hot.v > 0.3) {
         return {
           x: b.goalS.goal.x * 0.65 + hot.x * 0.35,
@@ -53,7 +56,19 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     }
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
-    if (fearing) return retreatDest(ctx, pos, t);
+    // Posted anchors — a HoF or home defender fires on everything it
+    // can see but only leaves the post for a fight inside its leash,
+    // and even an in-leash duel can't swing him out: orbit/press points
+    // that drift past the leash fold back to the stand. Fire stays
+    // live elsewhere — only feet hold.
+    const postedHold = (dest: BotVec): BotVec =>
+      ctx.posted && ctx.objective && dist3(dest, ctx.objective) > ctx.posted
+        ? { ...ctx.objective } : dest;
+    // A posted defender under fire still dodges — but the stand is the
+    // most-shelled ground on the map, and an unclamped fear retreat is
+    // exactly how the HoF kept wandering: shell → flee 30m → walk back
+    // → shell. He sidesteps inside his leash, not across the field.
+    if (fearing) return postedHold(retreatDest(ctx, pos, t));
     // A gem chase is a route, not a duel pause: while a pickup sits on
     // the goal line the feet keep walking it — fire and aim stay live
     // elsewhere, so the bot hunts THROUGH the pickup like a player
@@ -97,11 +112,6 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         if (!blocking) return { ...ctx.objective };
       }
     }
-    // Posted anchors — a HoF or home defender fires on everything it
-    // can see but only leaves the post for a fight inside its leash.
-    // A contact out in the field is somebody else's business: pressing
-    // it drags the anchor off the stand (the wide wander the per-role
-    // heatmap showed). Fire stays live elsewhere — only feet hold.
     if (ctx.posted && ctx.objective && dist3(t.pos, ctx.objective) > ctx.posted) {
       return { ...ctx.objective };
     }
@@ -109,7 +119,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // Point-blank or outranged: press straight in either way — inside
       // fist reach the press converts to the punch, outside it to the
       // approach. Holding the orbit at 2m would stare down a barrel.
-      return { ...t.pos };
+      return postedHold({ ...t.pos });
     }
     // fightPos comes from the last replan tick — "hold" used to mean
     // stand still and shoot, which reads (and meters) as sheeping.
@@ -117,7 +127,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // preferred range band, cycling angle so the bot keeps moving
     // between volleys like a real duelist.
     b.holding = b.h.fightPos === null;
-    if (b.h.fightPos) return b.h.fightPos;
+    if (b.h.fightPos) return postedHold(b.h.fightPos);
     b.orbitA += dt * (b.orbitDir * 0.55);
     b.orbitFlipT -= dt;
     if (b.orbitFlipT <= 0) {
@@ -128,7 +138,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const mid = (b.h.orbitFar + b.h.orbitClose) * 0.5 * b.orbitMul;
     const ox = t.pos.x + Math.cos(b.orbitA) * mid;
     const oz = t.pos.z + Math.sin(b.orbitA) * mid;
-    return { x: ox, y: ctx.groundY(ox, oz), z: oz };
+    return postedHold({ x: ox, y: ctx.groundY(ox, oz), z: oz });
   }
 
   /** Fortification pick: planting while a fight rages on the stand is

@@ -45,8 +45,12 @@ const WANT: Record<CommandKind, number> = {
 /** Which roles volunteer for which job — defenders chase and return,
  *  attackers escort and flood. */
 const WHO: Record<CommandKind, Set<string>> = {
-  chase: new Set(['ldefense', 'defense', 'hof', 'offense']),
-  return: new Set(['ldefense', 'defense', 'hof', 'offense', 'technician']),
+  // No 'hof' anywhere — heavy-on-flag never chases and never returns:
+  // sitting AT home made him the nearest volunteer every pass, which
+  // pulled him off the stand as a named responder. His own goal table
+  // still grabs a dropped flag within arm's reach.
+  chase: new Set(['ldefense', 'defense', 'offense']),
+  return: new Set(['ldefense', 'defense', 'offense', 'technician']),
   escort: new Set(['offense', 'capper', 'medic']),
   push: new Set(['offense', 'infiltrator', 'bombardier']),
 };

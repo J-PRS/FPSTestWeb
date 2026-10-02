@@ -473,8 +473,8 @@ export class ServerBotSenses {
     let posted = 0;
     if (anchored && Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15) {
       const base = own.state === 'carried'
-        ? (role === 'hof' ? 140 : 200)
-        : (role === 'hof' ? 45 : 90);
+        ? (role === 'hof' ? 60 : 200)
+        : (role === 'hof' ? 5 : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
     return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
@@ -508,7 +508,7 @@ export class ServerBotSenses {
    *  Only counts enemies inside the ring so a fighter out in the field
    *  doesn't drag the anchor off the flag. */
   private standThreat(home: Vec3, me: TeamId): Vec3 | null {
-    let best: Vec3 | null = null, bestD = 45;
+    let best: Vec3 | null = null, bestD = 26;
     for (const [, q] of this.room.players.getAllPlayers()) {
       if (q.team === me || q.isDead) continue;
       const d = Math.hypot(q.position.x - home.x, q.position.z - home.z);

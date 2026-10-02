@@ -146,10 +146,11 @@ function hofGoal(s: FlagSituation, commit: number) {
     const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
     const d = Math.hypot(dx, dz);
     if (d > 1 && d < 45) {
-      // A guideline, not a law: the lean scales with the bot's duty —
-      // a slack HoF barely shifts off the flag, a locked-in one plants
-      // squarely on the incoming line.
-      const lean = Math.min(5, d * 0.25) * commit;
+      // The HoF body-block: slide onto the capper's run line so his
+      // speed meets a heavy's hitbox before it meets the flag. A slack
+      // HoF barely shifts off the pole, a locked-in one squares up
+      // several meters into the lane.
+      const lean = Math.min(1, d * 0.05) * commit;
       return { x: s.home.x + (dx / d) * lean, y: s.home.y, z: s.home.z + (dz / d) * lean };
     }
   }
