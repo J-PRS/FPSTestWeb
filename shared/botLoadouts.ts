@@ -49,7 +49,7 @@ export const BOT_LOADOUTS: BotLoadout[] = [
  *  chaingun phenom reaches for it even at the band's edge, while the
  *  utility of a splash weapon still wins at clearly right ranges —
  *  specialists use their best gun MOST of the time, not always. */
-export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skill?: (w: number) => number, courage = 0.5): number {
+export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skill?: (w: number) => number, courage = 0.5, nonAoeOnly = false): number {
   if (distXZ < BOT_MELEE_M) return WeaponType.Melee;
   // Heal slots never feed a combat draw — the med kit fires its beam at
   // ALLIES through the support path; picking it at an enemy is a dry pull.
@@ -68,17 +68,26 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     }
   };
   let best: { w: number; s: number } = { w: lo.mid, s: 0 };
+  // First combat-usable non-explosive — the `nonAoeOnly` fallback when
+  // every band score is 0, so the gate can't hand back a launcher it
+  // was asked to holster.
+  let safeW = lo.mid;
+  for (const slot of ['side', 'near', 'mid', 'far'] as const) {
+    const w = lo[slot];
+    if (w !== WeaponType.HealBeam && getWeaponStats(w).aoeRadius <= 0) { safeW = w; break; }
+  }
   for (const slot of ['side', 'near', 'mid', 'far'] as const) {
     const w = lo[slot];
     if (w === WeaponType.HealBeam) continue; // healing is aimed at allies, not drawn for a fight
-    let s = fit(slot) * Math.max(0.1, skill(w));
     // Self-splash pricing: an enemy already inside this weapon's blast
     // means the shell costs the shooter too — the cautious draw the
     // sidearm, the bold keep the launcher (a mutual splash is still a
     // play). Dist-scaled so the rule fades in as the foe closes.
     const aoe = getWeaponStats(w).aoeRadius;
+    if (aoe > 0 && nonAoeOnly) continue;
+    let s = fit(slot) * Math.max(0.1, skill(w));
     if (aoe > 0 && dist < aoe * 0.8) s *= 0.08 + courage * 0.5;
     if (s > best.s) best = { w, s };
   }
-  return best.w;
+  return nonAoeOnly && getWeaponStats(best.w).aoeRadius > 0 ? safeW : best.w;
 }

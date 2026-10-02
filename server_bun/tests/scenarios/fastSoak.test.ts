@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
@@ -9,25 +10,43 @@ import { selfKillImpactDist, selfKillFoeDist, selfKillTrades } from '../../src/h
 import { WeaponType } from '../../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 
-// FPS_TRAIL=<file.bmp> plots every bot's XZ track (alpha=red, bravo=
+// FPS_TRAIL=<file.png> plots every bot's XZ track (alpha=red, bravo=
 // blue) top-down over the 1500m terrain wrap at 512x512 — hotspots and
-// dead routing lanes show instantly. Costs a position snapshot per
-// batch, so it stays opt-in.
+// dead routing lanes show instantly. One combined map plus one per
+// role (<file>_<role>.png) so a capper's lanes don't drown in the herd.
+// Costs a position snapshot per batch, so it stays opt-in.
 const TRAIL_PATH = process.env.FPS_TRAIL;
 
-/** 24-bit uncompressed BMP — zero deps, opens everywhere. */
-function bmpWrite(path: string, w: number, h: number, px: Uint8Array): void {
-  const row = w * 3, pad = (4 - (row % 4)) % 4, size = (row + pad) * h;
-  const b = Buffer.alloc(54 + size);
-  b.write('BM'); b.writeUInt32LE(54 + size, 2); b.writeUInt32LE(54, 10);
-  b.writeUInt32LE(40, 14); b.writeInt32LE(w, 18); b.writeInt32LE(h, 22);
-  b.writeUInt16LE(1, 26); b.writeUInt16LE(24, 28); b.writeUInt32LE(size, 34);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const s = (y * w + x) * 3, d = 54 + y * (row + pad) + x * 3;
-      b[d] = px[s + 2]!; b[d + 1] = px[s + 1]!; b[d + 2] = px[s]!;
-    }
-  writeFileSync(path, b);
+/** Lossless RGB PNG — zlib from node, no image deps. */
+function pngWrite(path: string, w: number, h: number, px: Uint8Array): void {
+  const crcTable = new Uint32Array(256).map((_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const b of buf) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const t = Buffer.from(type, 'ascii');
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(Buffer.concat([t, data])));
+    return Buffer.concat([len, t, data, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const raw = Buffer.alloc(h * (w * 3 + 1));
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 3 + 1)] = 0; // filter: none — heatmap pixels don't predict
+    Buffer.from(px.buffer, y * w * 3, w * 3).copy(raw, y * (w * 3 + 1) + 1);
+  }
+  writeFileSync(path, Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)),
+  ]));
 }
 
 // Throughput probe: how much honest sim-time does a real CTF room burn
@@ -213,8 +232,8 @@ describe('scenario: warp soak throughput', () => {
         }
       }
     };
-    const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
-    const deaths: { x: number; z: number; team: string }[] = [];
+    const trail: { x: number; z: number; team: string; carrying: boolean; role: string }[] = [];
+    const deaths: { x: number; z: number; team: string; role: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
     // (h = height above terrain, J/kg), the "are they skiing like Tribes
     // or walking like llamas" meter. Sampled per batch per live bot.
@@ -305,7 +324,7 @@ describe('scenario: warp soak throughput', () => {
         if (p.isDead) {
           // Corpses can't press or carry — but the kill spot still feeds
           // the death heatmap.
-          if (TRAIL_PATH && p.team && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team });
+          if (TRAIL_PATH && p.team && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team, role: room.bots.roleOf(p.id) ?? 'bot' });
           if (wasDead.get(p.id) === false) {
             const born = lifeStart.get(p.id);
             if (born !== undefined) (lifeSpans.get(p.id) ?? lifeSpans.set(p.id, []).get(p.id)!).push(simTicks * dt - born);
@@ -420,7 +439,7 @@ describe('scenario: warp soak throughput', () => {
         }
         if (TRAIL_PATH && p.team) {
           const carrying = [...(room.flags?.flags.values() ?? [])].some((f) => f.carrier === p.id);
-          trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying });
+          trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying, role: room.bots.roleOf(p.id) ?? 'bot' });
         }
       }
     }
@@ -454,19 +473,13 @@ describe('scenario: warp soak throughput', () => {
 
     if (TRAIL_PATH && trail.length) {
       const W = 512, HALF = 750; // terrain wrap is ±750m
-      const px = new Uint8Array(W * W * 3);
       const ij = (x: number, z: number) => [
         Math.round((x + HALF) / (2 * HALF) * (W - 1)),
         Math.round((z + HALF) / (2 * HALF) * (W - 1)),
       ];
-      const set = (ix: number, iy: number, r: number, g: number, b: number) => {
-        if (ix < 0 || iy < 0 || ix >= W || iy >= W) return;
-        const i = (iy * W + ix) * 3;
-        px[i] = r; px[i + 1] = g; px[i + 2] = b;
-      };
-      const plot = (x: number, z: number, r: number, g: number, b: number) => set(ij(x, z)[0]!, ij(x, z)[1]!, r, g, b);
       // Terrain underlay: elevation → brightness, so dead zones read as
-      // ridges/valleys and not unexplored void.
+      // ridges/valleys and not unexplored void. Built once; every map
+      // (combined + per-role) shares it.
       let hMin = Infinity, hMax = -Infinity;
       const hAt: number[] = new Array(W * W);
       for (let iy = 0; iy < W; iy++)
@@ -476,39 +489,56 @@ describe('scenario: warp soak throughput', () => {
           if (h < hMin) hMin = h;
           if (h > hMax) hMax = h;
         }
+      const basePx = new Uint8Array(W * W * 3);
       for (let i = 0; i < W * W; i++) {
         const v = 18 + 52 * ((hAt[i]! - hMin) / Math.max(1, hMax - hMin));
-        px[i * 3] = v; px[i * 3 + 1] = v; px[i * 3 + 2] = v + 6;
+        basePx[i * 3] = v; basePx[i * 3 + 1] = v; basePx[i * 3 + 2] = v + 6;
       }
-      // Deaths under trails: where bodies fall decides whether a dead
-      // lane is a wall (deaths on the seam) or a killbox (deaths clustered).
-      for (const d of deaths) {
-        const [ix, iy] = ij(d.x, d.z);
-        for (let dx = -1; dx <= 1; dx++)
-          for (let dy = -1; dy <= 1; dy++)
-            d.team === 'alpha' ? set(ix! + dx, iy! + dy, 140, 40, 30) : set(ix! + dx, iy! + dy, 40, 60, 140);
+      const render = (rows: typeof trail, deads: typeof deaths) => {
+        const px = new Uint8Array(basePx);
+        const set = (ix: number, iy: number, r: number, g: number, b: number) => {
+          if (ix < 0 || iy < 0 || ix >= W || iy >= W) return;
+          const i = (iy * W + ix) * 3;
+          px[i] = r; px[i + 1] = g; px[i + 2] = b;
+        };
+        const plot = (x: number, z: number, r: number, g: number, b: number) => set(ij(x, z)[0]!, ij(x, z)[1]!, r, g, b);
+        // Deaths under trails: where bodies fall decides whether a dead
+        // lane is a wall (deaths on the seam) or a killbox (clustered).
+        for (const d of deads) {
+          const [ix, iy] = ij(d.x, d.z);
+          for (let dx = -1; dx <= 1; dx++)
+            for (let dy = -1; dy <= 1; dy++)
+              d.team === 'alpha' ? set(ix! + dx, iy! + dy, 140, 40, 30) : set(ix! + dx, iy! + dy, 40, 60, 140);
+        }
+        for (const t of rows) {
+          // Carriers glow so flag routes cut through the team-color noise —
+          // orange for alpha, purple for bravo.
+          const [r, g, b] = t.carrying
+            ? (t.team === 'alpha' ? [255, 160, 40] : [190, 80, 255])
+            : (t.team === 'alpha' ? [255, 70, 70] : [90, 140, 255]);
+          plot(t.x, t.z, r, g, b);
+        }
+        // Flag-event pins on top: lime grab, cyan drop/return-to-home.
+        for (const pin of pins) {
+          const [ix, iy] = ij(pin.x, pin.z);
+          const c = pin.kind === 'grab' ? [120, 255, 60] : pin.kind === 'home' ? [255, 255, 120] : [60, 220, 255];
+          for (let dx = -1; dx <= 1; dx++)
+            for (let dy = -1; dy <= 1; dy++) set(ix! + dx, iy! + dy, c[0]!, c[1]!, c[2]!);
+        }
+        for (const s of [alphaStand, bravoStand]) {
+          for (let dx = -3; dx <= 3; dx++)
+            for (let dz = -3; dz <= 3; dz++) plot(s.x + dx * 3, s.z + dz * 3, 255, 255, 255);
+        }
+        return px;
+      };
+      const out = TRAIL_PATH.replace(/\.(png|bmp)$/i, '');
+      pngWrite(`${out}.png`, W, W, render(trail, deaths));
+      const roles = [...new Set(trail.map((t) => t.role))].sort();
+      for (const role of roles) {
+        pngWrite(`${out}_${role}.png`, W, W,
+          render(trail.filter((t) => t.role === role), deaths.filter((d) => d.role === role)));
       }
-      for (const t of trail) {
-        // Carriers glow so flag routes cut through the team-color noise —
-        // orange for alpha, purple for bravo.
-        const [r, g, b] = t.carrying
-          ? (t.team === 'alpha' ? [255, 160, 40] : [190, 80, 255])
-          : (t.team === 'alpha' ? [255, 70, 70] : [90, 140, 255]);
-        plot(t.x, t.z, r, g, b);
-      }
-      // Flag-event pins on top: lime grab, cyan drop/return-to-home.
-      for (const pin of pins) {
-        const [ix, iy] = ij(pin.x, pin.z);
-        const c = pin.kind === 'grab' ? [120, 255, 60] : pin.kind === 'home' ? [255, 255, 120] : [60, 220, 255];
-        for (let dx = -1; dx <= 1; dx++)
-          for (let dy = -1; dy <= 1; dy++) set(ix! + dx, iy! + dy, c[0]!, c[1]!, c[2]!);
-      }
-      for (const s of [alphaStand, bravoStand]) {
-        for (let dx = -3; dx <= 3; dx++)
-          for (let dz = -3; dz <= 3; dz++) plot(s.x + dx * 3, s.z + dz * 3, 255, 255, 255);
-      }
-      bmpWrite(TRAIL_PATH, W, W, px);
-      console.log(`  trail: ${trail.length} samples, ${deaths.length} deaths, ${pins.length} flag events → ${TRAIL_PATH}`);
+      console.log(`  trail: ${trail.length} samples, ${deaths.length} deaths, ${pins.length} flag events → ${out}.png + ${roles.length} role maps`);
     }
 
     const alive = [...room.players.getAllPlayers().values()].filter((p) => !p.isDead).length;

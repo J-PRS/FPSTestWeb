@@ -205,10 +205,11 @@ export class BotArsenal implements BeamHost {
         (dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) ||
         hp <= SELF_SPLASH_MAX * (1.5 - nerve));
       if (woundedGate) {
-        for (const slot of ['side', 'near', 'mid', 'far'] as const) {
-          const alt = lo[slot];
-          if (alt !== wt && alt !== WeaponType.HealBeam && !getWeaponStats(alt)?.aoeRadius) return alt;
-        }
+        // Redraw inside the non-explosive shelf by the same band fit —
+        // grabbing slot-order's first clean gun made wounded bots spam
+        // the hold-out pistol at 80m (the Pistol 1%-accuracy column).
+        const alt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined, s?.courage, true);
+        if (alt !== wt) return alt;
       }
     }
     return wt;
