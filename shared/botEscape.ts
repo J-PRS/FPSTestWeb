@@ -125,11 +125,19 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
   const tl = Math.hypot(tx, tz) || 1;
   const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
   const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
-  return {
-    x: pos.x + (-tz / tl) * side * dodgeStep,
-    y: pos.y,
-    z: pos.z + (tx / tl) * side * dodgeStep,
-  };
+  const dx = pos.x + (-tz / tl) * side * dodgeStep;
+  const dz = pos.z + (tx / tl) * side * dodgeStep;
+  // The hop still can't leave the leash — repeated shell dodges on a
+  // posted anchor ratchet him off the pole one 4m step at a time.
+  if (ctx.posted && ctx.objective) {
+    const ox = dx - ctx.objective.x, oz = dz - ctx.objective.z;
+    const od = Math.hypot(ox, oz);
+    if (od > ctx.posted) {
+      const k = ctx.posted / od;
+      return { x: ctx.objective.x + ox * k, y: pos.y, z: ctx.objective.z + oz * k };
+    }
+  }
+  return { x: dx, y: pos.y, z: dz };
 }
 
 // dist3/distSq imported from botVec.ts — shared by the brain family.
