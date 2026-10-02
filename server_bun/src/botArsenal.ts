@@ -9,6 +9,7 @@ import type { Room } from './Room.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
+import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
@@ -126,6 +127,21 @@ export class BotArsenal implements BeamHost {
     const az = aim.z - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
+    // Self-radius clearance: an AOE shell that detonates on terrain
+    // inside its own blast radius of the muzzle is a guaranteed
+    // self-splash — humans see the hump between them and the target
+    // and hold the rocket. March the ray; if dirt crosses it inside
+    // the blast envelope, the shot doesn't exist to be taken.
+    if (this.room.field) {
+      const aoer = getWeaponStats(wt)?.aoeRadius ?? 0;
+      if (aoer > 0) {
+        for (let t = 2; t <= aoer; t += 3) {
+          if (hmHeight(this.room.field, muzzle.x + dir.x * t, muzzle.z + dir.z * t) > muzzle.y + dir.y * t + 1) {
+            return;
+          }
+        }
+      }
+    }
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       beamSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -133,7 +149,25 @@ export class BotArsenal implements BeamHost {
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
     const s = botId ? this.skillOfCb(botId) : undefined;
-    return pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined);
+    const wt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined);
+    // Self-preservation with nerve: a blast inside its own radius can
+    // cost up to SELF_SPLASH_MAX health — cautious bots (low courage
+    // draw) swap to a non-explosive slot early, heroes ride the
+    // explosive down to the last hit and eat the occasional self-frag.
+    if (botId) {
+      const hp = this.room.players.getAllPlayers().get(botId)?.health ?? 100;
+      const wstats = getWeaponStats(wt);
+      const nerve = (s?.courage ?? 0.5);
+      // Two self-splashes frag anyone under ~2×SELF_SPLASH_MAX — trading
+      // a point-blank disc is only a win while it can't kill you twice.
+      if (wstats?.aoeRadius && dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) {
+        for (const slot of ['side', 'near', 'mid', 'far'] as const) {
+          const alt = lo[slot];
+          if (alt !== wt && alt !== WeaponType.HealBeam && !getWeaponStats(alt)?.aoeRadius) return alt;
+        }
+      }
+    }
+    return wt;
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same

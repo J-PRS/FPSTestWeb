@@ -192,7 +192,11 @@ export class BlastRunner {
       // Self-propulsion still pays blood: the cost fades with distance
       // inside the blast radius — a feet blast lands near SELF_SPLASH_MAX,
       // a rim graze costs scraps. Continuous, so no cliff-edge price.
-      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX);
+      // Feet blasts pay the full disc-jump price; past 2m the cost
+      // falls off quadratically to the rim — a stray shell popping a
+      // few meters out grazes instead of taking a third of the bar.
+      const near = Math.max(0, 1 - Math.max(0, dist - 2) / Math.max(1, ctx.radius - 2));
+      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near * near;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
         this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });

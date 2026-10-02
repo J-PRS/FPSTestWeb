@@ -28,6 +28,11 @@ export interface BotSkill {
    *  (no heel-shot turnaround); others ride the classic push blast. A
    *  personality draw, not a skill — both styles top out the same. */
   beltPull: boolean;
+  /** Low-HP close-combat nerve: high-courage bots keep firing explosives
+   *  point-blank and take the occasional self-frag with the enemy;
+   *  cautious ones swap to a safe slot before the splash does them in.
+   *  Personality draw like beltPull, so duels end differently per bot. */
+  courage: number;
   /** Private stream — form drift consumes it, not the shared botRand. */
   rng: () => number;
 }
@@ -61,6 +66,7 @@ export function rollSkill(spawn: BotVec): BotSkill {
     movement: clamp(0.7 + rng() * 0.8),
     form: 1,
     beltPull: rng() < 0.45,
+    courage: rng(),
     rng,
   };
 }

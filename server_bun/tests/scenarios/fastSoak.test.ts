@@ -5,6 +5,7 @@ import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
+import { selfKillImpactDist } from '../../src/hitLedger.ts';
 import { WeaponType } from '../../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 
@@ -412,8 +413,16 @@ describe('scenario: fast-forward soak throughput', () => {
     // Self-blast credit check: playerKill broadcasts carry shooter/target —
     // a suicide counts once as scoreboard-zero but still hits the weapon
     // ledger, so selfK reconciles kills_a+b vs the weapons table.
-    const pkMsgs = w.msgs.filter((m) => m.type === 'playerKill') as unknown as { shooterId: string; targetId: string }[];
+    const pkMsgs = w.msgs.filter((m) => m.type === 'playerKill') as unknown as { shooterId: string; targetId: string; weapon?: number }[];
     const selfKills = pkMsgs.filter((m) => m.shooterId === m.targetId).length;
+    const selfByW = new Map<string, number>();
+    for (const m of pkMsgs) if (m.shooterId === m.targetId) {
+      const k: string = m.weapon !== undefined && WeaponType[m.weapon] ? WeaponType[m.weapon]! : `w${m.weapon}`;
+      selfByW.set(k, (selfByW.get(k) ?? 0) + 1);
+    }
+    const selfImpact = [...selfKillImpactDist].sort((a, b) => a - b);
+    const selfLine = [...selfByW.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' ') +
+      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m`;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');
@@ -455,7 +464,7 @@ describe('scenario: fast-forward soak throughput', () => {
     }
     console.log(
       `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
-      `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0},pkEv=${pkMsgs.length},selfK=${selfKills}` +
+      `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0},pkEv=${pkMsgs.length},selfK=${selfKills}(${selfLine})` +
       `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
       `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'}(${flagGap.alpha[0].toFixed(1)}+${flagGap.alpha[1].toFixed(1)}y@${flagGap.alpha[2].toFixed(0)}mps),flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}(${flagGap.bravo[0].toFixed(1)}+${flagGap.bravo[1].toFixed(1)}y@${flagGap.bravo[2].toFixed(0)}mps)` +
       `,capA=${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(1) : '-'},capB=${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(1) : '-'}` +

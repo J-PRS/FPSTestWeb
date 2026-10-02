@@ -1,4 +1,7 @@
 import { weaponStats } from './weaponStats.ts';
+// Debug probe: shooter-to-impact distance on self-kills — answers
+// "do bots frag themselves with shots that pop at their own feet".
+export const selfKillImpactDist: number[] = [];
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
@@ -17,7 +20,7 @@ export class HitLedger {
     if (result.killed) c.hb('kill');
     c.deps.onHit?.(targetId, shooterId);
     const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
-    this.noteHit(c, shooterId, targetId, src, damage, result.killed);
+    this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined);
     if (!result.killed) {
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
       c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq });
@@ -30,7 +33,7 @@ export class HitLedger {
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
    *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean): void {
+  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impactDist?: number): void {
     const modeTag = c.deps.mode ?? '';
     weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
     const duelKey = `${shooterId}|${targetId}`;
@@ -41,6 +44,7 @@ export class HitLedger {
     }
     const victim = c.playerManager.getPlayer(targetId);
     if (victim) weaponStats.recordDeath(modeTag, victim.position);
+    if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
     weaponStats.recordKillSpeed(modeTag,
       c.playerManager.getPlayer(shooterId)?.velocity ?? null,
       victim?.velocity ?? null);
