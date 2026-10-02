@@ -311,6 +311,13 @@ export class BotBrain {
     return this.h.skill;
   }
 
+  /** Role-adherence scalar for role-policy callers (HoF lean, route
+   *  discipline): high duty holds the assigned shape, low duty loosens
+   *  it. Guidelines not laws — nobody sits at exactly 1.0. */
+  get dutyLevel(): number {
+    return this.duty;
+  }
+
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
@@ -367,11 +374,23 @@ export class BotBrain {
   }
 
   /** Belt lob: a live target in mid range on a 9s cooldown — grenades
-   *  into a brawl, not at ghosts (stale seen-times don't qualify). */
-  private pickBelt(dt: number, pos: BotVec, now: number): boolean {
+   *  into a brawl, not at ghosts (stale seen-times don't qualify).
+   *  The infiltrator plays it as an ambush: the belt flies at knife
+   *  range in the same tick the cloak drops — belt+primary combo is
+   *  the whole point of sneaking up. */
+  private pickBelt(dt: number, pos: BotVec, now: number, ctx: BrainCtx): boolean {
     this.beltT -= dt;
     if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) return false;
     const d = dist3(pos, this.h.lastSeen);
+    if (ctx.infiltrating) {
+      // Guideline, not doctrine — only commit to the knife-range combo
+      // when the setup is favorable: healthy enough to eat the trade,
+      // tank carrying the fight, and not walking into a crowd.
+      const crowded = (ctx.enemies?.length ?? 0) > 2;
+      if (d > 22 || crowded || (ctx.healthFrac ?? 1) < 0.45 || (ctx.energy ?? 99) < 25) return false;
+      this.beltT = 9;
+      return true;
+    }
     if (d <= 10 || d >= 35) return false;
     this.beltT = 9;
     return true;
@@ -434,7 +453,7 @@ export class BotBrain {
     const fire = pickFire(this.h, dt, ctx, pos, now, { hero, fearing });
 
     // --- belt: lob a grenade into a mid-range fight on a slow cooldown ---
-    const belt = this.pickBelt(dt, pos, now);
+    const belt = this.pickBelt(dt, pos, now, ctx);
 
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = pickDeploy(this, dt, ctx, pos, fearing);

@@ -150,7 +150,8 @@ export class CtfFlags {
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: escortPos,
-    });
+      threat: this.standThreat(own.home, bot.team as string),
+    }, bot.dutyLevel);
     // Cloak intent is the infiltrator's alone — the drain is
     // speed-scaled, so a sprinting capper would arrive tank-dry.
     const infiltrating = enemyStand !== null && pick === enemyStand && role === 'infiltrator';
@@ -160,6 +161,19 @@ export class CtfFlags {
       // escorting doesn't break off to chase.
       thief: this.thiefBeacon(thief, pick, own),
     };
+  }
+
+  /** Closest hostile inside the home ring — the HoF's body-block
+   *  anchor. touchers() includes the local player, so a human pressing
+   *  the stand draws the lean too. */
+  private standThreat(home: THREE.Vector3, myTeam: string): { x: number; y: number; z: number } | null {
+    let best: THREE.Vector3 | null = null, bestD = 45;
+    for (const [id, pos] of this.ctx.touchers()) {
+      if (this.ctx.teamOf(id) === myTeam) continue;
+      const d = Math.hypot(pos.x - home.x, pos.z - home.z);
+      if (d < bestD) { bestD = d; best = pos; }
+    }
+    return best ? { x: best.x, y: best.y, z: best.z } : null;
   }
 
   private thiefBeacon(thief: THREE.Vector3 | null, pick: { x: number; y: number; z: number }, own: Flag) {

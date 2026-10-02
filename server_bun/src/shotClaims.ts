@@ -4,7 +4,7 @@ import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S 
 import { validateHitClaim, pointToCapsuleDistance } from '../../shared/combat.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { rewindPos, clampPing, freshDefer, type ClaimDefer } from './claimLedger.ts';
+import { rewindPos, rewindNearest, clampPing, freshDefer, type ClaimDefer } from './claimLedger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
@@ -63,10 +63,11 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // the claim's own airtime — the reach/arc/occlusion checks still pin
     // the flight geometry to the real registered origin.
     if (defer) proj.spawnAt = Math.min(proj.spawnAt, Date.now() - msg.airtime * 1000);
-    // Lag compensation: validate against where the target was when the
-    // shooter saw it (now - ping), not where it is now — otherwise a
-    // 100ms client aims at ghosts by design.
-    const targetPos = rewindPos(target, clampPing(player.ping));
+    // Lag compensation: validate against the target's rewind PATH —
+    // where the shooter saw it is anywhere in (now-ping-interp, now),
+    // so a fast target's legit claim can sit several meters off the
+    // single rewound point. Bounded by recorded positions, not slack.
+    const targetPos = rewindNearest(target, clampPing(player.ping), 200, msg.position);
     const verdict = validateHitClaim({
       projectile: proj,
       hitPos: msg.position,

@@ -30,6 +30,9 @@ export interface FlagSituation {
   enemyStand: { x: number; y: number; z: number } | null;
   /** A teammate carrying the enemy flag — escort target. */
   escort: { x: number; y: number; z: number } | null;
+  /** Nearest enemy pressing OUR stand — the HoF's body-block anchor.
+   *  Only populated for hostiles inside the home ring's reach. */
+  threat: { x: number; y: number; z: number } | null;
 }
 
 /** Role-priority table, core before luxury — the row unlocks when the
@@ -105,9 +108,9 @@ export function assignRole(
  *  situation slot picked — callers compare against their own slots (e.g.
  *  `result === s.enemyStand` ⇒ the bot is pressing the stand, which the
  *  server reads as its infiltrate/cloak intent). */
-export function roleObjective(role: string, s: FlagSituation): { x: number; y: number; z: number } {
+export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: number; y: number; z: number } {
   switch (role) {
-    case 'hof': return hofGoal(s);
+    case 'hof': return hofGoal(s, commit);
     case 'ldefense': case 'technician': case 'defense': return defenseGoal(s);
     case 'capper': return capperGoal(s);
     case 'infiltrator': return infiltratorGoal(s);
@@ -116,9 +119,23 @@ export function roleObjective(role: string, s: FlagSituation): { x: number; y: n
 }
 
 /** HoF: planted on the stand, PERIOD — never chases a thief (that's what
- *  LD exists for). Only leaves the ring for a flag dropped in easy reach. */
-function hofGoal(s: FlagSituation) {
+ *  LD exists for). Only leaves the ring for a flag dropped in easy
+ *  reach. With a threat inbound it interposes — plants a few meters
+ *  toward the incoming line so a capping run hits a heavy's hitbox
+ *  before it hits the flag. */
+function hofGoal(s: FlagSituation, commit: number) {
   if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < 25) return s.dropped;
+  if (s.threat) {
+    const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1 && d < 45) {
+      // A guideline, not a law: the lean scales with the bot's duty —
+      // a slack HoF barely shifts off the flag, a locked-in one plants
+      // squarely on the incoming line.
+      const lean = Math.min(5, d * 0.25) * commit;
+      return { x: s.home.x + (dx / d) * lean, y: s.home.y, z: s.home.z + (dz / d) * lean };
+    }
+  }
   return s.home;
 }
 

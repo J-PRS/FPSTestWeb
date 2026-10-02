@@ -10,7 +10,7 @@ const DROPPED_FAR = V(200, 0, 200);
 const ESCORT = V(50, 0, 50);
 
 function sit(o: Partial<FlagSituation> = {}): FlagSituation {
-  return { home: HOME, thief: null, dropped: null, enemyStand: ENEMY, escort: null, ...o };
+  return { home: HOME, thief: null, dropped: null, enemyStand: ENEMY, escort: null, threat: null, ...o };
 }
 
 describe('roleObjective', () => {

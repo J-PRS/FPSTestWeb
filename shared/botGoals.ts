@@ -8,6 +8,7 @@
  */
 import { botRand } from './botRand.ts';
 import { BOT_EYE } from './botHunt.ts';
+import { ENERGY } from './movement.ts';
 import type { BotVec, BrainCtx } from './botBrain.ts';
 
 /** Mutable goal/wander/revenge state — the brain owns the bag, the
@@ -47,6 +48,11 @@ export class BotGoals {
       const rally = this.rallyGoal(ctx, pos);
       if (rally) s.goal = rally;
       return;
+    }
+    // A dry infiltrator can't hold the veil — the nugget loop IS its
+    // stealth economy, so feeding the tank outranks pressing the stand.
+    if (ctx.infiltrating && ctx.energy !== undefined && ctx.energy < ENERGY.cloakCost + 30 && ctx.pickup) {
+      s.goal = { ...ctx.pickup }; return;
     }
     if (ctx.objective) { s.goal = { ...ctx.objective }; return; }
     if (ctx.pickup) { s.goal = { ...ctx.pickup }; return; }

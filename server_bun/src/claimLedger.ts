@@ -43,6 +43,29 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
   return last;
 }
 
+// The shooter's view is stale by ping + jitter + interp buffer, so an
+// honest claim can land where the target WAS anywhere across the lag
+// window, not only at the rewound instant. Nearest point on the
+// target's recorded path in [now-backMs-extraMs, now] bounds the error
+// by the target's own measured motion instead of a flat slack.
+export function rewindNearest(target: PlayerState, backMs: number, extraMs: number, pt: Vec3): Vec3 {
+  const floor = Date.now() - backMs - extraMs;
+  let best = rewindPos(target, backMs);
+  let bestD = dist3(best, pt);
+  for (const s of target.history) {
+    if (s.t < floor) continue;
+    const d = dist3(s, pt);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  const d = dist3(target.position, pt);
+  if (d < bestD) best = target.position;
+  return best;
+}
+
+function dist3(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
 interface SpentRecord {
   proj: TrackedProjectile;
   shot: boolean;

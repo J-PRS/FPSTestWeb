@@ -112,9 +112,9 @@ export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): numb
     if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
     else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
-    // through it — cloak only while the approach is still covert (no
-    // hunt target), so contact drops the veil the tick fighting starts.
-    else if (ctx.infiltrating && !fighting && ctx.energy >= ENERGY.cloakCost + 15) status |= STATUS.CLOAK;
+    // through it. A WOUNDED infiltrator slips the veil back on while
+    // retreating — the pest survives by breaking contact, not trading.
+    if (ctx.infiltrating && (!fighting || fearing) && ctx.energy >= ENERGY.cloakCost + 15) status |= STATUS.CLOAK;
     return status;
   }
 

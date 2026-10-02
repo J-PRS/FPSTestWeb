@@ -123,7 +123,7 @@ export class ServerBots {
 
   /** Scenario tests poke the objective pick directly. */
   flagGoal(p: { id: string; team?: string; position: Vec3 }) {
-    return this.sense.flagGoal(p);
+    return this.sense.flagGoal(p, this.brains.get(p.id)?.dutyLevel ?? 1);
   }
 
   /** The brain's current hunt target id — needed by throwBelt since the
@@ -282,7 +282,7 @@ export class ServerBots {
       this.thinkCounter = (this.thinkCounter + 1) % ServerBots.THINK_DIV;
       let out = this.lastOut.get(id);
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
-        const goal = this.sense.flagGoal(p);
+        const goal = this.sense.flagGoal(p, brain.dutyLevel);
         const ctx = this.sense.build(id, p, goal, now, brain.skill);
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
         // Situation chatter edge — killFeed.say resolves the kind through

@@ -160,14 +160,26 @@ export class NetBot {
       dropped: mine.state === 'dropped' ? mine.pos : null,
       enemyStand: theirs.state === 'carried' ? null : theirs.pos,
       escort: theirs.state === 'carried' && theirs.carrier ? this.rosterPos(theirs.carrier) : null,
+      threat: this.standThreat(mine.pos, myTeam),
     };
     const role: BotRole = this.squadRole();
-    return roleObjective(role, s);
+    return roleObjective(role, s, this.brain.dutyLevel);
   }
 
   private rosterPos(id: string): Vec3 | null {
     const e = this.nc.roster.get(id);
     return e ? { ...e.pos } : null;
+  }
+
+  /** Closest hostile inside the home ring — feeds the HoF body block. */
+  private standThreat(home: Vec3, myTeam: string): Vec3 | null {
+    let best: Vec3 | null = null, bestD = 45;
+    for (const e of this.nc.roster.values()) {
+      if (e.team === myTeam || e.isDead) continue;
+      const d = Math.hypot(e.pos.x - home.x, e.pos.z - home.z);
+      if (d < bestD) { bestD = d; best = e.pos; }
+    }
+    return best;
   }
 
   /** Squad role computed each call: every peer sorts the same roster and

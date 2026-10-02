@@ -191,7 +191,7 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
@@ -210,7 +210,8 @@ export class ServerBotSenses {
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
-    });
+      threat: this.standThreat(own.home, me),
+    }, duty);
     const role = this.roles.get(p.id);
     // A capper doesn't beeline to the stand — it attacks from the high
     // side so the last leg is a downhill graze at speed. The entry point
@@ -249,6 +250,19 @@ export class ServerBotSenses {
   private escortSpot(carrier: string | null | undefined, me: TeamId): Vec3 | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
     return escortP && escortP.team === me ? escortP.position : null;
+  }
+
+  /** Closest hostile pressing our stand — the HoF body-block anchor.
+   *  Only counts enemies inside the ring so a fighter out in the field
+   *  doesn't drag the anchor off the flag. */
+  private standThreat(home: Vec3, me: TeamId): Vec3 | null {
+    let best: Vec3 | null = null, bestD = 45;
+    for (const [, q] of this.room.players.getAllPlayers()) {
+      if (q.team === me || q.isDead) continue;
+      const d = Math.hypot(q.position.x - home.x, q.position.z - home.z);
+      if (d < bestD) { bestD = d; best = q.position; }
+    }
+    return best;
   }
 
   /** Who's carrying OUR flag — pos+vel are beacon info (the wire streams

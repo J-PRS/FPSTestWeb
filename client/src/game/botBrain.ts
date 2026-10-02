@@ -118,6 +118,8 @@ export class GameBot extends RemotePlayer {
   get huntTargetId(): string | null { return this.brain.currentHuntId; }
   /** The brain's skill matrix — the fire resolver biases the draw with it. */
   get skill() { return this.brain.skill; }
+  /** Role-adherence scalar — role policy (HoF lean) scales by it. */
+  get dutyLevel() { return this.brain.dutyLevel; }
   /** MoveSim grounded flag — propel only launches from a stand. */
   get grounded(): boolean { return this.moveState.onGround; }
 

@@ -170,7 +170,9 @@ export class BotRoster {
         if (donorP && strict) this.applyClass(donorP, strict);
         // Technician is the only role that promises the deploy kit —
         // pin its builder trait instead of trusting the spawn roll.
-        if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
+        // HoF gets the same nudge: mines+shields ARE the job. (The
+        // deploy itself stays stochastic — a guideline, not a script.)
+        if (want === 'technician' || want === 'hof') this.brains.get(donor)?.setBuilder(true);
         // A capper who PREFERS pull rides the implosion disc — the
         // forward launch needs no heel-shot turnaround. Push-style
         // cappers keep their drawn belt and blast off their heels;
