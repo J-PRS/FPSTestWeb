@@ -7,7 +7,7 @@
 // exercise — a server-internal bot can never produce a reject.
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
-import { MoveSim, ENERGY } from '../../shared/movement.ts';
+import { MoveSim, ENERGY, GRAVITY } from '../../shared/movement.ts';
 
 import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor } from '../../shared/botSkill.ts';
@@ -36,6 +36,12 @@ interface Shell {
   /** When the client-side flight should land. */
   impactAt: number;
   impactPos: Vec3;
+  /** Spawn origin + launch velocity — the shell's legal endpoint is a
+   *  point ON its own arc, not wherever the target happened to stand;
+   *  claiming blast at the target reads as a forged trajectory (reach
+   *  rejects prove the server checks exactly this). */
+  origin: Vec3;
+  launchVel: Vec3;
   /** 'b' = ball, 'c' = crawler — creature targets claim via the
    *  creatureHit/crawlerHit wire path instead of a `shot` hit. */
   creature: '' | 'b' | 'c';
@@ -223,9 +229,20 @@ export class NetBot {
     return this.loadout.side;
   }
 
+  /** Pain bookkeeping — a hit the client hasn't flinched to yet. */
+  private lastPainAt = 0;
+
   private think(): void {
     const nc = this.nc;
     if (nc.self.isDead) return;
+    // Getting shot is a priority interrupt — a bot that keeps walking
+    // while hit reads as exactly the sheep the meter counts on 'ignore'.
+    const pain = nc.lastAttacker;
+    if (pain && pain.at > this.lastPainAt) {
+      this.lastPainAt = pain.at;
+      const shooter = pain.shooterId ? nc.roster.get(pain.shooterId) : null;
+      this.brain.takeHit(shooter ? { ...shooter.pos } : { ...nc.self.pos });
+    }
     const out = this.brain.think(THINK_S, this.ctx());
 
     // The brain's objective goals ignore enemies it can't see, and a
@@ -336,6 +353,8 @@ export class NetBot {
       shotId, weaponType, targetId,
       flightS,
       impactAt: Date.now() + flightS * 1000,
+      origin: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
+      launchVel: { x: (dir.x / dl) * w.speed, y: (dir.y / dl) * w.speed, z: (dir.z / dl) * w.speed },
       impactPos: {
         x: target.pos.x + target.vel.x * flightS,
         y: target.pos.y + target.vel.y * flightS,
@@ -368,6 +387,15 @@ export class NetBot {
       const roll = this.rand();
       const aoe = (w?.aoeRadius ?? 0) > 0;
       const target = this.targetEntry(sh.targetId);
+      // Where the shell really is at flight end — the blast claims this
+      // point, not the target's position; a shell can't detonate off
+      // its own arc and the server's reach check knows it.
+      const drop = w?.gravity ? 0.5 * GRAVITY * sh.flightS * sh.flightS : 0;
+      const endPos = {
+        x: sh.origin.x + sh.launchVel.x * sh.flightS,
+        y: sh.origin.y + sh.launchVel.y * sh.flightS + drop,
+        z: sh.origin.z + sh.launchVel.z * sh.flightS,
+      };
 
       if (roll < DIRECT_P && target && !target.isDead) {
         // Direct claims need the target's position at claim-land time —
@@ -404,7 +432,7 @@ export class NetBot {
         if (speed > 15 || contact > 1.0) {
           if (aoe) {
             nc.send({
-              type: 'aoeShot', position: { ...target.pos }, weaponType: sh.weaponType,
+              type: 'aoeShot', position: endPos, weaponType: sh.weaponType,
               projectileId: projId ?? null, shotId: sh.shotId, airtime,
             });
             nc.tel.claims++;
@@ -426,9 +454,10 @@ export class NetBot {
           nc.tel.claims++;
         }
       } else if (roll < DIRECT_P + BLAST_P && aoe) {
-        // Blast-only: near miss that still splashes.
+        // Blast-only: near miss that still splashes — claimed where
+        // the shell's own arc ends, not at the target.
         nc.send({
-          type: 'aoeShot', position: { ...sh.impactPos }, weaponType: sh.weaponType,
+          type: 'aoeShot', position: endPos, weaponType: sh.weaponType,
           projectileId: projId ?? null, shotId: sh.shotId, airtime,
         });
         nc.tel.claims++;

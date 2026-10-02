@@ -98,6 +98,10 @@ export class NetClient {
    *  physics; without it a bot's eased positions read as airborne drift. */
   field: Heightfield | null = null;
   surface: FieldSurface | null = null;
+  /** Last incoming hit + the shooter's roster position at that moment —
+   *  the pain signal a real player reacts to (server bots get it via
+   *  brain.takeHit off the combat funnel). */
+  lastAttacker: { at: number; shooterId: string | undefined } | null = null;
   /** Structures from gameState/mapUpdate — stashed until the field
    *  finishes loading so the attach survives a slow .bin fetch. */
   private structures?: readonly StructureSpec[];
@@ -311,7 +315,7 @@ export class NetClient {
           if (m.seq <= this.lastHitSeq) { this.tel.dedupDrops++; break; }
           this.lastHitSeq = m.seq;
         }
-        if (m.targetId === this.id) { this.tel.hitsTaken++; this.self.health = m.health; }
+        if (m.targetId === this.id) { this.tel.hitsTaken++; this.self.health = m.health; this.lastAttacker = { at: Date.now(), shooterId: m.shooterId }; }
         if (m.shooterId === this.id) this.tel.hitsDealt++;
         const e = this.roster.get(m.targetId);
         if (e) e.health = m.health;
