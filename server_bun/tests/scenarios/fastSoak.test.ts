@@ -177,7 +177,10 @@ describe('scenario: warp soak throughput', () => {
       let n = 0;
       for (const q of room.players.getAllPlayers().values()) {
         if (q.id === pid || q.isDead || q.team !== me?.team) continue;
-        if (Math.hypot(q.position.x - foeF0.pos.x, q.position.z - foeF0.pos.z) < 60) n++;
+        // 130m not 60: the marshalled wave holds a ~110m staging orbit
+        // by design now, so a 60m radius reads "no support" while the
+        // flood is literally in position waiting to commit.
+        if (Math.hypot(q.position.x - foeF0.pos.x, q.position.z - foeF0.pos.z) < 130) n++;
       }
       return n;
     };
