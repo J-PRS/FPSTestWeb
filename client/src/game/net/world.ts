@@ -14,6 +14,7 @@ import type { NetCtx } from './ctx.js';
 import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { setBotStructureSpecs } from '../botBrain.js';
+import { noteLocalSnap } from '../gameLoop.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
 import { saveLastRoomMap } from './lastRoom.js';
@@ -196,6 +197,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
   const player = deps.lazyPlayer();
   player.pos.set(localPlayerState.position.x, localPlayerState.position.y, localPlayerState.position.z);
+  noteLocalSnap();
   deps.setLastSentPos({ x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z });
   player.yaw = localPlayerState.rotation.yaw;
   player.pitch = localPlayerState.rotation.pitch;

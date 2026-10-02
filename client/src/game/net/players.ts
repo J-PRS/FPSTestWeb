@@ -7,6 +7,7 @@ import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config
 import * as sfx from '../../core/sfx.js';
 import type { ArmorClass } from '../../../../shared/botClasses.js';
 import { onPlayerKill } from './playerKill.js';
+import { noteLocalSnap } from '../gameLoop.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
@@ -141,6 +142,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (journal.length === 0) {
       player.pos.set(position.x, position.y, position.z);
       player.vel.set(velocity.x, velocity.y, velocity.z);
+      noteLocalSnap();
       // NEVER touch yaw/pitch — the server echoes our last *accepted*
       // rotation, which can be seconds stale. Aim is client-authoritative;
       // snapping it warps the camera 40-60° for no gameplay reason.
@@ -173,6 +175,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     player.pos.set(st.pos.x, st.pos.y, st.pos.z);
     player.vel.set(st.vel.x, st.vel.y, st.vel.z);
     player.onGround = st.onGround;
+    noteLocalSnap();
     player.syncMovement();
     logger.info(`Correction replayed: ${err.toFixed(2)}m err, ${journal.length} inputs from seq ${inputSeq}`);
   };
@@ -235,6 +238,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       if (armorClass) player.armorClass = armorClass as ArmorClass;
       player.resetLifeState();
       player.pos.set(position.x, position.y, position.z);
+      noteLocalSnap();
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       player.yaw = rotation.yaw;
       player.pitch = rotation.pitch;

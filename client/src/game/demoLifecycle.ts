@@ -8,6 +8,7 @@ import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
 import type { Player } from '../entities/Player.js';
+import { noteLocalSnap } from './gameLoop.js';
 import type { Projectile } from '../projectiles/Projectile.js';
 import type { Terrain } from '../world/terrain.js';
 import * as THREE from 'three';
@@ -193,6 +194,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     if (demoManager.isPlaying) {
       const player = d.lazyPlayer();
       player.pos.set(state.posX, state.posY, state.posZ);
+      noteLocalSnap(); // replayed trajectory isn't a physics snap — scrubbing included
       player.vel.set(state.velX, state.velY, state.velZ);
       player.yaw = state.yaw;
       player.pitch = state.pitch;

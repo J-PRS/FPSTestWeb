@@ -52,6 +52,13 @@ const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
 // fires on a real snap.
 const _posPrev = new THREE.Vector3();
 let _posPrimed = false;
+
+/** Authoritative reseats (respawn, correction, gameState restore, journal
+ *  rewind) teleport the body by design — the frame-jump watch must not
+ *  read them as physics snaps. Snap paths call this after pos.set. */
+export function noteLocalSnap(): void {
+  _posPrimed = false;
+}
 const JUMP_FRAME_M = 8;
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
