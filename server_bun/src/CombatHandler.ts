@@ -42,6 +42,9 @@ export interface CombatDeps {
   /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
    *  rooms without structures (offline-style lobbies). */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  /** A bot chat line hit the wire — Room relays it as a 'reply' notice
+   *  so squadmates can answer back. */
+  onBotSpoke?: (id: string) => void;
   /** Room heartbeat counters — claims/rejects/applied damage tally here
    *  so the periodic 'Room health' line shows the funnel at a glance. */
   health?: Map<string, number>;
@@ -70,6 +73,13 @@ export class CombatHandler {
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
+  /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
+   *  burst window — start time + claims seen inside it. The client fire
+   *  timer is feel; this is the law. A window holds up to `burst` spawn
+   *  claims (fan weapons fire all pellets in one pull); hits don't need
+   *  gating — the ledger already caps them at one per registered
+   *  projectile. */
+  fireWindows = new Map<string, { start: number; count: number }>();
   /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
   chargeBank: ChargeBank; // public — aoeClaims banks LG ticks through it
@@ -103,7 +113,8 @@ export class CombatHandler {
   ) {
     // Late binding on the static — tests reassign tauntDelayMs after
     // construction and must still steer the delay.
-    this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs());
+    this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs(),
+      (id) => this.deps.onBotSpoke?.(id), sendToPlayer);
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
     this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target, amount));
@@ -151,6 +162,9 @@ export class CombatHandler {
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
+    for (const key of this.fireWindows.keys()) {
+      if (key.startsWith(`${playerId}:`)) this.fireWindows.delete(key);
+    }
     this.lastHeal.delete(playerId);
     this.chargeBank.delete(playerId);
   }
@@ -232,18 +246,27 @@ export class CombatHandler {
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
     // Ownership check: any client could otherwise destroy every other
     // player's in-flight projectiles (grief vector — silently suppresses
-    // weapons). Unknown IDs are allowed through so client-side-only IDs
-    // still work.
-    const owner = this.ledger.ownerOf(msg.projectileId);
-    if (owner !== undefined && owner !== playerId) {
-      logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${msg.projectileId}`);
+    // weapons). Unknown IDs now drop entirely: a replica can only exist
+    // for a ledger-minted id, so destroying one nobody knows just relayed
+    // fake pops — including for server-owned 'sp-' shells, which live
+    // outside the ledger by design and must never be client-destroyable.
+    let pid: string | undefined = msg.projectileId || undefined;
+    if (pid === undefined || this.ledger.ownerOf(pid) === undefined) {
+      pid = msg.shotId ? this.ledger.idForClientShot(playerId, msg.shotId) : pid;
+    }
+    if (pid === undefined) return;
+    const owner = this.ledger.ownerOf(pid);
+    if (owner === undefined) return;
+    if (owner !== playerId) {
+      logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${pid}`);
       return;
     }
-    this.ledger.destroy(msg.projectileId);
+    this.ledger.destroy(pid);
 
     this.broadcast({
       type: 'projectileDestroyed',
-      projectileId: msg.projectileId,
+      projectileId: pid,
+      shotId: msg.shotId,
     });
   }
 
@@ -298,8 +321,8 @@ export class CombatHandler {
     this.serverHit(ownerId, targetId, damage, 'Turret hit');
   }
 
-  botAttack(shooterId: string, targetId: string, weaponType: number): void {
-    botAttack(this, shooterId, targetId, weaponType);
+  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
+    botAttack(this, shooterId, targetId, weaponType, airtime);
   }
 
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.

@@ -3,6 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { classMass } from '../../shared/botClasses.ts';
 import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -63,18 +64,7 @@ export class BlastRunner {
     // in-flight ordnance and its charge-pop both outlive the kill.
     if (!player || (player.isDead && !trusted)) return;
 
-    // Cheat prevention: bound the blast to plausible projectile range —
-    // legit long shots (mortar arcs, cross-map rockets) fly hundreds of
-    // metres; 200m was rejecting real hits. 500m still catches the cheat
-    // this guards: a blast teleported to a victim across the map.
-    const dx = player.position.x - position.x;
-    const dy = player.position.y - position.y;
-    const dz = player.position.z - position.z;
-    const distSq = dx * dx + dy * dy + dz * dz;
-    if (!trusted && distSq > 250000) { // 500m squared
-      this.h.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
-      return;
-    }
+    if (!trusted && !this.blastInReach(playerId, player, position, weapon)) return;
 
     const pull = stats.forceMode === 'pull';
     // Perk modifies the blast envelope, not the damage numbers — a
@@ -82,23 +72,15 @@ export class BlastRunner {
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
     const ctx: BlastCtx = {
       shooterId: playerId, ping: player.ping, pos: position,
-      radius, baseDamage: stats.aoeDamage * this.h.ddMult(player),
+      // Splash pays a banded fraction of the DIRECT hit — aoeDamage on
+      // the stat block only survives as the base for damage-only specials
+      // (melee arc, injected LG pop charge) that have no directDamage.
+      radius, baseDamage: (stats.directDamage || stats.aoeDamage) * this.h.ddMult(player),
       impulse: stats.knockbackForce, pull,
       label: pull ? 'disc AOE' : 'AOE', weapon,
     };
 
-    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
-      if (targetId === excludeTargetId) continue; // Skip direct hit target
-      if (target.isDead) continue;
-      if (targetId === playerId) {
-        // Self-knockback for bots only: a bot's velocity is server truth
-        // so a disc-jump blast must land here. Human clients self-predict
-        // their own displacement and would double-apply it.
-        if (target.isBot) this.splashOne(ctx, targetId, target, true);
-        continue;
-      }
-      this.splashOne(ctx, targetId, target);
-    }
+    this.splashTargets(ctx, playerId, excludeTargetId);
 
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
@@ -106,6 +88,32 @@ export class BlastRunner {
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
+  }
+
+  /** Cheat prevention: bound the blast to plausible projectile range —
+   *  legit long shots (mortar arcs, cross-map rockets) fly hundreds of
+   *  metres; 200m was rejecting real hits. 500m still catches the cheat
+   *  this guards: a blast teleported to a victim across the map. */
+  private blastInReach(playerId: string, player: PlayerState, position: Vec3, weapon?: number): boolean {
+    const dx = player.position.x - position.x;
+    const dy = player.position.y - position.y;
+    const dz = player.position.z - position.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq <= 250000) return true; // 500m squared
+    this.h.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
+    return false;
+  }
+
+  /** Every live player except the direct-hit victim takes the splash
+   *  roll — including the shooter, but only for bots: a bot's velocity is
+   *  server truth so a disc-jump blast must land here, while human
+   *  clients self-predict their own displacement and would double-apply. */
+  private splashTargets(ctx: BlastCtx, playerId: string, excludeTargetId: string | null | undefined): void {
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (targetId === excludeTargetId || target.isDead) continue;
+      if (targetId === playerId && !target.isBot) continue;
+      this.splashOne(ctx, targetId, target, targetId === playerId);
+    }
   }
 
   /** Armor-grenade plating sweep: coats EVERY player caught — friend or
@@ -169,9 +177,14 @@ export class BlastRunner {
   private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, pos: Vec3, pull: boolean): void {
     const dist = Math.hypot(offset.x, offset.y, offset.z);
     if (dist <= 0) return;
+    // Mass is real now — a heavy mech eats 20% less shove, a light sails
+    // 33% further. The wire force stays pre-mass: the victim's own
+    // applyKnockback divides by its class, so both ends land the same dv.
+    const m = classMass(target.armorClass);
+    const eff = impulseMag / m;
     const dv: Vec3 = pull
-      ? { x: -(offset.x / dist) * impulseMag, y: 0.3 * impulseMag, z: -(offset.z / dist) * impulseMag }
-      : { x: (offset.x / dist) * impulseMag, y: 0.5 * impulseMag, z: (offset.z / dist) * impulseMag };
+      ? { x: -(offset.x / dist) * eff, y: 0.3 * eff, z: -(offset.z / dist) * eff }
+      : { x: (offset.x / dist) * eff, y: 0.5 * eff, z: (offset.z / dist) * eff };
     target.velocity.x += dv.x;
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;

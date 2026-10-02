@@ -188,10 +188,11 @@ export class TickFanout {
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;
         const dSq = dx * dx + dy * dy + dz * dz;
-        // 500ms spacing on the far tier read as mini-warps even through the
-        // interpolation buffer — 200ms + Hermite is visually indistinguishable
-        // from full rate and still a 5x send reduction.
-        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 4; // 150m / 400m
+        // Tier 4 (200ms spacing) read as mini-warps even through the
+        // interpolation buffer — a skiing bot covers ~8m between records.
+        // 150ms is the worst a body ever gets; hits/kills ride reliable
+        // events either way.
+        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 3; // 150m / 400m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
         if (r.force || seq % tier === 0) others.push(r.data);

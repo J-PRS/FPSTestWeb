@@ -73,6 +73,11 @@ function validateBody(obj: Record<string, unknown>): ValidationResult<{ position
 
 // Optional vec — absent is fine, present-but-bad is not.
 type OptVec = { ok: true; data?: Vec3 } | { ok: false; error: string };
+/** Client shot nonce — bounded opaque token, never a path/keys source. */
+function optShotId(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 && v.length <= 40 ? v : undefined;
+}
+
 function optVec(value: unknown): OptVec {
   if (value === undefined) return { ok: true };
   const r = validateVec3(value);
@@ -117,6 +122,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
         projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
         weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
         airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
+        shotId: optShotId(obj.shotId),
       },
     };
   },
@@ -139,6 +145,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
         airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
         power: isFiniteNumber(obj.power) ? obj.power : undefined,
         directHit: obj.directHit === true ? true : undefined,
+        shotId: optShotId(obj.shotId),
       },
     };
   },
@@ -194,14 +201,19 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     if (typeof obj.projectileId !== 'string') {
       return { success: false, error: 'projectileId must be a string' };
     }
-    return { success: true, data: { type: 'projectileDestroy', projectileId: obj.projectileId } };
+    return { success: true, data: { type: 'projectileDestroy', projectileId: obj.projectileId, shotId: optShotId(obj.shotId) } };
   },
 
   environmentDamage: (obj) => {
     if (!isFiniteNumber(obj.amount)) {
       return { success: false, error: 'amount must be a finite number' };
     }
-    return { success: true, data: { type: 'environmentDamage', amount: obj.amount } };
+    // Attribution rides through for host-simmed sources ('bot:*',
+    // deployable owners). Same grammar CombatHandler re-checks —
+    // validation is the gate that actually strips hostile payloads.
+    const attacker = typeof obj.attacker === 'string' && /^[\w: .-]{1,32}$/.test(obj.attacker)
+      ? obj.attacker : undefined;
+    return { success: true, data: { type: 'environmentDamage', amount: obj.amount, attacker } };
   },
 
   heal: (obj) => {

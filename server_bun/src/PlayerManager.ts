@@ -6,8 +6,9 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
 import { SpawnPicker } from './spawnPicker.ts';
-
+import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
+
 let internalIdCounter = 0;
 
 function nextInternalId(): string {
@@ -17,7 +18,13 @@ function nextInternalId(): string {
 export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
   /** Spawn anchors — map specs override, default is the config ring. */
-  spawnPoints: Vec3[] | null = null;
+  spawnPoints: SpawnPoint[] | null = null;
+  /** Team-owned spawn spheres from the map spec — when set, team members
+   *  spawn inside their own sphere volumes (T2 SpawnSphere semantics). */
+  teamSpawns: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } | null = null;
+  /** Spawn jitter source — Room wires its seeded rng so soaks/tests can
+   *  reproduce a spawn layout. */
+  spawnRng: () => number = Math.random;
   /** Spawn protection window — long enough to orient, short enough that
    *  camping a spawn ring still works. */
   static readonly SPAWN_PROTECT_MS = 2000;
@@ -38,8 +45,10 @@ export class PlayerManager {
   private readonly spawnPicker = new SpawnPicker({
     players: () => this.players,
     spawnPoints: () => this.spawnPoints,
+    teamSpawns: () => this.teamSpawns,
     teamBases: () => this.teamBases,
     groundAt: () => this.groundAt,
+    rng: () => this.spawnRng(),
   });
 
   addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium'): PlayerState {

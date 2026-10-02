@@ -59,14 +59,15 @@ export class BallCombat {
 
   /** Earliest live-ball contact along a segment — same order rule the
    *  player sweep uses (terrain/walls are the caller's to check first). */
-  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number } | null {
-    let best: { id: number; t: number } | null = null;
+  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number; d: number } | null {
+    let best: { id: number; t: number; d: number } | null = null;
     for (const b of this.host.balls().values()) {
       if (b.dead) continue;
       const c = { x: b.x, y: b.y, z: b.z };
-      if (segPointDist(from, to, c) > b.radius + extraReach) continue;
+      const d = segPointDist(from, to, c);
+      if (d > b.radius + extraReach) continue;
       const t = segPointT(from, to, c);
-      if (!best || t < best.t) best = { id: b.id, t };
+      if (!best || t < best.t) best = { id: b.id, t, d };
     }
     return best;
   }

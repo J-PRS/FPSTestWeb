@@ -1,4 +1,4 @@
-import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage } from '../../shared/weapons.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
@@ -22,14 +22,15 @@ export function crawlerAttack(h: CombatHandler, targetId: string, damage: number
     h.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
   }
 
-export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number): void {
+export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) return;
     shooter.protectedUntil = 0; // firing breaks your own spawn shield
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
-    // — falling back to it keeps bot punches non-zero.
+    // — falling back to it keeps bot punches non-zero. airtime feeds the
+    // skillshot ramp for sim shells (melee/beam callers pass none).
     const stats = getWeaponStats(weaponType);
-    let damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
+    let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
     // Bot beams ramp down like human ones — the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {

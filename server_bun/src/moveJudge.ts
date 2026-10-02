@@ -30,7 +30,7 @@ export class FieldSurface {
     hmNormal(this.f, x, z, out as { x: number; y: number; z: number });
     return out;
   }
-  resolveBody(s: MoveState): void { this.solid?.resolveBody(s); }
+  resolveBody(s: MoveState, height: number): void { this.solid?.resolveBody(s, height); }
 }
 
 export interface Shadow {
@@ -271,6 +271,9 @@ export class MoveJudge {
     const anchor = anchorSeq !== undefined ? sh.seqStates.get(anchorSeq) : undefined;
     if (!anchor) return s;
     const probe = (sh.probe ??= new MoveSim(this.host.surface()!, anchor.st));
+    // The probe replays the SAME body — a heavy's weaker jets would
+    // replay as a phantom climb if mass/eye fell back to defaults.
+    probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
     probe.setState(anchor.st);
     const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
     this.replayWindow(sh, probe, anchor, segs);
@@ -316,6 +319,7 @@ export class MoveJudge {
 
   private probeForward(sh: Shadow, from: MoveState, steps: number, inp: MoveInput): MoveState {
     const probe = (sh.probe ??= new MoveSim(this.host.surface()!, from));
+    probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
     probe.setState(from);
     Object.assign(probe.input, inp);
     for (let i = 0, n = Math.min(steps, 16); i < n; i++) probe.update(MoveSim.STEP);

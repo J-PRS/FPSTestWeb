@@ -1,7 +1,8 @@
 import type { ClientMessage } from './types.ts';
 import type { PlayerState } from './types.ts';
-import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
-import { validateHitClaim } from '../../shared/combat.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { validateHitClaim, pointToCapsuleDistance } from '../../shared/combat.ts';
+import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { rewindPos, clampPing } from './claimLedger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
@@ -40,7 +41,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // Hit claims must name the projectile that landed them. The claimed
     // id may be null if the hit raced the server's projectileCreated —
     // fall back to the shooter's most recent spawn of that weapon type.
-    const proj = h.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'shot');
+    const proj = h.ledger.resolve(playerId, { projectileId: msg.projectileId, clientShotId: msg.shotId, weaponType: msg.weaponType, claim: 'shot' });
     if (!proj) {
       h.reject(playerId, 'Shot', `no known projectile (id=${msg.projectileId ?? 'null'})`, targetId, msg.weaponType);
       return;
@@ -52,20 +53,27 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // Lag compensation: validate against where the target was when the
     // shooter saw it (now - ping), not where it is now — otherwise a
     // 100ms client aims at ghosts by design.
+    const targetPos = rewindPos(target, clampPing(player.ping));
     const verdict = validateHitClaim({
       projectile: proj,
       hitPos: msg.position,
-      targetPos: rewindPos(target, clampPing(player.ping)),
+      targetPos,
       airtime: msg.airtime,
       shooterVel: player.velocity,
       now: Date.now(),
       solids: h.solids,
+      targetClass: target.armorClass,
     });
     if (!verdict.ok) {
       h.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
       return;
     }
-    const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage * h.ddMult(player);
+    // Skillshot ramp pays on BODY contact only — a claim inside the grown
+    // wake proxy is still a legal hit (flat directDamage) but doesn't earn
+    // the airtime multiplier. Re-derived server-side, never trusted.
+    const bodyHit = pointToCapsuleDistance(msg.position, targetPos, target.armorClass)
+      <= PLAYER_RADIUS + getWeaponStats(proj.weaponType).bodyRadius;
+    const shotDamage = scaledDirectDamage(proj.weaponType, bodyHit ? msg.airtime : undefined) * perkMods(player.perk).directDamage * h.ddMult(player);
     const result = h.playerManager.applyDamage(targetId, shotDamage);
     // Full-rate tick updates for the hit window — the shooter's client is
     // extrapolating this target's knockback and needs real positions to
@@ -87,6 +95,27 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
     logger.debug('Shot fired (miss)', { shooter: playerId });
     if (!msg.position || !msg.velocity) return;
 
+    // Fire-rate validation (the UE ServerFire_Validate pattern) on the
+    // SPAWN claim — hit claims don't need it: the ledger already caps them
+    // at one per registered projectile, so bounding spawns bounds damage.
+    // A window admits `burst` claims (fan weapons register every pellet
+    // in one pull); 15% slack absorbs ping jitter.
+    const interval = msg.weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType] : undefined;
+    if (interval !== undefined) {
+      const now = Date.now();
+      const key = `${playerId}:${msg.weaponType}`;
+      const win = h.fireWindows.get(key);
+      if (win && now - win.start < interval * 850) {
+        if (win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
+          h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType);
+          return;
+        }
+        win.count++;
+      } else {
+        h.fireWindows.set(key, { start: now, count: 1 });
+      }
+    }
+
     // Spawn sanity: the claimed muzzle position must be near where the
     // shooter was WHEN THEY FIRED — rewind by their ping (respawn,
     // knockback and teleports all legitimately move the server-side
@@ -105,7 +134,7 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       h.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
       return;
     }
-    const projectileId = h.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity);
+    const projectileId = h.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity, msg.shotId);
     h.broadcast({
       type: 'projectileCreated',
       projectileId,
@@ -113,6 +142,7 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       position: msg.position,
       velocity: msg.velocity,
       weaponType: msg.weaponType,
+      shotId: msg.shotId,
     });
   }
 

@@ -24,7 +24,7 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
@@ -41,6 +41,10 @@ export interface LiveProj {
   /** Age at which the parabola could first reach the terrain ceiling.
    *  Before it, segFieldHit is skipped — provably nothing below. */
   terrainAt: number;
+  /** This shell's fuse — maxLifetime jittered per id so burst weapons
+   *  (flak) pop raggedly. Client replicas derive the same value from the
+   *  projectileId, so both ends' pops line up. */
+  ttl: number;
 }
 
 // Player aim height — matches where the client sweeps the capsule center.
@@ -136,7 +140,10 @@ export class RoomProjectiles {
     // Schedule the first age at which this arc could reach the terrain
     // ceiling; spawned inside it → sweep every tick as before.
     const terrainAt = this.field ? timeToCeiling(origin.y, vel.y, g, this.fieldMax + stats.bodyRadius) : 0;
-    this.projs.set(id, { id, ownerId, weaponType, stats, p: { pos: { ...origin }, vel, age: 0 }, terrainAt });
+    this.projs.set(id, {
+      id, ownerId, weaponType, stats, p: { pos: { ...origin }, vel, age: 0 }, terrainAt,
+      ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
+    });
     this.room.broadcast({
       type: 'projectileCreated', projectileId: id, ownerId,
       position: { ...origin }, velocity: vel, weaponType,
@@ -151,8 +158,7 @@ export class RoomProjectiles {
       const p = proj.p;
       const prevAge = p.age;
       const from = projStep(p, dt, stats.gravity ? GRAVITY : 0);
-      const ttl = stats.maxLifetime ?? HARD_TTL_S;
-      if (p.age >= ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
+      if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the
       // shell's velocity line into a hitscan beam — the earliest contact
@@ -178,15 +184,19 @@ export class RoomProjectiles {
     dischargeRay(this, proj, range);
   }
 
-  detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number): void {
+  detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean): void {
     this.projs.delete(proj.id);
     this.room.broadcast({ type: 'projectileDestroyed', projectileId: proj.id });
-    if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType);
+    // Skillshot ramp: sim shells carry their real flight age — a bot's
+    // 2s disc lead pays the same multiplier a player's claim would. Wake
+    // contacts still pay flat directDamage; only body hits earn it.
+    const rampAge = bodyDirect ? proj.p.age : undefined;
+    if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge);
     // A shell that lands on a creature deals its direct line, then the
     // blast splashes the rest of the swarm — same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
-      this.room.ballSim?.handleHit(proj.ownerId, ballId, proj.stats.directDamage || proj.stats.aoeDamage);
+      this.room.ballSim?.handleHit(proj.ownerId, ballId, scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage);
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);

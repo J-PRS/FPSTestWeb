@@ -69,6 +69,11 @@ export class RoomFlags {
   dropIfCarrier(playerId: string): void {
     for (const f of this.flags.values()) {
       if (f.carrier !== playerId) continue;
+      // The dead carrier gets the fumble line — the killer's taunt
+      // already fires on the frag itself.
+      this.room.messages.killFeed.say(playerId, 'flagdrop');
+      this.room.bots?.notice('flagdrop', playerId,
+        this.room.players.getPlayer(playerId)?.team);
       const p = this.room.players.getPlayer(playerId);
       if (p) f.pos = { ...p.position };
       f.carrier = null;
@@ -126,6 +131,8 @@ export class RoomFlags {
     if (carrier.team !== f.team && ownFlag.state === 'home'
       && Math.hypot(cdx, cdz) <= FLAG_HOME_R) {
       logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
+      this.room.messages.killFeed.say(carrier.id, 'flagcap');
+      this.room.bots?.notice('flagcap', carrier.id, carrier.team);
       if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', Date.now() - f.carriedAt);
       f.state = 'home';
       f.pos = { ...f.home };
@@ -155,6 +162,8 @@ export class RoomFlags {
     if (!t) return;
     if (t.team === f.team && f.state === 'dropped') {
       logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
+      this.room.messages.killFeed.say(t.id, 'flagreturn');
+      this.room.bots?.notice('flagreturn', t.id, t.team);
       if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
       f.state = 'home';
       f.pos = { ...f.home };
@@ -162,6 +171,8 @@ export class RoomFlags {
       this.dirty = true;
     } else if (t.team && t.team !== f.team) {
       logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
+      this.room.messages.killFeed.say(t.id, 'flaggrab');
+      this.room.bots?.notice('flaggrab', t.id, t.team);
       f.state = 'carried';
       f.carrier = t.id;
       f.carriedAt = Date.now();

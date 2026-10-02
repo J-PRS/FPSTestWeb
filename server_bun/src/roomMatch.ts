@@ -17,6 +17,7 @@ export interface MatchHost {
   rotate(): MapSpec | null;    // next same-mode spec, or null to replay
   applySpec(spec: MapSpec): void;
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
+  onEnded?: () => void;         // the horn fired — bots get their 'gg' beat
 }
 
 /**
@@ -112,6 +113,7 @@ export class MatchClock {
     const scores = spec.teams ? { ...host.scores } : Object.fromEntries(host.ffaScores);
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
     host.onMatchEnd?.({ room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() });
+    host.onEnded?.();
     host.scores.alpha = 0;
     host.scores.bravo = 0;
     host.ffaScores.clear();

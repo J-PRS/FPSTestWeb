@@ -1,7 +1,8 @@
 import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
-import { CombatHandler } from './CombatHandler.ts';
+import { CombatHandler, type CombatDeps } from './CombatHandler.ts';
+import type { KillFeed } from './killFeed.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -82,6 +83,11 @@ export interface RoomInfo {
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
+  /** Bot chat landed — Room relays it as a 'reply' notice to the squad. */
+  onBotSpoke?: (id: string) => void;
+  /** A player typed in chat — Room keyword-matches it into a bot notice
+   *  (gg → 'gg', ez → 'salty', bot-name mention → 'mention'). */
+  onChat?: (id: string, text: string) => void;
   /** Mute the shadow's divergence judge ~1 RTT without re-seating it —
    *  armed alongside correctionGraceUntil whenever a correction goes out:
    *  pre-correction reports still in flight would otherwise blip the
@@ -104,6 +110,26 @@ export interface RoomInfo {
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: Vec3; hp?: number; armor?: number; team?: string }[];
 }
 
+/** RoomInfo → CombatDeps projection — kept out of the constructor so the
+ *  handler table stays the ctor's readable half. */
+function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
+  return {
+    onKill: roomInfo?.onKill,
+    onHit: roomInfo?.onHit,
+    rng: roomInfo?.rng,
+    teams: roomInfo?.teams,
+    friendlyFire: roomInfo?.friendlyFire,
+    moveImpulse: roomInfo?.moveImpulse,
+    moveResync: roomInfo?.moveResync,
+    onBotSpoke: roomInfo?.onBotSpoke,
+    mode: roomInfo?.mode,
+    deployBlast: roomInfo?.deployBlast,
+    health: roomInfo?.health,
+    envRange: roomInfo?.envRange,
+    creatureArmor: roomInfo?.creatureArmor,
+  };
+}
+
 export class MessageHandler {
   // Public fields/methods are the MoveClaims host surface (moveClaims.ts)
   // — the position/teleport plausibility funnel lives there.
@@ -114,6 +140,8 @@ export class MessageHandler {
   private moves: MoveClaims;
   // Everything that deals damage — projectiles, blasts, env damage, respawns
   private combat: CombatHandler;
+  /** Room/flag code reads killFeed for situation chatter (bot 'say' events). */
+  get killFeed(): KillFeed { return this.combat.killFeed; }
   // Server-owned creatures (balls). Optional — a missing/unloadable
   // heightmap must not take down the whole game server.
   private ballSim: BallSim | null = null;
@@ -145,20 +173,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, {
-      onKill: roomInfo?.onKill,
-      onHit: roomInfo?.onHit,
-      rng: roomInfo?.rng,
-      teams: roomInfo?.teams,
-      friendlyFire: roomInfo?.friendlyFire,
-      moveImpulse: roomInfo?.moveImpulse,
-      moveResync: roomInfo?.moveResync,
-      mode: roomInfo?.mode,
-      deployBlast: roomInfo?.deployBlast,
-      health: roomInfo?.health,
-      envRange: roomInfo?.envRange,
-      creatureArmor: roomInfo?.creatureArmor,
-    });
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, combatDeps(roomInfo));
     this.moves = new MoveClaims(this);
     this.attachStructures(roomInfo?.structures);
 
@@ -215,6 +230,10 @@ export class MessageHandler {
           return;
         }
         this.broadcast({ type: 'chat', playerId: id, text, vgs });
+        // Bots can read: the relay above ships the line, this lets the
+        // room turn high-confidence phrases (gg, ez, a bot's name) into
+        // a squad notice — whether anyone answers is still dice+cooldown.
+        this.roomInfo.onChat?.(id, text);
       },
       ping: (id, m) => {
         const p = this.playerManager.getPlayer(id);
@@ -268,25 +287,18 @@ export class MessageHandler {
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */
-  setMap(
-    bases: RoomInfo['bases'],
-    structures: RoomInfo['structures'],
-    arena: RoomInfo['arena'],
-    ambient?: RoomInfo['ambient'],
-    terrain?: RoomInfo['terrain'],
-    terrainTex?: RoomInfo['terrainTex'],
-    sky?: RoomInfo['sky'],
-    interiors?: RoomInfo['interiors'],
-  ): void {
-    this.roomInfo.bases = bases;
-    this.roomInfo.structures = structures;
-    this.roomInfo.arena = arena;
-    this.roomInfo.ambient = ambient;
-    this.roomInfo.terrain = terrain;
-    this.roomInfo.terrainTex = terrainTex;
-    this.roomInfo.sky = sky;
-    this.roomInfo.interiors = interiors;
-    this.attachStructures(structures);
+  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'terrainTex' | 'sky' | 'interiors'>): void {
+    // Explicit field writes (not Object.assign): a spec that omits a
+    // field must clear it, not leave the previous map's value behind.
+    this.roomInfo.bases = m.bases;
+    this.roomInfo.structures = m.structures;
+    this.roomInfo.arena = m.arena;
+    this.roomInfo.ambient = m.ambient;
+    this.roomInfo.terrain = m.terrain;
+    this.roomInfo.terrainTex = m.terrainTex;
+    this.roomInfo.sky = m.sky;
+    this.roomInfo.interiors = m.interiors;
+    this.attachStructures(m.structures);
   }
 
   /** Rebuild the collider set claim validation occludes against —
@@ -317,8 +329,8 @@ export class MessageHandler {
 
   /** Server-simulated direct hit — the room's projectile sim resolved the
    *  contact; combat applies damage through the same funnel as botFire. */
-  botAttack(shooterId: string, targetId: string, weaponType: number): void {
-    this.combat.botAttack(shooterId, targetId, weaponType);
+  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
+    this.combat.botAttack(shooterId, targetId, weaponType, airtime);
   }
 
   /** Drop per-player bookkeeping when a socket closes (grace-period cleanup

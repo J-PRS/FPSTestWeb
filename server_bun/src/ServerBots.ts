@@ -17,6 +17,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
+import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -115,6 +116,7 @@ export class ServerBots {
     this.deadSet.delete(playerId);
     this.quiet.delete(playerId);
     this.watchdog.remove(playerId);
+    this.sense.forget(playerId);
     this.room.moveSim.untrack(playerId);
   }
 
@@ -135,6 +137,23 @@ export class ServerBots {
     const brain = this.brains.get(targetId);
     const shooter = this.room.players.getPlayer(shooterId);
     if (brain && shooter) brain.takeHit(shooter.position);
+  }
+
+  /** A room event the squad may react to — enters the senses as a notice
+   *  channel; each bot's brain decides on its own whether to remark. */
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
+    this.sense.notice(kind, actorId, actorTeam);
+  }
+
+  /** Does chat text name a live bot? Callsigns are 'BOT-VEKTOR-01' — the
+   *  middle name is what humans actually type ('vektor u sux'). */
+  nameIn(text: string): boolean {
+    const t = text.toLowerCase();
+    for (const id of this.brains.keys()) {
+      const name = id.slice(4, id.lastIndexOf('-')).toLowerCase();
+      if (name.length > 2 && t.includes(name)) return true;
+    }
+    return false;
   }
 
   private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
@@ -168,7 +187,7 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null): void {
     if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
     if (out.belt) this.arsenal.throwBelt(p);
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
@@ -194,11 +213,11 @@ export class ServerBots {
     if (out.repair) this.room.deployables.repair(id, +out.repair);
   }
 
-  private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
-    driveMoveInto(this, id, p, out, sh, dt, now);
+  private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number; armorClass: string }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
+    driveMoveInto(this, id, p, { out, sh, dt, now });
   }
 
-  private legacyMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number }, dest: Vec3, dt: number): boolean {
+  private legacyMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number; armorClass: string }, dest: Vec3, dt: number): boolean {
     return legacyMoveInto(this, id, p, dest, dt);
   }
 
@@ -264,6 +283,10 @@ export class ServerBots {
         const goal = this.sense.flagGoal(p);
         const ctx = this.sense.build(id, p, goal, now);
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
+        // Situation chatter edge — killFeed.say resolves the kind through
+        // the taunt pools + throttle, so a fresh contact/bored edge reads
+        // as a remark rather than spam.
+        if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target);
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);

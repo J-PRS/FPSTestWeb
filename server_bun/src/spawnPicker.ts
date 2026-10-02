@@ -5,26 +5,47 @@
  * objective layout without touching the roster/damage surface.
  */
 import type { PlayerState, Vec3 } from './types.ts';
+import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import { CONFIG } from './config.ts';
-
 import type { TeamId } from '../../shared/teams.ts';
+
 export interface SpawnPickerHost {
   players(): Map<string, PlayerState>;
   /** Spawn anchors — map specs override, default is the config ring. */
-  spawnPoints(): Vec3[] | null;
+  spawnPoints(): SpawnPoint[] | null;
+  /** Team-owned spawn volumes — when a team's list exists its members
+   *  spawn only from their own spheres (T2 TeamN SimGroups). */
+  teamSpawns(): { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } | null;
   /** Team home bases — own-flag spawns when set. */
   teamBases(): { alpha: Vec3; bravo: Vec3 } | null;
   /** Ground height at (x,z) — live heightfield. */
   groundAt(): ((x: number, z: number) => number) | undefined;
+  /** Jitter source — Room wires its rng so tests can seed it. */
+  rng(): number;
 }
 
 export class SpawnPicker {
   constructor(private host: SpawnPickerHost) {}
 
   pick(playerId: string, team?: TeamId): Vec3 {
-    const points: Vec3[] = (this.host.spawnPoints() ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
-    // Authored anchors predate the current terrain — anything buried
-    // under the field lifts to the surface rather than spawning into it.
+    const { points, teamPool } = this.pool(team);
+    if (this.host.players().size === 0) {
+      return this.scatter(points[0]!);
+    }
+    return this.scatter(this.bestSpawn(points, playerId, team, teamPool));
+  }
+
+  /** Team-authored spheres win over the flat pool — spawning a bravo
+   *  player inside alpha's sphere group is instant camp food. Anchors
+   *  are copied then lifted: authored points predate the live terrain,
+   *  so anything buried under the field rises to the surface. */
+  private pool(team?: TeamId): { points: SpawnPoint[]; teamPool: SpawnPoint[] | undefined } {
+    const teamPool = (team === 'alpha' || team === 'bravo')
+      ? this.host.teamSpawns()?.[team] : undefined;
+    const raw = teamPool?.length ? teamPool
+      : (this.host.spawnPoints() ?? CONFIG.spawnPoints);
+    const points: SpawnPoint[] = [];
+    for (const p of raw) points.push({ ...p });
     const groundAt = this.host.groundAt();
     if (groundAt) {
       for (const p of points) {
@@ -32,28 +53,43 @@ export class SpawnPicker {
         if (p.y < g) p.y = g;
       }
     }
-    if (this.host.players().size === 0) {
-      return { ...points[0]! };
-    }
+    return { points, teamPool };
+  }
 
-    // Team modes prefer own-base spawns — materializing among enemies is
-    // instant camp food. Score blends base proximity with enemy clearance.
-    const base = team === 'alpha' || team === 'bravo' ? this.host.teamBases()?.[team] : undefined;
-    let best: Vec3 = { ...points[0]! };
+  /** Team modes prefer own-base spawns — materializing among enemies is
+   *  instant camp food. Score blends base proximity with enemy clearance.
+   *  Team pools are already home-side, so base proximity adds nothing. */
+  private bestSpawn(points: SpawnPoint[], playerId: string, team: TeamId | undefined, teamPool: SpawnPoint[] | undefined): SpawnPoint {
+    const base = !teamPool && (team === 'alpha' || team === 'bravo')
+      ? this.host.teamBases()?.[team] : undefined;
+    let best: SpawnPoint = { ...points[0]! };
     let bestScore = -Infinity;
-
     for (const spawn of points) {
       const minFoeDist = this.foeClearance(spawn, playerId, team);
-      const score = base
+      const score = (base
         ? minFoeDist - 2 * Math.hypot(spawn.x - base.x, spawn.z - base.z)
-        : minFoeDist;
+        : minFoeDist) * (spawn.w ?? 1) / 100;
       if (score > bestScore) {
         bestScore = score;
         best = { ...spawn };
       }
     }
-
     return best;
+  }
+
+  /** Sphere volumes spawn somewhere INSIDE — T2 SpawnSpheres are 30-100m
+   *  volumes; using the center spawned every player at one exact spot. */
+  private scatter(anchor: SpawnPoint): Vec3 {
+    const out: Vec3 = { x: anchor.x, y: anchor.y, z: anchor.z };
+    if (anchor.r && anchor.r > 0) {
+      const a = this.host.rng() * Math.PI * 2;
+      const d = anchor.r * Math.sqrt(this.host.rng());
+      out.x += Math.cos(a) * d;
+      out.z += Math.sin(a) * d;
+      const g = this.host.groundAt()?.(out.x, out.z);
+      if (g !== undefined && out.y < g) out.y = g;
+    }
+    return out;
   }
 
   /** Distance to the nearest living non-teammate from a spawn point —

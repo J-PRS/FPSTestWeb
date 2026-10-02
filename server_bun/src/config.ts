@@ -107,7 +107,11 @@ export const CONFIG = {
     inputMove: { maxCount: 120, windowMs: 1000 },
     input: { maxCount: 120, windowMs: 1000 },
     projectileDestroy: { maxCount: 30, windowMs: 1000 },
-    environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
+    // One bucket serves crawler pounces, host-simmed bot damage on the
+    // local player (attacker-tagged), deployables, and self-splash — a
+    // firefight can legitimately burst past 10/s, and drops are silent.
+    // Still self-report-only and capped per-claim (80 tagged / 40 plain).
+    environmentDamage: { maxCount: 30, windowMs: 1000 },
     // teleport skips plausibility checks by design (declared warp), so the
     // only defense is rate — a distance bound is impossible since a thrown
     // warp beacon can legally land hundreds of metres out. Legit cadence:

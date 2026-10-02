@@ -7,12 +7,26 @@ import { healPool } from './healPool.ts';
 
 type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 
+// First env claim per player lands on disk (warn → server.log) — the
+// INFO path is console-only, so without this edge marker a dead env
+// channel is indistinguishable from a quiet one in postmortem logs.
+const envSeen = new Set<string>();
+const markEnvSeen = (id: string): boolean => {
+  if (envSeen.has(id)) return false;
+  if (envSeen.size > 512) envSeen.clear();
+  envSeen.add(id);
+  return true;
+};
+
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
   // clamped so it can never be aimed at another player or one-shot anyone.
 export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): void {
     const player = h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     h.hb('envdmg');
+    if (markEnvSeen(playerId)) {
+      logger.warn('First envDamage claim received', { playerId, amount: msg.amount, attacker: msg.attacker });
+    }
     // Melee-from-afar check: creature contact damage needs a creature
     // nearby. Past ~15m there's no legal pounce — flag it in the
     // heartbeat + warn (damage still applies: this is a self-report, and

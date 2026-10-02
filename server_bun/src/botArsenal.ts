@@ -6,7 +6,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { EYE_OFFSET } from '../../shared/constants.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
@@ -19,7 +19,7 @@ const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
 // FPS_SUPERBOT knob lives in superBot.ts — leaf import so beam/drive/
 // roster don't reach back through this file.
 
-type BotBody = { id: string; position: Vec3; velocity: Vec3 };
+type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string };
 
 export class BotArsenal implements BeamHost {
   /** Propel cooldown + the post-shove jet pin — owned here because only
@@ -195,7 +195,7 @@ export class BotArsenal implements BeamHost {
       const wt = this.propelWeapon(lo);
       const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
       const hx = p.position.x - nx * 1.8 - muzzle.x;
-      const hy = p.position.y - EYE_OFFSET - muzzle.y;
+      const hy = p.position.y - classCapsule(p.armorClass).eye - muzzle.y;
       const hz = p.position.z - nz * 1.8 - muzzle.z;
       const len = Math.hypot(hx, hy, hz) || 1;
       this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);

@@ -39,6 +39,15 @@ interface SpentRecord {
   at: number;
 }
 
+/** Claim identity — an explicit server id, the client's spawn nonce, or
+ *  nothing (falls back to the shooter's oldest live shell of the type). */
+export interface ClaimRef {
+  projectileId?: string | null;
+  clientShotId?: string;
+  weaponType?: number;
+  claim: 'shot' | 'aoe';
+}
+
 /**
  * The claim ledger: every in-flight projectile the server knows about,
  * plus "spent" tombstones so a detonating shell can satisfy BOTH its
@@ -51,9 +60,12 @@ export class ClaimLedger {
   private counter = 0;
   private projectiles: Map<string, TrackedProjectile> = new Map();
   private spent = new Map<string, SpentRecord>();
+  /** `${ownerId}|${clientShotId}` → proj_N — lets claims name the shell
+   *  before the projectileCreated echo lands (or instead of it). */
+  private clientIds = new Map<string, string>();
 
   /** Track a newly spawned projectile; returns the server-assigned id. */
-  register(ownerId: string, weaponType: number, position: Vec3, velocity: Vec3): string {
+  register(ownerId: string, weaponType: number, position: Vec3, velocity: Vec3, clientShotId?: string): string {
     const id = `proj_${++this.counter}`;
     this.projectiles.set(id, {
       ownerId,
@@ -61,7 +73,9 @@ export class ClaimLedger {
       origin: { ...position },
       velocity: { ...velocity },
       spawnAt: Date.now(),
+      clientShotId,
     });
+    if (clientShotId) this.clientIds.set(`${ownerId}|${clientShotId}`, id);
     // A live game never has >512 in-flight projectiles — the cap bounds
     // memory if clients never send destroys.
     if (this.projectiles.size > MAX_SPENT) {
@@ -71,21 +85,30 @@ export class ClaimLedger {
     return id;
   }
 
+  /** proj_N for a client's spawn nonce — live or spent, still indexed. */
+  idForClientShot(playerId: string, clientShotId: string): string | undefined {
+    const id = this.clientIds.get(`${playerId}|${clientShotId}`);
+    if (!id) return undefined;
+    // Lazily reap index entries whose record was swept — the map would
+    // otherwise grow one entry per shot for the life of the session.
+    if (!this.projectiles.has(id) && !this.spent.has(id)) {
+      this.clientIds.delete(`${playerId}|${clientShotId}`);
+      return undefined;
+    }
+    return id;
+  }
+
   /**
-   * Find the tracked projectile a hit claim refers to. The client echoes
-   * the server-assigned id when it has it; when the hit outraced the
-   * projectileCreated reply it can't, so we fall back to the shooter's
-   * most recently spawned projectile of the claimed weapon type.
+   * Find the tracked projectile a claim refers to. Binding precedence:
+   * explicit server id → the spawn-claim nonce → the shooter's oldest
+   * live shell of the claimed type (a claim that outraced its echo).
    */
-  resolve(
-    playerId: string,
-    projectileId: string | null | undefined,
-    weaponType: number | undefined,
-    claim: 'shot' | 'aoe',
-  ): TrackedProjectile | undefined {
-    return projectileId
-      ? this.resolveById(playerId, projectileId, claim)
-      : this.resolveLatest(playerId, weaponType, claim);
+  resolve(playerId: string, ref: ClaimRef): TrackedProjectile | undefined {
+    const pid = ref.projectileId
+      ?? (ref.clientShotId ? this.idForClientShot(playerId, ref.clientShotId) : undefined);
+    return pid
+      ? this.resolveById(playerId, pid, ref.claim)
+      : this.resolveLatest(playerId, ref.weaponType, ref.claim);
   }
 
   /** A tombstone fuels one claim of each kind — a rocket's direct `shot`
@@ -121,25 +144,33 @@ export class ClaimLedger {
    *  means, and leaving siblings live would let each claim mint hits off
    *  a projectile that already detonated. */
   private resolveLatest(playerId: string, weaponType: number | undefined, claim: 'shot' | 'aoe'): TrackedProjectile | undefined {
-    let latest: SpentRecord | undefined;
+    // The claim outraced its projectileCreated echo — the shell that
+    // detonated is one of the OLDEST live matches (spawn order ≈
+    // detonation order), never the one fired last. Resolving the newest
+    // systematically failed airtime-vs-age by exactly one fire interval.
+    let claimable: SpentRecord | undefined;
     for (const [id, proj] of this.projectiles) {
       if (!this.matches(proj, playerId, weaponType)) continue;
       this.projectiles.delete(id);
-      latest = { proj, shot: false, aoe: false, at: Date.now() };
-      this.spent.set(id, latest);
+      const rec: SpentRecord = { proj, shot: false, aoe: false, at: Date.now() };
+      this.spent.set(id, rec);
+      if (!claimable) claimable = rec; // first live match = oldest
     }
-    if (latest) {
+    if (claimable) {
       // This path mints tombstones without passing through sweepSpent —
       // unbounded growth under sustained fire on unordered transports.
       this.sweepSpent();
-      return this.take(latest, claim);
+      return this.take(claimable, claim);
     }
+    // Spent fallback: first matching tombstone whose claim-kind is still
+    // free — taking a consumed rec would just bounce the claim.
     for (const rec of this.spent.values()) {
       if (!this.matches(rec.proj, playerId, weaponType)) continue;
       if (Date.now() - rec.at >= SPENT_CLAIM_MS) continue;
-      latest = rec;
+      const t = this.take(rec, claim);
+      if (t) return t;
     }
-    return latest ? this.take(latest, claim) : undefined;
+    return undefined;
   }
 
   private matches(proj: TrackedProjectile, playerId: string, weaponType: number | undefined): boolean {
@@ -150,6 +181,12 @@ export class ClaimLedger {
   ownerOf(projectileId: string): string | undefined {
     return this.projectiles.get(projectileId)?.ownerId
       ?? this.spent.get(projectileId)?.proj.ownerId;
+  }
+
+  /** Owner lookup by spawn nonce — same check for shotId-keyed destroys. */
+  ownerOfClientShot(playerId: string, clientShotId: string): string | undefined {
+    const id = this.idForClientShot(playerId, clientShotId);
+    return id ? this.ownerOf(id) : undefined;
   }
 
   /**
@@ -175,7 +212,10 @@ export class ClaimLedger {
       if (proj.ownerId === playerId) this.projectiles.delete(id);
     }
     for (const [id, rec] of this.spent) {
-      if (rec.proj.ownerId === playerId) this.spent.delete(id);
+      if (rec.proj.ownerId === playerId) this.dropSpent(id, rec);
+    }
+    for (const key of this.clientIds.keys()) {
+      if (key.startsWith(`${playerId}|`)) this.clientIds.delete(key);
     }
   }
 
@@ -186,10 +226,22 @@ export class ClaimLedger {
   private sweepSpent(): void {
     const now = Date.now();
     for (const [id, rec] of this.spent) {
-      if (now - rec.at > SPENT_SWEEP_MS) this.spent.delete(id);
+      if (now - rec.at > SPENT_SWEEP_MS) this.dropSpent(id, rec);
     }
     while (this.spent.size > MAX_SPENT) {
-      this.spent.delete(this.spent.keys().next().value!);
+      const [id, rec] = this.spent.entries().next().value!;
+      this.dropSpent(id, rec);
+    }
+  }
+
+  /** Spent eviction also drops the nonce index so a swept shell's
+   *  clientShotId can't bind a claim hours later (or leak the entry). */
+  private dropSpent(id: string, rec: SpentRecord): void {
+    this.spent.delete(id);
+    const sid = rec.proj.clientShotId;
+    if (sid !== undefined) {
+      const key = `${rec.proj.ownerId}|${sid}`;
+      if (this.clientIds.get(key) === id) this.clientIds.delete(key);
     }
   }
 }

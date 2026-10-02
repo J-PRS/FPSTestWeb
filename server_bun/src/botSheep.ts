@@ -48,21 +48,7 @@ export class BotSheepMeter {
   set(id: string, v: number): void { this.meter.set(id, v); }
 
   check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, _now: number): void {
-    // Total mechanical energy (kinetic + potential) is the Tribes
-    // currency — a fast bot low to the ground and a slow bot on a perch
-    // are both holding real E. bonusSpeed converts it back to the
-    // equivalent flat-ground speed so the thresholds stay familiar.
-    const v = p.velocity;
-    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
-    // Potential counts at half gravity past a 2m deadband — and only
-    // while the bot is moving: a parked body at altitude isn't holding
-    // energy to convert, it's sleeping on the deposit (the drain-forever
-    // bug that kept sleepers at sheep=0).
-    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, (m.height ?? 0) - 2) : 0);
-    const ePrev = this.eSm.get(id) ?? mech;
-    const eSm = ePrev + (mech - ePrev) * Math.min(1, m.dt * 5);
-    this.eSm.set(id, eSm);
-    const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
+    const bonusSpeed = this.energy(id, p.velocity, m.dt, m.height ?? 0);
     const jetting = !!m.out.move?.jet;
     // Welding the stand's gear is honest work — a parked welder is
     // productive, not a pedestrian.
@@ -77,13 +63,32 @@ export class BotSheepMeter {
     // holds fire.
     if (m.out.fire?.targetId) this.lastFire.set(id, this.simMs);
     meter += this.debits(id, p, m, tribesing, why);
+    this.commit(id, prev, meter, why);
+  }
 
+  /** Total mechanical energy (kinetic + potential) is the Tribes
+   *  currency — a fast bot low to the ground and a slow bot on a perch
+   *  are both holding real E. Returns the EMA smoothed back into the
+   *  equivalent flat-ground speed so the thresholds stay familiar.
+   *  Potential counts at half gravity past a 2m deadband — and only
+   *  while the bot is moving: a parked body at altitude isn't holding
+   *  energy to convert, it's sleeping on the deposit (the drain-forever
+   *  bug that kept sleepers at sheep=0). */
+  private energy(id: string, v: Vec3, dt: number, height: number): number {
+    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
+    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
+    const ePrev = this.eSm.get(id) ?? mech;
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
+    this.eSm.set(id, eSm);
+    return Math.sqrt(Math.max(0, 2 * eSm));
+  }
+
+  /** Write the new meter value with its thresholds — a full meter just
+   *  clamps and dumps the charge ledger once (the launch penalty is
+   *  retired: the meter is a readout, not a punish lever). */
+  private commit(id: string, prev: number, meter: number, why: { idle: number; ignore: number; cover: number }): void {
     if (meter >= 100) {
-      // The meter is a readout only — a full meter clamps and the bot
-      // plays on (the launch penalty is retired: it was a joke mechanic).
-      // Dump the ledger once so tuning still reads "why".
-      meter = 100;
-      this.meter.set(id, meter);
+      this.meter.set(id, 100);
       if (!this.maxed.delete(id)) {
         this.maxed.add(id);
         logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
@@ -91,9 +96,8 @@ export class BotSheepMeter {
       return;
     }
     this.maxed.delete(id);
-    if (meter < 0) {
-      meter = 0;
-    } else if (prev < 60 && meter >= 60) {
+    if (meter < 0) meter = 0;
+    else if (prev < 60 && meter >= 60) {
       logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
     }
     this.meter.set(id, meter);

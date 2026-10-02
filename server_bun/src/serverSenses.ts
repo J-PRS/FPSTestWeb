@@ -9,9 +9,11 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
+import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { STATUS } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
@@ -28,6 +30,42 @@ export class ServerBotSenses {
     private readonly foeNear: Map<string, number>,
   ) {}
 
+  /** A room event the squad may react to — delivered to each bot on its
+   *  OWN think phase (phases are offset across the squad), so reactions
+   *  scatter naturally; the taunt cooldown+dice thin out who speaks.
+   *  Nothing dispatches "a crowd" — the chattiness is emergent. */
+  private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
+  private noticed = new Map<string, number>();
+
+  /** Bot left the room — drop its notice receipt so the map can't grow
+   *  one entry per retired bot for the room's life. */
+  forget(id: string): void {
+    this.noticed.delete(id);
+  }
+
+  /** Room code reports an event worth a reaction (flag cap/grab/return/
+   *  drop). Actor's own line is separate — the actor never gets a notice. */
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
+    this.pendingNotice = { kind, actorId, actorTeam, stamp: Date.now() };
+  }
+
+  /** Translate the pending event into THIS bot's side of it — allies
+   *  cheer their team's score, enemies groan, defenders get the alert. */
+  private noticeFor(id: string, team: string | undefined, now: number): { kind: ChatterKind; actor: string } | undefined {
+    const n = this.pendingNotice;
+    if (!n) return undefined;
+    if (now - n.stamp > 2000) { this.pendingNotice = null; return undefined; }
+    if (n.actorId === id || (this.noticed.get(id) ?? 0) >= n.stamp) return undefined;
+    this.noticed.set(id, n.stamp);
+    const mine = n.actorTeam !== undefined && n.actorTeam === team;
+    switch (n.kind) {
+      case 'flagcap': case 'flagreturn': return { kind: mine ? 'cheer' : 'groan', actor: n.actorId };
+      case 'flaggrab': return { kind: mine ? 'cheer' : 'alert', actor: n.actorId };
+      case 'flagdrop': return { kind: mine ? 'groan' : 'cheer', actor: n.actorId };
+      default: return { kind: n.kind, actor: n.actorId };
+    }
+  }
+
   /** Hostiles this bot may hunt. Team modes fight the other side; FFA
    *  bots pick any non-bot (fighting filler-vs-filler burns ticks nobody
    *  asked for). */
@@ -39,13 +77,14 @@ export class ServerBotSenses {
         if (q.team === p.team) continue;
       } else if (q.isBot) continue;
       if (q.status & STATUS.CLOAK) continue; // bots can't aim what they can't see
-      out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead });
+      out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead,
+        aimY: classCapsule(q.armorClass).centerOff });
     }
     // Creatures are huntable too — in nuggets rooms they're the whole
     // objective (each kill drops the gem that scores), and shooting
     // hunters off your back is correct behavior in every mode.
     for (const b of this.room.ballSim.roster()) {
-      out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true });
+      out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
     }
     return out;
   }
@@ -196,7 +235,8 @@ export class ServerBotSenses {
     if (!own || own.state !== 'carried' || !own.carrier) return null;
     const t = this.room.players.getPlayer(own.carrier);
     if (!t || t.isDead) return null;
-    return { id: t.id, pos: t.position, vel: t.velocity, alive: true };
+    return { id: t.id, pos: t.position, vel: t.velocity, alive: true,
+      aimY: classCapsule(t.armorClass).centerOff };
   }
 
   /** The sensorium for one think tick — see file header for what's legal
@@ -250,6 +290,7 @@ export class ServerBotSenses {
       // like a human reading the arc instead of eating every volley.
       threats: this.room.projectiles.incomingNear(p.position, 12),
       sounds: this.room.noisesNear(p.position, 50),
+      notice: this.noticeFor(id, p.team, now),
       repair: this.repairJob(p),
       now,
     };

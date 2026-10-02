@@ -9,7 +9,7 @@
  */
 import type { Vec3 } from './types.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { EYE_OFFSET } from '../../shared/constants.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 import type { BrainOut } from '../../shared/botBrain.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import type { BotSheepMeter } from './botSheep.ts';
@@ -38,7 +38,8 @@ export interface DriveHost {
  *  (heading → yaw, walk = forward key) and let the sim integrate.
  *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
  *  after bots.tick, so this reads the fresh post-step state. */
-export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
+export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
+  const { out, sh, dt, now } = frame;
   const dx = out.dest.x - p.position.x;
   const dz = out.dest.z - p.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
@@ -46,7 +47,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
-  const sheepHeight = Math.max(0, p.position.y - EYE_OFFSET - sheepGround);
+  const sheepHeight = Math.max(0, p.position.y - classCapsule(p.armorClass).eye - sheepGround);
   h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   if (dist >= 0.5) {
     // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
@@ -83,7 +84,7 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
 
 /** No heightfield → no shadow → legacy direct-write fallback.
  *  Returns true when the parked case already finished the tick. */
-export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number }, dest: Vec3, dt: number): boolean {
+export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number; armorClass: string }, dest: Vec3, dt: number): boolean {
   const dx = dest.x - p.position.x;
   const dz = dest.z - p.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
@@ -97,10 +98,10 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
   // p.position is EYE-height (the wire convention — clients render
-  // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
-  // underground.
-  const targetY = Math.max(groundY + EYE_OFFSET, p.position.y - 9 * dt);
-  const hopping = p.position.y > groundY + EYE_OFFSET + 1.1;
+  // feet at pos.y - eyeHeight); groundY+0.1 parked the model underground.
+  const eye = classCapsule(p.armorClass).eye;
+  const targetY = Math.max(groundY + eye, p.position.y - 9 * dt);
+  const hopping = p.position.y > groundY + eye + 1.1;
   p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
   p.position.x += p.velocity.x * dt;
   p.position.z += p.velocity.z * dt;

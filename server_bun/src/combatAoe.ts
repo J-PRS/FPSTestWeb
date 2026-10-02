@@ -69,7 +69,7 @@ export class AoeClaims {
    *  that popped (same fallback resolution as direct-hit claims — the
    *  hit can race the server's projectileCreated). */
   private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
-    const proj = this.h.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'aoe');
+    const proj = this.h.ledger.resolve(playerId, { projectileId: msg.projectileId, clientShotId: msg.shotId, weaponType: msg.weaponType, claim: 'aoe' });
     if (!proj) {
       this.h.reject(playerId, 'AOE', `blast with no known projectile (id=${msg.projectileId ?? 'null'})`, undefined, msg.weaponType);
       return;
