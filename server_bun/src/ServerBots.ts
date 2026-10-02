@@ -321,6 +321,11 @@ export class ServerBots {
     return this.sense.debugTasks(team);
   }
 
+  /** Test hook — is a push call live for this team right now. */
+  pushActive(team: string | undefined): boolean {
+    return this.sense.pushTarget(team) !== null;
+  }
+
   /** Test hook — seed the meter directly; accrual tests shouldn't need
    *  to park a bot for 30 simulated seconds to fill the meter. */
   debugSetSheep(id: string, v: number): void {

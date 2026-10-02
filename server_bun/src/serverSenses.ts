@@ -345,7 +345,14 @@ export class ServerBotSenses {
     // the stand is stand-bound regardless of which object holds it.
     const standBound = enemyStand !== null && pick !== null &&
       (pick === enemyStand || dist3(pick, enemyStand) < 8);
-    if (role === 'capper' && standBound && enemyStand) {
+    // The call also posts off the approach leg: standBound only arms
+    // inside ~80m where the pick snaps to the raw stand — by then the
+    // wave's ~15s transit is already late. A capper whose committed
+    // route targets the stand (entry probes still resolve toward it)
+    // announces early, so the flood launches with the approach.
+    const approachBound = !standBound && enemyStand !== null && pick !== null
+      && Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) < 260;
+    if (role === 'capper' && (standBound || approachBound) && enemyStand) {
       const qp = this.room.players.getPlayer(p.id);
       const spd = qp ? Math.hypot(qp.velocity.x, qp.velocity.z) : 0;
       const eta = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) / Math.max(12, spd);
