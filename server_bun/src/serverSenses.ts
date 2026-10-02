@@ -47,6 +47,18 @@ export class ServerBotSenses {
    *  stand floods BEFORE the runner lands — the same "capper's 10 out"
    *  call humans make on comms. Legal: the caller's own ETA, not intel. */
   private pushAt = new Map<TeamId, { pos: BotVec; at: number }>();
+  private routePrefs = new Map<string, number>();
+  /** A bot's habitual entry bearing — stable per id, no RNG draw. */
+  private routePref(id: string): number {
+    let a = this.routePrefs.get(id);
+    if (a === undefined) {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+      a = (h % 1000) / 1000 * Math.PI * 2;
+      this.routePrefs.set(id, a);
+    }
+    return a;
+  }
   /** Times each team's push-call was (re)posted — soak visibility into
    *  how often the flood call actually fires. */
   readonly pushCalls = new Map<TeamId, number>();
@@ -430,6 +442,12 @@ export class ServerBotSenses {
           }
           return score;
         };
+        // Route temperament: two runners reading the same terrain pick
+        // the same entry — mirrored runs joust head-on mid-field (the
+        // capper autopsy: enemy cappers are each other's top killer).
+        // A stable per-bot preferred bearing tilts the pick toward a
+        // lane without vetoing a clearly-better route.
+        const pref = this.routePref(p.id);
         let best = enemyStand, bestScore = -Infinity;
         for (let a = 0; a < 24; a++) {
           // Three radii: close entries are cheap, a closed rim wall
@@ -441,7 +459,7 @@ export class ServerBotSenses {
           const ex = enemyStand.x + Math.cos(ang) * ring;
           const ez = enemyStand.z + Math.sin(ang) * ring;
           const ey = hmHeight(this.field, ex, ez);
-          const score = scoreEntry(ex, ey, ez);
+          const score = scoreEntry(ex, ey, ez) + Math.cos(ang - pref) * 18;
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
         // Hysteresis verdict: the incumbent keeps the route unless the
@@ -473,8 +491,8 @@ export class ServerBotSenses {
     let posted = 0;
     if (anchored && Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15) {
       const base = own.state === 'carried'
-        ? (role === 'hof' ? 60 : 200)
-        : (role === 'hof' ? 5 : 90);
+        ? (role === 'hof' ? 20 : 200)
+        : (role === 'hof' ? 3 : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
     return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null

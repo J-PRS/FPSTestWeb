@@ -292,7 +292,7 @@ export class BotArsenal implements BeamHost {
    *  launches worth a fuse (long run, low speed, tank for the climb);
    *  distant pursuits may boost mid-volley since out-shooting never
    *  closes ground on a fleeing carrier. */
-  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec } | null, sh: MoveState | null, now: number): void {
+  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean } | null, sh: MoveState | null, now: number): void {
     if (!goal || !sh) return;
     // Self-splash costs real health now. A wounded bot holds fire —
     // except a desperate chaser: a loose enemy carrier far away means
@@ -351,8 +351,16 @@ export class BotArsenal implements BeamHost {
     // must choose between shooting and disc-jumping never catches a
     // carrier. Close goals still don't trade fire for speed.
     if (out.fire && dist < 60) return;
-    if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
-    if ((this.room.moveSim.energyOf(id) ?? 0) < 30) return;
+    // A runner pays blood to HOLD cruise, not just to launch: cappers
+    // die in transit at 12-18mps (the autopsy median) because the 8s
+    // re-boost gate let a 300m leg decay into a walk. Humans chain
+    // disc-jumps across the flat legs — the runner gate re-boosts under
+    // cruise (~20m/s), tighter cooldown on long legs, and only while
+    // healthy enough to keep paying splash.
+    const spdCap = goal.runner && dist > 120 ? 20 : 12;
+    if (Math.hypot(sh.vel.x, sh.vel.z) > spdCap) return; // already moving — boost is for launches
+    if (goal.runner && spdCap === 20 && hp < 60) return;
+    if ((this.room.moveSim.energyOf(id) ?? 0) < (goal.runner ? 40 : 30)) return;
     // Don't buy with a fuse what gravity sells for free: a mild descent
     // skis to speed without the launch, and the blast's fixed up-share
     // is just wasted hang time. A STEEP face is different — the
@@ -394,7 +402,7 @@ export class BotArsenal implements BeamHost {
       this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
       this.propelMark(id, 'heel');
     }
-    this.propelT.set(id, now + 8000);
+    this.propelT.set(id, now + (spdCap === 20 ? 3000 : 8000));
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
     logger.info('Bot propel', { id });
   }

@@ -345,7 +345,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // meters decide that: a bump farther downrange just costs a miss —
   // and ballistic arcs clear lips a straight full-length ray would
   // flag, so probing the whole ray strangled fire volume for nothing.
-  if (ctx.weaponSpeed?.(d)) {
+  if (ctx.weaponSpeed?.(d) && !process.env.FPS_NOMUZZLE) {
     const muzzle = { x: pos.x, y: pos.y + 1.4, z: pos.z };
     const reach = Math.min(d, 12);
     const nearAim = {
