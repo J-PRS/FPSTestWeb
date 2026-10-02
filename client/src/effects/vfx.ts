@@ -372,7 +372,12 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
   if (Math.random() > pressure * pressure) return;
   const ss = spec.sizeScale ?? 1;
   const count = Math.max(1, Math.round(spec.count * pressure));
-  const ps = new ParticleSystem({
+  // The whole spec is baked into the build (colors, life ranges, emitter
+  // shape, material) — pool per spec signature so reuse only ever sees
+  // its own config. Call sites pass near-constant specs, so a handful of
+  // kinds covers every puff.
+  const kind = `puff:${spec.count}:${spec.lifeMin}:${spec.lifeMax}:${ss}:${spec.additive ? 1 : 0}:${spec.gravity === false ? 0 : 1}:${spec.colA.join(',')}:${spec.colB.join(',')}:${spec.velMin.join(',')}:${spec.velMax.join(',')}:${spec.pos?.join(',') ?? ''}:${spec.shed?.join(',') ?? ''}`;
+  const ps = takeSystem(kind, () => new ParticleSystem({
     duration: spec.lifeMax + 0.05,
     looping: false,
     startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
@@ -398,7 +403,10 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
       new SizeOverLife(new FnValue(t => 0.3 + (1 - t) * 1.4)),
       new RotationOverLife(new IntervalValue(-2, 2)),
     ],
-  });
+  }));
+  // count is baked at build but pressure-scaled per call — a pooled
+  // reuse would replay the first build's crowd size.
+  ps.emissionBursts[0]!.count = new ConstantValue(count);
   activateSystem(ps, pos); // tags the emitter for the aim probe too
   live.add(ps);
 }
