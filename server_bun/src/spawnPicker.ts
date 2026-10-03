@@ -66,7 +66,18 @@ export class SpawnPicker {
    *  authored forward spheres exist for runners, not for the HoF who
    *  would otherwise hike 400m back to the stand he never left. */
   private bestSpawn(points: SpawnPoint[], playerId: string, team: TeamId | undefined, teamPool: SpawnPoint[] | undefined): SpawnPoint {
+    // No living enemies at all: every point is equally safe, and scoring
+    // degenerates to 0-everything → always points[0] — a respawn spot a
+    // camper can learn. Random instead; team modes with bias>0 still
+    // prefer their base through the fallback below (same effect, since
+    // baseDist breaks the tie there too — but a flat pick is fairer
+    // than the first authored sphere for everyone else).
     const bias = this.host.homeBias?.(playerId) ?? (teamPool ? 0 : 2);
+    if (bias === 0) {
+      const anyFoe = [...this.host.players().entries()].some(
+        ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
+      if (!anyFoe) return { ...points[Math.floor(this.host.rng() * points.length)]! };
+    }
     const base = bias > 0 && (team === 'alpha' || team === 'bravo')
       ? this.host.teamBases()?.[team] : undefined;
     let best: SpawnPoint = { ...points[0]! };

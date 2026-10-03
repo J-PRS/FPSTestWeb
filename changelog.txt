@@ -1,3 +1,4 @@
+2026-10-01 - spawnPicker: zero living enemies now picks a random spawn instead of always points[0] — a fully deterministic respawn spot was a camper-readable exploit
 2026-10-01 - claimLedger live-cap eviction tombstones instead of deleting — a still-flying shell pushed over 512 live entries no longer hard-bounces its hit claim
 2026-10-01 - sticky cook-off ages siblings to their own jittered fuse instead of base maxLifetime — a long-rolled sibling could previously survive the chain
 2026-10-01 - deployable combat envelopes moved into DEPLOY_ITEMS (one table both ends read); fixes client mines self-popping at 45s while the server kept them armed to 120s, mine fuse ignoring spawn protection, and a lastRepair key leak
