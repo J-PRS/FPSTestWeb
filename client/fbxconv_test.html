@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+const q = new URLSearchParams(location.search);
+const fbx = q.get('fbx'), tex = q.get('tex') || '';
+const animList = (q.get('anims') || '').split('|').filter(Boolean);
+try {
+  // tex is either one map applied to every mesh, or a material-name map:
+  // 'MatA:/a.png,MatB:/b.png' assigns each material its own base color.
+  const texMaps = new Map();
+  if (tex.includes('=') || tex.includes(':')) {
+    for (const pair of tex.split(',')) {
+      const i = pair.indexOf(':');
+      const mat = pair.slice(0, i), path = pair.slice(i + 1);
+      const t = await new THREE.TextureLoader().loadAsync(path);
+      t.colorSpace = THREE.SRGBColorSpace; t.flipY = true;
+      texMaps.set(mat, t);
+    }
+  } else if (tex) {
+    const t = await new THREE.TextureLoader().loadAsync(tex);
+    t.colorSpace = THREE.SRGBColorSpace; t.flipY = true;
+    texMaps.set('*', t);
+  }
+  const texMap = texMaps.get('*') || null;
+  const root = await new FBXLoader().loadAsync(fbx);
+  window.__bones = [];
+  root.traverse((o) => { if (o.isBone) window.__bones.push(o.name); });
+  window.__mats = [];
+  root.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) window.__mats.push({ mesh: o.name, mats: [].concat(o.material || []).map((m) => m && m.name || '?') }); });
+  // same-rig clip packs: load each anim FBX, name the clip by file stem so
+  // the state map can address it
+  const clips = [];
+  for (const a of animList) {
+    const g = await new FBXLoader().loadAsync(a);
+    const stem = decodeURIComponent(a).split('/').pop().replace(/\.(fbx|FBX)$/, '');
+    for (const c of g.animations || []) { c.name = stem; clips.push(c); }
+  }
+  // weapon props ship as sibling nodes in the same FBX — drop them, the game
+  // attaches its own weapons
+  const toRemove = [];
+  root.traverse((o) => {
+    const n = (o.name || '').toLowerCase();
+    // never touch bones — deleting a joint breaks the skin (GLTFLoader isBone crash)
+    if (o.isBone) return;
+    if (/gun|rifle|weapon|sword|axe|bow|staff|knife|pistol/.test(n)) toRemove.push(o);
+  });
+  toRemove.forEach((o) => o.parent && o.parent.remove(o));
+  root.traverse((o) => {
+    if (o.isMesh || o.isSkinnedMesh) {
+      const mats = [].concat(o.material || []);
+      const named = texMaps.size && !texMaps.get('*');
+      o.material = mats.map((m) => new THREE.MeshStandardMaterial({
+        map: named ? (texMaps.get(m?.name || '') || null) : texMap,
+        roughness: 0.9, metalness: 0.05,
+      }));
+      if (o.material.length === 1) o.material = o.material[0];
+      o.frustumCulled = false;
+    }
+  });
+  const exporter = new GLTFExporter();
+  const buf = await exporter.parseAsync(root, { binary: true, animations: clips.length ? clips : (root.animations || []) });
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  window.__glb = btoa(bin);
+} catch (e) { window.__err = String(e && e.stack || e); }
+</script>
+</body></html>

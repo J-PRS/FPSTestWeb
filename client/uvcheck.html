@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<body style="margin:0;background:#222">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const wt = q.get('wt') ?? '3', ext = q.get('ext') ?? 'png';
+const scene = new THREE.Scene();
+scene.add(new THREE.AmbientLight(0xffffff, 3));
+const gltf = await new GLTFLoader().loadAsync(`/weapons/w${wt}_baked.glb`);
+const tex = await new THREE.TextureLoader().loadAsync(`/weapons/w${wt}_edge.${ext}`);
+tex.flipY = false; tex.colorSpace = THREE.LinearSRGBColorSpace;
+const m = new THREE.MeshBasicMaterial({ map: tex });
+gltf.scene.traverse(o => { if (o.isMesh) o.material = m; });
+scene.add(gltf.scene);
+const box = new THREE.Box3().setFromObject(gltf.scene);
+const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3()).length();
+const cam = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.01, 100);
+cam.position.set(c.x + s*0.7, c.y + s*0.5, c.z + s*0.8); cam.lookAt(c);
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(innerWidth, innerHeight);
+document.body.appendChild(r.domElement);
+r.render(scene, cam);
+window.__done = true;
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin:0; background:#161a22; font-family:Consolas,monospace; color:#cfd6e4; overflow:hidden }
+  #labels { position:absolute; bottom:12px; left:0; width:100%; display:flex; justify-content:center }
+  #labels div { width:190px; text-align:center; font-size:14px; line-height:1.35 }
+  #title { position:absolute; top:12px; width:100%; text-align:center; font-size:15px; color:#8fa3c8 }
+</style>
+</head>
+<body>
+<div id="title">server pickups &mdash; kind silhouettes + idle glow</div>
+<div id="labels">
+  <div>HEAL<br>medkit +50hp</div>
+  <div>ARMOR<br>plate +100</div>
+  <div>REGEN<br>halo cell timed</div>
+  <div>DD<br>core 2x dmg</div>
+  <div>GEM<br>score drop</div>
+  <div>TAG<br>kill token</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { buildPickupModel } from '/src/entities/PickupModel.ts';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x161a22);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(1);
+document.body.appendChild(renderer.domElement);
+
+const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+cam.position.set(0, 1.5, 8.4);
+cam.lookAt(0, 0.9, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(2, 4, 5); scene.add(key);
+const rim = new THREE.DirectionalLight(0x8899ff, 0.8); rim.position.set(-3, 2, -4); scene.add(rim);
+scene.add(new THREE.GridHelper(12, 24, 0x445066, 0x2a3242));
+
+const kinds = ['heal', 'armor', 'regen', 'dd', 'gem', 'tag'];
+kinds.forEach((k, i) => {
+  const m = buildPickupModel(k, 0);
+  m.root.position.x = (i - 2.5) * 1.55;
+  scene.add(m.root);
+});
+
+renderer.setAnimationLoop(() => renderer.render(scene, cam));
+</script>
+</body>
+</html>

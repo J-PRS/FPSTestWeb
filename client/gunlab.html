@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gunlab — live weapon viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #25282e; }
+    canvas { display: block; }
+    #rail {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 180px;
+      background: rgba(10,12,16,0.85); overflow-y: auto; padding: 8px;
+      font: 12px monospace; color: #cde; z-index: 10;
+      scrollbar-width: thin;
+      scrollbar-color: #3a4552 transparent;
+    }
+    #rail::-webkit-scrollbar { width: 5px; }
+    #rail::-webkit-scrollbar-track { background: transparent; }
+    #rail::-webkit-scrollbar-thumb {
+      background: #3a4552; border-radius: 3px;
+    }
+    #rail::-webkit-scrollbar-thumb:hover { background: #55aaff; }
+    #rail button {
+      display: block; width: 100%; margin: 2px 0; padding: 5px 8px;
+      background: #1a1f26; color: #cde; border: 1px solid #333;
+      text-align: left; cursor: pointer; font: inherit;
+    }
+    #rail button.active { background: #2d4a66; border-color: #55aaff; }
+    #rail button.baked { border-left: 3px solid #7ddf7d; }
+    #rail .tools { margin-top: 10px; border-top: 1px solid #333; padding-top: 0px; }
+    #rail .tools button { color: #ffd; }
+    #rail .fovslider { display: flex; align-items: center; gap: 6px; margin: 4px 0; color: #8ab; }
+    #rail .fovslider input { flex: 1; min-width: 0; }
+    #rail .fovslider span { min-width: 30px; text-align: right; }
+    #status {
+      position: fixed; right: 8px; top: 8px; color: #8ab;
+      font: 11px monospace; text-align: right; z-index: 10;
+      text-shadow: 0 1px 2px #000; pointer-events: none;
+    }
+    #status .hot { color: #7ddf7d; }
+  </style>
+</head>
+<body>
+  <div id="rail"></div>
+  <div id="status"></div>
+  <script type="module" src="src/gunlab.ts"></script>
+</body>
+</html>

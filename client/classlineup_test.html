@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin:0; background:#161a22; font-family:Consolas,monospace; color:#cfd6e4; overflow:hidden }
+  #labels { position:absolute; bottom:12px; left:0; width:100%; display:flex; justify-content:center }
+  #labels div { width:190px; text-align:center; font-size:14px; line-height:1.35 }
+  #title { position:absolute; top:12px; width:100%; text-align:center; font-size:15px; color:#8fa3c8 }
+</style>
+</head>
+<body>
+<div id="title">mannequin.glb &times; CLASS_MODEL_SCALE (modelScale = 2.0 / size.y)</div>
+<div id="labels">
+  <div>LIGHT &times;1.00<br>eye 1.8m &middot; HP-25 &middot; mass 1.25 &middot; speed&times;1.2</div>
+  <div>MEDIUM &times;1.11<br>eye 2.0m &middot; HP 125 &middot; mass 1.5 &middot; speed&times;1.0</div>
+  <div>HEAVY &times;1.39<br>eye 2.5m &middot; HP 200 &middot; mass 1.75 &middot; speed&times;0.8</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x161a22);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(1);
+document.body.appendChild(renderer.domElement);
+
+const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+cam.position.set(0, 1.75, 7.2);
+cam.lookAt(0, 1.25, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(2, 4, 5); scene.add(key);
+const rim = new THREE.DirectionalLight(0x8899ff, 0.9); rim.position.set(-3, 2, -4); scene.add(rim);
+scene.add(new THREE.GridHelper(12, 24, 0x445066, 0x2a3242));
+
+// eye-height rulers at the capsule eye levels
+for (const [y, c] of [[1.8, 0x5ac86e], [2.0, 0xe0b64f], [2.5, 0xd06a4f]]) {
+  const pts = [new THREE.Vector3(-3.2, y, 0), new THREE.Vector3(3.4, y, 0)];
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.5 })));
+}
+
+const lineup = [
+  { scale: 1.0,       x: -1.9 },   // light
+  { scale: 2.0 / 1.8, x: 0.0  },   // medium
+  { scale: 2.5 / 1.8, x: 2.2  },   // heavy
+];
+
+new GLTFLoader().load('/public/assets/models/mannequin.glb', (g) => {
+  const src = g.scene;
+  const box = new THREE.Box3().setFromObject(src);
+  const modelScale = 2.0 / (box.max.y - box.min.y); // PlayerModel.ts mannequin fit
+  for (const { scale, x } of lineup) {
+    const inst = SkeletonUtils.clone(src);
+    inst.scale.setScalar(modelScale * scale);       // setScale(): modelScale * _classScale
+    inst.position.set(x, 0, 0);
+    scene.add(inst);
+  }
+  renderer.render(scene, cam);
+  window.__ready = true;
+}, undefined, (e) => { window.__err = String(e && e.message || e); });
+</script>
+</body>
+</html>

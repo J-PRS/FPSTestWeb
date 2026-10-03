@@ -5,9 +5,13 @@
 // /weapons/*.glb/_ao.png files hot-swaps bake assets in place — no reload.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Brush, Evaluator, ADDITION } from 'three-bvh-csg';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import ManifoldModule from 'manifold-3d';
+import manifoldWasmUrl from 'manifold-3d/manifold.wasm?url';
 import { ViewModel } from './entities/ViewModel.js';
 import { MODEL_BUILDERS } from './entities/viewmodel/weaponsGeo.js';
+import { ARCHIVE_BUILDERS } from './entities/viewmodel/weaponsGeoArchive.js';
+import { bakeVertexAO } from './effects/vertexAO.js';
 import { WeaponType } from '../../shared/weaponTable.js';
 
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean }
@@ -16,7 +20,6 @@ interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; c
 const saved = (() => {
   try {
     const s = JSON.parse(localStorage.getItem('gunlab') ?? '') as LabState;
-    console.log('[gunlab] restored state:', JSON.stringify(s));
     return s;
   } catch { return (window as any).__gunlab as LabState | undefined; }
 })();
@@ -257,6 +260,166 @@ function holeScan(root: THREE.Object3D): { holes: number; at: number[][]; who: s
   }
   return results;
 };
+// Gap check — floating-part lint: build every mesh's world AABB, then
+// any part whose box (expanded a hair) touches NO other part's box is
+// detached geometry — floating glow discs, prongs that miss their seat.
+// Reported per weapon with the orphan's name + center + nearest gap.
+const _bb = new THREE.Box3();
+function gapScan(root: THREE.Object3D): { orphans: number; who: string[]; at: number[][]; clusters: number } {
+  root.updateMatrixWorld(true);
+  const parts: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry.computeBoundingBox();
+    const box = m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld);
+    parts.push({ m, box });
+  });
+  const EPS2 = 0.002;
+  const touch = (a: THREE.Box3, b: THREE.Box3) =>
+    a.min.x - EPS2 <= b.max.x && b.min.x - EPS2 <= a.max.x &&
+    a.min.y - EPS2 <= b.max.y && b.min.y - EPS2 <= a.max.y &&
+    a.min.z - EPS2 <= b.max.z && b.min.z - EPS2 <= a.max.z;
+  // Union-find over box-overlap: cluster count + orphan detection in one pass.
+  const parent = parts.map((_, i) => i);
+  const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
+  for (let i = 0; i < parts.length; i++)
+    for (let j = i + 1; j < parts.length; j++)
+      if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);
+  const roots = new Set(parts.map((_, i) => find(i)));
+  // Orphan = a cluster of one (not merely a small cluster).
+  const size = new Map<number, number>();
+  for (let i = 0; i < parts.length; i++) size.set(find(i), (size.get(find(i)) ?? 0) + 1);
+  const orphans: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
+  for (let i = 0; i < parts.length; i++) if (size.get(find(i)) === 1) orphans.push(parts[i]!);
+  const who: string[] = [], at: number[][] = [];
+  for (const o of orphans.slice(0, 8)) {
+    who.push(o.m.name || o.m.geometry.type);
+    at.push(o.box.getCenter(_tmpC).toArray().map(v => +v.toFixed(3)));
+  }
+  return { orphans: orphans.length, who, at, clusters: roots.size };
+}
+const _tmpC = new THREE.Vector3();
+(window as any).__gl.gapcheck = (): { wt: number; orphans: number; clusters: number; who: string[]; at: number[][] }[] => {
+  const results: { wt: number; orphans: number; clusters: number; who: string[]; at: number[][] }[] = [];
+  for (const [wt, mk] of MODEL_BUILDERS) {
+    const built = mk() as THREE.Group | { g: THREE.Group };
+    const root = 'g' in built ? built.g : built;
+    root.visible = true;
+    const r = gapScan(root);
+    if (r.orphans || r.clusters > 1) results.push({ wt, ...r });
+  }
+  return results;
+};
+// Winding check — signed-volume census per mesh (divergence theorem):
+// a closed mesh sums positive when its tris face outward, NEGATIVE when
+// it's inside-out. Catches the mkLoft bug holeScan can't — an inverted
+// mesh is still watertight. Open pieces (bore discs, glow strips) are
+// allowed a small negative read: they report |vol| relative to bbox so
+// only real flips flag.
+function volScan(root: THREE.Object3D): { inverted: number; who: string[] } {
+  root.updateMatrixWorld(true);
+  const who: string[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const pos = m.geometry.getAttribute('position');
+    const idx = m.geometry.index;
+    const triCount = idx ? idx.count / 3 : pos.count / 3;
+    let vol = 0;
+    for (let t = 0; t < triCount; t++) {
+      const [ia, ib, ic] = idx ? [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)] : [t * 3, t * 3 + 1, t * 3 + 2];
+      A.fromBufferAttribute(pos, ia).applyMatrix4(m.matrixWorld);
+      B.fromBufferAttribute(pos, ib).applyMatrix4(m.matrixWorld);
+      C.fromBufferAttribute(pos, ic).applyMatrix4(m.matrixWorld);
+      vol += A.dot(EDGE.copy(B).cross(C)) / 6;
+    }
+    // Normalise against the mesh's own AABB volume — a real shell reads
+    // as a stable fraction of its box; open discs read ~0 either sign.
+    m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld).getSize(EDGE);
+    // Flat meshes (bore discs, glow strips) can't be volume-tested —
+    // a near-zero bbox axis explodes the ratio; skip them.
+    if (Math.min(bb.x, bb.y, bb.z) < 0.002) return;
+    const norm = vol / Math.max(bb.x * bb.y * bb.z, 1e-9);
+    if (norm < -0.02) who.push(`${m.name || m.geometry.type}(${norm.toFixed(2)})`);
+  });
+  return { inverted: who.length, who };
+}
+(window as any).__gl.normcheck = (): { wt: number; inverted: number; who: string[] }[] => {
+  const results: { wt: number; inverted: number; who: string[] }[] = [];
+  for (const [wt, mk] of MODEL_BUILDERS) {
+    const built = mk() as THREE.Group | { g: THREE.Group };
+    const root = 'g' in built ? built.g : built;
+    root.visible = true;
+    const r = volScan(root);
+    if (r.inverted) results.push({ wt, ...r });
+  }
+  return results;
+};
+// Info dump — clipboard truth per weapon: mesh/vert/tri census,
+// footprint size, baked attributes present, then the three checks
+// (z-fight pairs, hole rims, floating parts). Alt+Q = ACTIVE weapon
+// (the live viewmodel group, bake swap included); Alt+W = all weapons
+// off the builders. ⓘ info runs the current weapon.
+function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
+  root.updateMatrixWorld(true);
+  let meshes = 0, verts = 0, tris = 0;
+  const attrs = new Set<string>();
+  const wb = new THREE.Box3();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    meshes++;
+    const pos = m.geometry.getAttribute('position');
+    verts += pos.count;
+    tris += m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
+    for (const k of Object.keys(m.geometry.attributes)) attrs.add(k);
+    m.geometry.computeBoundingBox();
+    wb.union(m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld));
+  });
+  const size = wb.getSize(new THREE.Vector3());
+  const z = zScan(root);
+  const holes = holeScan(root);
+  const gaps = gapScan(root);
+  const vol = volScan(root);
+  return (
+    `w${wt} ${name}: ${meshes} meshes, ${verts}v/${tris}t, ` +
+    `size ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}, ` +
+    `attrs {${[...attrs].join(',')}} — ` +
+    `z:${z.pairs} holes:${holes.holes} inverted:${vol.inverted} floaters:${gaps.orphans} clusters:${gaps.clusters}` +
+    (vol.inverted ? ` INV[${vol.who.join('; ')}]` : '') +
+    (gaps.orphans ? ` [${gaps.who.join('; ')}]` : '')
+  );
+}
+async function infoDump(all = false): Promise<void> {
+  const lines: string[] = [`gunlab info — ${new Date().toISOString()}`];
+  if (all) {
+    for (const [wt, mk] of MODEL_BUILDERS) {
+      const built = mk() as THREE.Group | { g: THREE.Group };
+      const root = 'g' in built ? built.g : built;
+      root.visible = true;
+      lines.push(dumpWeapon(wt, root, mk.name || '?'));
+    }
+  } else {
+    // Active weapon, live state — the procedural bake, swapped GLB, or
+    // an archived build if one's parked in the group.
+    if (archiveGroup) {
+      lines.push(dumpWeapon(-1, archiveGroup, `${archiveLabel} (archive)`));
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      flashStatus(`${archiveLabel} info → clipboard`);
+      console.log(lines.join('\n'));
+      return;
+    }
+    const g = vm.weapons.get(state.wt);
+    if (!g) { flashStatus('no active weapon'); return; }
+    const name = MODEL_BUILDERS.find(([wt]) => wt === state.wt)?.[1].name || '?';
+    lines.push(dumpWeapon(state.wt, g, `${name} (live)`));
+  }
+  await navigator.clipboard?.writeText(lines.join('\n'));
+  flashStatus(all ? 'info (all) → clipboard' : `w${state.wt} info → clipboard`);
+  console.log(lines.join('\n'));
+}
 // ⚠z toggle — rebuilds the flagged tris of the ACTIVE weapon into an
 // error-magenta overlay, the way missing-texture pipelines mark broken
 // surfaces. Paints the live weapon (inspect or FPS pose), so it rides
@@ -415,6 +578,7 @@ function rebuild(): void {
   const wasInspect = state.inspect;
   if (wasInspect) setInspect(false);
   disposeVm(vm);
+  archiveGroup = null; archiveLabel = ''; // died with the old vm group
   vm = new ViewModel(camera);
   vm.switchWeapon(state.wt);
   for (let i = 0; i < 60; i++) vm.update(1 / 60, 0, 0, zeroVel, camera);
@@ -432,18 +596,29 @@ function rebuild(): void {
 // wear. Toggles the group between unioned shell and authored parts.
 let unionOn = false;
 let unioned: { mesh: THREE.Mesh; hidden: THREE.Object3D[] } | null = null;
-const _eval = new Evaluator();
-function unionToggle(): void {
+// Manifold (WASM) — guaranteed-watertight booleans, unlike three-bvh-csg
+// which shreds on coplanar/sliver inputs. Loaded lazily on first toggle.
+let maniMod: any = null;
+async function mani(): Promise<any> {
+  if (!maniMod) {
+    maniMod = await (ManifoldModule as any)({ locateFile: () => manifoldWasmUrl });
+    maniMod.setup();
+  }
+  return maniMod;
+}
+async function unionToggle(): Promise<void> {
   const g = vm.weapons.get(state.wt);
   if (!g) return;
   if (unionOn && unioned) {
     g.remove(unioned.mesh);
     unioned.mesh.geometry.dispose();
+    (unioned.mesh.material as THREE.Material).dispose();
     for (const o of unioned.hidden) o.visible = true;
     unioned = null;
     unionOn = false;
     return;
   }
+  const { Manifold, Mesh: MMesh } = await mani();
   g.updateWorldMatrix(true, true);
   const parts: THREE.Mesh[] = [];
   g.traverse((o) => {
@@ -452,15 +627,67 @@ function unionToggle(): void {
   });
   if (!parts.length) return;
   const inv = g.matrixWorld.clone().invert();
-  let acc: Brush | null = null;
+  const manis: any[] = [];
+  let inV = 0, inT = 0, rejected = 0;
+  const t0 = performance.now();
   for (const m of parts) {
-    const geo = m.geometry.clone().applyMatrix4(inv.clone().multiply(m.matrixWorld));
-    // CSG needs indexed, watertight-ish input — procedural parts qualify.
-    const b = new Brush(geo.toNonIndexed ? (geo.index ? geo.toNonIndexed() : geo) : geo);
-    acc = acc ? _eval.evaluate(acc, b, ADDITION) : b;
+    // Strip baked attrs BEFORE welding — mergeVertices only merges verts
+    // whose whole attribute set matches, and per-vertex AO/wear differs,
+    // so nothing welded and every part read as non-manifold.
+    const stripped = m.geometry.clone().applyMatrix4(inv.clone().multiply(m.matrixWorld));
+    for (const name of Object.keys(stripped.attributes)) if (name !== 'position') stripped.deleteAttribute(name);
+    const geo = mergeVertices(stripped);
+    if (!geo.index) geo.setIndex([...Array(geo.attributes.position!.count).keys()]);
+    inV += geo.attributes.position!.count;
+    inT += geo.index!.count / 3;
+    try {
+      manis.push(new Manifold(new MMesh({
+        numProp: 3,
+        vertProperties: (geo.attributes.position!.array as Float32Array).slice(),
+        triVerts: new Uint32Array(geo.index!.array as ArrayLike<number>),
+      })));
+    } catch (e) {
+      rejected++;
+      console.warn(`[union] part ${parts.indexOf(m)} (${m.geometry.type}) not manifold:`, e);
+    }
+    geo.dispose();
   }
-  if (!acc) return;
-  const out = new THREE.Mesh(acc.geometry, parts[0]!.material);
+  if (!manis.length) return;
+  let solid: any;
+  try {
+    solid = Manifold.union(manis);
+    if (solid.isEmpty()) { console.warn('[union] empty result'); return; }
+  } catch (e) { console.warn('[union] manifold failed:', e); return; }
+  const om = solid.getMesh();
+  console.log(`[union] w${state.wt}: ${parts.length} parts (${rejected} rejected) — ${inV}v/${inT}t in → ${om.numVert}v/${om.triVerts.length / 3}t out, ${(performance.now() - t0).toFixed(0)}ms`);
+  const geo = new THREE.BufferGeometry();
+  const np = om.numProp;
+  const verts = new Float32Array(om.numVert * 3);
+  for (let v = 0; v < om.numVert; v++) { verts[v * 3] = om.vertProperties[v * np]!; verts[v * 3 + 1] = om.vertProperties[v * np + 1]!; verts[v * 3 + 2] = om.vertProperties[v * np + 2]!; }
+  // Non-indexed + face normals — hard-surface shading, matches the kit look.
+  const ni = new THREE.BufferGeometry();
+  const pos = new Float32Array(om.triVerts.length * 3);
+  for (let t = 0; t < om.triVerts.length; t++) {
+    const vi = om.triVerts[t]!;
+    pos[t * 3] = verts[vi * 3]!; pos[t * 3 + 1] = verts[vi * 3 + 1]!; pos[t * 3 + 2] = verts[vi * 3 + 2]!;
+  }
+  ni.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  ni.computeVertexNormals();
+  geo.dispose();
+  for (const mm of manis) mm.delete?.();
+  solid.delete?.();
+  // Clone material — shared bodyMat's wearTex must not be retargeted —
+  // and run the wear/grunge/edge bake so the shell matches the parts.
+  const umat = (parts[0]!.material as THREE.Material).clone();
+  // clone() copies userData — including __grunge, which would make
+  // enhanceWeaponMaterial skip injecting the procedural shader.
+  delete umat.userData.__grunge;
+  const out = new THREE.Mesh(ni, umat);
+  const wrap = new THREE.Group();
+  wrap.add(out); // identity transform: geometry is already in g-space
+  // Manifold output IS watertight, so the full raycast AO bake is safe
+  // here (this was the original point of the union preview anyway).
+  bakeVertexAO(wrap);
   const hidden: THREE.Object3D[] = [];
   g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && parts.includes(m)) { m.visible = false; hidden.push(m); } });
   g.add(out);
@@ -478,6 +705,20 @@ function paintRail(): void {
     if (wt === state.wt) b.classList.add('active');
     b.addEventListener('click', () => select(wt));
     rail.appendChild(b);
+  }
+  // Archive shelf — retired builders, for A/B against the live versions.
+  if (ARCHIVE_BUILDERS.length) {
+    const sep = document.createElement('div');
+    sep.className = 'tools';
+    sep.innerHTML = '<span style="opacity:.5;padding:2px 4px">archive</span>';
+    rail.appendChild(sep);
+    for (const [label, mkArc] of ARCHIVE_BUILDERS) {
+      const b = document.createElement('button');
+      b.textContent = `† ${label}`;
+      if (archiveLabel === label && archiveGroup) b.classList.add('active');
+      b.addEventListener('click', () => selectArchive(label, mkArc));
+      rail.appendChild(b);
+    }
   }
   const tools = document.createElement('div');
   tools.className = 'tools';
@@ -536,7 +777,8 @@ function paintRail(): void {
     flushSave();
     location.href = u.toString();
   });
-  mk(unionOn ? '⛛ union: ON' : '⛛ union', () => { unionToggle(); paintRail(); });
+  mk(unionOn ? '⛛ union: ON' : '⛛ union', () => { void unionToggle().then(paintRail); });
+  mk('ⓘ info', () => void infoDump());
   mk('▣ src', () => void copyBuilderSrc());
   mk('▸ kick', () => vm.kick(1));
   mk('▸ punch', () => vm.punch(false));
@@ -669,8 +911,28 @@ async function copyBuilderSrc(): Promise<void> {
   flashStatus(`${name} not found in sources`);
 }
 
+// Retired-model preview — archive builders spawn straight into
+// vm.group so inspect/zcheck/gapcheck treat them like any weapon.
+let archiveGroup: THREE.Group | null = null;
+let archiveLabel = '';
+function selectArchive(label: string, mk: () => THREE.Group): void {
+  if (archiveGroup) vm.group.remove(archiveGroup);
+  for (const g of vm.weapons.values()) g.visible = false;
+  archiveGroup = mk();
+  bakeVertexAO(archiveGroup); // same AO+grunge+wear pipeline the live weapons get
+  archiveGroup.visible = true;
+  archiveGroup.name = `archive:${label}`;
+  archiveLabel = label;
+  vm.group.add(archiveGroup);
+  if (state.inspect) { setInspect(false); setInspect(true); }
+  applyWire();
+  paintRail();
+  flashStatus(`archive: ${label}`);
+}
+
 function select(wt: number): void {
   state.wt = wt;
+  if (archiveGroup) { vm.group.remove(archiveGroup); archiveGroup = null; archiveLabel = ''; }
   vm.switchWeapon(wt);
   for (let i = 0; i < 60; i++) vm.update(1 / 60, 0, 0, zeroVel, camera); // skip the holster dip
   // Re-anchor whatever just became active — inspect mode follows the
@@ -721,6 +983,8 @@ addEventListener('mousedown', (e) => {
 });
 addEventListener('mouseup', () => { dragging = false; });
 addEventListener('keydown', (e) => {
+  if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); void infoDump(false); return; }
+  if (e.altKey && e.code === 'KeyW') { e.preventDefault(); void infoDump(true); return; }
   if (e.code !== 'Space' || e.repeat) return;
   e.preventDefault(); // page scroll
   setInspect(!state.inspect);
@@ -776,14 +1040,23 @@ function pickPiece(cx: number, cy: number): void {
   // hit.point is the exact surface point the ray touched (world space);
   // the second tuple is relative to the weapon's own center.
   const rel = hit.point.clone().sub(hit.object.getWorldPosition(new THREE.Vector3()));
-  const label = `${WeaponType[state.wt] ?? state.wt} › ${segs.join(' › ')} hit(${hit.point.x.toFixed(3)}, ${hit.point.y.toFixed(3)}, ${hit.point.z.toFixed(3)}) rel(${rel.x.toFixed(3)}, ${rel.y.toFixed(3)}, ${rel.z.toFixed(3)})`;
+  // Part fingerprint: world-space bbox center + size — "the 0.05-wide box
+  // at (…)" survives child-index reshuffles and names the piece for real.
+  const mesh = hit.object as THREE.Mesh;
+  let fp = '';
+  if (mesh.isMesh) {
+    mesh.geometry.computeBoundingBox();
+    const wb = mesh.geometry.boundingBox!.clone().applyMatrix4(mesh.matrixWorld);
+    const c = wb.getCenter(new THREE.Vector3()), s = wb.getSize(new THREE.Vector3());
+    fp = ` box(${s.x.toFixed(3)}×${s.y.toFixed(3)}×${s.z.toFixed(3)} @ ${c.x.toFixed(3)},${c.y.toFixed(3)},${c.z.toFixed(3)})`;
+  }
+  const label = `${WeaponType[state.wt] ?? state.wt} › ${segs.join(' › ')} hit(${hit.point.x.toFixed(3)}, ${hit.point.y.toFixed(3)}, ${hit.point.z.toFixed(3)}) rel(${rel.x.toFixed(3)}, ${rel.y.toFixed(3)}, ${rel.z.toFixed(3)})${fp}`;
   void navigator.clipboard?.writeText(label);
   flashStatus(`copied: ${label}`);
   // Flash the picked mesh — the piece materials are SHARED across the
   // gun, so flash by swapping this mesh's material, not by mutating one.
   // A re-click during the window must not capture the flash mat as the
   // "original" — that would restore TO flash, i.e. permanent highlight.
-  const mesh = hit.object as THREE.Mesh;
   if (!mesh.isMesh) return;
   if (mesh.userData.flashTimer) clearTimeout(mesh.userData.flashTimer as number);
   if (mesh.material !== pickFlashMat) mesh.userData.origMat = mesh.material;

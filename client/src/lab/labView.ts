@@ -134,6 +134,9 @@ class LabView {
     setVfxCamOverride(null);
     for (const o of this.hiddenSiblings) o.visible = true;
     this.hiddenSiblings = [];
+    // labRoot borrows the LIVE scene — leave it attached and the last
+    // scenario's objects stay visible in-game after close.
+    this.labRoot.removeFromParent();
   }
 
   private select(id: string): void {
@@ -225,9 +228,14 @@ declare global {
 }
 
 /** Wire the SIM LAB button in the ESC menu. One call from overlayInput —
- *  that's the whole blast radius outside this module. */
+ *  that's the whole blast radius outside this module. The GUN LAB
+ *  sibling opens the standalone viewer page in a second tab — it's an
+ *  asset-iteration tool, not an in-match overlay, so it keeps its own
+ *  renderer rather than borrowing the game's. */
 export function wireLabButton(): void {
   const btn = document.getElementById('lab-open');
+  document.getElementById('gunlab-open')?.addEventListener('click', () =>
+    window.open('gunlab.html', '_blank'));
   if (!btn) return;
   window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);
   btn.addEventListener('click', () => {
