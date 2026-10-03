@@ -9,6 +9,7 @@
 import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const BANELING_SIM = {
   ACCEL: 22.0,
@@ -21,20 +22,17 @@ export const BANELING_SIM = {
   STUN_S: 0.3,           // a hit staggers the fuse run
 } as const;
 
-export const BANELING_SPECIES: Record<string, {
-  speed: number;
-  health: number;
-  bite: number;         // blast damage at zero distance
-  blast: number;        // blast radius
-}> = {
-  baneling: { speed: 1.0, health: 15, bite: 18, blast: 5.0 },
-};
+// Baneling rows live in the unified SPECIES registry; derived view.
+export const BANELING_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'baneling'),
+);
 
 export type BanelingState = 'chase';
 
 type BanelingTunables = { readonly [K in keyof typeof BANELING_SIM]: number };
 
-export interface SimBaneling extends Omit<SimCrawler, 'state' | 'sp'> {
+export interface SimBaneling extends Omit<SimCrawler, 'state' | 'sp' | 'family'> {
+  family: 'baneling';
   state: BanelingState;
   sp: BanelingTunables;
   age: number;          // fuse life clock — deterministic, drives the pop
@@ -42,28 +40,28 @@ export interface SimBaneling extends Omit<SimCrawler, 'state' | 'sp'> {
 }
 
 export function isBanelingSpecies(species: string): boolean {
-  return BANELING_SPECIES[species] !== undefined;
+  return speciesFamily(species) === 'baneling';
 }
 
 export function makeSimBaneling(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'baneling',
 ): SimBaneling {
   const { x, y, z } = pos;
-  const row = BANELING_SPECIES[species] ?? BANELING_SPECIES.baneling!;
+  const row = SPECIES[species] ?? SPECIES.baneling!;
   const health = uber ? row.health * 4 : row.health;
   const sp: BanelingTunables = {
     ...BANELING_SIM,
-    TOPSPEED: BANELING_SIM.TOPSPEED * row.speed,
-    ACCEL: BANELING_SIM.ACCEL * row.speed,
+    TOPSPEED: BANELING_SIM.TOPSPEED * (row.speed ?? 1),
+    ACCEL: BANELING_SIM.ACCEL * (row.speed ?? 1),
   };
   return {
-    id, species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
+    id, family: 'baneling', species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'chase', hopTimer: 0, windupTimer: 0, stunTimer: 0,
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,
     uber, dead: false, rng: seed >>> 0 || 1,
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
-    age: 0, blastRadius: uber ? row.blast * 1.7 : row.blast,
+    age: 0, blastRadius: uber ? (row.blast ?? 0) * 1.7 : (row.blast ?? 0),
   };
 }
 

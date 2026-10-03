@@ -23,6 +23,7 @@
 import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const CRAWLER_SIM = {
   GRAVITY: -28.0,
@@ -42,25 +43,19 @@ export const CRAWLER_SIM = {
 type SimTunables = { readonly [K in keyof typeof CRAWLER_SIM]: number };
 
 /** Hop-family species share the whole state machine — they differ only in
- *  the numbers. A table beats subclassing because the wire just carries
- *  the species NAME and both sides resolve the same row. `spd`/`hp`/
- *  `bite` scale or override the crawler baseline. */
-export const MELEE_SPECIES: Record<string, {
-  speed: number;        // multiplier on HOP_SPEED
-  health: number;       // base (uber still ×~3.4)
-  bite: number;         // pounce-contact damage
-  aggro?: number;       // flat overrides for species that sense differently
-  pounceD?: number;
-}> = {
-  crawler: { speed: 1.0, health: 70, bite: 25 },
-  scarab:  { speed: 1.35, health: 40, bite: 15, aggro: 55 * 55, pounceD: 20 * 20 },
-};
+ *  the numbers. The rows live in the unified SPECIES registry
+ *  (species.ts); this derived view keeps the old import sites working. */
+export const MELEE_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'hop'),
+);
+export const isHopSpecies = (species: string): boolean => speciesFamily(species) === 'hop';
 
 export type CrawlerState = 'wander' | 'chase' | 'windup';
 
 export interface SimCrawler {
   id: number;
-  species: string;      // key into MELEE_SPECIES — travels on the wire
+  family: 'hop';        // dispatch discriminant — SPECIES_FAMILY[c.family]
+  species: string;      // key into SPECIES — travels on the wire
   biteDamage: number;
   sp: SimTunables;      // resolved per-species constants
   x: number; y: number; z: number;
@@ -123,16 +118,16 @@ export function makeSimCrawler(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'crawler',
 ): SimCrawler {
   const { x, y, z } = pos;
-  const row = MELEE_SPECIES[species] ?? MELEE_SPECIES.crawler!;
+  const row = SPECIES[species] ?? SPECIES.crawler!;
   const health = uber ? row.health * 3.4 : row.health;
   const sp: SimTunables = {
     ...CRAWLER_SIM,
-    HOP_SPEED: CRAWLER_SIM.HOP_SPEED * row.speed,
+    HOP_SPEED: CRAWLER_SIM.HOP_SPEED * (row.speed ?? 1),
     AGGRO_D2: row.aggro ?? CRAWLER_SIM.AGGRO_D2,
     POUNCE_D2: row.pounceD ?? CRAWLER_SIM.POUNCE_D2,
   };
   return {
-    id, species, biteDamage: row.bite, sp,
+    id, family: 'hop', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'wander', hopTimer: 0.5, windupTimer: 0, stunTimer: 0,
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,

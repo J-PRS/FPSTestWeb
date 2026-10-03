@@ -8,6 +8,7 @@
 import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const ROLLER_SIM = {
   ACCEL: 9.0,
@@ -19,40 +20,38 @@ export const ROLLER_SIM = {
   STUN_S: 0.5,
 } as const;
 
-export const ROLLER_SPECIES: Record<string, {
-  speed: number;        // multiplier on TOPSPEED
-  health: number;
-  bite: number;
-}> = {
-  roller: { speed: 1.0, health: 120, bite: 30 },
-};
+// Roller rows live in the unified SPECIES registry; derived view.
+export const ROLLER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'roll'),
+);
 
 export type RollerState = 'roll';
 
 type RollerTunables = { readonly [K in keyof typeof ROLLER_SIM]: number };
 
-export interface SimRoller extends Omit<SimCrawler, 'state' | 'sp'> {
+export interface SimRoller extends Omit<SimCrawler, 'state' | 'sp' | 'family'> {
+  family: 'roll';
   state: RollerState;
   sp: RollerTunables;
   hitCd: number;        // contact invuln — deterministic cooldown
 }
 
 export function isRollerSpecies(species: string): boolean {
-  return ROLLER_SPECIES[species] !== undefined;
+  return speciesFamily(species) === 'roll';
 }
 
 export function makeSimRoller(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'roller',
 ): SimRoller {
   const { x, y, z } = pos;
-  const row = ROLLER_SPECIES[species] ?? ROLLER_SPECIES.roller!;
+  const row = SPECIES[species] ?? SPECIES.roller!;
   const health = uber ? row.health * 3.4 : row.health;
   const sp: RollerTunables = {
     ...ROLLER_SIM,
-    TOPSPEED: ROLLER_SIM.TOPSPEED * row.speed,
+    TOPSPEED: ROLLER_SIM.TOPSPEED * (row.speed ?? 1),
   };
   return {
-    id, species, biteDamage: row.bite, sp,
+    id, family: 'roll', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'roll', hopTimer: 0, windupTimer: 0, stunTimer: 0,
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,

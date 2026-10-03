@@ -10,6 +10,7 @@ import { type Heightfield, hmHeight } from './heightfield.js';
 import { wrapAngleDelta } from './angles.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const SLITHER_SIM = {
   SPEED: 6.5,
@@ -25,19 +26,17 @@ export const SLITHER_SIM = {
   STUN_S: 0.8,       // a hit breaks the strike — matches applyKnockback
 } as const;
 
-export const SLITHER_SPECIES: Record<string, {
-  speed: number;
-  health: number;
-  bite: number;
-}> = {
-  snake: { speed: 1.0, health: 45, bite: 14 },
-};
+// Slither rows live in the unified SPECIES registry; derived view.
+export const SLITHER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'slither'),
+);
 
 export type SlitherState = 'slither' | 'windup' | 'lunge';
 
 type SlitherTunables = { readonly [K in keyof typeof SLITHER_SIM]: number };
 
-export interface SimSlither extends Omit<SimCrawler, 'state' | 'sp'> {
+export interface SimSlither extends Omit<SimCrawler, 'state' | 'sp' | 'family'> {
+  family: 'slither';
   state: SlitherState;
   sp: SlitherTunables;
   animT: number;      // weave phase — sim-owned so the S is deterministic
@@ -45,22 +44,22 @@ export interface SimSlither extends Omit<SimCrawler, 'state' | 'sp'> {
 }
 
 export function isSlitherSpecies(species: string): boolean {
-  return SLITHER_SPECIES[species] !== undefined;
+  return speciesFamily(species) === 'slither';
 }
 
 export function makeSimSlither(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'snake',
 ): SimSlither {
   const { x, y, z } = pos;
-  const row = SLITHER_SPECIES[species] ?? SLITHER_SPECIES.snake!;
+  const row = SPECIES[species] ?? SPECIES.snake!;
   const health = uber ? row.health * 4 : row.health;
   const sp: SlitherTunables = {
     ...SLITHER_SIM,
-    SPEED: SLITHER_SIM.SPEED * row.speed,
+    SPEED: SLITHER_SIM.SPEED * (row.speed ?? 1),
   };
   const rng = seed >>> 0 || 1;
   return {
-    id, species, biteDamage: row.bite, sp,
+    id, family: 'slither', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'slither', hopTimer: 0, windupTimer: 0, stunTimer: 0,
     wanderYaw: (rng % 628) / 100, health, maxHealth: health,

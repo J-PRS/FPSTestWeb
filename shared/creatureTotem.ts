@@ -19,6 +19,7 @@ import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const TOTEM_SIM = {
   RANGE: 105.0,          // engage envelope — inside readable fog distance
@@ -44,12 +45,10 @@ const TOTEM_UBER = {
   HIT_R2: 1.5 * 1.5,
 } as const;
 
-export const TOTEM_SPECIES: Record<string, {
-  health: number;
-  bite: number;          // beam damage
-}> = {
-  totem: { health: 200, bite: 15 },
-};
+// Totem rows live in the unified SPECIES registry; derived view.
+export const TOTEM_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'totem'),
+);
 
 export type TotemState = 'aim' | 'charge' | 'blinkOut' | 'blinkIn';
 
@@ -59,7 +58,8 @@ type TotemTunables = { readonly [K in keyof typeof TOTEM_SIM]: number };
  *  `state`, the tunables and the lock/blink payload differ. hopTimer is
  *  the per-state clock (charge timer / blink phase timer); windupTimer
  *  is the refire countdown; stunTimer doubles as the stagger pin. */
-export interface SimTotem extends Omit<SimCrawler, 'state' | 'sp'> {
+export interface SimTotem extends Omit<SimCrawler, 'state' | 'sp' | 'family'> {
+  family: 'totem';
   state: TotemState;
   sp: TotemTunables;
   shotsFired: number;
@@ -77,14 +77,14 @@ export interface SimTotem extends Omit<SimCrawler, 'state' | 'sp'> {
 }
 
 export function isTotemSpecies(species: string): boolean {
-  return TOTEM_SPECIES[species] !== undefined;
+  return speciesFamily(species) === 'totem';
 }
 
 export function makeSimTotem(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'totem',
 ): SimTotem {
   const { x, y, z } = pos;
-  const row = TOTEM_SPECIES[species] ?? TOTEM_SPECIES.totem!;
+  const row = SPECIES[species] ?? SPECIES.totem!;
   const health = uber ? row.health * 2.5 : row.health;
   const sp: TotemTunables = {
     ...TOTEM_SIM,
@@ -92,7 +92,7 @@ export function makeSimTotem(
     CHARGE: uber ? TOTEM_UBER.CHARGE : TOTEM_SIM.CHARGE,
   };
   return {
-    id, species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
+    id, family: 'totem', species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'aim', hopTimer: 0, windupTimer: sp.REFIRE, stunTimer: 0,
     wanderYaw: 0, health, maxHealth: health,

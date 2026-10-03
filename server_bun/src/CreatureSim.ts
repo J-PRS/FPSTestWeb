@@ -12,11 +12,10 @@
  */
 import { type Heightfield } from '../../shared/heightfield.ts';
 import {
-  applyCrawlerDamage, applyFlyerDamage, applyRollerDamage,
-  applySlitherDamage, applyBanelingDamage, applyTotemDamage,
+  SPECIES_FAMILY,
   type SimBaneling,
 } from '../../shared/creatureSim.ts';
-import { CreatureBrain, type SimBeing, isFlyer, isTotem, isRoller, isSlither, isBaneling } from './creatureBrain.ts';
+import { CreatureBrain, type SimBeing, isTotem, isBaneling } from './creatureBrain.ts';
 import {
   alivePlayers as alivePlayersOf, nearestPlayer,
   spawnCrawler as spawnCrawlerInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
@@ -249,17 +248,7 @@ export class CreatureSim {
       return { killed: false, reason: 'range' };
     }
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
-    const dead = isFlyer(c)
-      ? applyFlyerDamage(c, dmg)
-      : isTotem(c)
-        ? applyTotemDamage(c, dmg)
-        : isRoller(c)
-          ? applyRollerDamage(c, dmg)
-          : isSlither(c)
-            ? applySlitherDamage(c, dmg)
-            : isBaneling(c)
-              ? applyBanelingDamage(c, dmg)
-              : applyCrawlerDamage(c, dmg);
+    const dead = SPECIES_FAMILY[c.family].damage(c, dmg);
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.

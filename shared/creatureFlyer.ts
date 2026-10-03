@@ -10,6 +10,7 @@
 import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
+import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const FLYER_SIM = {
   ORBIT_R: 16.0,        // circle radius around the prey anchor
@@ -27,16 +28,11 @@ export const FLYER_SIM = {
   STUN_S: 0.6,
 } as const;
 
-export const FLYER_SPECIES: Record<string, {
-  speed: number;        // multiplier on ORBIT_SPEED + DIVE_SPEED
-  health: number;
-  bite: number;         // claw-contact damage
-  orbitR?: number;
-  orbitAlt?: number;
-}> = {
-  rakk: { speed: 1.0, health: 50, bite: 18 },
-  gnat: { speed: 1.5, health: 20, bite: 8, orbitR: 10, orbitAlt: 8 },
-};
+// Flyer rows live in the unified SPECIES registry; this derived view
+// keeps the old import sites working.
+export const FLYER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
+  Object.entries(SPECIES).filter(([, r]) => r.family === 'fly'),
+);
 
 export type FlyerState = 'orbit' | 'windup' | 'dive' | 'climb';
 
@@ -45,7 +41,8 @@ type FlyerTunables = { readonly [K in keyof typeof FLYER_SIM]: number };
 /** Shares the hop sim's wire/sim fields so CreatureSim + the client replay
  *  helpers treat both families uniformly — only `state`, the tunables and
  *  the flyer-only anchors differ. */
-export interface SimFlyer extends Omit<SimCrawler, 'state' | 'sp'> {
+export interface SimFlyer extends Omit<SimCrawler, 'state' | 'sp' | 'family'> {
+  family: 'fly';
   state: FlyerState;
   sp: FlyerTunables;
   orbitPhase: number;
@@ -58,25 +55,26 @@ export interface SimFlyer extends Omit<SimCrawler, 'state' | 'sp'> {
 }
 
 export function isFlyerSpecies(species: string): boolean {
-  return FLYER_SPECIES[species] !== undefined;
+  return speciesFamily(species) === 'fly';
 }
 
 export function makeSimFlyer(
   id: number, pos: SimVec, uber: boolean, seed: number, species = 'rakk',
 ): SimFlyer {
   const { x, y, z } = pos;
-  const row = FLYER_SPECIES[species] ?? FLYER_SPECIES.rakk!;
+  const row = SPECIES[species] ?? SPECIES.rakk!;
   const health = uber ? row.health * 3.4 : row.health;
+  const speed = row.speed ?? 1;
   const sp: FlyerTunables = {
     ...FLYER_SIM,
-    ORBIT_SPEED: FLYER_SIM.ORBIT_SPEED * row.speed,
-    DIVE_SPEED: FLYER_SIM.DIVE_SPEED * row.speed,
+    ORBIT_SPEED: FLYER_SIM.ORBIT_SPEED * speed,
+    DIVE_SPEED: FLYER_SIM.DIVE_SPEED * speed,
     ORBIT_R: row.orbitR ?? FLYER_SIM.ORBIT_R,
     ORBIT_ALT: row.orbitAlt ?? FLYER_SIM.ORBIT_ALT,
   };
   const rng = seed >>> 0 || 1;
   return {
-    id, species, biteDamage: row.bite, sp,
+    id, family: 'fly', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'orbit', hopTimer: 0, windupTimer: 0, stunTimer: 0,
     wanderYaw: 0, health, maxHealth: health,

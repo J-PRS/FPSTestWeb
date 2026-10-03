@@ -8,15 +8,10 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  makeSimCrawler,
-  isFlyerSpecies, makeSimFlyer,
-  isRollerSpecies, makeSimRoller,
-  isSlitherSpecies, makeSimSlither,
-  isBanelingSpecies, makeSimBaneling,
-  isTotemSpecies, makeSimTotem,
+  SPECIES_FAMILY, speciesFamily,
   commitTarget,
 } from '../../shared/creatureSim.ts';
-import { type SimBeing, isFlyer, isRoller, isSlither, isBaneling, type CreatureBrain } from './creatureBrain.ts';
+import { type SimBeing, type CreatureBrain } from './creatureBrain.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
@@ -67,21 +62,9 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
   const gy = hmHeight(field, x, z);
   const id = h.nextId++;
   const uber = h.rng() < 0.05;
-  const c: SimBeing = isFlyerSpecies(species)
-    ? makeSimFlyer(id, { x, y: gy, z }, uber, seed, species)
-    : isTotemSpecies(species)
-      ? makeSimTotem(id, { x, y: gy, z }, uber, seed, species)
-      : isRollerSpecies(species)
-        ? makeSimRoller(id, { x, y: gy, z }, uber, seed, species)
-        : isSlitherSpecies(species)
-          ? makeSimSlither(id, { x, y: gy, z }, uber, seed, species)
-          : isBanelingSpecies(species)
-            ? makeSimBaneling(id, { x, y: gy, z }, uber, seed, species)
-            : makeSimCrawler(id, { x, y: gy, z }, uber, seed, species);
-  if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
-  if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
-  if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt
-  if (isBaneling(c)) c.y = gy + 0.7;         // sac skims low
+  const fam = SPECIES_FAMILY[speciesFamily(species)];
+  const c: SimBeing = fam.make(id, { x, y: gy, z }, uber, seed, species);
+  c.y = gy + fam.lift(c);
   // Negative offset pushes this crawler's first retarget into its own
   // bucket instead of the spawn tick — the spread survives every reset.
   h.brain.seedBuckets(c.id);

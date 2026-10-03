@@ -7,10 +7,10 @@
  * committed snapshot — no wall clock.
  */
 import {
-  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type SimTotem, type CrawlerEvent,
-  stepCrawler, commitTarget,
-  stepFlyer, stepRoller, stepSlither, stepBaneling, stepTotem, totemFireTargets,
-  CRAWLER_SIM,
+  type SimBeing, type CrawlerEvent,
+  commitTarget, totemFireTargets,
+  isFlyer, isRoller, isSlither, isBaneling, isTotem,
+  SPECIES_FAMILY, CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
@@ -35,15 +35,10 @@ const CONFUSE_DRIFT_R = 6;
 // buckets.
 const BRAIN_BUCKETS = 8;
 
-/** Hop + flyer + roller + totem families share every wire field — the
- *  union only matters at step/damage dispatch, discriminated by
- *  family-only fields (`orbitPhase` = flyer, `hitCd` = roller). */
-export type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither | SimBaneling | SimTotem;
-export const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
-export const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
-export const isSlither = (c: SimBeing): c is SimSlither => 'animT' in c;
-export const isBaneling = (c: SimBeing): c is SimBaneling => 'age' in c;
-export const isTotem = (c: SimBeing): c is SimTotem => 'lockDist' in c;
+// SimBeing union + family guards live in shared/creatureSim.ts — re-
+// exported here so existing server import sites keep working.
+export { isFlyer, isRoller, isSlither, isBaneling, isTotem };
+export type { SimBeing };
 
 export interface BrainHost {
   field(): Heightfield;
@@ -152,14 +147,7 @@ export class CreatureBrain {
 
   /** One deterministic step — the family picks its own step routine. */
   private stepBody(c: SimBeing, tgt: SimVec | null): CrawlerEvent | null {
-    const f = this.host.field();
-    const col = this.host.colliders();
-    if (isFlyer(c)) return stepFlyer(c, TICK_DT, f, tgt, true, col);
-    if (isTotem(c)) return stepTotem(c, TICK_DT, f, tgt, true, col);
-    if (isRoller(c)) return stepRoller(c, TICK_DT, f, tgt, true, col);
-    if (isSlither(c)) return stepSlither(c, TICK_DT, f, tgt, true, col);
-    if (isBaneling(c)) return stepBaneling(c, TICK_DT, f, tgt, true, col);
-    return stepCrawler(c, TICK_DT, f, tgt, true, col);
+    return SPECIES_FAMILY[c.family].step(c, TICK_DT, this.host.field(), tgt, true, this.host.colliders());
   }
 
   /** What the step left behind — an edge to stream, an authoritative

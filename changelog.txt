@@ -1,3 +1,4 @@
+2026-10-01 - Species registry: one SPECIES table + SPECIES_FAMILY dispatch; explicit family tag replaces duck typing; make/step/damage/lift chains -> table
 2026-10-01 - anim P3: RIG_MANIFEST consolidates rig config; dead mannequin GLBs retired
 2026-10-01 - anim P2: clipCandidates table replaces resolution cascade (test shares the resolver)
 2026-10-01 - destHigh only counts objective inside 60m climb window (surreal plateau burn fix)
