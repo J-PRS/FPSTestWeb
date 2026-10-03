@@ -20,10 +20,10 @@ const _footPQ = new THREE.Quaternion();
 // testable without loading the rig.
 
 export type { AnimationState } from './playerClips.js';
-import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
-  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, VARIANT_CLIP_OVERRIDES,
+import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS, clipCandidates,
+  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS,
   normBone, type AnimationState } from './playerClips.js';
-import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, computeRootMotionNodes,
+import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, SWAY_BONES, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
@@ -813,29 +813,6 @@ export class PlayerModel {
     return this.dirClipActive;
   }
 
-  /** The KevDev clip for the current dir+state, or null when the sector
-   *  has no dedicated stride (forward keeps the UAL jog/sprint, and a
-   *  missing bake falls back to the reverse/lean tricks). */
-  private directionalClip(state: 'walk' | 'run'): string | null {
-    // 'F' normally defers to the UAL jog/sprint — variants that lack it
-    // (vexa has no mannequin bake) would otherwise fall to a missing
-    // native fallback and idle-hold while walking forward.
-    if (this.locoDir === 'F') {
-      if (this.animations.has(ANIM_NAMES[state][0])) return null;
-      for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01']) {
-        const f = `UAL_${s}_Forward`;
-        if (this.animations.has(f)) return f;
-      }
-      return null;
-    }
-    // The Sprint set only covers the forward hemisphere — back-half
-    // run sectors ride the Run clips.
-    const fwdHemi = this.locoDir === 'FL' || this.locoDir === 'FR' || this.locoDir === 'L' || this.locoDir === 'R';
-    const set = state === 'run' ? (fwdHemi ? 'Sprint01' : 'Run01') : 'Walk01';
-    const name = 'UAL_' + set + '_' + DIR_SUFFIX[this.locoDir];
-    return this.animations.has(name) ? name : null;
-  }
-
   // Locomotion direction: sectors without a dedicated clip run the
   // walk/run clip in reverse (the UE "Rate Scale -1" blendspace trick —
   // the footstep phase flips too, which is what kills the moonwalk look).
@@ -866,57 +843,20 @@ export class PlayerModel {
     const phase = keepPhase && prev ? prev.time / Math.max(prev.getClip().duration, 1e-6) : 0;
     this.currentState = state;
     this.dirClipActive = false;
-    if (this.variant === 'knight') {
-      this.playAnimation(KNIGHT_ANIMS[state]);
+    // The whole cascade lives in clipCandidates — knight/class tables,
+    // directional strides, per-variant overrides, UAL→native fallback,
+    // in that order. The last candidate is always a table-native name
+    // played unconditionally (missing clip = hold pose, not snap).
+    const cands = clipCandidates(this.variant, state, this.locoDir);
+    for (let i = 0; i < cands.length; i++) {
+      const c = cands[i];
+      const last = i === cands.length - 1;
+      if (!last && !this.animations.has(c.name)) continue;
+      this.dirClipActive = c.dir;
+      this.playAnimation(c.name, c.dir ? phase : 0);
       return;
     }
-    const classBody = CLASS_BODY_SPEC[this.variant];
-    if (classBody?.anims) {
-      // Class-native clip tables resolve by state; a missing entry
-      // leaves the previous action running rather than snapping poses.
-      const clip = classBody.anims[state];
-      if (clip) this.playAnimation(clip);
-      return;
-    }
-    // cybersoldier/vexa ship no anims table — they resolve through
-    // ANIM_NAMES against their baked clip sets like the mannequin does.
-    if (state === 'walk' || state === 'run') {
-      const dirClip = this.directionalClip(state);
-      if (dirClip) {
-        this.dirClipActive = true;
-        this.playAnimation(dirClip, phase);
-        return;
-      }
-    }
-    const override = VARIANT_CLIP_OVERRIDES[this.variant]?.[state];
-    if (override && this.animations.has(override)) {
-      this.playAnimation(override);
-      return;
-    }
-    const [ual, fallback] = ANIM_NAMES[state];
-    if (this.variant === 'mannequin') {
-      const m = this.mannequinClip(state);
-      if (m) {
-        this.playAnimation(m);
-        return;
-      }
-    }
-    // Prefer the retargeted clip; fall back to the native emote until the
-    // UAL bake lands (or forever if the retarget failed).
-    this.playAnimation(this.animations.has(ual) ? ual : fallback);
-  }
-
-  // Mannequin clip overrides, or null for the default UAL/fallback pick.
-  private mannequinClip(state: AnimationState): string | null {
-    // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
-    // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
-    if (state === 'ski') {
-      return this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop';
-    }
-    // Default stance is armed — the relaxed Idle_Loop dangles the gun at
-    // the thigh; Pistol_Idle holds it raised and reads as "in combat".
-    if (state === 'idle' && this.animations.has('UAL_Pistol_Idle_Loop')) return 'UAL_Pistol_Idle_Loop';
-    return null;
+    // Empty table (class-body anims gap) — hold the previous action.
   }
 
   /**

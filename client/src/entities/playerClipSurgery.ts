@@ -1,15 +1,11 @@
 // Locomotion clip surgery — mannequin/knight rigs carry authored root
 // motion and full-body tracks our layered system has to carve up.
 import * as THREE from 'three';
-import { normBone } from './playerClips.js';
+import { normBone, DIR8, DIR_SUFFIX, type LocoDir } from './playerClips.js';
 
-// 8-way facing-frame direction. atan2(side, fwd): 0=F, +90°=R, ±180°=B.
-export type LocoDir = 'F' | 'FR' | 'R' | 'BR' | 'B' | 'BL' | 'L' | 'FL';
-export const DIR8: LocoDir[] = ['F', 'FR', 'R', 'BR', 'B', 'BL', 'L', 'FL'];
-export const DIR_SUFFIX: Record<LocoDir, string> = {
-  F: 'Forward', FR: 'ForwardRight', R: 'Right', BR: 'BackwardRight',
-  B: 'Backward', BL: 'BackwardLeft', L: 'Left', FL: 'ForwardLeft',
-};
+// Direction data lives in playerClips with the other resolution tables;
+// re-exported here where the surgery callers already import from.
+export { DIR8, DIR_SUFFIX, type LocoDir };
 
 const _dampA = new THREE.Quaternion();
 const _dampB = new THREE.Quaternion();

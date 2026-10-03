@@ -7,6 +7,14 @@ import * as THREE from 'three';
 
 export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot' | 'jet';
 
+// 8-way facing-frame direction. atan2(side, fwd): 0=F, +90°=R, ±180°=B.
+export type LocoDir = 'F' | 'FR' | 'R' | 'BR' | 'B' | 'BL' | 'L' | 'FL';
+export const DIR8: LocoDir[] = ['F', 'FR', 'R', 'BR', 'B', 'BL', 'L', 'FL'];
+export const DIR_SUFFIX: Record<LocoDir, string> = {
+  F: 'Forward', FR: 'ForwardRight', R: 'Right', BR: 'BackwardRight',
+  B: 'Backward', BL: 'BackwardLeft', L: 'Left', FL: 'ForwardLeft',
+};
+
 // Map our states to clip names. UAL_* clips are retargeted at load from the
 // Quaternius Universal Animation Library (CC0) — the robot's native set is
 // an emote pack (Dance/Wave/Yes...) with no aim, crouch, or fall poses.
@@ -138,10 +146,52 @@ export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hi
 // on that rig. cybersoldier ski: mannequin's clip set has no Slide_Loop
 // (UAL2 is robot-locked) and 'Sitting' isn't a mannequin clip either, so
 // skis parked him on the idle loop — Crouch_Fwd is the same tuck the
-// mannequin itself uses for ski.
-export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationState, string>>> = {
+// mannequin itself uses for ski. Mannequin's own specials live here too
+// (armed idle, crouch-tuck ski) — overrides and specials were the same
+// concept on two code paths.
+export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationState, string | string[]>>> = {
   cybersoldier: { ski: 'UAL_Crouch_Fwd_Loop' },
+  mannequin: {
+    // No native slide clip — the UAL2 retarget bakes limb-axis artifacts
+    // on this rig, so ski rides the tucked Crouch_Fwd.
+    ski: ['UAL_Crouch_Fwd_Loop', 'Crouch_Fwd_Loop'],
+    // Default stance is armed — the relaxed Idle_Loop dangles the gun at
+    // the thigh; Pistol_Idle holds it raised and reads as "in combat".
+    idle: 'UAL_Pistol_Idle_Loop',
+  },
 };
+
+/** Ordered clip candidates for (variant, state, dir) — the resolution
+ *  cascade as data, shared by PlayerModel and the coverage test so the
+ *  two can't drift. Try each in turn; the first name the loaded set has
+ *  wins. `dir` marks dedicated locomotion strides (callers keep the
+ *  reverse/lean fallbacks off while one drives). */
+export interface ClipCandidate { name: string; dir: boolean }
+export function clipCandidates(variant: string, state: AnimationState, dir: LocoDir): ClipCandidate[] {
+  if (variant === 'knight') return [{ name: KNIGHT_ANIMS[state], dir: false }];
+  const anims = CLASS_BODY_SPEC[variant]?.anims;
+  if (anims) return anims[state] ? [{ name: anims[state]!, dir: false }] : [];
+  const out: ClipCandidate[] = [];
+  if (state === 'walk' || state === 'run') {
+    if (dir === 'F') {
+      // 'F' prefers the UAL jog/sprint; variants without it take the
+      // kevdev forward stride instead of idling through the walk.
+      out.push({ name: ANIM_NAMES[state][0], dir: false });
+      for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01'])
+        out.push({ name: `UAL_${s}_Forward`, dir: true });
+    } else {
+      // The Sprint set only covers the forward hemisphere — back-half
+      // run sectors ride the Run clips.
+      const fwdHemi = dir === 'FL' || dir === 'FR' || dir === 'L' || dir === 'R';
+      const set = state === 'run' ? (fwdHemi ? 'Sprint01' : 'Run01') : 'Walk01';
+      out.push({ name: `UAL_${set}_${DIR_SUFFIX[dir]}`, dir: true });
+    }
+  }
+  const ov = VARIANT_CLIP_OVERRIDES[variant]?.[state];
+  for (const n of ov === undefined ? [] : Array.isArray(ov) ? ov : [ov]) out.push({ name: n, dir: false });
+  out.push({ name: ANIM_NAMES[state][0], dir: false }, { name: ANIM_NAMES[state][1], dir: false });
+  return out;
+}
 
 // Mannequin (DEF-* Rigify rig) → UAL2 source bones. GLTFLoader strips dots
 // from node names, so 'DEF-upper_arm.L' arrives as 'DEF-upper_armL'.

@@ -1,3 +1,4 @@
+2026-10-01 - anim P2: clipCandidates table replaces resolution cascade (test shares the resolver)
 2026-10-01 - destHigh only counts objective inside 60m climb window (surreal plateau burn fix)
 2026-10-01 - capper destHigh jet trigger now scales with distance-to-goal (surreal energy leak)
 2026-10-02 - capper grab-suicide fix: pull-belt carriers no longer lob the implosion blast onto themselves after grabbing (flag-snapshot carrying check + early return on lobAt failure)
