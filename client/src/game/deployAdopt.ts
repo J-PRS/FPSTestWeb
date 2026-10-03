@@ -178,6 +178,7 @@ export class DeployAdopter {
       dispose: () => b.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
+      beacon: b,
     };
     const hurt = item.hurt;
     item.hurt = (dmg) => { hurt(dmg); if (b.dead) this.host.killItem(item); };

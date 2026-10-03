@@ -110,6 +110,8 @@ export interface Item {
   team?: string;
   /** Dome lattice flare when the field soaks a shell — shield only. */
   flash?: () => void;
+  /** The live emitter — lets the aim solve tilt its sky shaft. */
+  beacon?: DeployBeacon;
 }
 
 // Base hp caps — mirrors the server's HP table + entity maxHealth, used
@@ -788,6 +790,7 @@ export class Deployables {
   // (T2 mortar read); flat-trajectory weapons aim straight at the post.
   private readonly _beaconOrigin = new THREE.Vector3();
   private readonly _beaconAim = new THREE.Vector3();
+  private readonly _beaconDir = new THREE.Vector3();
 
   private updateBeaconAim(): void {
     const beacon = this.items.find(i => i.kind === 'beacon' && !i.dead && i.owner === undefined);
@@ -805,6 +808,7 @@ export class Deployables {
     if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, cam, true); return; }
     if (!cfg.gravity) {
       // Flat gun — the reticle IS the beacon; still worth marking.
+      beacon.beacon?.setAimDir(_UP);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
       hud.updateBeaconAim(this._beaconAim, cam, true);
       return;
@@ -814,6 +818,7 @@ export class Deployables {
     if (disc < 0) {
       // Out of this gun's arc — flag it so the reticle reads "can't reach"
       // instead of lying about a lob that falls short.
+      beacon.beacon?.setAimDir(_UP);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
       hud.updateBeaconAim(this._beaconAim, cam, false);
       return;
@@ -826,6 +831,9 @@ export class Deployables {
     // along it keeps the marker off the near field.
     const dist = Math.max(d, 40);
     this._beaconAim.set(o.x + hx * cosT * dist, o.y + sinT * dist, o.z + hz * cosT * dist);
+    // The sky shaft leans along the same lob — it reaches from the emitter
+    // toward the reticle so the pointer reads "aim along this".
+    beacon.beacon?.setAimDir(this._beaconDir.set(hx * cosT, sinT, hz * cosT));
     hud.updateBeaconAim(this._beaconAim, cam, true);
   }
 

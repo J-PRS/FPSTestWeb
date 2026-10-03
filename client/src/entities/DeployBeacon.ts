@@ -19,6 +19,7 @@ const _holoMat = new THREE.MeshBasicMaterial({
 });
 // Sky pillar — tall thin additive shaft, the across-the-map read.
 const _geoPillar = new THREE.CylinderGeometry(0.06, 0.14, 40, 6, 1, true);
+const _UP = new THREE.Vector3(0, 1, 0);
 const _pillarMat = new THREE.MeshBasicMaterial({
   color: 0x44ddee, transparent: true, opacity: 0.12,
   blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
@@ -38,6 +39,10 @@ export class DeployBeacon {
   private holo: THREE.Mesh;
   private holoGlow: THREE.Sprite;
   private pillar: THREE.Mesh;
+  // The shaft doubles as an aim pointer: the owner's beacon tilts it along
+  // the solved lob direction so it visibly reaches toward the HUD reticle.
+  private readonly aimDir = new THREE.Vector3(0, 1, 0);
+  private readonly _pillarMid = new THREE.Vector3();
   private animT = Math.random() * 10;
   private unfoldT = 0;
   private scene: THREE.Scene;
@@ -67,15 +72,21 @@ export class DeployBeacon {
     this.holoGlow.position.y = 1.0;
     this.group.add(this.holoGlow);
 
-    // The pillar is world-mounted (not in the slope-tilted group) so the
-    // shaft always reads vertical even when the emitter sits on a bank.
+    // The shaft is world-mounted (not in the slope-tilted group) so the
+    // aim-pointer orientation isn't skewed by banked ground.
     this.pillar = new THREE.Mesh(_geoPillar, _pillarMat);
     this.pillar.position.copy(this.pos).y += 20;
     scene.add(this.pillar);
 
     this.group.position.copy(this.pos);
-    this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
+    this.group.quaternion.setFromUnitVectors(_UP, terrain.getNormal(pos.x, pos.z));
     scene.add(this.group);
+  }
+
+  /** Point the sky shaft along a direction (unit vector). The owner's
+   *  beacon tilts it along the solved lob arc; defaults to straight up. */
+  setAimDir(dir: THREE.Vector3): void {
+    this.aimDir.copy(dir).normalize();
   }
 
   update(dt: number): void {
@@ -83,7 +94,9 @@ export class DeployBeacon {
     this.animT += dt;
     // The emitter's pos can move after construction (pod flight → touchdown);
     // the pillar tracks it here rather than at plant sites.
-    this.pillar.position.set(this.pos.x, this.pos.y + 20, this.pos.z);
+    this._pillarMid.copy(this.pos).addScaledVector(this.aimDir, 20);
+    this.pillar.position.copy(this._pillarMid);
+    this.pillar.quaternion.setFromUnitVectors(_UP, this.aimDir);
     this.holo.rotation.y += dt * 3.0;
     this.holo.position.y = 1.0 + Math.sin(this.animT * 2.2) * 0.06;
     const pulse = 0.7 + Math.sin(this.animT * 4.0) * 0.3;
