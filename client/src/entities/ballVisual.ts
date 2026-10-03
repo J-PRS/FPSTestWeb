@@ -57,17 +57,25 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
     // ~200m but each emit still churns the dot list. Aging keeps running
     // so a ball arcing back into range doesn't pop stale sparkles.
     const nearCam = b._rpos.distanceToSquared(viewPos) < 200 * 200;
-    if (nearCam) {
+    // Net corrections sweep _rpos smoothly over ~0.2s via renderOffset
+    // decay — that sweep isn't flight, and depositing dots/ribbon samples
+    // along it lays a dotted line across the map (the per-frame step is
+    // under every jump threshold, so guards never see it). While the
+    // correction dominates real travel, emit nothing.
+    const travel = Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * dt);
+    const correcting = b._rpos.distanceTo(b._lastTrailPos) > Math.max(6, travel * 4);
+    if (nearCam && !correcting) {
       b.trails.emit(dt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color);
     }
     b.trails.fade(dt);
-    // Position discontinuity (teleport or playback keyframe snap) — cut the
-    // ribbons so they don't streak across the jump
-    if (b._rpos.distanceToSquared(b._lastTrailPos) > 400) {
+    // Position discontinuity (teleport, playback keyframe snap, or an
+    // active correction sweep) — cut the ribbons so they don't streak
+    // across the jump
+    if (correcting || b._rpos.distanceToSquared(b._lastTrailPos) > 400) {
       for (const r of b.ribbons) r.clear();
     }
     b._lastTrailPos.copy(b._rpos);
-    if (b.vel.lengthSq() > 0.5) {
+    if (!correcting && b.vel.lengthSq() > 0.5) {
       for (const r of b.ribbons) r.push(b._rpos, b.vel);
     }
     for (const r of b.ribbons) r.update(dt, viewPos);

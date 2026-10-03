@@ -144,13 +144,21 @@ export class PlayerVisuals {
 
   /** Faint innate air trail — the same arc read remotes get; gated to third person since your own dots would just bloom behind the camera. */
   private tickAirTrail(dt: number, pos: THREE.Vector3, vel: THREE.Vector3 | undefined, emit: boolean): void {
-    if (emit) {
+    // Same correction-sweep guard as ballVisual — a smoothed correction
+    // deposits dots along its path, so emit only on real travel.
+    const moved = this._airLastInit ? this._airLast.distanceTo(pos) : 0;
+    const travel = Math.max(1e-4, (vel?.length() ?? 0) * dt);
+    const correcting = moved > Math.max(6, travel * 4);
+    if (emit && !correcting) {
       if (!this.airTrail) this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
       _airP.copy(pos); _airP.y -= 0.7;
       this.airTrail.emit(dt, _airP, vel ?? _airP, 0.4, _airTint);
     }
+    this._airLast.copy(pos); this._airLastInit = true;
     this.airTrail?.fade(dt);
   }
+  private _airLast = new THREE.Vector3();
+  private _airLastInit = false;
 
   updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean, eyeOffset?: number]): number {
     const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false, eyeOff = EYE_OFFSET] = rest;

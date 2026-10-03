@@ -157,7 +157,11 @@ export class RemoteAnim {
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;
-    if (airborne && speed > 6 && this._lastTrailPos.distanceToSquared(h.position) < 225) {
+    // Snapshot corrections sweep the render pos smoothly — depositing
+    // dots along that sweep lays a dotted streak, so emit only while the
+    // per-frame move is explained by real travel, not correction decay.
+    const correcting = this._lastTrailPos.distanceTo(h.position) > Math.max(6, speed * dt * 4);
+    if (airborne && speed > 6 && !correcting) {
       if (!this.airTrail) this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
       _trailP.copy(h.position); _trailP.y -= 0.7;
       this.airTrail.emit(dt, _trailP, h.velocity, 0.4, _trailTint);
