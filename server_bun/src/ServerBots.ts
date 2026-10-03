@@ -102,13 +102,16 @@ export class ServerBots {
    *  at full rate, so motion smoothness is unchanged. */
   private static readonly THINK_DIV = 5;
   private thinkPhase = new Map<string, number>();
+  /** One think-phase slot per tick — advanced once per tick() pass so every
+   *  brain runs its think exactly once per THINK_DIV ticks regardless of
+   *  roster size. */
+  private thinkPhaseNow = 0;
   private lastOut = new Map<string, BrainOut>();
   /** Visible-enemy-present flag from the last think (epoch ms expiry). */
   readonly foeNear = new Map<string, number>();
   /** FPS_BOT_PROF=1 stage timers — flagGoal/build/think/fire/drive.
    *  Read-only accumulate; the soak prints the rollup. */
   readonly stageProf = process.env.FPS_BOT_PROF ? new Array<number>(5).fill(0) : null;
-  private thinkCounter = 0;
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {
@@ -444,6 +447,7 @@ export class ServerBots {
     this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
     this.meterHumans(dt);
     if (this.brains.size === 0) return;
+    this.thinkPhaseNow = (this.thinkPhaseNow + 1) % ServerBots.THINK_DIV;
     const now = simNow();
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
@@ -478,9 +482,14 @@ export class ServerBots {
       // Think pipeline runs on the bot's slow cadence; between thinks the
       // previous decision is re-emitted so the move sim still gets inputs
       // every tick (a stale dest for 200ms beats idling the drive).
-      this.thinkCounter = (this.thinkCounter + 1) % ServerBots.THINK_DIV;
+      // The phase advances once per TICK, not per bot — incrementing it
+      // inside this loop canceled out whenever the roster size was a
+      // multiple of THINK_DIV (bot count % 5 == 0 parked the counter,
+      // freezing every off-phase brain: no think, no fire, posted bots
+      // stood on the flag and never engaged).
+      const phaseNow = this.thinkPhaseNow;
       let out = this.lastOut.get(id);
-      if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
+      if (phaseNow === (this.thinkPhase.get(id) ?? 0) || !out) {
         const prof = this.stageProf;
         let tm = prof ? performance.now() : 0;
         const goal = this.sense.flagGoal(p, brain.dutyLevel);
