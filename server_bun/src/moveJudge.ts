@@ -168,11 +168,15 @@ export class MoveJudge {
     // teleport that reseated the shadow. Judging it against the new anchor
     // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
     if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return null;
-    // The report's seq tells us how many input events the client had
-    // consumed when it generated this position. If the shadow is behind
-    // (inputs still in flight), the client is legitimately ahead by up
-    // to ~vel * pending-steps — compare against a probe stepped forward
-    // that many ticks with the last-seen input instead of the stale sim.
+    // Journal coverage gate: a report stamped seq N was produced by
+    // inputs up to N — if inputMove N is still in flight (jittered
+    // reorder), the shadow has NOT seen the edge that produced this
+    // position (a jet toggle inside the window reads as a phantom
+    // ~10-30m climb and the probe can't reproduce it). Judging now is
+    // premature by construction: the next report lands in ~50ms with
+    // the journal caught up, so skip rather than probe with stale
+    // input — a cheat gets judged on the very next report anyway.
+    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) return null;
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
     let dist = Math.hypot(dx0, dy0, dz0);
     if (reportInputSeq !== undefined) {
@@ -265,12 +269,11 @@ export class MoveJudge {
   }
 
   /** Pick the sim state a seq-stamped report should be compared against.
-   *  Client ahead (report seq > consumed): probe the live state forward
-   *  by the in-flight input gap. Shadow ahead: replay from the journal
-   *  anchor at/below the report seq up to now — the live sim applied
-   *  inputs the report predates, which reads as divergence otherwise. */
+   *  reconcile() guarantees reportSeq ≤ lastInputSeq before this runs —
+   *  replay from the journal anchor at/below the report seq up to now:
+   *  the live sim applied inputs the report predates, which reads as
+   *  divergence otherwise. */
   private anchoredCompare(sh: Shadow, s: MoveState, reportSeq: number): MoveState {
-    if (reportSeq > sh.lastInputSeq) return this.probeForward(sh, s, reportSeq - sh.lastInputSeq, sh.sim.input);
     // Entries after the anchor (sorted) define input segments: each runs
     // its recorded input until the next entry's sim tick — a jet toggle
     // mid-window then replays correctly instead of being applied to the
@@ -331,12 +334,4 @@ export class MoveJudge {
     }
   }
 
-  private probeForward(sh: Shadow, from: MoveState, steps: number, inp: MoveInput): MoveState {
-    const probe = (sh.probe ??= new MoveSim(this.host.surface()!, from));
-    probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
-    probe.setState(from);
-    Object.assign(probe.input, inp);
-    for (let i = 0, n = Math.min(steps, 16); i < n; i++) probe.update(MoveSim.STEP);
-    return probe.state;
-  }
 }
