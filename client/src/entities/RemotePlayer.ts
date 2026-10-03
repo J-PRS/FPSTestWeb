@@ -89,7 +89,7 @@ export class RemotePlayer {
     this._classScale = cls === 'heavy' ? CLASS_MODEL_SCALE.heavy : cls === 'light' ? CLASS_MODEL_SCALE.light : 1;
     // The class IS the body: a tier change swaps the whole GLB, not a
     // scale factor — class bodies carry their own proportions.
-    const want = (CLASS_BODY_VARIANT[cls ?? 'medium'] ?? 'cybersoldier') as PlayerModelVariant;
+    const want = (CLASS_BODY_VARIANT[cls ?? 'medium'] ?? 'vexa') as PlayerModelVariant;
     if (this._model.variant !== want) {
       this._model.dispose();
       this._loaded = false;
@@ -157,7 +157,7 @@ export class RemotePlayer {
     // silhouettes, picked from the constructor's wire class when present
     // (a mid-match re-fit rebuilds via setClass).
     this._model = new PlayerModel(scene,
-      (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'cybersoldier') as PlayerModelVariant);
+      (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'vexa') as PlayerModelVariant);
     this.model.load().then(() => {
       this.finishModelLoad();
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });

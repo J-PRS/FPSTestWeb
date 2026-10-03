@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, normBone } from './playerClips.js';
 
 const logger = new ChildLogger('PlayerUal');
 
@@ -40,9 +40,9 @@ const SPECS: UalSpec[] = [
   // traverse pass and nothing else.
   { url: '/assets/models/kevdev-anims.glb', boneMap: KEVDEV_BONE_MAP, mannMap: MANNEQUIN_KEVDEV_BONE_MAP,
     prefix: 'b', hip: 'bhips', exclude: /^(broot|bspineproxy|bhandprop|bjaw|btoe)/i,
-    // CyberSoldier's rig is semantically the kevdev chain under Unity
-    // casing — it ships zero clips of its own, so it lives on this bake.
-    mapByVariant: { cybersoldier: CYBER_KEVDEV_BONE_MAP } },
+    // Vexa's Base_Human* chain is semantically the kevdev skeleton — she
+    // ships no locomotion of her own, so run/walk comes from this bake.
+    mapByVariant: { vexa: VEXA_KEVDEV_BONE_MAP } },
 ];
 
 // KevDev directional clips turn the hips toward travel (authored "run
@@ -195,8 +195,8 @@ function bakeSource(
     // mannequin's spine rest pose leans differently than the chibi robot's,
     // and absolute copy bakes a constant forward hunch into every clip.
     // Delta-map the torso, keep limbs absolute.
-    const TORSO = variant === 'cybersoldier'
-      ? /^(Hips|Spine|Chest|Neck|Head)$/
+    const TORSO = variant === 'vexa'
+      ? /^Base_Human(Pelvis|Spine1|Ribcage|Neck|Head)$/
       : variant === 'mannequin'
       ? /^DEF-(hips|spine001|spine003|neck|head)$/
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;

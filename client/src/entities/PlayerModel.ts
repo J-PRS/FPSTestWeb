@@ -27,7 +27,7 @@ import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './player
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips } from './playerUal.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'polyart';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'vexa' | 'polyart';
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -164,8 +164,8 @@ export class PlayerModel {
    *  'mannequin' = the UAL's own rig — clips play natively, no retarget.
    *  'knight' = Quaternius Knight_Male — the heavy-class silhouette;
    *  native clips, armored read at distance.
-   *  'scifisoldier'/'cybersoldier'/'polyart' = the UAS class bodies —
-   *  each bakes its own clip set on its own rig (cybersoldier ships
+   *  'scifisoldier'/'vexa'/'polyart' = the UAS class bodies —
+   *  each bakes its own clip set on its own rig (vexa ships
    *  none, it stands static until a clip'd medium replaces it). */
   readonly variant: PlayerModelVariant;
 
@@ -282,7 +282,7 @@ export class PlayerModel {
     // Knight/scifisoldier/polyart are native-only (their own rigs carry
     // their own clip sets). Cybersoldier ships zero clips — it bakes the
     // kevdev set through the same retarget the mannequin uses.
-    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'cybersoldier') this.retargetUAL();
+    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'vexa') this.retargetUAL();
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -739,7 +739,7 @@ export class PlayerModel {
       if (clip) this.playAnimation(clip);
       return;
     }
-    // cybersoldier has no anims table — it resolves through ANIM_NAMES
+    // vexa has no anims table — she resolves through ANIM_NAMES
     // against its baked kevdev clip set like the mannequin does.
     if (state === 'walk' || state === 'run') {
       const dirClip = this.directionalClip(state);

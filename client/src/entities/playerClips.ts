@@ -37,9 +37,10 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
 };
 
 // UAS class bodies (paid packs) — each GLB bakes its own clip set on its
-// own rig, so clips bind natively with no retarget. CyberSoldier's pack
-// ships ZERO clips (its anims were Unity-Humanoid-retargeted): it runs
-// the kevdev retarget path instead — see CYBER_KEVDEV_BONE_MAP below.
+// own rig, so clips bind natively with no retarget. Vexa ships clips for
+// every NON-locomotion state (idles, jumps, death, damage, gunshots) but
+// zero run/walk: her GLB names them on the ANIM_NAMES fallback slots and
+// kevdev supplies locomotion via VEXA_KEVDEV_BONE_MAP below.
 export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
   'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
   'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
@@ -53,9 +54,9 @@ export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
 
 // armorClass → dedicated body GLB. Table presence marks the variant as
 // class-native: the silhouette IS the class (no _classScale stack). A
-// present `anims` table means the GLB's own clips drive it; cybersoldier
-// ships no clips, so it bakes the kevdev set through bakeUALClips like
-// the mannequin (CYBER_KEVDEV_BONE_MAP) and resolves via ANIM_NAMES.
+// present `anims` table means the GLB's own clips drive it; vexa ships
+// no table — her clips sit on the ANIM_NAMES fallback slots while the
+// kevdev bake supplies the UAL_* locomotion (VEXA_KEVDEV_BONE_MAP).
 export const CLASS_BODY_SPEC: Record<string, {
   url: string; yaw: number; fitH: number;
   anims?: Partial<Record<AnimationState, string>>;
@@ -63,18 +64,18 @@ export const CLASS_BODY_SPEC: Record<string, {
   // All three rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
   'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.8, anims: SCIFISOLDIER_ANIMS },
-  'cybersoldier': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.0 },
+  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.0 },
   'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.5, anims: POLYART_ANIMS },
 };
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
 // the whole GLB (RemotePlayer.setClass).
 export const CLASS_BODY_VARIANT: Record<string, string> = {
-  light: 'scifisoldier', medium: 'cybersoldier', heavy: 'polyart',
+  light: 'scifisoldier', medium: 'vexa', heavy: 'polyart',
 };
 
 // Death clips per class body — corpse-clamp like 'Death'/'UAL_Death01'.
-export const CLASS_BODY_DEATH_CLIPS = new Set(['Death_Rifle', 'Die']);
+export const CLASS_BODY_DEATH_CLIPS = new Set(['Death_Rifle', 'Die', 'Death']);
 
 // RobotExpressive bone → UAL source bone. RobotExpressive bones carry
 // Blender names (UpperArm.L); UAL uses DEF-* (DEF-upper_arm.L). Both sides
@@ -167,13 +168,19 @@ export const MANNEQUIN_KEVDEV_BONE_MAP: Record<string, string> = {
 
 export const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-// CyberSoldier rig → kevdev B-* names. The rig's Mixamo-ish names map
-// 1:1 — same semantic chain, just Unity 'l'/'r' casing quirks.
-export const CYBER_KEVDEV_BONE_MAP: Record<string, string> = {
-  Hips: 'hips', Spine: 'spine', Chest: 'chest', Neck: 'neck', Head: 'head',
-  ShoulderL: 'shoulderl', UpperArml: 'upperarml', LowerArmL: 'forearml', HandL: 'handl',
-  ShoulderR: 'shoulderr', UpperArmr: 'upperarmr', LowerArmR: 'forearmr', HandR: 'handr',
-  UpperLegL: 'thighl', LowerLegL: 'shinl', UpperLegR: 'thighr', LowerLegR: 'shinr',
+// Vexa rig → kevdev B-* names. The Base_Human* chain is semantically 1:1
+// with the robot's — extra limb segments (Upperarm2/3, digits, lash/eye
+// helpers) stay unmapped and inherit their parent's motion.
+export const VEXA_KEVDEV_BONE_MAP: Record<string, string> = {
+  Base_HumanPelvis: 'hips',
+  Base_HumanSpine1: 'spine', Base_HumanRibcage: 'chest',
+  Base_HumanNeck: 'neck', Base_HumanHead: 'head',
+  Base_HumanLCollarbone: 'shoulderl', Base_HumanLUpperarm1: 'upperarml',
+  Base_HumanLForearm1: 'forearml', Base_HumanLPalm: 'handl',
+  Base_HumanRCollarbone: 'shoulderr', Base_HumanRUpperarm1: 'upperarmr',
+  Base_HumanRForearm1: 'forearmr', Base_HumanRPalm: 'handr',
+  Base_HumanLThigh: 'thighl', Base_HumanLCalf: 'shinl',
+  Base_HumanRThigh: 'thighr', Base_HumanRCalf: 'shinr',
 };
 
 // Shared radial-gradient flash texture — one per process, all remote

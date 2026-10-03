@@ -307,7 +307,7 @@ export class Player {
 
     // Your third-person body wears the same class GLB remotes see on
     // you — what you see looking down IS the hitbox class you claim.
-    this.model = new PlayerModel(scene, (CLASS_BODY_VARIANT[this.appliedClass] ?? 'cybersoldier') as PlayerModelVariant);
+    this.model = new PlayerModel(scene, (CLASS_BODY_VARIANT[this.appliedClass] ?? 'vexa') as PlayerModelVariant);
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills + input routing — the two ctx objects live in

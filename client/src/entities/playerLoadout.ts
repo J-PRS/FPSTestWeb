@@ -86,7 +86,7 @@ export class PlayerLoadout {
     // The class IS the body — same GLB remotes see on this player. A
     // tier swap rebuilds the whole model, not a rescale; the hidden /
     // gizmo-off local state reasserts once the new GLB lands.
-    const want = CLASS_BODY_VARIANT[c] ?? 'cybersoldier';
+    const want = CLASS_BODY_VARIANT[c] ?? 'vexa';
     if (this.h.model && this.h.model.variant !== want) {
       const old = this.h.model;
       const m = new PlayerModel(this.h.scene, want as PlayerModelVariant);
