@@ -470,6 +470,11 @@ const G_GLB_TO_T2 = new THREE.Matrix4().makeRotationX(Math.PI / 2);
 
 let interiorGroup: THREE.Group | null = null;
 let interiorGeos: THREE.BufferGeometry[] = []; // merged geos — owned, must dispose on swap
+// Bumped every applyInteriors — consumers that cache scene queries over
+// the group (e.g. the shadow-caster gate) must re-census on change: a map
+// swap disposes the old group, so a stale cache would gate dead meshes.
+let interiorsEpoch = 0;
+export function getInteriorsEpoch(): number { return interiorsEpoch; }
 const glbCache = new Map<string, Promise<THREE.Group | null>>();
 const glbLoader = new GLTFLoader();
 
@@ -556,6 +561,7 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
 /** Instance a converted T2 interior. Clone shares geometry/materials —
  *  these are static hulls, no skeletons. */
 export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
+  interiorsEpoch++;
   const { deps } = ctx;
   const scene = deps.lazyScene();
   if (interiorGroup) {

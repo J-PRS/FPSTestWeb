@@ -41,6 +41,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
+import { getInteriorsEpoch } from './net/mapAssets.js';
 import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
@@ -154,8 +155,11 @@ export interface LoopState {
   /** FPS-cap render skip accumulator — see loop. */
   renderAcc: number;
   /** Cached interior meshes for the per-frame shadow-caster distance
-   *  gate — populated once the __t2interiors group exists. */
+   *  gate — populated once the __t2interiors group exists, and re-
+   *  censused whenever applyInteriors swaps it (map change disposes
+   *  the old meshes; a stale cache would gate corpses forever). */
   interiorCasters?: THREE.Mesh[];
+  interiorEpoch?: number;
   /** Frames rendered before the shader warmup fires — lets async content
    *  (interiors, rigs) land in the scene before compileAsync runs. */
   warmN: number;
@@ -534,7 +538,10 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
 // Census showed ~700 caster meshes — at a base view they were half the
 // shadow pass's draw calls.
 function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Camera): void {
-  if (!st.interiorCasters) {
+  const epoch = getInteriorsEpoch();
+  if (st.interiorEpoch !== epoch) {
+    st.interiorEpoch = epoch;
+    st.interiorCasters = undefined;
     const g = deps.sceneSetup.scene.getObjectByName('__t2interiors');
     if (g) st.interiorCasters = g.children as THREE.Mesh[];
   }
