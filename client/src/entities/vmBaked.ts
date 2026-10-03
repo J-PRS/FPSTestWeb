@@ -25,6 +25,14 @@ export interface BakedHost {
   ghostifyMesh(mesh: THREE.Mesh): void;
 }
 
+// Concave-grime rollout: per-weapon opt-in while the signed-curvature
+// pass gets tuned. Weapons not in the set bake no `grime` attribute —
+// the shader reads 0 for them, so nothing changes pixel-wise.
+const GRIME_WEAPONS = new Set<number>([WeaponType.Chaingun]);
+// Per-weapon wear-line emphasis — 0 keeps the shared look; >0 pushes
+// the white edge wear toward full brightness on this weapon only.
+const WEAR_BOOST = new Map<number, number>([[WeaponType.Chaingun, 0.7]]);
+
 export class VmBaked {
   constructor(private h: BakedHost) {}
 
@@ -37,14 +45,14 @@ export class VmBaked {
     // can never pick up new geometry. Still bake AO: the dump pipeline
     // round-trips the procedural vertex colors into the GLB.
     if (urlParams.has('export')) {
-      for (const g of this.h.weapons.values()) bakeVertexAO(g);
+      for (const [wt, g] of this.h.weapons) bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
       return;
     }
     // Procedural is the default look — baked GLBs only load behind ?bake
     // (gunlab A/B + pipeline verification). The nobake flag still reads
     // as off for anyone with it bookmarked.
     if (!urlParams.has('bake') || urlParams.has('nobake')) {
-      for (const g of this.h.weapons.values()) bakeVertexAO(g);
+      for (const [wt, g] of this.h.weapons) bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
       return;
     }
     const loader = new GLTFLoader();
@@ -62,10 +70,10 @@ export class VmBaked {
         // Vite's SPA fallback can 200 a HEAD for a missing file — only a
         // non-HTML body is a real bake.
         const ct = probe.headers.get('content-type') ?? '';
-        if (!probe.ok || ct.includes('html')) { bakeVertexAO(g); continue; }
+        if (!probe.ok || ct.includes('html')) { bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) }); continue; }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
-        bakeVertexAO(g);
+        bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
         // neither is worth a log line. Only a real parse/decode failure is.
@@ -111,10 +119,21 @@ export class VmBaked {
       m.material = inBarrels && spin.barrelMat ? spin.barrelMat : bakedMat;
     });
     g.add(gltf.scene);
+    // The blend bakes a real edge-wear mask on this same unwrap — prefer
+    // it over the runtime atlas. Missing file = atlas fallback, silent.
+    const edgeTex = await this.loadEdgeTex(wt, texLoader);
+    if (edgeTex) {
+      gltf.scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.geometry.userData.__keepUv = true;
+        m.geometry.userData.__wearTex = edgeTex;
+      });
+    }
     // The swap path skips bakeVertexAO entirely (AO lives in the ao.png
     // map) — curvature still needs baking or the wear shader has no edge
     // signal and the gun reads flat.
-    bakeWearOnly(gltf.scene as THREE.Group);
+    bakeWearOnly(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
     if (spin) this.seatChainPivot(spin.node, g);
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.
@@ -136,6 +155,23 @@ export class VmBaked {
       for (const mesh of toShell) this.h.ghostifyMesh(mesh);
     }
     console.log(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
+  }
+
+  /** Optional per-weapon edge bake (exported from the weapon's .blend on
+   *  the same unwrap as _ao.png). null when absent — caller falls back
+   *  to the runtime atlas. */
+  private async loadEdgeTex(wt: number, texLoader: THREE.TextureLoader): Promise<THREE.Texture | null> {
+    for (const ext of ['png', 'jpg']) {
+      try {
+        const probe = await fetch(`/weapons/w${wt}_edge.${ext}`, { method: 'HEAD' });
+        if (!probe.ok || (probe.headers.get('content-type') ?? '').includes('html')) continue;
+        const t = await texLoader.loadAsync(`/weapons/w${wt}_edge.${ext}?v=${Date.now()}`);
+        t.flipY = false;
+        t.colorSpace = THREE.LinearSRGBColorSpace;
+        return t;
+      } catch { continue; }
+    }
+    return null;
   }
 
   /** Finds the bake's "barrels" node (Blender dedups to 'barrels.001'
