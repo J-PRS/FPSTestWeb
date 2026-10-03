@@ -609,6 +609,9 @@ class WireBot {
       type: 'shot', targetId: null, weaponType,
       position: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
       velocity: { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed },
+      // The fire window's escape hatch reads this on the CLIENT clock —
+      // wire compression otherwise pairs two legal spawns into one window.
+      timestamp: Date.now(),
     });
     const airtime = dist / speed;
     const firedAt = performance.now();

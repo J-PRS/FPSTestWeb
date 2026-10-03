@@ -124,7 +124,7 @@ export class CombatHandler {
    *  claims (fan weapons fire all pellets in one pull); hits don't need
    *  gating — the ledger already caps them at one per registered
    *  projectile. */
-  fireWindows = new Map<string, { start: number; count: number; lastTs?: number; lastAt?: number }>();
+  fireWindows = new Map<string, { start: number; count: number; lastTs?: number; arr: number[] }>();
   /** Heal-beam tick law — per `shooter|patient` pair last-tick stamp,
    *  the same rate shape the repair beam enforces. */
   healTicks = new Map<string, number>();

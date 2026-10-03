@@ -210,21 +210,24 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
         // (the ledger's per-projectile claim cap bounds damage anyway).
         const tsGapOk = msg.timestamp !== undefined && win.lastTs !== undefined
           && msg.timestamp - win.lastTs >= interval * 850;
-        // Stampless claims can't prove their trigger spacing — without a
-        // fallback ANY compressed pair (backlog drain delivering two
-        // frames in one tick) reads as fast-fire. Judge them against the
-        // last admitted claim's arrival at half slack; the ledger's
-        // one-claim-per-projectile cap still bounds damage.
-        const arrGapOk = msg.timestamp === undefined && now - (win.lastAt ?? win.start) >= interval * 500;
-        if (!tsGapOk && !arrGapOk && win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
+        // Stampless claims can't prove trigger spacing — judging a pair's
+        // arrival gap flags every honest backlog drain, so bound the
+        // SUSTAINED rate instead: arrivals inside a rolling second,
+        // legal rate + backlog slack. A backlog burst passes; a cheater
+        // firing >2× rate across a second still reads as fast-fire.
+        const burst = getWeaponStats(msg.weaponType).burst ?? 1;
+        const stamplessFlood = msg.timestamp === undefined
+          && (win.arr = win.arr.filter(t => now - t < 1000)).length
+            >= Math.ceil(1000 / (interval * 850)) + 2;
+        if ((!tsGapOk && msg.timestamp !== undefined || stamplessFlood) && win.count >= burst) {
           h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType, msg.shotId);
           return;
         }
         win.count++;
-        win.lastAt = now;
         if (msg.timestamp !== undefined) win.lastTs = msg.timestamp;
+        else win.arr.push(now);
       } else {
-        h.fireWindows.set(key, { start: now, count: 1, lastTs: msg.timestamp });
+        h.fireWindows.set(key, { start: now, count: 1, lastTs: msg.timestamp, arr: [] });
       }
     }
 
