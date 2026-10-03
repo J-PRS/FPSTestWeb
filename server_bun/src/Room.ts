@@ -142,8 +142,11 @@ export class Room {
   /** Server-simulated projectiles — bot fire spawns real shells here
    *  instead of rolled hitscan (bots-as-legal-players phase 2). */
   readonly projectiles: RoomProjectiles;
-  /** Server-side simulations ticked each room tick, in order. */
-  readonly sims: { tick(dt: number): void }[] = [];
+  /** Server-side simulations ticked each room tick, in order. A sim
+   *  with worldState() also emits its join/resync replay frames (roster
+   *  snapshots), so sendWorldState iterates this registry instead of
+   *  naming each sim. */
+  readonly sims: { tick(dt: number): void; worldState?(): ServerMessage[] }[] = [];
 
   /** Wall ms of the last room tick — TickLoop turns the gap into the dt
    *  every sim sees, so interval lag can't drift sim clocks off wall time. */
@@ -482,8 +485,8 @@ export class Room {
   private registerSims(): void {
     // World sims step first — bots and downstream systems see post-step
     // wildlife positions inside the same tick.
-    this.sims.push({ tick: (dt) => this.ballSim.step(dt) });
-    this.sims.push({ tick: (dt) => this.creatureSim.step(dt) });
+    this.sims.push({ tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
+    this.sims.push({ tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
     if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
@@ -538,6 +541,7 @@ export class Room {
       friendlyFire: CONFIG.friendlyFire,
       winAt: this.modeSpec?.winAt,
       ffaScores: () => Object.fromEntries(this.scoring.ffaScores),
+      simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
       bases: this.spec.bases,
       structures: this.spec.structures,
       arena: this.spec.arena,

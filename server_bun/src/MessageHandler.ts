@@ -42,6 +42,9 @@ export interface RoomInfo {
   structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
+  /** World-state replay frames the room's registered sims emit —
+   *  roster snapshots a joiner/resync replays (Room.sims worldState). */
+  simsWorldState?: () => ServerMessage[];
   /** Map display name for the scoreboard chrome — lazy like ffaScores:
    *  the spec source lands after Room's ctor (factory/rotation/reload),
    *  so a frozen string would miss the real name on the first gameState. */
@@ -426,14 +429,9 @@ export class MessageHandler {
       },
     });
 
-    // Creature roster — joiner/resync replays the live ball set from
-    // these segment snapshots; anything spawned after is a ballSpawn event.
-    if (this.ballSim) {
-      this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
-    }
-    if (this.creatureSim) {
-      this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
-    }
+    // Sim replay frames — each world sim reports its own roster
+    // snapshot; anything spawned after arrives as a live event.
+    this.sendSimWorldState(playerId);
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
@@ -470,12 +468,13 @@ export class MessageHandler {
       protocolVersion: PROTOCOL_VERSION,
       ...this.roomEcho(),
     });
-    if (this.ballSim) {
-      this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
-    }
-    if (this.creatureSim) {
-      this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
-    }
+    this.sendSimWorldState(playerId);
+  }
+
+  /** World-state replay frames every registered sim opts into — adding
+   *  a world sim to room.sims is now the whole wiring for its replay. */
+  private sendSimWorldState(playerId: string): void {
+    for (const m of this.roomInfo.simsWorldState?.() ?? []) this.sendToPlayer(playerId, m);
   }
 
   handleMessage(playerId: string, msg: ClientMessage): void {
