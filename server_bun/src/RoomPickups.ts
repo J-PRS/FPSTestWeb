@@ -12,7 +12,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
@@ -21,18 +21,36 @@ const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
 const NUG_FRICTION = 4;  // tumble bleed per second — gems skid, not slide
 
 export class RoomPickups {
-  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; vel: Vec3 }>();
+  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; vel: Vec3; armT: number }>();
   private nextId = 1;
   /** Set by the room — banks the point or applies the powerup. */
   onCollect: ((playerId: string, kind: PickupKind) => void) | null = null;
 
   constructor(private room: Room) {}
 
-  spawn(pos: Vec3, kind: PickupKind = 'gem'): void {
-    if (this.pickups.size >= MAX_PICKUPS) return;
+  /** armS: collect grace — a pack-thrown nugget mints one of these at the
+   *  thrower's feet-ish range; the beat keeps the toss from bank-to-self
+   *  on the same frame it lands. */
+  spawn(pos: Vec3, kind: PickupKind = 'gem', armS = 0): void {
+    if (this.pickups.size >= MAX_PICKUPS) {
+      // A saturated pool refusing the objective's income is invisible
+      // without this — "kills stopped dropping nuggets" vs "pool full"
+      // must be separable in the pickup tallies.
+      weaponStats.recordPickup(this.room.mode, kind, 'refused');
+      return;
+    }
     const id = this.nextId++;
-    const p = { id, pos: { ...pos }, ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 } };
+    const p = { id, pos: { ...pos }, ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 }, armT: armS };
     this.settleReachable(p);
+    // Drops spawn at the victim's eye height — hmSettleWalkable only
+    // grounds pos.y when it slides, so a flat-ground death leaves the
+    // tag hovering ~1.5m up. Ground it when the spot is over open
+    // terrain; on a structure (>2.5m up) corpse height is the reachable
+    // spot and grounding would sink the tag under the deck.
+    if (this.room.field) {
+      const ground = hmHeight(this.room.field, p.pos.x, p.pos.z) + 0.5;
+      if (p.pos.y - ground < 2.5) p.pos.y = ground;
+    }
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     weaponStats.recordPickup(this.room.mode, kind, 'spawned');
@@ -78,24 +96,9 @@ export class RoomPickups {
     }
   }
 
-  /** Gems decay by timeout, never by geography: a tumble that ends on a
-   *  cliff lip or a steep face is unreachable for every walker, so the
-   *  rest spot slides downhill until the gradient is walkable. */
+  /** Gems decay by timeout, never by geography — see hmSettleWalkable. */
   private settleReachable(p: { pos: Vec3 }): void {
-    const f = this.room.field;
-    if (!f) return;
-    for (let i = 0; i < 12; i++) {
-      const h0 = hmHeight(f, p.pos.x, p.pos.z);
-      const gxm = hmHeight(f, p.pos.x - 4, p.pos.z), gxp = hmHeight(f, p.pos.x + 4, p.pos.z);
-      const gzm = hmHeight(f, p.pos.x, p.pos.z - 4), gzp = hmHeight(f, p.pos.x, p.pos.z + 4);
-      const sx = (gxp - gxm) / 8, sz = (gzp - gzm) / 8;
-      const slope = Math.hypot(sx, sz);
-      if (slope < 0.8) break; // walkable grade
-      const d = Math.hypot(sx, sz) || 1;
-      p.pos.x -= (sx / d) * 6; p.pos.z -= (sz / d) * 6;
-      p.pos.y = hmHeight(f, p.pos.x, p.pos.z) + 0.5;
-      if (Math.abs(h0 - p.pos.y) < 0.5 && i > 4) break; // settled on a shelf
-    }
+    if (this.room.field) hmSettleWalkable(this.room.field, p.pos);
   }
 
   private remove(id: number, by: string | null): void {
@@ -127,6 +130,7 @@ export class RoomPickups {
         weaponStats.recordPickup(this.room.mode, p.kind, 'decayed');
         continue;
       }
+      if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
       for (const pl of players) {
         if (pl.isDead) continue;
         // Score pickups (gems/tags) only exist in team modes; powerups

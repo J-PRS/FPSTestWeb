@@ -152,25 +152,29 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string): Prom
   let target: THREE.SkinnedMesh | undefined;
   model.traverse(o => { if (!target && (o as THREE.SkinnedMesh).isSkinnedMesh) target = o as THREE.SkinnedMesh; });
   if (!target) throw new Error('no skinned mesh to retarget onto');
-  // pose() decomposes bind locals through the PARENT matrixWorld — it has
-  // to run on an updated graph or it rewrites the GLB rest transform
-  // (cyber's hips rest ≠ bind: rest −23 vs bind 0.8, a 33-unit miss).
   model.updateMatrixWorld(true);
-  target.skeleton.pose();
-  model.updateMatrixWorld(true);
+
+  // Snapshot the rest pose once — every bakeSource reads the hip's local
+  // transform as its bind reference and retargetClip leaves the skeleton
+  // at its last evaluated frame, so a second source would bake off the
+  // first's residue and drag the mesh ~100 units out of the body.
+  const rest = target.skeleton.bones.map(b => ({
+    b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone(),
+  }));
+  const restoreRest = () => {
+    for (const r of rest) { r.b.position.copy(r.p); r.b.quaternion.copy(r.q); r.b.scale.copy(r.s); }
+    model.updateMatrixWorld(true);
+  };
 
   const t0 = performance.now();
   const baked = new Map<string, THREE.AnimationClip>();
   for (const s of sources) {
     if (s.spec.variants && !s.spec.variants.includes(variant)) continue;
+    restoreRest();
     for (const [name, clip] of bakeSource(s, target, model, variant)) baked.set(name, clip);
   }
-  // retargetClip poses the target skeleton while it evaluates — with no
-  // clip running yet the bones stay at the last evaluated frame, which on
-  // foreign armatures is ~100 units off bind (gun/muzzle-anchored props
-  // end up hundreds of meters away). Restore bind pose after the bake.
-  target.skeleton.pose();
-  model.updateMatrixWorld(true);
+  // Leave the skeleton at its authored rest, not the last baked frame.
+  restoreRest();
   logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
   bakedByVariant.set(variant, baked);
   return baked;
@@ -268,10 +272,10 @@ function bakeSource(
       hipTr.values = new Float32Array([tgtHipBind.x, tgtHipBind.y, tgtHipBind.z]);
       return;
     }
-    const interp = (srcTr as unknown as { createInterpolant(): { evaluate(t: number): { result: Float32Array | number[] } } }).createInterpolant();
+    const interp = (srcTr as unknown as { createInterpolant(): { evaluate(t: number): ArrayLike<number> } }).createInterpolant();
     const v = hipTr.values, t = hipTr.times;
     for (let i = 0; i < t.length; i++) {
-      const s = interp.evaluate(t[i]!).result;
+      const s = interp.evaluate(t[i]!);
       v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
       v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;
       v[i * 3 + 2] = tgtHipBind.z + (s[2]! - srcHipBind.z) * deltaScale;
