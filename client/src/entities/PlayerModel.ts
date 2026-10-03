@@ -20,7 +20,7 @@ const _footPQ = new THREE.Quaternion();
 // testable without loading the rig.
 
 export type { AnimationState } from './playerClips.js';
-import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS, clipCandidates,
+import { ONESHOT_CLIPS, clipCandidates,
   CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
@@ -245,8 +245,11 @@ export class PlayerModel {
 
     this._loaded = true;
     // Start with whatever the last request was (remotes spawn mid-
-    // load and ask for Running/Walking before the mixer exists).
-    this.playAnimation(this._queuedAnim ?? (mann ? 'UAL_Pistol_Idle_Loop' : 'Idle'));
+    // load and ask for Running/Walking before the mixer exists). The
+    // default goes through the state table — a bare 'Idle' name only
+    // exists on knight's rig, other variants resolve their own idle.
+    if (this._queuedAnim) this.playAnimation(this._queuedAnim);
+    else this.forceAnimationState('idle');
     this._queuedAnim = null;
 
     // Retargeted UAL clips arrive async — a native clip plays until
@@ -873,9 +876,11 @@ export class PlayerModel {
       for (const [name, clip] of baked) {
         this.animations.set(name, this.mixer.clipAction(clip));
       }
-      // Re-resolve the current state onto the better clip if one landed.
-      const want = this.variant === 'knight' ? KNIGHT_ANIMS[this.currentState] : ANIM_NAMES[this.currentState][0];
-      this.playAnimation(this.animations.has(want) ? want : (this.currentClipName ?? 'Idle'));
+      // Re-resolve the current state onto the better clip if one landed —
+      // the baked names now sit in the same candidate table the state
+      // resolver reads, so let it pick (a bare 'Idle' name doesn't exist
+      // on every rig).
+      this.forceAnimationState(this.currentState);
     };
     const runtimeBake = () =>
       bakeUALClips(model, this.variant).then(adopt)
