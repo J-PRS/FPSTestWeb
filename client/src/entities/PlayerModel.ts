@@ -571,12 +571,37 @@ export class PlayerModel {
     handBone.add(this.gun);
   }
 
+  // Nodes above the hips that authored rigs animate as root motion —
+  // the ancestor chain of the skeleton's shallowest joint (Vexa animates
+  // 'Armature', Yurowm 'Rig'). No name table covers these; computed from
+  // the loaded hierarchy once.
+  private _rootMotionNodes: Set<string> | null = null;
+
+  private rootMotionNodes(): Set<string> {
+    if (this._rootMotionNodes) return this._rootMotionNodes;
+    const set = new Set<string>();
+    this.model?.traverse(o => {
+      const sk = o as THREE.SkinnedMesh;
+      if (!sk.isSkinnedMesh || !sk.skeleton) return;
+      let root: THREE.Object3D | null = null, rootDepth = Infinity;
+      for (const b of sk.skeleton.bones) {
+        let d = 0; for (let p = b.parent; p && p !== this.model; p = p.parent) d++;
+        if (d < rootDepth) { root = b; rootDepth = d; }
+      }
+      for (let n = root; n && n !== this.model; n = n.parent) {
+        if (n.name) set.add(normBone(n.name));
+      }
+    });
+    this._rootMotionNodes = set;
+    return set;
+  }
+
   // Mannequin/knight clips need their hip XZ root motion stripped — the
   // entity owns world position, and loop clips otherwise translate the
   // mesh out from under the hitbox each cycle. Y stays (the crouch dip).
   private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
     if (mann || knight || CLASS_BODY_SPEC[this.variant]) {
-      stripHipXZ(clip);
+      stripHipXZ(clip, this.rootMotionNodes());
       if (mann && PlayerModel.isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
           !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
@@ -786,16 +811,15 @@ export class PlayerModel {
     bakeUALClips(this.model, this.variant).then(baked => {
       if (this._disposed || !this.mixer || !this.model) return;
       for (const [name, clip] of baked) {
-        // Baked clips arrive full-body — the mannequin's arm tracks must
-        // yield to the aim layer and its hip XZ to the entity, same as
-        // its native clips get at registerClip.
-        if (this.variant === 'mannequin') {
-          stripHipXZ(clip);
-          if (PlayerModel.isLayeredClip(name)) {
-            clip.tracks = clip.tracks.filter(t =>
-              !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-            dampenSway(clip, PlayerModel.SWAY_BONES);
-          }
+        // Every variant's baked clips get the hip XZ strip — the entity
+        // owns world position regardless of rig (Vexa's bake drifted her
+        // whole body until this applied outside the mannequin branch).
+        stripHipXZ(clip, this.rootMotionNodes());
+        // Mannequin's arm tracks additionally yield to the aim layer.
+        if (this.variant === 'mannequin' && PlayerModel.isLayeredClip(name)) {
+          clip.tracks = clip.tracks.filter(t =>
+            !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+          dampenSway(clip, PlayerModel.SWAY_BONES);
         }
         this.animations.set(name, this.mixer.clipAction(clip));
       }

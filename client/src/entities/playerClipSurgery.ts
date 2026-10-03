@@ -14,13 +14,22 @@ export const DIR_SUFFIX: Record<LocoDir, string> = {
 const _dampA = new THREE.Quaternion();
 const _dampB = new THREE.Quaternion();
 
+// Norm'd bone names that carry the rig's world-translation — the entity
+// owns world position, so these tracks pin their XZ or loop clips walk
+// the mesh out from under the hitbox. 'pelvis' suffix catches authored
+// rigs like Vexa's Base_HumanPelvis.
+const ROOT_POS_BONES = new Set(['defhips', 'root', 'hips', 'bone']);
+
 /** Strip hip/root XZ translation — the entity owns world position; left
- *  in, loop clips translate the mesh out from under the hitbox. */
-export function stripHipXZ(clip: THREE.AnimationClip): void {
+ *  in, loop clips translate the mesh out from under the hitbox.
+ *  `extraRoots` lets the caller pass rig-specific carriers computed from
+ *  the model itself: authored rigs animate their armature-level parents
+ *  too (Vexa moves `Armature`, Yurowm `Rig`), which no name table covers. */
+export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<string>): void {
   for (const tr of clip.tracks) {
     if (!tr.name.endsWith('.position')) continue;
-    const node = tr.name.slice(0, tr.name.indexOf('.'));
-    if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
+    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
+    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) continue;
     const v = tr.values;
     for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
   }
