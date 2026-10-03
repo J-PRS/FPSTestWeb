@@ -1,3 +1,4 @@
+2026-10-01 - botTuning: all bot movement/route constants live in shared/botTuning.ts (BOT_TUNING); _tools/sweeps/capperSweep.ts random-samples genomes and scores them on the real cap-run loop (capMeasure.ts extracted from capRun.test)
 2026-10-03 - anim P1: offline retarget bake (_tools/animbake) ships per-variant clip packs; runtime prefers baked GLB, clip surgery moved into the bake so both paths are identical
 2026-10-03 - anim P0: coverage-matrix test pins variant x state x dir resolution; cyber ski rides Crouch_Fwd, vexa forward walk/run use kevdev F clips
 2026-10-03 - trailParticles.ProjectileTrail: emit-time jump cut too (prevPos->pos bridge refused past ~0.25s travel); the declared-teleport skipSeg stays for the explicit case.

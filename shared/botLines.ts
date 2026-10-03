@@ -11,16 +11,17 @@
  * the same code adapts to any terrain the field throws at it.
  */
 import type { BotVec, BrainCtx } from './botBrain.ts';
+import { BOT_TUNING as T } from './botTuning.ts';
 
-const RAYS = 7;          // fan of candidate directions around the goal
-const CONE = 1.4;        // rad — half-angle of the fan
-const PTS = 4;           // probes per ray
-const REACH = 58;        // m — farthest landing probe
-const NEAR = 15;         // m — nearest landing probe
-const COMMIT_S = 2.4;    // hold a line this long before re-planning
-const ARRIVE = 6;        // m — closer than this counts as reached
-const MIN_GD = 34;       // don't line-plan close work — steerer owns that
-const REDEST = 22;       // m — goal drift that forces an early re-roll
+          // fan of candidate directions around the goal
+        // rad — half-angle of the fan
+           // probes per ray
+        // m — farthest landing probe
+         // m — nearest landing probe
+    // hold a line this long before re-planning
+        // m — closer than this counts as reached
+       // don't line-plan close work — steerer owns that
+       // m — goal drift that forces an early re-roll
 
 export class BotLines {
   private wp: BotVec | null = null;
@@ -50,11 +51,11 @@ export class BotLines {
       if (this.passes.length > 8) this.passes.shift();
     }
     this.lastY = pos.y;
-    if (gd < MIN_GD) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; return dest; }
+    if (gd < T.lines.minGd) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; return dest; }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
-    const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > REDEST : true;
-    if (this.wp && this.lineT > 0 && wpD > ARRIVE && !drifted) return this.wp;
+    const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > T.lines.redest : true;
+    if (this.wp && this.lineT > 0 && wpD > T.lines.arrive && !drifted) return this.wp;
 
     // Stagnation meter: a route that re-plans without closing ground is
     // in an orbit trap — on a massif the energy-play exemption keeps
@@ -66,7 +67,7 @@ export class BotLines {
     // has actually made before outranks another face probe.
     if (gd > this.lastGd - 8) this.stale++; else { this.stale = 0; this.traverseDir = null; }
     this.lastGd = gd;
-    if (this.stale >= 3) {
+    if (this.stale >= T.lines.staleLimit) {
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
         const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
@@ -136,14 +137,14 @@ export class BotLines {
       }
       this.wp = wp;
       this.wpGoal = { ...dest };
-      this.lineT = COMMIT_S;
+      this.lineT = T.lines.commitS;
       this.stale = 0;
       return this.wp;
     }
 
     this.wp = this.roll(ctx, pos, dest, gd);
     this.wpGoal = { ...dest };
-    this.lineT = COMMIT_S;
+    this.lineT = T.lines.commitS;
     return this.wp ?? dest;
   }
 
@@ -160,12 +161,12 @@ export class BotLines {
     // pocket on the same face (the bravo capper's match-long orbit).
     // At long range extend the probe to ~half the remaining leg so the
     // pass shows up in the fan at all.
-    const reach = Math.min(gd, ctx.runner && gd > 300 ? Math.max(REACH * 2.2, gd * 0.45) : REACH * (ctx.runner ? 2.2 : 1));
+    const reach = Math.min(gd, ctx.runner && gd > T.lines.farReachGd ? Math.max(T.lines.reach * T.lines.runnerReachK, gd * T.lines.farReachK) : T.lines.reach * (ctx.runner ? T.lines.runnerReachK : 1));
     // Runners (carriers, cappers) get a wider fan and harder downhill
     // pull — a momentum run arcs around climbs rather than over them.
-    const cone = CONE * (ctx.runner ? 2.0 : 1);
-    const dropW = ctx.runner ? 2.0 : 1.4;
-    const straightW = ctx.runner ? 4 : 8;
+    const cone = T.lines.cone * (ctx.runner ? T.lines.runnerConeK : 1);
+    const dropW = ctx.runner ? T.lines.runnerDropW : T.lines.dropW;
+    const straightW = ctx.runner ? T.lines.runnerStraightW : T.lines.straightW;
     // A runner's real currency is mechanical energy — ½v²+g·h totalled,
     // not the momentary speed. Landings priced above the bot's energy
     // budget can't be reached without spending on jets or slope work,
@@ -174,8 +175,8 @@ export class BotLines {
     const eNow = 0.5 * vNow * vNow + 28 * pos.y;
 
     let best: BotVec | null = null, bestScore = 0;
-    for (let r = 0; r < RAYS; r++) {
-      const a = (r / (RAYS - 1) - 0.5) * 2 * cone;
+    for (let r = 0; r < T.lines.rays; r++) {
+      const a = (r / (T.lines.rays - 1) - 0.5) * 2 * cone;
       const dx = gx * Math.cos(a) - gz * Math.sin(a);
       const dz = gx * Math.sin(a) + gz * Math.cos(a);
 
@@ -184,22 +185,22 @@ export class BotLines {
       let earlyClimb = 0;
       let prevG = g0, prevD = 0;
       const drops: number[] = [];
-      for (let p = 1; p <= PTS; p++) {
-        const d = NEAR + ((reach - NEAR) * p) / PTS;
+      for (let p = 1; p <= T.lines.pts; p++) {
+        const d = T.lines.near + ((reach - T.lines.near) * p) / T.lines.pts;
         const g = ctx.groundY(pos.x + dx * d, pos.z + dz * d);
         const seg = (g - prevG) / (d - prevD);
-        if (prevD < NEAR && seg > earlyClimb) earlyClimb = seg;
+        if (prevD < T.lines.near && seg > earlyClimb) earlyClimb = seg;
         drops.push(g);
         prevG = g; prevD = d;
       }
       const sheer = Math.min(...drops.map((g, i) => g - (i ? drops[i - 1]! : g0)));
-      if (sheer < -16) continue; // cliff face — don't route bots off sheers
+      if (sheer < T.lines.sheerVeto) continue; // cliff face — don't route bots off sheers
 
       // Best landing on this ray: the deepest pocket that still gains
       // on the goal. Downhill pockets buy speed; the goal term keeps
       // the run pointed at the objective.
-      for (let p = 0; p < PTS; p++) {
-        const d = NEAR + ((reach - NEAR) * (p + 1)) / PTS;
+      for (let p = 0; p < T.lines.pts; p++) {
+        const d = T.lines.near + ((reach - T.lines.near) * (p + 1)) / T.lines.pts;
         const wx = pos.x + dx * d, wz = pos.z + dz * d;
         const gained = gd - Math.hypot(dest.x - wx, dest.z - wz);
         const drop = g0 - drops[p]!;
@@ -208,28 +209,28 @@ export class BotLines {
         // above what E affords reads as spent, keeping the run inside
         // its real budget instead of over-climbing.
         const vEndSq = vNow * vNow + 56 * (pos.y - drops[p]!);
-        const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * 0.2 : 0;
+        const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * T.lines.eScoreW : 0;
         // Progress floor: a run has to close a real share of its own
         // travel toward the goal — unless it's an energy play, banking
         // speed off a side valley to convert later (that's a legit ski
         // setup, not a loop). Without the floor a deep side valley
         // always outscores the route and the bot orbits midfield
         // forever (soak: align=0.00, prog=0).
-        if (gained < d * 0.4 && (eScore <= 12 || this.stale >= 2)) continue;
+        if (gained < d * T.lines.gainedFloor && (eScore <= T.lines.eScoreEscape || this.stale >= 2)) continue;
         // Apex setup (last leg, runners only): a landing above the goal
         // banks altitude the dive converts back into arrival speed —
         // the flank-crest-and-drop that makes a flag run survivable.
         // Gated to the last leg so mid-route stays direct instead of
         // carving side-hills forever.
-        const apex = ctx.runner && gd < 220 ? Math.min(40, Math.max(0, drops[p]! - dest.y)) * 0.8 : 0;
+        const apex = ctx.runner && gd < T.lines.apexGd ? Math.min(T.lines.apexMax, Math.max(0, drops[p]! - dest.y)) * T.lines.apexW : 0;
         const score =
-          gained * 0.9 +                      // progress toward the goal
+          gained * T.lines.progressW +                      // progress toward the goal
           drop * dropW +                      // downhill buys ski speed
-          Math.min(0, drop + 4) * 1.8 +       // climbs past ~4m get taxed hard
+          Math.min(0, drop + T.lines.climbTaxRise) * T.lines.climbTaxW +       // climbs past ~4m get taxed hard
           eScore +                            // banked E beats burning it (runners)
           apex +
-          (p === PTS - 1 ? 3 : 0) -           // prefer committing long when tied
-          earlyClimb * 26 -                   // a climb in the first stretch kills the run
+          (p === T.lines.pts - 1 ? T.lines.longCommitBonus : 0) -           // prefer committing long when tied
+          earlyClimb * T.lines.earlyClimbW -                   // a climb in the first stretch kills the run
           Math.abs(a) * straightW;            // straighter lines beat carving sideways
         if (score > bestScore) {
           bestScore = score;

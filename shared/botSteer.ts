@@ -13,15 +13,16 @@
 import type { BotVec, BrainCtx } from './botBrain.ts';
 import { wrapAngleDelta } from './angles.ts';
 import { botRand } from './botRand.ts';
+import { BOT_TUNING as T } from './botTuning.ts';
 
 // --- context steering senses ---
-const SLOTS = 16;        // directions sampled around the circle
-const PROBE_A = 4;       // m — near slope probe
-const PROBE_B = 9;       // m — far probe catches ridgelines early
-const STEP = 8;          // m — steering lookahead distance
-const SEP_RANGE = 7;     // m — personal space vs other bodies
-const MEM_MS = 4000;     // recently-visited ground repels for this long
-const MEM_RANGE = 12;    // m — memory trail influence radius
+        // directions sampled around the circle
+       // m — near slope probe
+       // m — far probe catches ridgelines early
+          // m — steering lookahead distance
+     // m — personal space vs other bodies
+     // recently-visited ground repels for this long
+    // m — memory trail influence radius
 
 export class BotSteer {
   private heading = { x: 1, z: 0 };
@@ -50,7 +51,7 @@ export class BotSteer {
       const ax = dest.x + Math.cos(this.swayT) * r - pos.x;
       const az = dest.z + Math.sin(this.swayT) * r - pos.z;
       const al = Math.hypot(ax, az) || 1;
-      const step0 = Math.min(al, STEP * 0.3);
+      const step0 = Math.min(al, T.steer.step * 0.3);
       this.heading.x = ax / al; this.heading.z = az / al;
       return { x: pos.x + (ax / al) * step0, y: pos.y, z: pos.z + (az / al) * step0 };
     }
@@ -70,7 +71,7 @@ export class BotSteer {
       // A jam on the straight line is stuckBreak's problem, not a
       // reason to wander.
       this.heading.x = gx; this.heading.z = gz;
-      const step0 = Math.min(gd, STEP);
+      const step0 = Math.min(gd, T.steer.step);
       return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };
     }
     const now = ctx.now;
@@ -83,13 +84,13 @@ export class BotSteer {
       if (this.memory.length > 24) this.memory.shift();
     }
     this.memory = this.memory.filter(
-      (m) => now - m.t < MEM_MS && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < MEM_RANGE * MEM_RANGE,
+      (m) => now - m.t < T.steer.memMs && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < T.steer.memRange * T.steer.memRange,
     );
 
     let bestX = gx, bestZ = gz, bestScore = -1;
     let safeX = gx, safeZ = gz, safeDanger = 2;
-    for (let i = 0; i < SLOTS; i++) {
-      const a = (i / SLOTS) * Math.PI * 2;
+    for (let i = 0; i < T.steer.slots; i++) {
+      const a = (i / T.steer.slots) * Math.PI * 2;
       const dx = Math.cos(a), dz = Math.sin(a);
 
       const align = dx * gx + dz * gz;
@@ -100,7 +101,7 @@ export class BotSteer {
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling
       // off it parked every stand press ~8m short of the flag pickup ring.
-      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now, gd < MEM_RANGE);
+      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now, gd < T.steer.memRange);
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -117,10 +118,10 @@ export class BotSteer {
     const cur = Math.atan2(this.heading.x, this.heading.z);
     const tgt = Math.atan2(bestX, bestZ);
     const dYaw = wrapAngleDelta(tgt - cur);
-    const maxTurn = 4.0 * dt;
+    const maxTurn = T.steer.turnRate * dt;
     const a = cur + Math.max(-maxTurn, Math.min(maxTurn, dYaw));
     this.heading.x = Math.sin(a); this.heading.z = Math.cos(a);
-    const step = Math.min(gd, STEP);
+    const step = Math.min(gd, T.steer.step);
     return { x: pos.x + this.heading.x * step, y: pos.y, z: pos.z + this.heading.z * step };
   }
 
@@ -129,28 +130,28 @@ export class BotSteer {
    *  trail that lets a bot escape a local minimum. */
   private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number, nearGoal: boolean): number {
     let danger = 0;
-    const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
-    const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
-    const slope = Math.max(riseA / PROBE_A, riseB / PROBE_B);
-    if (slope > 0.45) danger = Math.min(1, danger + (slope - 0.45) * 2);
-    if (riseA < -12) danger = Math.min(1, danger + 0.5); // sheer drop
+    const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
+    const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;
+    const slope = Math.max(riseA / T.steer.probeA, riseB / T.steer.probeB);
+    if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
+    if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
 
     if (ctx.others) {
       for (const o of ctx.others) {
         const ox = o.x - pos.x, oz = o.z - pos.z;
         const od = Math.hypot(ox, oz);
-        if (od > SEP_RANGE || od < 0.01) continue;
+        if (od > T.steer.sepRange || od < 0.01) continue;
         const toward = dx * (ox / od) + dz * (oz / od);
-        if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
+        if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / T.steer.sepRange));
       }
     }
     for (const m of nearGoal ? [] : this.memory) {
       const mx = m.x - pos.x, mz = m.z - pos.z;
       const md = Math.hypot(mx, mz);
-      if (md > MEM_RANGE || md < 0.5) continue;
+      if (md > T.steer.memRange || md < 0.5) continue;
       const toward = dx * (mx / md) + dz * (mz / md);
       if (toward > 0.5) {
-        danger = Math.min(1, danger + toward * 0.2 * (1 - md / MEM_RANGE) * (1 - (now - m.t) / MEM_MS));
+        danger = Math.min(1, danger + toward * 0.2 * (1 - md / T.steer.memRange) * (1 - (now - m.t) / T.steer.memMs));
       }
     }
     return danger;
