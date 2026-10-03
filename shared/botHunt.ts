@@ -355,7 +355,11 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // flag, so probing the whole ray strangled fire volume for nothing.
   if (ctx.weaponSpeed?.(d) && !process.env.FPS_NOMUZZLE) {
     const muzzle = { x: pos.x, y: pos.y + 1.4, z: pos.z };
-    const reach = Math.min(d, 16);
+    // Reach = splash radius + a stride's margin, not a constant: a lip
+    // that pops the shell outside its own blast can't self-frag, and a
+    // mortar-class splash reaches ~18m back (surviving pops read @17m).
+    const aoeR = ctx.weaponAoe?.(d)?.r ?? 10;
+    const reach = Math.min(d, aoeR + 6);
     const nearAim = {
       x: pos.x + ((aim.x - pos.x) / d) * reach,
       y: pos.y + ((aim.y - pos.y) / d) * reach,
@@ -371,9 +375,13 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
     const steps = Math.max(2, Math.ceil(reach));
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
+      // A lip is terrain ABOVE the ray: descending toward a foe's feet
+      // skims the deck near the aim point and that is the shell doing
+      // its job, not a block (flat-ground feet shots read "blocked" at
+      // any graze tolerance and refused every volley).
       if (ctx.groundY(muzzle.x + (nearAim.x - muzzle.x) * t,
                       muzzle.z + (nearAim.z - muzzle.z) * t)
-          >= muzzle.y + (nearAim.y - muzzle.y) * t - 0.2) { blocked = true; break; }
+          >= muzzle.y + (nearAim.y - muzzle.y) * t + 0.3) { blocked = true; break; }
     }
     if (!blocked && ctx.solids?.length &&
         segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined)) blocked = true;
