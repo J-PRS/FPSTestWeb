@@ -180,7 +180,11 @@ function stepNetLeg(st: NetStatics, bag: NetBag, host: NetHost, s: SimBall): voi
  *  A stamp newer than the anchor is always fresher truth; the cursor
  *  itself never rewinds (applySeg maxes it). */
 export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
-  return t !== undefined && t <= bag.legT0;
+  // Strictly older only: stamps have 50ms granularity, so two segments in
+  // the same server tick (edge + heartbeat, hit + resync) share a stamp —
+  // the second is fresher truth in wire order and MUST apply. Dropping it
+  // replayed a dead leg for a whole interval (the 5-15m heartbeat warns).
+  return t !== undefined && t < bag.legT0;
 }
 
 /** Authoritative resync — a segment event lands mid-flight: snap the sim
