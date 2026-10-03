@@ -9,7 +9,10 @@ interface RateLimitEntry {
 export class RateLimiter {
   private limits: Map<string, Map<string, RateLimitEntry>> = new Map();
 
-  check(playerId: string, messageType: string): boolean {
+  /** `at` is ARRIVAL time — the command drain can run a stalled-tick
+   *  backlog seconds late, and windowing on drain time counts the whole
+   *  backlog in one burst (position/teleport reports eaten wholesale). */
+  check(playerId: string, messageType: string, at = wallNow()): boolean {
     const configKey = wireLimitKey(messageType);
     const limit = wireLimit(configKey);
 
@@ -19,7 +22,7 @@ export class RateLimiter {
       this.limits.set(playerId, playerLimits);
     }
 
-    const now = wallNow();
+    const now = at;
     let entry = playerLimits.get(configKey);
     if (!entry) {
       entry = { count: 0, windowStart: now };

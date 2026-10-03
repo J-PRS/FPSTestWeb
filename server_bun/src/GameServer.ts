@@ -338,8 +338,10 @@ export class GameServer {
 
     this.ops.msgsIn++;
     // Command buffer: effects land at phase 0 of the next room tick, in
-    // arrival order — sims never see a mid-frame mutation order.
-    room.commands.push({ playerId, msg: result.data });
+    // arrival order — sims never see a mid-frame mutation order. The
+    // arrival stamp feeds the rate limiter: a stalled tick draining a
+    // backlog must not count every queued report inside one window.
+    room.commands.push({ playerId, msg: result.data, at: wallNow() });
   }
 
   // Full teardown shared by grace expiry and idle reap — the five stores

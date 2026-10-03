@@ -477,11 +477,14 @@ export class MessageHandler {
     for (const m of this.roomInfo.simsWorldState?.() ?? []) this.sendToPlayer(playerId, m);
   }
 
-  handleMessage(playerId: string, msg: ClientMessage): void {
+  /** `at` = socket-arrival time — the command drain runs it against the
+   *  rate limiter so a tick-lag backlog is windowed by when it came in,
+   *  not by when the stalled tick caught up. */
+  handleMessage(playerId: string, msg: ClientMessage, at?: number): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
-    if (!this.rateLimiter.check(playerId, msg.type)) {
+    if (!this.rateLimiter.check(playerId, msg.type, at)) {
       const warnKey = `${playerId}:${msg.type}`;
       const now = wallNow();
       const lastWarn = this.rateLimitWarnings.get(warnKey);

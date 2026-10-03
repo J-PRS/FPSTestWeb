@@ -156,10 +156,10 @@ export class Room {
    *  the Quake/Valve command-buffer pattern: all input lands at phase 0
    *  so sims see a deterministic order (input → sim → fanout) instead of
    *  arrival-time mutations interleaving with bot/projectile ticks. */
-  readonly commands: { playerId: string; msg: ClientMessage }[] = [];
+  readonly commands: { playerId: string; msg: ClientMessage; at: number }[] = [];
   drainCommands(): void {
     if (!this.commands.length) return;
-    for (const c of this.commands) this.messages.handleMessage(c.playerId, c.msg);
+    for (const c of this.commands) this.messages.handleMessage(c.playerId, c.msg, c.at);
     this.commands.length = 0;
   }
   /** Spatial memory — kills/fights/gems/flags leave decaying scent the

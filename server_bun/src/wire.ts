@@ -56,11 +56,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   teleport: {
-    // teleport skips plausibility checks by design (declared warp), so the
-    // only defense is rate — a distance bound is impossible since a thrown
-    // warp beacon can legally land hundreds of metres out. Legit cadence:
-    // one-shot skills share a 1s cooldown floor; 0.9s leaves jitter margin.
-    limit: { maxCount: 1, windowMs: 900 },
+    // NO rate limit on purpose: teleport is a declared discontinuity the
+    // client already applied locally — silently dropping it doesn't stop
+    // the warp, it just converts it into pos-reject ping-pong + an event
+    // observers never see. Anti-spam lives in handleTeleport's violation
+    // counter (teleportSpam) instead, which honors-and-counts rather than
+    // drop-and-desync.
     validate: (obj) => {
       const body = validateBody(obj);
       if (!body.success) return body;

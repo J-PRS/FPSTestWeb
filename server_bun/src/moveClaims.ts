@@ -176,9 +176,14 @@ export class MoveClaims {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     const now = wallNow();
+    // Honor EVERY declared warp: the client already moved, so refusing
+    // the reseat just recreates the warp as impossibly-fast pos reports
+    // (the force-accept loop) and starves observers of the relay — the
+    // drop never stopped the warp anyway. Abuse is a violation count
+    // toward the same kick wiring the diverge counter feeds.
     if ((this.lastTeleport.get(playerId) ?? 0) > now) {
-      logger.warn('teleport dropped: cadence', { playerId });
-      return;
+      this.h.hb('teleportSpam');
+      logger.warn('teleport spam: inside cadence window — honored, counted', { playerId });
     }
     this.lastTeleport.set(playerId, now + 3000);
     player.lastPosCheckPos = { ...msg.position };

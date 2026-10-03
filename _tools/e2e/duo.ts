@@ -51,7 +51,7 @@ try {
   // teleport msgs to distinguish "event never arrived" from "entity didn't
   // snap".
   await b.page.evaluate(`(() => { const nm = window.__test.networkManager; const orig = nm.onRemoteTeleport; window.__tpSeen = 0; nm.onRemoteTeleport = (...args) => { window.__tpSeen++; orig?.(...args); }; })()`);
-  const bx0 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x) ?? 1e9`);
+  const bx0 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.position?.x) ?? 1e9`);
   // The REAL warp path: set pos → syncMovement (reseats the controller so
   // the sim doesn't revert next frame) → markTeleport — the next position
   // report then emits the 'teleport' verb. Bare sendTeleport only DECLARES
@@ -66,8 +66,8 @@ try {
     p.markTeleport();
     return { x: dest.x, z: dest.z };
   })()`);
-  await b.waitFor(`Math.abs((t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x ?? 0) - ${tp.x}) < 5`, 20000).catch(() => null);
-  const bx1 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x) ?? 0`);
+  await b.waitFor(`Math.abs((t.world.remotePlayers.entities.get('${aId}')?.position?.x ?? 0) - ${tp.x}) < 5`, 20000).catch(() => null);
+  const bx1 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.position?.x) ?? 0`);
   const tpSeen = await b.test<number>(`window.__tpSeen`);
   ok(Math.abs(bx1 - tp.x) < 5, `A's teleport propagated to B (x: ${bx0.toFixed(0)} → ${bx1.toFixed(0)}, target ${tp.x.toFixed(0)}, teleport msgs seen: ${tpSeen})`);
   if (Math.abs(bx1 - tp.x) >= 5) {
@@ -75,6 +75,7 @@ try {
     // entity just frozen (records suppressed) or still tracking stale data?
     const aPos = await a.test(`(() => { const p = t.player.pos; return {x:p.x,y:p.y,z:p.z}; })()`);
     console.log(`   diag: aPos=${JSON.stringify(aPos)} metrics=${JSON.stringify(await stack.serverMetrics())}`);
+    console.log(`   srvlog tail:\n${stack.serverLog().split('\n').slice(-30).join('\n')}`);
   }
 
   // Chat both directions on the real wire — capture at onChat (the raw
