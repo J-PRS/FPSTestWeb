@@ -90,9 +90,14 @@ for (let z = 0; z < N; z++) {
     }
     if (rimring.length === 4) {
       const [cx, cz, r, raise] = rimring;
+      // Organic crest: low-freq noise wanders the ring radius ±30m and
+      // gates the lift 0.35-1x, so the wall reads as dune ridges with
+      // natural saddles to ski through, not a machined torus.
+      const rr = r + (noise(u, v, 3, 4) - 0.5) * 60;
       const d = tdist(cx, cz);
-      const band = Math.max(0, 1 - Math.abs(d - r) / 60);
-      h = Math.min(1, h + raise * band);
+      const band = Math.max(0, 1 - Math.abs(d - rr) / 55);
+      const jag = 0.35 + 0.65 * noise(u, v, 7, 5);
+      h = Math.min(1, h + raise * band * jag);
     }
     let flat = 0;
     for (const [fx, fz, r] of flats) {
