@@ -20,6 +20,9 @@ export interface BallPopulation {
 }
 
 export interface MapSpec {
+  /** Human title for HUD/chrome ("Dangerous Crossing"). Absent = the
+   *  spec's filename, prettified client-side. */
+  name?: string;
   /** Default mode when the host doesn't pick one. */
   mode?: string;
   /** Modes this map can host — map = geometry+spawns+bases, mode = the
@@ -86,7 +89,7 @@ export interface MapSpec {
 }
 
 export interface StructureSpec {
-  kind: 'box' | 'wall' | 'pillar' | 'ramp';
+  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root';
   pos: Vec3like;
   size: Vec3like;
   /** Y-rotation in radians (ramps/boxes), default 0. */
@@ -136,6 +139,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
   if (balls.max < balls.base) balls.max = balls.base;
 
   return {
+    name: parseName((src as { name?: unknown }).name),
     mode: parseMode((src as { mode?: unknown }).mode),
     modes: parseModes((src as { modes?: unknown }).modes),
     balls,
@@ -156,6 +160,12 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };
+}
+
+/** Display title — printable words only; the wire echoes it verbatim
+ *  into HUD text so keep it boring ASCII on purpose. */
+function parseName(raw: unknown): string | undefined {
+  return typeof raw === 'string' && /^[\w .&'()/-]{1,48}$/.test(raw) ? raw : undefined;
 }
 
 function parseMode(raw: unknown): string | undefined {
@@ -243,7 +253,7 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   return { x: a.x as number, z: a.z as number, radius };
 }
 
-const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp']);
+const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root']);
 const isVec = (s: unknown): s is Vec3like =>
   !!s && typeof s === 'object' &&
   Number.isFinite((s as Vec3like).x) &&

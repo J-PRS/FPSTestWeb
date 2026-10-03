@@ -11,6 +11,7 @@ const TINTS = {
   neutral: 0x4a5058,
   alpha: 0x3a5a80,
   bravo: 0x80483a,
+  root: 0x4d3a24,
 } as const;
 
 let built: THREE.Group | null = null;
@@ -77,6 +78,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
     neutral: new THREE.MeshLambertMaterial({ color: TINTS.neutral }),
     alpha: new THREE.MeshLambertMaterial({ color: TINTS.alpha }),
     bravo: new THREE.MeshLambertMaterial({ color: TINTS.bravo }),
+    root: new THREE.MeshLambertMaterial({ color: TINTS.root }),
   };
   const unit = new THREE.BoxGeometry(1, 1, 1);
   const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
@@ -86,14 +88,28 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
   for (const s of list) {
-    const key = s.team ?? 'neutral';
-    _p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
-    _e.set(0, s.rotY ?? 0, 0);
-    if (s.kind === 'ramp') _e.x = -Math.PI / 7;
-    _q.setFromEuler(_e);
-    _s.set(s.size.x, s.size.y, s.size.z);
-    _m.compose(_p, _q, _s);
-    const g = (s.kind === 'pillar' ? cyl : unit).clone().applyMatrix4(_m);
+    const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
+    let g: THREE.BufferGeometry;
+    if (s.kind === 'root') {
+      // Twisted-root arch (Quicksand): half-torus, legs at ±size.x on the
+      // local X axis, apex ~size.x above base, tube radius size.y.
+      // size.z tilts the ring off-axis so arches read gnarled, not ideal.
+      g = new THREE.TorusGeometry(s.size.x, s.size.y, 7, 18, Math.PI);
+      _p.set(s.pos.x, s.pos.y, s.pos.z);
+      _e.set(0, s.rotY ?? 0, 0);
+      _q.setFromEuler(_e);
+      _s.set(1, 1, s.size.z);
+      _m.compose(_p, _q, _s);
+      g.applyMatrix4(_m);
+    } else {
+      _p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
+      _e.set(0, s.rotY ?? 0, 0);
+      if (s.kind === 'ramp') _e.x = -Math.PI / 7;
+      _q.setFromEuler(_e);
+      _s.set(s.size.x, s.size.y, s.size.z);
+      _m.compose(_p, _q, _s);
+      g = (s.kind === 'pillar' ? cyl : unit).clone().applyMatrix4(_m);
+    }
     (byMat.get(key) ?? byMat.set(key, []).get(key)!).push(g);
   }
   for (const [key, geos] of byMat) {

@@ -22,6 +22,11 @@ const flats = (opts.flats ?? '').split(';').filter(Boolean).map(s => s.split(','
 // Craters: x,z,r,depth — depress the field so a structure roof over the
 // bowl reads as an underground room without cutting the heightmap.
 const craters = (opts.craters ?? '').split(';').filter(Boolean).map(s => s.split(',').map(Number));
+// Quicksand layout: --moat=r1,r2,depth digs an annular ravine around the
+// center; --mesa=hw raises a square plateau inside it (edge eases over
+// ~15m of cliff so the lip isn't a razor).
+const moat = (opts.moat ?? '').split(',').map(Number);
+const mesa = (opts.mesa ?? '').split(',').map(Number); // hw[, lift]
 const WORLD = 1500; // HM_WORLD_SCALE — one heightmap wraps the arena
 
 // Deterministic lattice hash → [0,1)
@@ -62,6 +67,24 @@ for (let z = 0; z < N; z++) {
       dig = Math.max(dig, (depth ?? 0.3) * Math.min(1, Math.max(0, (1 - d / r) * 3)));
     }
     h = Math.max(0, h - dig);
+    // Square mesa: Chebyshev distance to center < hw lifts the plateau to
+    // a fixed shelf; moat annulus digs back down around it.
+    if (mesa.length >= 1 && mesa[0] > 0) {
+      const [hw, top] = mesa;
+      const sq = Math.max(
+        Math.min(Math.abs(wx), WORLD - Math.abs(wx)),
+        Math.min(Math.abs(wz), WORLD - Math.abs(wz)),
+      );
+      const lift = Math.min(1, Math.max(0, (hw - sq) / 15));
+      h = h * (1 - lift) + (top ?? 0.30) * lift;
+    }
+    if (moat.length === 3) {
+      const [r1, r2, depth] = moat;
+      const d = tdist(0, 0);
+      const edge = Math.min(d - r1, r2 - d);
+      const sink = Math.min(1, Math.max(0, edge / 14)) * depth;
+      h = Math.max(0, h - sink);
+    }
     let flat = 0;
     for (const [fx, fz, r] of flats) {
       flat = Math.max(flat, Math.min(1, Math.max(0, 1 - tdist(fx, fz) / (r * 2))));

@@ -23,11 +23,29 @@ export interface StructureCollider {
 
 export function structureColliders(list: readonly StructureSpec[] | undefined): StructureCollider[] {
   if (!list?.length) return [];
-  return list.map(s => ({
-    cx: s.pos.x, cy: s.pos.y + s.size.y / 2, cz: s.pos.z,
-    hx: s.size.x / 2, hy: s.size.y / 2, hz: s.size.z / 2,
-    cos: Math.cos(s.rotY ?? 0), sin: Math.sin(s.rotY ?? 0),
-  }));
+  const out: StructureCollider[] = [];
+  for (const s of list) {
+    const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
+    if (s.kind === 'root') {
+      // Arch collides as its two feet — the span overhead stays open to
+      // ski under; a single OBB would wall off the whole gap.
+      for (const sgn of [-1, 1]) {
+        const lx = sgn * s.size.x;
+        out.push({
+          cx: s.pos.x + lx * cos, cy: s.pos.y + s.size.x / 2, cz: s.pos.z + lx * sin,
+          hx: s.size.y, hy: s.size.x / 2, hz: s.size.y,
+          cos, sin,
+        });
+      }
+      continue;
+    }
+    out.push({
+      cx: s.pos.x, cy: s.pos.y + s.size.y / 2, cz: s.pos.z,
+      hx: s.size.x / 2, hy: s.size.y / 2, hz: s.size.z / 2,
+      cos, sin,
+    });
+  }
+  return out;
 }
 
 const _cn = { x: 0, y: 0, z: 0 }; // scratch — contact normal

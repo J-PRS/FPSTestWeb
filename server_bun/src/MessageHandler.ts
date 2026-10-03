@@ -39,7 +39,7 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
-  structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
+  structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
   /** Map display name for the scoreboard chrome — lazy like ffaScores:
@@ -77,8 +77,10 @@ export interface RoomInfo {
   /** Repair-beam claim sink — Room.deployables.repair. */
   onRepair?: (playerId: string, targetId: number) => void;
   /** AOE blast sink for deployables — Room.deployables.applyBlast. */
-  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
   pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
+  /** Dropped-flag punt — RoomFlags.knock. */
+  flagsKnock?: (at: Vec3, radius: number, force: number) => void;
   preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
   influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
@@ -148,6 +150,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     mode: roomInfo?.mode,
     deployBlast: roomInfo?.deployBlast,
     pickupsKnock: roomInfo?.pickupsKnock,
+    flagsKnock: roomInfo?.flagsKnock,
     preySplash: roomInfo?.preySplash,
     influence: roomInfo?.influence,
     health: roomInfo?.health,
@@ -565,6 +568,11 @@ export class MessageHandler {
     // Indexed access widens to the union of all handler signatures —
     // the per-key narrowing already happened in the table, so one cast
     // here replaces one per entry.
+    // Any valid, rate-limit-passing message proves the socket is alive —
+    // liveness can't live per-handler or a chatty-but-untracked type
+    // (inputMove in authority mode) starves the idle reaper mid-match.
+    player.lastSeen = Date.now();
+
     const handler = this.handlers[msg.type] as ((id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
       this.hb('unhandled');

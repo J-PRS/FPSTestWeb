@@ -86,6 +86,11 @@ export type ClientMessage =
   // already spent ENERGY.skillCost locally — this claim only mirrors the
   // ante into the server's shadow tank. Carries nothing else.
   | { type: 'skillUse' }
+  // Deliberate respawn (the K bind): a self-kill claim that funnels
+  // through the normal death path — kill feed, respawn timer, corpse
+  // charge — rather than a teleport shortcut, so a pending class/perk
+  // banks exactly like any other death.
+  | { type: 'respawn' }
   | { type: 'snapshotRequest' }
   // Catch-up resync — ask for a fresh world-state replay (gameState +
   // rosters) without a room hop or reconnect, e.g. after an alt-tab
@@ -125,7 +130,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string }; flags?: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string }; flags?: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -214,6 +219,14 @@ export type ServerMessage =
        *  predicted self-splash locally, so this lets the client resync
        *  instead of running divergent health until the next real hit. */
       health?: number }
+  // Claim dropped without judgement — dead shooter/target mid-flight, an
+  // honest-lag discard that must still clear the shooter's predicted-hit
+  // ledger. Kept distinct from shotRejected so reject tallies stay pure.
+  | { type: 'claimDropped'; reason: string; targetId?: string; weaponType?: number;
+      health?: number }
+  // Anti-cheat verdict surfaced to the flagged player instead of a kick —
+  // renders on the conn-banner slot so it reads as a warning, not chat.
+  | { type: 'serverWarn'; text: string }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
@@ -221,7 +234,7 @@ export type ServerMessage =
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
+  | { type: 'mapUpdate'; mapName?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
 
 export interface GameStatePlayer {
   id: string;
