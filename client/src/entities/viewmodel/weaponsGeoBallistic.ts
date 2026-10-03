@@ -144,128 +144,73 @@ disc.visible = false;
 return disc;
 }
 
-// Weapon 2 — chaingun, Tribes-style: the machinery is SHROUDED. The
-// reads: a fat chamfered casing the size of the whole gun, three barrel
-// tips poking out of a dark faceplate (the spinning brass collars are
-// the machine tell), an ammo drum slung under the flank, cooling slots
-// on the receiver. Chunky and solid beats exposed plumbing.
+// Weapon 2 — chaingun, UT/Serious Sam language: the barrels ARE the
+// gun. Three fat pipes spinning on an exposed cluster, short stubby
+// breech behind, ammo drum slung low. No shroud — a full casing hid
+// the cluster and read as a rocket tube.
 export function mkChaingun(): { g: THREE.Group; barrels: THREE.Group } {
 const chain = new THREE.Group();
 const chainBarrels = new THREE.Group();
 // The bake pipeline treats "barrels" as a kept-separate node — it's the
 // only viewmodel part that animates, so it can't fold into the merged mesh.
 chainBarrels.name = 'barrels';
-// Tribes chaingun language: the cluster SPINS INSIDE a fat shrouded
-// casing — you see three muzzle tips poking out of a dark faceplate,
-// not naked pipes. Chunky octagonal housing, machinery hinted at.
 const CHAIN_BARRELS = 3;
-const CLUSTER_R = 0.062;
+const CLUSTER_R = 0.088;
 for (let i = 0; i < CHAIN_BARRELS; i++) {
   const a = (i / CHAIN_BARRELS) * Math.PI * 2;
   const dx = Math.cos(a) * CLUSTER_R, dy = Math.sin(a) * CLUSTER_R;
-  // Barrel runs inside the shroud from the breech, tips proud of the
-  // faceplate so the holes read as muzzles not a cage.
+  // FAT barrels — the cluster fills the FPS view; chunky 8-seg with a
+  // slight swell at the breech root, tapering to the muzzle.
   const barrel = mkLoft([
-    { z: -0.30, ring: rotRing(profCircle(0.045, 8), a), dx, dy },
-    { z: -0.86, ring: rotRing(profCircle(0.045, 8), a), dx, dy },
-  ], bodyMat, false);
+    { z: -0.12, ring: rotRing(profCircle(0.072, 8), a), dx, dy },
+    { z: -0.30, ring: rotRing(profCircle(0.066, 8), a), dx, dy },
+    { z: -0.78, ring: rotRing(profCircle(0.06, 8), a), dx, dy },
+  ], bodyMat, false); // open ends — throat + breech collar cap both
   // Per-barrel fire recoil — kick() knocks the TOP barrel back a beat.
   // baseZ restores it; `barrel` tag skips the collar/studs sharing the group.
   barrel.userData.barrel = true;
   barrel.userData.baseZ = barrel.position.z;
   chainBarrels.add(barrel);
-  // Brass muzzle collar where each barrel exits the faceplate.
-  const throat = mkAnnulus(rotRing(profCircle(0.052, 8), a), rotRing(profCircle(0.03, 8), a), -0.86, -0.885, brassMat);
+  // Brass muzzle collar + recessed bore — the UT fat-pipe read.
+  const throat = mkAnnulus(rotRing(profCircle(0.068, 8), a), rotRing(profCircle(0.038, 8), a), -0.78, -0.81, brassMat);
   throat.position.set(dx, dy, 0);
   chainBarrels.add(throat);
-  const plug = mkBore(0.03, -0.88);
+  const plug = mkBore(0.038, -0.805);
   plug.rotation.y = Math.PI;
   plug.position.x = dx; plug.position.y = dy;
   chainBarrels.add(plug);
 }
 chain.add(chainBarrels);
-// Faceplate — dark disc the barrels poke through; the depth illusion.
-chain.add(mkBore(CLUSTER_R + 0.05, -0.50));
-// Shroud — chunky octagonal casing over the breech HALF only. Full-length
-// casing hid the whole cluster and read as a Quake rocket tube; the
-// Tribes silhouette is fat breech + exposed spinning barrels up front.
-chain.add(mkLoft([
-  { z: 0.05, ring: profOct(0.31, 0.31, 0.1) },
-  { z: -0.30, ring: profOct(0.31, 0.31, 0.1) },
-  { z: -0.42, ring: profOct(0.27, 0.27, 0.09) },
-  { z: -0.50, ring: profOct(0.26, 0.26, 0.085) },
-], bodyMat, false)); // open ends — faceplate + breech cap them visually
-// Shroud collar — machined ring where the casing ends and the barrels
-// take over; a static step the spinning clamp sits just ahead of.
-chain.add(mkAnnulus(profOct(0.30, 0.30, 0.095), profOct(0.26, 0.26, 0.085), -0.48, -0.52, darkMat));
-// Muzzle clamp — spins WITH the barrels (journalled ahead of the static
-// collar), the gatling machine tell the shroud version lost.
-const clamp = new THREE.Mesh(new THREE.TorusGeometry(CLUSTER_R + 0.05, 0.018, 6, 14), bodyMat);
-clamp.position.z = -0.80;
-chainBarrels.add(clamp);
-for (let i = 0; i < CHAIN_BARRELS; i++) {
-  const a = (i / CHAIN_BARRELS) * Math.PI * 2;
-  const strut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.014, 0.014), bodyMat);
-  strut.rotation.z = a;
-  strut.position.set(Math.cos(a) * (CLUSTER_R / 2 + 0.015), Math.sin(a) * (CLUSTER_R / 2 + 0.015), -0.80);
-  chainBarrels.add(strut);
-}
-// Breech collar — the bearing the spinning cluster seats into. Lives
-// in chainBarrels so its bolt studs turn with the barrels; mostly hidden
-// inside the shroud but the rim reads in the breech gap.
-const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.115, 0.05, 12), darkMat);
+// Breech bearing — the big collar the cluster seats into, VISIBLE and
+// spinning with the barrels. The machine tell.
+const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.175, 0.09, 12), darkMat);
 chainCollar.rotation.x = Math.PI / 2;
-chainCollar.position.z = -0.06;
+chainCollar.position.z = -0.11;
 chainBarrels.add(chainCollar);
-// Breech housing — where the cluster disappears into the gun. The
-// shroud is the mass now; this is just the receiver block behind it.
-const housing = new THREE.Shape();
-housing.moveTo(-0.1, -0.1);
-housing.lineTo(0.1, -0.1);
-housing.lineTo(0.085, 0.085);
-housing.lineTo(-0.085, 0.085);
-housing.closePath();
-chain.add(extrudeAt(housing, 0.02, 0.13, bodyMat));
-
-// Flank cooling slots — dark insets that read as heat vents
-for (const side of [-1, 1]) {
-  for (let i = 0; i < 3; i++) {
-    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.04, 0.12), boreMat);
-    slot.position.set(side * 0.092, 0.015 - i * 0.055, 0.08);
-    chain.add(slot);
-  }
+for (let i = 0; i < CHAIN_BARRELS * 2; i++) {
+  const a = (i / (CHAIN_BARRELS * 2)) * Math.PI * 2;
+  const stud = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), bodyMat);
+  stud.position.set(Math.cos(a) * 0.15, Math.sin(a) * 0.15, -0.14);
+  chainBarrels.add(stud);
 }
-// The spin sells itself — brass muzzle collars rotate inside the
-// faceplate port while the shroud and faceplate hold still.
-// Ammo drum + feed chute on the left flank — a chaingun has to EAT.
-// Big drum slung low, brass belt link strip running up into the breech.
-const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), darkMat);
-drum.rotation.z = Math.PI / 2;
-drum.position.set(-0.08, -0.14, 0.12);
-chain.add(drum);
-const drumCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.15, 8), bodyMat);
-drumCap.rotation.z = Math.PI / 2;
-drumCap.position.copy(drum.position);
-chain.add(drumCap);
-for (let i = 0; i < 4; i++) {
-  const link = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.024, 0.05), brassMat);
-  link.position.set(-0.06, -0.09 + i * 0.035, 0.2 - i * 0.02);
-  link.rotation.x = 0.4;
-  chain.add(link);
-}
-// Rear receiver + top rail to match the family — tucked right against
-// the housing so the tail doesn't read as a second box.
-const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.08), darkMat);
-chainRecv.position.set(0, -0.03, 0.2);
-chain.add(chainRecv);
-const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.025, 0.2), darkMat);
-chainRail.position.set(0, 0.115, 0.08);
-chain.add(chainRail);
-// Grip — mounted under the drum-side belly
-const chainGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.07), darkMat);
-chainGrip.position.set(0.05, -0.16, 0.22);
-chainGrip.rotation.x = 0.3;
-chain.add(chainGrip);
+// Brass center axle inside the cluster — static while the barrels spin
+// around it, the railgun nose-connector read through the barrel gaps.
+chain.add(mkTube(0.07, 0.07, 0.55, -0.4, brassMat));
+// Dark mouth behind the cluster between the barrels.
+chain.add(mkBore(CLUSTER_R + 0.075, -0.155));
+// No muzzle clamp — a ring mid-run read as clutter against the three
+// fat pipes; the barrels and their brass throats carry the spin alone.
+// Breech housing — SHORT stubby body, the body exists to feed the
+// cluster, not to be a rifle. Round loft so the tail reads as a turned
+// receiver, not a box.
+chain.add(mkLoft([
+  { z: 0.15, ring: profCircle(0.11, 12) },
+  { z: 0.05, ring: profCircle(0.14, 12) },
+  { z: -0.09, ring: profCircle(0.145, 12) },
+], bodyMat));
+// Flank vents removed — floater boxes outside the tapered body, and
+// behind the breech where FPS never sees them anyway.
+// No rail — pure tail clutter, invisible in FPS anyway.
 // Pull the whole gun back toward the shoulder — the breech sits close
 // to the eye and reads huge next to the barrels; letting the rear slip
 // out of frame leaves the cluster owning the view.

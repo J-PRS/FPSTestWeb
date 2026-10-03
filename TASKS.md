@@ -23,6 +23,11 @@
   CI runs it on every push; `_tools/pvptest/soakreport.ts` headless
   fleet+server audit.
 - **Recent Changes:**
+  - Modes arc: all six advertised modes real end-to-end — rabbit (T2
+    rules + offline RabbitBridge), duel/tdm offline wiring, FFA bot
+    senses fix (dm/duel/rabbit were inert in soaks), 69 map×mode pairs
+    pinned by scenarios/modes.test.ts; sprinkler impact VFX rebuilt as
+    wet normal-blend droplets + energy core
   - Perf arc: bot brain 20Hz→4Hz phase-staggered; two-axis dynamic
     quality scaler (GPU ladder: shadows→px2→px1→px3→px4; CPU ladder:
     ambient fx off→pixel) driven by sustained fps + JS-phase timing;

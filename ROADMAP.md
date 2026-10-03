@@ -29,7 +29,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Server validation layer + per-type rate limits + session-token reconnect
 - Grace-period reconnect, idle reaper, force-send windows on knockback
 - Offline play end-to-end (localAuthority, bot damage funnel, match restart)
-- Modes: nuggets / ctf / dm / classic + 5v5 team bots (shared/teams.ts rules)
+- Modes: nuggets / ctf / tdm (kill-confirmed) / dm / duel / rabbit (T2
+  rules: no flag until first blood, carrier-only damage, bottom-feeder
+  open season) — every advertised map×mode pair builds + ticks
+  (scenarios/modes.test.ts); offline mirrors all six via TeamBots +
+  CtfBridge/RabbitBridge
 - P2P over WebRTC DataChannel w/ server relayed handshake + embedded authority
 - Ball sim rubberband fixes: grid-locked replay, closed-form inert legs,
   renderOffset blending, settle threshold, server wall-clock catch-up
