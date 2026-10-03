@@ -168,8 +168,8 @@ export class RemotePlayer {
     });
   }
 
-  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0, serverVelocity?: { x: number; y: number; z: number }): void {
-    this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity);
+  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
+    this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity, serverMs);
     // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()
     // so they run every frame at the real dt — running them here at 20Hz with a
     // fixed dt made dead bodies fall/tumble at ~32% speed and look choppy.

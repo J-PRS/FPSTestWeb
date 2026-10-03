@@ -17,6 +17,13 @@ import { lerpAngle } from '../../../shared/angles.ts';
  * linear (guard below). Past the newest snapshot it extrapolates velocity for
  * a bounded 250ms rather than freezing.
  *
+ * Timestamps are SERVER time (tickSeq × tick period), never arrival
+ * wall time: a jittered packet then slots into the correct timeline
+ * position instead of pushing the whole render window forward — arrival
+ * stamping folds jitter straight into the rendered path (rubberbands).
+ * renderTime re-anchors on the newest snapshot's server time plus elapsed
+ * wall time, so it advances smoothly between pushes with no clock engine.
+ *
  * Pure math + Date.now() — no scene objects, so it's unit-testable in
  * isolation from RemotePlayer's models/gizmos.
  */
@@ -34,21 +41,31 @@ export class SnapshotBuffer {
 
   private snapshots: NetSnapshot[] = [];
   private pool: NetSnapshot[] = [];
+  // Anchor pair for the render clock: newest snapshot's server time and
+  // the client wall time it arrived. renderTime = latestT + elapsed.
+  private latestT = 0;
+  private latestArrive = 0;
   interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
   /** EMA of the observed arrival interval — send suppression stretches it
    *  well past the nominal 20Hz without being jitter. */
   arrivalInterval = 50;
   private arrivalJitter = 0;
 
-  /** Push a server update; returns the arrival gap in ms (0 = first sample). */
+  /** Push a server update; returns the arrival gap in ms (0 = first sample).
+   *  `t` is the snapshot's SERVER time; `arriveMs` the client wall time it
+   *  landed (jitter stats + the render-clock anchor). Callers without a
+   *  server clock (JSON/host paths) pass arrival time for t as before. */
   push(
     t: number,
     pos: { x: number; y: number; z: number },
     rot: { yaw: number; pitch: number },
     vel: { x: number; y: number; z: number },
+    arriveMs = Date.now(),
   ): number {
-    const prev = this.snapshots.length ? this.snapshots[this.snapshots.length - 1]!.t : 0;
-    const gap = prev > 0 ? t - prev : 0;
+    const prev = this.latestArrive;
+    const gap = prev > 0 ? arriveMs - prev : 0;
+    this.latestT = t;
+    this.latestArrive = arriveMs;
     if (gap > 10 && gap < 2000) {
       // Fast EMA on cadence change (tier-10 streams arrive at 10x the
       // baseline — 0.15 takes ~7s to converge, during which renderTime
@@ -84,7 +101,10 @@ export class SnapshotBuffer {
   /** Sample the render position/rotation for right now. */
   sample(outPos: THREE.Vector3, outRot: { yaw: number; pitch: number },
          fallbackPos: THREE.Vector3, fallbackYaw: number, fallbackPitch: number): void {
-    const renderTime = Date.now() - this.interpDelay;
+    // renderTime rides the server timeline: re-anchored by each push,
+    // free-runs at wall rate between them. A jittered/late packet raises
+    // elapsed — bounded extrapolation — instead of shifting the window.
+    const renderTime = this.latestT + (Date.now() - this.latestArrive) - this.interpDelay;
     const snaps = this.snapshots;
 
     if (snaps.length === 0) {

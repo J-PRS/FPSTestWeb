@@ -38,8 +38,8 @@ export class RemoteInterp {
   private targetPosition = new THREE.Vector3();
   private targetRotation = { yaw: 0, pitch: 0 };
   private ping = 0; // connection ping in ms — the knockback window sizes off it
-  private lastUpdateTime = 0;   // wall ms of the last position update
-  private lastServerUpdateMs = 0;
+  private lastUpdateTime = 0;   // CLIENT wall ms of the last update — liveness/DR only
+  private lastServerUpdateMs = 0; // SERVER ms of the last update (tickSeq×50, or wall when no server clock)
   private _simulating = false;  // dead reckoning is running
   private simulatedVelocity = new THREE.Vector3();
   /** Forced local prediction window — bridges the server round-trip after
@@ -58,11 +58,14 @@ export class RemoteInterp {
   get lastUpdate(): number { return this.lastUpdateTime; }
 
   /** One server position update arrived — push the snapshot, refresh
-   *  velocity estimates, and (when the DR window allows) blend back. */
-  onUpdate(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, ping: number, serverVelocity?: { x: number; y: number; z: number }): void {
+   *  velocity estimates, and (when the DR window allows) blend back.
+   *  `serverMs` is the snapshot's server-timeline stamp (tickSeq×50);
+   *  callers without a server clock omit it and arrival time is used. */
+  onUpdate(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, ping: number, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
     const prevUpdateMs = this.lastServerUpdateMs;
     this.lastUpdateTime = Date.now();
-    this.lastServerUpdateMs = this.lastUpdateTime;
+    const stamp = serverMs ?? this.lastUpdateTime;
+    this.lastServerUpdateMs = stamp;
 
     // Simulating and an update arrived → stop simulating and blend back.
     // Inside the prediction window the server hasn't reflected the
@@ -80,10 +83,11 @@ export class RemoteInterp {
     // Push onto the snapshot buffer — it also tracks arrival jitter and
     // adapts the render delay (see remoteSnapshots.ts)
     this.net.push(
-      this.lastServerUpdateMs,
+      stamp,
       targetPosition,
       targetRotation,
       serverVelocity ?? { x: 0, y: 0, z: 0 },
+      this.lastUpdateTime,
     );
 
     if (serverVelocity) {
@@ -91,11 +95,12 @@ export class RemoteInterp {
     }
 
     // Estimate velocity from consecutive server positions (not the
-    // extrapolated position). Skipped during the prediction window —
-    // the server hasn't reflected the knockback yet.
+    // extrapolated position). serverMs deltas are jitter-free server
+    // ticks — dividing by arrival gaps was feeding transport noise
+    // into the DR launch vector. Skipped during the prediction window.
     if (this.predictionTimer <= 0) {
       if (this.lastServerPosition.lengthSq() > 0) {
-        const serverDt = (this.lastUpdateTime - prevUpdateMs) / 1000;
+        const serverDt = (stamp - prevUpdateMs) / 1000;
         if (serverDt > 0) {
           this.simulatedVelocity.set(
             (targetPosition.x - this.lastServerPosition.x) / serverDt,

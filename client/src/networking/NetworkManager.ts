@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG } from '../../../shared/wire.js';
+import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG, SERVER_TICK_MS } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -595,7 +595,7 @@ export class NetworkManager {
     this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
-  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number; inputAck?: number }): void {
+  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number; inputAck?: number; tickSeq?: number }): void {
     // Host loopback delivers ticks in per-frame bursts — feeding those to
     // the gap tracker turns frame hitches into fake "packet loss".
     if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
@@ -610,24 +610,31 @@ export class NetworkManager {
     }
     if (!data.updates || !Array.isArray(data.updates)) return;
     const now = Date.now();
-    for (const u of data.updates) {
-      // Defense-in-depth: server already excludes self from tickUpdate,
-      // but skip local player here too in case of any server-side regression
-      if (u.playerId === this.localPlayerId) continue;
-      this.upsertRemotePlayer(u.playerId, {
-        internalId: u.internalId || undefined,
-        position: u.position,
-        rotation: u.rotation,
-        velocity: u.velocity,
-        isDead: u.isDead,
-        health: u.health,
-        ping: u.ping,
-        ski: u.ski,
-        status: u.status,
-        sheep: u.sheep,
-      });
-      this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, now, u.velocity);
-    }
+    // Snapshots must carry the SERVER timeline (tickSeq×50), not arrival
+    // wall time — arrival stamps fold transport jitter into the rendered
+    // path itself, which is the rubberband mechanism. The JSON path has
+    // no tickSeq and keeps the arrival fallback (host/loopback: jitter≈0).
+    const serverMs = data.tickSeq !== undefined ? data.tickSeq * SERVER_TICK_MS : now;
+    for (const u of data.updates) this.applyTickPlayerUpdate(u, serverMs);
+  }
+
+  private applyTickPlayerUpdate(u: TickUpdatePlayer, serverMs: number): void {
+    // Defense-in-depth: server already excludes self from tickUpdate,
+    // but skip local player here too in case of any server-side regression
+    if (u.playerId === this.localPlayerId) return;
+    this.upsertRemotePlayer(u.playerId, {
+      internalId: u.internalId || undefined,
+      position: u.position,
+      rotation: u.rotation,
+      velocity: u.velocity,
+      isDead: u.isDead,
+      health: u.health,
+      ping: u.ping,
+      ski: u.ski,
+      status: u.status,
+      sheep: u.sheep,
+    });
+    this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, serverMs, u.velocity);
   }
 
   // Upsert a remote player's roster entry, preserving fields the message

@@ -206,12 +206,12 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     deps.lazyEffects().spawnJetpack(pos);
   };
 
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number, velocity?: { x: number; y: number; z: number }) => {
+  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }) => {
     // Safety: never process local player as a remote player
     if (playerId === nm().getLocalPlayerId()) return;
     let remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
-      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity);
+      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity, serverMs);
       if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
         logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
       }

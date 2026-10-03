@@ -60,7 +60,8 @@ describe('SnapshotBuffer', () => {
   it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
-    buf.push(now - 5000, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    // Stale feed: last packet arrived 5s ago (arriveMs), same server time.
+    buf.push(now - 5000, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0}, now - 5000);
     const { pos } = sample(buf);
     // 0.25s cap × vx=10 → exactly 2.5, not 50
     expect(pos.x).toBeCloseTo(2.5, 1);

@@ -229,6 +229,12 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
   return { ackSeq, tickSeq, inputAck, updates };
 }
 
+/** tickSeq → server time: frames run at CONFIG.tickRate (20Hz = 50ms).
+ *  Snapshot timelines must be stamped with this, not packet-arrival
+ *  wall time — arrival stamps fold transport jitter into the render
+ *  position itself (the rubberband source). */
+export const SERVER_TICK_MS = 50;
+
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 
 const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit'] as const;
