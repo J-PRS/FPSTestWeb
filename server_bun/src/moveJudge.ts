@@ -88,6 +88,14 @@ export interface Shadow {
   gapStreak: number;
   /** Cooldown on the inputSync hint so one dead lane can't spam it. */
   lastHintAt: number;
+  /** Wall time of the last position report — a throttled client reports
+   *  (and sims) slower than the server tick. */
+  lastReportAt: number;
+  /** EMA of report inter-arrival ms. Reports flow one per client frame,
+   *  so below ~4fps the shared MoveSim's MAX_DT clamp makes the client's
+   *  sim advance at reportHz × 0.25 of wall time — the cadence is the
+   *  only honest proxy for its sim rate the wire already carries. */
+  reportEma: number;
 }
 
 export interface JudgeHost {
@@ -131,6 +139,12 @@ export class MoveJudge {
    *  the caller turns it into a client correction (witness → judge). */
   reconcile(sh: Shadow, playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
     const s = sh.sim.state;
+    const reportNow = wallNow();
+    if (sh.lastReportAt > 0) {
+      const dt = reportNow - sh.lastReportAt;
+      if (dt > 0 && dt < 5000) sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;
+    }
+    sh.lastReportAt = reportNow;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
     // Stale in-flight reports after a re-seat (room hop): the old seat
     // kept reporting until the client saw gameState — those frames would
@@ -172,7 +186,17 @@ export class MoveJudge {
       if (d < dist) dist = d;
     }
     const speed = Math.hypot(s.vel.x, s.vel.z);
-    const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF);
+    // A client throttled below ~4fps sims slower than wall time (MAX_DT
+    // caps catch-up at 0.25s/frame), so its honest state trails the
+    // full-rate shadow by speed×(1−rate) every second — growing until
+    // the next correction snaps it. Report cadence is the rate proxy:
+    // under 4Hz the client still burns the whole clamp budget each
+    // frame, so simRate ≈ fps × 0.25. Forgive up to that accumulated
+    // deficit over the correction window; a teleport is still far past.
+    const speed3d = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
+    const simRate = sh.reportEma > 0 ? Math.min(1, 250 / sh.reportEma) : 1;
+    const lagTol = speed3d * (1 - simRate) * (this.host.correctMs() / 1000 + 0.25);
+    const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol;
     if (dist <= tol) return null;
 
     this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);

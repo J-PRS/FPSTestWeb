@@ -135,7 +135,7 @@ export class RoomMoveSim {
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
-      gapStreak: 0, lastHintAt: 0,
+      gapStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
     });
   }
 
