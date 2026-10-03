@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -8,6 +9,18 @@ import { logger } from './logger.ts';
  *  backlog the frame is dropped before it hits the send queue. Only the
  *  tick hot path is gated; reliable control/ball traffic still queues. */
 const MAX_TICK_BACKLOG = 256 * 1024;
+
+/** Transient cues — a muzzle flash, a jump, a knockback shove. A reclaiming
+ *  socket replays the journal after possibly seconds of grace; a stale cue
+ *  replays as a phantom effect, while skipping it costs nothing because the
+ *  reclaim's gameState reseeds every truth these could feed. State events
+ *  (joins, kills, flag/deploy/pickup edges, chat) always replay — they carry
+ *  durable fact a snapshot gap would lose. */
+const VOLATILE_TYPES = new Set([
+  'playerShot', 'jump', 'jetpack', 'knockback', 'playerHit',
+  'projectileCreated', 'projectileDestroyed', 'claimAck',
+]);
+const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
@@ -20,13 +33,14 @@ export class ConnectionManager {
   // ball segments) skip the journal: ticks are drop-safe and the reclaim's
   // gameState+ballRoster already reseeds ball truth.
   private outSeq = 0;
-  private journal: { seq: number; data: string; only?: string; exclude?: string }[] = [];
+  private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
   private static readonly JOURNAL_MAX = 1024;
 
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
     const seq = ++this.outSeq;
     const data = JSON.stringify({ ...(msg as object), ev: seq });
-    this.journal.push({ seq, data, only, exclude });
+    const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
+    this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
     if (this.journal.length > ConnectionManager.JOURNAL_MAX) {
       this.journal.splice(0, this.journal.length - ConnectionManager.JOURNAL_MAX);
     }
@@ -37,15 +51,17 @@ export class ConnectionManager {
    *  arrived after their last processed seq. Runs before the handshake
    *  reply so gameState remains the final word on truth. */
   replayTo(playerId: string, ws: ServerWebSocket<WebSocketData>, fromSeq: number): number {
-    let n = 0;
+    const now = wallNow();
+    let n = 0, skippedStale = 0;
     for (const e of this.journal) {
       if (e.seq <= fromSeq) continue;
+      if (e.volatile && now - e.at > VOLATILE_TTL_MS) { skippedStale++; continue; }
       if (e.only !== undefined && e.only !== playerId) continue;
       if (e.exclude === playerId) continue;
       ws.send(e.data);
       n++;
     }
-    if (n > 0) logger.info('reclaim replay', { playerId, fromSeq, replayed: n });
+    if (n > 0 || skippedStale > 0) logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale });
     return n;
   }
 
