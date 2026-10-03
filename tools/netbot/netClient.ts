@@ -110,6 +110,10 @@ export class NetClient {
   /** Behavior-layer hook for claim verdicts — a reject is a verdict, not
    *  transport loss, so the bot stops retransmitting that spawn. */
   onShotRejected?: (m: Extract<ServerMessage, { type: 'shotRejected' }>) => void;
+  /** Behavior-layer hook for world resyncs — a gameState means the world
+   *  may have moved on without us (grace-gap knockback/kills), so claims
+   *  queued before it are stale the same way pre-hop claims are. */
+  onGameState?: () => void;
   /** Structures from gameState/mapUpdate — stashed until the field
    *  finishes loading so the attach survives a slow .bin fetch. */
   private structures?: readonly StructureSpec[];
@@ -280,6 +284,7 @@ export class NetClient {
         if (m.map?.structures) this.attachStructures(m.map.structures);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
+        this.onGameState?.();
         break;
       }
       case 'mapUpdate': {

@@ -87,6 +87,13 @@ export class NetBot {
       this.spawns.delete(m.shotId);
       this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
     };
+    // World resynced (reconnect, room hop): the gap let the server move
+    // our record without us seeing it — pre-state claims carry stale
+    // origins, same invariant as the hop purge.
+    nc.onGameState = () => {
+      if (this.spawns.size) this.spawns.clear();
+      if (this.shells.length) this.shells.length = 0;
+    };
     if (opts.hopEveryMs) {
       this.hopTimer = setInterval(() => {
         // Hold fire for the jitter window first, THEN send the switch —
