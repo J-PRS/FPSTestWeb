@@ -27,6 +27,7 @@ export interface ModelFxHost {
   gunUnit: number;
   gunBaseY: number;
   gunBaseZ: number;
+  gunRestX: number;
   gunBaseX: number;
   gunKickZ: number;
   /** setRotation's applied roll — lean rebuilds rotation.z from it, so
@@ -154,7 +155,7 @@ export class ModelFx {
       const k = this.recoil * this.recoil; // snappy attack, soft release
       // All prop motions compose into one transform: swap dips down,
       // throw drops + rolls out, punch shoves forward-right.
-      gun.position.x = punchE * 0.18 * this.h.gunUnit;
+      gun.position.x = this.h.gunRestX + punchE * 0.18 * this.h.gunUnit;
       gun.position.y = this.h.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.h.gunUnit;
       gun.position.z = this.h.gunBaseZ - k * this.h.gunKickZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.h.gunUnit;
       gun.rotation.x = this.h.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;

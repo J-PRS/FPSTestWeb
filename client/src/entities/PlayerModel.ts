@@ -80,6 +80,7 @@ export class PlayerModel {
   private handBone: THREE.Bone | null = null;
   gun: THREE.Group | null = null;
   gunBaseZ = 0;
+  gunRestX = 0; // socket-mounted guns park at a lateral offset
   gunBaseX = 0; // mannequin attach pitch — recoil adds on top
   gunKickZ = 0;
   muzzleFlash: THREE.Sprite | null = null;
@@ -248,9 +249,11 @@ export class PlayerModel {
     this.feetOffsetY = -min.y * this.modelScale;
     this.model.position.y = this.feetOffsetY;
 
-    // Procedural gun in the right hand — follows every animation.
-    if (this.handBone) this.attachGun(mann);
-    else logger.warn('GUN NOT ATTACHED — no hand bone found');
+    // Procedural gun: bone-mounted on rigs whose bones match the
+    // rendered body (mannequin/robot), socket-mounted on class bodies
+    // whose armature frames don't (cyber's bones sit ~98 units off).
+    if (this.handBone || classBody?.gunLocal) this.attachGun(mann);
+    else logger.warn('GUN NOT ATTACHED — no hand bone or gun socket');
 
     // No Y offset needed — model origin is already at feet
 
@@ -517,7 +520,8 @@ export class PlayerModel {
     // Quaternius rigs put the grip in FistR.
     } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr'
       || nb === 'handr' || nb === 'handright'
-      || nb === 'rigpistolright' || nb === 'rigarmright3') && !this.handBone) {
+      || nb === 'rigpistolright' || nb === 'rigarmright3'
+      || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
     // Foot-snap rig for retargeted clips on the robot rig (UAL
@@ -542,7 +546,9 @@ export class PlayerModel {
   private static _gunGeo: THREE.BufferGeometry | null = null;
   private static _gunMat: THREE.MeshStandardMaterial | null = null;
   private attachGun(mann: boolean): void {
-    const handBone = this.handBone!;
+    const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
+    const handBone = this.handBone;
+    if (!handBone && !classGun) return;
     if (!PlayerModel._gunMat) {
       PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
     }
@@ -560,8 +566,32 @@ export class PlayerModel {
     // Measure bone world scale AFTER model.scale so the gun lands
     // real-world size (bones carry the armature's ~100x scale)
     this.model!.updateMatrixWorld(true);
-    const ws = handBone.getWorldScale(new THREE.Vector3());
-    logger.debug(`GUN ATTACH`, { hand: handBone.name, worldScale: ws.x, aimBones: this.aimBones.length });
+    if (classGun) {
+      // Socket mount: class bodies keep bones in armature frames up to
+      // ~100 units off the rendered mesh (cyber's hips bind at -98Z), so
+      // a bone-mounted gun renders nowhere near the hand. Park the gun
+      // on the model root at the per-variant socket instead — anchored
+      // to the body, immune to retargeted hip drift.
+      const ws = this.modelScale;
+      this.gun.scale.setScalar(0.7 / ws);
+      this.gunUnit = 1 / ws;
+      this.gunKickZ = 0.15 * this.gunUnit;
+      // gunLocal is meters above the logical feet; the model root sits
+      // feetOffsetY below them on rigs not authored feet-at-origin. The
+      // FX update rewrites gun.position from these base fields each
+      // frame, so the socket lives in the bases, not a one-time set.
+      this.gunRestX = classGun[0] * this.gunUnit;
+      this.gunBaseY = (classGun[1] - this.feetOffsetY) * this.gunUnit;
+      this.gunBaseZ = classGun[2] * this.gunUnit;
+      this.gun.position.set(this.gunRestX, this.gunBaseY, this.gunBaseZ);
+      this.gun.rotation.y = Math.PI; // barrel -Z = the body's facing
+      this.muzzleFlash = ModelFx.buildMuzzleFlash();
+      this.gun.add(this.muzzleFlash);
+      this.model!.add(this.gun);
+      return;
+    }
+    const ws = handBone!.getWorldScale(new THREE.Vector3());
+    logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.aimBones.length });
     this.gun.scale.setScalar(0.7 / ws.x); // ~0.7m gun in world space
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
@@ -582,7 +612,7 @@ export class PlayerModel {
     this.muzzleFlash = ModelFx.buildMuzzleFlash();
     this.gun.add(this.muzzleFlash);
 
-    handBone.add(this.gun);
+    handBone!.add(this.gun);
   }
 
   // Nodes above the hips that authored rigs animate as root motion —

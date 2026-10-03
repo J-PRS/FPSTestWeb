@@ -131,12 +131,16 @@ function groundRing(accent: number): THREE.Mesh {
   return m;
 }
 
+// Hover height — pickup bodies float just over their ground ring; at
+// 0.75 the models read as ballooning well above the terrain.
+const HOVER_Y = 0.45;
+
 export function buildPickupModel(kind: PickupKind, y0: number): PickupModel {
   const spec = SPECS[kind];
   const root = new THREE.Group();
   const body = buildBody(kind, spec);
   const born = performance.now() / 1000 + Math.random(); // phase-spread spins
-  body.position.y = 0.75;
+  body.position.y = HOVER_Y;
   root.add(body);
 
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -144,7 +148,7 @@ export function buildPickupModel(kind: PickupKind, y0: number): PickupModel {
     depthWrite: false, blending: THREE.AdditiveBlending,
   }));
   halo.scale.setScalar(1.8);
-  halo.position.y = 0.75;
+  halo.position.y = HOVER_Y;
   root.add(halo);
 
   const ring = groundRing(spec.accent);
@@ -155,7 +159,7 @@ export function buildPickupModel(kind: PickupKind, y0: number): PickupModel {
   root.onBeforeRender = () => {
     const t = performance.now() / 1000 - born;
     body.rotation.y = t * spec.spin;
-    body.position.y = 0.75 + Math.sin(t * 2.1) * spec.bob;
+    body.position.y = HOVER_Y + Math.sin(t * 2.1) * spec.bob;
     const pulse = 1 + Math.sin(t * 3.2) * 0.12;
     halo.scale.setScalar(1.8 * pulse);
     (halo.material as THREE.SpriteMaterial).opacity = 0.3 + Math.sin(t * 3.2) * 0.1;

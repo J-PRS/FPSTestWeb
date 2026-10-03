@@ -165,6 +165,12 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string): Prom
     if (s.spec.variants && !s.spec.variants.includes(variant)) continue;
     for (const [name, clip] of bakeSource(s, target, model, variant)) baked.set(name, clip);
   }
+  // retargetClip poses the target skeleton while it evaluates — with no
+  // clip running yet the bones stay at the last evaluated frame, which on
+  // foreign armatures is ~100 units off bind (gun/muzzle-anchored props
+  // end up hundreds of meters away). Restore bind pose after the bake.
+  target.skeleton.pose();
+  model.updateMatrixWorld(true);
   logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
   bakedByVariant.set(variant, baked);
   return baked;

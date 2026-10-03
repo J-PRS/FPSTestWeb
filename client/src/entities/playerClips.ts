@@ -60,18 +60,25 @@ export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
 export const CLASS_BODY_SPEC: Record<string, {
   url: string; yaw: number; fitH: number;
   anims?: Partial<Record<AnimationState, string>>;
+  /** Prop-gun + muzzle anchor in model-space meters [x right, y up, z
+   *  fwd(-)]. Foreign rigs keep bones in armature frames up to ~100
+   *  units off the rendered body, so bone-mounted props can't be
+   *  trusted — a fixed socket on the model root is predictable.
+   *  Trade-off: the gun stays at chest-forward instead of tracking
+   *  the hand, which reads as 'carried' rather than 'swung'. */
+  gunLocal?: [number, number, number];
 }> = {
   // All these rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
-  'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS },
+  'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35] },
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
   // native UAL states (idle/jump/death/hit/shoot) via CYBER_MANNEQUIN_
   // BONE_MAP + kevdev 8-way locomotion via CYBER_KEVDEV_BONE_MAP.
-  'cybersoldier': { url: '/assets/models/class_cyber.glb', yaw: 0, fitH: 2.2 },
+  'cybersoldier': { url: '/assets/models/class_cyber.glb', yaw: 0, fitH: 2.2, gunLocal: [0.28, 1.35, -0.45] },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
-  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2 },
-  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.76, anims: POLYART_ANIMS },
+  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2, gunLocal: [0.26, 1.35, -0.45] },
+  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55] },
 };
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
