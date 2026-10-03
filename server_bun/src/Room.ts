@@ -95,6 +95,30 @@ export class Room {
     this.health.clear();
   }
 
+  /** Buried-body failsafe: every sim path should pull a body back to the
+   *  surface in one tick, but authored spawns, stale shadows and legacy
+   *  writes have all leaked players under the field. Cheap sweep: feet
+   *  below the terrain gets lifted to the surface and the shadow reseated
+   *  so client and server agree. Counted in room health — if the number
+   *  stays nonzero there's a real leak to hunt. */
+  private unburyAcc = 0;
+  private unburyTick(dt: number): void {
+    if (!this.field) return;
+    this.unburyAcc += dt;
+    if (this.unburyAcc < 0.5) return;
+    this.unburyAcc = 0;
+    for (const p of this.players.getAllPlayers().values()) {
+      if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) continue;
+      const eye = classCapsule(p.armorClass as ArmorClass).eye;
+      const terrain = hmHeight(this.field, p.position.x, p.position.z);
+      if (p.position.y - eye >= terrain - 0.5) continue;
+      p.position.y = terrain + eye;
+      p.velocity.y = Math.max(0, p.velocity.y);
+      this.moveSim.resync(p.id, p.position, p.rotation.yaw);
+      this.healthBump('unbury');
+    }
+  }
+
   spec: MapSpec; // mutable — admin hot-reload rewrites it live
   // Server-owned match scoreboard — only populated in team modes.
   readonly modeSpec: ModeSpec | null;
@@ -369,6 +393,7 @@ export class Room {
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
     if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
+    this.sims.push({ tick: (dt) => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
       this.sims.push({ tick: (dt) => arena.tick(dt) });
@@ -435,7 +460,7 @@ export class Room {
       pickups: () => this.pickups?.snapshot() ?? [],
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
-      deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
+      deployBlast: (pos, damage, radius, shooter, scales) => this.deployables.applyBlast(pos, damage, radius, shooter, scales),
       pickupsKnock: (at, radius, force) => this.pickups?.knock(at, radius, force),
       flagsKnock: (at, radius, force) => this.flags?.knock(at, radius, force),
       preySplash: (ownerId, pos, radius, maxDamage) => {
