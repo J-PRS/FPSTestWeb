@@ -10,6 +10,7 @@ import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
+import { scoreboardTitle } from '../ui/hud/scoreboard.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { isBotId } from '../../../shared/botNames.js';
@@ -74,15 +75,19 @@ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string
 // Status bitmask → per-effect visuals. One bit = one row; the next
 // toggle effect lands here, nowhere else in the netcode. Returns false
 // when cloaked — an enemy's HUD must give no trace (dust off an
-// invisible skier is a giveaway).
-function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, status: number): boolean {
-  remotePlayer.setCloakHidden(!!(status & STATUS.CLOAK));
+// invisible skier is a giveaway). A teammate's cloak is different: it
+// stays on screen wearing the ghost shimmer, so only enemies vanish.
+function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
+  const cloaked = !!(status & STATUS.CLOAK);
+  const friendly = cloaked && !!theirTeam && theirTeam === deps.world.localTeam;
+  remotePlayer.setCloakHidden(cloaked && !friendly);
+  remotePlayer.setCloakGhosted(cloaked && friendly);
   remotePlayer.setShielded(!!(status & STATUS.SHIELD));
   remotePlayer.setMending(!!(status & STATUS.MEND));
   remotePlayer.setRegenAura(!!(status & STATUS.REGEN));
   remotePlayer.setDdAura(!!(status & STATUS.DD));
   remotePlayer.setCharged(!!(status & STATUS.CHARGED));
-  if (!(status & STATUS.CLOAK)) return true;
+  if (!cloaked || friendly) return true;
   deps.lazyHud().removePlayerIndicator(playerId);
   deps.lazyHealthBarSystem().removeBar(playerId);
   return false;
@@ -166,7 +171,7 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // the AnimationMixer — a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
 
-  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0)) return;
+  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team)) return;
   applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
 }
@@ -186,17 +191,25 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
 }
 
 /** CTF flag diamonds — projected every frame like player indicators.
- *  A carried flag anchors on the carrier's rendered body (the mesh only
- *  follows inside the frustum), home/dropped flags read the mesh spot. */
+ *  This tick also OWNS the flag mesh position (Group.onBeforeRender
+ *  never fires, so a render hook can't do it): carried flags ride the
+ *  carrier's body, loose flags ease toward the last wire pos so a
+ *  knocked flag glides instead of stepping in 50ms jumps. */
 function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
     playerPos: THREE.Vector3, hud: HUD, cam: THREE.PerspectiveCamera): void {
   for (const [team, marker] of deps.world.flagMarkers) {
     const c = marker.carrier;
-    const anchor = c === localPlayerId ? playerPos
-      : c ? (deps.world.remotePlayers.get(c)?.pos ?? marker.mesh.position)
-      : marker.mesh.position;
+    const m = marker.mesh;
+    if (c === localPlayerId) {
+      m.position.set(playerPos.x, playerPos.y + 0.4, playerPos.z);
+    } else if (c) {
+      const rp = deps.world.remotePlayers.get(c);
+      if (rp) m.position.set(rp.pos.x, rp.pos.y + 0.4, rp.pos.z); // shoulders, not boots
+    } else if (m.position.distanceToSquared(marker.wirePos) > 1e-6) {
+      m.position.lerp(marker.wirePos, 0.35);
+    }
     hud.updateFlagIndicator(`flag:${team}`,
-      _flagAnchor.set(anchor.x, anchor.y + 3.4, anchor.z), cam, team);
+      _flagAnchor.set(m.position.x, m.position.y + 3.4, m.position.z), cam, team);
   }
 }
 
@@ -272,6 +285,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   }
   remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   hud.setScoreboardRows([...rows, ...remoteRows]);
+  hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }
 
 export function createRemotes(deps: RemotesDeps) {

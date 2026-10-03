@@ -36,14 +36,23 @@ export function applyStatus(b: GameBot, claim: number, dt: number): void {
     if (b.mods.regen > 0 && !b.isDead) b.heal(b.mods.regen * dt);
     b.setMending(!!(b.status & STATUS.MEND));
     b.setShielded(!!(b.status & STATUS.SHIELD));
-    b.setCloakHidden(!!(b.status & STATUS.CLOAK));
+    setCloakVisual(b);
+  }
+
+/** Cloak display: a teammate's held cloak is the ghost shimmer, an
+ *  enemy's is full invisibility — same split the wire path applies. */
+function setCloakVisual(b: GameBot): void {
+    const cloaked = !!(b.status & STATUS.CLOAK);
+    const friendly = cloaked && b.team === b.localTeam && b.localTeam !== undefined;
+    b.setCloakHidden(cloaked && !friendly);
+    b.setCloakGhosted(cloaked && friendly);
   }
 
 export function dropSkill(b: GameBot, bit: number): void {
     b.status &= ~bit;
     if (bit === STATUS.MEND) b.setMending(false);
     else if (bit === STATUS.SHIELD) b.setShielded(false);
-    else if (bit === STATUS.CLOAK) b.setCloakHidden(false);
+    else if (bit === STATUS.CLOAK) { b.setCloakHidden(false); b.setCloakGhosted(false); }
   }
 
   /** One tank feeds jets AND skills — featherjets' fuel regen and

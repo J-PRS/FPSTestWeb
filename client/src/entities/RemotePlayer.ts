@@ -11,7 +11,7 @@ import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remot
 import { WeaponType } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
-import { hideRemote, showRemote, setStaleVis, setCloakVis, shootReveal, tickGhostF } from './remoteVis.js';
+import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -295,9 +295,11 @@ export class RemotePlayer {
   staleHidden = false;
   frustumHidden = false;
   cloakHidden = false;
+  cloakGhost = false;
   get isCloakHidden(): boolean { return this.cloakHidden; }
   setStaleHidden(hidden: boolean): void { setStaleVis(this, hidden); }
   setCloakHidden(hidden: boolean): void { setCloakVis(this, hidden); }
+  setCloakGhosted(on: boolean): void { setCloakGhost(this, on); }
   setShielded(on: boolean): void { this.auras.setShielded(on); }
   get isShielded(): boolean { return this.auras.isShielded; }
 

@@ -245,6 +245,9 @@ export class TeamBots {
     // AnimationMixer onto the model. Without it think() moves the
     // logical position but the rendered body stands frozen at spawn.
     bot.tick(dt);
+    // Friendly cloak renders the ghost shimmer instead of vanishing —
+    // refresh the verdict's team each frame so a re-seat flips it live.
+    bot.localTeam = this.teamOf.get('local');
     if (bot.isDead) {
       bot.respawnAt -= dt;
       if (bot.respawnAt <= 0) this.respawnBot(bot);

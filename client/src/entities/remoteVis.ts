@@ -33,6 +33,16 @@ export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
   if (hidden) hideRemote(p); else if (!p.staleHidden) showRemote(p);
 }
 
+// Friendly cloak: a teammate's held cloak renders as the ghost shimmer,
+// not an empty space — only enemies are fully invisible. The flag just
+// swaps the model's materials, so stale/frustum/dead gates keep owning
+// real visibility and a decloak restores the skin untouched.
+export function setCloakGhost(p: RemotePlayer, on: boolean): void {
+  if (on === p.cloakGhost) return;
+  p.cloakGhost = on;
+  p._model.setGhost(on);
+}
+
 // Frustum hide: an offscreen rig stays out of projectObject AND the
 // shadow pass — the anim gate already skips its mixer, but the ~40-node
 // subtree was still being walked every frame. Lighter than hideRemote:

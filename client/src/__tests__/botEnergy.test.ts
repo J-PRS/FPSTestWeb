@@ -19,6 +19,7 @@ const mkBot = (energy = 100) => ({
   setMending: vi.fn(),
   setShielded: vi.fn(),
   setCloakHidden: vi.fn(),
+  setCloakGhosted: vi.fn(),
 }) as unknown as GameBot;
 
 describe('applyStatus', () => {

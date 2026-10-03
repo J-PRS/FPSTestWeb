@@ -40,6 +40,9 @@ const sharedGroundYCache = new Map<number, number>();
 export class GameBot extends RemotePlayer {
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
   team: string;
+  /** The LOCAL player's team — TeamBots refreshes it each frame so the
+   *  friendly/enemy verdicts (cloak ghost vs vanish) follow re-seats. */
+  localTeam?: string;
   botHp = BOT_HP;
   /** Armor tier — speedScale feeds the shared MoveSim so heavy/light
    *  ground speed changes land exactly as the server computes them. */
