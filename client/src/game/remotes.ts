@@ -154,6 +154,16 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   const remotePlayer = deps.world.remotePlayers.ensure(playerId, playerState);
   if (!remotePlayer) return;
 
+  // Entity liveness mirrors roster truth every frame — the kill/respawn
+  // events are just the fast path. A lost event leaves _isDead frozen
+  // while ticks already say alive (roster heals, body stays a corpse:
+  // the silent invisible-bot desync the hash can't flag because the
+  // roster agrees).
+  if (playerState.isDead !== remotePlayer.isDead) {
+    if (playerState.isDead) remotePlayer.playDeath();
+    else remotePlayer.respawn(playerState.position);
+  }
+
   // Hide stale remote players — backgrounded tabs keep the socket open but
   // stop sending updates, leaving ghosts standing around. 60s grace covers
   // genuine packet loss; dead reckoning handles shorter gaps. Players that
