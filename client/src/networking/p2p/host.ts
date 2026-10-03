@@ -14,7 +14,8 @@
 import { PlayerManager } from '../../../../server_bun/src/PlayerManager.js';
 import { MessageHandler } from '../../../../server_bun/src/MessageHandler.js';
 import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
-import { validateMessage, validatePlayerId } from '../../../../server_bun/src/validation.js';
+import { validateMessage } from '../../../../server_bun/src/wire.js';
+import { validatePlayerId } from '../../../../server_bun/src/validation.js';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../../../shared/wire.js';
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';

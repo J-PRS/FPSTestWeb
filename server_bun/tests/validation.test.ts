@@ -6,7 +6,7 @@
  * feature — e.g. chat.team dropping made team chat go global).
  */
 import { describe, test, expect } from 'bun:test';
-import { validateMessage } from '../src/validation.ts';
+import { validateMessage } from '../src/wire.ts';
 
 const VALID_BODIES: Record<string, Record<string, unknown>> = {
   position: { position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: -0.1 }, velocity: { x: 0, y: 0, z: 0 }, seq: 7, inputSeq: 6, ping: 40 },

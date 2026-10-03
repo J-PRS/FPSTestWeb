@@ -6,16 +6,14 @@ import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
-import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
+import { WIRE } from './wire.ts';
 import { MoveClaims } from './moveClaims.ts';
 import type { BallSim } from './BallSim.ts';
 import type { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
-import { isPerkId } from '../../shared/perks.ts';
-import { CLASS_STATS } from '../../shared/botClasses.ts';
-import type { ArmorClass } from '../../shared/botClasses.ts';
+
 import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
@@ -100,6 +98,12 @@ export interface RoomInfo {
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
   dropFlagCarrier?: (playerId: string) => void;
+  /** Rabbit rooms: current flag carrier (null = flag loose). Present only
+   *  in rabbit rooms — CombatHandler gates all PvP damage on the pair
+   *  involving the carrier. */
+  rabbitCarrier?: () => string | null;
+  /** Rabbit bottom-feeder ids — RoomScore.bottomFeeders. */
+  rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — energy is server truth. */
   drainEnergy?: (playerId: string, amount: number) => void;
   energyOf?: (playerId: string) => number | null;
@@ -143,6 +147,8 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     friendlyFire: roomInfo?.friendlyFire,
     moveImpulse: roomInfo?.moveImpulse,
     dropFlagCarrier: roomInfo?.dropFlagCarrier,
+    rabbitCarrier: roomInfo?.rabbitCarrier,
+    rabbitBottom: roomInfo?.rabbitBottom,
     drainEnergy: roomInfo?.drainEnergy,
     energyOf: roomInfo?.energyOf,
     moveResync: roomInfo?.moveResync,
@@ -167,9 +173,10 @@ export class MessageHandler {
   private rateLimiter: RateLimiter;
   broadcast: BroadcastFn;
   sendToPlayer: SendToPlayerFn;
-  private moves: MoveClaims;
+  // Public — wire.ts handlers drive these directly.
+  moves: MoveClaims;
   // Everything that deals damage — projectiles, blasts, env damage, respawns
-  private combat: CombatHandler;
+  combat: CombatHandler;
   /** Room/flag code reads killFeed for situation chatter (bot 'say' events). */
   get killFeed(): KillFeed { return this.combat.killFeed; }
   /** Fast-forward driver seam: lapses sim-timed respawn deadlines when
@@ -178,13 +185,13 @@ export class MessageHandler {
   respawnTick(now: number): void { this.combat.respawner.tick(now); }
   // Server-owned creatures (balls). Optional — a missing/unloadable
   // heightmap must not take down the whole game server.
-  private ballSim: BallSim | null = null;
+  ballSim: BallSim | null = null;
   // Server-owned melee species (crawlers) — same pattern as ballSim.
-  private creatureSim: CreatureSim | null = null;
+  creatureSim: CreatureSim | null = null;
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
-  private roomInfo: RoomInfo = { room: 'default', mode: '' };
+  roomInfo: RoomInfo = { room: 'default', mode: '' };
 
   hb(key: string, n = 1): void {
     const h = this.roomInfo.health;
@@ -195,7 +202,7 @@ export class MessageHandler {
    *  claims without one stay legacy fire-and-forget (bot paths, old
    *  clients). Rejects bump the heartbeat so a massed drop pattern
    *  shows up on /metrics before any single client reports it. */
-  private claimAck(id: string, kind: string, seq: number | undefined, verdict: ClaimVerdict): void {
+  claimAck(id: string, kind: string, seq: number | undefined, verdict: ClaimVerdict): void {
     if (seq === undefined) return;
     const ok = verdict === true;
     if (!ok) this.hb(`claimrej.${kind}`);
@@ -221,99 +228,9 @@ export class MessageHandler {
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, combatDeps(roomInfo));
     this.moves = new MoveClaims(this);
     this.attachStructures(roomInfo?.structures);
-
-    // Per-type dispatch — a new message type is one table entry. Field
-    // order: handlers need this.combat, so the table is built last.
-    // The mapped type narrows `m` per key, so entries never cast — and a
-    // ClientMessage type with no entry is a table the compiler can see.
-    this.handlers = {
-      position: (id, m) => this.moves.handlePosition(id, m),
-      teleport: (id, m) => this.moves.handleTeleport(id, m),
-      shot: (id, m) => this.combat.handleShot(id, m),
-      aoeShot: (id, m) => this.combat.handleAOEShot(id, m),
-      shotFired: (id, m) => this.combat.handleShotFired(id, m),
-      jump: (id, m) => this.relayPresenceEvent(id, m),
-      jetpack: (id, m) => this.relayPresenceEvent(id, m),
-      projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m),
-      environmentDamage: (id, m) => this.claimAck(id, 'environmentDamage', m.claimSeq, this.combat.handleEnvironmentDamage(id, m)),
-      heal: (id, m) => this.claimAck(id, 'heal', m.claimSeq, this.combat.handleHeal(id, m)),
-      deploy: (id, m) => this.claimAck(id, 'deploy', m.claimSeq, this.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
-      repair: (id, m) => this.claimAck(id, 'repair', m.claimSeq, this.roomInfo.onRepair?.(id, m.targetId) ?? 'gone'),
-      skillUse: (id, m) => this.claimAck(id, 'skillUse', m.claimSeq, this.roomInfo.onSkillUse?.(id) ?? 'gone'),
-      respawn: (id) => this.combat.respawnRequest(id),
-      creatureHit: (id, m) => {
-        const v = this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
-        this.claimAck(id, 'creatureHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
-      },
-      crawlerHit: (id, m) => {
-        const v = this.creatureSim?.handleHit(id, m.id, m.damage);
-        this.claimAck(id, 'crawlerHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
-      },
-      inputMove: (id, m) => {
-        const p = this.playerManager.getPlayer(id);
-        if (!p || p.isDead) return;
-        const i = m.input;
-        // Stale input events (reordered datagrams) must not touch skiing/
-        // status either — the sim's seq gate decides before we commit.
-        const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
-        if (this.roomInfo.moveInput?.(id, i, newStatus, m.seq) === false) return;
-        p.skiing = i.ski ? 1 : 0;
-        p.status = newStatus;
-      },
-      // Room-scoped relay — broadcast() only reaches this room's sockets.
-      chat: (id, m) => {
-        const sender = this.playerManager.getPlayer(id);
-        // Truncate — the relay is the broadcast ceiling too, so an
-        // oversized payload would amplify one client's bandwidth into
-        // every socket in the room.
-        const text = typeof m.text === 'string' ? m.text.slice(0, 280) : '';
-        if (!text) return;
-        // Team channel: only the sender's own team hears it — and only
-        // when the sender actually carries a team, else a ffa client
-        // claiming 'team' would quietly self-filter to nobody.
-        const vgs = typeof m.vgs === 'string' ? m.vgs : undefined;
-        if (m.team && sender?.team) {
-          for (const [pid, p] of this.playerManager.getAllPlayers()) {
-            if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });
-          }
-          return;
-        }
-        this.broadcast({ type: 'chat', playerId: id, text, vgs });
-        // Bots can read: the relay above ships the line, this lets the
-        // room turn high-confidence phrases (gg, ez, a bot's name) into
-        // a squad notice — whether anyone answers is still dice+cooldown.
-        this.roomInfo.emit?.({ type: 'chat', id, text });
-      },
-      ping: (id, m) => {
-        const p = this.playerManager.getPlayer(id);
-        if (!p) return;
-        p.lastSeen = wallNow(); // ping is a liveness signal too —
-        // without it a non-moving client could still go "stale"
-        this.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
-      },
-      snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
-      // Reseat BEFORE the replay goes out — the shadow and the echoed
-      // localPlayerState must describe the same spot or the client's
-      // post-snap reports/shots get judged against the stale anchor.
-      resync: (id) => { this.hb('resync'); this.moves.handleResyncSeat(id); this.sendWorldState(id); },
-      // Tribes rule: the tier swap banks on the next respawn — applying
-      // it mid-life would be a free heal and flip the sim's speed scale
-      // without the shadow knowing.
-      classUpdate: (id, m) => {
-        const p = this.playerManager.getPlayer(id);
-        // A cast here isn't a check — an off-table class hits
-        // CLASS_STATS[garbage].maxHealth at respawn and throws.
-        const cls = m.armorClass;
-        if (p && typeof cls === 'string' && cls in CLASS_STATS) p.pendingClass = cls as ArmorClass;
-      },
-      perkUpdate: (id, m) => {
-        const p = this.playerManager.getPlayer(id);
-        if (p && isPerkId(m.perk)) p.pendingPerk = m.perk;
-      },
-    };
+    // Per-type dispatch lives in wire.ts — a new message type is one
+    // WIRE entry (validate + limit + handle), not edits in three files.
   }
-
-  private handlers: { [K in ClientMessage['type']]?: (playerId: string, msg: Extract<ClientMessage, { type: K }>) => void } = {};
 
   /** Server-sim entry point — deployable sentries fire through the same
    *  outcome funnel as player/bot damage. */
@@ -481,7 +398,7 @@ export class MessageHandler {
    *  gameState (roster/team/map/flags/pickups/deployables) plus the
    *  creature rosters. Shared by handshake and the resync request, so an
    *  alt-tab catch-up rebuilds the same truth a reload would. */
-  private sendWorldState(playerId: string, sessionToken?: string): void {
+  sendWorldState(playerId: string, sessionToken?: string): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
@@ -585,13 +502,13 @@ export class MessageHandler {
     // (inputMove in authority mode) starves the idle reaper mid-match.
     player.lastSeen = wallNow();
 
-    const handler = this.handlers[msg.type] as ((id: string, m: ClientMessage) => void) | undefined;
+    const handler = WIRE[msg.type]?.handle as ((h: MessageHandler, id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
       this.hb('unhandled');
       logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
       return;
     }
-    handler(playerId, msg);
+    handler(this, playerId, msg);
   }
 
   // MoveClaims host surface — the room's optional moveSim hooks arrive
@@ -605,13 +522,13 @@ export class MessageHandler {
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
   // to everyone but the sender for remote-side jump-dust/jet FX.
-  private relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
+  relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     this.broadcast({ type: msg.type, playerId, position: msg.position }, playerId);
   }
 
-  private handleSnapshotRequest(playerId: string): void {
+  handleSnapshotRequest(playerId: string): void {
     const players: SnapshotPlayer[] = [];
     for (const [, p] of this.playerManager.getAllPlayers()) {
       players.push({

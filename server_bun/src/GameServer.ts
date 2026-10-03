@@ -3,7 +3,7 @@ import { CONFIG } from './config.ts';
 import { Room } from './Room.ts';
 import { totalPlayers as opsTotalPlayers, getServerInfo as opsGetServerInfo, getHealthStatus as opsGetHealthStatus, getMetrics as opsGetMetrics } from './serverOps.ts';
 import { BallSim } from './BallSim.ts';
-import { validateMessage } from './validation.ts';
+import { validateMessage } from './wire.ts';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';

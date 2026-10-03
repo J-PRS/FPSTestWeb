@@ -100,39 +100,8 @@ export const CONFIG = {
   // Empty = LAN/direct-connect only, which is what dev needs anyway.
   iceServersJson: envStr('FPS_ICE_SERVERS', ''),
 
-  rateLimits: {
-    position: { maxCount: 30, windowMs: 1000 },
-    shot: { maxCount: 20, windowMs: 1000 }, // chaingun fires ~11/s spawn events
-    aoeShot: { maxCount: 15, windowMs: 1000 }, // all AOE weapons share one bucket — GL spam is the ceiling
-    jump: { maxCount: 10, windowMs: 1000 },
-    jetpack: { maxCount: 60, windowMs: 1000 },
-    inputMove: { maxCount: 120, windowMs: 1000 },
-    input: { maxCount: 120, windowMs: 1000 },
-    projectileDestroy: { maxCount: 30, windowMs: 1000 },
-    // One bucket serves crawler pounces, host-simmed bot damage on the
-    // local player (attacker-tagged), deployables, and self-splash — a
-    // firefight can legitimately burst past 10/s, and drops are silent.
-    // Still self-report-only and capped per-claim (80 tagged / 40 plain).
-    environmentDamage: { maxCount: 30, windowMs: 1000 },
-    // teleport skips plausibility checks by design (declared warp), so the
-    // only defense is rate — a distance bound is impossible since a thrown
-    // warp beacon can legally land hundreds of metres out. Legit cadence:
-    // one-shot skills share a 1s cooldown floor; 0.9s leaves jitter margin.
-    teleport: { maxCount: 1, windowMs: 900 },
-    // Team rooms gate heal claims behind server-granted credit; non-team
-    // claims are free-form (local nuggets have no server backing), so the
-    // only bound there is rate — 3 per 2s caps invincibility-heals at
-    // ~37hp/s while leaving burst pickups legal.
-    heal: { maxCount: 3, windowMs: 2000 },
-    creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
-    crawlerHit: { maxCount: 120, windowMs: 1000 }, // same claim rate vs ground crawlers
-    deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
-    // Deliberate respawn — one deliberate press per second is plenty;
-    // faster spam is either a stuck key or abuse of the kill feed.
-    respawn: { maxCount: 1, windowMs: 1000 },
-    chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
-    default: { maxCount: 120, windowMs: 1000 },
-  } as const,
+  // Per-type rate limits live in wire.ts beside the validators and
+  // handlers — one WIRE entry is the whole contract for a message type.
 
   playerIdPattern: /^[a-zA-Z0-9_-]+$/,
   playerIdMinLength: 1,

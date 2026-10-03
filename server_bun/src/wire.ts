@@ -1,0 +1,472 @@
+// WIRE — the client→server message contract as ONE table. A new message
+// type is a single entry here: its validator (wire bytes → typed msg),
+// its rate limit (omit for the shared default bucket), and its room
+// handler. Validation happens pre-room (GameServer.validate), the limit
+// and handler run inside the room's command drain at tick phase 0.
+//
+// 'join' is absent on purpose — it never reaches a room (sessions.handle
+// owns the handshake). 'switchRoom' validates here but is intercepted by
+// GameServer before room dispatch, so it carries no handle.
+
+import {
+  type ValidationResult,
+  isFiniteNumber,
+  word,
+  validateVec3,
+  validateRotation,
+  validateBody,
+  optVec,
+  optShotId,
+  optClaimSeq,
+} from './validation.ts';
+import type { ClientMessage } from './types.ts';
+import type { MessageHandler } from './MessageHandler.ts';
+import { DEPLOY_KINDS, type DeployKind } from '../../shared/deployables.ts';
+import { isPerkId } from '../../shared/perks.ts';
+import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
+import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
+import { wallNow } from './wallClock.ts';
+
+export interface RateLimit {
+  maxCount: number;
+  windowMs: number;
+}
+
+export interface WireEntry<K extends ClientMessage['type']> {
+  validate(obj: Record<string, unknown>): ValidationResult<Extract<ClientMessage, { type: K }>>;
+  limit?: RateLimit;
+  handle?: (h: MessageHandler, id: string, m: Extract<ClientMessage, { type: K }>) => void;
+}
+
+/** Types without their own bucket share this one. */
+export const WIRE_DEFAULT_LIMIT: RateLimit = { maxCount: 120, windowMs: 1000 };
+
+export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
+  position: {
+    limit: { maxCount: 30, windowMs: 1000 },
+    validate: (obj) => {
+      const body = validateBody(obj);
+      if (!body.success) return body;
+      const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
+      const inputSeq = isFiniteNumber(obj.inputSeq) ? obj.inputSeq : undefined;
+      const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
+      return { success: true, data: { type: 'position', ...body.data, seq, inputSeq, ping } };
+    },
+    handle: (h, id, m) => h.moves.handlePosition(id, m),
+  },
+
+  teleport: {
+    // teleport skips plausibility checks by design (declared warp), so the
+    // only defense is rate — a distance bound is impossible since a thrown
+    // warp beacon can legally land hundreds of metres out. Legit cadence:
+    // one-shot skills share a 1s cooldown floor; 0.9s leaves jitter margin.
+    limit: { maxCount: 1, windowMs: 900 },
+    validate: (obj) => {
+      const body = validateBody(obj);
+      if (!body.success) return body;
+      return { success: true, data: { type: 'teleport', ...body.data } };
+    },
+    handle: (h, id, m) => h.moves.handleTeleport(id, m),
+  },
+
+  shot: {
+    limit: { maxCount: 20, windowMs: 1000 }, // chaingun fires ~11/s spawn events
+    validate: (obj) => {
+      const targetId = obj.targetId;
+      if (targetId !== null && typeof targetId !== 'string') {
+        return { success: false, error: 'targetId must be string or null' };
+      }
+      const position = optVec(obj.position);
+      if (!position.ok) return { success: false, error: `position: ${position.error}` };
+      const velocity = optVec(obj.velocity);
+      if (!velocity.ok) return { success: false, error: `velocity: ${velocity.error}` };
+      return {
+        success: true,
+        data: {
+          type: 'shot',
+          targetId: targetId as string | null,
+          position: position.ok ? position.data : undefined,
+          velocity: velocity.ok ? velocity.data : undefined,
+          timestamp: isFiniteNumber(obj.timestamp) ? obj.timestamp : undefined,
+          projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
+          shotId: optShotId(obj.shotId),
+        },
+      };
+    },
+    handle: (h, id, m) => h.combat.handleShot(id, m),
+  },
+
+  aoeShot: {
+    limit: { maxCount: 15, windowMs: 1000 }, // all AOE weapons share one bucket — GL spam is the ceiling
+    validate: (obj) => {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      const excludeTargetId = obj.excludeTargetId;
+      if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
+        return { success: false, error: 'excludeTargetId must be string or null' };
+      }
+      return {
+        success: true,
+        data: {
+          type: 'aoeShot',
+          position: pos.data,
+          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          excludeTargetId: (excludeTargetId as string | null) ?? null,
+          projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
+          power: isFiniteNumber(obj.power) ? obj.power : undefined,
+          directHit: obj.directHit === true ? true : undefined,
+          shotId: optShotId(obj.shotId),
+        },
+      };
+    },
+    handle: (h, id, m) => h.combat.handleAOEShot(id, m),
+  },
+
+  shotFired: {
+    validate: (obj) => {
+      const dir = optVec(obj.dir);
+      if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
+      return {
+        success: true,
+        data: {
+          type: 'shotFired',
+          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          dir: dir.ok ? dir.data : undefined,
+        },
+      };
+    },
+    handle: (h, id, m) => h.combat.handleShotFired(id, m),
+  },
+
+  jump: {
+    limit: { maxCount: 10, windowMs: 1000 },
+    validate: (obj) => {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      return { success: true, data: { type: 'jump', position: pos.data } };
+    },
+    handle: (h, id, m) => h.relayPresenceEvent(id, m),
+  },
+
+  jetpack: {
+    limit: { maxCount: 60, windowMs: 1000 },
+    validate: (obj) => {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      return { success: true, data: { type: 'jetpack', position: pos.data } };
+    },
+    handle: (h, id, m) => h.relayPresenceEvent(id, m),
+  },
+
+  inputMove: {
+    limit: { maxCount: 120, windowMs: 1000 },
+    validate: (obj) => {
+      const input = obj.input;
+      if (typeof input !== 'object' || input === null) {
+        return { success: false, error: 'input must be an object' };
+      }
+      const i = input as Record<string, unknown>;
+      if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
+        return { success: false, error: 'input fields must be finite numbers' };
+      }
+      const rot = validateRotation(obj.rotation);
+      if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
+      return {
+        success: true,
+        data: {
+          type: 'inputMove',
+          seq: isFiniteNumber(obj.seq) ? obj.seq : undefined,
+          input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
+          rotation: rot.data,
+        },
+      };
+    },
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      if (!p || p.isDead) return;
+      const i = m.input;
+      // Stale input events (reordered datagrams) must not touch skiing/
+      // status either — the sim's seq gate decides before we commit.
+      const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
+      if (h.roomInfo.moveInput?.(id, i, newStatus, m.seq) === false) return;
+      p.skiing = i.ski ? 1 : 0;
+      p.status = newStatus;
+    },
+  },
+
+  projectileDestroy: {
+    limit: { maxCount: 30, windowMs: 1000 },
+    validate: (obj) => {
+      if (typeof obj.projectileId !== 'string') {
+        return { success: false, error: 'projectileId must be a string' };
+      }
+      return { success: true, data: { type: 'projectileDestroy', projectileId: obj.projectileId, shotId: optShotId(obj.shotId) } };
+    },
+    handle: (h, id, m) => h.combat.handleProjectileDestroy(id, m),
+  },
+
+  environmentDamage: {
+    // One bucket serves crawler pounces, host-simmed bot damage on the
+    // local player (attacker-tagged), deployables, and self-splash — a
+    // firefight can legitimately burst past 10/s, and drops are silent.
+    // Still self-report-only and capped per-claim (80 tagged / 40 plain).
+    limit: { maxCount: 30, windowMs: 1000 },
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.amount)) {
+        return { success: false, error: 'amount must be a finite number' };
+      }
+      // Attribution rides through for host-simmed sources ('bot:*',
+      // deployable owners). Same grammar CombatHandler re-checks —
+      // validation is the gate that actually strips hostile payloads.
+      const attacker = typeof obj.attacker === 'string' && /^[\w: .-]{1,32}$/.test(obj.attacker)
+        ? obj.attacker : undefined;
+      return { success: true, data: { type: 'environmentDamage', amount: obj.amount, attacker, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.claimAck(id, 'environmentDamage', m.claimSeq, h.combat.handleEnvironmentDamage(id, m)),
+  },
+
+  heal: {
+    // Team rooms gate heal claims behind server-granted credit; non-team
+    // claims are free-form (local nuggets have no server backing), so the
+    // only bound there is rate — 3 per 2s caps invincibility-heals at
+    // ~37hp/s while leaving burst pickups legal.
+    limit: { maxCount: 3, windowMs: 2000 },
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.amount)) {
+        return { success: false, error: 'amount must be a finite number' };
+      }
+      return { success: true, data: { type: 'heal', amount: obj.amount, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
+  },
+
+  creatureHit: {
+    limit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.id) || !Number.isInteger(obj.id) || obj.id < 0) {
+        return { success: false, error: 'id must be a non-negative integer' };
+      }
+      if (!isFiniteNumber(obj.damage)) {
+        return { success: false, error: 'damage must be a finite number' };
+      }
+      const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
+      const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
+      const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
+      return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => {
+      const v = h.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
+      h.claimAck(id, 'creatureHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
+    },
+  },
+
+  crawlerHit: {
+    limit: { maxCount: 120, windowMs: 1000 }, // same claim rate vs ground crawlers
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.id) || !Number.isInteger(obj.id) || obj.id < 0) {
+        return { success: false, error: 'id must be a non-negative integer' };
+      }
+      if (!isFiniteNumber(obj.damage)) {
+        return { success: false, error: 'damage must be a finite number' };
+      }
+      const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
+      const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
+      const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
+      return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => {
+      const v = h.creatureSim?.handleHit(id, m.id, m.damage);
+      h.claimAck(id, 'crawlerHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
+    },
+  },
+
+  deploy: {
+    limit: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
+    validate: (obj) => {
+      const kind = obj.kind;
+      if (typeof kind !== 'string' || !DEPLOY_KINDS.includes(kind as DeployKind)) {
+        return { success: false, error: `kind must be ${DEPLOY_KINDS.join('|')}` };
+      }
+      const dpos = validateVec3(obj.position);
+      if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
+      return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
+  },
+
+  repair: {
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.targetId) || !Number.isInteger(obj.targetId) || obj.targetId < 0) {
+        return { success: false, error: 'targetId must be a non-negative integer' };
+      }
+      return { success: true, data: { type: 'repair', targetId: obj.targetId, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.claimAck(id, 'repair', m.claimSeq, h.roomInfo.onRepair?.(id, m.targetId) ?? 'gone'),
+  },
+
+  // Mirror-only claim: the server re-derives the energy ante itself —
+  // the message deliberately carries no amount or skill id.
+  skillUse: {
+    validate: (obj) => {
+      return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id) ?? 'gone'),
+  },
+
+  snapshotRequest: {
+    validate: () => {
+      return { success: true, data: { type: 'snapshotRequest' } };
+    },
+    handle: (h, id) => { h.hb('snapreq'); h.handleSnapshotRequest(id); },
+  },
+
+  // Deliberate respawn — carries no payload; the kill path derives
+  // everything (kill feed, respawn timer, banked loadout) itself.
+  respawn: {
+    // one deliberate press per second is plenty; faster spam is either a
+    // stuck key or abuse of the kill feed.
+    limit: { maxCount: 1, windowMs: 1000 },
+    validate: () => {
+      return { success: true, data: { type: 'respawn' } };
+    },
+    handle: (h, id) => h.combat.respawnRequest(id),
+  },
+
+  resync: {
+    validate: () => {
+      return { success: true, data: { type: 'resync' } };
+    },
+    // Reseat BEFORE the replay goes out — the shadow and the echoed
+    // localPlayerState must describe the same spot or the client's
+    // post-snap reports/shots get judged against the stale anchor.
+    handle: (h, id) => { h.hb('resync'); h.moves.handleResyncSeat(id); h.sendWorldState(id); },
+  },
+
+  classUpdate: {
+    validate: (obj) => {
+      const c = obj.armorClass;
+      if (c !== 'light' && c !== 'medium' && c !== 'heavy') {
+        return { success: false, error: 'armorClass must be light|medium|heavy' };
+      }
+      return { success: true, data: { type: 'classUpdate', armorClass: c } };
+    },
+    // Tribes rule: the tier swap banks on the next respawn — applying
+    // it mid-life would be a free heal and flip the sim's speed scale
+    // without the shadow knowing.
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      // The validator allows exactly light|medium|heavy; this `in` guard
+      // keeps the table honest if CLASS_STATS' keys ever drift from that.
+      if (p && m.armorClass in CLASS_STATS) p.pendingClass = m.armorClass as ArmorClass;
+    },
+  },
+
+  perkUpdate: {
+    validate: (obj) => {
+      if (!isPerkId(obj.perk)) {
+        return { success: false, error: 'perk must be a known PerkId' };
+      }
+      return { success: true, data: { type: 'perkUpdate', perk: obj.perk } };
+    },
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      if (p && isPerkId(m.perk)) p.pendingPerk = m.perk;
+    },
+  },
+
+  // Same name/map/mode grammar as the join handshake — a bad name just
+  // lands you in 'default', never a rejection. No handle: GameServer
+  // intercepts room hops before they reach a room's handler.
+  switchRoom: {
+    validate: (obj) => {
+      const bots = isFiniteNumber(obj.bots)
+        ? Math.max(0, Math.min(24, Math.floor(obj.bots as number)))
+        : undefined;
+      return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots } };
+    },
+  },
+
+  // Relay-only content: length cap is the whole validation — the server
+  // never interprets the text, clients render it escaped (textContent).
+  chat: {
+    limit: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
+    validate: (obj) => {
+      if (typeof obj.text !== 'string' || obj.text.length === 0 || obj.text.length > 200) {
+        return { success: false, error: 'chat text must be 1-200 chars' };
+      }
+      // vgs carries the chord letters ("VGS") so receivers can print the
+      // keypath alongside the line — newbies learn the menu by reading chat.
+      const vgs = typeof obj.vgs === 'string' && /^[A-Z]{1,8}$/.test(obj.vgs) ? obj.vgs : undefined;
+      return { success: true, data: { type: 'chat', text: obj.text, team: obj.team === true ? true : undefined, vgs } };
+    },
+    // Room-scoped relay — broadcast() only reaches this room's sockets.
+    handle: (h, id, m) => {
+      const sender = h.playerManager.getPlayer(id);
+      // Truncate — the relay is the broadcast ceiling too, so an
+      // oversized payload would amplify one client's bandwidth into
+      // every socket in the room.
+      const text = typeof m.text === 'string' ? m.text.slice(0, 280) : '';
+      if (!text) return;
+      // Team channel: only the sender's own team hears it — and only
+      // when the sender actually carries a team, else a ffa client
+      // claiming 'team' would quietly self-filter to nobody.
+      const vgs = typeof m.vgs === 'string' ? m.vgs : undefined;
+      if (m.team && sender?.team) {
+        for (const [pid, p] of h.playerManager.getAllPlayers()) {
+          if (p.team === sender.team) h.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });
+        }
+        return;
+      }
+      h.broadcast({ type: 'chat', playerId: id, text, vgs });
+      // Bots can read: the relay above ships the line, this lets the
+      // room turn high-confidence phrases (gg, ez, a bot's name) into
+      // a squad notice — whether anyone answers is still dice+cooldown.
+      h.roomInfo.emit?.({ type: 'chat', id, text });
+    },
+  },
+
+  ping: {
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.timestamp)) {
+        return { success: false, error: 'ping timestamp must be a finite number' };
+      }
+      return { success: true, data: { type: 'ping', timestamp: obj.timestamp } };
+    },
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      if (!p) return;
+      p.lastSeen = wallNow(); // ping is a liveness signal too —
+      // without it a non-moving client could still go "stale"
+      h.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
+    },
+  },
+};
+
+export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
+  if (typeof raw !== 'object' || raw === null) {
+    return { success: false, error: 'Message must be an object' };
+  }
+  const obj = raw as Record<string, unknown>;
+  const type = obj.type;
+  if (typeof type !== 'string') {
+    return { success: false, error: 'Message missing "type" field' };
+  }
+  const validator = WIRE[type as ClientMessage['type']]?.validate;
+  if (!validator) {
+    return { success: false, error: `Unknown message type: ${type}` };
+  }
+  return validator(obj) as ValidationResult<ClientMessage>;
+}
+
+/** Rate-limit bucket key for a wire type — types without their own limit
+ *  share the 'default' bucket. */
+export function wireLimitKey(messageType: string): string {
+  return WIRE[messageType as ClientMessage['type']]?.limit ? messageType : 'default';
+}
+
+export function wireLimit(messageType: string): RateLimit {
+  return WIRE[messageType as ClientMessage['type']]?.limit ?? WIRE_DEFAULT_LIMIT;
+}

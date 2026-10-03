@@ -1,4 +1,4 @@
-import { CONFIG } from './config.ts';
+import { wireLimit, wireLimitKey } from './wire.ts';
 import { wallNow } from './wallClock.ts';
 
 interface RateLimitEntry {
@@ -6,14 +6,12 @@ interface RateLimitEntry {
   windowStart: number;
 }
 
-type MessageType = keyof typeof CONFIG.rateLimits | 'default';
-
 export class RateLimiter {
-  private limits: Map<string, Map<MessageType, RateLimitEntry>> = new Map();
+  private limits: Map<string, Map<string, RateLimitEntry>> = new Map();
 
   check(playerId: string, messageType: string): boolean {
-    const configKey = (messageType in CONFIG.rateLimits ? messageType : 'default') as MessageType;
-    const limit = CONFIG.rateLimits[configKey] ?? CONFIG.rateLimits.default;
+    const configKey = wireLimitKey(messageType);
+    const limit = wireLimit(configKey);
 
     let playerLimits = this.limits.get(playerId);
     if (!playerLimits) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer, pin, watch } from './harness.ts';
-import { validateMessage } from '../../src/validation.ts';
+import { validateMessage } from '../../src/wire.ts';
 
 // Host-simmed team bots ('bot:*') hurt the local player via the
 // environmentDamage claim channel with an attacker tag. Server-side

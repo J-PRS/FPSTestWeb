@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { validateMessage } from '../../src/validation.ts';
+import { validateMessage } from '../../src/wire.ts';
 import { encodePosition, decodePosition } from '../../../shared/wire.ts';
 
 // Both position lanes must reject absurd-but-finite claims: in judge mode
