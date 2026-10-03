@@ -83,7 +83,13 @@ const STARVE_LIMIT = 60;
 export const trailStats = {
   built: 0, reused: 0, noBatcher: 0, noRate: 0,
   reapedActive: 0, poolZombies: 0,
+  /** Emitters caught mid-teleport by the central jump guard — counts how
+   *  often a caller moved >EMIT_JUMP_M without resyncing (should trend 0). */
+  teleportJumps: 0,
 };
+/** An emitter that moved this far between emits is a teleport, not
+ *  travel — a legit emitter covers ≤10m/frame even at 600m/s. */
+const EMIT_JUMP_M = 30;
 // Trails are exempt from the distance-pause AND the starve-reaper's
 // delete path — membership is what `owns this system` means here.
 export const activeTrailPs = new Set<ParticleSystem>();
@@ -161,6 +167,7 @@ export function takeSystem(kind: string, build: () => ParticleSystem): ParticleS
  *  too bright, lingering" blob. `??=` matters — `?.set` on a missing
  *  vector no-ops and quarks re-reads the stale emitter.matrixWorld. */
 export function resyncEmission(ps: IParticleSystem, em: THREE.Object3D): void {
+
   const st = (ps as ParticleSystem).emissionState as {
     travelDistance: number;
     waitEmiting: number;
@@ -356,7 +363,25 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
     runBookkeeping(camOverride ?? camPos);
   }
   simParity = !simParity;
-  if (simParity) batcher?.update(dt * 2);
+  if (simParity && batcher) {
+    // Central teleport guard: emit() turns emitter travel into particle
+    // deposits along the whole jump — a caller that moves its emitter
+    // without resyncEmission streaks a dotted line across the map.
+    // Per-caller teleport() calls cover the known jumps; this is the
+    // invariant that makes every unknown/future path safe too.
+    for (const ps of batcher.systemToBatchIndex.keys()) {
+      const st = (ps as ParticleSystem).emissionState as { previousWorldPos?: THREE.Vector3 };
+      const prev = st.previousWorldPos;
+      if (!prev) continue;
+      const e = (ps as ParticleSystem).emitter.matrixWorld.elements;
+      const jx = e[12]! - prev.x, jy = e[13]! - prev.y, jz = e[14]! - prev.z;
+      if (jx * jx + jy * jy + jz * jz > EMIT_JUMP_M * EMIT_JUMP_M) {
+        resyncEmission(ps as ParticleSystem, (ps as ParticleSystem).emitter as unknown as THREE.Object3D);
+        trailStats.teleportJumps++;
+      }
+    }
+    batcher.update(dt * 2);
+  }
 }
 
 /** Pool inventory + batcher census — a trailKind whose pool keeps a dead
