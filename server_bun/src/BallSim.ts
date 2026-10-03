@@ -295,8 +295,11 @@ export class BallSim {
       } else {
         // No discontinuity this step — but silence itself desyncs a
         // long flight: periodic forced segment bounds client divergence.
+        // Kind 'segment' labels the heartbeat — the client's rubberband
+        // probe only treats fresh-anchor prediction-vs-truth as desync
+        // signal; labeling it 'bounce' drowned every resync in edge noise.
         const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
-        if (rs >= RESYNC_INTERVAL) this.segment(b, 'bounce');
+        if (rs >= RESYNC_INTERVAL) this.segment(b, 'segment');
         else this.resyncAcc.set(b.id, rs);
       }
     }

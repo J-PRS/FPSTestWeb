@@ -110,7 +110,7 @@ export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, 
   };
 }
 
-export type SegmentKind = 'bounce' | 'lunge' | 'enrage' | 'stall' | 'teleport' | 'spawn' | 'knockback' | 'hit';
+export type SegmentKind = 'bounce' | 'lunge' | 'enrage' | 'stall' | 'teleport' | 'spawn' | 'knockback' | 'hit' | 'segment';
 
 /** One integration step. `target` = the ball's committed player's position
  *  (null when nobody alive to chase). `colliders` = static map structures

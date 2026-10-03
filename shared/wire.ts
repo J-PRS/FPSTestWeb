@@ -237,7 +237,7 @@ export const SERVER_TICK_MS = 50;
 
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 
-const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit'] as const;
+const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit', 'segment'] as const;
 const segKindIdx = new Map<string, number>(SEG_KINDS.map((k, i) => [k, i]));
 
 export interface WireBallSegment {
