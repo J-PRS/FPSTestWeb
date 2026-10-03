@@ -12,6 +12,43 @@ const MAX_TICK_BACKLOG = 256 * 1024;
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
 
+  // Offset cursor (Socket.IO connection-state-recovery shape): every
+  // reliable JSON frame carries a room-scoped `ev` seq, and the last N
+  // frames sit in a journal. A reclaim presents the last seq it processed
+  // and we replay only what its dead socket missed — cheaper than a blind
+  // resnapshot and it preserves event causality. Binary lanes (ticks,
+  // ball segments) skip the journal: ticks are drop-safe and the reclaim's
+  // gameState+ballRoster already reseeds ball truth.
+  private outSeq = 0;
+  private journal: { seq: number; data: string; only?: string; exclude?: string }[] = [];
+  private static readonly JOURNAL_MAX = 1024;
+
+  private frame(msg: ServerMessage, only?: string, exclude?: string): string {
+    const seq = ++this.outSeq;
+    const data = JSON.stringify({ ...(msg as object), ev: seq });
+    this.journal.push({ seq, data, only, exclude });
+    if (this.journal.length > ConnectionManager.JOURNAL_MAX) {
+      this.journal.splice(0, this.journal.length - ConnectionManager.JOURNAL_MAX);
+    }
+    return data;
+  }
+
+  /** Reclaim replay — frames addressed to everyone or to this player that
+   *  arrived after their last processed seq. Runs before the handshake
+   *  reply so gameState remains the final word on truth. */
+  replayTo(playerId: string, ws: ServerWebSocket<WebSocketData>, fromSeq: number): number {
+    let n = 0;
+    for (const e of this.journal) {
+      if (e.seq <= fromSeq) continue;
+      if (e.only !== undefined && e.only !== playerId) continue;
+      if (e.exclude === playerId) continue;
+      ws.send(e.data);
+      n++;
+    }
+    if (n > 0) logger.info('reclaim replay', { playerId, fromSeq, replayed: n });
+    return n;
+  }
+
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
     logger.info(`Connection registered`, { playerId, total: this.connections.size });
@@ -26,9 +63,12 @@ export class ConnectionManager {
   }
 
   sendToPlayer(playerId: string, msg: ServerMessage): void {
+    // Journal BEFORE delivery — a frame aimed at a dead/grace socket is
+    // exactly what reclaim replay must find later.
+    const data = this.frame(msg, playerId);
     const ws = this.connections.get(playerId);
     if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify(msg));
+      ws.send(data);
     }
   }
 
@@ -59,7 +99,7 @@ export class ConnectionManager {
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
-    const data = JSON.stringify(msg);
+    const data = this.frame(msg, undefined, excludePlayerId);
     this.connections.forEach((ws, pid) => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) return;
       if (ws.readyState === 1) {

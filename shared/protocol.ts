@@ -39,7 +39,11 @@ export type ClientMessage =
        *  spec source too. bots overrides the spec's bot count. */
       map?: string; bots?: number;
       /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
-      transport?: string }
+      transport?: string;
+      /** Offset cursor: last reliable `ev` seq the client processed — a
+       *  reclaim presents it so the server replays only the missed frames
+       *  (Socket.IO connection-state-recovery shape). */
+      resumeSeq?: number }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; inputSeq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
@@ -130,7 +134,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string }; flags?: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -189,7 +193,7 @@ export type ServerMessage =
   | { type: 'pong'; timestamp: number }
   | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string }
   // --- Match scoreboard (team-mode rooms) --------------------------------
-  | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
+  | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { SessionManager } from '../../src/SessionManager.ts';
+import { SessionRegistry } from '../../src/sessionRegistry.ts';
 import { mkRoom } from './harness.ts';
 
 // Join-guard scenarios: the handshake is the only unauthenticated surface —
@@ -27,6 +28,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
       totalPlayers: () => playerRoom.size,
       ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 },
+      registry: new SessionRegistry(),
     }),
     playerRoom,
   };

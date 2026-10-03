@@ -5,6 +5,7 @@ import { validatePlayerId } from './validation.ts';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { isPerkId } from '../../shared/perks.ts';
+import type { SessionRegistry } from './sessionRegistry.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 
 /** Everything the socket lifecycle needs from GameServer — supplied as
@@ -19,6 +20,9 @@ export interface SessionDeps {
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
+  /** Session lifecycle state machine — owns who each playerId is; sockets
+   *  carry the seat generation it stamps so stale callbacks die by gen. */
+  registry: SessionRegistry;
 }
 
 /** Join handshake + persistent identity. Handles four join shapes:
@@ -103,7 +107,7 @@ export class SessionManager {
 
     const playerId = playerIdResult.data;
 
-    const { token, roomName, roomMode, joinMap, joinBots } = SessionManager.joinSpec(handshake);
+    const { token, roomName, roomMode, joinMap, joinBots, resumeSeq } = SessionManager.joinSpec(handshake);
 
     // A reclaim must land in the room the session was in — find by playerId
     // rather than trusting the claimed room (reconnecting to a different
@@ -113,7 +117,7 @@ export class SessionManager {
     // seat — reclaim is already authenticated by the session token.
     const reclaimRoom = this.d.roomOfPlayer(playerId);
     if (reclaimRoom) {
-      this.reclaim(ws, reclaimRoom, playerId, token);
+      this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq);
       return;
     }
 
@@ -165,16 +169,20 @@ export class SessionManager {
       specRoom.spectators.delete(playerId);
       specRoom.connections.unregister(playerId);
       this.d.specRooms.delete(playerId);
+      // The spectator session ends here — the player session that follows
+      // is a fresh generation, not a state transition.
+      this.d.registry.terminate(playerId, 'id claimed by player');
     }
 
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
+    this.d.registry.begin(playerId, room.name);
     this.seat(ws, room, playerId, handshake, idToken);
   }
 
   /** Grace-period reclaim: the seat is still reserved — cancel the removal
    *  timer and re-seat the socket, or reject on a bad token / live playerId. */
-  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined): void {
+  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined, resumeSeq: number | undefined): void {
     const existingPlayer = room.players.getPlayer(playerId);
     if (!existingPlayer) {
       logger.warn('Reclaim rejected: no player state', { playerId });
@@ -204,7 +212,11 @@ export class SessionManager {
     existingPlayer.lastSeen = Date.now();
     const oldSock = room.connections.getConnection(playerId);
     ws.data.playerId = playerId;
+    ws.data.gen = this.d.registry.reclaim(playerId, 'reclaim');
     room.connections.register(playerId, ws);
+    // Offset-cursor replay: reliable events the dead socket missed stream
+    // back BEFORE the handshake reply, so gameState remains the final word.
+    if (resumeSeq !== undefined) room.connections.replayTo(playerId, ws, resumeSeq);
     // Evict whatever still held the seat — zombie or not. Register FIRST:
     // closing the old socket fires GameServer.onClose, which must see the
     // seat already owned by ws or it re-marks the player disconnected and
@@ -227,6 +239,8 @@ export class SessionManager {
       return;
     }
     ws.data.playerId = playerId;
+    this.d.registry.begin(playerId, room.name);
+    ws.data.gen = this.d.registry.seat(playerId, true, 'spectate');
     room.spectators.add(playerId);
     this.d.specRooms.set(playerId, room);
     room.connections.register(playerId, ws);
@@ -240,6 +254,7 @@ export class SessionManager {
    *  with the same spec — the room name alone doesn't carry it. */
   private static joinSpec(handshake: Record<string, unknown>): {
     token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
+    resumeSeq: number | undefined;
   } {
     const word = (v: unknown): string => typeof v === 'string' && SessionManager.ROOM_NAME_RE.test(v) ? v : '';
     return {
@@ -249,6 +264,12 @@ export class SessionManager {
       joinMap: word(handshake.map),
       joinBots: typeof handshake.bots === 'number' && Number.isFinite(handshake.bots)
         ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
+        : undefined,
+      // Offset cursor (Socket.IO connection-state-recovery shape): the last
+      // reliable-event seq the client processed — the reclaim replays what
+      // its dead socket missed instead of resnapshotting blind.
+      resumeSeq: typeof handshake.resumeSeq === 'number' && Number.isFinite(handshake.resumeSeq)
+        ? Math.max(0, Math.floor(handshake.resumeSeq))
         : undefined,
     };
   }
@@ -283,6 +304,7 @@ export class SessionManager {
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;
     }
+    ws.data.gen = this.d.registry.seat(playerId, false, 'join');
     this.d.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);

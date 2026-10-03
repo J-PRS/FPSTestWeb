@@ -15,6 +15,7 @@ import { MapCatalog } from './mapCatalog.ts';
 import { RoomFactory } from './roomFactory.ts';
 import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
+import { SessionRegistry } from './sessionRegistry.ts';
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -25,6 +26,9 @@ export class GameServer {
   private bunServer: Server<WebSocketData> | null = null;
   readonly tickLoop: TickLoop;
   readonly sessions: SessionManager;
+  /** Session lifecycle state machine — every connect/seat/grace/reap
+   *  decision funnels through here (see sessionRegistry.ts). */
+  readonly registry = new SessionRegistry();
   private readonly maps = new MapCatalog();
   private readonly factory: RoomFactory;
   private readonly switcher: RoomSwitcher;
@@ -78,6 +82,7 @@ export class GameServer {
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       totalPlayers: () => opsTotalPlayers(this),
       ops: this.ops,
+      registry: this.registry,
     });
     this.factory = new RoomFactory({
       rooms: this.rooms,
@@ -199,19 +204,29 @@ export class GameServer {
       specRoom.spectators.delete(playerId);
       specRoom.connections.unregister(playerId);
       this.specRooms.delete(playerId);
+      this.registry.terminate(playerId, 'spectator left');
       logger.info('Spectator left', { playerId, room: specRoom.name });
       return;
     }
     const room = this.roomOfPlayer(playerId);
-    if (!room) return;
+    if (!room) {
+      // Closed mid-handshake (connecting, never seated) — no room entry
+      // exists to tear down, but the session record must not leak.
+      this.registry.terminate(playerId, 'closed before seat');
+      return;
+    }
 
     // A stale socket's close must not detach a re-seated session: RTC
     // adapters close both datachannels asynchronously, so the old
     // socket's onClose can land AFTER a reclaim already handed the seat
     // to a new socket — marking a live player disconnected and flapping
-    // the connection every reconnect cycle.
+    // the connection every reconnect cycle. The seat generation makes it
+    // a no-op by construction; the map check stays as belt-and-suspenders
+    // for sockets seated before the registry existed (adapters).
     if (room.connections.getConnection(playerId) !== ws) return;
+    if (ws.data.gen !== undefined && ws.data.gen !== this.registry.gen(playerId)) return;
 
+    this.registry.disconnect(playerId, 'socket closed');
     room.connections.unregister(playerId);
     room.rateLimiter.removePlayer(playerId);
     room.messages.onPlayerDisconnected(playerId);
@@ -330,6 +345,7 @@ export class GameServer {
   // Full teardown shared by grace expiry and idle reap — the five stores
   // and the broadcast must move together or a stale slot/token leaks.
   private removePlayerCompletely(room: Room, playerId: string, reason: string): void {
+    this.registry.terminate(playerId, reason);
     room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
     this.playerRoom.delete(playerId);
     this.ops.leaves++;

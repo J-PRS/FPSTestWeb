@@ -22,6 +22,9 @@ export interface WebSocketData {
   open?: boolean;
   /** /rtcs signalling sockets: negotiate a server-peer DataChannel. */
   rtcs?: boolean;
+  /** Seat generation stamped by SessionRegistry — a callback arriving on a
+   *  socket whose gen isn't the session's current gen is stale and dies. */
+  gen?: number;
 }
 
 export interface PlayerState {
