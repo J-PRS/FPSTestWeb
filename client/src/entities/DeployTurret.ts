@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import type { Terrain } from '../world/terrain.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 // Player-deployable sentry — the T2 base-economy seed. A tripod dome that
 // hitscan-snaps to the nearest hostile (creature or enemy bot) inside its
@@ -12,8 +13,8 @@ import type { Terrain } from '../world/terrain.js';
 // detonate your own turret. Creatures break it through the speciesKit
 // gnaw funnel (they commit to it like any candidate and chew it down).
 
-const RANGE = 42;           // acquire envelope
-const FIRE_INTERVAL = 1.25; // mini-rockets: heavier shots, longer beat
+const RANGE = DEPLOY_ITEMS.turret.range!;           // acquire envelope
+const FIRE_INTERVAL = DEPLOY_ITEMS.turret.fireInterval!; // mini-rockets: heavier shots, longer beat
 const TURN_RATE = 2.6;      // rad/s traverse — a real slew, not a snap
 const AIM_TOL = 0.18;       // must be on-target within this to fire
 const MUZZLE = new THREE.Vector3(0, 0.05, 0.95); // local to head pivot — tube mouth

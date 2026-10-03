@@ -48,29 +48,26 @@ const HP = DEPLOY_HP;
 // conforms to any slope). Hostile shells detonate on entry; friendly
 // fire passes. The emitter itself eats blast damage like any stand —
 // shelling the dome is the intended counterplay.
-export const SHIELD_RADIUS = 6;
-
-// Sentry combat envelope — mirrors the client DeployTurret constants so
-// the server sim and the visual agree on what the gun can reach.
-export const TURRET_RANGE = 42;
-export const TURRET_FIRE_INTERVAL = 1.25;
-export const TURRET_DAMAGE = 14;
-export const TURRET_UNFOLD_S = 0.45;
-// Mirrors client config.ts MINE_* — proximity fuse + blast envelope.
-export const MINE_ARM_S = 1.0;
-export const MINE_TRIGGER_DIST = 3.2;
-export const MINE_BLAST_RADIUS = 6.0;
-export const MINE_DAMAGE = 22;
-export const MINE_KNOCKBACK = 12.0;
-// Mirrors client DeployDrone: escort trades damage for following you.
-export const DRONE_RANGE = 35;
-export const DRONE_FIRE_INTERVAL = 1.6;
-export const DRONE_DAMAGE = 9;
-export const DRONE_HOVER_UP = 2.5;
-// Mirrors client DeployStation: recharge envelope.
-export const STATION_RANGE = 9;
-export const STATION_HP_RATE = 0.09;   // fraction of maxHealth per second
-export const STATION_HEAL_CD = 0.5;    // heal tick cadence
+// Combat envelopes derive from DEPLOY_ITEMS — one fact table for both
+// ends; the old per-side copies drifted (mine life 45 vs ttl 120 meant
+// clients hid a mine the server still exploded for 75s).
+export const SHIELD_RADIUS = DEPLOY_ITEMS.shield.shieldRadius!;
+export const TURRET_RANGE = DEPLOY_ITEMS.turret.range!;
+export const TURRET_FIRE_INTERVAL = DEPLOY_ITEMS.turret.fireInterval!;
+export const TURRET_DAMAGE = DEPLOY_ITEMS.turret.damage!;
+export const TURRET_UNFOLD_S = DEPLOY_ITEMS.turret.armS!;
+export const MINE_ARM_S = DEPLOY_ITEMS.mine.armS!;
+export const MINE_TRIGGER_DIST = DEPLOY_ITEMS.mine.triggerDist!;
+export const MINE_BLAST_RADIUS = DEPLOY_ITEMS.mine.blastRadius!;
+export const MINE_DAMAGE = DEPLOY_ITEMS.mine.blastDamage!;
+export const MINE_KNOCKBACK = DEPLOY_ITEMS.mine.knockback!;
+export const DRONE_RANGE = DEPLOY_ITEMS.drone.range!;
+export const DRONE_FIRE_INTERVAL = DEPLOY_ITEMS.drone.fireInterval!;
+export const DRONE_DAMAGE = DEPLOY_ITEMS.drone.damage!;
+export const DRONE_HOVER_UP = DEPLOY_ITEMS.drone.hoverUp!;
+export const STATION_RANGE = DEPLOY_ITEMS.station.range!;
+export const STATION_HP_RATE = DEPLOY_ITEMS.station.healRate!;
+export const STATION_HEAL_CD = DEPLOY_ITEMS.station.fireInterval!;
 
 /** First t∈[0,1] where the segment enters the sphere — quadratic solve,
  *  null on a miss. A segment already inside returns 0 (blocked at once). */
@@ -247,6 +244,11 @@ export class RoomDeployables {
 
   remove(id: number): void {
     if (!this.items.delete(id)) return;
+    // Dead ids must drop their rate-limit keys — otherwise every planted
+    // and destroyed item leaves a permanent entry in lastRepair.
+    for (const k of this.lastRepair.keys()) {
+      if (k.endsWith(`:${id}`)) this.lastRepair.delete(k);
+    }
     this.room.broadcast({ type: 'deployGone', id });
   }
 

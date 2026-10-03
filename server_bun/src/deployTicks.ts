@@ -55,6 +55,9 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead || pid === d.owner) continue;
       if (owner?.team && p.team === owner.team) continue;
+      // Spawn grace exempts like the sentry scan — a fresh spawn standing
+      // on a fuse shouldn't eat it before control hands over.
+      if (p.protectedUntil > simNow()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
         r.room.broadcast({ type: 'mineBoom', id: d.id, owner: d.owner, pos: { ...d.pos } });

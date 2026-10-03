@@ -5,6 +5,7 @@ import {
   MINE_RADIUS, MINE_ARM_TIME, MINE_TRIGGER_DIST, MINE_LIFE, MINE_BLAST_RADIUS,
   EMERGE_DUR,
 } from '../core/config.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm } from './swarms.js';
@@ -87,12 +88,18 @@ export class Mine implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
+  /** Self-destruct age — overlord fields thin at MINE_LIFE, but a
+   *  server-tracked deploy must live its wire ttl (a client popping at
+   *  45s left the server's 120s mine exploding invisibly). */
+  private readonly life: number;
+
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false, life = MINE_LIFE) {
     void scene;
     this.id = nextTargetId();
     // Uber = "doombloom": a bigger pod with a bigger payload — twice the
     // blast envelope, and it triggers from further out.
     this.uber = uber;
+    this.life = life;
     this.radius = uber ? MINE_RADIUS * 1.7 : MINE_RADIUS;
     this.blastRadius = uber ? MINE_BLAST_RADIUS * 2 : MINE_BLAST_RADIUS;
     this.scale = uber ? 0.4 : 0.2;
@@ -121,7 +128,7 @@ export class Mine implements Targetable, SwarmSlotOwner {
 
     const trig = this.uber ? MINE_TRIGGER_DIST * 1.5 : MINE_TRIGGER_DIST;
     if (this.armed && dist < trig) { this.detonate(); return; }
-    if (this.age > MINE_LIFE) { this.detonate(); return; }
+    if (this.age > this.life) { this.detonate(); return; }
 
     // Blink rate accelerates as the player approaches — the audible-beep
     // equivalent in pure visuals. Unarmed mines blink slow and dim.

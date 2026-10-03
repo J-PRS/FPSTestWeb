@@ -3,6 +3,7 @@ import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 // Player-deployable recharge pad — the T2 remote-inventory-station role:
 // a field post you stand beside to refill health + energy. Destructible:
@@ -114,11 +115,11 @@ export class DeployStation {
   }
 
   /** Recharge envelope — the aura ring is drawn at exactly this radius. */
-  static readonly RANGE = 9;
+  static readonly RANGE = DEPLOY_ITEMS.station.range!;
   /** Energy refill while in the envelope — 3× the ambient regen. */
   static readonly JET_RATE = 24;
   /** Health refill as a fraction of max per second (~11s to full). */
-  static readonly HP_RATE = 0.09;
+  static readonly HP_RATE = DEPLOY_ITEMS.station.healRate!;
   /** Pulse intensity 0..1 — drives the crystal spin speed + glow flare. */
   private charge = 0;
 

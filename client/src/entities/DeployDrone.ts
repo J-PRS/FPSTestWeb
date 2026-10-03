@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import type { Terrain } from '../world/terrain.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 // Player-deployable escort drone — hovers above/behind the owner's head and
 // plinks nearby enemies with the same mini-rocket plumbing the sentry uses.
@@ -9,9 +10,9 @@ import type { Terrain } from '../world/terrain.js';
 // It's a dep: candidate like every deployable — enemies can target and
 // kill it, so it buys uptime, not immunity.
 
-const RANGE = 35;           // acquire envelope
-const FIRE_INTERVAL = 1.6;  // deliberately weaker than the sentry's 1.25s
-const HOVER_UP = 2.5;       // anchor height above the owner's head
+const RANGE = DEPLOY_ITEMS.drone.range!;           // acquire envelope
+const FIRE_INTERVAL = DEPLOY_ITEMS.drone.fireInterval!;  // deliberately weaker than the sentry's 1.25s
+const HOVER_UP = DEPLOY_ITEMS.drone.hoverUp!;       // anchor height above the owner's head
 const HOVER_BACK = 0.9;     // slight back-offset — keeps it out of the crosshair
 const SPRING = 14;          // anchor pull strength — lag is emergent, not faked
 const DAMP = 5.5;           // velocity damping — settles without orbit-jitter

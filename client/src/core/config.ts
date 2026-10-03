@@ -38,6 +38,7 @@ export const LG_CHAIN_RANGE = 9.0;
 export const LG_CHAIN_DMG_SCALE = 0.5;
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
 export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
@@ -306,11 +307,14 @@ export const OVERLORD_STUN = 0.4;          // blast knockback stalls its steerin
 // Mines — the droppings. Shootable (detonating one clears it), proximity-fused.
 export const MINE_MAX = 10;             // global cap — oldest fields thin out
 export const MINE_RADIUS = 0.5;
-export const MINE_ARM_TIME = 1.0;       // seconds before it can trigger
-export const MINE_TRIGGER_DIST = 3.2;   // proximity fuse
-export const MINE_BLAST_RADIUS = 6.0;   // damage falloff radius
-export const MINE_DAMAGE_MAX = 22;      // at zero distance
-export const MINE_KNOCKBACK = 12.0;
+// Combat envelope derives from the shared belt registry — the fuse,
+// blast and damage numbers must match the server's authoritatively;
+// MINE_LIFE stays local (overlord-field balance, not the wire ttl).
+export const MINE_ARM_TIME = DEPLOY_ITEMS.mine.armS!;
+export const MINE_TRIGGER_DIST = DEPLOY_ITEMS.mine.triggerDist!;
+export const MINE_BLAST_RADIUS = DEPLOY_ITEMS.mine.blastRadius!;
+export const MINE_DAMAGE_MAX = DEPLOY_ITEMS.mine.blastDamage!;
+export const MINE_KNOCKBACK = DEPLOY_ITEMS.mine.knockback!;
 export const MINE_LIFE = 45.0;          // seconds before it fizzle-pops
 
 // Banelings — rolling suicide bombs birthed by the Overlord (was: Overlord)

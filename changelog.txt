@@ -1,3 +1,4 @@
+2026-10-01 - deployable combat envelopes moved into DEPLOY_ITEMS (one table both ends read); fixes client mines self-popping at 45s while the server kept them armed to 120s, mine fuse ignoring spawn protection, and a lastRepair key leak
 2026-10-01 - sfx voice pool is now priority-ranked FMOD-style: UI stingers (killConfirm, flagCue, hitMarker) and self sounds steal world chatter on overflow instead of being silently dropped mid-firefight
 2026-10-01 - fire-rate gate is a client-clock violation counter, not an arrival window; one fast pair (loadout-reset refire, paused-tab bunch, out-of-order stamps) admits while sustained sub-cadence macros still reject
 2026-10-01 - remote entity liveness mirrors roster every frame; a lost kill/respawn event no longer freezes _isDead (silent corpse/ghost desync)

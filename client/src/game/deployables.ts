@@ -213,7 +213,9 @@ export class Deployables {
       this.deps.scene.add(pod.nugget);
     }
     else if (kind === 'beacon') pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);
-    else pod.mine = new Mine(this.deps.scene, terrain, pos);
+    // Server-tracked life: the planted mine lives its wire ttl, not the
+    // overlord field's 45s — the server still explodes it either way.
+    else pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);
     this.pods.push(pod);
     sfx.dash();
   }
@@ -376,7 +378,7 @@ export class Deployables {
       b.unfoldDone();
       this.adopter.adoptBeacon(b, owner);
     } else {
-      const m = new Mine(this.deps.scene, terrain, at);
+      const m = new Mine(this.deps.scene, terrain, at, false, DEPLOY_ITEMS.mine.ttlS);
       m.seatOn(terrain);
       this.adopter.adoptMine(m, owner);
     }
