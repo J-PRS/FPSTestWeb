@@ -14,7 +14,7 @@
 import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
-export const PROTOCOL_VERSION = 11; // powerup pickup kinds + buff msg — stale clients' pickup tables would miss them
+export const PROTOCOL_VERSION = 12; // claimSeq + claimAck — uniform claim verdicts, no more fire-and-forget drops
 
 export interface Vec3 {
   x: number;
@@ -67,29 +67,33 @@ export type ClientMessage =
   // server drops stale ones.
   | { type: 'inputMove'; seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation }
   | { type: 'projectileDestroy'; projectileId: string; shotId?: string }
+  // claimSeq stamps the claim kinds the client wants a verdict for —
+  // every claim carrying one gets a claimAck back (applied vs rejected+
+  // reason), so a rejected claim is never indistinguishable from a lost
+  // packet. Absent = legacy fire-and-forget, no ack sent.
   // attacker: optional source tag (host-simmed bots 'bot:NAME', deployables)
   // so kill credit/feed names the real shooter instead of 'environment'.
-  | { type: 'environmentDamage'; amount: number; attacker?: string }
+  | { type: 'environmentDamage'; amount: number; attacker?: string; claimSeq?: number }
   // Client-claimed pickups (nuggets): self-only heal, server clamps the
   // amount so it can't be a cheat lever — it exists so server health stays
   // the truth instead of drifting under each nugget the client ate.
-  | { type: 'heal'; amount: number }
+  | { type: 'heal'; amount: number; claimSeq?: number }
   // Hit claim on a server-owned creature (balls are server-authoritative
   // when connected). damage is clamped server-side; kx/ky/kz is the
   // normalized knockback direction the shot imparted (server scales it
   // by weapon force itself). See server_bun/src/BallSim.ts.
-  | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
+  | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number; claimSeq?: number }
   // Same claim, but on a melee-species crawler — separate channel because
   // the two id namespaces don't overlap (crawl ids live in CreatureSim).
-  | { type: 'crawlerHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
-  | { type: 'deploy'; kind: DeployKind; position: Vec3 }
+  | { type: 'crawlerHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number; claimSeq?: number }
+  | { type: 'deploy'; kind: DeployKind; position: Vec3; claimSeq?: number }
   // Repair-tool beam tick: the server re-derives range, LOS, team and the
   // heal amount itself — the claim carries only WHICH deployable.
-  | { type: 'repair'; targetId: number }
+  | { type: 'repair'; targetId: number; claimSeq?: number }
   // One-shot skill activation (blink/dash/slam/warp/bounce): the client
   // already spent ENERGY.skillCost locally — this claim only mirrors the
   // ante into the server's shadow tank. Carries nothing else.
-  | { type: 'skillUse' }
+  | { type: 'skillUse'; claimSeq?: number }
   // Deliberate respawn (the K bind): a self-kill claim that funnels
   // through the normal death path — kill feed, respawn timer, corpse
   // charge — rather than a teleport shortcut, so a pending class/perk
@@ -174,6 +178,11 @@ export type ServerMessage =
    *  consumed inputMove seq (the same value the tick frame's inputAck
    *  field confirms every tick). */
   | { type: 'inputSync'; lastSeq: number }
+  /** Uniform claim verdict — one ack per claim that carried claimSeq.
+   *  `reason` is the server's drop cause when ok=false. The client's
+   *  pending-claim ledger classifies the rest (transport-lost,
+   *  unconfirmed) instead of guessing. */
+  | { type: 'claimAck'; kind: string; seq: number; ok: boolean; reason?: string }
   // Relayed declared-teleport — observers snap instead of interpolating
   // across the gap (interp across 50m reads as a rocket-flight glitch)
   | { type: 'teleport'; playerId: string; position: Vec3; velocity: Vec3 }

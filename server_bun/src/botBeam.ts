@@ -51,7 +51,7 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
       const d = Math.hypot(b.x - muzzle.x, b.y - muzzle.y, b.z - muzzle.z);
       if (d <= stats.aoeRadius + b.radius) {
         const dmg = isSuper(p.id) ? 300 : stats.aoeDamage;
-        const killed = h.room.ballSim.handleHit(p.id, ball, dmg);
+        const killed = h.room.ballSim.handleHit(p.id, ball, dmg).killed;
         weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
       }
     }
@@ -74,12 +74,12 @@ export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, 
     { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, !!playerId);
   if (c?.ballId !== undefined && stats) {
     const dmg = stats.directDamage || stats.aoeDamage;
-    const killed = h.room.ballSim.handleHit(id, c.ballId, dmg);
+    const killed = h.room.ballSim.handleHit(id, c.ballId, dmg).killed;
     weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
   if (c?.crawlerId !== undefined && stats) {
     const dmg = stats.directDamage || stats.aoeDamage;
-    const killed = h.room.creatureSim.handleHit(id, c.crawlerId, dmg);
+    const killed = h.room.creatureSim.handleHit(id, c.crawlerId, dmg).killed;
     weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
 }

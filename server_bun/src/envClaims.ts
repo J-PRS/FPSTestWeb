@@ -1,4 +1,4 @@
-import type { ClientMessage } from './types.ts';
+import type { ClientMessage, ClaimVerdict } from './types.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { logger } from './logger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
@@ -20,9 +20,9 @@ const markEnvSeen = (id: string): boolean => {
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
   // clamped so it can never be aimed at another player or one-shot anyone.
-export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): void {
+export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): ClaimVerdict {
     const player = h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) return 'gone';
     h.hb('envdmg');
     if (markEnvSeen(playerId)) {
       logger.warn('First envDamage claim received', { playerId, amount: msg.amount, attacker: msg.attacker });
@@ -47,6 +47,7 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     const result = h.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     h.applyHit(attacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
+    return true;
   }
 
   /** Free-form heal claims still need a cadence — without a credit gate
@@ -57,14 +58,14 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
   // (local nuggets in non-team rooms have no server backing). No
   // broadcast: health rides the next tickUpdate; forceSend makes sure
   // it isn't delta-suppressed.
-export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
+export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): ClaimVerdict {
     const player = h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) return 'gone';
     const now = Date.now();
-    if ((h.lastHeal.get(playerId) ?? 0) > now) return;
+    if ((h.lastHeal.get(playerId) ?? 0) > now) return 'cooldown';
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
     if (h.deps.teams) {
-      if (player.healCredit <= 0) return;
+      if (player.healCredit <= 0) return 'nocredit';
       const applied = Math.min(heal, player.healCredit);
       player.healCredit -= applied;
       healPool(player, applied);
@@ -74,5 +75,6 @@ export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMess
     h.lastHeal.set(playerId, now + 1500); // a heal that landed sets the cadence; a refused one doesn't
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     logger.info('Player healed', { playerId, heal, health: player.health });
+    return true;
   }
 

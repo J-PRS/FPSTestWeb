@@ -79,6 +79,11 @@ function optShotId(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 && v.length <= 40 ? v : undefined;
 }
 
+/** Claim verdict cursor — the seq the client wants a claimAck for. */
+function optClaimSeq(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffffffff ? v : undefined;
+}
+
 function optVec(value: unknown): OptVec {
   if (value === undefined) return { ok: true };
   const r = validateVec3(value);
@@ -214,14 +219,14 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     // validation is the gate that actually strips hostile payloads.
     const attacker = typeof obj.attacker === 'string' && /^[\w: .-]{1,32}$/.test(obj.attacker)
       ? obj.attacker : undefined;
-    return { success: true, data: { type: 'environmentDamage', amount: obj.amount, attacker } };
+    return { success: true, data: { type: 'environmentDamage', amount: obj.amount, attacker, claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   heal: (obj) => {
     if (!isFiniteNumber(obj.amount)) {
       return { success: false, error: 'amount must be a finite number' };
     }
-    return { success: true, data: { type: 'heal', amount: obj.amount } };
+    return { success: true, data: { type: 'heal', amount: obj.amount, claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   creatureHit: (obj) => {
@@ -234,7 +239,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
     const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
     const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
-    return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
+    return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   crawlerHit: (obj) => {
@@ -247,7 +252,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
     const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
     const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
-    return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
+    return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   deploy: (obj) => {
@@ -257,13 +262,20 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     }
     const dpos = validateVec3(obj.position);
     if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
-    return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data } };
+    return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
+  },
+
+  repair: (obj) => {
+    if (!isFiniteNumber(obj.targetId) || !Number.isInteger(obj.targetId) || obj.targetId < 0) {
+      return { success: false, error: 'targetId must be a non-negative integer' };
+    }
+    return { success: true, data: { type: 'repair', targetId: obj.targetId, claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   // Mirror-only claim: the server re-derives the energy ante itself —
   // the message deliberately carries no amount or skill id.
-  skillUse: () => {
-    return { success: true, data: { type: 'skillUse' } };
+  skillUse: (obj) => {
+    return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq) } };
   },
 
   snapshotRequest: () => {

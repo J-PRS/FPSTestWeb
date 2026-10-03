@@ -6,7 +6,7 @@
  * teardown on death/leave/match-reset. Without this layer a cheater could
  * carpet the map — there was previously no server record at all.
  */
-import type { Vec3 } from './types.ts';
+import type { Vec3, ClaimVerdict } from './types.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -98,25 +98,26 @@ export class RoomDeployables {
   /** Client claims a plant. Validates kind, per-player cap, and that the
    *  drop point is near the planter — the deploy anim throws the pod a few
    *  meters, not across the map. */
-  handleDeploy(playerId: string, kind: string, pos: Vec3): void {
+  handleDeploy(playerId: string, kind: string, pos: Vec3): ClaimVerdict {
     const player = this.room.players.getPlayer(playerId);
-    if (!player || player.isDead || !KINDS.has(kind as DeployKind)) return;
+    if (!player || player.isDead) return 'gone';
+    if (!KINDS.has(kind as DeployKind)) return 'badkind';
     const k = kind as DeployKind;
     // Pack gear costs belt charges — the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
     if (player.beltCharges < DEPLOY_COST) {
       logger.debug('Deploy blocked: dry belt', { owner: playerId, kind: k });
-      return;
+      return 'drybelt';
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
-    if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return;
+    if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return 'toofar';
     player.beltCharges -= DEPLOY_COST;
     // Nugget: no planted item — the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
     // grab is first-come — a fast enemy can steal the thrower's change.
     if (k === 'nugget') {
       this.room.pickups?.spawn({ ...pos }, 'gem', NUGGET_ARM_S);
-      return;
+      return true;
     }
     const owned = [...this.items.values()].filter((d) => d.owner === playerId && d.kind === k);
     // At cap: recycle the oldest rather than refuse — Tribes remote-arms
@@ -133,6 +134,7 @@ export class RoomDeployables {
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team });
+    return true;
   }
 
   /** Owner death clears their field — no orphaned turrets farming kills
@@ -220,27 +222,28 @@ export class RoomDeployables {
    *  overcharge armor to REPAIR_ARMOR_MULT×. Server re-derives distance,
    *  LOS, team and the heal amount — the claim names a target, nothing
    *  else. */
-  repair(playerId: string, targetId: number): void {
+  repair(playerId: string, targetId: number): ClaimVerdict {
     const d = this.items.get(targetId);
     const p = this.room.players.getPlayer(playerId);
-    if (!d || !p || p.isDead) return;
+    if (!d || !p || p.isDead) return 'gone';
     // Friendly only: own gear always; teammates' gear when teams exist.
     if (p.team && d.owner !== playerId) {
       const owner = this.room.players.getPlayer(d.owner);
-      if (owner?.team !== p.team) return;
-    } else if (!p.team && d.owner !== playerId) return;
+      if (owner?.team !== p.team) return 'enemy';
+    } else if (!p.team && d.owner !== playerId) return 'enemy';
     const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
-    if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return; // 1.5× slack
-    if (!losClear(this, p.position, d.pos)) return;
+    if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return 'range'; // 1.5× slack
+    if (!losClear(this, p.position, d.pos)) return 'los';
     const key = `${playerId}:${targetId}`;
     const now = simNow() / 1000;
-    if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return;
+    if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return 'cooldown';
     this.lastRepair.set(key, now);
     const hpCap = HP[d.kind];
     const healed = Math.min(REPAIR_HEAL_PER_TICK, hpCap - d.hp);
     d.hp += healed;
     d.armor = Math.min(REPAIR_ARMOR_MULT * hpCap, d.armor + (REPAIR_HEAL_PER_TICK - healed));
     this.sendHp(d, playerId);
+    return true;
   }
 
   remove(id: number): void {

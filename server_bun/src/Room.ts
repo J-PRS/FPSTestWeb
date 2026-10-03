@@ -492,7 +492,7 @@ export class Room {
       drainEnergy: (pid, n) => this.moveSim.drainEnergy(pid, n),
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.
-      onSkillUse: (pid) => this.moveSim.drainEnergy(pid, ENERGY.skillCost),
+      onSkillUse: (pid) => this.moveSim.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
       energyOf: (pid) => this.moveSim.energyOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy) => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);

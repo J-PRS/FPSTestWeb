@@ -24,7 +24,7 @@ import {
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import type { ServerMessage, Vec3 } from './types.ts';
+import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import { aoeDamage } from '../../shared/combat.ts';
@@ -234,19 +234,19 @@ export class CreatureSim {
 
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the
    *  real validation is anticheat-phase). Returns whether it killed. */
-  handleHit(playerId: string, id: number, damage: number): boolean {
+  handleHit(playerId: string, id: number, damage: number): HitVerdict {
     const c = this.crawlers.get(id);
-    if (c?.dead) return false;
+    if (c?.dead) return { killed: false, reason: 'deadball' };
     if (!c || !this.field) {
       logger[this.field ? 'debug' : 'warn']('crawlerHit dropped: unknown id', { playerId, id });
-      return false;
+      return { killed: false, reason: 'unknown' };
     }
     const claimer = this.players.getPlayer(playerId);
-    if (!claimer) return false;
+    if (!claimer) return { killed: false, reason: 'noclaimer' };
     const d2 = (claimer.position.x - c.x) ** 2 + (claimer.position.y - c.y) ** 2 + (claimer.position.z - c.z) ** 2;
     if (d2 > 600 * 600) {
       logger.warn('crawlerHit dropped: out of range', { playerId, id });
-      return false;
+      return { killed: false, reason: 'range' };
     }
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
     const dead = isFlyer(c)
@@ -263,7 +263,7 @@ export class CreatureSim {
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
-    return dead;
+    return { killed: dead };
   }
 
   private kill(c: SimBeing, by?: string): void {

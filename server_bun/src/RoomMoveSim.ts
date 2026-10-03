@@ -249,9 +249,11 @@ export class RoomMoveSim {
   }
 
   /** Energy burns outside the input stream — shield damage soak. */
-  drainEnergy(playerId: string, amount: number): void {
+  drainEnergy(playerId: string, amount: number): boolean {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.energy = Math.max(0, sh.energy - amount);
+    if (!sh) return false;
+    sh.energy = Math.max(0, sh.energy - amount);
+    return true;
   }
 
   /** Modeled tank level — brains read this for jet/skill gating. */

@@ -27,7 +27,7 @@ import {
 } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import type { ServerMessage, Vec3 } from './types.ts';
+import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
@@ -220,7 +220,7 @@ export class BallSim {
   }
 
   /** creatureHit claim — BallCombat does the lenient clamps + impulse cap. */
-  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): boolean {
+  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): HitVerdict {
     return this.combat.handleHit(playerId, id, damage, kx, ky, kz);
   }
 

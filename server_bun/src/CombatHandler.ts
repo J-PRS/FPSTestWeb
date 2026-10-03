@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, Vec3 } from './types.ts';
+import type { ClientMessage, ServerMessage, Vec3, ClaimVerdict } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { POWERUP } from '../../shared/pickups.ts';
@@ -343,8 +343,8 @@ export class CombatHandler {
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
   // clamped so it can never be aimed at another player or one-shot anyone.
-  handleEnvironmentDamage(playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): void {
-    handleEnvironmentDamage(this, playerId, msg);
+  handleEnvironmentDamage(playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): ClaimVerdict {
+    return handleEnvironmentDamage(this, playerId, msg);
   }
 
   /** Heal claim cadence gate — see envClaims.handleHeal. */
@@ -352,8 +352,8 @@ export class CombatHandler {
 
   // Client-claimed heal — self-only; team-mode needs a server-granted
   // credit, elsewhere the claim stays free-form.
-  handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
-    handleHeal(this, playerId, msg);
+  handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): ClaimVerdict {
+    return handleHeal(this, playerId, msg);
   }
 
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {

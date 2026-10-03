@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState } from './types.ts';
+import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler, type CombatDeps } from './CombatHandler.ts';
@@ -72,10 +72,11 @@ export interface RoomInfo {
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;
-  /** Deploy claim sink — Room.deployables.handleDeploy. */
-  onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
+  /** Deploy claim sink — Room.deployables.handleDeploy. The return is
+   *  the claim verdict the claimant sees in its claimAck. */
+  onDeploy?: (playerId: string, kind: string, pos: Vec3) => ClaimVerdict;
   /** Repair-beam claim sink — Room.deployables.repair. */
-  onRepair?: (playerId: string, targetId: number) => void;
+  onRepair?: (playerId: string, targetId: number) => ClaimVerdict;
   /** AOE blast sink for deployables — Room.deployables.applyBlast. */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
   pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
@@ -84,7 +85,7 @@ export interface RoomInfo {
   preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
   influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
-  onSkillUse?: (playerId: string) => void;
+  onSkillUse?: (playerId: string) => ClaimVerdict;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
   /** Returns false when the event is stale (seq regression on an
@@ -191,6 +192,17 @@ export class MessageHandler {
     const h = this.roomInfo.health;
     if (h) h.set(key, (h.get(key) ?? 0) + n);
   }
+
+  /** Uniform claim verdict — one ack per claim that carried claimSeq;
+   *  claims without one stay legacy fire-and-forget (bot paths, old
+   *  clients). Rejects bump the heartbeat so a massed drop pattern
+   *  shows up on /metrics before any single client reports it. */
+  private claimAck(id: string, kind: string, seq: number | undefined, verdict: ClaimVerdict): void {
+    if (seq === undefined) return;
+    const ok = verdict === true;
+    if (!ok) this.hb(`claimrej.${kind}`);
+    this.sendToPlayer(id, { type: 'claimAck', kind, seq, ok, ...(ok ? {} : { reason: verdict }) });
+  }
   hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
     if (h && v > (h.get(key) ?? 0)) h.set(key, Math.round(v * 10) / 10);
@@ -225,17 +237,19 @@ export class MessageHandler {
       jump: (id, m) => this.relayPresenceEvent(id, m),
       jetpack: (id, m) => this.relayPresenceEvent(id, m),
       projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m),
-      environmentDamage: (id, m) => this.combat.handleEnvironmentDamage(id, m),
-      heal: (id, m) => this.combat.handleHeal(id, m),
-      deploy: (id, m) => this.roomInfo.onDeploy?.(id, m.kind, m.position),
-      repair: (id, m) => this.roomInfo.onRepair?.(id, m.targetId),
-      skillUse: (id) => this.roomInfo.onSkillUse?.(id),
+      environmentDamage: (id, m) => this.claimAck(id, 'environmentDamage', m.claimSeq, this.combat.handleEnvironmentDamage(id, m)),
+      heal: (id, m) => this.claimAck(id, 'heal', m.claimSeq, this.combat.handleHeal(id, m)),
+      deploy: (id, m) => this.claimAck(id, 'deploy', m.claimSeq, this.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
+      repair: (id, m) => this.claimAck(id, 'repair', m.claimSeq, this.roomInfo.onRepair?.(id, m.targetId) ?? 'gone'),
+      skillUse: (id, m) => this.claimAck(id, 'skillUse', m.claimSeq, this.roomInfo.onSkillUse?.(id) ?? 'gone'),
       respawn: (id) => this.combat.respawnRequest(id),
       creatureHit: (id, m) => {
-        this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
+        const v = this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
+        this.claimAck(id, 'creatureHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
       },
       crawlerHit: (id, m) => {
-        this.creatureSim?.handleHit(id, m.id, m.damage);
+        const v = this.creatureSim?.handleHit(id, m.id, m.damage);
+        this.claimAck(id, 'crawlerHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
       },
       inputMove: (id, m) => {
         const p = this.playerManager.getPlayer(id);

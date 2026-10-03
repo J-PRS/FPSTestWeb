@@ -120,3 +120,11 @@ export interface PlayerState {
    *  to keep the client's HUD and state-hash view converged). */
   healthEchoAt: number;
 }
+
+/** Uniform claim verdict — `true` = applied/accepted, a string = the
+ *  server's drop reason (echoed to the claimant inside claimAck). */
+export type ClaimVerdict = true | string;
+
+/** Creature-hit claim verdict — `killed` feeds kill-edge telemetry,
+ *  `reason` names the drop when the claim never touched the sim. */
+export interface HitVerdict { killed: boolean; reason?: string }

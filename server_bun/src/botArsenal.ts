@@ -122,7 +122,7 @@ export class BotArsenal implements BeamHost {
         const stats = getWeaponStats(WeaponType.Melee);
         const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
         if (bug && stats && Math.hypot(bug.x - muzzle0.x, bug.y - muzzle0.y, bug.z - muzzle0.z) <= stats.aoeRadius + 1.4) {
-          const killed = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage);
+          const killed = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage).killed;
           weaponStats.record(this.room.mode, `w${wt0}:prey`, stats.aoeDamage, killed, true);
         }
         this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
