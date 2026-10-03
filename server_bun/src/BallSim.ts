@@ -59,13 +59,9 @@ export class BallSim {
    *  extrapolate a stale leg for ~1.2s (the rubberband storm). */
   private broadcastBinaryReliable: (data: Uint8Array) => void;
   players: PlayerManager; // public — ballSpawn target checks read the roster
-  private timer: ReturnType<typeof setInterval> | null = null;
   simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
-  private lastTickAt = 0;
-  // setInterval under load fires LATE (measured +11ms avg) — stepping once
-  // per fire makes sim time run ~18% behind wall clock, and every client
-  // replay overshoots by that much. Accumulate real elapsed time and catch
-  // up in whole 50ms cells so sim time tracks wall time.
+  // The room tick feeds real elapsed dt; whole-cell catch-up keeps sim
+  // time tracking wall time even when a tick arrives early or late.
   private tickAcc = 0;
   private combat: BallCombat;
   private static readonly TICK_CATCHUP_CAP = 0.25; // don't spiral on a 1s hiccup
@@ -96,7 +92,7 @@ export class BallSim {
     });
   }
 
-  /** Load heightmap from disk and start the tick loop. */
+  /** Load heightmap from disk — standalone hosts (demos) without a Room. */
   async start(heightmapPath: string): Promise<void> {
     // Bun.file is Bun-only; the P2P host imports this module type-only in
     // the browser, where Bun is undefined — read it via globalThis so the
@@ -114,16 +110,12 @@ export class BallSim {
    *  runs are reproducible; the wire only carries resolved outcomes. */
   rng: () => number = Math.random;
 
-  /** Attach an already-loaded heightfield and start the tick loop — rooms
-   *  share one parsed field rather than re-reading the file each. */
+  /** Attach an already-loaded heightfield — rooms share one parsed field
+   *  rather than re-reading the file each. The room tick drives step();
+   *  the sim owns no clock of its own. */
   attachField(field: Heightfield): void {
     this.field = field;
-    // Re-attach on map rotation: clear the old loop or each swap adds
-    // another interval and the sim ticks N× real time.
-    if (this.timer) clearInterval(this.timer);
-    this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
-    this.lastTickAt = performance.now();
-    logger.info('BallSim started', { heightmap: `${field.size}x${field.size}`, fp: hmFingerprint(field) });
+    logger.info('BallSim field attached', { heightmap: `${field.size}x${field.size}`, fp: hmFingerprint(field) });
   }
 
   static parseHeightmap(buf: Uint8Array): Heightfield {
@@ -131,8 +123,9 @@ export class BallSim {
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    // No clock to clear — the room tick owns the cadence. Kept for the
+    // room-teardown call site.
+    this.tickAcc = 0;
   }
 
   get ballCount(): number {
@@ -188,7 +181,7 @@ export class BallSim {
       velocity: { x: b.vx, y: b.vy, z: b.vz },
       enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
       // Full-sim resync: the predictors run the same integrator, so the
-      // timers ride along or a client's 20s timeout / stall breaker drifts
+      // sim clock rides along or a client's 20s timeout / stall breaker drifts
       // off the server's (heartbeats would otherwise keep resetting them).
       et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce,
       t: this.simTime,
@@ -245,14 +238,8 @@ export class BallSim {
     }
   }
 
-  private tick(): void {
-    const now = performance.now();
-    this.step(Math.min(now - this.lastTickAt, 1000) / 1000);
-    this.lastTickAt = now;
-  }
-
-  /** Drive the sim manually — scenario tests and warp soaks step it
-   *  deterministically (the wall interval can't keep pace at 400x). */
+  /** Step by real elapsed dt — the room tick calls this once per fire;
+   *  scenario tests and warp soaks drive it directly (sim-time ≠ wall). */
   step(dt: number): void {
     if (!this.field || this.dormant) return;
     this.tickAcc += dt;

@@ -30,8 +30,8 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // balls pop on pinned bots — leaking damage into unrelated scenarios.
   const room = new Room('t', field, mode,
     resolveMapSpec({ balls: { base: 0, perPlayer: 0, max: 0 }, ...spec }), moveAuthority);
-  // BallSim self-drives on a wall-clock setInterval like CreatureSim —
-  // stop it so step() owns the cadence deterministically.
+  // Wildlife sims register in room.sims — the step helper below owns
+  // their cadence deterministically.
   room.ballSim.stop();
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
@@ -52,13 +52,11 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
   return [ps[0]!, ps[1]!];
 }
 
-/** Step the whole room N sim-ticks. CreatureSim self-drives on a wall-clock
- *  setInterval in production — tests step it deterministically instead. */
+/** Step the whole room N sim-ticks — ball/creature sims ride room.sims
+ *  like in production, so this drives the exact same ordering. */
 export function step(room: Room, ticks: number, dt = 0.05): void {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) s.tick(dt);
-    room.creatureSim.step(dt);
-    room.ballSim.step(dt);
   }
 }
 

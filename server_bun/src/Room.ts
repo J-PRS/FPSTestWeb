@@ -476,6 +476,10 @@ export class Room {
   // server-side systems (deployables, generators) register here instead
   // of editing the tick loop.
   private registerSims(): void {
+    // World sims step first — bots and downstream systems see post-step
+    // wildlife positions inside the same tick.
+    this.sims.push({ tick: (dt) => this.ballSim.step(dt) });
+    this.sims.push({ tick: (dt) => this.creatureSim.step(dt) });
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
     if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });

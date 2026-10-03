@@ -52,9 +52,7 @@ export class CreatureSim {
   private sendTo: ((playerId: string, msg: ServerMessage) => void) | null = null;
   private edgeSeq = new Map<number, number>();
   players: PlayerManager;
-  private timer: ReturnType<typeof setInterval> | null = null;
   simTime = 0;
-  private lastTickAt = 0;
   private tickAcc = 0;
   private static readonly TICK_CATCHUP_CAP = 0.25;
 
@@ -102,17 +100,16 @@ export class CreatureSim {
     });
   }
 
+  /** The room tick drives step(); the sim owns no clock of its own. */
   attachField(field: Heightfield): void {
     this.field = field;
-    if (this.timer) clearInterval(this.timer);
-    this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
-    this.lastTickAt = performance.now();
-    logger.info('CreatureSim started', { fp: field.size });
+    logger.info('CreatureSim field attached', { fp: field.size });
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    // No clock to clear — the room tick owns the cadence. Kept for the
+    // room-teardown call site.
+    this.tickAcc = 0;
   }
 
   get count(): number { return this.crawlers.size; }
@@ -266,8 +263,8 @@ export class CreatureSim {
     if (by) this.onKilled?.(by, pos);
   }
 
-  /** Drive the sim manually — tests and embedded hosts step it
-   *  deterministically instead of waiting on the wall-clock interval. */
+  /** Step by real elapsed dt — the room tick calls this once per fire;
+   *  tests and embedded hosts drive it directly (sim-time ≠ wall). */
   step(dt: number): void {
     if (!this.field || this.dormant) return;
     this.tickAcc += dt;
@@ -295,29 +292,4 @@ export class CreatureSim {
     return false;
   }
 
-  private tick(): void {
-    if (!this.field || this.dormant) return;
-    const now = performance.now();
-    this.tickAcc += Math.min(now - this.lastTickAt, 1000) / 1000;
-    this.lastTickAt = now;
-    this.tickAcc = Math.min(this.tickAcc, CreatureSim.TICK_CATCHUP_CAP);
-    if (this.tickAcc < TICK_DT) return;
-
-    const alive = this.alivePlayers();
-    if (alive.length === 0 && !this.anyTargeted()) { this.tickAcc = 0; return; }
-
-    // Drip-feed each declared species toward its own spec cap.
-    for (const [species, cap] of Object.entries(this.pops)) {
-      if (cap > 0 && this.aliveCount(species) < cap && alive.length) {
-        const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
-        this.spawnCrawler(near, species);
-      }
-    }
-
-    while (this.tickAcc >= TICK_DT) {
-      this.tickAcc -= TICK_DT;
-      this.simTime += TICK_DT;
-      this.brain.stepAll(this.crawlers.values(), alive);
-    }
-  }
 }
