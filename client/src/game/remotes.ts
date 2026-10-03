@@ -224,10 +224,10 @@ function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayer
   // 'dummy' is the ?dummy debug body — gameLoop ticks it from a closure,
   // so pruning it would leave a disposed model animating forever.
   deps.world.remotePlayers.prune(
-    (id) => isBotId(id) || id === 'dummy' || players.has(id),
+    (id) => isBotId(id) || id.startsWith('dummy') || players.has(id),
     // Bots/dummies keep their body across death+respawn — the death
     // shrink must NOT reap them or they respawn invisible and off-board.
-    (id) => isBotId(id) || id === 'dummy',
+    (id) => isBotId(id) || id.startsWith('dummy'),
   );
 }
 

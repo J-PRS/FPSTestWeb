@@ -641,7 +641,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // ?dummy debug remote — pin it in front of the camera and tick it
     const dummy = deps.world.remotePlayers.get('dummy');
     const dummyTick = deps.getDummyTick();
-    if (dummy && dummyTick) { dummyTick(dt); dummy.tick(dt); }
+    if (dummyTick) { dummyTick(dt); if (dummy) dummy.tick(dt); }
 
     hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
