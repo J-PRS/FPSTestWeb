@@ -1,3 +1,4 @@
+2026-10-03 - trailParticles.ProjectileTrail: emit-time jump cut too (prevPos->pos bridge refused past ~0.25s travel); the declared-teleport skipSeg stays for the explicit case.
 2026-10-03 - vfx overhaul diagnosis + P0/P1: emission-by-movement is the streak root class (report _reports/2026.10.03-vfx-overhaul.md). Lifecycle invariants pinned in ribbonTrail tests; QuarksTrail.emitSegment now cuts deposits on discontinuity itself (previousWorldPos delta, emitCuts counter) instead of relying on callers' teleport().
 2026-10-03 - netbot.test: dropped-socket rejoin test runs 4-bot dm (FFA) - two CTF hunters could sit corners >20s; FFA engages near-instantly. 3x runs all pass in ~5s.
 2026-10-03 - viewmodel: procedural (unbaked) is the default weapon look; baked GLBs only load behind ?bake (gunlab A/B). ?nobake still honored.

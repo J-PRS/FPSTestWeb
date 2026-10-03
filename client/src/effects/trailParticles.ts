@@ -68,9 +68,13 @@ export class ProjectileTrail {
   // slow shells and fast slugs get the same particle density
   emitSegment(): void {
     if (this.skipSeg) { this.skipSeg = false; return; }
-    const { pos, prevPos } = this.host;
+    const { pos, prevPos, vel } = this.host;
     const trailDist = pos.distanceTo(prevPos);
     if (trailDist < 1e-6) return;
+    // Jump cut lives inside emit, not in the caller — a teleport the host
+    // forgot to declare used to bridge prevPos→pos with a straight line.
+    const jump = vel.length() * 0.25 + 12;
+    if (trailDist > jump) { this.accum = 0; return; }
     const spacing = 1 / this.host.config.trailParticlesPerUnit;
     this.accum += trailDist;
     while (this.accum >= spacing) {
