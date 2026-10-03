@@ -261,6 +261,25 @@ lum = emit_px.max(axis=1)
 wear = em * np.clip(lum * 6.0 - 0.1, 0, 1) * 1.6
 out = np.clip(emit_px + dust - grime + wear[:, None] * (1.0 - emit_px), 0, 1)
 
+# Standalone maps on the same atlas: _edge = the wear mask itself (thin rim +
+# splotchy wide wear, before the composite), _grime = the AO/crease shading
+# factor. The shader samples them separately from the baked albedo so the
+# wear band stays tunable at runtime.
+def dump_gray(name, plane):
+    g = np.flipud(plane.reshape(H, W))
+    gim = bpy.data.images.new(name, width=W, height=H, alpha=False)
+    gim.colorspace_settings.name = 'Non-Color'
+    px4 = np.repeat(g[:, :, None], 4, axis=2)
+    px4[:, :, 3] = 1.0
+    gim.pixels[:] = px4.ravel()
+    gim.update()
+    gim.filepath_raw = os.path.abspath(out_prefix + name + '.png')
+    gim.file_format = 'PNG'
+    gim.save()
+    bpy.data.images.remove(gim)
+dump_gray('_edge', em)
+dump_gray('_grime', (0.35 + 0.65 * ao2) * (1.0 - 0.30 * concave))
+
 # No speckle — JP's refs are smooth mottled metal; random flecks read as noise.
 
 # Mild lift — the median normalization already lands us near mid-tone;
