@@ -72,6 +72,8 @@ export const BOT_TUNING = {
     gainedFloor: 0.4,    // fraction of own travel a run must close
     eScoreEscape: 12,    // E-score budget that exempts the floor
     apexGd: 220,         // m — last-leg apex setup radius
+    diveAgl: 25,         // m AGL — runner this high aims the descent at the objective
+    diveGlideK: 4,       // objective within altitude*this → in glide range
     apexMax: 40,         // m — max banked apex altitude credited
     apexW: 0.8,          // apex bonus weight
     climbTaxRise: 4,     // m — landings above this get taxed

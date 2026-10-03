@@ -1,3 +1,4 @@
+2026-10-01 - Runner ballistic descent aims at the objective: capper apex now lands ON the stand (surreal grab 72.9→45.2s, carry 31→23s)
 2026-10-01 - WIRE table: one entry per client message type (validate + rate limit + handler) in server_bun/src/wire.ts; VALIDATORS/config.rateLimits/handlers tables merged
 2026-10-01 - Room tick feeds measured elapsed dt (not nominal) — sim clocks track wall time; late heightmap attach covers creatureSim too; 30s networked simClock soak added
 2026-10-01 - One sim clock: BallSim/CreatureSim lose private setIntervals and ride room.sims — wildlife steps before bots inside the room tick

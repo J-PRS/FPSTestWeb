@@ -59,6 +59,21 @@ export class BotLines {
     this.lastY = pos.y;
     if (gd < T.lines.minGd) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitGd = Infinity; return dest; }
 
+    // Ballistic descent aims at the objective itself: a runner high
+    // over the approach doesn't need a terrain pocket — steering at the
+    // flag converts the apex into a landing ON the stand instead of
+    // touching down a field away and walking the last leg (surreal
+    // autopsy: a clean 300m apex landed ~150m off-target because the
+    // planner kept committing downhill pockets under the glide).
+    const od0 = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
+    const objIsDest = ctx.objective && Math.hypot(ctx.objective.x - dest.x, ctx.objective.z - dest.z) < 40;
+    if (ctx.runner && ctx.objective && objIsDest && pos.y - ctx.groundY(pos.x, pos.z) > T.lines.diveAgl && od0 < pos.y * T.lines.diveGlideK) {
+      this.wp = { x: ctx.objective.x, y: ctx.objective.y, z: ctx.objective.z };
+      this.wpGoal = { ...dest };
+      this.lineT = T.lines.commitS;
+      return this.wp;
+    }
+
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > T.lines.redest : true;
     if (this.wp && this.lineT > 0 && wpD > T.lines.arrive && !drifted) return this.wp;
