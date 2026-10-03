@@ -62,4 +62,52 @@ describe('RibbonTrail pooling + slots', () => {
     expect(r.done).toBe(true); // no samples = nothing to draw
     r.dispose();
   });
+
+  // ---- lifecycle invariants pinned before the P1/P2 restructure ----
+  // These describe the contract the overhaul keeps, not the bugs it kills.
+
+  it('a position discontinuity cuts the strip instead of drawing a chord', () => {
+    const r = RibbonTrail.acquire(scene, { color: 0xff0000 });
+    r.push(pos(0), vel());
+    r.push(pos(1), vel());
+    // ~200m jump in one push — far past the per-push travel guard.
+    r.push(new THREE.Vector3(200, 0, 0), vel());
+    const internal = r as unknown as { count: number };
+    expect(internal.count).toBeLessThanOrEqual(1); // strip restarted, no chord
+    r.dispose();
+  });
+
+  it('push after dispose counts a zombie and writes nothing', () => {
+    const r = RibbonTrail.acquire(scene, { color: 0xff0000 });
+    r.dispose();
+    const before = RibbonTrail.zombiePushes;
+    r.push(pos(5), vel());
+    expect(RibbonTrail.zombiePushes).toBe(before + 1);
+  });
+
+  it('double dispose is safe — the pool never hands one ribbon to two owners', () => {
+    const r = RibbonTrail.acquire(scene, { color: 0xff0000 });
+    r.dispose();
+    r.dispose(); // inPool guard — a second push would double-list it
+    const a = RibbonTrail.acquire(scene, { color: 0x00ff00 });
+    const b = RibbonTrail.acquire(scene, { color: 0x0000ff });
+    expect(a).not.toBe(b);
+    expect(slot(a)).not.toBe(slot(b));
+    a.dispose();
+    b.dispose();
+  });
+
+  it('done ribbons the owner stopped ticking get swept as stale', () => {
+    const r = RibbonTrail.acquire(scene, { color: 0xff0000, life: 0.05 });
+    r.push(pos(0), vel());
+    r.push(pos(1), vel());
+    r.stop();
+    for (let i = 0; i < 20 && !r.done; i++) r.update(0.05);
+    expect(r.done).toBe(true);
+    // Owner walked away without dispose() — sweepStale is the reaper.
+    (r as unknown as { lastUpdateAt: number }).lastUpdateAt = 0;
+    const before = RibbonTrail.reapedStale;
+    RibbonTrail.sweepStale(1);
+    expect(RibbonTrail.reapedStale).toBe(before + 1);
+  });
 });

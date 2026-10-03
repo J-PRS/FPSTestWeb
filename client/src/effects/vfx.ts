@@ -304,7 +304,22 @@ export class QuarksTrail {
     if (!this.ps) return;
     this.segCount++;
     const { pos, vel, config } = this.host;
-    this.ps.emitter.position.copy(pos);
+    // Emit-time jump cut — the deposit is the segment the emitter
+    // traveled, so ANY discontinuity (teleport, resync sweep, correction
+    // glide) has to be refused HERE, inside emit, not left to every
+    // caller remembering teleport(). Same shape as RibbonTrail.push's
+    // guard: ~0.25s of travel + slack reads as a jump, not motion.
+    const em = this.ps.emitter;
+    const spd = vel.length();
+    const jump = spd * 0.25 + 12;
+    // Measure against what emit() actually deposits from —
+    // previousWorldPos, not the emitter's last position write.
+    const pwp = (this.ps.emissionState as { previousWorldPos?: THREE.Vector3 }).previousWorldPos;
+    const ax = pwp?.x ?? em.position.x, ay = pwp?.y ?? em.position.y, az = pwp?.z ?? em.position.z;
+    const jx = pos.x - ax, jy = pos.y - ay, jz = pos.z - az;
+    const jumped = jx * jx + jy * jy + jz * jz > jump * jump;
+    em.position.copy(pos);
+    if (jumped) { trailStats.emitCuts++; resyncEmission(this.ps, em); }
     if (vel.lengthSq() > 1e-4) {
       this.ps.emitter.quaternion.setFromUnitVectors(
         _forward, _tDir.copy(vel).normalize());

@@ -86,6 +86,10 @@ export const trailStats = {
   /** Emitters caught mid-teleport by the central jump guard — counts how
    *  often a caller moved >EMIT_JUMP_M without resyncing (should trend 0). */
   teleportJumps: 0,
+  /** Deposits refused inside emitSegment by the emit-time jump cut —
+   *  sub-EMIT_JUMP discontinuities (correction glides) that would have
+   *  drawn a smudge line. */
+  emitCuts: 0,
 };
 /** An emitter that moved this far between emits is a teleport, not
  *  travel — a legit emitter covers ≤10m/frame even at 600m/s. */
