@@ -40,6 +40,20 @@ function bootServer() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Poll `cond` every 250ms until true or the deadline passes — returns
+ *  the outcome so the caller's expect() still fails the same way. Fixed
+ *  sleep windows were the flake source: engagement timing varies wildly
+ *  under CI scheduling while the property under test (claims resolve)
+ *  is timing-independent. */
+const until = async (cond: () => boolean, maxMs: number): Promise<boolean> => {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    if (cond()) return true;
+    await sleep(250);
+  }
+  return cond();
+};
+
 // node-datachannel resolves from server_bun/node_modules — injected into
 // netbot's RTC transport rather than imported inside tools/.
 const nd = await import('node-datachannel').then((m) => ((m as { default?: NdModule }).default ?? m) as NdModule).catch(() => null);
@@ -79,18 +93,18 @@ describe('netbot — real clients over real sockets', () => {
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {
     env = bootServer();
     await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }); // heavy jitter: claims race spawns constantly
-    // Humanized bots close slower — reaction delay + honest misses mean
-    // the first landed hit needs a longer fight window than the aimbot
-    // pace these numbers were written against.
-    await sleep(14000);
+    const t = () => bots.map((b) => b.nc.tel);
+    // Humanized bots close slower — wait on engagement, not a fixed
+    // window, then drain the in-flight claims before asserting.
+    await until(() => t().reduce((a, x) => a + x.hitsDealt, 0) > 0, 25000);
     await sleep(400); // let in-flight claims land
 
-    const t = bots.map((b) => b.nc.tel);
+    const t1 = t();
     for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
-    const shots = t.reduce((a, x) => a + x.shots, 0);
-    const claims = t.reduce((a, x) => a + x.claims, 0);
-    const dealt = t.reduce((a, x) => a + x.hitsDealt, 0);
-    const rejects = t.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
+    const shots = t1.reduce((a, x) => a + x.shots, 0);
+    const claims = t1.reduce((a, x) => a + x.claims, 0);
+    const dealt = t1.reduce((a, x) => a + x.hitsDealt, 0);
+    const rejects = t1.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
 
     // Sanity: the fight actually happened.
     expect(shots).toBeGreaterThan(0);
@@ -172,9 +186,8 @@ describe('netbot — real clients over real sockets', () => {
     env = bootServer();
     await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { hopEveryMs: 4000 });
     // Hop transitions gate gameplay sends until each room's gameState —
-    // a bad hop cadence can starve the whole claim window, so give the
-    // fight extra slack before counting.
-    await sleep(18000);
+    // wait on a hop + first claim rather than a fixed window.
+    await until(() => bots.some((b) => b.nc.tel.hops > 0) && bots.reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 25000);
 
     const hopped = bots.some((b) => b.nc.tel.hops > 0);
     const claims = bots.reduce((a, b) => a + b.nc.tel.claims, 0);
@@ -194,7 +207,7 @@ describe('netbot — real clients over real sockets', () => {
   it('a harsh WAN (100ms + 300 jitter + 5% loss) still resolves every claim it sees', async () => {
     env = bootServer();
     await spawn(4, { pingMs: 100, jitterMs: 300, lossRate: 0.05 });
-    await sleep(14000);
+    await until(() => bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0) > 0, 25000);
     await sleep(600); // drain the deep in-flight window
 
     const dealt = bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);
@@ -221,7 +234,7 @@ describe('netbot — real clients over real sockets', () => {
     victim.nc.ws?.close();
     await sleep(300);
     await victim.nc.connect();
-    await sleep(6000);
+    await until(() => bots.reduce((a, b) => a + b.nc.tel.shots, 0) > 0, 20000);
     await sleep(300);
 
     const rejects = totalRejects();
@@ -241,7 +254,7 @@ describe('netbot — real clients over real sockets', () => {
     if (!nd) return; // native addon unavailable in this environment
     env = bootServer();
     await spawn(4, { pingMs: 20, jitterMs: 80, lossRate: 0 }, { transports: ['ws', 'rtc'] });
-    await sleep(14000);
+    await until(() => bots.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 25000);
     await sleep(400);
 
     for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
@@ -253,5 +266,5 @@ describe('netbot — real clients over real sockets', () => {
     expect(rtcBots.length).toBe(2);
     expect(rtcClaims).toBeGreaterThan(0); // the SCTP lane issued claims
     expect(rejects).toBe(0);
-  }, 30000);
+  }, 45000); // RTC handshake + engagement-wait needs more than 30s worst case
 });
