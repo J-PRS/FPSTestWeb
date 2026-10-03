@@ -51,7 +51,7 @@ export class ViewModel {
     [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
     [WeaponType.Chaingun]: -0.80, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.30,
-    [WeaponType.Railgun]: -0.43,
+    [WeaponType.Railgun]: -0.64, // clear of the prong cluster — at -0.57 the hex tips frame-swallow the flash
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips

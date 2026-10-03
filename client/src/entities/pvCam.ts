@@ -52,7 +52,6 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
   // Feet marker — pinned to the terrain surface below the player
 export function updateFeetMarker(v: PlayerVisuals, terrain: Terrain, pos: THREE.Vector3): void {
     v.groundGizmo.position.set(pos.x, terrain.getHeight(pos.x, pos.z) + 0.05, pos.z);
-    v.groundGizmoGhost.position.copy(v.groundGizmo.position);
   }
 
   // Demo playback path: camera follows pos without input/physics

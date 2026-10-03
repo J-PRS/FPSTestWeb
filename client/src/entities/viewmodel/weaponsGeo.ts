@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
-import { mkPlasmaCannon, mkPlasmaGun, mkRailgun, mkLightningGun } from './weaponsGeoEnergy.js';
+import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair } from './weaponsGeoSidearm.js';
 import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv } from './weaponsGeoBallistic.js';
 
@@ -16,7 +16,7 @@ export interface WeaponMeshes {
   chainBarrels: THREE.Group;
 }
 
-const MODEL_BUILDERS: [number, () => THREE.Group][] = [
+export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.BoltLauncher, mkBolt],
   [WeaponType.Disc, mkDisc],
   [WeaponType.GrenadeLauncher, mkGrenadeLauncher],
@@ -24,7 +24,7 @@ const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Mortar, mkMortar],
   [WeaponType.PlasmaCannon, mkPlasmaCannon],
   [WeaponType.PlasmaGun, mkPlasmaGun],
-  [WeaponType.Sprinkler, mkPlasmaGun], // same receiver, different bolt payload
+  [WeaponType.Sprinkler, mkSprinkler],
   [WeaponType.Railgun, mkRailgun],
   [WeaponType.Lightning, mkLightningGun],
   [WeaponType.Shotgun, mkShotgun],

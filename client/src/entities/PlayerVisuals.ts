@@ -21,7 +21,6 @@ const _airTint = new THREE.Color(0.75, 0.85, 1.0);
 export class PlayerVisuals {
   private shadowBlob: THREE.Mesh;
   groundGizmo: THREE.Mesh;
-  groundGizmoGhost: THREE.Mesh;
   // Same faint air trail remotes get — your own arc is only readable in
   // third person, so emission gates on that flag (dots spawn behind you).
   private airTrail: BallTrailDots | null = null;
@@ -79,15 +78,6 @@ export class PlayerVisuals {
     this.groundGizmo.rotation.x = -Math.PI / 2;
     this.groundGizmo.renderOrder = 999;
     scene.add(this.groundGizmo);
-    // Ghost pass: draws only where terrain occludes the ring (GreaterDepth) —
-    // on slopes the buried arc shows through dimmed instead of vanishing.
-    // Kept very faint: behind a real ridge the whole ring would paint over
-    // the terrain (same failure the TerrainRing ghost had at 0.35).
-    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x66ffcc, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false, depthFunc: THREE.GreaterDepth });
-    this.groundGizmoGhost = new THREE.Mesh(gizmoGeo, ghostMat);
-    this.groundGizmoGhost.rotation.x = -Math.PI / 2;
-    this.groundGizmoGhost.renderOrder = 998;
-    scene.add(this.groundGizmoGhost);
   }
 
   // Third-person chase cam — Tribes Ascend style: camera backs out along the

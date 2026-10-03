@@ -119,7 +119,8 @@ export class VmBaked {
       // and render the albedo ~2 stops dark. Keep it linear.
       tex.colorSpace = THREE.LinearSRGBColorSpace;
     }
-    const bakedMat = new THREE.MeshLambertMaterial({ map: tex ?? undefined });
+    const bakedMat = new THREE.MeshLambertMaterial();
+    if (tex) bakedMat.map = tex;
     if (!tex) bakedMat.color.set(0x3a3632); // gunmetal fallback until an ao bake exists
     if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not

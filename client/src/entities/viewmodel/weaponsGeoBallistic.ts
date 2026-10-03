@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, notchRing } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -48,8 +48,8 @@ return rocket;
 // Quake-RL hex tube with a horizontal slit cut clean through its front
 // half. The flat chambered disc rides in the slit, cyan rim glowing
 // through the gap — the slit IS the "fires discs" read.
-const DISC_HEX_R = 0.13;
-const DISC_SLIT_HALF = 0.02; // tall enough to read as air at viewmodel distance
+const DISC_HEX_R = 0.12; // slimmer slab — disc rim (r=0.115) stays proud of the apothem (0.104)
+const DISC_SLIT_HALF = 0.019; // hug the 0.028-thick disc — a wide gap reads hollow, not chambered
 
 // Sutherland-Hodgman against one horizontal line: keeps the hexagon's
 // part above (side=1) or below (side=-1) the slit edge. This is the
@@ -94,23 +94,41 @@ for (let k = 0; k <= 6; k++) {
   const x = Math.cos(a) * DISC_HEX_R, y = Math.sin(a) * DISC_HEX_R;
   if (k === 0) fullHex.moveTo(x, y); else fullHex.lineTo(x, y);
 }
-// Breech overlaps the slit section AND sits slightly proud — a same-size
-// overlap makes its side walls coplanar with the halves' walls (z-fight),
-// while a flush start makes the caps coplanar (also z-fight).
-disc.add(extrudeAt(fullHex, zFront + slitLen - 0.006, 0.186, bodyMat)).scale.set(1.02, 1.02, 1);
-// Dark collar ring where the slit ends — the visual stop of the throat
-disc.add(extrudeAt(fullHex, zFront + slitLen - 0.012, 0.024, darkMat)).scale.set(1.04, 1.04, 1);
-// Chambered disc lying flat in the slit, rim just short of the flank
-// tips, emissive rim so it reads through the gap from any side
+// Breech overlaps the slit section AND steps IN — the valley where the
+// proud slit-section overhangs lands on the breech's verts, so AO grime
+// shadows the back, not the front half. (A same-size overlap is coplanar
+// side walls = z-fight; a flush start is coplanar caps = z-fight.)
+const breech = extrudeAt(fullHex, zFront + slitLen - 0.006, 0.186, bodyMat);
+breech.scale.set(0.97, 0.97, 1);
+disc.add(breech);
+// Groove ring where the slit ends — recessed, so it reads as a machined
+// channel and the AO valley-darkening lands INSIDE it (where it belongs)
+// instead of dirtying either neighbor's face.
+// (add() returns the GROUP, not the mesh — scale must be set on the
+// extrude itself or the whole weapon gets scaled and nothing changes.)
+const collar = extrudeAt(fullHex, zFront + slitLen - 0.012, 0.024, darkMat);
+collar.scale.set(0.94, 0.94, 1);
+disc.add(collar);
+// Chambered disc lying flat in the slit — the spinfusor's whole read.
+// Dark body, hot rim: T2's loaded disc glows at the EDGE, not the face.
+// Both ride a named group so the fire envelope can slide the NEXT disc
+// out of the breech into the slit (the "it really fires discs" sell).
+const ammo = new THREE.Group();
+ammo.name = 'discAmmo';
 const loadedMat = new THREE.MeshLambertMaterial({ color: 0x3a3f45, emissive: 0x14161a });
-const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.106, 0.106, 0.022, 24), loadedMat);
+const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.028, 24), loadedMat);
 loaded.position.set(0, 0, -0.15);
-disc.add(loaded);
-const rim = new THREE.Mesh(new THREE.TorusGeometry(0.104, 0.008, 6, 32),
-  new THREE.MeshBasicMaterial({ color: 0x66e0ff }));
+ammo.add(loaded);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 6, 32),
+  new THREE.MeshBasicMaterial({ color: 0x77e8ff }));
 rim.rotation.x = Math.PI / 2;
 rim.position.set(0, 0, -0.15);
-disc.add(rim);
+ammo.add(rim);
+disc.add(ammo);
+// Spindle cap through the disc's core — the "held in a launcher" tell
+const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.07, 8), darkMat);
+spindle.position.set(0, 0, -0.15);
+disc.add(spindle);
 // Forend under the slit section + raked grip under the breech
 const forend = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.24), darkMat);
 forend.position.set(0, -0.13, -0.13);
@@ -126,77 +144,118 @@ disc.visible = false;
 return disc;
 }
 
-// Weapon 2 — chaingun: the ref reads as one long WEDGE — a triangular
-// prism body, wide flat belly sloping up to a narrow flat top, uniform
-// for the whole length (its apparent taper toward the muzzle is just
-// perspective). The barrel cluster peeks out of the wedge's front face.
-// Not three floating sticks: the SHROUD is the gun.
+// Weapon 2 — chaingun, Tribes-style: the machinery is SHROUDED. The
+// reads: a fat chamfered casing the size of the whole gun, three barrel
+// tips poking out of a dark faceplate (the spinning brass collars are
+// the machine tell), an ammo drum slung under the flank, cooling slots
+// on the receiver. Chunky and solid beats exposed plumbing.
 export function mkChaingun(): { g: THREE.Group; barrels: THREE.Group } {
 const chain = new THREE.Group();
 const chainBarrels = new THREE.Group();
 // The bake pipeline treats "barrels" as a kept-separate node — it's the
 // only viewmodel part that animates, so it can't fold into the merged mesh.
 chainBarrels.name = 'barrels';
-for (let i = 0; i < 3; i++) {
-  const a = (i / 3) * Math.PI * 2;
-  const barrel = mkTube(0.04, 0.04, 0.34, -0.46, bodyMat);
-  barrel.position.x = Math.cos(a) * 0.055;
-  barrel.position.y = Math.sin(a) * 0.055;
+// Tribes chaingun language: the cluster SPINS INSIDE a fat shrouded
+// casing — you see three muzzle tips poking out of a dark faceplate,
+// not naked pipes. Chunky octagonal housing, machinery hinted at.
+const CHAIN_BARRELS = 3;
+const CLUSTER_R = 0.062;
+for (let i = 0; i < CHAIN_BARRELS; i++) {
+  const a = (i / CHAIN_BARRELS) * Math.PI * 2;
+  const dx = Math.cos(a) * CLUSTER_R, dy = Math.sin(a) * CLUSTER_R;
+  // Barrel runs inside the shroud from the breech, tips proud of the
+  // faceplate so the holes read as muzzles not a cage.
+  const barrel = mkLoft([
+    { z: -0.30, ring: rotRing(profCircle(0.045, 8), a), dx, dy },
+    { z: -0.86, ring: rotRing(profCircle(0.045, 8), a), dx, dy },
+  ], bodyMat, false);
   // Per-barrel fire recoil — kick() knocks the TOP barrel back a beat.
   // baseZ restores it; `barrel` tag skips the collar/studs sharing the group.
   barrel.userData.barrel = true;
   barrel.userData.baseZ = barrel.position.z;
   chainBarrels.add(barrel);
+  // Brass muzzle collar where each barrel exits the faceplate.
+  const throat = mkAnnulus(rotRing(profCircle(0.052, 8), a), rotRing(profCircle(0.03, 8), a), -0.86, -0.885, brassMat);
+  throat.position.set(dx, dy, 0);
+  chainBarrels.add(throat);
+  const plug = mkBore(0.03, -0.88);
+  plug.rotation.y = Math.PI;
+  plug.position.x = dx; plug.position.y = dy;
+  chainBarrels.add(plug);
 }
 chain.add(chainBarrels);
-// The wedge — trapezoid cross-section extruded the full body length:
-// wide flat base, shoulders sloping to a narrower flat top. One solid
-// faceted mass, matching the ref's "big slab of metal" read.
-const wedge = new THREE.Shape();
-wedge.moveTo(-0.17, -0.12);  // bottom corners
-wedge.lineTo(0.17, -0.12);
-wedge.lineTo(0.05, 0.16);    // long sloped shoulders — the triangle read
-wedge.lineTo(-0.05, 0.16);   // sliver flat top
-wedge.closePath();
-chain.add(extrudeAt(wedge, -0.31, 0.6, bodyMat));
-// Front face plate — dark inset the barrel cluster exits through, so
-// the muzzle reads as a socket in the wedge, not a hollow shell.
-const facePlate = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 8), darkMat);
-facePlate.rotation.x = Math.PI / 2;
-facePlate.position.set(0, 0.02, -0.315);
-chain.add(facePlate);
-chain.add(mkBore(0.09, -0.331));
-// Front collar — the bearing plate the barrels exit through. A gatling
-// collar SPINS with the cluster, so it lives in chainBarrels. A symmetric
-// ring's rotation is invisible though — the bolt studs on its face are
-// what sell the spin.
-const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.035, 8), darkMat);
+// Faceplate — dark disc the barrels poke through; the depth illusion.
+chain.add(mkBore(CLUSTER_R + 0.055, -0.84));
+// Shroud — the Tribes chunky octagonal casing, enclosing the cluster.
+// Slightly tapered to the muzzle end so it reads as a gun not a tube.
+chain.add(mkLoft([
+  { z: 0.05, ring: profOct(0.31, 0.31, 0.1) },
+  { z: -0.42, ring: profOct(0.31, 0.31, 0.1) },
+  { z: -0.50, ring: profOct(0.28, 0.28, 0.09) },
+  { z: -0.84, ring: profOct(0.27, 0.27, 0.09) },
+], bodyMat, false)); // open ends — faceplate + breech cap them visually
+// Shroud collar — machined ring at the muzzle end the casing steps into.
+chain.add(mkAnnulus(profOct(0.32, 0.32, 0.1), profOct(0.28, 0.28, 0.09), -0.82, -0.86, darkMat));
+// Breech collar — the bearing the spinning cluster seats into. Lives
+// in chainBarrels so its bolt studs turn with the barrels; mostly hidden
+// inside the shroud but the rim reads in the breech gap.
+const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.115, 0.05, 12), darkMat);
 chainCollar.rotation.x = Math.PI / 2;
-chainCollar.position.z = -0.345;
+chainCollar.position.z = -0.06;
 chainBarrels.add(chainCollar);
-for (let i = 0; i < 3; i++) {
-  const a = (i / 3) * Math.PI * 2;
-  const stud = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.025), bodyMat);
-  stud.position.set(Math.cos(a) * 0.078, Math.sin(a) * 0.078, -0.35);
-  chainBarrels.add(stud);
+// Breech housing — where the cluster disappears into the gun. The
+// shroud is the mass now; this is just the receiver block behind it.
+const housing = new THREE.Shape();
+housing.moveTo(-0.1, -0.1);
+housing.lineTo(0.1, -0.1);
+housing.lineTo(0.085, 0.085);
+housing.lineTo(-0.085, 0.085);
+housing.closePath();
+chain.add(extrudeAt(housing, 0.02, 0.13, bodyMat));
+
+// Flank cooling slots — dark insets that read as heat vents
+for (const side of [-1, 1]) {
+  for (let i = 0; i < 3; i++) {
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.04, 0.12), boreMat);
+    slot.position.set(side * 0.092, 0.015 - i * 0.055, 0.08);
+    chain.add(slot);
+  }
 }
-// Dark recessed channel under the belly — the ref's lower slot where
-// the drive train lives.
-const chainBelly = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.4), darkMat);
-chainBelly.position.set(0, -0.115, -0.02);
-chain.add(chainBelly);
-// Rear receiver block + top rail to match the family
-const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.18), darkMat);
-chainRecv.position.set(0, -0.04, 0.32);
+// The spin sells itself — brass muzzle collars rotate inside the
+// faceplate port while the shroud and faceplate hold still.
+// Ammo drum + feed chute on the left flank — a chaingun has to EAT.
+// Big drum slung low, brass belt link strip running up into the breech.
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), darkMat);
+drum.rotation.z = Math.PI / 2;
+drum.position.set(-0.08, -0.14, 0.12);
+chain.add(drum);
+const drumCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.15, 8), bodyMat);
+drumCap.rotation.z = Math.PI / 2;
+drumCap.position.copy(drum.position);
+chain.add(drumCap);
+for (let i = 0; i < 4; i++) {
+  const link = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.024, 0.05), brassMat);
+  link.position.set(-0.06, -0.09 + i * 0.035, 0.2 - i * 0.02);
+  link.rotation.x = 0.4;
+  chain.add(link);
+}
+// Rear receiver + top rail to match the family — tucked right against
+// the housing so the tail doesn't read as a second box.
+const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.08), darkMat);
+chainRecv.position.set(0, -0.03, 0.2);
 chain.add(chainRecv);
-const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.34), darkMat);
-chainRail.position.set(0, 0.175, -0.08); // rides the wedge's flat apex
+const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.025, 0.2), darkMat);
+chainRail.position.set(0, 0.115, 0.08);
 chain.add(chainRail);
-// Grip — the wedge's belly means it mounts lower than most guns
-const chainGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.07), darkMat);
-chainGrip.position.set(0, -0.2, 0.18);
+// Grip — mounted under the drum-side belly
+const chainGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.07), darkMat);
+chainGrip.position.set(0.05, -0.16, 0.22);
 chainGrip.rotation.x = 0.3;
 chain.add(chainGrip);
+// Pull the whole gun back toward the shoulder — the breech sits close
+// to the eye and reads huge next to the barrels; letting the rear slip
+// out of frame leaves the cluster owning the view.
+chain.position.z = 0.15;
 chain.visible = false;
 return { g: chain, barrels: chainBarrels };
 }
@@ -376,32 +435,33 @@ flak.add(mkTube(0.19, 0.19, 0.06, -0.24, darkMat)); // muzzle ring
 flak.add(mkBore(0.155, -0.271));
 const flakThroat = mkTube(0.155, 0.12, 0.05, -0.24, boreMat);
 flak.add(flakThroat);
-const flakBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.3), darkMat);
+// Receiver — hexagonal drum instead of a raw cube; reads machined.
+const flakBox = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.3, 6), darkMat);
+flakBox.rotation.x = Math.PI / 2;
 flakBox.position.set(0, 0, 0.16);
 flak.add(flakBox);
-// Top vents — the UT flak "grill"
+// Top vents — the UT flak "grill". Hex rods across the drum top match
+// the new hexagonal receiver better than raw slabs.
 for (let i = 0; i < 3; i++) {
-  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.05), bodyMat);
-  vent.position.set(0, 0.11, 0.08 + i * 0.08);
+  const vent = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 6), bodyMat);
+  vent.rotation.z = Math.PI / 2;
+  vent.position.set(0, 0.1, 0.11 + i * 0.08);
   flak.add(vent);
 }
-// Loading slot on the right flank — the break-open port
-const loadSlot = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.16), boreMat);
-loadSlot.position.set(0.105, 0.02, 0.14);
-flak.add(loadSlot);
-// Shell clip beside the port — three stubby brass rounds nose-up
-const flakShellMat = new THREE.MeshLambertMaterial({ color: 0xa86a20, emissive: 0x241503 });
-for (let i = 0; i < 3; i++) {
-  const round = mkTube(0.028, 0.028, 0.05, 0, flakShellMat);
-  round.rotation.z = 0; // axis already across? keep vertical stack look
-  round.position.set(0.115, -0.03, 0.08 + i * 0.06);
-  flak.add(round);
-}
+
+
 // Grip
-const flakGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), darkMat);
+const flakGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.033, 0.12, 6), darkMat);
 flakGrip.position.set(0, -0.15, 0.18);
 flakGrip.rotation.x = 0.3;
 flak.add(flakGrip);
+// Grip pommel — the extrude-and-scale trick: a short butt section
+// slightly narrower, gives the handle a shaped heel instead of a
+// cylinder ending on a flat cut. Child of the grip so it inherits the
+// rake — offset is just down the grip's local axis.
+const flakButt = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.026, 0.035, 6), darkMat);
+flakButt.position.y = -0.0775; // half grip len + half butt len
+flakGrip.add(flakButt);
 flak.visible = false;
 return flak;
 }
@@ -480,20 +540,38 @@ const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
   cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
   cz -= len;
 };
-cnSeg(0.10, 0.13, 0.04, bodyMat);   // breech cap flare
-cnSeg(0.13, 0.16, 0.05, bodyMat);   // bulge 1 out
-cnSeg(0.16, 0.11, 0.05, bodyMat);   // bulge 1 in
-cnSeg(0.105, 0.105, 0.02, darkMat); // pinch ring
-cnSeg(0.11, 0.165, 0.06, bodyMat);  // bulge 2 out
-cnSeg(0.165, 0.11, 0.05, bodyMat);  // bulge 2 in
-cnSeg(0.105, 0.105, 0.02, darkMat); // pinch ring
-cnSeg(0.11, 0.155, 0.06, bodyMat);  // bulge 3 out
-cnSeg(0.155, 0.175, 0.04, bodyMat); // muzzle flare
-cnSeg(0.175, 0.175, 0.02, darkMat); // muzzle ring
+// Bombard silhouette: gently TAPERING barrel (fat at the breech, slim
+// at the muzzle) with thin reinforcing hoops only ~15% proud of the
+// tube. The old version swelled each band to ~1.6x the tube radius —
+// stacked donuts instead of one machined barrel.
+// Crowned hoop — /\ profile instead of a flat band; sits only ~7mm
+// proud of the tube so it reads as a shrunk-on ring, not a collar.
+const cnHoop = (r: number) => {
+  cnSeg(r, r + 0.006, 0.012, darkMat);
+  cnSeg(r + 0.006, r, 0.012, darkMat);
+};
+cnSeg(0.125, 0.13, 0.03, bodyMat);  // breech cap
+cnSeg(0.13, 0.12, 0.12, bodyMat);   // tube taper 1
+cnHoop(0.127);                      // hoop 1
+cnSeg(0.12, 0.11, 0.12, bodyMat);   // tube taper 2
+cnHoop(0.117);                      // hoop 2
+cnSeg(0.11, 0.10, 0.10, bodyMat);   // chase — slimmest stretch
+cnHoop(0.107);                      // hoop 3
+cnSeg(0.10, 0.125, 0.035, bodyMat); // muzzle flare (trumpet lip)
+cnHoop(0.128);                      // muzzle ring
 // cz ends ≈ -0.46; muzzle ring's own capped face serves as the dark bore.
-const cnBall = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), darkMat);
-cnBall.position.set(0, -0.02, 0.06);               // rounded breech ball
+// Cascabel — the breech knob, proper: a slim neck off the cap widening
+// into a small ball half the barrel's radius. Centered on axis (the old
+// one hung 0.02 low and read as a random sphere stuck to the back).
+const cnNeck = mkTube(0.05, 0.035, 0.035, 0.017, bodyMat); // flares into the ball (+Z end is r1)
+cn.add(cnNeck);
+const cnBall = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), bodyMat);
+cnBall.position.set(0, 0, 0.05);
 cn.add(cnBall);
+// A cannon reads by mass — scale up and pull the whole group back so
+// the fat breech sits closer instead of poking a long thin tube forward.
+cn.scale.setScalar(1.2);
+cn.position.z += 0.08;
 cn.visible = false;
 return cn;
 }
