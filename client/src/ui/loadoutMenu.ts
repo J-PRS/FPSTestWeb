@@ -16,13 +16,14 @@ export interface LoadoutDeps {
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
 
-interface DropOpt { v: string; label: string; desc?: string }
+interface DropOpt { v: string; label: string; desc?: string; disabled?: boolean }
 interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: DropOpt[]): void; }
 
 const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
   javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
+  proxy: 'Proxy Grenade', satchel: 'Satchel Charge (2)', heal: 'Heal Grenade',
 };
 
 // Chip width is measured, not hardcoded — canvas-measure the widest
@@ -75,6 +76,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
       for (const o of options) {
         const it = document.createElement('div');
         it.className = 'lo-opt';
+        if (o.disabled) it.classList.add('locked');
         // 'none' isn't a perk — banner it across both columns.
         if (cols2 && o.v === 'none') it.classList.add('full');
         const name = document.createElement('span');
@@ -93,6 +95,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
         it.dataset.v = o.v;
         it.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (o.disabled) return; // tier-locked — visible but unshoulderable
           onPick(o.v);
           el.classList.remove('open');
           openDrop = null;
@@ -140,7 +143,10 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   function refreshLoadout(): void {
     if (!ui) return;
     const player = deps.lazyPlayer();
-    ui.slotDrops.forEach((d, i) => d.setValue(String(player.loadout[i])));
+    // appliedClass flips at respawn — re-flag locked options so a
+    // banked tier swap un-grays (or grays) the right entries.
+    const opts = weaponOptsFor(player.appliedClass);
+    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.loadout[i])); });
     ui.beltDrop?.setValue(player.beltItem);
     ui.skillDrop?.setValue(player.skill);
     ui.perkDrop?.setValue(player.perk);
@@ -167,28 +173,35 @@ function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanEleme
 }
 
 // Sidearms are chosen in their own row — a primary slot offering them
-// would let a loadout double-carry the hold-out tier. Heavy-only
-// ordnance stays listed but tagged [H]; setLoadoutSlot is the gate that
-// rejects it on lighter tiers.
-const HEAVY_ONLY = new Set(Player.HEAVY_ONLY.map(String));
+// would let a loadout double-carry the hold-out tier. Tier-locked
+// ordnance stays listed but tagged [H]/[M]/[L] and grayed out —
+// lockedForClass flags it in the list AND gates it in setLoadoutSlot.
+const TIER_TAG = new Map<string, string>([
+  ...Player.HEAVY_ONLY.map((w) => [String(w), '[H]'] as const),
+  ...Player.MEDIUM_ONLY.map((w) => [String(w), '[M]'] as const),
+  ...Player.LIGHT_ONLY.map((w) => [String(w), '[L]'] as const),
+]);
 
-function weaponOptsFor(): { v: string; label: string }[] {
+// Locked gear stays listed but grays out against the tier in effect —
+// knowing a mortar exists matters even when you can't shoulder it.
+function weaponOptsFor(cls: ArmorClass): DropOpt[] {
   return SLOT_DEFS
-    .map((def, wid) => ({
-      v: String(wid),
-      // [H] tag marks heavy-only ordnance in the list — visibility with a
-      // badge beats hiding; a non-heavy pick still bounces in
-      // setLoadoutSlot (shoulder gate is the tier's enforcement point).
-      label: (HEAVY_ONLY.has(String(wid)) ? '[H] ' : '') + def.config.displayName,
-      sidearm: !!def.sidearm,
-    }))
+    .map((def, wid) => {
+      const tag = TIER_TAG.get(String(wid));
+      return {
+        v: String(wid),
+        label: (tag ? `${tag} ` : '') + def.config.displayName,
+        sidearm: !!def.sidearm,
+        disabled: Player.lockedForClass(cls, wid),
+      };
+    })
     .filter((o) => !o.sidearm)
     // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle. Heavy-only
+    // name instead; v stays the wid so picks never reshuffle. Tier-locked
     // entries group at the bottom so restricted gear reads as one block.
     .toSorted((a, b) => {
-      const ah = a.label.startsWith('[H]') ? 1 : 0, bh = b.label.startsWith('[H]') ? 1 : 0;
-      return ah - bh || a.label.localeCompare(b.label);
+      const ar = a.label.startsWith('[') ? 1 : 0, br = b.label.startsWith('[') ? 1 : 0;
+      return ar - br || a.label.localeCompare(b.label);
     });
 }
 
@@ -228,10 +241,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pickClass = (v: string) => {
     deps.lazyPlayer().setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-    // Re-filter on the tier in effect, not the pick — the banked swap
+    // Re-flag on the tier in effect, not the pick — the banked swap
     // lands at respawn, and ordnance the player can't shoulder yet
     // must not masquerade as selectable.
-    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor());
+    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium'));
     refreshTiles();
   };
   const refreshTiles = () => {
@@ -262,7 +275,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const weaponCells = mkGroup('WEAPONS', false);
   // Filter by appliedClass (tier in effect), not armorClass — a banked
   // mid-life pick doesn't unlock heavy ordnance until the next respawn.
-  const weaponOpts = weaponOptsFor();
+  // lazyPlayer can be unborn at wire-up — default the flag pass to
+  // medium so a pre-game menu build doesn't deref a missing player.
+  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium');
   const allWeaponOpts = weaponOpts; // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
     const { cell, cap } = mkCellDom(weaponCells);
@@ -302,7 +317,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
      { v: 'mine', label: 'Mine' },
      { v: 'station', label: 'Pad' },
      { v: 'drone', label: 'Drone' },
-     { v: 'shield', label: 'Barrier' }],
+     { v: 'shield', label: 'Barrier' },
+     { v: 'nugget', label: 'Nugget' },
+     { v: 'beacon', label: 'Beacon' }],
     (v) => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.appendChild(ui.packDrop.el);

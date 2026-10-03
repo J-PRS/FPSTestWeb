@@ -9,13 +9,16 @@ import { WarpBeacon } from './skillBeacon.js';
 // ---- Skill tuning ----
 const BLINK_RANGE = 20;      // metres along the crosshair
 const BLINK_TIME = 0.16;     // lerp duration — reads as a flash, not a slide
-const BLINK_COOLDOWN = 1.2;  // s between blinks
+// Cooldowns are a spam-breaker, not the economy — the ENERGY.skillCost
+// ante is what actually prices skill use, so every one-shot gets a
+// uniform 1s floor.
+const BLINK_COOLDOWN = 1.0;
 
 const DASH_IMPULSE = 25;     // m/s added along aim
-const DASH_COOLDOWN = 0.9;   // s between dashes
+const DASH_COOLDOWN = 1.0;   // s between dashes
 
 const SLAM_SPEED = 55;       // m/s straight down
-const SLAM_COOLDOWN = 1.4;   // s
+const SLAM_COOLDOWN = 1.0;   // s
 
 
 // Energy economy constants live in shared/movement.ts (ENERGY) — the

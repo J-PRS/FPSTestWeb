@@ -54,8 +54,12 @@ export class HudStats {
   private lastPlayerPos = new THREE.Vector3();
   private lastPlayerYaw = 0;
 
-  // HUD abbreviations by weapon id (WEAPON_RATES / viewmodel order)
-  private static readonly WEAPON_SHORT = ['BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT'];
+  // HUD abbreviations indexed by wid = SLOT_DEFS position (all 19 slots —
+  // sidearms included, since a stale persisted loadout can shoulder one).
+  private static readonly WEAPON_SHORT = [
+    'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT',
+    'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV',
+  ];
 
   constructor(private h: StatsHost) {}
 
@@ -117,7 +121,9 @@ export class HudStats {
     // health is float (regen ticks at 12/s leave fractions) — the chip
     // shows whole hp or it prints 78.00000000000001.
     this.setText(h.health, 'health', String(Math.round(player.health)));
-    const healthPct = Math.round(player.health);
+    // Bar %, not raw hp — heavy runs a 200hp pool and light 75, so the
+    // width must normalize or heavies read "full" through half a healthbar.
+    const healthPct = Math.round((player.health / player.maxHealth) * 100);
     if (healthPct !== this.lastHealthPct) {
       this.lastHealthPct = healthPct;
       h.healthBar.style.width = `${healthPct}%`;

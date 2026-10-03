@@ -7,7 +7,7 @@ import type { SkillsCtx } from './skills.js';
 // Warp beacon — Q-down throws the anchor; it flies/arcs/bounces while Q
 // is held, Q-up teleports the player onto it with momentum preserved.
 const TL_THROW_SPEED = 45;   // m/s along the crosshair (+ 50% inherit)
-const TL_COOLDOWN = 4.0;     // s after a teleport
+const TL_COOLDOWN = 1.0;     // s after a teleport — energy does the pricing
 const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
 const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 

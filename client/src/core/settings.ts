@@ -11,7 +11,10 @@ type Schema = {
   'fps-invert-y': boolean;
   'fps-sens': number;
   'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
-  'fps-loadout': string;      // "0,2,6,7" — weapon id per slot
+  'fps-loadout': string;      // "0,2,6,7" — weapon id per slot (active class's kit)
+  'fps-loadout-light': string;  // remembered kit per armor tier — '' = never set
+  'fps-loadout-medium': string;
+  'fps-loadout-heavy': string;
   'fps-belt': string;         // BeltItem id — see Player.BELT_ITEMS
   'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair'
   'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station' | 'drone' | 'shield'
@@ -45,6 +48,9 @@ const DEFAULTS: Schema = {
   'fps-sens': 1,
   'fps-minimap': 0,
   'fps-loadout': '0,2,6,7',
+  'fps-loadout-light': '',
+  'fps-loadout-medium': '',
+  'fps-loadout-heavy': '',
   'fps-belt': 'disc',
   'fps-sidearm': 'pistol',
   'fps-pack': 'turret',
@@ -93,5 +99,8 @@ export const settings = {
   },
   set<K extends keyof Schema>(key: K, value: Schema[K]): void {
     localStorage.setItem(key, String(value));
+    // Live-toggle consumers (debug overlays) subscribe to this — the event
+    // fires same-tab only, which is the only place a toggle can happen.
+    window.dispatchEvent(new CustomEvent('fps:set', { detail: { key, value } }));
   },
 };

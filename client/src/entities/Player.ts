@@ -108,10 +108,16 @@ export class Player {
     this.lastDamageSource = '';
     this.beltCharges = BELT_MAX;
     this.vel.set(0, 0, 0);
+    // Re-arm the viewmodel to the active slot — a banked class swap can
+    // recall a kit whose slot holds a different wid than the corpse was
+    // carrying, and without this the new life opens on the old weapon's
+    // model while the HUD reads the recalled one.
+    this.armory.emitWeaponSwitch(this.loadout[this.weaponIndex]);
   }
 
   kills = 0;
   isDead = false;
+  private wasObserving = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by
    *  every environment-damage path so the kill feed names the real killer. */
   lastDamageSource = '';
@@ -202,13 +208,19 @@ export class Player {
   weaponIndex = 0;
   // 4-slot loadout: weaponIndex is the SLOT (0-3); loadout[slot] is the
   // weapon id (index into weapons.ts SLOT_DEFS). ESC menu assigns.
-  loadout: number[] = PlayerLoadout.parseLoadout(settings.get('fps-loadout'));
+  // The remembered kit for the loaded class wins over the shared key —
+  // that's the whole point of the per-class memory.
+  loadout: number[] = PlayerLoadout.parseLoadout(
+    settings.get(PlayerLoadout.CLASS_KEY[this.armorClass]) || settings.get('fps-loadout'));
 
   // Belt: one throwable equipped, the belt key throws it. ESC menu picks.
   beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
     ? settings.get('fps-belt') as BeltItem : 'disc';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
   static readonly HEAVY_ONLY = PlayerLoadout.HEAVY_ONLY;
+  static readonly MEDIUM_ONLY = PlayerLoadout.MEDIUM_ONLY;
+  static readonly LIGHT_ONLY = PlayerLoadout.LIGHT_ONLY;
+  static readonly lockedForClass = PlayerLoadout.lockedForClass;
   static readonly LOADOUT_SLOTS = PlayerLoadout.LOADOUT_SLOTS;
   static readonly SIDEARM_WIDS = PlayerLoadout.SIDEARM_WIDS;
   sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' =
@@ -303,7 +315,7 @@ export class Player {
     this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
     this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight, CLASS_STATS[this.appliedClass].radius);
-    if (this.appliedClass !== 'heavy') this.armory.unshoulderHeavy();
+    this.armory.unshoulderLocked();
 
     // Your third-person body wears the same class GLB remotes see on
     // you — what you see looking down IS the hitbox class you claim.
@@ -342,7 +354,15 @@ export class Player {
       this.status.spectating = false;
       this.onSpectate?.(false);
     }
-    if (this.isDead || this.status.spectating) {
+    const observing = this.isDead || this.status.spectating;
+    if (observing && !this.wasObserving) {
+      // Keys held at the moment of death would read as held forever —
+      // the ghost drifts until the player happens to re-press them.
+      // Clearing on entry means the cam only moves on a fresh press.
+      this.input.clearAll();
+    }
+    this.wasObserving = observing;
+    if (observing) {
       const obInput = this.readMoveInput();
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {

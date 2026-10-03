@@ -48,6 +48,21 @@ body.menu-open #frag-msg { display: none !important; }
   0%, 100% { opacity: 0.65; }
   50% { opacity: 1; }
 }
+/* Session veil — covers the gap between connect and gameState on an F5
+   rejoin so the default spawn state never paints. world.ts arms it only
+   when a stored session token says a restore may be coming. */
+#session-veil {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: #060a10;
+  color: rgba(200,220,240,0.8);
+  font-family: inherit; font-size: 1rem; font-weight: 600;
+  letter-spacing: 0.35em; text-transform: uppercase;
+  pointer-events: none;
+}
+/* Label only mounts after ~1s on the veil (world.ts arms it lazily) —
+   a fast restore never earns a caption. */
+#session-veil span { animation: resumePulse 1.4s ease-in-out infinite; }
 #menu-side {
   position: absolute; top: 0; right: 0; bottom: 0;
   width: 400px;
@@ -322,6 +337,8 @@ body.lobby-open #loadout-bar {
 }
 #loadout-bar .lo-opt:hover { background: rgba(58,167,255,0.18); color: #fff; }
 #loadout-bar .lo-opt.sel { color: #3aa7ff; }
+#loadout-bar .lo-opt.locked { opacity: 0.35; cursor: not-allowed; }
+#loadout-bar .lo-opt.locked:hover { background: none; color: #cdd9e5; }
 #loadout-bar .lo-opt.has-desc { white-space: normal; }
 #loadout-bar .lo-opt .lo-desc {
   display: block; margin-top: 2px;

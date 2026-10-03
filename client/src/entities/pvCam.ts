@@ -67,7 +67,7 @@ export function updateFrozenCamera(v: PlayerVisuals, camera: THREE.PerspectiveCa
   // risk; the player drives the view like T1's observer/Tab mode.
 export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, ...rest: [vel: THREE.Vector3, yaw: number, pitch: number, input: { forward: number; right: number; jumpHeld: boolean; shiftDown: boolean }]): void {
     const [vel, yaw, pitch, input] = rest;
-    const OBSERVER_SPEED = 40; // m/s ghost-flight
+    const OBSERVER_SPEED = 20; // m/s ghost-flight — half player strafe speed, it should lag a chase not race it
     const fwd = new THREE.Vector3(
       Math.cos(pitch) * Math.sin(yaw),
       Math.sin(pitch),

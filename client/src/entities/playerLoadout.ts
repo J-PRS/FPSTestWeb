@@ -40,7 +40,16 @@ export class PlayerLoadout {
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
    *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
   static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher
+  /** Medium-only guns — lights trade them for speed, heavies for ordnance. */
+  static readonly MEDIUM_ONLY: readonly number[] = [5, 15]; // Flak, PlasmaGun
+  /** Light-frame precision gear — heavier chassis can't shoulder them. */
+  static readonly LIGHT_ONLY: readonly number[] = [7, 8]; // Railgun, Lightning
   static readonly LOADOUT_SLOTS = 4;
+  /** Per-class kit memory — the four weapon slots are remembered per
+   *  tier, so heavy's ordnance rig survives a stint on light. */
+  static readonly CLASS_KEY = {
+    light: 'fps-loadout-light', medium: 'fps-loadout-medium', heavy: 'fps-loadout-heavy',
+  } as const;
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
   // repair 17. (sticky launcher sits at wid 14 — primary, not a hold-out.)
   static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17 } as const;
@@ -69,6 +78,18 @@ export class PlayerLoadout {
    *  applyPendingClass (the server banks the same pick through
    *  classUpdate so both ends flip together). */
   setArmorClass(c: ArmorClass): void {
+    if (c !== this.h.armorClass) {
+      // Stash the kit under the tier being left, then recall the target
+      // tier's remembered kit. First visit keeps the carried loadout —
+      // unshoulderLocked scrubs anything illegal at respawn anyway.
+      settings.set(PlayerLoadout.CLASS_KEY[this.h.armorClass], this.h.loadout.join(','));
+      const saved = settings.get(PlayerLoadout.CLASS_KEY[c]);
+      if (saved) {
+        this.h.loadout = PlayerLoadout.parseLoadout(saved);
+        settings.set('fps-loadout', this.h.loadout.join(','));
+        this.emitWeaponSwitch(this.h.loadout[this.h.weaponIndex]);
+      }
+    }
     this.h.armorClass = c;
     settings.set('fps-class', c);
   }
@@ -82,7 +103,9 @@ export class PlayerLoadout {
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
-    if (c !== 'heavy') this.unshoulderHeavy();
+    // Every tier has locked guns now — heavy ordnance, medium's mid punch,
+    // and light-frame precision gear all unshoulder on the wrong chassis.
+    this.unshoulderLocked();
     // The class IS the body — same GLB remotes see on this player. A
     // tier swap rebuilds the whole model, not a rescale; the hidden /
     // gizmo-off local state reasserts once the new GLB lands.
@@ -103,11 +126,23 @@ export class PlayerLoadout {
   /** Unshoulder restricted ordnance — swap each gated slot for the
    *  chaingun so no slot ends up empty. Called when a tier drops below
    *  heavy (respawn bank) AND at construction, since the persisted
-   *  loadout parses raw and can carry a stale heavy pick. */
-  unshoulderHeavy(): void {
+   *  loadout parses raw and can carry a stale locked pick. */
+  unshoulderLocked(): void {
     for (let i = 0; i < this.h.loadout.length; i++) {
-      if (PlayerLoadout.HEAVY_ONLY.includes(this.h.loadout[i])) this.setLoadoutSlot(i, 2);
+      if (this.lockedFor(this.h.appliedClass, this.h.loadout[i])) this.setLoadoutSlot(i, 2);
     }
+  }
+
+  /** Slot-space tier gate — the menu gate and unshoulder share it. */
+  /** Slot-space tier gate — the menu gate, unshoulder, and the dropup
+   *  disabled-flag all read this one truth. */
+  static lockedForClass(cls: ArmorClass, wid: number): boolean {
+    return (cls !== 'heavy' && PlayerLoadout.HEAVY_ONLY.includes(wid)) ||
+           (cls !== 'medium' && PlayerLoadout.MEDIUM_ONLY.includes(wid)) ||
+           (cls !== 'light' && PlayerLoadout.LIGHT_ONLY.includes(wid));
+  }
+  private lockedFor(cls: ArmorClass, wid: number): boolean {
+    return PlayerLoadout.lockedForClass(cls, wid);
   }
 
   /** Respawn-time perk application — the picked perk banks here so its
@@ -130,13 +165,16 @@ export class PlayerLoadout {
     // appliedClass (the tier the server enforces), not armorClass — a mid-
     // life heavy pick banks until respawn; letting it shoulder now would
     // spam class-locked rejections for the rest of the life.
-    if (h.appliedClass !== 'heavy' && PlayerLoadout.HEAVY_ONLY.includes(weaponId)) return;
+    if (this.lockedFor(h.appliedClass, weaponId)) return;
     // Picking a weapon that's already equipped elsewhere swaps the slots
     // instead of duplicating it — standard loadout-menu behavior.
     const other = h.loadout.indexOf(weaponId);
     if (other >= 0 && other !== slot) h.loadout[other] = h.loadout[slot];
     h.loadout[slot] = weaponId;
     settings.set('fps-loadout', h.loadout.join(','));
+    // Edits belong to the picked tier — persist under it too so a
+    // loadout tweak isn't lost if the session ends before a class hop.
+    settings.set(PlayerLoadout.CLASS_KEY[h.armorClass], h.loadout.join(','));
     if (h.weaponIndex === slot || h.weaponIndex === other) {
       this.emitWeaponSwitch(h.loadout[h.weaponIndex]);
     }

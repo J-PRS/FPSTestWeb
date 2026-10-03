@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameBot, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
-import { BOT_LOADOUTS } from '../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, botClassForLoadout } from '../../../shared/botLoadouts.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
@@ -137,14 +137,14 @@ export class TeamBots {
         const spawn = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
         spawn.y = terrain.getHeight(spawn.x, spawn.z) + EYE;
         const name = ffa ? BOT_NAMES[ni++ % BOT_NAMES.length] : `${BOT_NAMES[ni++ % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
-        // Tier mix mirrors the server roster: ~1 light, ~1 heavy per
-        // squad, mediums filling — enough for silhouettes to read. Class
-        // rides the ctor so a heavy lands the knight model, not just stats.
-        const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
-          ni % 4 === 1 ? 'light' : ni % 4 === 3 ? 'heavy' : 'medium');
         // Same roster the dedicated server fields — loadout picks the
-        // weapon by engagement range instead of one generic bolt.
-        bot.setLoadout(BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length]!);
+        // weapon by engagement range instead of one generic bolt, and
+        // the kit picks the body (botClassForLoadout) so the class gate
+        // never arms an offline bot with contraband guns.
+        const lo = BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length]!;
+        const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
+          botClassForLoadout(lo));
+        bot.setLoadout(lo);
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;

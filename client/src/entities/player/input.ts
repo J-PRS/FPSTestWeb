@@ -29,6 +29,8 @@ export interface PlayerInputHandlers {
   selectSlot(i: number): void;
   cycleWeapon(step: number): void;
   deploy(): void;
+  /** Deliberate respawn — a server claim, not a local state flip. */
+  respawn(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
   look(dx: number, dy: number): void;
 }
@@ -78,8 +80,11 @@ export class PlayerInput {
     if (matchCode('belt', e.code)) this.beltHeld = true;
     if (matchCode('melee', e.code)) h.melee();
     if (matchCode('camera', e.code)) h.toggleCamera();
-    if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
-    if (matchCode('deploy', e.code) && !e.repeat) h.deploy();
+    if (!e.repeat) {
+      if (matchCode('skill', e.code)) h.skillPress();
+      if (matchCode('deploy', e.code)) h.deploy();
+      if (matchCode('respawn', e.code)) h.respawn();
+    }
     const slot = this.slotForCode(e.code);
     if (slot >= 0) h.selectSlot(slot);
   }
@@ -126,6 +131,7 @@ export class PlayerInput {
       if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = true;
       if (matchCode('melee', `Mouse${e.button}`)) h.melee();
       if (matchCode('camera', `Mouse${e.button}`)) h.toggleCamera();
+      if (matchCode('respawn', `Mouse${e.button}`)) h.respawn();
     });
     document.addEventListener('mouseup', (e) => {
       if (this.frozen) return;
@@ -223,7 +229,9 @@ export class PlayerInput {
       label();
       debugBtn.addEventListener('click', () => {
         settings.set('fps-debug', settings.get('fps-debug') ? 0 : 1);
-        location.reload();
+        // No reload: every debug consumer reads urlParams.debug live (or
+        // hears the fps:set event this set() just fired).
+        label();
       });
     }
 
