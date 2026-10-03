@@ -400,7 +400,11 @@ export class BotArsenal implements BeamHost {
     // re-arms — the approach blasts' cooldown is up to 3.5s dead, and
     // the soak's return-leg autopsy reads carriers dying at ~3% of the
     // route home: they die AT the stand inside that window.
-    const carrying = !!(goal as { running?: boolean }).running;
+    // Carrier truth lives in the flag sim, not the brain's goal pick —
+    // a carrier fighting at the stand can hold a combat goal (running
+    // unset) and the feet blast then fires as if he weren't loaded.
+    const carrying = this.room.flags?.snapshot().some(f => f.carrier === id)
+      ?? !!(goal as { running?: boolean }).running;
     if (carrying && !this.wasCarrying.get(id)) this.propelT.delete(id);
     this.wasCarrying.set(id, carrying);
     // Self-splash costs real health now. A wounded bot holds fire —
@@ -443,6 +447,24 @@ export class BotArsenal implements BeamHost {
     // the blow-by through the intercept line (overshoot = the grab).
     if (dist < (surge ? 10 : 35)) return;
     const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
+    // A pull-belt carrier never feet/crest-blasts: lobbing the implosion
+    // ahead drags him forward with ZERO self-splash — the feet blast at
+    // the stand is how healthy grabs turned into one-hit carriers
+    // (grab re-arm stacked a second blast right after the approach one).
+    if (carrying && getWeaponStats(lo.belt)?.forceMode === 'pull') {
+      const nx = dx / dist, nz = dz / dist;
+      if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
+        this.propelMark(id, 'pull', now);
+        this.propelT.set(id, now + 3500);
+        this.propelJetUntil.set(id, now + 900);
+        logger.info('Bot pull surf', { id });
+        return;
+      }
+      // Dry belt or unsafe arc: a carrier just holds. Falling through
+      // to the feet/crest blast is the suicide this branch exists to
+      // remove — a slow ride home beats a dead drop at the stand.
+      return;
+    }
     if (!sh.onGround) {
       // Crest blast: jetting up a face, the hill drops away under the
       // bot — a straight-down shot at its own feet banks the blast as
