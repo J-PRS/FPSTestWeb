@@ -1,3 +1,4 @@
+2026-10-01 - File-size watch: ~900-line ceiling test, six giants pinned and may only shrink (ROADMAP next-list done)
 2026-10-01 - Options objects at boundaries: last six >6-param functions converted (processAOE, noteHit, firePhase, slotDanger, wantJet, addMesh)
 2026-10-01 - Sim lifecycle registry: worldState() replay frames ride room.sims — join/resync rosters no longer hand-wired per sim
 2026-10-01 - Runner ballistic descent aims at the objective: capper apex now lands ON the stand (surreal grab 72.9→45.2s, carry 31→23s)
