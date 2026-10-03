@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { ParticleSystem, ConstantValue } from 'three.quarks';
-import { activateSystem, resyncEmission } from '../effects/vfxRuntime.js';
+import { activateSystem, resyncEmission, TrailDriver } from '../effects/vfxRuntime.js';
 
 interface EmissionState {
   travelDistance: number;
@@ -88,5 +88,50 @@ describe('resyncEmission', () => {
     const st = emissionState(ps);
     expect(st.travelDistance).toBe(0);
     expect(st.previousWorldPos!.distanceTo(pos)).toBeLessThan(1e-4);
+  });
+});
+
+// TrailDriver (VFX P1): the emit-vs-jump decision lives in ONE place —
+// updateVfx ticks registered drivers; a host discontinuity cuts every
+// layer without any caller declaring a teleport.
+const fakeLayer = () => ({ emits: 0, teleports: 0,
+  emitSegment() { this.emits++; }, teleport() { this.teleports++; } });
+const fakeRibbon = () => ({ pushes: 0, clears: 0,
+  push() { this.pushes++; }, clear() { this.clears++; } });
+
+describe('TrailDriver', () => {
+
+  it('emits on ordinary travel, cuts every layer on a jump — no caller teleport', () => {
+    const host = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(10, 0, 0) };
+    const layer = fakeLayer(); const rib = fakeRibbon();
+    const d = new TrailDriver(host, [layer], [rib]);
+    host.pos.x += 1; d.tick(0.016);          // ~legit frame of travel
+    expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1);
+    host.pos.x += 200; d.tick(0.016);        // discontinuity — no caller help
+    expect(layer.teleports).toBe(1); expect(rib.clears).toBe(1);
+    host.pos.x += 1; d.tick(0.016);          // motion resumes cleanly
+    expect(layer.emits).toBe(3);
+    d.release();
+  });
+
+  it('stops emitting when the host reports dead, keeps sampling pos', () => {
+    let alive = true;
+    const host = { pos: new THREE.Vector3(), vel: new THREE.Vector3(5, 0, 0),
+      emitting: () => alive };
+    const layer = fakeLayer(); const rib = fakeRibbon();
+    const d = new TrailDriver(host, [layer], [rib]);
+    d.tick(0.016); expect(layer.emits).toBe(1);
+    alive = false; host.pos.x += 0.5; d.tick(0.016);
+    expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1);
+    d.release();
+  });
+
+  it('release() unregisters — updateVfx no longer ticks it', () => {
+    const host = { pos: new THREE.Vector3(), vel: new THREE.Vector3(1, 0, 0) };
+    const layer = fakeLayer();
+    const d = new TrailDriver(host, [layer]);
+    d.release();
+    host.pos.x += 1; d.tick(0.016); // direct tick still works — release only gates the registry
+    expect(layer.emits).toBe(1);
   });
 });

@@ -12,6 +12,7 @@ import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from '../effects/RibbonTrail.js';
 import { ProjectileTrail } from '../effects/trailParticles.js';
 import { QuarksTrail } from '../effects/vfx.js';
+import { TrailDriver } from '../effects/vfxRuntime.js';
 import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import { tickRemote } from './projRemote.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
@@ -193,17 +194,16 @@ export class Projectile {
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: RibbonTrail[] = [];
-  // Last position the trail layers sampled — the backstop discontinuity
-  // detector compares against this, not prevPos (collision code rewinds
-  // prevPos for swept segments, so it can't mark a render jump).
-  private readonly _lastTrailPos: THREE.Vector3;
+  // Runtime-owned emit/jump decisions for every trail layer (P1) —
+  // pos discontinuities need no caller teleport(): the driver cuts all
+  // layers when its own last-sample says the host jumped.
+  private readonly driver: TrailDriver;
 
   constructor(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, config: ProjectileConfig) {
     this.scene = scene;
     this.config = config;
     this.pos = origin.clone();
     this.prevPos = origin.clone();
-    this._lastTrailPos = origin.clone();
     this.shotOrigin = origin.clone();
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
@@ -226,6 +226,11 @@ export class Projectile {
         });
 
     this.ribbons = v.ribbons;
+    this.driver = new TrailDriver(
+      { pos: this.pos, vel: this.vel, emitting: () => !this.exploded },
+      [this.trail],
+      this.ribbons,
+    );
   }
 
   /** Impact policy (bounce/fuse/intercept/target record) — projCollide.ts. */
@@ -269,12 +274,24 @@ export class Projectile {
     this.prevPos.copy(this.pos);
     this.pos.addScaledVector(this.vel, seconds);
     this.age += seconds;
-    // The jump is a discontinuity — ribbons must not bridge it with a
-    // quad between the spawn point and here, and the quarks emitter must
-    // resync or emissionOverDistance dumps a streak across the map.
-    for (const r of this.ribbons) r.clear();
-    this.trail.teleport();
+    // The jump reads as a discontinuity to the trail driver — it cuts
+    // every layer on its next tick, no caller declaration needed.
     if (this.mesh) { this.mesh.position.copy(this.pos); syncProjectileInstance(this.mesh); }
+  }
+
+  /** Ray-burst discharge: the rest of this frame's travel is the beam —
+   *  prevPos stays at the discharge point so the swept segment covers the
+   *  whole ray. Applies to remote replicas too: delay/direction/range are
+   *  all deterministic from spawn state, like bounces. The jump reads as
+   *  a discontinuity to the trail driver, which cuts every layer itself. */
+  private tickRayDischarge(): void {
+    if (this.config.rayBurst && !this.rayFired && this.age >= this.config.rayBurst.delay) {
+      this.rayFired = true;
+      this.rayFrom.copy(this.pos);
+      _rayDir.copy(this.vel).normalize();
+      this.prevPos.copy(this.pos);
+      this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
+    }
   }
 
   // Physics + collision + visuals for a live (non-exploded) projectile
@@ -313,22 +330,7 @@ export class Projectile {
       return;
     }
 
-    // Ray-burst discharge: the rest of this frame's travel is the beam —
-    // prevPos stays at the discharge point so the swept segment covers the
-    // whole ray. Applies to remote replicas too: delay/direction/range are
-    // all deterministic from spawn state, like bounces.
-    if (this.config.rayBurst && !this.rayFired && this.age >= this.config.rayBurst.delay) {
-      this.rayFired = true;
-      this.rayFrom.copy(this.pos);
-      _rayDir.copy(this.vel).normalize();
-      this.prevPos.copy(this.pos);
-      this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
-      // The discharge is a teleport — the ribbon would bridge it with a
-      // streak across the whole beam range (same hazard advanceBy covers),
-      // and emit-over-distance would lay particles along the full ray.
-      for (const r of this.ribbons) r.clear();
-      this.trail.teleport();
-    }
+    this.tickRayDischarge();
 
     // Remote (server-authoritative/demo) replicas skip all collision —
     // terrain-only behavior lives in tickRemote.
@@ -339,23 +341,8 @@ export class Projectile {
     }
 
     this.updateMesh();
-    this.emitTrails(dt);
-  }
-
-  // Trail emission + the discontinuity backstop: explicit teleports call
-  // trail.teleport()/ribbon clear() already, but pos can also jump via
-  // sticky-anchor chases, depenetration, demo seeks, or future callers.
-  // Anything beyond ~3x this frame's legit travel isn't motion — it's a
-  // jump, and neither ribbons nor emit-over-distance may bridge it.
-  private emitTrails(dt: number): void {
-    const maxStep = this.vel.length() * dt * 3 + 4;
-    if (this.pos.distanceToSquared(this._lastTrailPos) > maxStep * maxStep) {
-      for (const r of this.ribbons) r.clear();
-      this.trail.teleport();
-    }
-    this.trail.emitSegment();
-    for (const r of this.ribbons) r.push(this.pos, this.vel);
-    this._lastTrailPos.copy(this.pos);
+    // Trail emission is driver-owned: updateVfx samples this.pos once the
+    // frame settles and decides emit-vs-jump for every layer.
   }
 
   // Discharge aftermath: beam visual fires once with the resolved
@@ -473,6 +460,7 @@ export class Projectile {
   dispose(): void {
     if (this.disposed) return;
     this.removeProjectileMesh();
+    this.driver.release();
     for (const r of this.ribbons) r.dispose();
     this.trail.dispose();
     this.disposed = true;

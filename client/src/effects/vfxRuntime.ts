@@ -360,7 +360,54 @@ function shrinkPools(now: number): void {
 let camOverride: THREE.Vector3 | null = null;
 export function setVfxCamOverride(p: THREE.Vector3 | null): void { camOverride = p; }
 
+/** Runtime-owned emitter motion (VFX overhaul P1). A host registers ONE
+ *  driver per trail pack; updateVfx samples the host's pos each frame and
+ *  makes the only emit-vs-jump decision — a discontinuity (latency advance,
+ *  ray-burst discharge, resync sweep) cuts ribbons + resyncs emitters here,
+ *  so callers never declare teleports and a forgotten one can't streak. */
+export interface TrailDriverHost {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  /** False while the host is dead/detonated — layers fade but stop emitting. */
+  emitting?(): boolean;
+}
+export interface DriveLayer { emitSegment(): void; teleport(): void }
+export interface DriveRibbon { push(pos: THREE.Vector3, vel: THREE.Vector3): void; clear(): void }
+
+const drivers = new Set<TrailDriver>();
+export function trailDriverCount(): number { return drivers.size; }
+
+export class TrailDriver {
+  private readonly last = new THREE.Vector3(NaN, 0, 0);
+  constructor(
+    private readonly host: TrailDriverHost,
+    private readonly emitters: DriveLayer[],
+    private readonly ribbons: DriveRibbon[] = [],
+  ) { drivers.add(this); }
+  release(): void { drivers.delete(this); }
+
+  tick(dt: number): void {
+    if (dt <= 0) return; // paused fx clock — pos is frozen, don't misread a seek as travel
+    const { pos, vel } = this.host;
+    // Same budget the old host-side backstop used: ~3 frames of legit
+    // travel + slack — beyond that it's a discontinuity every layer cuts.
+    const maxStep = vel.length() * dt * 3 + 4;
+    if (pos.distanceToSquared(this.last) > maxStep * maxStep) {
+      for (const r of this.ribbons) r.clear();
+      for (const e of this.emitters) e.teleport();
+    }
+    // emitSegment runs even on the jump frame — each layer's own skipSeg/
+    // jump-cut swallows the teleported deposit, same as the old caller path.
+    if (this.host.emitting?.() ?? true) {
+      for (const e of this.emitters) e.emitSegment();
+      for (const r of this.ribbons) r.push(pos, vel);
+    }
+    this.last.copy(pos);
+  }
+}
+
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
+  for (const d of drivers) d.tick(dt);
   if (buildQueue.length) buildQueue.shift()!();
   if (++prunePhase >= 4) {
     prunePhase = 0;

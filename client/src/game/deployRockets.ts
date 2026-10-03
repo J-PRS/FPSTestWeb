@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Explosion } from '../effects/explosion.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
+import { TrailDriver } from '../effects/vfxRuntime.js';
 import * as sfx from '../core/sfx.js';
 import type { DeployDeps } from './deployables.js';
 
@@ -45,6 +46,8 @@ interface Rocket {
   owner?: string;
   group: THREE.Group;
   ribbons: RibbonTrail[];
+  /** Set right after the literal — the driver needs r itself as host. */
+  driver?: TrailDriver;
 }
 
 export class DeployRockets {
@@ -82,6 +85,7 @@ export class DeployRockets {
         RibbonTrail.acquire(this.deps.scene, { color: RKTT_CORE, width: RKTT_W * 0.35, life: RKTT_LIFE * 0.8, vOffset: -RKTT_W * 0.07, tag: 'sentry' }),
       ],
     };
+    r.driver = new TrailDriver(r, [], r.ribbons);
     if (!target) { // fired with no live target — lob up-forward, no homing
       const yaw = this.deps.lazyPlayer().yaw;
       r.vel.set(Math.sin(yaw), 0.3, Math.cos(yaw)).normalize().multiplyScalar(ROCKET_SPEED);
@@ -108,11 +112,12 @@ export class DeployRockets {
       this.step(r, dt);
       if (r.ttl <= 0) {
         this.deps.scene.remove(r.group); // detonate already removed; ttl cut is the safety
+        r.driver?.release();
         this.dying.fadeAll(r.ribbons);
         this.rockets.splice(i, 1);
         continue;
       }
-      for (const t of r.ribbons) { t.push(r.pos, r.vel); t.update(dt); }
+      for (const t of r.ribbons) t.update(dt); // emission is driver-owned
     }
     this.dying.update(dt);
   }
@@ -184,6 +189,7 @@ export class DeployRockets {
 
   dispose(): void {
     for (const r of this.rockets) {
+      r.driver?.release();
       this.deps.scene.remove(r.group);
       for (const t of r.ribbons) t.dispose();
     }
