@@ -49,8 +49,8 @@ export class ViewModel {
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
-    [WeaponType.Chaingun]: -0.64, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.26,
+    [WeaponType.Chaingun]: -0.80, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
+    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.30,
     [WeaponType.Railgun]: -0.43,
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
@@ -79,6 +79,7 @@ export class ViewModel {
   kickAmp = 1;       // per-weapon muzzle-rise multiplier
   kickBack = 1;      // per-weapon backward-shove multiplier (kickZ scale)
   flashLifeScale = 1;
+  flashLightI = 5; // peak intensity of the current pop — set per weapon in kickF
   fistGroup: THREE.Group; // public — the punch envelope flies it
   private baseRotX = 0.04;
   private baseRotZ = 0;
@@ -164,6 +165,19 @@ export class ViewModel {
     return true;
   }
 
+  /** Same round-trip for an arbitrary vm-space point (e.g. the emitter
+   *  ball's world position): renders where the point sits on screen
+   *  through vmCam, then back out through the main camera's ray. */
+  anchorWorldPoint(vmWorld: THREE.Vector3, cam: THREE.Camera, out: THREE.Vector3): boolean {
+    this.vmCam.quaternion.copy(cam.quaternion);
+    this.vmCam.updateMatrixWorld();
+    out.copy(this.vmCam.worldToLocal(vmWorld));
+    out.applyMatrix4(this.vmCam.projectionMatrix);
+    cam.updateMatrixWorld();
+    out.unproject(cam);
+    return true;
+  }
+
   // Per-weapon fire feel: [decay, sideways jitter, flashColor, flashScale, flashLife, rise]
   // Same spring everywhere — only the impulse shape changes per weapon,
   // the Quake approach: one damped oscillator, re-triggered per shot.
@@ -172,7 +186,22 @@ export class ViewModel {
   kick(strength = 1): void {
     kickF(this, strength);
     if (this.activeWeapon === WeaponType.Chaingun) this.startBarrelKick();
+    if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.DiscPull) {
+      // Spinfusor fake: the chambered disc IS the projectile — it's gone
+      // the instant the shot breaks. The NEXT disc slides forward out of
+      // the breech into the slit during the refire gap.
+      if (!this.discAmmo) this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;
+      if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
+    }
   }
+
+  private discAmmo: THREE.Object3D | null = null;
+  private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
+  private static readonly DISC_HIDE = 0.06;  // blink gap before the reload slide
+  // ~75% of DISC_RATE (1.0s) total — a lazy feed reads as machinery, and
+  // a fast snap would be invisible behind the kick anyway.
+  private static readonly DISC_SLIDE = 0.69; // breech→slit travel
+  private static readonly DISC_BACK = 0.2;   // park depth inside the breech
 
   // Chaingun per-shot tell: knock the TOP barrel (the one feeding) back a
   // beat, spring it home before the next round. At full spin it's ~mush —
@@ -215,6 +244,17 @@ export class ViewModel {
   private env = new VmEnvelopes(this);
   private baked = new VmBaked(this);
   muzzleZ(wt: number): number { return ViewModel.MUZZLE_Z[wt] ?? -0.35; }
+
+  /** Re-park a weapon's muzzle node on a model feature (e.g. the LG's
+   *  emitter ball) so every consumer of the node — beam anchor, flash —
+   *  tracks the authored geometry instead of the tuned constant. */
+  parkMuzzleAt(wt: number, worldPos: THREE.Vector3): boolean {
+    const n = this.muzzleNodes.get(wt);
+    if (!n?.parent) return false;
+    n.parent.updateWorldMatrix(true, false);
+    n.position.copy(n.parent.worldToLocal(worldPos.clone()));
+    return true;
+  }
 
   /** Flash park point in GROUP space — the muzzle NODE's real position
    *  plus a small forward push past the bore face. z-only parking left
@@ -342,25 +382,8 @@ export class ViewModel {
     this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
       + this.kickRoll * this.kickAmount;
 
-    // Chaingun barrel spin — decays over ~0.7s after firing stops
-    if (this.chainBarrels && this.spinVel > 0) {
-      this.chainBarrels.rotateOnAxis(this.spinAxis, this.spinVel * dt);
-      this.chainSpin += this.spinVel * dt;
-      this.spinVel *= Math.exp(-dt * 4);
-      if (this.spinVel < 0.5) this.spinVel = 0;
-    }
-
-    // Per-barrel recoil spring — the knocked barrel rides back on its
-    // own short envelope, independent of the whole-gun kick.
-    if (this.barrelKickIdx >= 0 && this.chainBarrels) {
-      const b = this.chainBarrels.children[this.barrelKickIdx];
-      if (b) {
-        this.barrelKickT = Math.max(0, this.barrelKickT - dt);
-        const k = this.barrelKickT / 0.08;
-        b.position.z = b.userData.baseZ - k * k * 0.06; // squared: snap out, settle home
-        if (this.barrelKickT <= 0) { b.position.z = b.userData.baseZ; this.barrelKickIdx = -1; }
-      } else this.barrelKickIdx = -1;
-    }
+    this.tickChainBarrels(dt);
+    this.tickDiscAmmo(dt);
 
     // Flash decay — sqrt curve: bright spike, fast falloff. The two quads
     // grow/shrink in opposite directions (Effekseer's recipe — mirrored
@@ -370,7 +393,7 @@ export class ViewModel {
       this.flashT -= dt;
       const k = Math.max(this.flashT / (ViewModel.FLASH_LIFE * this.flashLifeScale), 0);
       this.flashMat.opacity = Math.sqrt(k);
-      this.flashLight.intensity = 5 * k;
+      this.flashLight.intensity = this.flashLightI * k;
       this.flashMesh.scale.setScalar(this.flashBaseS * (1 + (1 - k) * 0.9));
       this.flashMesh2.scale.setScalar(this.flashBaseS2 * (0.4 + k * 0.6));
       if (this.flashT <= 0) {
@@ -382,5 +405,46 @@ export class ViewModel {
 
     this.lastFrameYVel = playerVel.y;
     this.lastFrameVel.copy(playerVel);
+  }
+
+  /** Chaingun cluster tick — spin decay (~0.7s coast after firing stops)
+   *  plus the per-barrel recoil spring: the knocked barrel rides back on
+   *  its own short envelope, independent of the whole-gun kick. */
+  private tickChainBarrels(dt: number): void {
+    if (this.chainBarrels && this.spinVel > 0) {
+      this.chainBarrels.rotateOnAxis(this.spinAxis, this.spinVel * dt);
+      this.chainSpin += this.spinVel * dt;
+      this.spinVel *= Math.exp(-dt * 4);
+      if (this.spinVel < 0.5) this.spinVel = 0;
+    }
+    if (this.barrelKickIdx < 0 || !this.chainBarrels) return;
+    const b = this.chainBarrels.children[this.barrelKickIdx];
+    if (!b) { this.barrelKickIdx = -1; return; }
+    this.barrelKickT = Math.max(0, this.barrelKickT - dt);
+    const k = this.barrelKickT / 0.08;
+    b.position.z = b.userData.baseZ - k * k * 0.06; // squared: snap out, settle home
+    if (this.barrelKickT <= 0) { b.position.z = b.userData.baseZ; this.barrelKickIdx = -1; }
+  }
+
+  /** Disc rechamber: hidden during the blink gap, then the next disc
+   *  slides forward out of the breech into the slit, spinning — ease-out
+   *  cubic so it seats with a snap rather than a drift. */
+  private tickDiscAmmo(dt: number): void {
+    if (this.discT < 0 || !this.discAmmo) return;
+    this.discT += dt;
+    if (this.discT < ViewModel.DISC_HIDE) return;
+    this.discAmmo.visible = true;
+    const k = Math.min((this.discT - ViewModel.DISC_HIDE) / ViewModel.DISC_SLIDE, 1);
+    const e = 1 - (1 - k) * (1 - k) * (1 - k);
+    this.discAmmo.position.z = ViewModel.DISC_BACK * (1 - e);
+    // Rim (r 0.115) is wider than the body apothem (~0.10) — a full-size
+    // disc parked deep would leak cyan through the flanks. Spawn it small
+    // inside the breech and grow as it slides; the clip is hidden anyway.
+    this.discAmmo.scale.setScalar(0.55 + 0.45 * e);
+    if (k >= 1) {
+      this.discAmmo.position.z = 0;
+      this.discAmmo.scale.setScalar(1);
+      this.discT = -1;
+    }
   }
 }

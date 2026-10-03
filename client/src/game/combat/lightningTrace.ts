@@ -56,11 +56,21 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   _lgO.copy(cam.position);
   cam.getWorldDirection(_lgD);
 
-  // Terrain: march the ray in 1.5m steps until it goes under the heightmap
+  // Terrain: march the ray in 1.5m steps until it goes under the heightmap,
+  // then bisect the last step — the coarse march alone can leave the tip
+  // buried ~1.5m inside a slope.
   let hitT = LG_RANGE;
   for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
     _lgP.copy(_lgO).addScaledVector(_lgD, d);
-    if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
+    if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {
+      let lo = d - 1.5, hi = d;
+      for (let i = 0; i < 6; i++) {
+        const mid = (lo + hi) * 0.5;
+        _lgP.copy(_lgO).addScaledVector(_lgD, mid);
+        if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) hi = mid; else lo = mid;
+      }
+      hitT = lo; break;
+    }
   }
 
   // Structures: the beam stops at walls — a bolt that could pierce a

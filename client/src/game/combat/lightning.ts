@@ -31,7 +31,6 @@ interface LgState {
   sizzleAt: number;
   beamTo: THREE.Vector3;
   tipAt: number;         // last visual-frame timestamp for the tip spring
-  tipSettled: boolean;   // first frame after spawn pins the tip — no 0→hit whip
   ramp: Map<number, { t: number; n: number }>;
   rampP: Map<string, { t: number; n: number }>; // remote-player victims, same stepped decay
   shroud: Map<number, { sprite: THREE.Sprite; seenAt: number }>;
@@ -76,17 +75,83 @@ function shroudTexture(): THREE.Texture {
   return _shroudTex;
 }
 
-// Beam start: the muzzle node's actual rendered pixel, unprojected into
-// world space through the main camera — FOV difference between the
-// viewmodel pass (55) and world pass (90) means a raw view-space offset
-// lands on the wrong ray, which read as the bolt lagging the gun.
+// Emitter ball: the bolt is drawn from the ball's CENTER, not a fixed
+// marker — the new model carries a real energy sphere at the prong tips
+// and the beam must visibly issue from inside it. Resolved once by
+// largest SphereGeometry in the weapon group (the ball dwarfs the prong
+// tip spheres); bakes/procedural share the search. undefined = searched
+// and missed; null = not yet attempted (bake swap lands async).
+function isDescendant(node: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = node; p; p = p.parent) if (p === root) return true;
+  return false;
+}
+let lgBall: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null | undefined;
+function lgBallNode(deps: CombatDeps): { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null {
+  const g = deps.lazyViewModel()?.weapons.get(WeaponType.Lightning);
+  if (lgBall !== undefined) {
+    // The baked-model swap replaces the group's children wholesale —
+    // a cached mesh can be left detached with a frozen matrixWorld,
+    // which reads as the beam firing from world origin. Re-search
+    // whenever the ball is no longer inside the live group.
+    if (lgBall && g && isDescendant(lgBall.mesh, g)) return lgBall;
+    lgBall = undefined;
+  }
+  lgBall = null;
+  let best: THREE.Mesh | null = null, bestR = 0;
+  g?.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m.geometry as THREE.BufferGeometry).type !== 'SphereGeometry') return;
+    m.geometry.computeBoundingSphere();
+    const r = m.geometry.boundingSphere?.radius ?? 0;
+    if (r > bestR) { bestR = r; best = m; }
+  });
+  if (best) {
+    // Own material so the charge glow doesn't repaint shared bakedMat.
+    const mat = ((best as THREE.Mesh).material as THREE.MeshLambertMaterial).clone();
+    (best as THREE.Mesh).material = mat;
+    lgBall = { mesh: best as THREE.Mesh, mat };
+    // The authored muzzle marker only approximates the ball — re-park it
+    // on the ball's real center once so every beam/flash consumer lands
+    // exactly on the emitter, whatever model variant is loaded.
+    const b = best as THREE.Mesh;
+    b.updateWorldMatrix(true, false);
+    const c = b.geometry.boundingSphere!.center.clone().applyMatrix4(b.matrixWorld);
+    deps.lazyViewModel()?.parkMuzzleAt(WeaponType.Lightning, c);
+  }
+  return lgBall;
+}
+
+// Ball drives its own tell from beam state — swells + brightens while
+// the bolt runs, flares harder on a biting tip. Idle ball stays dormant;
+// the lerp keeps pull/release from popping.
+function updateBall(deps: CombatDeps, firing: boolean, damaging: boolean, dt: number): void {
+  const ball = lgBallNode(deps);
+  if (!ball) return;
+  const { mesh, mat } = ball;
+  const target = firing ? (damaging ? 1 : 0.55) : 0;
+  const cur = mesh.userData.__flare ?? 0;
+  const flare = cur + (target - cur) * Math.min(dt * 10, 1);
+  mesh.userData.__flare = flare;
+  const jitter = flare * (Math.random() - 0.5) * 0.12;
+  mesh.scale.setScalar(1 + flare * 0.35 + jitter);
+  // Lambert emissive on the baked ball, plain color on the procedural
+  // Basic core — either way a firing ball reads charged.
+  mat.emissive?.setRGB(0.25 * flare, 0.75 * flare, 1.0 * flare);
+  if (mat.emissive) mat.emissiveIntensity = 1.5 * flare;
+}
+
+// Beam start: the emitter ball's rendered pixel, unprojected into world
+// space through the main camera — the viewmodel pass (FOV 55) and world
+// pass (FOV 90) disagree, so a raw view-space offset lands on the wrong
+// ray, which read as the bolt lagging the gun.
 function lgAnchorLive(deps: CombatDeps, cam: THREE.Camera, out: THREE.Vector3): void {
   const player = deps.lazyPlayer();
   // Third person: the viewmodel is hidden — its muzzle node still resolves
   // to the first-person screen spot, so the beam visibly springs from mid-
   // air under the crosshair. Anchor at the body model's barrel tip instead.
   if (player.thirdPerson && player.muzzleWorld(out)) return;
-  if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
+  const vm = deps.lazyViewModel();
+  if (!vm?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
     lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
   }
 }
@@ -120,17 +185,14 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
   // strafe, and a live trace tracks the enemy's surface as it moves.
   // Damage stays per-tick; this is purely welding the visual.
   const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
-  // Tip spring: the trace is exact, but snapping the DISPLAYED tip to a
-  // new depth every frame reads as a rigid rod pivoting on the crosshair
-  // (55m instant jumps on sky↔wall sweeps). A fast exp approach keeps the
-  // beam welded to aim while a real sweep whips instead of teleporting.
+  // Tip is welded to the trace every frame — the trace is exact, and a
+  // settling spring only ever read as a broken stub whipping onto the
+  // crosshair after the shaft lagged behind.
+  lg.beamTo.copy(_lgHit);
   const nowV = performance.now();
-  if (!lg.tipSettled) { lg.beamTo.copy(_lgHit); lg.tipSettled = true; }
-  else {
-    const dtV = Math.min((nowV - lg.tipAt) / 1000, 0.1);
-    lg.beamTo.lerp(_lgHit, 1 - Math.exp(-dtV * 28)); // ~150ms to settle
-  }
+  const dtV = Math.min((nowV - lg.tipAt) / 1000, 0.1);
   lg.tipAt = nowV;
+  updateBall(deps, true, hitTarget !== null || hitPlayerId !== null, dtV);
   if (hitTarget) {
     const chain = pickChain(deps, _lgHit, hitTarget);
     if (chain) lg.beam.fireChain(_lgHit, chain.pos); else lg.beam.clearChain();
@@ -141,7 +203,7 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
 }
 
 // Beam fades ~80ms after the last tick — driven from updateProjectiles.
-function tickBeam(lg: LgState, dt: number): void {
+function tickBeam(deps: CombatDeps, lg: LgState, dt: number): void {
   if (!lg.beam) return;
   lg.beam.update(dt);
   const lgAge = performance.now() - lg.lastFire;
@@ -149,8 +211,11 @@ function tickBeam(lg: LgState, dt: number): void {
     sfx.beamLoopStop(); // trigger dropped — ramp the hum out
     lg.lastFire = 0;
     lg.beam.clearChain();
-    lg.tipSettled = false; // next pull re-pins the tip, no stale whip
   }
+  // Ball relaxes when the bolt stops — firing path drives it per-frame
+  // in updateBeamVisual; this keeps the decay alive between the last
+  // tick and the 90ms visual cutoff.
+  updateBall(deps, lg.lastFire > 0 && lgAge <= 90, false, dt);
   // Charge shrouds: banked charge decays smoothly once the beam leaves a
   // victim (5x fill rate) — the glow fades as the bomb bleeds off.
   const now = performance.now() / 1000;
@@ -234,7 +299,6 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     sizzleAt: 0, // throttle the connect sizzle — one crackle per ~6 ticks
     beamTo: new THREE.Vector3(), // displayed tip — updateBeamVisual springs it
     tipAt: 0,
-    tipSettled: false,
     ramp: new Map(), // consecutive-tick count per target — steps damage down
     rampP: new Map(),
     shroud: new Map(), // charged-enemy glow — telegraphs the banked pop
@@ -333,5 +397,5 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   }
 
 
-  return { lightning, updateBeamVisual: () => updateBeamVisual(deps, lg), tickBeam: (dt: number) => tickBeam(lg, dt) };
+  return { lightning, updateBeamVisual: () => updateBeamVisual(deps, lg), tickBeam: (dt: number) => tickBeam(deps, lg, dt) };
 }
