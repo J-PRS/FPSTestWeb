@@ -33,6 +33,9 @@ export class PlayerModel {
   private scene: THREE.Scene;
   model: THREE.Group | null = null; // public — ModelFx writes lean/pivot
   private modelScale = 0.5;
+  // Vertical lift for rigs whose authored origin isn't at their feet —
+  // keeps the mesh's lowest point on the logical entity position.
+  private feetOffsetY = 0;
   // Disposed before the GLB finishes loading (pruned remote, ?dummy reaped
   // by the roster cleanup): the async onLoad must not re-add the mesh or
   // repopulate animations — that zombie re-add was the invisible-model bug.
@@ -240,6 +243,10 @@ export class PlayerModel {
     this.model.scale.setScalar(classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5); // class bodies fit their capsule eye height — the body IS the class silhouette
     this.model.rotation.y = classBody ? classBody.yaw : Math.PI; // Face forward
     this.modelScale = classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5;
+    // Some rigs don't author their origin at the feet — setPosition
+    // re-lands the mesh's lowest point on the logical feet each frame.
+    this.feetOffsetY = -min.y * this.modelScale;
+    this.model.position.y = this.feetOffsetY;
 
     // Procedural gun in the right hand — follows every animation.
     if (this.handBone) this.attachGun(mann);
@@ -293,10 +300,10 @@ export class PlayerModel {
       depthTest: false // Always render on top
     });
     this.colliderGizmo = new THREE.Mesh(colliderGeo, this.colliderMat);
-    // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
-    // Model origin is at feet, model is scaled by 0.5
-    // So local y = CAPSULE_CENTER_Y / 0.5
-    this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale;
+    // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT).
+    // feetOffsetY lifts the whole group for rigs not authored feet-at-origin
+    // — the gizmo counteracts it locally so it stays on the logical feet.
+    this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale - this.feetOffsetY;
     this.colliderGizmo.renderOrder = 999; // Render last (on top)
     // Hitbox visualization is a debug overlay — same flag as the
     // AOE blast wireframes (menu DEBUG toggle / ?debug).
@@ -324,7 +331,7 @@ export class PlayerModel {
     if (!this.colliderGizmo) return;
     this.colliderGizmo.geometry.dispose();
     this.colliderGizmo.geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
-    this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale;
+    this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale - this.feetOffsetY;
   }
 
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
@@ -891,8 +898,9 @@ export class PlayerModel {
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
-      // Position represents feet, model origin is at feet (y=0)
-      this.model.position.set(x, y, z);
+      // Position represents feet; feetOffsetY lifts rigs whose authored
+      // origin isn't at their feet so capsule bottom == mesh bottom.
+      this.model.position.set(x, y + this.feetOffsetY, z);
     }
     // Collider gizmo is a child of the model, so it moves with it automatically
   }
@@ -903,6 +911,7 @@ export class PlayerModel {
   getModelPosition(out: THREE.Vector3): boolean {
     if (!this.model) return false;
     out.copy(this.model.position);
+    out.y -= this.feetOffsetY;
     return true;
   }
 
@@ -969,9 +978,14 @@ export class PlayerModel {
   setColliderColor(hex: number): void {
     this.colliderHex = hex;
     this.colliderMat?.color.setHex(hex);
+    // This runs every frame per remote — piggyback the debug-visibility
+    // refresh so the menu DEBUG toggle applies without a reload.
+    if (this.colliderGizmo) this.colliderGizmo.visible = this.colliderShown && urlParams.debug;
   }
 
+  private colliderShown = true;
   setColliderVisible(visible: boolean): void {
+    this.colliderShown = visible;
     if (this.colliderGizmo) {
       this.colliderGizmo.visible = visible && urlParams.debug;
     }
