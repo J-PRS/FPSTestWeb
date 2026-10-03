@@ -27,6 +27,9 @@ const craters = (opts.craters ?? '').split(';').filter(Boolean).map(s => s.split
 // ~15m of cliff so the lip isn't a razor).
 const moat = (opts.moat ?? '').split(',').map(Number);
 const mesa = (opts.mesa ?? '').split(',').map(Number); // hw[, lift]
+// --rimring=x,z,r,raise — lifts a ring wall around a bowl so the rim is
+// uniformly tall regardless of where the noise landed.
+const rimring = (opts.rimring ?? '').split(',').map(Number);
 const WORLD = 1500; // HM_WORLD_SCALE — one heightmap wraps the arena
 
 // Deterministic lattice hash → [0,1)
@@ -84,6 +87,12 @@ for (let z = 0; z < N; z++) {
       const edge = Math.min(d - r1, r2 - d);
       const sink = Math.min(1, Math.max(0, edge / 14)) * depth;
       h = Math.max(0, h - sink);
+    }
+    if (rimring.length === 4) {
+      const [cx, cz, r, raise] = rimring;
+      const d = tdist(cx, cz);
+      const band = Math.max(0, 1 - Math.abs(d - r) / 60);
+      h = Math.min(1, h + raise * band);
     }
     let flat = 0;
     for (const [fx, fz, r] of flats) {
