@@ -76,6 +76,11 @@ export class DeployBeacon {
     // aim-pointer orientation isn't skewed by banked ground.
     this.pillar = new THREE.Mesh(_geoPillar, _pillarMat);
     this.pillar.position.copy(this.pos).y += 20;
+    // Nothing glows until touchdown — a lit shaft streaking through the
+    // air reads as a trajectory bug, not a thrown device.
+    this.pillar.visible = false;
+    this.holo.visible = false;
+    this.holoGlow.visible = false;
     scene.add(this.pillar);
 
     this.group.position.copy(this.pos);
@@ -115,6 +120,9 @@ export class DeployBeacon {
   unfoldDone(): void {
     this.unfoldT = 1;
     this.group.scale.setScalar(1);
+    this.pillar.visible = true;
+    this.holo.visible = true;
+    this.holoGlow.visible = true;
   }
 
   takeDamage(dmg: number): void {
