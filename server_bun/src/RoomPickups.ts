@@ -23,6 +23,10 @@ const NUG_FRICTION = 4;  // tumble bleed per second — gems skid, not slide
 export class RoomPickups {
   private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; vel: Vec3; armT: number }>();
   private nextId = 1;
+  /** Last-tick positions for the sweep — a capper crosses the grab ring
+   *  between two 20Hz frames at speed; same swept-capsule rule flags use,
+   *  or fast grabs tunnel straight through the nugget. */
+  private prevPos = new Map<string, Vec3>();
   /** Set by the room — banks the point or applies the powerup. */
   onCollect: ((playerId: string, kind: PickupKind) => void) | null = null;
 
@@ -107,7 +111,12 @@ export class RoomPickups {
   }
 
   tick(dt: number): void {
-    if (this.pickups.size === 0) return;
+    if (this.pickups.size === 0) {
+      // Stale sweep anchors would span idle time — a fresh nugget must
+      // start each segment from the current frame, not an hour-old spot.
+      if (this.prevPos.size) this.prevPos.clear();
+      return;
+    }
     const players = [...this.room.players.getAllPlayers().values()];
     for (const p of this.pickups.values()) {
       p.ttl -= dt;
@@ -136,11 +145,22 @@ export class RoomPickups {
         // Score pickups (gems/tags) only exist in team modes; powerups
         // are grab-able by anyone alive in any mode.
         if ((p.kind === 'gem' || p.kind === 'tag') && !pl.team) continue;
+        // Swept grab: closest point on this tick's path segment — a
+        // point check lets a full-speed ski skip the ring entirely.
+        const a = this.prevPos.get(pl.id) ?? pl.position;
+        const b = pl.position;
+        const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+        const len2 = abx * abx + aby * aby + abz * abz;
+        let t = 0;
+        if (len2 > 0) {
+          t = Math.min(1, Math.max(0,
+            ((p.pos.x - a.x) * abx + (p.pos.y - a.y) * aby + (p.pos.z - a.z) * abz) / len2));
+        }
+        const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
         // Planar grab — a jump shouldn't put a nugget out of reach,
         // but a jetpack flyover isn't a pickup.
-        const dy = Math.abs(pl.position.y - p.pos.y);
-        if (dy > 6) continue;
-        const dx = pl.position.x - p.pos.x, dz = pl.position.z - p.pos.z;
+        if (Math.abs(cy - p.pos.y) > 6) continue;
+        const dx = cx - p.pos.x, dz = cz - p.pos.z;
         const reach = PICKUP_R * perkMods(pl.perk).pickupRadius;
         if (dx * dx + dz * dz > reach * reach) continue;
         this.remove(p.id, pl.id);
@@ -153,6 +173,12 @@ export class RoomPickups {
         this.onCollect?.(pl.id, p.kind);
         break;
       }
+    }
+    // Snapshot AFTER the touch pass — next tick's segment starts where
+    // this one ended (same ordering RoomFlags uses for its sweep).
+    for (const pl of players) this.prevPos.set(pl.id, { ...pl.position });
+    for (const id of this.prevPos.keys()) {
+      if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);
     }
   }
 }

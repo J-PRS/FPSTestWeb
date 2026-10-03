@@ -1,3 +1,4 @@
+2026-10-01 - pickup touch is now a swept capsule like flag touch — a 60m/s skier crossing the 2.2m ring between 20Hz frames tunneled through nuggets without grabbing
 2026-10-01 - MAX_ENERGY/JET_DRAIN/JET_CHARGE now derive from shared ENERGY table — the client copy would have silently desynced the shadow tank on the next economy tune
 2026-10-01 - suicides no longer score: creditKill/onKill skip frag credit for self-splash — a self-frag was paying ptsPlayerKill and padding kills in every mode
 2026-10-01 - spawnPicker: zero living enemies now picks a random spawn instead of always points[0] — a fully deterministic respawn spot was a camper-readable exploit
