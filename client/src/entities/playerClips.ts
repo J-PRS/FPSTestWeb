@@ -67,7 +67,7 @@ export const CLASS_BODY_SPEC: Record<string, {
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
   'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2 },
-  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.5, anims: POLYART_ANIMS },
+  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.63, anims: POLYART_ANIMS },
 };
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
