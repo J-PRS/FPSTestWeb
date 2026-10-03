@@ -19,6 +19,7 @@ import { Mine } from '../entities/Mine.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { DeployShield } from '../entities/DeployShield.js';
+import { DeployBeacon } from '../entities/DeployBeacon.js';
 import type { SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
@@ -27,6 +28,8 @@ import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';
 import { WeaponType, REPAIR_ARMOR_MULT, DEPLOY_COST } from '../../../shared/weapons.js';
+import { weaponDef } from '../weapons.js';
+import { getProjectileConfig } from '../projectiles/index.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
@@ -44,6 +47,12 @@ export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
   { kind: 'station', label: 'PAD',      max: DEPLOY_MAX.station },
   { kind: 'drone',   label: 'DRONE',    max: DEPLOY_MAX.drone },
   { kind: 'shield',  label: 'BARRIER',  max: DEPLOY_MAX.shield },
+  // Costs 2 nuggets, lobs a gem that banks 1 back for whoever grabs it
+  // first — the joke item that's secretly a charge-transfer tool.
+  { kind: 'nugget',  label: 'NUGGET',   max: DEPLOY_MAX.nugget },
+  // T2 targeting beacon — plants a sky-marked emitter and the HUD paints
+  // the solved lob arc onto it so your mortar lands exactly there.
+  { kind: 'beacon',  label: 'BEACON',   max: DEPLOY_MAX.beacon },
 ];
 
 // Sentry mini-rockets live in deployRockets.ts — a real flying body with
@@ -53,6 +62,11 @@ const POD_SPEED = 30;      // throw velocity along the crosshair
 const POD_INHERIT = 0.6;   // fraction of player velocity carried into the toss
 const POD_RADIUS = 0.32;
 const POD_TTL = 8;         // airtime budget — a pod that never settles fizzles
+const NUGGET_LOB = 0.55;   // fraction of pod speed — a nugget lobs, not launches
+// Nugget pod visual — the same octahedron the server gem wears, so the
+// thing you threw and the thing you pick up read as one object.
+const NUG_POD_GEO = new THREE.OctahedronGeometry(0.45);
+const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
 const _UP = new THREE.Vector3(0, 1, 0);
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
@@ -66,6 +80,8 @@ interface Pod {
   station?: DeployStation;
   drone?: DeployDrone;
   shield?: DeployShield;
+  nugget?: THREE.Mesh; // pure visual — lands as a pickup, not an item
+  beacon?: DeployBeacon;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   ttl: number;
@@ -124,6 +140,11 @@ export interface DeployDeps extends GameContext {
   /** Bots hostile to a given team — a bot-owned turret/mine scans these
    *  instead of the local player's enemies. */
   botFoes?: (team: string) => Foe[];
+  /** Offline nugget mint — connected play uses the server's pickup edge,
+   *  disconnected drops a local nugget so the pack still works solo. */
+  dropNugget?: (pos: THREE.Vector3) => void;
+  /** World camera — the beacon's HUD aim reticle projects through it. */
+  camera: THREE.Camera;
 }
 
 export class Deployables {
@@ -185,7 +206,7 @@ export class Deployables {
     pos.y += 0.4; // release at chest, not feet
     const pod: Pod = {
       kind, pos,
-      vel: dir.multiplyScalar(POD_SPEED).addScaledVector(p.vel, POD_INHERIT),
+      vel: dir.multiplyScalar(POD_SPEED * (kind === 'nugget' ? NUGGET_LOB : 1)).addScaledVector(p.vel, POD_INHERIT),
       ttl: POD_TTL, landed: false,
     };
     // The item is constructed at release — it flies folded and finishes
@@ -194,6 +215,12 @@ export class Deployables {
     else if (kind === 'station') pod.station = new DeployStation(this.deps.scene, terrain, pos);
     else if (kind === 'drone') pod.drone = new DeployDrone(this.deps.scene, terrain, pos);
     else if (kind === 'shield') pod.shield = new DeployShield(this.deps.scene, terrain, pos);
+    else if (kind === 'nugget') {
+      pod.nugget = new THREE.Mesh(NUG_POD_GEO, NUG_POD_MAT);
+      pod.nugget.position.copy(pos);
+      this.deps.scene.add(pod.nugget);
+    }
+    else if (kind === 'beacon') pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);
     else pod.mine = new Mine(this.deps.scene, terrain, pos);
     this.pods.push(pod);
     sfx.dash();
@@ -226,9 +253,17 @@ export class Deployables {
       pod.shield.group.rotation.y += dt * 4;
       pod.shield.pos.copy(pod.pos);
       pod.shield.group.position.copy(pod.pos);
+    } else if (pod.nugget) {
+      pod.nugget.position.copy(pod.pos);
+      pod.nugget.rotation.y += dt * 9; // tumble — same read as a spun gem
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.update(dt, _FAR); // airborne — nobody to trigger on
+    } else if (pod.beacon) {
+      pod.beacon.tickUnfold(dt);
+      pod.beacon.group.rotation.y += dt * 4;
+      pod.beacon.pos.copy(pod.pos);
+      pod.beacon.group.position.copy(pod.pos);
     }
 
     const groundY = terrain.getHeight(pod.pos.x, pod.pos.z);
@@ -293,6 +328,22 @@ export class Deployables {
       pod.mine.seatOn(terrain);
       this.adopter.adoptMine(pod.mine, undefined);
       pod.mine = undefined;
+    } else if (pod.beacon) {
+      pod.beacon.pos.copy(pod.pos);
+      pod.beacon.group.position.copy(pod.pos);
+      pod.beacon.group.quaternion.setFromUnitVectors(_UP, n);
+      pod.beacon.unfoldDone();
+      this.adopter.adoptBeacon(pod.beacon, undefined);
+      pod.beacon = undefined;
+    } else if (pod.nugget) {
+      // Nothing seats — the pod IS the payload. Connected, the deploy
+      // claim below mints the server pickup whose spawn edge paints the
+      // resting gem; offline, drop a local nugget in its place.
+      if (!this.deps.lazyNetworkManager().isConnected()) {
+        this.deps.dropNugget?.(pod.pos);
+      }
+      this.deps.scene.remove(pod.nugget);
+      pod.nugget = undefined;
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
     sfx.land(impact);
@@ -326,6 +377,12 @@ export class Deployables {
       const s = new DeployShield(this.deps.scene, terrain, at);
       s.unfoldDone();
       this.adopter.adoptShield(s, owner);
+    } else if (kind === 'nugget') {
+      this.deps.dropNugget?.(at);
+    } else if (kind === 'beacon') {
+      const b = new DeployBeacon(this.deps.scene, terrain, at);
+      b.unfoldDone();
+      this.adopter.adoptBeacon(b, owner);
     } else {
       const m = new Mine(this.deps.scene, terrain, at);
       m.seatOn(terrain);
@@ -373,7 +430,7 @@ export class Deployables {
 
   remoteSpawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
     const { owner, kind, pos, hp, armor, team } = spec;
-    if (this.remote.has(id)) return;
+    if (kind === 'nugget' || this.remote.has(id)) return; // mints pickups, never a deploySpawn
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     let item: Item;
@@ -402,6 +459,8 @@ export class Deployables {
         dispose: () => t.dispose(this.deps.scene),
         v: t,
       };
+    } else if (kind === 'beacon') {
+      item = this.remoteBeaconItem(id, owner, at, hp, armor);
     } else {
       const group = new THREE.Group();
       const m = new THREE.Mesh(
@@ -429,6 +488,21 @@ export class Deployables {
     item.team = team;
     this.remote.set(id, item);
     this.byId.set(id, item);
+  }
+
+  /** Remote beacon — same DeployBeacon visual as a local plant; the item
+   *  is a server-lifetime proxy, so hurt is a no-op (deployGone kills it). */
+  private remoteBeaconItem(id: number, owner: string, at: THREE.Vector3, hp?: number, armor?: number): Item {
+    const b = new DeployBeacon(this.deps.scene, this.deps.lazyTerrain(), at);
+    b.unfoldDone();
+    if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
+    return {
+      kind: 'beacon', candId: `rdep:${id}`, pos: b.pos, dead: false,
+      hurt: () => {},
+      update: (dt) => b.update(dt),
+      dispose: () => b.dispose(this.deps.scene),
+      v: b, owner,
+    };
   }
 
   /** deployHp broadcast — server is the vitals authority; the local
@@ -689,7 +763,9 @@ export class Deployables {
         pod.station?.dispose(this.deps.scene);
         pod.drone?.dispose(this.deps.scene);
         pod.shield?.dispose(this.deps.scene);
+        pod.beacon?.dispose(this.deps.scene);
         pod.mine?.dispose();
+        if (pod.nugget) this.deps.scene.remove(pod.nugget);
         this.pods.splice(i, 1);
       }
     }
@@ -703,6 +779,54 @@ export class Deployables {
       if (nowMs - w.last > 250) { w.beam.dispose(); this.weldBeams.delete(id); }
     }
     this.rockets.update(dt);
+    this.updateBeaconAim();
+  }
+
+  // --- Targeting beacon aim reticle -----------------------------------------
+  // Own beacon → HUD diamond marking where to point the current weapon so
+  // the shell lands on it. Gravity guns get the solved high-arc lob
+  // (T2 mortar read); flat-trajectory weapons aim straight at the post.
+  private readonly _beaconOrigin = new THREE.Vector3();
+  private readonly _beaconAim = new THREE.Vector3();
+
+  private updateBeaconAim(): void {
+    const beacon = this.items.find(i => i.kind === 'beacon' && !i.dead && i.owner === undefined);
+    const hud = this.deps.lazyHud();
+    const cam = this.deps.camera;
+    if (!beacon) { hud.updateBeaconAim(null, cam, true); return; }
+    const p = this.deps.lazyPlayer();
+    const cfg = getProjectileConfig(weaponDef(p.currentWeapon).weaponType);
+    cam.getWorldPosition(this._beaconOrigin);
+    const o = this._beaconOrigin;
+    const t = beacon.pos;
+    const dx = t.x - o.x, dz = t.z - o.z;
+    const dy = (t.y + 0.6) - o.y; // aim at the emitter, not the dirt
+    const d = Math.hypot(dx, dz);
+    if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, cam, true); return; }
+    if (!cfg.gravity) {
+      // Flat gun — the reticle IS the beacon; still worth marking.
+      this._beaconAim.set(t.x, t.y + 0.6, t.z);
+      hud.updateBeaconAim(this._beaconAim, cam, true);
+      return;
+    }
+    const v = cfg.speed, g = Math.abs(GRAVITY);
+    const disc = v * v * v * v - g * (g * d * d + 2 * dy * v * v);
+    if (disc < 0) {
+      // Out of this gun's arc — flag it so the reticle reads "can't reach"
+      // instead of lying about a lob that falls short.
+      this._beaconAim.set(t.x, t.y + 0.6, t.z);
+      hud.updateBeaconAim(this._beaconAim, cam, false);
+      return;
+    }
+    // High-arc root — the T2 mortar lob over obstacles, not the flat one.
+    const theta = Math.atan((v * v + Math.sqrt(disc)) / (g * d));
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    const hx = dx / d, hz = dz / d;
+    // The reticle marks the aim direction; projecting a point far enough
+    // along it keeps the marker off the near field.
+    const dist = Math.max(d, 40);
+    this._beaconAim.set(o.x + hx * cosT * dist, o.y + sinT * dist, o.z + hz * cosT * dist);
+    hud.updateBeaconAim(this._beaconAim, cam, true);
   }
 
   // A server-acked local item also sits in byId — drop it or

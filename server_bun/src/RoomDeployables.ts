@@ -20,7 +20,10 @@ import { DEPLOY_COST } from '../../shared/weapons.ts';
 import { simNow } from './simClock.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
-const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120 };
+const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120, nugget: 0, beacon: 300 };
+// Thrown nugget mints a pickup that can't be grabbed for a beat — the
+// gem needs to leave the thrower's grab radius before anyone banks it.
+const NUGGET_ARM_S = 0.2;
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
 
@@ -108,6 +111,13 @@ export class RoomDeployables {
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return;
     player.beltCharges -= DEPLOY_COST;
+    // Nugget: no planted item — the claim mints a grabbable gem where the
+    // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
+    // grab is first-come — a fast enemy can steal the thrower's change.
+    if (k === 'nugget') {
+      this.room.pickups?.spawn({ ...pos }, 'gem', NUGGET_ARM_S);
+      return;
+    }
     const owned = [...this.items.values()].filter((d) => d.owner === playerId && d.kind === k);
     // At cap: recycle the oldest rather than refuse — Tribes remote-arms
     // behavior, keeps the feel without an unbounded pile.
@@ -241,7 +251,7 @@ export class RoomDeployables {
   /** AOE blast sweep — every deployable inside the radius eats scaled
    *  splash (same falloff curve as players). Own gear is not exempt:
    *  a careless mortar wrecks your own turret too. */
-  applyBlast(center: Vec3, damage: number, radius: number, shooterId: string): void {
+  applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]): void {
     if (this.items.size === 0) return;
     for (const d of this.items.values()) {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
@@ -250,7 +260,7 @@ export class RoomDeployables {
       // Static gear can't dodge — a bolt landing inside the envelope does
       // at least half its base splash, so clearing a stand costs a few
       // well-placed lobs instead of a dozen grazed edges.
-      const dmg = Math.max(aoeDamage(damage, dist, radius), Math.round(damage * 0.5));
+      const dmg = Math.max(aoeDamage(damage, dist, radius, scales), Math.round(damage * 0.5));
       if (dmg <= 0) continue;
       logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
       this.hurt(d, dmg, shooterId);

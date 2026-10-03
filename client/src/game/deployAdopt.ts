@@ -10,6 +10,7 @@ import type { Mine } from '../entities/Mine.js';
 import type { DeployStation } from '../entities/DeployStation.js';
 import type { DeployDrone } from '../entities/DeployDrone.js';
 import type { DeployShield } from '../entities/DeployShield.js';
+import type { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployStation as StationClass } from '../entities/DeployStation.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -162,6 +163,24 @@ export class DeployAdopter {
     };
     const hurt = item.hurt;
     item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };
+    this.items.push(item);
+  }
+
+  /** Targeting beacon — no behavior of its own; the item record exists so
+   *  caps/TTL/blasts manage it while Deployables reads its pos for the
+   *  mortar-arc HUD reticle. */
+  adoptBeacon(b: DeployBeacon, owner?: DeployOwner): void {
+    const item: Item = {
+      kind: 'beacon', candId: b.candId, pos: b.pos, dead: false,
+      hurt: (dmg) => b.takeDamage(dmg),
+      v: b,
+      update: (dt) => b.update(dt),
+      dispose: () => b.dispose(this.deps.scene),
+      owner: owner?.id,
+      team: owner?.team,
+    };
+    const hurt = item.hurt;
+    item.hurt = (dmg) => { hurt(dmg); if (b.dead) this.host.killItem(item); };
     this.items.push(item);
   }
 

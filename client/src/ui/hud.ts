@@ -215,6 +215,9 @@ export class HUD {
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
 
+  /** Header over the roster — "CAPTURE THE FLAG · Dangerous Crossing". */
+  setScoreboardTitle(t: string): void { this.sb.setTitle(t); }
+
   weaponSlots: HTMLSpanElement[] = [];  // public — HudStats family paints it
   healthBar!: HTMLDivElement;
   energyBar!: HTMLDivElement;
@@ -274,7 +277,16 @@ export class HUD {
   private connDownAt = 0;
   private connFlashUntil = 0;
   private connFlashTxt = '';
+  private connFlashCls: 'up' | 'warn' = 'up';
   private connLastTxt = '';
+  /** Server-flagged warning (anti-cheat verdict) — reuses the conn-banner
+   *  slot in amber for a few seconds; setConnDown's per-frame pass renders
+   *  it via the flash path. */
+  serverWarn(text: string): void {
+    this.connFlashUntil = performance.now() + 6000;
+    this.connFlashTxt = text;
+    this.connFlashCls = 'warn';
+  }
   setConnDown(down: boolean): void {
     const now = performance.now();
     if (down) {
@@ -290,13 +302,14 @@ export class HUD {
       this.connFlashTxt = `back online — was down ${s.toFixed(1)}s`;
     }
     if (now < this.connFlashUntil) {
-      this.paintConn(this.connFlashTxt, 'up');
+      this.paintConn(this.connFlashTxt, this.connFlashCls);
     } else {
+      this.connFlashCls = 'up';
       this.connBanner.style.display = 'none';
       this.connLastTxt = '';
     }
   }
-  private paintConn(txt: string, cls: 'down' | 'up'): void {
+  private paintConn(txt: string, cls: 'down' | 'up' | 'warn'): void {
     if (this.connBanner.className !== cls) this.connBanner.className = cls;
     if (txt === this.connLastTxt) return;
     this.connLastTxt = txt;
@@ -324,6 +337,34 @@ export class HUD {
   updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
                       camera: THREE.Camera, team: TeamId): void {
     this.indicators.update(id, position, camera, { variant: `flag ${team}` });
+  }
+
+  /** Targeting-beacon aim reticle — Deployables solves the lob each frame
+   *  and hands the world-space aim point here; null hides the marker.
+   *  `reachable=false` means the current gun's arc can't carry that far. */
+  private beaconAimEl: HTMLDivElement | null = null;
+  private readonly _beaconProj = new THREE.Vector3();
+  updateBeaconAim(point: THREE.Vector3 | null, camera: THREE.Camera, reachable: boolean): void {
+    if (!point) {
+      this.beaconAimEl?.classList.add('hidden');
+      return;
+    }
+    if (!this.beaconAimEl) {
+      this.beaconAimEl = document.createElement('div');
+      this.beaconAimEl.className = 'beacon-aim';
+      this.el.appendChild(this.beaconAimEl);
+    }
+    this.beaconAimEl.classList.toggle('noarc', !reachable);
+    const v = this._beaconProj.copy(point).project(camera);
+    // A point behind the camera projects inverted — hide rather than lie.
+    if (v.z > 1 || Math.abs(v.x) > 1.3 || Math.abs(v.y) > 1.3) {
+      this.beaconAimEl.classList.add('hidden');
+      return;
+    }
+    this.beaconAimEl.classList.remove('hidden');
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    this.beaconAimEl.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 
   removePlayerIndicator(playerId: string): void {

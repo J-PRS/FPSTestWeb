@@ -313,6 +313,37 @@
 }
 .player-indicator.flag.alpha { --ind-bg: #55aaff; }
 .player-indicator.flag.bravo { --ind-bg: #ff8855; }
+/* Targeting-beacon aim reticle — hollow diamond-in-ring, cyan. Unlike the
+   indicators it marks an aim DIRECTION (solved lob arc), not an entity. */
+.beacon-aim {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.1s;
+}
+.beacon-aim::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid #7df9ff;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  filter: drop-shadow(0 0 4px rgba(125, 249, 255, 0.9));
+}
+.beacon-aim::after {
+  content: '';
+  position: absolute;
+  inset: 30%;
+  background: #7df9ff;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+/* The lob can't reach the beacon with this gun — read as a dead marker,
+   not a false promise. */
+.beacon-aim.noarc::before { border-color: #ff6b6b; filter: none; }
+.beacon-aim.noarc::after { background: #ff6b6b; }
+.beacon-aim.hidden { opacity: 0; }
+.sb-open .beacon-aim { opacity: 0; }
 /* A flag offscreen stays a filled diamond — losing the flag's edge marker
    is exactly the failure mode this element exists to prevent. */
 .player-indicator.flag.offscreen::before {
@@ -348,6 +379,11 @@
   padding: 14px 18px;
   font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   display: none;
+}
+#sb-title {
+  font-size: 0.68rem; letter-spacing: 0.22em; font-weight: 600;
+  color: rgba(200,220,240,0.65); text-align: center;
+  padding-bottom: 9px; white-space: nowrap;
 }
 #scoreboard table {
   width: 100%; border-collapse: collapse;
@@ -427,6 +463,10 @@
 #conn-banner.up {
   color: #7ddf7d; border: 1px solid rgba(125,223,125,0.4);
   background: rgba(10,50,20,0.5);
+}
+#conn-banner.warn {
+  color: #ffcf5e; border: 1px solid rgba(255,190,60,0.6);
+  background: rgba(60,40,5,0.6); animation: resumePulse 1s ease-in-out infinite;
 }
 
 /* Death overlay + respawn countdown (hud.ts builds these elements) */
