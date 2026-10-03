@@ -124,6 +124,10 @@ export class TickLoop {
   }
 
   private tickRoom(room: Room, players: Players, now0: number): void {
+    // Phase 0: drain the command buffer — all client input lands before
+    // any sim runs, in wire-arrival order.
+    room.drainCommands();
+
     // Server sims move first — bot/flag writes land in this tick's records.
     for (const sim of room.sims) sim.tick(TICK_DT);
 

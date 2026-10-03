@@ -27,7 +27,7 @@ import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
-import type { PlayerState, Vec3 } from './types.ts';
+import type { PlayerState, Vec3, ClientMessage } from './types.ts';
 import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
@@ -142,6 +142,17 @@ export class Room {
   readonly projectiles: RoomProjectiles;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
+
+  /** Inbound client messages park here until the next tick drains them —
+   *  the Quake/Valve command-buffer pattern: all input lands at phase 0
+   *  so sims see a deterministic order (input → sim → fanout) instead of
+   *  arrival-time mutations interleaving with bot/projectile ticks. */
+  readonly commands: { playerId: string; msg: ClientMessage }[] = [];
+  drainCommands(): void {
+    if (!this.commands.length) return;
+    for (const c of this.commands) this.messages.handleMessage(c.playerId, c.msg);
+    this.commands.length = 0;
+  }
   /** Spatial memory — kills/fights/gems/flags leave decaying scent the
    *  brains read for where-the-action-was. See influenceMap.ts. */
   readonly influence = new InfluenceMap();
@@ -798,19 +809,21 @@ export class Room {
     // mapUpdate; a sim still running the old field disagrees about where
     // the ground is for the entire match.
     if (terrainChanged) this.onTerrain?.(spec);
-    // Top up / retire bots toward the new spec count.
-    const want = spec.bots ?? 0;
-    if (this.bots.count < want) this.bots.populate(want - this.bots.count);
-    else if (this.bots.count > want) {
-      let excess = this.bots.count - want;
-      // Snapshot first — removePlayerCompletely mutates the map we're walking.
-      // oxlint-disable-next-line no-useless-spread
-      for (const p of [...this.players.getAllPlayers().values()]) {
-        if (excess <= 0) break;
-        if (!p.isBot) continue;
-        this.removePlayerCompletely(p.id, 'adminReload', () => {});
-        excess--;
-      }
+    this.retuneBots(spec.bots ?? 0);
+  }
+
+  /** Top up / retire bots toward a spec's bot count (admin reload). */
+  private retuneBots(want: number): void {
+    if (this.bots.count < want) { this.bots.populate(want - this.bots.count); return; }
+    if (this.bots.count <= want) return;
+    let excess = this.bots.count - want;
+    // Snapshot first — removePlayerCompletely mutates the map we're walking.
+    // oxlint-disable-next-line no-useless-spread
+    for (const p of [...this.players.getAllPlayers().values()]) {
+      if (excess <= 0) break;
+      if (!p.isBot) continue;
+      this.removePlayerCompletely(p.id, 'adminReload', () => {});
+      excess--;
     }
   }
 

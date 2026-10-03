@@ -340,7 +340,9 @@ export class GameServer {
     }
 
     this.ops.msgsIn++;
-    room.messages.handleMessage(playerId, result.data);
+    // Command buffer: effects land at phase 0 of the next room tick, in
+    // arrival order — sims never see a mid-frame mutation order.
+    room.commands.push({ playerId, msg: result.data });
   }
 
   // Full teardown shared by grace expiry and idle reap — the five stores
