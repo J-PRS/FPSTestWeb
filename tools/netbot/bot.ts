@@ -78,6 +78,15 @@ export class NetBot {
     if (opts.loadout) this.loadout = opts.loadout;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
+    // A reject is a verdict, not transport loss — the resend loop only
+    // exists for claims that never got ANY answer, so a refused spawn
+    // leaves the queue (and its impact shell rolls off the wire too,
+    // else it claims 'no known projectile' at flight end).
+    nc.onShotRejected = (m) => {
+      if (!m.shotId) return;
+      this.spawns.delete(m.shotId);
+      this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
+    };
     if (opts.hopEveryMs) {
       this.hopTimer = setInterval(() => {
         // Hold fire for the jitter window first, THEN send the switch —

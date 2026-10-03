@@ -107,6 +107,9 @@ export class NetClient {
    *  the pain signal a real player reacts to (server bots get it via
    *  brain.takeHit off the combat funnel). */
   lastAttacker: { at: number; shooterId: string | undefined } | null = null;
+  /** Behavior-layer hook for claim verdicts — a reject is a verdict, not
+   *  transport loss, so the bot stops retransmitting that spawn. */
+  onShotRejected?: (m: Extract<ServerMessage, { type: 'shotRejected' }>) => void;
   /** Structures from gameState/mapUpdate — stashed until the field
    *  finishes loading so the attach survives a slow .bin fetch. */
   private structures?: readonly StructureSpec[];
@@ -353,6 +356,7 @@ export class NetClient {
       case 'shotRejected': {
         const n = (this.tel.rejects.get(m.reason) ?? 0) + 1;
         this.tel.rejects.set(m.reason, n);
+        this.onShotRejected?.(m);
         break;
       }
       case 'projectileCreated': {

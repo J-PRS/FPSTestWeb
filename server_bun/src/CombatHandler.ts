@@ -53,6 +53,13 @@ export interface CombatDeps {
   /** Concussion payload hook — RoomFlags.dropIfCarrier; absent = no
    *  flag sim, so the strip is a no-op outside CTF rooms. */
   dropFlagCarrier?: (playerId: string) => void;
+  /** Rabbit rooms: returns the flag carrier's id (null when the flag is
+   *  loose). Presence of the dep IS the mode check — friendly() blocks
+   *  damage unless one side of the pair is the rabbit. */
+  rabbitCarrier?: () => string | null;
+  /** Rabbit tie-in: ids sitting in last place — the bottom-feeder rule
+   *  lets the worst-ranked hunter brawl with anyone. */
+  rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — the beam burns movement energy,
    *  server-side truth so a bot/client can't heal for free. */
   drainEnergy?: (playerId: string, amount: number) => void;
@@ -200,14 +207,14 @@ export class CombatHandler {
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
    *  their client can log WHY predicted damage never happened. */
-  reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
+  reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     this.hb('rej');
     this.hb(`rej.${kind}`);
     logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
     // Rejected claims can leave predicted self-damage stuck client-side —
     // ship our health value so the shooter resyncs instead of drifting.
     const health = this.playerManager.getPlayer(playerId)?.health;
-    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health });
+    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health, shotId });
   }
 
   /** Honest-lag drop, not a reject — but the shooter's client already
@@ -227,6 +234,18 @@ export class CombatHandler {
   }
 
   friendly(shooterId: string, targetId: string): boolean {
+    // Rabbit law: once a rabbit exists, the only legal pairings are ones
+    // that include the rabbit — hunter-vs-hunter is friendly fire. The
+    // bottom-feeder is exempt: last place can hit/be hit by anyone. No
+    // rabbit at all (flag unspawned or loose) = open season. Self-splash
+    // stays legal (rocket jumps).
+    if (this.deps.rabbitCarrier) {
+      if (shooterId === targetId) return false;
+      const c = this.deps.rabbitCarrier();
+      if (!c || shooterId === c || targetId === c) return false;
+      const bottom = this.deps.rabbitBottom?.();
+      return !(bottom?.has(shooterId) || bottom?.has(targetId));
+    }
     // friendlyFire server option opens the gate entirely; self-splash
     // stays allowed regardless (rocket jumps).
     if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) return false;
@@ -285,7 +304,7 @@ export class CombatHandler {
     // Tier-locked ordnance — the menu filter is client-side convenience;
     // this is the real boundary for doctored clients.
     if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType);
+      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
       return;
     }
     player.protectedUntil = 0; // firing breaks your own spawn shield

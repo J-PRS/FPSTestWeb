@@ -19,13 +19,13 @@ import { wallNow } from './wallClock.ts';
 export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string, defer?: ClaimDefer): void {
     // Reject self-damage — client should never send its own ID as targetId
     if (targetId === playerId) {
-      h.reject(playerId, 'Shot', 'self-target');
+      h.reject(playerId, 'Shot', 'self-target', undefined, undefined, msg.shotId);
       return;
     }
 
     const target = h.playerManager.getPlayer(targetId);
     if (!target) {
-      h.reject(playerId, 'Shot', 'unknown target', targetId, msg.weaponType);
+      h.reject(playerId, 'Shot', 'unknown target', targetId, msg.weaponType, msg.shotId);
       return;
     }
     // Dead targets are untouchable — without this, corpse hits still
@@ -44,12 +44,12 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // gate (which would reject the whole archetype). The client latch
     // decides whom it pinned; range/energy/tick law is re-derived here.
     if (msg.weaponType === WeaponType.HealBeam) {
-      healBeamClaim(h, playerId, player, targetId, target);
+      healBeamClaim(h, playerId, player, targetId, target, msg.shotId);
       return;
     }
     // Friendly fire: no damage (and no playerHit) between teammates.
     if (h.friendly(playerId, targetId)) {
-      h.reject(playerId, 'Shot', 'friendly fire', targetId, msg.weaponType);
+      h.reject(playerId, 'Shot', 'friendly fire', targetId, msg.weaponType, msg.shotId);
       return;
     }
 
@@ -67,7 +67,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
       return;
     }
     if (msg.position === undefined || msg.airtime === undefined) {
-      h.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType);
+      h.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType, msg.shotId);
       return;
     }
     // Reorder case: the claim reached us before its spawn registered, so
@@ -91,7 +91,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
       targetClass: target.armorClass,
     });
     if (!verdict.ok) {
-      h.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
+      h.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType, msg.shotId);
       return;
     }
     // Skillshot ramp pays on BODY contact only — a claim inside the grown
@@ -122,7 +122,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
    *  cadence and the jet-energy cost — claims carry no amounts, so a
    *  doctored client can at most waste its own energy budget faster
    *  than the tick law allows (which the rate map blocks anyway). */
-function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, targetId: string, target: PlayerState): void {
+function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, targetId: string, target: PlayerState, shotId?: string): void {
     if (!h.friendly(playerId, targetId)) {
       h.hb('drop.healFoe'); // zapping an enemy with the med gun — no payload
       return;
@@ -142,7 +142,7 @@ function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, 
     const at = rewindPos(player, clampPing(player.ping));
     const d = Math.hypot(tpos.x - at.x, tpos.y - at.y, tpos.z - at.z);
     if (d > HEALBEAM_RANGE * 1.5) {
-      h.reject(playerId, 'Shot', `heal reach ${d.toFixed(1)}m > ${HEALBEAM_RANGE}m`, targetId, WeaponType.HealBeam);
+      h.reject(playerId, 'Shot', `heal reach ${d.toFixed(1)}m > ${HEALBEAM_RANGE}m`, targetId, WeaponType.HealBeam, shotId);
       return;
     }
     // Energy is the ammo: a dry tank can't tick — drops silent, the
@@ -211,7 +211,7 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
         const tsGapOk = msg.timestamp !== undefined && win.lastTs !== undefined
           && msg.timestamp - win.lastTs >= interval * 850;
         if (!tsGapOk && win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
-          h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType);
+          h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType, msg.shotId);
           return;
         }
         win.count++;
@@ -236,7 +236,7 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
     );
     if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
-      h.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
+      h.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType, msg.shotId);
       return;
     }
     // Belt throws are ordnance, not trigger pulls — a dry pocket can't

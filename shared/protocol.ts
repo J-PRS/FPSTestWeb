@@ -236,7 +236,11 @@ export type ServerMessage =
       /** Server-authoritative health — a rejected claim may have applied
        *  predicted self-splash locally, so this lets the client resync
        *  instead of running divergent health until the next real hit. */
-      health?: number }
+      health?: number;
+      /** The claim's own nonce — a client that retransmits un-acked spawns
+       *  must stop on a reject (it's a verdict, not transport loss), and
+       *  without the id it can't tell the two apart. */
+      shotId?: string }
   // Claim dropped without judgement — dead shooter/target mid-flight, an
   // honest-lag discard that must still clear the shooter's predicted-hit
   // ledger. Kept distinct from shotRejected so reject tallies stay pure.
