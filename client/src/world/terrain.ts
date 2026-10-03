@@ -187,9 +187,12 @@ export class Terrain {
   }
 
   /** Baked albedo (T2 ports carry terrainTex) replaces the procedural
-   *  palette — the fragment shader samples it in heightmap UV space. */
+   *  palette — the fragment shader samples it in heightmap UV space.
+   *  Ownership: swap callers hand us fresh uploads; disposing the
+   *  replaced texture here is what keeps map rotation off GPU memory. */
   private albedoTex: THREE.Texture | null = null;
   setAlbedo(tex: THREE.Texture | null): void {
+    if (this.albedoTex && this.albedoTex !== tex) this.albedoTex.dispose();
     this.albedoTex = tex;
     for (const level of this.levels) {
       level.material.uniforms.albedoMap.value = tex;
@@ -199,9 +202,14 @@ export class Terrain {
 
   /** T2 material blend layer — atlas of 256px tiles + packed alpha
    *  weights; the shader modulates the albedo by tile luminance near
-   *  the camera (grain only — the bake keeps its color). */
+   *  the camera (grain only — the bake keeps its color). Same ownership
+   *  rule as setAlbedo: swap hands us fresh uploads, we retire the old. */
+  private matsTex: THREE.Texture[] = [];
   setMaterialBlend(tiles: THREE.Texture | null, alphaA: THREE.Texture | null,
                    alphaB: THREE.Texture | null, tileMeters: number, means: number[] | null): void {
+    const next = [tiles, alphaA, alphaB].filter((t): t is THREE.Texture => t !== null);
+    for (const t of this.matsTex) if (!next.includes(t)) t.dispose();
+    this.matsTex = next;
     for (const level of this.levels) {
       level.material.uniforms.matTiles.value = tiles;
       level.material.uniforms.matAlphaA.value = alphaA;
@@ -273,6 +281,9 @@ export class Terrain {
     this.levels = [];
     this.gridGeo.dispose();
     this.heightTexture.dispose();
+    this.albedoTex?.dispose();
+    for (const t of this.matsTex) t.dispose();
+    this.matsTex = [];
   }
 
   getHeight(wx: number, wz: number): number {
