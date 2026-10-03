@@ -261,6 +261,7 @@ export class PlayerModel {
     // clips natively — alias them under the UAL_ names the state map
     // prefers so ANIM_NAMES resolves without a retarget pass.
     for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
+    if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
     if (mann) this.buildAimLayer();
 
     logger.debug('Loaded animations:', Array.from(this.animations.keys()));
@@ -650,6 +651,80 @@ export class PlayerModel {
     if (!this.aimNeutral) logger.debug('Aim layer unavailable — no Pistol_Aim clips');
   }
 
+  /** Authored clips can bake a facing turn into the hip track — the
+   *  polyart pack's Idle_Ducking_ar carries the body at +95° vs the
+   *  ~-138° every other clip agrees on, so skiing flipped him toward
+   *  the camera. Measure each clip's first hip key, take the set's
+   *  modal yaw as the rig's forward convention, and unwind outliers
+   *  (>~30°) back onto it in the hip's parent frame. */
+  private alignHipYaw(): void {
+    // Skeleton root joint = the shallowest skin joint (hips for humanoid
+    // rigs — the node every facing convention is authored on).
+    let hip: THREE.Object3D | undefined;
+    this.model?.traverse(o => {
+      const sk = o as THREE.SkinnedMesh;
+      if (hip || !sk.isSkinnedMesh || !sk.skeleton) return;
+      let root: THREE.Object3D | null = null, rd = Infinity;
+      for (const b of sk.skeleton.bones) {
+        let d = 0; for (let p = b.parent; p && p !== this.model; p = p.parent) d++;
+        if (d < rd) { root = b; rd = d; }
+      }
+      hip = root ?? undefined;
+    });
+    if (!hip?.parent) return;
+    const fwd = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const yawOf = (tr: THREE.KeyframeTrack): number | null => {
+      if (!tr.name.endsWith('.quaternion')) return null;
+      const v = tr.values;
+      q.set(v[0], v[1], v[2], v[3]);
+      fwd.set(0, 0, 1).applyQuaternion(q);
+      return Math.atan2(fwd.x, fwd.z);
+    };
+    const canonical = (() => {
+      const buckets = new Map<number, { sum: number; n: number }>();
+      for (const [, a] of this.animations) {
+        const tr = a.getClip().tracks.find(t => t.name === hip!.name + '.quaternion');
+        if (!tr) continue;
+        const y = yawOf(tr);
+        if (y === null) continue;
+        const k = Math.round(y / (Math.PI / 18));
+        const b = buckets.get(k) ?? { sum: 0, n: 0 };
+        b.sum += y; b.n++;
+        buckets.set(k, b);
+      }
+      let best = { sum: 0, n: 0 };
+      for (const b of buckets.values()) if (b.n > best.n) best = b;
+      return best.n ? best.sum / best.n : null;
+    })();
+    if (canonical === null) return;
+    this.model!.updateMatrixWorld(true);
+    const parentQ = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().copy(this.model!.matrixWorld).invert().multiply(hip.parent.matrixWorld));
+    const fixed: string[] = [];
+    for (const [, a] of this.animations) {
+      const clip = a.getClip();
+      const tr = clip.tracks.find(t => t.name === hip!.name + '.quaternion');
+      if (!tr) continue;
+      const y = yawOf(tr);
+      if (y === null) continue;
+      let delta = y - canonical;
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      while (delta < -Math.PI) delta += 2 * Math.PI;
+      if (Math.abs(delta) < 0.5) continue;
+      const fix = parentQ.clone().invert()
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -delta))
+        .multiply(parentQ);
+      const v = tr.values;
+      for (let i = 0; i < v.length; i += 4) {
+        q.set(v[i], v[i + 1], v[i + 2], v[i + 3]).premultiply(fix);
+        v[i] = q.x; v[i + 1] = q.y; v[i + 2] = q.z; v[i + 3] = q.w;
+      }
+      fixed.push(clip.name);
+    }
+    if (fixed.length) logger.debug(`Hip-yaw outliers corrected: ${fixed.join(', ')}`);
+  }
+
   playAnimation(name: string, startPhase = 0): void {
     if (!this._loaded) { this._queuedAnim = name; return; }
     const base = this.animations.get(name);
@@ -661,6 +736,15 @@ export class PlayerModel {
       return;
     }
     const action = this.distalFrozen ? this.farAction(base) : base;
+    // Same clip re-requested (jump↔jet share clips on the class rigs) —
+    // refading an already-running action dips its weight through 0 and
+    // flashes the bind pose; oneshots still restart since a replay is
+    // the point of re-firing them.
+    if (action === this.currentAction && !ONESHOT_CLIPS.has(name) && startPhase <= 0) {
+      this.currentClipName = name;
+      this.playingUAL = name.startsWith('UAL_');
+      return;
+    }
 
     // (no per-clip head bookkeeping — the pitch un-apply in update() handles
     // both tracked and untracked head bones, including the case where the
