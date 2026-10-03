@@ -9,8 +9,8 @@ Use when the Windows desktop is locked/unusable or you need scripted gameplay.
 
 ## Dev server
 
-`cd client && npm run dev` — vite, default port 5300 but it auto-increments
-(5300/5301 may be taken by other sessions; read the actual port from vite output).
+`cd client && npm run dev` — vite, default port 5400 but it auto-increments
+(5400/5401 may be taken by other sessions; read the actual port from vite output).
 
 ## Browser
 

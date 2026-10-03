@@ -8,10 +8,10 @@
 //
 // Usage:
 //   node render.js <file.demo> [out.mp4] [--fps=30] [--size=1280x720]
-//                  [--crf=19] [--url=http://localhost:5302] [--headless]
+//                  [--crf=19] [--url=http://localhost:5400] [--headless]
 //                  [--chrome="C:\path\to\chrome.exe"]
 //
-// Needs a running vite dev server (--url or auto-detect ports 5300-5310).
+// Needs a running vite dev server (--url or auto-detect ports 5400-5410).
 // Headed (default) uses the real GPU — much faster than headless SwiftShader.
 // -framerate MUST precede -i on ffmpeg's args: as an input option placed after
 // the pipe it gets ignored and the timeline silently stretches (puppeteer
@@ -55,7 +55,7 @@ async function tryUrl(url) {
 }
 async function findServer() {
   if (opt.url) return String(opt.url);
-  for (let p = 5300; p <= 5310; p++) {
+  for (let p = 5400; p <= 5410; p++) {
     const u = `http://localhost:${p}/`;
     if (await tryUrl(u)) return u;
   }
@@ -64,7 +64,7 @@ async function findServer() {
 
 (async () => {
   const url = await findServer();
-  if (!url) { console.error('no vite dev server on :5300-5310 — start one (cd client && npm run dev) or pass --url='); process.exit(1); }
+  if (!url) { console.error('no vite dev server on :5400-5410 — start one (cd client && npm run dev) or pass --url='); process.exit(1); }
   console.log(`server ${url}  size ${W}x${H}  fps ${FPS}  crf ${CRF}  ${HEADLESS ? 'headless' : 'headed'}`);
 
   // ---------- ffmpeg encoder: frames in via stdin, mp4 out ----------

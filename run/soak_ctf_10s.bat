@@ -10,6 +10,7 @@ set PATH=%PATH%;%USERPROFILE%\.bun\bin
 set FPS_SOAK_MS=10000
 set FPS_SOAK_MODE=ctf
 if /i "%1"=="--verbose" set FPS_SOAK_VERBOSE=1
+set FPS_TRAIL=%~dp0soak_map
 if not defined FPS_SOAK_VERBOSE set LOG_LEVEL=warn
 bun test tests/scenarios/fastSoak.test.ts
 endlocal

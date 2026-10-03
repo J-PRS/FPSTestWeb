@@ -24,8 +24,8 @@ function Get-PortProcess {
 Write-Host "Starting server and client..."
 
 # Check ports before starting
-$ports = @(5300)
-Write-Host "Checking port 5300..."
+$ports = @(5400)
+Write-Host "Checking port 5400..."
 foreach ($port in $ports) {
     $portInfo = Get-PortProcess -Port $port
     if ($portInfo) {

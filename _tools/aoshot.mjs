@@ -5,7 +5,7 @@ await p.setViewport({width:1280,height:800});
 p.on('console', m => { const t=m.text(); if(t.includes('aodump')||t.includes('swap')||t.includes('edgebake')) console.log('[pg]',t.slice(0,160)); });
 p.on('pageerror', e => console.log('[ERR]', e.message.slice(0,300)));
 const view = process.argv[2] ?? '0';
-await p.goto('http://localhost:5300/aodump.html?w=0&view='+view, { waitUntil: 'networkidle0', timeout: 30000 });
+await p.goto('http://localhost:5400/aodump.html?w=0&view='+view, { waitUntil: 'networkidle0', timeout: 30000 });
 await new Promise(r => setTimeout(r, 6000));
 await p.screenshot({ path: '../aoshot_v'+view+'.png' });
 await b.close();

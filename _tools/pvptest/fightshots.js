@@ -9,7 +9,7 @@ const ROOM = process.argv[3] || 'fightshots';
 const BOTS = Number(process.argv[4] || 8);
 const EXE = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = process.env.FIGHT_PORT || '8000';
-const BASE = `http://localhost:5302/?server=localhost:${PORT}&room=${ROOM}&bots=${BOTS}`;
+const BASE = `http://localhost:${process.env.VITE_PORT || '5400'}/?server=localhost:${PORT}&room=${ROOM}&bots=${BOTS}`;
 const OUT = path.join(__dirname, '..', '..', 'screenshots', 'fight');
 
 (async () => {

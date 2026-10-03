@@ -6,8 +6,8 @@ set "SERVER_DIR=%PROJECT_DIR%\server_bun"
 set "CLIENT_DIR=%PROJECT_DIR%\client"
 set "BUN_BIN=%USERPROFILE%\.bun\bin"
 
-echo Killing old processes on ports 5300 and 8000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5300.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+echo Killing old processes on ports 5400 and 8000...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5400.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 
 echo Starting server and client...

@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
-    port: 5300,
+    port: 5400,
     host: '0.0.0.0',
     allowedHosts: ['.trycloudflare.com'],
     cors: true,
@@ -57,7 +57,7 @@ export default defineConfig(({ mode }) => ({
       // Conditionally use WSS/443 only when accessing through cloudflared tunnel
       protocol: process.env.VITE_HMR_URL ? "wss" : "ws",
       host: process.env.VITE_HMR_URL, // undefined = auto-detect from page URL (works for LAN access)
-      clientPort: process.env.VITE_HMR_URL ? 443 : 5300,
+      clientPort: process.env.VITE_HMR_URL ? 443 : 5400,
       overlay: true, // Show error overlay
     },
     watch: {
