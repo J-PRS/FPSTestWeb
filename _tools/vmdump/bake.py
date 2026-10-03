@@ -5,7 +5,12 @@
 import bpy, sys, os
 
 argv = sys.argv[sys.argv.index('--') + 1:]
-src, out_prefix = argv
+src, out_prefix = argv[0], argv[1]
+# --union: boolean-weld the parts into one solid before the join. The
+# exports are separate overlapping shells, so part junctions read as
+# edges/cavities to AO and edge bakes; a real union gives the bakes true
+# intersection geometry instead.
+union = '--union' in argv[2:]
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
@@ -29,6 +34,17 @@ bpy.ops.object.select_all(action='DESELECT')
 for o in meshes:
     o.select_set(True)
 bpy.context.view_layer.objects.active = meshes[0]
+if union and len(meshes) > 1:
+    base = meshes[0]
+    for part in meshes[1:]:
+        mod = base.modifiers.new('union', 'BOOLEAN')
+        mod.operation = 'UNION'
+        mod.solver = 'EXACT'
+        mod.object = part
+        bpy.context.view_layer.objects.active = base
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(part)
+    meshes = [base]
 if len(meshes) > 1:
     bpy.ops.object.join()
 obj = bpy.context.active_object
