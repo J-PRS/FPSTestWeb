@@ -46,6 +46,7 @@ export const BOT_TUNING = {
     blockEta: 1.2,       // s — time-to-arrive budget for the pop
     preyRise: 6,         // m — prey this far overhead earns a burn
     destHighRise: 3,     // m — destination rise that arms 'destHigh'
+    destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
   },
   // botLines — meso-scale line picking
   lines: {
