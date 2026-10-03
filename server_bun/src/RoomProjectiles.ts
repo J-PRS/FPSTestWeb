@@ -232,13 +232,15 @@ export class RoomProjectiles {
     // Sticky chain: a blast cooks every sibling bomb in its radius — the
     // client already rips the chain visually; aging siblings to fuse lets
     // the same cascade happen server-side so blasts land when shown.
+    // Age to sib.ttl (not maxLifetime): jitteredTtl may roll past
+    // maxLifetime, and cooking to the base fuse would leave those stuck.
     if (proj.weaponType === WeaponType.Sticky) {
       const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
       for (const sib of this.projs.values()) {
         if (sib.weaponType !== WeaponType.Sticky) continue;
         const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
         if (dx * dx + dy * dy + dz * dz <= r2) {
-          sib.p.age = sib.stats.maxLifetime ?? HARD_TTL_S;
+          sib.p.age = Math.max(sib.p.age, sib.ttl);
         }
       }
     }

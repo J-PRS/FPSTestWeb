@@ -1,3 +1,4 @@
+2026-10-01 - sticky cook-off ages siblings to their own jittered fuse instead of base maxLifetime — a long-rolled sibling could previously survive the chain
 2026-10-01 - deployable combat envelopes moved into DEPLOY_ITEMS (one table both ends read); fixes client mines self-popping at 45s while the server kept them armed to 120s, mine fuse ignoring spawn protection, and a lastRepair key leak
 2026-10-01 - sfx voice pool is now priority-ranked FMOD-style: UI stingers (killConfirm, flagCue, hitMarker) and self sounds steal world chatter on overflow instead of being silently dropped mid-firefight
 2026-10-01 - fire-rate gate is a client-clock violation counter, not an arrival window; one fast pair (loadout-reset refire, paused-tab bunch, out-of-order stamps) admits while sustained sub-cadence macros still reject
