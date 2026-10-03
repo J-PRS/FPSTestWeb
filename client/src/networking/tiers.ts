@@ -374,7 +374,12 @@ export class TieredTransport implements GameTransport {
 
   send(data: string | Uint8Array): boolean {
     if (this.inner) return this.inner.send(data);
-    this.pending.push(data);
+    // Binary frames are volatile state — keep only the freshest while the
+    // probe resolves, same rule WebSocketConnection applies during downtime.
+    if (data instanceof Uint8Array) {
+      this.pending = this.pending.filter(m => !(m instanceof Uint8Array));
+    }
+    if (this.pending.length < 100) this.pending.push(data);
     return false;
   }
 
