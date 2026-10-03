@@ -769,6 +769,15 @@ export class PlayerModel {
         this._warnedAnims.add(name);
         logger.warn(`Animation not found: ${name}`);
       }
+      // Zero-native-clip variants (cybersoldier) resolve every state to a
+      // missing fallback until the async retarget bake lands — returning
+      // with no action running holds the model at bind pose for the whole
+      // window. Any real clip beats bind pose, so park on the idle loop
+      // (or the first available clip) while the requested one is absent.
+      if (!this.currentAction?.isRunning()) {
+        const hold = this.animations.has('UAL_Idle_Loop') ? 'UAL_Idle_Loop' : this.animations.keys().next().value;
+        if (hold) return this.playAnimation(hold);
+      }
       return;
     }
     const action = this.distalFrozen ? this.farAction(base) : base;
