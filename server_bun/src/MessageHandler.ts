@@ -18,6 +18,7 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
+import type { RoomEventSink } from './roomEvents.ts';
 import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -57,10 +58,11 @@ export interface RoomInfo {
   sky?: string;
   /** Interior placements (T2 .dif→.glb buildings) — client dressing only. */
   interiors?: { file: string; pos: { x: number; y: number; z: number }; rot?: number[]; scale?: { x: number; y: number; z: number } }[];
-  /** Any kill — Room drops carried flags here. */
-  onKill?: (targetId: string, shooterId: string) => void;
-  /** Any damage event — Room flinches bot brains here. */
-  onHit?: (targetId: string, shooterId: string) => void;
+  /** Domain-event sink — combat/chat notifications (kill, hit, fire,
+   *  botSpoke, chat) fan out to the room's subscribers. Commands and
+   *  queries stay as direct hooks below; an event never carries a
+   *  verdict back. */
+  emit?: RoomEventSink;
   /** Seeded room rng — scenario harnesses inject it so claim-path dice
    *  (bomblet scatter) replay identically under a seed. */
   rng?: () => number;
@@ -102,11 +104,9 @@ export interface RoomInfo {
   drainEnergy?: (playerId: string, amount: number) => void;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
-  /** Bot chat landed — Room relays it as a 'reply' notice to the squad. */
-  onBotSpoke?: (id: string) => void;
-  /** A player typed in chat — Room keyword-matches it into a bot notice
-   *  (gg → 'gg', ez → 'salty', bot-name mention → 'mention'). */
-  onChat?: (id: string, text: string) => void;
+  /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
+   *  notice to the squad. Player chat lands as 'chat' — Room keyword-
+   *  matches it into a bot notice (gg/ez/name-mention). */
   /** Mute the shadow's divergence judge ~1 RTT without re-seating it —
    *  armed alongside correctionGraceUntil whenever a correction goes out:
    *  pre-correction reports still in flight would otherwise blip the
@@ -127,9 +127,8 @@ export interface RoomInfo {
   preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
   /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
-  /** A legit fire claim passed the gates — the sheep meter's human
-   *  ignore debit reads its recency (bots report via BrainOut.fire). */
-  onFire?: (playerId: string) => void;
+  /** A legit fire claim lands as a 'fire' event — the sheep meter's
+   *  human ignore debit reads its recency (bots report via BrainOut). */
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[];
 }
@@ -138,8 +137,7 @@ export interface RoomInfo {
  *  handler table stays the ctor's readable half. */
 function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
   return {
-    onKill: roomInfo?.onKill,
-    onHit: roomInfo?.onHit,
+    emit: roomInfo?.emit,
     rng: roomInfo?.rng,
     teams: roomInfo?.teams,
     friendlyFire: roomInfo?.friendlyFire,
@@ -148,7 +146,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     drainEnergy: roomInfo?.drainEnergy,
     energyOf: roomInfo?.energyOf,
     moveResync: roomInfo?.moveResync,
-    onBotSpoke: roomInfo?.onBotSpoke,
+
     mode: roomInfo?.mode,
     deployBlast: roomInfo?.deployBlast,
     pickupsKnock: roomInfo?.pickupsKnock,
@@ -159,7 +157,6 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     envRange: roomInfo?.envRange,
     preyNear: roomInfo?.preyNear,
     creatureArmor: roomInfo?.creatureArmor,
-    onFire: roomInfo?.onFire,
   };
 }
 
@@ -285,7 +282,7 @@ export class MessageHandler {
         // Bots can read: the relay above ships the line, this lets the
         // room turn high-confidence phrases (gg, ez, a bot's name) into
         // a squad notice — whether anyone answers is still dice+cooldown.
-        this.roomInfo.onChat?.(id, text);
+        this.roomInfo.emit?.({ type: 'chat', id, text });
       },
       ping: (id, m) => {
         const p = this.playerManager.getPlayer(id);

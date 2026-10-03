@@ -32,7 +32,7 @@ export class HitLedger {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) c.hb('kill');
-    c.deps.onHit?.(targetId, shooterId);
+    c.deps.emit?.({ type: 'hit', targetId, shooterId });
     const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined, opts.extra?.pos as { x: number; y: number; z: number } | undefined);
     if (!result.killed) {
@@ -125,7 +125,7 @@ export class HitLedger {
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak });
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label);
-    c.deps.onKill?.(targetId, shooterId);
+    c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
   }
 

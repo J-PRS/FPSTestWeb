@@ -157,7 +157,7 @@ function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, 
     healPool(target, HEALBEAM_PER_TICK);
     h.hb('heal.beam');
     target.forceSendUntil = now + FORCE_SEND_MS;
-    h.deps.onFire?.(playerId);
+    h.deps.emit?.({ type: 'fire', playerId });
   }
 
   /** A claim with no target: a miss. If it carries spawn coordinates it

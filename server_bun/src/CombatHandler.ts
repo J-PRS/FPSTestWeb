@@ -14,6 +14,7 @@ import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
 import { BlastRunner, FORCE_SEND_MS } from './combatBlast.ts';
 import { AoeClaims } from './combatAoe.ts';
+import type { RoomEventSink } from './roomEvents.ts';
 import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
@@ -37,8 +38,9 @@ interface PendingClaim {
 
 /** Optional room wiring — mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
-  onKill?: (targetId: string, shooterId: string) => void;
-  onHit?: (targetId: string, shooterId: string) => void;
+  /** Domain-event sink — kill/hit/fire/botSpoke notifications fan out
+   *  to the room's subscribers (scoring, bot senses, influence). */
+  emit?: RoomEventSink;
   /** Team-mode rooms block damage between teammates (knockback still
    *  applies — boosting off a teammate's splash is intentional). */
   teams?: boolean;
@@ -67,14 +69,13 @@ export interface CombatDeps {
   /** Dropped-flag knock — RoomFlags.knock; blasts can punt the objective. */
   flagsKnock?: (at: Vec3, radius: number, force: number) => void;
   /** A bot chat line hit the wire — Room relays it as a 'reply' notice
-   *  so squadmates can answer back. */
-  onBotSpoke?: (id: string) => void;
+   *  so squadmates can answer back. Emitted as 'botSpoke'. */
   /** Room heartbeat counters — claims/rejects/applied damage tally here
    *  so the periodic 'Room health' line shows the funnel at a glance. */
   health?: Map<string, number>;
   /** A real fire claim passed the gates — the sheep meter's ignore
-   *  debit needs fire recency for humans (bots report their own). */
-  onFire?: (playerId: string) => void;
+   *  debit needs fire recency for humans (bots report their own).
+   *  Emitted as 'fire'. */
   /** Nearest-creature distance for env-damage plausibility (melee-from-
    *  afar flagging). Absent = no creature sim to check against. */
   envRange?: (playerId: string) => number;
@@ -186,7 +187,7 @@ export class CombatHandler {
     // Late binding on the static — tests reassign tauntDelayMs after
     // construction and must still steer the delay.
     this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs(),
-      (id) => this.deps.onBotSpoke?.(id), sendToPlayer);
+      (id) => this.deps.emit?.({ type: 'botSpoke', id }), sendToPlayer);
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
     this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target, amount));
@@ -286,7 +287,7 @@ export class CombatHandler {
     player.protectedUntil = 0; // firing breaks your own spawn shield
 
     if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
-    this.deps.onFire?.(playerId);
+    this.deps.emit?.({ type: 'fire', playerId });
     if (msg.targetId) {
       this.hitClaim(playerId, player, msg, msg.targetId);
     } else {
@@ -317,7 +318,7 @@ export class CombatHandler {
     const now = wallNow();
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
     this.lastFireNotify.set(playerId, now);
-    this.deps.onFire?.(playerId);
+    this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, clampPing(player.ping));
     this.broadcast({
       type: 'playerShot', id: playerId, weaponType: msg.weaponType,
@@ -332,7 +333,7 @@ export class CombatHandler {
       return;
     }
     this.flushClaims(playerId);
-    this.deps.onFire?.(playerId);
+    this.deps.emit?.({ type: 'fire', playerId });
     this.aoe.handleAOEShot(playerId, msg);
   }
 

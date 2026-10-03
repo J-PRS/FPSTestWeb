@@ -34,6 +34,7 @@ import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
+import { EventBus } from './roomEvents.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
@@ -75,6 +76,9 @@ export class Room {
   /** Since-boot totals — the rollup window clears per flush, so /metrics
    *  reads this cumulative mirror instead of racing it. */
   readonly healthTotal = new Map<string, number>();
+  /** Domain-event channel — combat/chat notifications (kill/hit/fire/
+   *  botSpoke/chat) fan out to subscribers wired in the ctor. */
+  readonly events = new EventBus();
   healthBump(key: string, n = 1): void {
     this.health.set(key, (this.health.get(key) ?? 0) + n);
   }
@@ -237,6 +241,23 @@ export class Room {
     if (field) this.ballSim.attachField(field);
     this.creatureSim = this.initCreatures(field);
     this.bots = new ServerBots(this, field);
+    // Event subscriptions — producers emit through RoomInfo.emit; each
+    // consumer reads only the kinds it cares about. A spoken line is
+    // itself an event worth a reply — the squad sees it on their own
+    // think phases, so an answer lands a beat later like real chat.
+    this.events.on((e) => {
+      switch (e.type) {
+        case 'kill': this.scoring.onKill(e.targetId, e.shooterId); break;
+        case 'hit': this.bots.flinch(e.targetId, e.shooterId); break;
+        case 'fire': this.bots.noteHumanFire(e.playerId); break;
+        case 'botSpoke': this.bots.notice('reply', e.id, this.players.getPlayer(e.id)?.team); break;
+        case 'chat': {
+          const kind = chatKindFor(e.text) ?? (this.bots.nameIn(e.text) ? 'mention' : null);
+          if (kind) this.bots.notice(kind, e.id, this.players.getPlayer(e.id)?.team);
+          break;
+        }
+      }
+    });
     // Posted roles spawn at home — a defender materializing on a
     // front-line sphere 400m out spends the next minute hiking, which
     // reads as wandering on every post/flag metric. Runners keep pure
@@ -459,9 +480,7 @@ export class Room {
       terrainTex: this.spec.terrainTex,
       sky: this.spec.sky,
       interiors: this.spec.interiors,
-      onKill: (pid, shooter) => this.scoring.onKill(pid, shooter),
-      onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
-      onFire: (pid) => this.bots.noteHumanFire(pid),
+      emit: this.events.emit,
       rng: () => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
@@ -514,11 +533,7 @@ export class Room {
       // A spoken line is itself an event worth a reply — the squad sees
       // it on their own think phases, so an answer (if any) lands a beat
       // later like real chat, not a scripted call-and-response.
-      onBotSpoke: (pid) => this.bots.notice('reply', pid, this.players.getPlayer(pid)?.team),
-      onChat: (pid, text) => {
-        const kind = chatKindFor(text) ?? (this.bots.nameIn(text) ? 'mention' : null);
-        if (kind) this.bots.notice(kind, pid, this.players.getPlayer(pid)?.team);
-      },
+
       moveAuthority: () => this.moveAuthority,
       health: this.health,
       envRange: (pid) => {
