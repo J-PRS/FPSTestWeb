@@ -18,6 +18,7 @@ import { noteLocalSnap } from '../gameLoop.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
 import { saveLastRoomMap } from './lastRoom.js';
+import { dropVolatileWorldFx } from './resync.js';
 import { applyTerrain, applyInteriors, type MapSnapshot } from './mapAssets.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
 // and lastRoom.ts keep a single import site.
@@ -69,6 +70,7 @@ export function wireWorld(ctx: NetCtx): void {
   // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
   // static geometry exactly like the join path does from gameState.
   networkManager.onMapUpdate = (map) => {
+    if (map.mapName) deps.world.mapName = map.mapName;
     buildStructures(map.structures ?? [], deps.lazyScene());
     Ball.colliders = structureColliders(map.structures);
     Ball.colliderIndex = Ball.colliders.length ? new ColliderIndex(Ball.colliders) : null;
@@ -88,8 +90,13 @@ export function wireWorld(ctx: NetCtx): void {
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
     logger.warn(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
+    // The snapshot replaces the world — any volatile layer still alive
+    // pre-reconnect is stale fast-forward, not truth. Purge before
+    // re-seeding (the hidden-tab regain path can't cover a socket that
+    // died and rejoined while we were still looking at the screen).
+    dropVolatileWorldFx(deps.world);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
   };
@@ -101,6 +108,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   const { deps, networkManager } = ctx;
   if (!roomInfo) return;
   deps.world.mode = roomInfo.mode;
+  if (roomInfo.mapName) deps.world.mapName = roomInfo.mapName;
   if (roomInfo.room !== undefined) deps.retireOfflineBots?.();
   applyMatchMeta(ctx, roomInfo);
   if (roomInfo.respawnMs) deps.world.respawnMs = roomInfo.respawnMs;

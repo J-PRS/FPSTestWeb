@@ -152,8 +152,12 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string): Prom
   let target: THREE.SkinnedMesh | undefined;
   model.traverse(o => { if (!target && (o as THREE.SkinnedMesh).isSkinnedMesh) target = o as THREE.SkinnedMesh; });
   if (!target) throw new Error('no skinned mesh to retarget onto');
+  // pose() decomposes bind locals through the PARENT matrixWorld — it has
+  // to run on an updated graph or it rewrites the GLB rest transform
+  // (cyber's hips rest ≠ bind: rest −23 vs bind 0.8, a 33-unit miss).
+  model.updateMatrixWorld(true);
   target.skeleton.pose();
-  target.updateMatrixWorld(true);
+  model.updateMatrixWorld(true);
 
   const t0 = performance.now();
   const baked = new Map<string, THREE.AnimationClip>();
@@ -222,11 +226,51 @@ function bakeSource(
     localOffsets[tName] = new THREE.Matrix4().makeRotationFromQuaternion(qs.clone().multiply(qt));
   }
 
-  // Hip translation scale: ratio of rest-pose hip offsets in each rig's
-  // local units (mannequin ~1.8m vs chibi robot proportions).
+  // Hip translation scale: retargetClip writes the source hip's WORLD
+  // position (in model space) multiplied by this scalar, so the ratio
+  // must be world-vs-world. Local-position lengths lie on rigs whose
+  // armature carries a different axis convention — the cybersoldier's
+  // hip sits ~25 units down a rotated frame, and a local ratio lifted
+  // his body ~7m off his capsule.
   const tgtHip = target.skeleton.bones.find(b => names[b.name] === srcHip.name);
-  const scale = tgtHip && srcHip.position.lengthSq() > 0
-    ? tgtHip.position.length() / srcHip.position.length() : 1;
+  const srcHipWorld = new THREE.Vector3();
+  srcHip.getWorldPosition(srcHipWorld);
+  const tgtHipWorld = new THREE.Vector3();
+  if (tgtHip) tgtHipWorld.setFromMatrixPosition(
+    _m1.copy(model.matrixWorld).invert().multiply(tgtHip.matrixWorld));
+  const scale = tgtHip && srcHipWorld.lengthSq() > 0
+    ? tgtHipWorld.length() / srcHipWorld.length() : 1;
+
+  // retargetClip writes the hip's model-SPACE position through the
+  // parent's world matrix — on rigs whose armature carries its own
+  // convention (cyber's bones sit ~100 units under their Armature node)
+  // the baked track drags the whole body that far off the entity.
+  // Re-emit it as a delta on the target's own bind hip instead:
+  // tgtBind + (srcKey - srcBind) × local-ratio keeps the bounce and the
+  // anchor regardless of armature frames.
+  const tgtHipBind = tgtHip ? tgtHip.position.clone() : null;
+  const srcHipBind = srcHip.position.clone();
+  const deltaScale = tgtHipBind && srcHipBind.lengthSq() > 0
+    ? tgtHipBind.length() / srcHipBind.length() : 1;
+  const fixHip = (rt: THREE.AnimationClip, srcClip: THREE.AnimationClip): void => {
+    if (!tgtHip || !tgtHipBind) return;
+    const hipTr = rt.tracks.find(t => t.name === tgtHip.name + '.position');
+    if (!hipTr) return;
+    const srcTr = srcClip.tracks.find(t => t.name === srcHip.name + '.position');
+    if (!srcTr) { // no source hip motion — pin to bind
+      hipTr.times = hipTr.times.slice(0, 1);
+      hipTr.values = new Float32Array([tgtHipBind.x, tgtHipBind.y, tgtHipBind.z]);
+      return;
+    }
+    const interp = (srcTr as unknown as { createInterpolant(): { evaluate(t: number): { result: Float32Array | number[] } } }).createInterpolant();
+    const v = hipTr.values, t = hipTr.times;
+    for (let i = 0; i < t.length; i++) {
+      const s = interp.evaluate(t[i]!).result;
+      v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
+      v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;
+      v[i * 3 + 2] = tgtHipBind.z + (s[2]! - srcHipBind.z) * deltaScale;
+    }
+  };
 
   const baked = new Map<string, THREE.AnimationClip>();
   for (const clip of clips) {
@@ -245,6 +289,7 @@ function bakeSource(
     for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
     rt.name = 'UAL_' + clip.name;
     unwindDirYaw(rt, model, target);
+    fixHip(rt, clip);
     baked.set(rt.name, rt);
   }
   return baked;

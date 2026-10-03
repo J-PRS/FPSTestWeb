@@ -11,6 +11,25 @@ import type { NetCtx } from './ctx.js';
 // resync is for real alt-tabs, not a quick task switch.
 const HIDDEN_RESYNC_MS = 3000;
 
+/** Volatile visuals can't be trusted after a backlog — shells the client
+ *  fast-forwarded blind and fx that spawned (and slow-mo decayed at 5%
+ *  speed) while the tab was hidden. Kill them; authoritative state
+ *  (gameState/rosters/resync reply) re-seeds truth. Local shells stay. */
+export function dropVolatileWorldFx(w: { projectiles: { isRemote: boolean; dispose(): void }[]; explosions: { dispose(): void }[]; implosions: { dead: boolean }[] }): number {
+  let dropped = 0;
+  w.projectiles = w.projectiles.filter((p) => {
+    if (!p.isRemote) return true;
+    p.dispose();
+    dropped++;
+    return false;
+  });
+  for (const e of w.explosions) { e.dispose(); }
+  w.explosions.length = 0;
+  for (const i of w.implosions) { i.dead = true; }
+  w.implosions.length = 0;
+  return dropped;
+}
+
 export function wireResync(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
   let hiddenAt: number | null = null;
@@ -23,23 +42,16 @@ export function wireResync(ctx: NetCtx): void {
     const hiddenMs = hiddenAt === null ? 0 : performance.now() - hiddenAt;
     hiddenAt = null;
     if (hiddenMs < HIDDEN_RESYNC_MS) return;
-    if (deps.world.playbackMode || !networkManager.isConnected()) return;
+    if (deps.world.playbackMode) return;
 
-    // Volatile visuals can't be trusted after the backlog — shells the
-    // client fast-forwarded blind and fx queued while the fx clock ran
-    // wall-time. Kill them; the fresh gameState/rosters re-seed truth.
-    const w = deps.world;
-    let dropped = 0;
-    w.projectiles = w.projectiles.filter((p) => {
-      if (!p.isRemote) return true;
-      p.dispose();
-      dropped++;
-      return false;
-    });
-    for (const e of w.explosions) { e.dispose(); }
-    w.explosions.length = 0;
-    for (const i of w.implosions) { i.dead = true; }
-    w.implosions.length = 0;
+    // Purge even while disconnected — the socket often dies during the
+    // hidden stretch ("CONNECTION LOST" on return) and gating the purge
+    // on isConnected() let the whole backlog survive into reconnect.
+    const dropped = dropVolatileWorldFx(deps.world);
+    if (!networkManager.isConnected()) {
+      deps.logger.warn(`[Resync] hidden ${(hiddenMs / 1000).toFixed(1)}s offline — dropped ${dropped} remote shells`);
+      return;
+    }
 
     // A correction arriving now must hard-snap to the echoed state —
     // replaying the journaled inputs of the whole hidden interval is the
