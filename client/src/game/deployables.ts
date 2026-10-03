@@ -839,15 +839,9 @@ export class Deployables {
       o.x + hx * Math.cos(thetaLob) * dist,
       o.y + Math.sin(thetaLob) * dist,
       o.z + hz * Math.cos(thetaLob) * dist);
-    // The sky shaft reaches from the emitter to the lob apex — the
-    // physical top of the arc the reticle marks.
-    const sinT = Math.sin(thetaLob), cosT = Math.cos(thetaLob);
-    const apexDist = v * v * sinT * cosT / g;
-    const apexH = (v * sinT) * (v * sinT) / (2 * g);
-    this._beaconDir.set(
-      o.x + hx * apexDist - t.x,
-      o.y + apexH - t.y,
-      o.z + hz * apexDist - t.z);
+    // The sky shaft reaches from the emitter to the exact world point the
+    // lob reticle projects — the beam tip and the marker coincide on screen.
+    this._beaconDir.subVectors(this._beaconLob, t);
     const beamLen = this._beaconDir.length();
     beacon.beacon?.setAim(this._beaconDir, Math.max(beamLen, 4));
     hud.updateBeaconAim(this._beaconAim, this._beaconLob, cam, true);
