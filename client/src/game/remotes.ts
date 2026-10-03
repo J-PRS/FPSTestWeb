@@ -170,6 +170,10 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // tick() drives interpolation + dead reckoning and internally advances
   // the AnimationMixer — a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
+  // Class rides every tick record because strict-tier role re-fits
+  // (hof→heavy, capper→light) land mid-life on the server — the
+  // silhouette must follow the sim's body, not the create-time class.
+  if (remotePlayer.armorClass !== playerState.armorClass) remotePlayer.setClass(playerState.armorClass);
 
   if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team)) return;
   applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);

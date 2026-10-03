@@ -68,6 +68,19 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
  *  server-side. */
 export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense', 'bombardier'];
 
+/** Strict-tier roles — the only slots that re-fit a donor's body.
+ *  HoF is literally "heavy on flag" and the technician carries the
+ *  deploy kit; the runners (capper/infiltrator) fly light because the
+ *  role IS speed. Offense/defense take whatever class shows up — a
+ *  heavy anchor pushing offense and a light harasser defending are
+ *  both legitimate, so generic slots never re-fit. Shared so the
+ *  offline lobby applies the same re-fit the server roster does —
+ *  a medium skin on a heavy sim is how the class lie starts. */
+export const STRICT_CLASS: Partial<Record<BotRole, 'light' | 'medium' | 'heavy'>> = {
+  capper: 'light', infiltrator: 'light',
+  hof: 'heavy', technician: 'heavy',
+};
+
 /** Kit → role fitness. A guideline, not a lock: offense/defense accept
  *  every class (heavy offense and light harassers are both classic), the
  *  runners (capper/infiltrator) pull light, and the planted specialists

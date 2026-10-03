@@ -12,7 +12,7 @@ import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
-import { CLASS_FITNESS, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
+import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
@@ -27,16 +27,9 @@ const RANDLO = (() => {
 })();
 const pickOf = <T,>(pool: T[]): T => pool[Math.floor(botRand() * pool.length) % pool.length]!;
 
-/** Strict-tier roles — the only slots that re-fit a donor's body.
- *  HoF is literally "heavy on flag" and the technician carries the
- *  deploy kit; the runners (capper/infiltrator) fly light because the
- *  role IS speed. Offense/defense take whatever class shows up — a
- *  heavy anchor pushing offense and a light harasser defending are
- *  both legitimate, so generic slots never re-fit. */
-const STRICT_CLASS: Partial<Record<BotRole, ArmorClass>> = {
-  capper: 'light', infiltrator: 'light',
-  hof: 'heavy', technician: 'heavy',
-};
+/** Strict-tier roles re-fit a donor's body (shared/flagGoals.ts —
+ *  the offline lobby applies the same table). */
+
 
 export class BotRoster {
   private roles = new Map<string, BotRole>();
@@ -181,7 +174,13 @@ export class BotRoster {
         this.roles.set(donor, want);
         const strict = STRICT_CLASS[want];
         const donorP = this.room.players.getPlayer(donor);
-        if (donorP && strict) this.applyClass(donorP, strict);
+        if (donorP && strict) {
+          // The sim re-fit alone leaves the wire record on the kit
+          // class — a strict hof would stream 'medium' while playing
+          // heavy mass/speed, i.e. a medium skin on a heavy sim.
+          donorP.armorClass = strict;
+          this.applyClass(donorP, strict);
+        }
         // Technician is the only role that promises the deploy kit —
         // pin its builder trait instead of trusting the spawn roll.
         // HoF gets the same nudge: mines+shields ARE the job. (The

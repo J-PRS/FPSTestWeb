@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
-import { roleObjective, ROLE_PRIORITY } from '../../../shared/flagGoals.js';
+import { roleObjective, ROLE_PRIORITY, STRICT_CLASS } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 
 export interface Flag {
@@ -109,6 +109,12 @@ export class CtfFlags {
           const donor = donors.shift();
           if (!donor) break;
           this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof' | 'infiltrator');
+          // Strict-tier roles re-fit the body too — the spawn mix is
+          // cosmetic, but a hof in a medium body is a medium standing
+          // on a flag, and the sim+silhouette must agree (same table
+          // the server roster applies).
+          const strict = STRICT_CLASS[role];
+          if (strict) this.ctx.bots.find((b) => b.playerId === donor)?.setBotClass(strict);
           have++;
         }
       }
