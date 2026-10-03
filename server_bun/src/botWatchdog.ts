@@ -18,7 +18,7 @@ const SHEEP_SPEED = 6;
 const SHEEP_COVER_M = 40;
 
 interface StuckState { x: number; z: number; since: number; warned: boolean }
-interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number; wasSheep?: boolean }
+interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number; wasSheep?: boolean; sheepStreak?: number }
 
 /** One tick of mobility evidence for checkSheep. */
 export interface MobilitySample {
@@ -62,6 +62,11 @@ export class BotWatchdog {
       return;
     }
     if (!carryingFlag && brain.holding) { w.since = now; return; }
+    // Standing on the destination is "arrived", not stuck — driveMove
+    // cuts input inside 0.5m, so a parked-on-goal bot covers nothing by
+    // design. 2.5m of slack covers yaw-circling around the point.
+    const ddx = brain.lastDest.x - pos.x, ddz = brain.lastDest.z - pos.z;
+    if (ddx * ddx + ddz * ddz < 6.25) { w.since = now; return; }
     const leash = carryingFlag ? STUCK_MS_FLAG : STUCK_MS;
     if (!w.warned && now - w.since > leash) {
       w.warned = true;
@@ -70,6 +75,9 @@ export class BotWatchdog {
         ms: now - w.since, carrying: carryingFlag,
         hunting: brain.currentHuntId !== null,
         pos: { x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) },
+        // The destination it can't reach is what separates "parked by
+        // choice" from "grinding into a pocket" — log both ends.
+        dest: { x: +brain.lastDest.x.toFixed(1), y: +brain.lastDest.y.toFixed(1), z: +brain.lastDest.z.toFixed(1) },
       });
     }
   }
@@ -109,12 +117,23 @@ export class BotWatchdog {
         covered: +s.dist.toFixed(1),
       };
       logger.info('Bot mobility', stats);
+      // Coverage is the ground truth: a bot topping 100m/s over 700m
+      // while holding no jet key is a fast skier, not a sheep — flagging
+      // on jetPct/skiAir alone was the main false-positive source.
+      // Those stay in stats as diagnostics; the alarm asks only "did it
+      // move" plus "did it ever leave the ground" for the slow cases.
       const jetPct = s.jet / s.ticks;
-      const sheeping = frac < SHEEP_SKIAIR || avgSpeed < SHEEP_SPEED || jetPct < SHEEP_JETPCT || s.dist < SHEEP_COVER_M;
-      // Per-window samples are telemetry, not alarms — bots oscillate
-      // across the band every window, which is hundreds of warns a run.
-      // The standing alarm is the sheep meter capping (persistent llama).
-      if (sheeping) logger.info('Bot sheeping', stats);
+      const sheeping = (avgSpeed < SHEEP_SPEED || s.dist < SHEEP_COVER_M)
+        && (frac < SHEEP_SKIAIR || jetPct < SHEEP_JETPCT);
+      // One slow window is a blip (downhill rest, orbital patrol) —
+      // only a bot that stays immobile across consecutive windows is
+      // worth a line. Healthy samples reset the streak.
+      if (sheeping) {
+        s.wasSheep = true;
+        if ((s.sheepStreak = (s.sheepStreak ?? 0) + 1) >= 2) logger.info('Bot sheeping', stats);
+      } else {
+        s.sheepStreak = 0;
+      }
     }
     s.winStart = now; s.ticks = 0; s.skiAir = 0; s.air = 0; s.jet = 0; s.dist = 0;
   }

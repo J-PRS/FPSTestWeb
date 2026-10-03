@@ -61,7 +61,10 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     p.rotation.yaw = yaw;
   }
   commitMoveInput(h, id, p, out, { moving: dist >= 0.5 }, now);
-  h.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
+  // 'trying' needs reach, not intent: out.dest re-rolls each think and
+  // can hover a meter off the position (steerer micro-orbit), which
+  // would count a bot that has effectively arrived as grinding forever.
+  h.checkSheep(id, p, { trying: dist >= 2 && !out.move?.park, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
   // Ski bit rides the tick flag byte (bit 2) — drives remote dust.

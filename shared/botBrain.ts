@@ -325,6 +325,9 @@ export class BotBrain {
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
+  /** Last think's destination — watchdog forensics only: a stuck bot
+   *  grinding toward X needs X logged, not just where it is. */
+  lastDest: BotVec = { x: 0, y: 0, z: 0 };
   /** Capper staging patience — seconds spent orbiting outside the
    *  defended ring waiting for the push wave to catch up. */
   stageT = 0;
@@ -504,6 +507,14 @@ export class BotBrain {
     }
 
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
+    // A goal the escape senses can't reach after ~4 failures is a bad
+    // roll, not a challenge — forfeit the wander waypoint so the next
+    // roll picks a new line instead of grinding the same wall forever.
+    // Hunting bots keep their target (a blocked hunt still fights).
+    if (this.escapeS.stuckStreak >= 4 && !this.h.hunt) {
+      this.goalS.wanderT = 0;
+      this.escapeS.stuckStreak = 0;
+    }
 
     // --- dodge: sidestep the nearest closing shell ---
     dest = dodge(ctx, pos, dest, hero);
@@ -526,6 +537,7 @@ export class BotBrain {
     // worth more words than scoreboard commentary.
     if (!say && ctx.notice) say = { kind: ctx.notice.kind, target: ctx.notice.actor };
 
+    this.lastDest = dest;
     return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
 
