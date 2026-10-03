@@ -60,13 +60,21 @@ export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
   'jet': 'Jump', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
 };
 
-// armorClass → dedicated body GLB. Table presence marks the variant as
-// class-native: the silhouette IS the class (no _classScale stack). A
-// present `anims` table means the GLB's own clips drive it; vexa ships
-// no table — her clips sit on the ANIM_NAMES fallback slots while the
-// kevdev bake supplies the UAL_* locomotion (VEXA_KEVDEV_BONE_MAP).
-export const CLASS_BODY_SPEC: Record<string, {
-  url: string; yaw: number; fitH: number;
+/** RIG_MANIFEST — one row per body variant: where it loads from, how it
+ *  fits the capsule, which anim sources feed its retarget bake, and its
+ *  native clip table when it ships one. Adding a rig = one entry here +
+ *  one animbake run; nothing else in the codebase needs to know it
+ *  exists. `fitH` fits the model's height to the capsule eye
+ *  (scale = fitH/size.y); `fixedScale` is for authored proportions
+ *  (robot) that were never capsule-fitted. */
+export interface RigManifest {
+  url: string;
+  /** Far-LOD stand-in GLB on the same rig (decimated), if authored. */
+  lodUrl?: string;
+  /** model.rotation.y — authored forward axis vs the game's -Z. */
+  yaw: number;
+  fitH?: number;
+  fixedScale?: number;
   anims?: Partial<Record<AnimationState, string>>;
   /** Prop-gun + muzzle anchor in model-space meters [x right, y up, z
    *  fwd(-)]. Foreign rigs keep bones in armature frames up to ~100
@@ -75,19 +83,47 @@ export const CLASS_BODY_SPEC: Record<string, {
    *  Trade-off: the gun stays at chest-forward instead of tracking
    *  the hand, which reads as 'carried' rather than 'swung'. */
   gunLocal?: [number, number, number];
-}> = {
-  // All these rigs author facing -Z (the camera check showed backs at
-  // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
-  'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35] },
+  /** Native clips also register under their UAL_ alias (mannequin's set
+   *  IS the UAL library). */
+  ualAlias?: boolean;
+  /** Anim-source ids (playerUal SPECS) this rig's retarget bake draws
+   *  from — empty for native-only rigs. */
+  sources: string[];
+}
+export const RIG_MANIFEST: Record<string, RigManifest> = {
+  robot:        { url: '/assets/models/RobotExpressive.glb', yaw: Math.PI, fixedScale: 0.5,
+                  sources: ['ual1', 'ual2', 'kevdev'] },
+  mannequin:    { url: '/assets/models/mannequin_opt.glb', lodUrl: '/assets/models/mannequin_lod1.glb',
+                  yaw: Math.PI, fitH: 2.0, ualAlias: true, sources: ['kevdev'] },
+  knight:       { url: '/assets/models/knight.glb', yaw: Math.PI, fitH: 2.0, sources: [] },
+  // All class rigs author facing -Z (the camera check showed backs at
+  // the legacy π flip) — no yaw needed.
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
-  // native UAL states (idle/jump/death/hit/shoot) via CYBER_MANNEQUIN_
-  // BONE_MAP + kevdev 8-way locomotion via CYBER_KEVDEV_BONE_MAP.
-  'cybersoldier': { url: '/assets/models/class_cyber.glb', yaw: 0, fitH: 2.2, gunLocal: [0.28, 1.35, -0.45] },
+  // native UAL states via CYBER_MANNEQUIN_BONE_MAP + kevdev 8-way
+  // locomotion via CYBER_KEVDEV_BONE_MAP.
+  'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35], sources: [] },
+  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'] },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
-  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2, gunLocal: [0.26, 1.35, -0.45] },
-  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55] },
+  'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'] },
+  'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [] },
 };
+
+// armorClass → dedicated body GLB, derived from the manifest — table
+// presence marks the variant as class-native: the silhouette IS the
+// class (no _classScale stack). A present `anims` table means the GLB's
+// own clips drive it; vexa ships no table — her clips sit on the
+// ANIM_NAMES fallback slots while the kevdev bake supplies UAL_*
+// locomotion (VEXA_KEVDEV_BONE_MAP).
+export const CLASS_BODY_SPEC: Record<string, {
+  url: string; yaw: number; fitH: number;
+  anims?: Partial<Record<AnimationState, string>>;
+  gunLocal?: [number, number, number];
+}> = Object.fromEntries(
+  Object.entries(RIG_MANIFEST)
+    .filter(([, r]) => r.fitH !== undefined && r.fixedScale === undefined && r.url.includes('/class_'))
+    .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal }]),
+);
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
 // the whole GLB (RemotePlayer.setClass).

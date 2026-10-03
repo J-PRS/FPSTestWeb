@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, RIG_MANIFEST, normBone } from './playerClips.js';
 import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, SWAY_BONES } from './playerClipSurgery.js';
 
 const logger = new ChildLogger('PlayerUal');
 
 /** One source animation pack: the rig's own bone map, its DEF-/UE-style
  *  name prefix, and which bone is the hip for translation scaling. */
-interface UalSpec { url: string; boneMap: Record<string, string>; mannMap?: Record<string, string>; mapByVariant?: Record<string, Record<string, string>>; prefix: string; hip: string; exclude?: RegExp; variants?: string[] }
+interface UalSpec { id: string; url: string; boneMap: Record<string, string>; mannMap?: Record<string, string>; mapByVariant?: Record<string, Record<string, string>>; prefix: string; hip: string; exclude?: RegExp }
 interface UalSource {
   spec: UalSpec; src: THREE.Object3D; srcBones: THREE.Object3D[];
   srcByNorm: Map<string, THREE.Object3D>; srcHip: THREE.Object3D;
@@ -39,13 +39,13 @@ const SPECS: UalSpec[] = [
   // Robot-only: the mannequin ships its UAL set natively inside its GLB
   // and its UAL2 retarget bakes limb-axis artifacts (UE vs Rigify bone
   // conventions) — variants filter keeps it off that path entirely.
-  { url: '/assets/models/robot-anims.glb', boneMap: UAL_BONE_MAP, prefix: 'def', hip: 'defhips', variants: ['robot'] },
-  { url: '/assets/models/robot-anims2.glb', boneMap: UAL2_BONE_MAP, prefix: '', hip: 'pelvis', exclude: /^(armature|mannequin|root)$/i, variants: ['robot'] },
+  { id: 'ual1', url: '/assets/models/robot-anims.glb', boneMap: UAL_BONE_MAP, prefix: 'def', hip: 'defhips' },
+  { id: 'ual2', url: '/assets/models/robot-anims2.glb', boneMap: UAL2_BONE_MAP, prefix: '', hip: 'pelvis', exclude: /^(armature|mannequin|root)$/i },
   // KevDev directional locomotion (8-dir walk/run, 5-dir sprint) — the
   // strafe/backpedal clips neither UAL free tier ships. B-* rig; the
   // root/proxy/finger bones are collected but unmapped, so they cost a
   // traverse pass and nothing else.
-  { url: '/assets/models/kevdev-anims.glb', boneMap: KEVDEV_BONE_MAP, mannMap: MANNEQUIN_KEVDEV_BONE_MAP,
+  { id: 'kevdev', url: '/assets/models/kevdev-anims.glb', boneMap: KEVDEV_BONE_MAP, mannMap: MANNEQUIN_KEVDEV_BONE_MAP,
     prefix: 'b', hip: 'bhips', exclude: /^(broot|bspineproxy|bhandprop|bjaw|btoe)/i,
     // Vexa's Base_Human* chain is semantically the kevdev skeleton — she
     // ships no locomotion of her own, so run/walk comes from this bake.
@@ -56,8 +56,8 @@ const SPECS: UalSpec[] = [
   // retargets onto his rig to fill every non-locomotion state. Cyber-only
   // spec: the mannequin already has these clips natively and other rigs
   // don't share his bone names.
-  { url: '/assets/models/mannequin.glb', boneMap: CYBER_MANNEQUIN_BONE_MAP,
-    prefix: 'def', hip: 'defhips', variants: ['cybersoldier'] },
+  { id: 'mannequin', url: '/assets/models/mannequin.glb', boneMap: CYBER_MANNEQUIN_BONE_MAP,
+    prefix: 'def', hip: 'defhips' },
 ];
 
 // KevDev directional clips turn the hips toward travel (authored "run
@@ -177,8 +177,11 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
 
   const t0 = performance.now();
   const baked = new Map<string, THREE.AnimationClip>();
+  // Which sources feed this rig lives on its manifest row — a new
+  // variant never edits this list, only its RIG_MANIFEST entry.
+  const want = new Set(RIG_MANIFEST[variant]?.sources ?? []);
   for (const s of sources) {
-    if (s.spec.variants && !s.spec.variants.includes(variant)) continue;
+    if (!want.has(s.spec.id)) continue;
     restoreRest();
     for (const [name, clip] of bakeSource(s, target, model, variant)) baked.set(name, clip);
   }

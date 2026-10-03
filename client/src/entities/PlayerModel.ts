@@ -21,7 +21,7 @@ const _footPQ = new THREE.Quaternion();
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS, clipCandidates,
-  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS,
+  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, SWAY_BONES, type LocoDir } from './playerClipSurgery.js';
@@ -155,16 +155,12 @@ export class PlayerModel {
     const loader = new GLTFLoader();
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
-    const classBody = CLASS_BODY_SPEC[this.variant];
 
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const attempt = () => {
       loader.load(
-        classBody ? classBody.url
-          : knight ? '/assets/models/knight.glb'
-          : mann ? '/assets/models/mannequin_opt.glb'
-          : '/assets/models/RobotExpressive.glb',
+        RIG_MANIFEST[this.variant]?.url ?? '/assets/models/RobotExpressive.glb',
         (gltf) => {
           if (this._disposed) { resolve(); return; }
           this.onModelLoaded(gltf, mann, knight);
@@ -217,9 +213,11 @@ export class PlayerModel {
     // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
     // RobotExpressive.glb origin is at feet (y=0), not center
     const classBody = CLASS_BODY_SPEC[this.variant];
-    this.model.scale.setScalar(classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5); // class bodies fit their capsule eye height — the body IS the class silhouette
-    this.model.rotation.y = classBody ? classBody.yaw : Math.PI; // Face forward
-    this.modelScale = classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5;
+    const rig = RIG_MANIFEST[this.variant];
+    const scale = rig?.fitH !== undefined ? rig.fitH / size.y : (rig?.fixedScale ?? 0.5); // class bodies fit their capsule eye height — the body IS the class silhouette
+    this.model.scale.setScalar(scale);
+    this.model.rotation.y = rig?.yaw ?? Math.PI; // Face forward
+    this.modelScale = scale;
     // Some rigs don't author their origin at the feet — setPosition
     // re-lands the mesh's lowest point on the logical feet each frame.
     this.feetOffsetY = -min.y * this.modelScale;
@@ -263,7 +261,7 @@ export class PlayerModel {
     // their own clip sets). Cybersoldier ships zero clips — it bakes the
     // mannequin's state set AND the kevdev directionals; vexa bakes
     // kevdev locomotion under her native states.
-    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'vexa' || this.variant === 'cybersoldier') this.retargetUAL();
+    if ((RIG_MANIFEST[this.variant]?.sources.length ?? 0) > 0) this.retargetUAL();
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -431,7 +429,7 @@ export class PlayerModel {
     this.lod = level;
     if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
     if (!this.lodLoadP) {
-      this.lodLoadP = new GLTFLoader().loadAsync('/assets/models/mannequin_lod1.glb').then((g) => {
+      this.lodLoadP = new GLTFLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
         const geos: THREE.BufferGeometry[] = [];
         g.scene.traverse((o) => {
           if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push((o as THREE.SkinnedMesh).geometry);
