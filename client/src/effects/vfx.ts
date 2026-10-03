@@ -23,10 +23,11 @@ import {
   vfxPressure, vfxReady, vfxBatcher,
   live, pools, takeSystem, activateSystem, returnSystem, resyncEmission,
   queueIfCold, buildQueue, activeTrailPs, trailStats,
-  poolDump,
+  poolDump, trailDriverCount,
 } from './vfxRuntime.js';
 export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
 import { EMIT_GAIN, GRAVITY } from '../core/config.js';
+import { litAudit } from './trailBatch.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
 import type { ProjectileConfig } from '../projectiles/types.js';
 
@@ -755,5 +756,13 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
 }
 
 // Alt+Q census section — registered here so the dump grows without
-// another gameLoop/stateDebug plumbing pass.
-registerDiag('vfx', () => ({ stats: trailStats, pools: poolDump(), trails: trailDump() }));
+// another gameLoop/stateDebug plumbing pass. This IS the P4 unified
+// census: pools (takeSystem), host drivers (P1), ribbons (P2 gens),
+// and lit/orphan audits in one row.
+registerDiag('vfx', () => ({
+  stats: trailStats,
+  pools: poolDump(),
+  drivers: trailDriverCount(),
+  ribbons: litAudit(),
+  trails: trailDump(),
+}));
