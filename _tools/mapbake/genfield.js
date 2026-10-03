@@ -1,6 +1,9 @@
 // Procedural heightfield → maps/<name>.bin (8-byte LE w,h + uint8 grid).
 // Usage: node genfield.js <out.bin> [--size=513] [--seed=7]
 //         [--flats=x,z,r[,x,z,r...]]   (world coords; pads flatten to mid)
+//         [--smooth]  gentler octave mix — 8/16/32 cells instead of
+//                     8/24/64; kills the jaggedy ridge texture the
+//                     high-frequency layer adds on smooth fields
 //
 // Value noise: multi-octave sine-hash lattice, smoothstep-interpolated,
 // tileable across the wrap so the clipmap's RepeatWrapping never seams.
@@ -30,6 +33,8 @@ const mesa = (opts.mesa ?? '').split(',').map(Number); // hw[, lift]
 // --rimring=x,z,r,raise — lifts a ring wall around a bowl so the rim is
 // uniformly tall regardless of where the noise landed.
 const rimring = (opts.rimring ?? '').split(',').map(Number);
+const smooth = 'smooth' in opts;
+const OCTAVES = smooth ? [[8, 0.55], [16, 0.30], [32, 0.15]] : [[8, 0.5], [24, 0.3], [64, 0.2]];
 const WORLD = 1500; // HM_WORLD_SCALE — one heightmap wraps the arena
 
 // Deterministic lattice hash → [0,1)
@@ -53,7 +58,8 @@ const bytes = new Uint8Array(8 + N * N);
 for (let z = 0; z < N; z++) {
   for (let x = 0; x < N; x++) {
     const u = x / N, v = z / N;
-    let h = noise(u, v, 8, 0) * 0.5 + noise(u, v, 24, 1) * 0.3 + noise(u, v, 64, 2) * 0.2;
+    let h = 0;
+    OCTAVES.forEach(([cells, amp], i) => { h += noise(u, v, cells, i) * amp; });
     const wx = (u - 0.5) * WORLD, wz = (v - 0.5) * WORLD;
     // Toroidal distance helper — pads/craters near the seam wrap cleanly.
     const tdist = (fx, fz) => Math.hypot(

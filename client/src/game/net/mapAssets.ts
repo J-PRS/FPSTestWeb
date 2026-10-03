@@ -10,7 +10,7 @@ import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js'
 import { Ball } from '../../entities/balls.js';
 import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
-import { loadHeightfieldBin, loadHeightmap } from '../../world/heightmap.js';
+import { loadHeightfieldBin } from '../../world/heightmap.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
@@ -30,9 +30,10 @@ let fieldLoaded: string | null = null;
  *  this so it never seeds a roster on the wrong heightmap. */
 let firstTerrainResolve!: () => void;
 export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; });
-// Rooms without a spec terrain reset to the boot field — the PNG the
-// session loaded at startup.
-const BOOT_HEIGHTMAP = '/assets/heightmaps/test_vertex.png';
+// Rooms without a spec terrain reset to the boot field — the SAME bin
+// the server sims (server_bun/heightmap.bin mirrored under assets), so
+// prediction and authority sample one file instead of PNG-vs-bin drift.
+const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
 export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string): Promise<void> {
   const key = `${file}|${texPath}|${skyDir}`;
   if (terrainActive === key) return;
@@ -46,7 +47,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
         if (file) {
           await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
         } else {
-          await loadHeightmap(BOOT_HEIGHTMAP);
+          await loadHeightfieldBin(BOOT_HEIGHTMAP);
         }
         deps.lazyTerrain().reloadHeightmap();
         // Ball.field captured the previous heightfield OBJECT — hmData is

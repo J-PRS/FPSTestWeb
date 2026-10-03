@@ -35,6 +35,7 @@ import { HealthBarSystem } from './ui/HealthBarSystem.js';
 import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
 import { initLogPanel } from './ui/logPanel.js';
+import { installOverlapAudit, reportHudOverlap } from './ui/overlapAudit.js';
 
 import { effectiveResist } from '../../shared/perks.js';
 import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
@@ -43,7 +44,7 @@ import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
-import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, type MapSnapshot } from './game/net/world.js';
+import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { weaponDef } from './weapons.js';
@@ -60,7 +61,8 @@ import { LoadProfiler } from './utils/profiling.js';
 
 import { createScene } from './world/scene.js';
 import { createViewModelScene } from './world/viewmodelScene.js';
-import { loadHeightmap, Terrain } from './world/terrain.js';
+import { Terrain } from './world/terrain.js';
+import { loadHeightfieldBin } from './world/heightmap.js';
 import { SWARM_SPECS } from './game/species/registry.js';
 import { initSwarms } from './entities/swarms.js';
 import type { Bolt } from './entities/Turretter.js';
@@ -151,7 +153,7 @@ async function init(): Promise<void> {
   const onlineBoot = !!urlParams.room || !!urlParams.p2p || (!!urlParams.mode && urlParams.mode !== 'classic');
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   if (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map))) {
-    await loadHeightmap('/assets/heightmaps/test_vertex.png');
+    await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
   }
   profiler.markTime('heightmapLoaded');
 
@@ -310,6 +312,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   if (!classicMode && !soloMode) bootApplySavedMap(netCtx, savedMap);
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
+  // F5 with a stored session token = the server may hand back our old
+  // body — veil the default spawn state until gameState lands instead of
+  // flashing a fresh spawn for a few hundred ms.
+  if (!classicMode && !soloMode && localStorage.getItem('fps-session-token')) armSessionVeil();
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
@@ -619,6 +625,7 @@ if (hot) {
     stale += d.count;
     if (!badge) {
       badge = document.createElement('div');
+      badge.id = 'stale-badge';
       badge.style.cssText =
         'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
         'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
@@ -671,6 +678,11 @@ init().then(async () => {
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
+  installOverlapAudit();
+  // Revealing the log panel reshuffles the corner stack — audit the
+  // layout once the reveal frame lands.
+  window.addEventListener('fps:altq', () =>
+    requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap)));
   window.addEventListener('fps:set', (e) => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
     if (key === 'fps-debug' && value === 1) void wireDebugTools();
