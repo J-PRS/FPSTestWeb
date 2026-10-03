@@ -167,7 +167,9 @@ export class P2PHost {
         }));
       }
       if (records.length === 0) continue;
-      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), this.tickSeq++, records)); } catch { /* dead pipe */ }
+      // inputAck=0: the P2P host tracks no per-player input seqs — clients
+      // ignore 0 (never prune on it).
+      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), this.tickSeq++, 0, records)); } catch { /* dead pipe */ }
     }
   }
 

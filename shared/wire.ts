@@ -164,9 +164,12 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
 
 /** Header + concatenated player records. ackSeq is per-recipient (echo of
  *  the client's last-received pos seq); tickSeq is the SERVER's frame seq —
- *  under an unordered transport receivers drop tickSeq <= lastTickSeq. */
-export function encodeTickFrame(ackSeq: number, tickSeq: number, records: Uint8Array[]): Uint8Array {
-  let total = 11;
+ *  under an unordered transport receivers drop tickSeq <= lastTickSeq.
+ *  inputAck is the tick-set confirm (Quantum-style): the highest inputMove
+ *  seq the server has consumed for this recipient — the client prunes its
+ *  input journal against it and detects a starving command stream. */
+export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[]): Uint8Array {
+  let total = 15;
   for (const r of records) total += r.length;
   const buf = new ArrayBuffer(total);
   const u8 = new Uint8Array(buf);
@@ -175,8 +178,9 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, records: Uint8A
   u8[1] = WIRE_TICK;
   d.setUint32(2, ackSeq >>> 0, true);
   d.setUint32(6, tickSeq >>> 0, true);
-  u8[10] = records.length;
-  let o = 11;
+  d.setUint32(10, inputAck >>> 0, true);
+  u8[14] = records.length;
+  let o = 15;
   for (const r of records) {
     u8.set(r, o);
     o += r.length;
@@ -184,14 +188,15 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, records: Uint8A
   return u8;
 }
 
-export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: number; updates: WireTickPlayer[] } | null {
-  if (u8.length < 11 || u8[0] !== MAGIC || u8[1] !== WIRE_TICK) return null;
+export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
+  if (u8.length < 15 || u8[0] !== MAGIC || u8[1] !== WIRE_TICK) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const ackSeq = d.getUint32(2, true);
   const tickSeq = d.getUint32(6, true);
-  const count = u8[10]!;
+  const inputAck = d.getUint32(10, true);
+  const count = u8[14]!;
   const updates: WireTickPlayer[] = [];
-  let o = 11;
+  let o = 15;
   for (let i = 0; i < count; i++) {
     if (o >= u8.length) return null;
     const idLen = u8[o++]!;
@@ -221,7 +226,7 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
       sheep: sheep > 0 ? sheep : undefined,
     });
   }
-  return { ackSeq, tickSeq, updates };
+  return { ackSeq, tickSeq, inputAck, updates };
 }
 
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----

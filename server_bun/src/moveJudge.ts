@@ -77,6 +77,16 @@ export interface Shadow {
   /** Step-count residue — simTicks counts MoveSim.STEP quanta; the
    *  fraction of a step dt didn't complete carries into the next tick. */
   acc: number;
+  /** Command-queue slot: the newest inputMove waiting for the next tick's
+   *  phase-0 drain. Latest wins — movement input is superseding state,
+   *  not a command list, so an older packet's loss is a no-op. */
+  pending?: { input: Partial<MoveInput>; status: number; seq?: number };
+  /** Consecutive reports whose inputSeq outran our consumed watermark —
+   *  a transient gap is just queue latency; a sustained one is a lost
+   *  input edge (hard-tolerance trip). */
+  gapStreak: number;
+  /** Cooldown on the inputSync hint so one dead lane can't spam it. */
+  lastHintAt: number;
 }
 
 export interface JudgeHost {

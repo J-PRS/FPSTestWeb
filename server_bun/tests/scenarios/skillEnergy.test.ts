@@ -14,6 +14,8 @@ describe('scenario: skill energy on the shadow sim', () => {
       type: 'inputMove', seq: 1,
       input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 /* CLOAK */ }, rotation: { yaw: 0, pitch: 0 },
     });
+    // Commands drain at phase 0 of the next tick — one small step applies it.
+    room.moveSim.tick(0);
     // Rising edge pays the ante immediately — a fresh claim can't be free.
     expect(room.moveSim.energyOf(p.id)!).toBe(ENERGY.max - ENERGY.cloakCost);
     const afterAnte = room.moveSim.energyOf(p.id)!;
@@ -28,6 +30,7 @@ describe('scenario: skill energy on the shadow sim', () => {
       type: 'inputMove', seq: 2,
       input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 0 }, rotation: { yaw: 0, pitch: 0 },
     });
+    room.moveSim.tick(0); // drain the queued cloak-off before measuring regen
     const before = room.moveSim.energyOf(p.id)!;
     room.moveSim.tick(1.0);
     expect(room.moveSim.energyOf(p.id)!).toBeGreaterThan(before);
@@ -43,6 +46,7 @@ describe('scenario: skill energy on the shadow sim', () => {
       type: 'inputMove', seq: 1,
       input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 }, rotation: { yaw: 0, pitch: 0 },
     });
+    room.moveSim.tick(0); // drain → ante
     expect(room.moveSim.energyOf(p.id)).toBe(0); // ante floored at zero, never negative
   });
 });

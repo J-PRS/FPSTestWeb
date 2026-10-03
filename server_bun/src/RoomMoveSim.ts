@@ -134,6 +134,7 @@ export class RoomMoveSim {
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
+      gapStreak: 0, lastHintAt: 0,
     });
   }
 
@@ -170,6 +171,33 @@ export class RoomMoveSim {
   setBody(playerId: string, mass: number, eyeHeight: number, bodyRadius: number): void {
     const sh = this.shadows.get(playerId);
     if (sh) { sh.sim.mass = mass; sh.sim.eyeHeight = eyeHeight; sh.sim.bodyRadius = bodyRadius; }
+  }
+
+  /** Command-queue ingress — inputMove does NOT apply on arrival. The
+   *  newest event parks in the shadow's pending slot and the next tick's
+   *  phase-0 drain applies it, so a tick's outcome can't depend on where
+   *  inside the tick window a packet landed. Seq gate mirrors setInput's
+   *  so the caller's stale-check answer is unchanged. */
+  queueInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
+    const sh = this.shadows.get(playerId);
+    if (!sh) return true;
+    // Gate against the pending slot too — lastInputSeq only moves at
+    // drain, so without it a reordered old packet could overwrite a
+    // fresher parked command before the next tick runs.
+    if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) return false;
+    sh.pending = { input, status, seq };
+    return true;
+  }
+
+  /** Phase 0 of every tick: drain pending commands through the normal
+   *  setInput path (seq journal, jet gating, rising-edge antes). */
+  private drainInputs(): void {
+    for (const [pid, sh] of this.shadows) {
+      if (!sh.pending) continue;
+      const p = sh.pending;
+      sh.pending = undefined;
+      this.setInput(pid, p.input, p.status, p.seq);
+    }
   }
 
   /** inputMove → sim input. Rotation/yaw comes from position reports.
@@ -241,12 +269,39 @@ export class RoomMoveSim {
     sh.lastImpulseAt = Date.now();
   }
 
+  /** Tick-set confirm for the wire frame — the highest inputMove seq
+   *  this player's shadow consumed. -1 for untracked ids (spectators):
+   *  encodes as 0 on the wire. */
+  inputSeqOf(playerId: string): number {
+    return this.shadows.get(playerId)?.lastInputSeq ?? -1;
+  }
+
+  /** Hard-tolerance trip (Photon Quantum): the position frame carries
+   *  the client's input watermark — when it runs ahead of our consumed
+   *  seq across several reports, an input edge died in flight and the
+   *  shadow is free-running stale input. The room relays inputSync so
+   *  the client re-emits its current input. */
+  onInputGap?: (playerId: string, lastSeq: number) => void;
+
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
+    // reportInputSeq = the client's input counter at snapshot time. A gap
+    // of 1-2 for a report or two is queue-drain latency; ≥3 consecutive
+    // reports ahead means events were lost, not queued.
+    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
+      sh.gapStreak++;
+      const now = Date.now();
+      if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
+        sh.lastHintAt = now;
+        this.onInputGap?.(playerId, sh.lastInputSeq);
+      }
+    } else {
+      sh.gapStreak = 0;
+    }
     return this.judge.reconcile(sh, playerId, pos, yaw, vel, reportInputSeq);
   }
 
@@ -284,6 +339,7 @@ export class RoomMoveSim {
   }
 
   tick(dt: number): void {
+    this.drainInputs(); // phase 0 — all queued commands land at the boundary
     const bodies = this.bodySource ? [...this.bodySource()] : null;
     for (const [pid, sh] of this.shadows) {
       if (bodies) {

@@ -468,6 +468,7 @@ export class NetworkManager {
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
     correction: (data) => this.handleCorrection(data),
+    inputSync: (data) => this.resendInput(data.lastSeq),
     teleport: (data) => this.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
     ballSpawn: (data) => this.onBallSpawn?.(data),
     ballSegment: (data) => this.onBallSegment?.(data),
@@ -567,13 +568,18 @@ export class NetworkManager {
     this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
-  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
+  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number; inputAck?: number }): void {
     // Host loopback delivers ticks in per-frame bursts — feeding those to
     // the gap tracker turns frame hitches into fake "packet loss".
     if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
     // Batched player updates from server (delta compressed)
     if (data.ackSeq !== undefined && data.ackSeq > 0) {
       this.pruneStateHistory(data.ackSeq);
+    }
+    // Tick-set confirm: the server consumed inputs ≤ inputAck — those
+    // journal entries are dead weight and only matter to replay.
+    if (data.inputAck !== undefined && data.inputAck > 0) {
+      while (this.inputJournal.length && this.inputJournal[0].seq <= data.inputAck) this.inputJournal.shift();
     }
     if (!data.updates || !Array.isArray(data.updates)) return;
     const now = Date.now();
@@ -808,6 +814,10 @@ export class NetworkManager {
    */
   private lastSentInput = '';
   private inputSeq = 0;
+  // Last transmitted input payload + rotation — an inputSync resend
+  // re-emits exactly this (the change-only stream's current edge).
+  private lastInputState: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } | null = null;
+  private lastInputRotation: { yaw: number; pitch: number } = { yaw: 0, pitch: 0 };
   /** Journal of transmitted input events (change-only stream). On a server
    *  correction the client rewinds to the echoed state and replays every
    *  entry with seq > the server's last consumed inputSeq — CFWK-style
@@ -824,7 +834,21 @@ export class NetworkManager {
     const seq = ++this.inputSeq;
     this.inputJournal.push({ seq, t: performance.now(), input: { ...input } });
     if (this.inputJournal.length > NetworkManager.INPUT_JOURNAL_MAX) this.inputJournal.shift();
+    this.lastInputState = { ...input };
+    this.lastInputRotation = { ...rotation };
     this.send({ type: 'inputMove', seq, input, rotation });
+  }
+
+  /** Hard-tolerance answer: the server's consumed input watermark fell
+   *  behind ours across several reports — an edge died in flight. Re-emit
+   *  the current input with a fresh seq so the shadow converges. */
+  private resendInput(lastSeq: number): void {
+    if (!this.lastInputState || !this.isConnected()) return;
+    const seq = ++this.inputSeq;
+    this.inputJournal.push({ seq, t: performance.now(), input: { ...this.lastInputState } });
+    if (this.inputJournal.length > NetworkManager.INPUT_JOURNAL_MAX) this.inputJournal.shift();
+    logger.info(`inputSync: re-emitting input at seq ${seq} (server consumed ${lastSeq})`);
+    this.send({ type: 'inputMove', seq, input: { ...this.lastInputState }, rotation: this.lastInputRotation });
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed

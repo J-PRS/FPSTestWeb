@@ -68,11 +68,12 @@ describe('tick frame round-trip', () => {
       rotation: { yaw: 3.0, pitch: 0.2 }, velocity: { x: 0, y: 0, z: 0 },
       health: 0, isDead: true, ping: undefined, ski: 0,
     });
-    const frame = encodeTickFrame(77, 900, [p1, p2]);
+    const frame = encodeTickFrame(77, 900, 41, [p1, p2]);
     expect(isWireFrame(frame)).toBe(true);
     const decoded = decodeTickFrame(frame)!;
     expect(decoded.ackSeq).toBe(77);
     expect(decoded.tickSeq).toBe(900);
+    expect(decoded.inputAck).toBe(41);
     expect(decoded.updates).toHaveLength(2);
     const [a, b] = decoded.updates;
     expect(a!.playerId).toBe('player_abc');
@@ -92,7 +93,7 @@ describe('tick frame round-trip', () => {
       rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
       health: 100, isDead: false, ski: 0,
     });
-    const frame = encodeTickFrame(0, 0, [p]);
+    const frame = encodeTickFrame(0, 0, 0, [p]);
     expect(decodeTickFrame(frame.slice(0, frame.length - 5))).toBeNull();
   });
 

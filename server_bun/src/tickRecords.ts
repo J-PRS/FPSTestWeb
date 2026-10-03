@@ -205,6 +205,9 @@ export class TickFanout {
       const frame = encodeTickFrame(
         room.players.getLastSeq(recipientId),
         seq,
+        // Tick-set confirm: highest inputMove seq the shadow consumed —
+        // the client prunes its input journal and sees a starving stream.
+        room.moveSim.inputSeqOf(recipientId),
         others,
       );
       this.metrics.recordsSent += others.length;
@@ -220,7 +223,7 @@ export class TickFanout {
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, records.map(r => r.data));
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), records.map(r => r.data));
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }

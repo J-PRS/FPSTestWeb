@@ -207,6 +207,13 @@ export class Room {
       return out;
     };
     this.matchClock = new MatchClock(this.matchHost());
+    // Hard-tolerance trip: the client's input watermark outran our consumed
+    // seq for ≥3 reports — an input edge died in flight (dead-lane drop).
+    // Ask it to re-emit its current input; cooldown lives on the shadow.
+    this.moveSim.onInputGap = (pid, lastSeq) => {
+      this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
+      this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
+    };
     this.moveSim.attachStructures(this.spec.structures);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
@@ -474,7 +481,7 @@ export class Room {
       },
       deployables: () => this.deployables.snapshot(),
       matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
-      moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
+      moveInput: (pid, i, status, seq) => this.moveSim.queueInput(pid, {
         forward: i.forward, right: i.right,
         jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
         jetHeld: !!i.jet,

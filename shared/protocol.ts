@@ -169,6 +169,11 @@ export type ServerMessage =
       /** Last inputMove seq the server consumed — the client replays its
        *  input journal from here after rewinding to this state. */
       inputSeq?: number; grounded?: boolean }
+  /** Hard-tolerance trip: the client's input watermark outran what the
+   *  server consumed — re-emit current input. `lastSeq` is the server's
+   *  consumed inputMove seq (the same value the tick frame's inputAck
+   *  field confirms every tick). */
+  | { type: 'inputSync'; lastSeq: number }
   // Relayed declared-teleport — observers snap instead of interpolating
   // across the gap (interp across 50m reads as a rocket-flight glitch)
   | { type: 'teleport'; playerId: string; position: Vec3; velocity: Vec3 }
