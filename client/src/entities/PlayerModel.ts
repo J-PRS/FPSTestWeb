@@ -380,6 +380,14 @@ export class PlayerModel {
     return a;
   }
 
+  // Primary-motion bones are never expendable — the ancestor-of-keys rule
+  // alone lets whole legs/arms lock mid-stride on rigs with no hand/foot
+  // key bones (polyart froze at bind pose → T-posed statue at distance).
+  private static readonly LIMB_BONES =
+    /thigh|shin|calf|foot|leg|upperarm|forearm|collar|shoulder|clavicle|pelvis|hips|spine|ribcage|chest|neck|head|hand|palm|arm|toetip/;
+  private static readonly HELPER_BONES =
+    /fing|digit|thumb|lash|brow|eye|jaw|tongue|twist|roll|_end|end$|marker|prop|magazine|trigger|pad|blade|belt|extra|proxy|pole|ik/;
+
   private computeDistalBones(): void {
     const essential = new Set<THREE.Object3D>();
     const keys: (THREE.Object3D | undefined)[] = [
@@ -391,7 +399,11 @@ export class PlayerModel {
     for (const k of keys) {
       for (let o = k; o && o !== this.model; o = o.parent!) essential.add(o);
     }
-    this.distalBones = this.bones.filter(b => !essential.has(b));
+    this.distalBones = this.bones.filter(b => {
+      if (essential.has(b)) return false;
+      const nb = normBone(b.name);
+      return PlayerModel.HELPER_BONES.test(nb) || !PlayerModel.LIMB_BONES.test(nb);
+    });
     this.distalNameSet = new Set(this.distalBones.map(b => normBone(b.name)));
     // Model may finish loading while a far LOD is already armed.
     if (this.distalFrozen) this.setDistalFrozen(true);

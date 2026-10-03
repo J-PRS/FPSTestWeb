@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { stripHipXZ } from '../entities/playerClipSurgery.js';
+import { SCIFISOLDIER_ANIMS, POLYART_ANIMS } from '../entities/playerClips.js';
 
 const MODELS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public/assets/models');
 
@@ -118,6 +119,25 @@ const BODIES: [file: string, fitH: number][] = [
   ['class_medium.glb', 2.2],
   ['class_heavy.glb', 2.76],
 ];
+
+// The anims tables must name real clips — a typo'd entry silently leaves
+// the previous action running (or bind-poses on first request).
+const ANIM_TABLES: [file: string, table: Record<string, string | undefined>][] = [
+  ['class_light.glb', SCIFISOLDIER_ANIMS],
+  ['class_heavy.glb', POLYART_ANIMS],
+];
+
+describe('class anims tables resolve to real clips', () => {
+  for (const [file, table] of ANIM_TABLES) {
+    it(file, () => {
+      const g = parseGlb(path.join(MODELS_DIR, file));
+      const names = new Set((g.json.animations || []).map((a: any) => a.name));
+      for (const [state, clip] of Object.entries(table)) {
+        expect(names.has(clip!), `${file} ${state} → '${clip}'`).toBe(true);
+      }
+    });
+  }
+});
 
 describe('class body root motion', () => {
   for (const [file, fitH] of BODIES) {
