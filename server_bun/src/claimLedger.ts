@@ -122,10 +122,18 @@ export class ClaimLedger {
     });
     if (clientShotId) this.clientIds.set(`${ownerId}|${clientShotId}`, id);
     // A live game never has >512 in-flight projectiles — the cap bounds
-    // memory if clients never send destroys.
+    // memory if clients never send destroys. Eviction tombstones like
+    // destroy() does: a pellet-fan flood could push a still-flying shell
+    // over the cap, and deleting it bare would hard-bounce its later
+    // hit claim 'gone' even though it legitimately flew.
     if (this.projectiles.size > MAX_SPENT) {
       const oldest = this.projectiles.keys().next().value;
-      if (oldest) this.projectiles.delete(oldest);
+      if (oldest) {
+        const proj = this.projectiles.get(oldest)!;
+        this.projectiles.delete(oldest);
+        this.spent.set(oldest, { proj, shot: false, aoe: false, at: wallNow() });
+        this.sweepSpent();
+      }
     }
     return id;
   }
