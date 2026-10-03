@@ -201,9 +201,24 @@ export class ServerBots {
    *  antes + drains the human path models, applied via setInput below.
    *  Keep server-owned buff bits (REGEN/DD) — the brain only claims
    *  the toggle skills a client could legitimately hold. */
-  private applyStatus(id: string, p: { status: number }, out: BrainOut): void {
+  /** Per-skill re-arm: statusIntent gates on an energy threshold that
+   *  the skill's own drain pulls the tank back under, so the claim
+   *  flickers every think — a dropped bit must cool down before the
+   *  brain may raise it again (cloak/mend/shield share the window). */
+  private skillOffAt = new Map<string, Map<number, number>>();
+  private static readonly SKILL_REARM_MS = 1500;
+  private applyStatus(id: string, p: { status: number }, out: BrainOut, now: number): void {
     if (out.status === undefined) return;
-    const claim = out.status & CLIENT_STATUS_MASK;
+    let claim = out.status & CLIENT_STATUS_MASK;
+    let offs = this.skillOffAt.get(id);
+    if (!offs) { offs = new Map(); this.skillOffAt.set(id, offs); }
+    const cur = p.status & CLIENT_STATUS_MASK;
+    for (const bit of [STATUS.MEND, STATUS.SHIELD, STATUS.CLOAK]) {
+      if ((cur & bit) && !(claim & bit)) offs.set(bit, now);
+      else if (!(cur & bit) && (claim & bit) && now - (offs.get(bit) ?? -Infinity) < ServerBots.SKILL_REARM_MS) {
+        claim &= ~bit; // still cooling down — suppress the flicker
+      }
+    }
     // Rising-edge skill activation — the only place a bot's mend/
     // shield/cloak intent becomes visible in logs.
     const rising = claim & ~(p.status & CLIENT_STATUS_MASK);
@@ -507,7 +522,7 @@ export class ServerBots {
         // as a remark rather than spam.
         if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target);
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
-        this.applyStatus(id, p, out);
+        this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, goal, now, sh0, nuggetNear);
         if (prof) { prof[3]! += performance.now() - tm; tm = performance.now(); }
