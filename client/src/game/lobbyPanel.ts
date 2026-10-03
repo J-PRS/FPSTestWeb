@@ -20,6 +20,7 @@ export interface LobbyPanelEls {
   mapSelect: HTMLSelectElement;
   modeSelect: HTMLSelectElement;
   botsInput: HTMLInputElement;
+  leaveBtn: HTMLButtonElement;
 }
 
 function btn(text: string): HTMLButtonElement {
@@ -115,9 +116,19 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     const head = label('MATCHES');
     head.style.marginTop = '0';
+    const hereRow = document.createElement('div');
+    hereRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
     const here = document.createElement('div');
     here.className = 'lb-here';
+    here.style.flex = '1';
     here.textContent = `IN: ${h.currentRoom().toUpperCase()}`;
+    // LEAVE = hop back to the immortal default lobby room (in-place
+    // switchRoom when the socket is live, reload otherwise) — only
+    // meaningful while you're in a named match.
+    const leaveBtn = btn('LEAVE');
+    leaveBtn.style.cssText = 'font-size:0.6rem;padding:2px 8px;';
+    leaveBtn.addEventListener('click', () => h.join('default'));
+    hereRow.append(here, leaveBtn);
     const rows = document.createElement('div');
     rows.className = 'lb-rows';
 
@@ -221,7 +232,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     p2pRow.appendChild(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
-    panel.append(head, here, rows, hostLbl, modeRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
+    panel.append(head, hereRow, rows, hostLbl, modeRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
@@ -229,5 +240,5 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       if (!document.body.classList.contains('menu-open') && panel.style.display !== 'none') h.toggle();
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   
-  return { panel, here, rows, mapSelect, modeSelect, botsInput };
+  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn };
 }

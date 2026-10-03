@@ -34,6 +34,8 @@ export interface MapRow {
   /** Modes the map can legally host (map = geometry, mode = ruleset). */
   modes: string[];
   bots: number;
+  /** Tribes 2 port — badged in the picker so ports read as ports. */
+  t2?: boolean;
 }
 
 export interface LobbyDeps {
@@ -66,6 +68,7 @@ export class Lobby {
   private mapSelect: HTMLSelectElement;
   private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
+  private leaveBtn: HTMLButtonElement;
   private maps: MapRow[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -83,6 +86,7 @@ export class Lobby {
     this.mapSelect = els.mapSelect;
     this.modeSelect = els.modeSelect;
     this.botsInput = els.botsInput;
+    this.leaveBtn = els.leaveBtn;
   }
 
   /** Populate the mode + map pickers once per open — cheap, menu is
@@ -133,7 +137,7 @@ export class Lobby {
       o.dataset.mode = mode || m.mode;
       // Label shows the default ruleset so a shared map doesn't pretend
       // the pick is unique to the selected mode.
-      o.textContent = `${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
+      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
       this.mapSelect.appendChild(o);
     }
   }
@@ -170,6 +174,8 @@ export class Lobby {
     rooms.sort((a, b) => (a.name === 'default' ? -1 : b.name === 'default' ? 1 : a.name.localeCompare(b.name)));
     const cur = rooms.find((r) => r.name === this.currentRoom());
     this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`;
+    // Default lobby IS home — leaving it is a no-op.
+    this.leaveBtn.disabled = this.currentRoom() === 'default';
     for (const r of rooms) this.addRow(r);
   }
 
