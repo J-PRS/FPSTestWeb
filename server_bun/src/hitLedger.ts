@@ -34,7 +34,7 @@ export class HitLedger {
     if (result.killed) c.hb('kill');
     c.deps.emit?.({ type: 'hit', targetId, shooterId });
     const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
-    this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined, opts.extra?.pos as { x: number; y: number; z: number } | undefined);
+    this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined });
     if (!result.killed) {
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
       c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq, shotId: opts.shotId });
@@ -47,7 +47,8 @@ export class HitLedger {
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
    *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impactDist?: number, impactPos?: { x: number; y: number; z: number }): void {
+  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impact: { dist?: number; pos?: { x: number; y: number; z: number } } = {}): void {
+    const { dist: impactDist, pos: impactPos } = impact;
     const modeTag = c.deps.mode ?? '';
     weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
     const duelKey = `${shooterId}|${targetId}`;

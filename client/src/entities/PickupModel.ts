@@ -57,11 +57,11 @@ function mat(color: number, emissive = 0, rough = 0.6): THREE.MeshStandardMateri
 }
 
 function addMesh(root: THREE.Group, g: THREE.BufferGeometry, m: THREE.Material,
-    x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, s = 1): THREE.Mesh {
+    opts: { pos?: [number, number, number]; rot?: [number, number, number]; s?: number } = {}): THREE.Mesh {
   const mesh = new THREE.Mesh(g, m);
-  mesh.position.set(x, y, z);
-  mesh.rotation.set(rx, ry, rz);
-  mesh.scale.setScalar(s);
+  if (opts.pos) mesh.position.set(...opts.pos);
+  if (opts.rot) mesh.rotation.set(...opts.rot);
+  if (opts.s !== undefined) mesh.scale.setScalar(opts.s);
   root.add(mesh);
   return mesh;
 }
@@ -78,33 +78,33 @@ function buildBody(kind: PickupKind, spec: PickupSpec): THREE.Group {
       // protected ICRC emblem, games get told off for using it).
       addMesh(body, geo('healBox', () => new THREE.BoxGeometry(0.6, 0.45, 0.4)), mat(0xe8e8e8));
       const cross = mat(0x22aa44, 0x22aa44);
-      addMesh(body, geo('crossV', () => new THREE.BoxGeometry(0.12, 0.34, 0.06)), cross, 0, 0, 0.2);
-      addMesh(body, geo('crossH', () => new THREE.BoxGeometry(0.34, 0.12, 0.06)), cross, 0, 0, 0.2);
-      addMesh(body, geo('healCap', () => new THREE.BoxGeometry(0.64, 0.1, 0.44)), mat(0x22aa44), 0, 0.24, 0);
+      addMesh(body, geo('crossV', () => new THREE.BoxGeometry(0.12, 0.34, 0.06)), cross, { pos: [0, 0, 0.2] });
+      addMesh(body, geo('crossH', () => new THREE.BoxGeometry(0.34, 0.12, 0.06)), cross, { pos: [0, 0, 0.2] });
+      addMesh(body, geo('healCap', () => new THREE.BoxGeometry(0.64, 0.1, 0.44)), mat(0x22aa44), { pos: [0, 0.24, 0] });
       break;
     }
     case 'armor': {
       // Shield plate — hex disc on edge with a glowing core boss.
-      addMesh(body, geo('shield', () => new THREE.CylinderGeometry(0.42, 0.5, 0.1, 6)), base, 0, 0, 0, Math.PI / 2);
-      addMesh(body, geo('boss', () => new THREE.SphereGeometry(0.14, 10, 8)), accentMat, 0, 0, 0.08);
+      addMesh(body, geo('shield', () => new THREE.CylinderGeometry(0.42, 0.5, 0.1, 6)), base, { rot: [Math.PI / 2, 0, 0] });
+      addMesh(body, geo('boss', () => new THREE.SphereGeometry(0.14, 10, 8)), accentMat, { pos: [0, 0, 0.08] });
       addMesh(body, geo('shieldRim', () => new THREE.TorusGeometry(0.46, 0.05, 8, 6)), mat(0x556677, 0x223344));
       break;
     }
     case 'regen': {
       // Halo cell — luminous orb inside a tilted ring.
       addMesh(body, geo('cell', () => new THREE.IcosahedronGeometry(0.26, 1)), accentMat);
-      addMesh(body, geo('cellRing', () => new THREE.TorusGeometry(0.42, 0.05, 8, 24)), mat(0x224444, 0x33aaaa), 0, 0, 0, 1.2);
-      addMesh(body, geo('cellRing2', () => new THREE.TorusGeometry(0.36, 0.04, 8, 24)), mat(0x224444, 0x33aaaa), 0, 0, 0, -0.7, 0.8);
+      addMesh(body, geo('cellRing', () => new THREE.TorusGeometry(0.42, 0.05, 8, 24)), mat(0x224444, 0x33aaaa), { rot: [1.2, 0, 0] });
+      addMesh(body, geo('cellRing2', () => new THREE.TorusGeometry(0.36, 0.04, 8, 24)), mat(0x224444, 0x33aaaa), { rot: [-0.7, 0.8, 0] });
       break;
     }
     case 'dd': {
       // Overcharge core — stretched octahedron + spike crown.
-      addMesh(body, geo('ddCore', () => new THREE.OctahedronGeometry(0.34)), accentMat, 0, 0, 0, 0, 0, 0, 1);
+      addMesh(body, geo('ddCore', () => new THREE.OctahedronGeometry(0.34)), accentMat);
       body.children[0]!.scale.set(0.8, 1.35, 0.8);
       const spike = geo('ddSpike', () => new THREE.ConeGeometry(0.07, 0.3, 5));
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI * 2;
-        addMesh(body, spike, accent, Math.cos(a) * 0.42, 0, Math.sin(a) * 0.42, 0, 0, -a - Math.PI / 2);
+        addMesh(body, spike, accent, { pos: [Math.cos(a) * 0.42, 0, Math.sin(a) * 0.42], rot: [0, 0, -a - Math.PI / 2] });
       }
       break;
     }
@@ -114,7 +114,7 @@ function buildBody(kind: PickupKind, spec: PickupSpec): THREE.Group {
     }
     case 'tag': {
       addMesh(body, geo('tagP', () => new THREE.BoxGeometry(0.7, 0.14, 0.45)), accentMat);
-      addMesh(body, geo('tagHole', () => new THREE.CylinderGeometry(0.06, 0.06, 0.16, 8)), base, -0.26);
+      addMesh(body, geo('tagHole', () => new THREE.CylinderGeometry(0.06, 0.06, 0.16, 8)), base, { pos: [-0.26, 0, 0] });
       break;
     }
   }

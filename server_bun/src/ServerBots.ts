@@ -248,7 +248,8 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null, nuggetNear: boolean): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec } | null; now: number; sh: MoveState | null; nuggetNear: boolean }): void {
+    const { goal, now, sh, nuggetNear } = s;
     if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
     // The generic hunt lob is the definition of a low-value toss.
     if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) this.arsenal.throwBelt(p);
@@ -524,7 +525,7 @@ export class ServerBots {
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
-        this.firePhase(id, p, out, goal, now, sh0, nuggetNear);
+        this.firePhase(id, p, out, { goal, now, sh: sh0, nuggetNear });
         if (prof) { prof[3]! += performance.now() - tm; tm = performance.now(); }
         this.supportNade(id, p, brain, now, nuggetNear);
         this.healAlly(id, p, brain, now);

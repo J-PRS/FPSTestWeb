@@ -101,7 +101,7 @@ export class BotSteer {
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling
       // off it parked every stand press ~8m short of the flag pickup ring.
-      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now, gd < T.steer.memRange);
+      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange });
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -128,7 +128,8 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number, nearGoal: boolean): number {
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean }): number {
+    const { g0, now, nearGoal } = probe;
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
     const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;

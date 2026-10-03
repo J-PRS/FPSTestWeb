@@ -66,7 +66,8 @@ export interface BlastHost {
 export class BlastRunner {
   constructor(private h: BlastHost) {}
 
-  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false, shotId?: string): void {
+  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string } = {}): void {
+    const { weapon, trusted = false, shotId } = opts;
     const player = this.h.playerManager.getPlayer(playerId);
     // Trusted server blasts still run from dead owners — a corpse's
     // in-flight ordnance and its charge-pop both outlive the kill.
@@ -267,7 +268,7 @@ export class BlastRunner {
       aoeDamage: Math.min(amount, LG_POP_DMG_CAP),
       aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),
       knockbackForce: 30,
-    }, WeaponType.Lightning, true);
+    }, { weapon: WeaponType.Lightning, trusted: true });
   }
 
   /** True when a wall stands between blast point and target chest.
@@ -283,7 +284,7 @@ export class BlastRunner {
   serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string): void {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.aoeRadius <= 0) return;
-    this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true, shotId);
+    this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // (flagsKnock is inside processAOE above — every blast reaches it.)
     this.h.deps.pickupsKnock?.(position, stats.aoeRadius, stats.knockbackForce);

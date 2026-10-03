@@ -113,7 +113,7 @@ export class AoeClaims {
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
     const projId = msg.projectileId ?? (msg.shotId ? this.h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType, false, projId);
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId });
 
     if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster, projId);
   }
@@ -135,7 +135,7 @@ export class AoeClaims {
       this.h.reject(playerId, 'AOE', `melee ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
       return;
     }
-    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, stats, { weapon: msg.weaponType });
   }
 
   /** Slam is a skill, not a projectile — the blast must land where the
@@ -156,7 +156,7 @@ export class AoeClaims {
       aoeDamage: stats.aoeDamage * power,
       aoeRadius: stats.aoeRadius * power,
       knockbackForce: stats.knockbackForce * power,
-    }, msg.weaponType);
+    }, { weapon: msg.weaponType });
   }
 
   /** Hitscan-class (Lightning beam): the claim names no projectile —
@@ -206,7 +206,7 @@ export class AoeClaims {
       }, victim.id, victim, false, dmg);
     }
     const scale = lgTickDamage(n) / LG_TICK_BASE;
-    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
+    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, { weapon: msg.weaponType });
   }
 
   /** Cluster carrier: the carrier's blast is only the delivery pop — the
@@ -224,7 +224,7 @@ export class AoeClaims {
         x: msg.position.x + Math.cos(ang) * r,
         y: msg.position.y, // bomblets scatter on the blast plane
         z: msg.position.z + Math.sin(ang) * r,
-      }, msg.excludeTargetId, bomblet, msg.weaponType, false, shotId);
+      }, msg.excludeTargetId, bomblet, { weapon: msg.weaponType, shotId });
     }
   }
 }

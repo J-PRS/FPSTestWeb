@@ -93,7 +93,7 @@ export class BotMoves {
     this.jetHold = Math.max(0, this.jetHold - dt);
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
-    if (this.wantJet(ctx, pos, dest, rise, speed, gd, airborne) && tanked) {
+    if (this.wantJet(ctx, pos, dest, { rise, speed, gd, airborne }) && tanked) {
       this.jetHold = Math.max(this.jetHold, T.moves.jetHoldBase + botRand() * T.moves.jetHoldRand);
     }
     // The dive: a destination at or below the bot wants gravity, not
@@ -159,7 +159,8 @@ export class BotMoves {
   /** Whether the situation calls for a burn: genuine climbs, airborne
    *  prey, a high destination — or discretionary speed plays when the
    *  tank is comfortable. */
-  private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number, airborne: boolean): boolean {
+  private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, s: { rise: number; speed: number; gd: number; airborne: boolean }): boolean {
+    const { rise, speed, gd, airborne } = s;
     // Posted anchors burn only to climb back onto the post — every
     // discretionary burn (boost to speed, hop, airborne-prey chase) is
     // altitude+momentum off the stand, and the chase is the gun's job.
