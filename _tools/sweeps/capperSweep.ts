@@ -17,11 +17,18 @@ import { BOT_TUNING } from '../../shared/botTuning.ts';
 import { measureCap, type RunStat } from '../../server_bun/tests/scenarios/capMeasure.ts';
 
 const OUT_DIR = resolve(import.meta.dir, 'out');
-const field = hmParseBin(new Uint8Array(readFileSync(resolve(import.meta.dir, '../../maps/peaks.bin'))));
-const kat = hmParseBin(new Uint8Array(readFileSync(resolve(import.meta.dir, '../../maps/katabatic.bin'))));
-const baseAt = (f: typeof field, x: number, z: number) => ({ x, y: hmHeight(f, x, z), z });
-const PEAKS = { alpha: baseAt(field, -150, 0), bravo: baseAt(field, 150, 0) };
-const KAT = { alpha: baseAt(kat, 236.85, -127.11), bravo: baseAt(kat, -423.57, 281.67) };
+// Real T2 routes only (porter-imported .mis flags + .ter heightfields;
+// the flat hand-authored specs like raindance/crossfire/henge are NOT
+// real T2 maps and are excluded). Chosen to span the 121m→982m
+// flag-distance range so a genome can't win on one terrain's quirks.
+const MAPS = ['oasis', 'broadside_nef', 'escalade', 'raindance_nef', 'katabatic', 'surreal'].map((name) => {
+  const spec = JSON.parse(readFileSync(resolve(import.meta.dir, `../../maps/${name}.json`), 'utf8'));
+  const f = hmParseBin(new Uint8Array(readFileSync(resolve(import.meta.dir, `../../maps/${spec.terrain}`))));
+  const at = (x: number, z: number) => ({ x, y: hmHeight(f, x, z), z });
+  const bases = { alpha: at(spec.bases.alpha.x, spec.bases.alpha.z), bravo: at(spec.bases.bravo.x, spec.bases.bravo.z) };
+  const flagM = Math.hypot(bases.alpha.x - bases.bravo.x, bases.alpha.z - bases.bravo.z);
+  return { name, f, bases, flagM };
+});
 
 // Genome dims: [dotted BOT_TUNING path, min, max]. Bounds are sane ranges
 // around the defaults — the sweep may find the interesting corner.
@@ -54,6 +61,12 @@ const DIMS: Dim[] = [
   ['steer.step', 3, 20],
   ['steer.turnRate', 1.5, 10],
   ['steer.slopeThresh', 0.2, 1.2],
+  ['brain.thinkS', 0.1, 0.8],
+  ['brain.heroThinkK', 0.2, 1.5],
+  ['brain.wanderBase', 0.1, 1.5],
+  ['brain.wanderRand', 0.1, 1.5],
+  ['brain.dutyBase', 0.1, 1.5],
+  ['brain.dutyRand', 0.1, 1.5],
 ];
 
 function get(path: string): number {
@@ -85,8 +98,11 @@ const GENOMES = arg('genomes', 24);
 const TRIALS = arg('trials', 2);
 const SEED = arg('seed', 1);
 const BUDGET = arg('budget', 120);
-const USE_KAT = process.argv.includes('--kat'); // the ~775m route instead of 300m
-const MAP = USE_KAT ? { f: kat, bases: KAT, name: 'katabatic' } : { f: field, bases: PEAKS, name: 'peaks' };
+const GENS = arg('gens', 0);   // >0 = evolution mode (no flat random phase)
+const POP = arg('pop', 4);     // children per generation
+const ELITES = Math.max(1, Math.floor(POP / 4));
+const USE_KAT = process.argv.includes('--kat'); // --kat restricts to katabatic only
+const MAP_LIST = USE_KAT ? MAPS.filter(m => m.name === 'katabatic') : MAPS;
 
 /** Fitness: a cap is mandatory, then shorter is better — total latency
  *  is grab+transit; banked E is the tiebreak (fast AND efficient). */
@@ -98,32 +114,77 @@ function fitness(s: RunStat): number {
 const defaults = DIMS.map(([p]) => get(p));
 const rng = mulberry32(SEED);
 mkdirSync(OUT_DIR, { recursive: true });
-const csvPath = resolve(OUT_DIR, `capper_sweep_${MAP.name}_seed${SEED}.csv`);
+const csvPath = resolve(OUT_DIR, `capper_sweep_${MAP_LIST.length > 1 ? 't2' : MAP_LIST[0]!.name}_seed${SEED}.csv`);
 if (!existsSync(csvPath)) {
-  appendFileSync(csvPath, 'genome,trial,' + DIMS.map(d => d[0]).join(',') + ',caps,grabT,carryT,pathM,avgSpeed,avgE,fitness\n');
+  appendFileSync(csvPath, 'genome,map,' + DIMS.map(d => d[0]).join(',') + ',caps,grabT,carryT,pathM,avgSpeed,avgE,fitness\n');
 }
 
 interface Row { genes: number[]; stat: RunStat; fit: number }
 const results: Row[] = [];
+let gid = 0;
 
-// Baseline: unmodified tuning, for the report's delta column.
-for (let t = 0; t < TRIALS; t++) {
-  const stat = measureCap(MAP.f, MAP.bases, { simBudgetS: BUDGET, tag: 'baseline' });
-  results.push({ genes: defaults.slice(), stat, fit: fitness(stat) });
-}
-
-for (let g = 0; g < GENOMES; g++) {
-  const genes = DIMS.map(([, lo, hi]) => lo + rng() * (hi - lo));
-  for (let t = 0; t < TRIALS; t++) {
-    genes.forEach((v, i) => set(DIMS[i]![0], v));
-    const stat = measureCap(MAP.f, MAP.bases, { simBudgetS: BUDGET, tag: `g${g}` });
-    const fit = fitness(stat);
-    results.push({ genes, stat, fit });
-    appendFileSync(csvPath,
-      `${g},${t},${genes.map(v => v.toFixed(3)).join(',')},${stat.caps},${stat.grabT.toFixed(1)},${stat.carryT.toFixed(1)},${stat.pathM.toFixed(0)},${stat.avgSpeed.toFixed(1)},${stat.avgE.toFixed(0)},${fit.toFixed(1)}\n`);
-    console.log(`g${g} t${t}: caps=${stat.caps} grab=${stat.grabT.toFixed(0)}s carry=${stat.carryT.toFixed(0)}s spd=${stat.avgSpeed.toFixed(1)} E=${stat.avgE.toFixed(0)} fit=${fit.toFixed(0)}`);
+function evaluate(genes: number[], tag: string): void {
+  genes.forEach((v, i) => set(DIMS[i]![0], v));
+  for (const m of MAP_LIST) {
+    for (let t = 0; t < TRIALS; t++) {
+      const stat = measureCap(m.f, m.bases, { simBudgetS: Math.round(BUDGET * Math.min(3, Math.max(1, m.flagM / 300))), tag: `${tag}:${m.name}` });
+      const fit = fitness(stat);
+      results.push({ genes: genes.slice(), stat, fit });
+      appendFileSync(csvPath,
+        `${gid},${m.name},${genes.map(v => v.toFixed(3)).join(',')},${stat.caps},${stat.grabT.toFixed(1)},${stat.carryT.toFixed(1)},${stat.pathM.toFixed(0)},${stat.avgSpeed.toFixed(1)},${stat.avgE.toFixed(0)},${fit.toFixed(1)}\n`);
+      console.log(`g${gid} ${m.name} t${t}: caps=${stat.caps} grab=${stat.grabT.toFixed(0)}s carry=${stat.carryT.toFixed(0)}s spd=${stat.avgSpeed.toFixed(1)} E=${stat.avgE.toFixed(0)} fit=${fit.toFixed(0)}`);
+    }
   }
   defaults.forEach((v, i) => set(DIMS[i]![0], v)); // restore before next genome
+  gid++;
+}
+
+// Gaussian sample (Box-Muller) for the evolution mode.
+function gauss(): number {
+  let u = 0;
+  while (u === 0) u = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
+}
+
+// Baseline: unmodified tuning, for the report's delta column.
+evaluate(defaults.slice(), 'baseline');
+
+if (GENS > 0) {
+  // (μ/μ,λ) evolution strategy: children drawn ~N(mean, sigma) around
+  // the current best region; mean recenters on the top quartile each
+  // generation and sigma anneals — local refinement after the random
+  // phase maps the terrain. True CMA-ES adds covariance; this is the
+  // cheap diagonal version.
+  const mean = defaults.slice();
+  const sigma = DIMS.map(([, lo, hi]) => (hi - lo) * 0.25);
+  for (let gen = 0; gen < GENS; gen++) {
+    const pop: { genes: number[]; fit: number }[] = [];
+    for (let k = 0; k < POP; k++) {
+      const genes = mean.map((m, i) => {
+        const [, lo, hi] = DIMS[i]!;
+        return Math.min(hi, Math.max(lo, m + gauss() * sigma[i]!));
+      });
+      const before = results.length;
+      evaluate(genes, `gen${gen}e${k}`);
+      const fit = results.slice(before).reduce((a, r) => a + r.fit, 0) / Math.max(1, results.length - before);
+      pop.push({ genes, fit });
+    }
+    pop.sort((a, b) => b.fit - a.fit);
+    const elite = pop.slice(0, ELITES);
+    for (let i = 0; i < mean.length; i++) {
+      mean[i] = elite.reduce((a, e) => a + e.genes[i]!, 0) / elite.length;
+    }
+    for (let i = 0; i < sigma.length; i++) {
+      const [, lo, hi] = DIMS[i]!;
+      sigma[i] = Math.max((hi - lo) * 0.03, sigma[i]! * 0.8);
+    }
+    console.log(`  gen${gen}: eliteFit=${elite[0]!.fit.toFixed(0)} meanFit=${(elite.reduce((a, e) => a + e.fit, 0) / elite.length).toFixed(0)}`);
+  }
+} else {
+  for (let g = 0; g < GENOMES; g++) {
+    const genes = DIMS.map(([, lo, hi]) => lo + rng() * (hi - lo));
+    evaluate(genes, `g${g}`);
+  }
 }
 defaults.forEach((v, i) => set(DIMS[i]![0], v));
 
@@ -137,4 +198,3 @@ for (const r of results.slice(0, 5)) {
   console.log(`fit=${r.fit.toFixed(0)} caps=${r.stat.caps} grab=${r.stat.grabT.toFixed(0)}s carry=${r.stat.carryT.toFixed(0)}s spd=${r.stat.avgSpeed.toFixed(1)} E=${r.stat.avgE.toFixed(0)}\n   ${diffs || '(default)'}`);
 }
 console.log(`\nCSV → ${csvPath}`);
-void KAT; // long route available via --kat later if needed

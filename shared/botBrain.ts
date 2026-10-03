@@ -194,7 +194,8 @@ export interface BrainOut {
   say?: { kind: ChatterKind; target?: string };
 }
 
-const THINK_S = 0.3;
+import { BOT_TUNING as T } from './botTuning.ts';
+
 const FLINCH_S = 0.4;
 
 // Fear / hero — both are sense tuning, never new moves or info. Below
@@ -203,9 +204,9 @@ const FLINCH_S = 0.4;
 // human could sharpen: cadence, aim, dodge horizon, acquisition range.
 // Tribes players don't scatter at the first scratch — FEAR_HP sits near
 // death, and the hero roll is a real coin flip toward a last stand.
-const FEAR_HP = 0.15;
-const HERO_CHANCE = 0.3; // per hurt episode, rolled on the rising edge
-const HERO_S = 6;        // seconds of hero before it cools off
+
+ // per hurt episode, rolled on the rising edge
+        // seconds of hero before it cools off
 
 const DEATH_MS = 15000;  // a death spot stays scary this long
 const DEATH_RANGE = 10;  // m — repel radius around each remembered death
@@ -218,7 +219,7 @@ export class BotBrain {
     this.h = newHuntState(spawn);
   }
 
-  private thinkT = botRand() * THINK_S;
+  private thinkT = botRand() * T.brain.thinkS;
   readonly h: HuntState;
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
@@ -307,12 +308,12 @@ export class BotBrain {
   }
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
-  private readonly wanderlust = 0.7 + botRand() * 0.6;
+  private readonly wanderlust = T.brain.wanderBase + botRand() * T.brain.wanderRand;
   /** How much this bot minds the objective vs the scenery — high duty
    *  chases heard fights and holds roles, low duty goes sightseeing.
    *  Independent of wanderlust: a hyper tourist and a lazy pro both
    *  exist in a real lobby. */
-  private readonly duty = 0.5 + botRand() * 0.9;
+  private readonly duty = T.brain.dutyBase + botRand() * T.brain.dutyRand;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
@@ -443,9 +444,9 @@ export class BotBrain {
    *  a desperate last stand. Latch resets once healed so the next wound
    *  gets a fresh roll. */
   private mood(ctx: BrainCtx, dt: number): { hurtEdge: boolean; hero: boolean; fearing: boolean } {
-    const hurt = (ctx.healthFrac ?? 1) < FEAR_HP;
+    const hurt = (ctx.healthFrac ?? 1) < T.brain.fearHp;
     const hurtEdge = hurt && !this.hurtLatch;
-    if (hurtEdge && botRand() < HERO_CHANCE) this.heroT = HERO_S;
+    if (hurtEdge && botRand() < T.brain.heroChance) this.heroT = T.brain.heroS;
     this.hurtLatch = hurt;
     this.heroT = Math.max(0, this.heroT - dt);
     const hero = this.heroT > 0;
@@ -465,7 +466,7 @@ export class BotBrain {
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
-      this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
+      this.thinkT = hero ? T.brain.thinkS * T.brain.heroThinkK : T.brain.thinkS;
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
     }
     let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);

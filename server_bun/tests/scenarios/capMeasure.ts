@@ -67,6 +67,12 @@ export function measureCap(
   const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0 };
   const dt = 0.05;
   let simT = 0;
+  // Wall-clock watchdog: a degenerate genome (or plain bad luck) can
+  // send the capper into an orbit that never resolves — the sim loop
+  // stays bounded, but a pathological think loop inside step() is not.
+  // Sweeps bail at ~3x the expected wall time instead of hanging.
+  const t0 = Date.now();
+  const wallBudget = simBudgetS * 800;
   let carrying = false;
   let lastPos: PlayerState['position'] | null = null;
   // The capper's real budget is total mechanical energy — speed read
@@ -80,6 +86,7 @@ export function measureCap(
   // Long budget — deaths reset the run and a second attempt is honest
   // capper behavior (nobody caps first try on a defended stand).
   for (let i = 0; i < simBudgetS * 20 && stat.caps === 0; i++) {
+    if (Date.now() - t0 > wallBudget) break;
     step(room, 1, dt);
     simT += dt;
     const bravoFlag = room.flags!.flags.get('bravo')!;

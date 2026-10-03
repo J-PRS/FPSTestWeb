@@ -80,6 +80,18 @@ export const BOT_TUNING = {
     progressW: 0.9,      // goal-progress weight
     eScoreW: 0.2,        // banked-energy weight (runners)
   },
+  // botBrain — think cadence + disposition rolls
+  brain: {
+    thinkS: 0.3,       // s — think tick period
+    fearHp: 0.15,      // healthFrac that breaks contact
+    heroChance: 0.3,   // per hurt episode, hero-mode roll
+    heroS: 6,          // s — hero window length
+    heroThinkK: 0.45,  // think-period multiplier while heroing
+    wanderBase: 0.7,   // wanderlust roll base
+    wanderRand: 0.6,   // wanderlust roll spread
+    dutyBase: 0.5,     // duty roll base
+    dutyRand: 0.9,     // duty roll spread
+  },
   // botSteer — context steering slots
   steer: {
     slots: 16,           // directions sampled around the circle
