@@ -110,6 +110,9 @@ export class NetClient {
   /** Behavior-layer hook for claim verdicts — a reject is a verdict, not
    *  transport loss, so the bot stops retransmitting that spawn. */
   onShotRejected?: (m: Extract<ServerMessage, { type: 'shotRejected' }>) => void;
+  /** Same hook for honest-lag discards — the claim is dead server-side,
+   *  re-firing it only burns the fire window. */
+  onClaimDropped?: (m: Extract<ServerMessage, { type: 'claimDropped' }>) => void;
   /** Behavior-layer hook for world resyncs — a gameState means the world
    *  may have moved on without us (grace-gap knockback/kills), so claims
    *  queued before it are stale the same way pre-hop claims are. */
@@ -364,6 +367,7 @@ export class NetClient {
         this.onShotRejected?.(m);
         break;
       }
+      case 'claimDropped': this.onClaimDropped?.(m); break;
       case 'projectileCreated': {
         if (m.ownerId === this.id && m.shotId) this.projectiles.set(m.shotId, m.projectileId);
         break;

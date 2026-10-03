@@ -87,6 +87,11 @@ export class NetBot {
       this.spawns.delete(m.shotId);
       this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
     };
+    nc.onClaimDropped = (m) => {
+      if (!m.shotId) return;
+      this.spawns.delete(m.shotId);
+      this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
+    };
     // World resynced (reconnect, room hop): the gap let the server move
     // our record without us seeing it — pre-state claims carry stale
     // origins, same invariant as the hop purge.
