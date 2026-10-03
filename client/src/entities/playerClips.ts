@@ -64,7 +64,9 @@ export const CLASS_BODY_SPEC: Record<string, {
   // All three rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
   'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.8, anims: SCIFISOLDIER_ANIMS },
-  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.0 },
+  // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
+  // next to the armored classes; the cap keeps the honest hitbox.
+  'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2 },
   'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.5, anims: POLYART_ANIMS },
 };
 
