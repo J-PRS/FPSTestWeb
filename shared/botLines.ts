@@ -38,6 +38,12 @@ export class BotLines {
    *  "goal-side" end of the contour and the bot zigzags around the ring
    *  instead of walking it monotonically until the grade opens. */
   private traverseDir: 1 | -1 | null = null;
+  /** Orbit-escape latch: goal distance when the give-up path armed.
+   *  A massif ring pays ~8m of "progress" per pocket lap — small gains
+   *  released the latch instantly and reset the traverse lock, which is
+   *  exactly the treadmill (kata: 180s circling ~160m short of the
+   *  stand). Escape needs a real net gain, not a lap dividend. */
+  private orbitGd = Infinity;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
@@ -51,7 +57,7 @@ export class BotLines {
       if (this.passes.length > 8) this.passes.shift();
     }
     this.lastY = pos.y;
-    if (gd < T.lines.minGd) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; return dest; }
+    if (gd < T.lines.minGd) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitGd = Infinity; return dest; }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > T.lines.redest : true;
@@ -65,9 +71,15 @@ export class BotLines {
     // the third gives up on terrain scoring entirely and beelines —
     // humans grind the climb when carving stops paying. A pass the bot
     // has actually made before outranks another face probe.
-    if (gd > this.lastGd - 8) this.stale++; else { this.stale = 0; this.traverseDir = null; }
+    if (gd > this.lastGd - 8) this.stale++;
+    else { this.stale = 0; if (this.orbitGd === Infinity) this.traverseDir = null; }
     this.lastGd = gd;
-    if (this.stale >= T.lines.staleLimit) {
+    // Release the orbit latch only on net progress from where it armed.
+    if (this.orbitGd !== Infinity && gd < this.orbitGd - 30) {
+      this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null;
+    }
+    if (this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
+      if (this.orbitGd === Infinity) this.orbitGd = gd;
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
         const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
