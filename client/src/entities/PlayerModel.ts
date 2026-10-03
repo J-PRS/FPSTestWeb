@@ -317,6 +317,16 @@ export class PlayerModel {
   private lodLoadP: Promise<void> | null = null;
   private lod = 0;
 
+  /** Re-size the debug gizmo to the class hit capsule — the gizmo was
+   *  built from the generic constants and never matched light/heavy sim
+   *  capsules (radius stays shared; only height/half differ per class). */
+  setColliderCapsule(cap: { height: number; half: number }): void {
+    if (!this.colliderGizmo) return;
+    this.colliderGizmo.geometry.dispose();
+    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
+    this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale;
+  }
+
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
    *  nobody reads a 200m figure's cast shadow. */
   setCastShadow(on: boolean): void {

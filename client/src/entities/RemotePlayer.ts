@@ -102,6 +102,7 @@ export class RemotePlayer {
   }
   private applyClassScale(): void {
     this._model.setScale(this._classScale);
+    this._model.setColliderCapsule(classCapsule(this.armorClass));
   }
 
   /** Shared async-load tail for the constructor and the setClass rebuild:
