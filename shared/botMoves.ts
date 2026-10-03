@@ -118,7 +118,7 @@ export class BotMoves {
     // ~10-14m/s and dying in the ring. A runner keeps the burn on a
     // flat approach: thrust is the only accelerator left out there.
     const flatRun = ctx.runner === true && drop < 6;
-    const diveRun = gd < runway && tgtY < pos.y + 4 && this.jetWhy !== 'prey' && !flatRun;
+    const diveRun = gd < runway && tgtY < pos.y + 4 && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;
@@ -162,7 +162,25 @@ export class BotMoves {
     // Posted anchors burn only to climb back onto the post — every
     // discretionary burn (boost to speed, hop, airborne-prey chase) is
     // altitude+momentum off the stand, and the chase is the gun's job.
+    // The one exception is the bodyblock hop: a stand touch is a sphere
+    // check, so a runner skimming in at head height sails clean over a
+    // planted heavy's feet. Meet the flyer — the T2 HoF answer is a
+    // timed pop into his lane the beat before he crosses.
     if (ctx.posted) {
+      const obj = ctx.objective;
+      const selfD = obj ? Math.hypot(obj.x - pos.x, obj.z - pos.z) : Infinity;
+      if (obj && selfD < 30 && ctx.enemies) {
+        for (const e of ctx.enemies) {
+          if (!e.alive || !e.vel) continue;
+          const ox = e.pos.x - obj.x, oz = e.pos.z - obj.z;
+          const od = Math.hypot(ox, oz);
+          if (od > 80) continue;
+          const closing = -(e.vel.x * ox + e.vel.z * oz) / (od || 1);
+          if (closing < 8 || od / closing > 1.2) continue;
+          this.jetWhy = 'block';
+          return true;
+        }
+      }
       this.jetWhy = rise > 2 ? 'climb' : '-';
       return rise > 2;
     }
