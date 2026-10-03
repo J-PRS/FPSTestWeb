@@ -145,6 +145,10 @@ export class Room {
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
 
+  /** Wall ms of the last room tick — TickLoop turns the gap into the dt
+   *  every sim sees, so interval lag can't drift sim clocks off wall time. */
+  lastStepAt = 0;
+
   /** Inbound client messages park here until the next tick drains them —
    *  the Quake/Valve command-buffer pattern: all input lands at phase 0
    *  so sims see a deterministic order (input → sim → fanout) instead of

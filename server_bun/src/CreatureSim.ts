@@ -114,6 +114,8 @@ export class CreatureSim {
 
   get count(): number { return this.crawlers.size; }
 
+  get hasField(): boolean { return this.field !== null; }
+
   roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number }[] {
     const out = [];
     for (const c of this.crawlers.values()) {

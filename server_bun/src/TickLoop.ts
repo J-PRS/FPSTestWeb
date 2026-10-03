@@ -95,9 +95,8 @@ export class TickLoop {
         // forever. A rejoining human wakes the room instantly.
         const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
         room.ballSim.dormant = !audience;
-        // Same hibernation for creatures — the sim's own interval keeps
-        // ticking when nobody can see it, unlike the room tick it can't
-        // reach. An unwatched room simming spawns forever burns CPU
+        // Same hibernation for creatures — an unwatched room spawning
+        // crawlers forever burns CPU
         // (and silently grows the crawler population it later dumps on
         // a rejoining player).
         room.creatureSim.dormant = !audience;
@@ -128,8 +127,16 @@ export class TickLoop {
     // any sim runs, in wire-arrival order.
     room.drainCommands();
 
-    // Server sims move first — bot/flag writes land in this tick's records.
-    for (const sim of room.sims) sim.tick(TICK_DT);
+    // Server sims move first — bot/flag writes land in this tick's
+    // records. They get MEASURED elapsed, not the nominal step: setInterval
+    // fires late under load (+11ms avg measured), and a fixed 50ms would
+    // let sim clocks drift ~18% behind wall time — client replays then
+    // overshoot every resync (the ball-rubberband storm). Sims catch up
+    // in whole cells inside step(); the cap prevents a hiccup spiral.
+    const elapsed = room.lastStepAt > 0 ? (now0 - room.lastStepAt) / 1000 : TICK_DT;
+    const dt = Math.min(Math.max(elapsed, TICK_DT), 1);
+    room.lastStepAt = now0;
+    for (const sim of room.sims) sim.tick(dt);
 
     // Authority mode: the shadow sim's output is the broadcast truth.
     // Reports only fed it aim/liveness hints — what every other player

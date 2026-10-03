@@ -62,6 +62,9 @@ export class GameServer {
           // finished) get the field attached now.
           for (const room of this.rooms.values()) {
             if (!room.ballSim.hasField) { room.field = this.field; room.ballSim.attachField(this.field); }
+            // The creature sim rides the same field — it sits dead
+            // without it (step() early-returns on !field).
+            if (!room.creatureSim.hasField) room.creatureSim.attachField(this.field);
           }
         })
         .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
