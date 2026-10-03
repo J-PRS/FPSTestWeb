@@ -123,6 +123,9 @@ export class RoomScore {
     const spec = this.h.modeSpec;
     const shooter = this.h.players.getPlayer(shooterId);
     if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
+    // Self-splash is a death, not a frag — kills/deaths still record,
+    // but a suicide must never pay a point toward winning.
+    if (shooterId === targetId) return;
     if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
     else if (shooter.team) {
       this.score(shooter.team, spec.ptsPlayerKill);

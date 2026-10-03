@@ -120,7 +120,10 @@ export class HitLedger {
   /** The kill tail: score credit, kill broadcast, spree callouts, and the
    *  respawn timer — every damage path converges here. */
   private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
-    if (shooterId !== 'environment') c.playerManager.addKill(shooterId);
+    // Self-frags are deaths, not kills — the kill feed already says so;
+    // kills++/killTotal must agree or suicides pad the scoreboard and
+    // can even fake "first blood".
+    if (shooterId !== 'environment' && shooterId !== targetId) c.playerManager.addKill(shooterId);
     logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
