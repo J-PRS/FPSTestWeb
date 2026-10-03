@@ -40,6 +40,13 @@ export class VmBaked {
       for (const g of this.h.weapons.values()) bakeVertexAO(g);
       return;
     }
+    // Procedural is the default look — baked GLBs only load behind ?bake
+    // (gunlab A/B + pipeline verification). The nobake flag still reads
+    // as off for anyone with it bookmarked.
+    if (!urlParams.has('bake') || urlParams.has('nobake')) {
+      for (const g of this.h.weapons.values()) bakeVertexAO(g);
+      return;
+    }
     const loader = new GLTFLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();

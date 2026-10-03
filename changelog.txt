@@ -1,3 +1,5 @@
+2026-10-03 - viewmodel: procedural (unbaked) is the default weapon look; baked GLBs only load behind ?bake (gunlab A/B). ?nobake still honored.
+2026-10-03 - netbot: claimDropped purges pending spawn/shell claims by shotId (same verdict-drop rule as shotRejected); 30s soak zero rejects.
 2026-10-03 - claimDropped carries shotId end-to-end too (dead-shooter/target-dropped claims); both sides tsc clean.
 2026-10-03 - NetworkManager: pendingHit clears match shotRejected by shotId exactly (no cross-clear when claims race the same target).
 2026-10-03 - netbot: purge pending spawn/shell claims on every gameState (reconnect/hop resync makes pre-state claims stale); 2x30s drop+loss soaks zero rejects.
