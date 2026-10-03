@@ -36,6 +36,14 @@ export interface ProjectileConfig {
   glowColor: number;
   glowOpacity: number;
   glowScale?: number; // override glow mesh size; defaults to hitRadius if not set
+  /** Glow shell silhouette: 'sphere' = the classic proxy bubble; 'cone' =
+   *  a vapor-cone (shock collar) — apex at the shell, flaring backward
+   *  along -velocity, base radius still tracking hitRadius. */
+  glowShape?: 'sphere' | 'cone';
+  /** Armed-light pulse — the glow shell breathes in scale (per-instance
+   *  matrix, so it survives material sharing). `fuseRamp` quickens the
+   *  blink as maxLifetime runs out — the classic "beeping faster" tell. */
+  glowPulse?: { hz: number; depth: number; fuseRamp?: boolean };
   meshRampIn?: boolean; // default ON — projectiles spawn small and grow; false = pop in at full size
   meshRampInDuration?: number; // default 0.2s, capped at 40% of maxLifetime
   meshStartScale?: number; // default 0.2
@@ -45,7 +53,7 @@ export interface ProjectileConfig {
   ttlJitter?: number; // per-shot fuse spread ±fraction, seeded from serverProjectileId so replicas agree
   trailMeshType?: 'sphere' | 'ring' | 'disc' | 'billboard'; // trail particle geometry; defaults to sphere
   noExplosion?: boolean; // true = hit produces no explosion/knockback (hitscan-style bullets)
-  ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles
+  ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles — ON by default; set false to opt out
   ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)
   ribbonWidth?: number;
   ribbonLife?: number;
