@@ -50,4 +50,8 @@ _tools/vmdump/.tb/
 _tools/vmdump/tbout/
 client/tmp_assets/
 zzz/
+ZZZ_ROOT/
 _reports/*.mp4
+*.old
+*.blend
+client/assets/LensDirt/originals/
