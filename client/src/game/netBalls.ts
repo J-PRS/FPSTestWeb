@@ -20,11 +20,14 @@ type Vec3Msg = { x: number; y: number; z: number };
 // terminal-speed ball legitimately diverges tens of meters on a bounce
 // tick, so its floor scales with velocity. Lunge/teleport/spawn are
 // server-side RNG the predictor can't foresee; segment heartbeat is the
-// only kind where >4m is a real desync.
+// only kind where >4m is a real desync — but a bounce whose segment is
+// still in flight inflates the check by up to speed×~0.5s (latency +
+// batch window), so the heartbeat floor scales the same way. A truly
+// missed resync drifts two whole intervals — still well above it.
 function rubberbandWarnAt(kind: string, speed: number): number {
   if (kind === 'lunge' || kind === 'teleport' || kind === 'spawn') return 40;
   if (kind === 'bounce' || kind === 'stall') return Math.max(12, speed * 0.6);
-  return 4;
+  return Math.max(4, speed * 0.5);
 }
 
 // ---- Server-owned balls (shared PvE) ---------------------------------
