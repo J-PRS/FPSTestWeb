@@ -97,6 +97,42 @@ describe('RibbonTrail pooling + slots', () => {
     b.dispose();
   });
 
+  // P2 generational slots: a handle whose slot was re-issued to a new
+  // owner must refuse writes — the batch's gen word proves staleness
+  // where slot index alone can't.
+  it('a stale gen handle refuses to paint the new owner\u2019s slot', () => {
+    const a = RibbonTrail.acquire(scene, { color: 0xff0000 });
+    const s = slot(a);
+    const b = (a as unknown as { batch: { release(n: number): void; claim(): number } }).batch;
+    // Free a's slot out from under it, then re-issue it to a fresh trail —
+    // 'a' still thinks it owns s.
+    b.release(s);
+    const c = RibbonTrail.acquire(scene, { color: 0x00ff00 });
+    expect(slot(c)).toBe(s);
+    const before = RibbonTrail.zombiePushes;
+    a.push(pos(9), vel()); // stale gen — refused, handle dropped
+    expect(RibbonTrail.zombiePushes).toBe(before + 1);
+    expect(slot(a)).toBe(-1);
+    // And the legitimate owner kept its slot + generation.
+    c.push(pos(3), vel());
+    expect(slot(c)).toBe(s);
+    a.dispose(); // still pooled cleanly — slot is already -1
+    c.dispose();
+  });
+
+  it('a stale releaseSlot can\u2019t steal the slot back from its new owner', () => {
+    const a = RibbonTrail.acquire(scene, { color: 0xff0000 });
+    const s = slot(a);
+    const ba = (a as unknown as { batch: { release(n: number): void } }).batch;
+    ba.release(s);
+    const c = RibbonTrail.acquire(scene, { color: 0x00ff00 });
+    expect(slot(c)).toBe(s);
+    (a as unknown as { releaseSlot(): void }).releaseSlot(); // stale — must not re-free s
+    expect(batch(c).used.has(s)).toBe(true);
+    a.dispose();
+    c.dispose();
+  });
+
   it('done ribbons the owner stopped ticking get swept as stale', () => {
     const r = RibbonTrail.acquire(scene, { color: 0xff0000, life: 0.05 });
     r.push(pos(0), vel());

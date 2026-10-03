@@ -42,6 +42,10 @@ export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos 
 export class RibbonTrail {
   private batch!: TrailBatch;
   private slot = -1;
+  // Generation word from TrailBatch.claim — a stale instance whose slot
+  // got re-issued to a new owner mismatches here and is refused at push
+  // (double-ownership dies at the check, not via sweeps).
+  private slotGen = 0;
 
   // Ring buffer of samples: position + side vector + emit time
   private px = new Float32Array(MAX_SAMPLES);
@@ -217,30 +221,31 @@ export class RibbonTrail {
     // and the first owner's stop() killed both trails mid-flight.
     this.lastUpdateAt = performance.now();
     this.batch = claimableBatch(scene);
-    this.slot = this.batch.free.pop()!;
+    this.slot = this.batch.claim();
+    this.slotGen = this.batch.gen[this.slot]!;
     RibbonTrail.liveSet.add(this);
-    this.batch.used.add(this.slot); this.batch.slotsDirty = true; this._lf.fill(-1);
+    this._lf.fill(-1);
+  }
+
+  /** Slot held AND generation-current — a stale instance whose slot was
+   *  released out from under it and re-issued drops its handle for good
+   *  (writing would paint the new owner's verts — the both-trails-killed
+   *  sweep bug, now refused at the check instead of healed by sweeps). */
+  private slotAlive(): boolean {
+    if (this.slot < 0) return false;
+    if (!this.batch.owns(this.slot, this.slotGen)) { this.slot = -1; return false; }
+    return true;
   }
 
   private releaseSlot(): void {
     RibbonTrail.liveSet.delete(this);
     if (this.slot < 0) return;
-    const b = this.slot * RIBBON_FLOATS_PER_SLOT;
-    this.batch.pos.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
-    this.batch.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
-    this.batch.mark(b, b + RIBBON_FLOATS_PER_SLOT);
-    // Upload NOW — mark() alone defers to the next ribbon's update(), and
-    // if this was the last live ribbon nothing ever flushes: the slot's
-    // stale verts stay lit as a frozen streak across the map.
-    this.batch.flush();
-    this.batch.used.delete(this.slot);
-    this.batch.slotsDirty = true;
-    this.batch.free.push(this.slot);
-    // Keep descending so pop() hands out the smallest slot — used slots
-    // stay packed at the front of the index buffer for drawRange.
-    this.batch.free.sort((x, y) => y - x);
+    const b = this.batch;
+    // owns() gates the free — a stale releaseSlot must not steal the slot
+    // back out from under whoever claimed it after us.
+    if (b.owns(this.slot, this.slotGen)) b.release(this.slot);
     this.slot = -1;
-    retireBatchIfOverflow(this.batch);
+    retireBatchIfOverflow(b);
   }
 
   private reinit(scene: THREE.Scene, o: RibbonOpts): void {
@@ -282,13 +287,13 @@ export class RibbonTrail {
     // dispose (resync mass-drop, stale-owner sweep) used to keep filling
     // the ring with slot=-1: the census row looked alive, the trail
     // rendered nothing, and nobody could tell which owner lost it.
-    if (this.slot < 0) { RibbonTrail.zombiePushes++; return; }
+    if (!this.slotAlive()) { RibbonTrail.zombiePushes++; return; }
     if (this.stopped) return;
     // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
     // forever: every later sideFor/glueBoundary reuses it and the whole
     // slot's verts go NaN (the "radius is NaN" console spam).
-    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z) ||
-        !Number.isFinite(vel.x) || !Number.isFinite(vel.y) || !Number.isFinite(vel.z)) {
+    // NaN propagates through the sum — one check covers all six lanes.
+    if (!Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z)) {
       RibbonTrail.nanPushes++;
       return;
     }
@@ -345,7 +350,9 @@ export class RibbonTrail {
     // fresh fq coincidentally matches the old bucket would skip its
     // color write and leave the segment black/invisible.
     this._lf.fill(-1);
-    if (this.slot >= 0) {
+    // Gen check too — a stale clear() wiping a slot that's since been
+    // re-issued is exactly the both-trails-killed sweep bug.
+    if (this.slot >= 0 && this.batch.owns(this.slot, this.slotGen)) {
       const b = this.slot * RIBBON_FLOATS_PER_SLOT;
       this.batch.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
       this.batch.mark(b, b + RIBBON_FLOATS_PER_SLOT);
@@ -363,7 +370,7 @@ export class RibbonTrail {
     this.lastUpdateAt = performance.now();
     camPos = camPos ?? sharedCamPos ?? undefined;
     this.time += dt;
-    if (this.slot < 0 || this.count < 2) return;
+    if (!this.slotAlive() || this.count < 2) return;
     const { camMoved, rebillboard } = this.cameraState(camPos);
     const pos = this.batch.pos;
     const base = this.slot * RIBBON_FLOATS_PER_SLOT;

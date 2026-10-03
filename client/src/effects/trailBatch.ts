@@ -45,6 +45,41 @@ export class TrailBatch {
     this.dirty = true;
   }
 
+  /** Generation per slot (VFX P2). claim() bumps it, so a stale handle
+   *  holding (slot, oldGen) after the slot got re-issued is refused at
+   *  owns() — double-ownership dies at the check, not via sweeps. */
+  readonly gen = new Uint32Array(MAX_TRAILS);
+
+  claim(): number {
+    const s = this.free.pop()!;
+    this.gen[s] = this.gen[s]! + 1;
+    this.used.add(s);
+    this.slotsDirty = true;
+    return s;
+  }
+
+  /** True while (slot, gen) is the slot's current owner. */
+  owns(slot: number, gen: number): boolean {
+    return this.used.has(slot) && this.gen[slot] === gen;
+  }
+
+  release(slot: number): void {
+    if (!this.used.delete(slot)) return; // stale release can't double-free
+    const b = slot * RIBBON_FLOATS_PER_SLOT;
+    this.pos.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
+    this.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
+    this.mark(b, b + RIBBON_FLOATS_PER_SLOT);
+    // Upload NOW — mark() alone defers to the next ribbon's update(), and
+    // if this was the last live ribbon nothing ever flushes: the slot's
+    // stale verts stay lit as a frozen streak across the map.
+    this.flush();
+    this.slotsDirty = true;
+    this.free.push(slot);
+    // Keep descending so pop() hands out the smallest slot — used slots
+    // stay packed at the front of the index buffer for drawRange.
+    this.free.sort((x, y) => y - x);
+  }
+
   // Union of what's already queued on the attrs since the last render.
   // flush() runs per ribbon, and clearUpdateRanges() would erase the
   // spans earlier ribbons queued this frame — three only drains the
