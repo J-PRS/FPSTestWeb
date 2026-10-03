@@ -48,6 +48,13 @@ export interface FireHooks {
 // spawn moves too (same origin in the shot message), keeping server
 // tracking and remote replicas consistent with what the shooter sees.
 const MUZZLE_LEAD = 1.0;
+// Shoulder drop (third person only): the eye-point origin reads as
+// forehead-fired on the chase cam — a small parallel offset puts the
+// launch at chest/gun height. First person keeps the Quake rule:
+// spawn exactly on the aim line from the eye/crosshair. The offset
+// rides the claimed origin, so what the 3P shooter sees is what
+// remote replicas render.
+const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): void {
@@ -56,6 +63,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
 
   if (!quiet) sfx.shoot(config.weaponType);
   _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
+  if (deps.lazyPlayer().thirdPerson) _spawnOrigin.y -= SHOULDER_DROP;
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
   const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
   deps.world.projectiles.push(p);
@@ -96,6 +104,10 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
     weaponType: config.weaponType,
     shotId: p.shotId ?? undefined,
+    // Trigger-time stamp — the server's fire-window escape hatch compares
+    // client-side spacing, and wire compression (batching/backlog drain)
+    // otherwise makes two legal shots arrive inside one window.
+    timestamp: Date.now(),
   });
 }
 
