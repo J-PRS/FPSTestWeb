@@ -19,9 +19,12 @@ export {
 } from '../../../shared/constants.js';
 
 // Player jetpack constants
-export const MAX_ENERGY = 60.0; // Maximum jetpack energy
-export const JET_DRAIN = 15.0; // Energy drain per second
-export const JET_CHARGE = 8.0; // Energy recharge per second
+// The jet economy is authored in shared/movement.ts (ENERGY) — the server
+// shadow sims the same tank. These stay derived, never copies: a tune
+// must move both ends at once.
+export const MAX_ENERGY: number = ENERGY.max;
+export const JET_DRAIN: number = ENERGY.jetDrain;
+export const JET_CHARGE: number = ENERGY.jetCharge;
 
 // Weapon constants
 export const BOLT_FIRE_RATE = 0.8; // bolt launcher fire rate (seconds)
@@ -39,6 +42,7 @@ export const LG_CHAIN_DMG_SCALE = 0.5;
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import { ENERGY } from '../../../shared/movement.js';
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
 export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
