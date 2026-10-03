@@ -25,18 +25,21 @@ interface BlastCtx {
   pos: Vec3;
   radius: number;
   baseDamage: number;
+  scales?: readonly number[];
   impulse: number;
   pull: boolean;
   label: string;
   weapon?: number;
+  shotId?: string;
 }
 
 /** The CombatHandler surface the blast sweep reads. */
 export interface BlastHost {
   playerManager: PlayerManager;
   deps: {
-    deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+    deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
     pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
+    flagsKnock?: (at: Vec3, radius: number, force: number) => void;
     creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
     preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
     moveImpulse?: (playerId: string, dv: Vec3) => void;
@@ -51,7 +54,7 @@ export interface BlastHost {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   applyHit(shooterId: string, targetId: string, damage: number,
            result: { killed: boolean; newHealth: number; newArmor: number },
-           opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void;
+           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void;
   ddMult(shooter: PlayerState): number;
 }
 
@@ -62,7 +65,7 @@ export interface BlastHost {
 export class BlastRunner {
   constructor(private h: BlastHost) {}
 
-  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false): void {
+  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false, shotId?: string): void {
     const player = this.h.playerManager.getPlayer(playerId);
     // Trusted server blasts still run from dead owners — a corpse's
     // in-flight ordnance and its charge-pop both outlive the kill.
@@ -79,16 +82,21 @@ export class BlastRunner {
       // Splash pays a banded fraction of the DIRECT hit — aoeDamage on
       // the stat block only survives as the base for damage-only specials
       // (melee arc, injected LG pop charge) that have no directDamage.
-      radius, baseDamage: (stats.directDamage || stats.aoeDamage) * this.h.ddMult(player),
+      radius, baseDamage: (stats.directDamage || stats.aoeDamage) * this.h.ddMult(player), scales: stats.aoeScales,
       impulse: stats.knockbackForce, pull,
-      label: pull ? 'disc AOE' : 'AOE', weapon,
+      label: pull ? 'disc AOE' : 'AOE', weapon, shotId,
     };
 
     this.splashTargets(ctx, playerId, excludeTargetId);
 
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
-    this.h.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId);
+    this.h.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId, ctx.scales);
+
+    // A dropped flag is a loose physical object — every blast (claimed or
+    // trusted) can punt it. Lives inside processAOE so claimed shots,
+    // server blasts and splashes all knock it through one funnel.
+    this.h.deps.flagsKnock?.(position, radius, stats.knockbackForce);
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
@@ -179,7 +187,7 @@ export class BlastRunner {
 
     // shared/combat.ts — same formula the client predicts with; beam ticks
     // pass a flat figure (the ramp already IS the falloff)
-    const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius);
+    const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius, ctx.scales);
     if (damage <= 0) return;
 
     const impulseMag = Math.min(
@@ -207,7 +215,7 @@ export class BlastRunner {
       const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
-        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon });
+        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId });
       }
       return;
     }
@@ -216,7 +224,7 @@ export class BlastRunner {
     // never deals damage to them in team rooms.
     if (this.h.friendly(ctx.shooterId, targetId)) return;
     const result = this.h.playerManager.applyDamage(targetId, damage);
-    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
+    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon, shotId: ctx.shotId });
     // Concussion payload: the impact nade's whole job is stripping the
     // flag — a carrier clipped by the blast fumbles it like in T2.
     if (ctx.weapon === WeaponType.ImpactGrenade) this.h.deps.dropFlagCarrier?.(targetId);
@@ -271,11 +279,12 @@ export class BlastRunner {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null): void {
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string): void {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.aoeRadius <= 0) return;
-    this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true);
+    this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true, shotId);
     // Live nuggets are fair game too — a shell near a gem can punt it.
+    // (flagsKnock is inside processAOE above — every blast reaches it.)
     this.h.deps.pickupsKnock?.(position, stats.aoeRadius, stats.knockbackForce);
   }
 
@@ -286,6 +295,7 @@ export class BlastRunner {
     const owner = this.h.playerManager.getPlayer(ownerId);
     const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
     this.h.deps.pickupsKnock?.(pos, radius, knockback);
+    this.h.deps.flagsKnock?.(pos, radius, knockback);
     // Wildlife isn't mine-savvy — a popping trap catches the swarm too.
     this.h.deps.preySplash?.(ownerId, pos, radius, baseDamage);
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {

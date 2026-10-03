@@ -32,17 +32,17 @@ export const AOE_BAND_SCALES = [0.75, 0.5, 0.25] as const;
 /** Global splash dial — every band scales by this. 1.0 for now. */
 export const AOE_DAMAGE_MULT = 1.0;
 
-export function aoeBandScale(dist: number, radius: number): number {
+export function aoeBandScale(dist: number, radius: number, scales: readonly number[] = AOE_BAND_SCALES): number {
   if (radius <= 0 || dist >= radius) return 0;
-  return AOE_BAND_SCALES[Math.min(2, Math.floor((dist / radius) * 3))]! * AOE_DAMAGE_MULT;
+  return scales[Math.min(scales.length - 1, Math.floor((dist / radius) * scales.length))]! * AOE_DAMAGE_MULT;
 }
 
 /** Banded falloff applied to an already-resolved amount — used by both the
  *  client's predicted splash and the server's authoritative pass. The
  *  amount is normally the weapon's directDamage (splash is a fraction of
  *  the direct hit), so there is no separate aoe damage stat to tune. */
-export function aoeDamage(amount: number, dist: number, radius: number): number {
-  return Math.round(amount * aoeBandScale(dist, radius));
+export function aoeDamage(amount: number, dist: number, radius: number, scales?: readonly number[]): number {
+  return Math.round(amount * aoeBandScale(dist, radius, scales));
 }
 
 /** Global knockback dial — applied at the call sites, not inside
@@ -68,7 +68,7 @@ export function aoeImpulse(force: number, dist: number, radius: number): number 
 
 export function aoeDamageAt(dist: number, weaponType: number | undefined): number {
   const s = getWeaponStats(weaponType);
-  return aoeDamage(s.directDamage || s.aoeDamage, dist, s.aoeRadius);
+  return aoeDamage(s.directDamage || s.aoeDamage, dist, s.aoeRadius, s.aoeScales);
 }
 
 export function aoeImpulseAt(dist: number, weaponType: number | undefined): number {

@@ -24,6 +24,32 @@ export interface ClassStats {
  *  boundary. */
 export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28]);
 
+/** Medium-only guns (Flak, PlasmaGun) — the mid-tier punch. An EXACT-class
+ *  lock like the light tier: heavies trade it away for ordnance access. */
+export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = new Set([6, 23]);
+
+/** Light-only finesse weapons (Railgun, Lightning) — precision gear for
+ *  the frame that paid HP for twitch; heavies get ordnance instead.
+ *  Unlike the other tiers this is an EXACT-class lock, not a floor. */
+export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = new Set([9, 12]);
+
+const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
+
+/** The lowest tier allowed to fire weapon `w` (WeaponType id). Light-only
+ *  guns report 'light' — the floor IS the ceiling for them. */
+export function minClassForWeapon(w: number): ArmorClass {
+  return HEAVY_ONLY_WEAPONS.has(w) ? 'heavy' : MEDIUM_ONLY_WEAPONS.has(w) ? 'medium' : 'light';
+}
+
+/** Server-side boundary: may `cls` fire weapon `w`? Unknown class = medium,
+ *  same default the rest of the class plumbing assumes. */
+export function classCanFire(cls: string | undefined, w: number): boolean {
+  const have = cls === 'light' || cls === 'heavy' ? cls : 'medium';
+  if (LIGHT_ONLY_WEAPONS.has(w)) return have === 'light';
+  if (MEDIUM_ONLY_WEAPONS.has(w)) return have === 'medium';
+  return TIER_RANK[have] >= TIER_RANK[minClassForWeapon(w)];
+}
+
 /** Silhouette bump per tier — one cast (mannequin), class reads as bulk:
  *  heavy a 15% taller/broader frame, light a leaner one. Shared so remotes
  *  and the local body agree. */
@@ -35,9 +61,14 @@ export const CLASS_MODEL_SCALE: Record<ArmorClass, number> = {
 };
 
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
-  light:  { maxHealth: -25, speedScale: 1.2, mass: 1.25, eyeHeight: 1.8, radius: 0.5 },
-  medium: { maxHealth: 0,   speedScale: 1.0,  mass: 1.5,  eyeHeight: 2.0, radius: 0.65 },
-  heavy:  { maxHealth: 50,  speedScale: 0.8, mass: 2.0, eyeHeight: 2.5, radius: 0.8 },
+  // Mass is a dimensionless divisor (accel = force/m) shared by jets and
+  // knockback. Every tier must stay under jetForceUp/gravity (35/28=1.25)
+  // or the pack can't lift the chassis off a stand — heavy sits at 1.2,
+  // the heaviest frame that still climbs. Lighter mass also means bigger
+  // blast shoves, so the tier spread doubles as the shove gradient.
+  light:  { maxHealth: -25, speedScale: 1.2, mass: 1.1,  eyeHeight: 1.8, radius: 0.5 },
+  medium: { maxHealth: 25,  speedScale: 1.0,  mass: 1.15, eyeHeight: 2.0, radius: 0.65 },
+  heavy:  { maxHealth: 100, speedScale: 0.8, mass: 1.2,  eyeHeight: 2.5, radius: 0.8 },
 };
 
 /** Headroom above the eye — the helmet must live inside the capsule. */

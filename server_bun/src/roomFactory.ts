@@ -60,6 +60,9 @@ export class RoomFactory {
       room.ballSim.attachField(f);
       room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
       room.projectiles.attachField(f);
+      // Flag homes were snapped in the ctor against whatever field the
+      // host had then (often null) — re-snap now that the real one is in.
+      room.refreshFlagHomes();
       logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
     });
   }
@@ -73,6 +76,7 @@ export class RoomFactory {
       const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
       this.host.maps.noteSource(name, src);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
+      room.mapSrc = src; // spec source filename — scoreboard map title fallback
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.
       const r = room;
@@ -82,7 +86,9 @@ export class RoomFactory {
       // reach (see RoomMoveSim.SEVERE_*).
       room.moveSim.onCheat = (pid, dist) => {
         logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1) });
-        this.host.kickPlayer(pid);
+        // Warn instead of kick — flap/reconnect catch-up reports read as
+        // teleport-scale divergence, and a kick loop punishes honest lag.
+        r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
       };
       room.onRotate = () => this.host.maps.nextRotationSpec(r);
       room.onTerrain = (s) => this.attachTerrain(r, s);

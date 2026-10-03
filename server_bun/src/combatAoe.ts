@@ -11,7 +11,7 @@ import type { ClaimLedger, ClaimDefer } from './claimLedger.ts';
 import { freshDefer } from './claimLedger.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
-import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
+import { classCanFire } from '../../shared/botClasses.ts';
 
 // AOE claim adjudication — the blast detonation a client claims: pop the
 // named shell, sanity-check the blast point per weapon contract (named
@@ -28,6 +28,7 @@ export interface AoeHost {
   solidIndex: ColliderIndex | null;
   hb(key: string, n?: number): void;
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
+  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
@@ -42,7 +43,7 @@ export class AoeClaims {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) { this.h.hb('drop.deadShooter'); return; }
     this.h.hb('aoe');
-    if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
+    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
       this.h.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
       return;
     }
@@ -109,10 +110,11 @@ export class AoeClaims {
     // blast. Server re-derives the bonus from the shared table — the
     // client can't widen the radius past what the weapon allows.
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
+    const projId = msg.projectileId ?? (msg.shotId ? this.h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType);
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType, false, projId);
 
-    if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster);
+    if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster, projId);
   }
 
   /** Swing distance to the player — self-positioned skills (melee, slam)
@@ -161,13 +163,18 @@ export class AoeClaims {
    *  beam's range. The tip also can't sit through a wall: the eye→tip
    *  ray must be clear of structures. */
   private aoeBeam(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
+    // Per-branch counters: hb('aoe') alone can't split "claims arriving
+    // but failing a gate" from "claims never arriving" in the health map.
+    this.h.hb('aoe.beam');
     const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
     const dist = AoeClaims.distTo(eye, msg.position);
     if (dist > 70) { // LG_RANGE 55 + lag slack
+      this.h.hb('aoe.beam.tip');
       this.h.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
       return;
     }
     if (this.h.solids.length && segSolidHit(eye, msg.position, this.h.solids, this.h.solidIndex ?? undefined)) {
+      this.h.hb('aoe.beam.occluded');
       this.h.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
       return;
     }
@@ -177,6 +184,11 @@ export class AoeClaims {
     // The withheld tick damage banks ON the victim — bank before the
     // blast resolves so this tick's share counts if it kills.
     const victim = msg.excludeTargetId ? this.h.playerManager.getPlayer(msg.excludeTargetId) : null;
+    if (victim?.isDead) {
+      // Beam on a corpse: honest aim→death race, but the client's
+      // predicted tic still needs clearing or its ledger warns phantom.
+      this.h.notifyDrop(playerId, 'AOE', 'target dead', victim.id, msg.weaponType);
+    }
     if (victim && !victim.isDead && !this.h.friendly(playerId, victim.id)) this.h.chargeBank.bank(victim, this.h.chargeBank.withheldFor(n));
     // The victim sits in excludeTargetId — projectile semantics would skip
     // them in the blast, but the beam has no paired `shot` claim. Apply the
@@ -184,6 +196,7 @@ export class AoeClaims {
     // uses, so a held beam on one player decays identically either side.
     if (victim && !victim.isDead) {
       const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.h.ddMult(player);
+      this.h.hb('aoe.beam.hit');
       this.h.blast.splashOne({
         shooterId: playerId, ping: player.ping, pos: msg.position,
         radius: stats.aoeRadius, baseDamage: dmg,
@@ -198,7 +211,7 @@ export class AoeClaims {
   /** Cluster carrier: the carrier's blast is only the delivery pop — the
    *  real damage is `count` bomblet blasts scattered inside `radius`, each
    *  rolled with ClusterBomblet stats. Client bomblets are visual-only. */
-  private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }): void {
+  private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }, shotId?: string): void {
     // Each carrier names its own child stats — the belt's ClusterBomb
     // scatters ClusterBomblets, the MRVLauncher scatters MRVBomblets.
     const bomblet = getWeaponStats(
@@ -210,7 +223,7 @@ export class AoeClaims {
         x: msg.position.x + Math.cos(ang) * r,
         y: msg.position.y, // bomblets scatter on the blast plane
         z: msg.position.z + Math.sin(ang) * r,
-      }, msg.excludeTargetId, bomblet, msg.weaponType);
+      }, msg.excludeTargetId, bomblet, msg.weaponType, false, shotId);
     }
   }
 }

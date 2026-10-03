@@ -78,7 +78,17 @@ export const BELT_THROW_WEAPONS = new Set<number>([
   WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
+  WeaponType.ProxyGrenade, WeaponType.SatchelCharge,
 ]);
+
+/** Nuggets charged per belt toss — heavy ordnance costs more than a
+ *  nade. Server deducts this on the spawn claim; client gates on it. */
+const BELT_THROW_COSTS = new Map<number, number>([
+  [WeaponType.SatchelCharge, 2],
+]);
+export function beltThrowCost(weaponType: number): number {
+  return BELT_THROW_COSTS.get(weaponType) ?? BELT_THROW_COST;
+}
 
 /** Biggest legal single damage claim vs a creature: table max
  *  (direct+splash) with perk headroom. creatureHit/crawlerHit claims

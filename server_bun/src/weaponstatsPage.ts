@@ -92,10 +92,10 @@ fetch('/weaponstats').then(r=>r.json()).then(d=>{
     // pickups
     const pk=d.pickups?.[mode]||{};
     if(Object.keys(pk).length){
-      h.push('<h3>pickup funnel</h3><table><tr><th class="l">kind</th><th>spawned</th><th>banked</th><th>decayed</th><th>bank%</th></tr>');
+      h.push('<h3>pickup funnel</h3><table><tr><th class="l">kind</th><th>spawned</th><th>banked</th><th>decayed</th><th>refused</th><th>bank%</th></tr>');
       for(const [k,r] of Object.entries(pk)){
         const pct=r.spawned?Math.round(100*r.banked/r.spawned):0;
-        h.push('<tr><td class="l">'+esc(k)+'</td><td>'+r.spawned+'</td><td>'+r.banked+'</td><td>'+r.decayed+'</td><td class="'+(pct<40?'hot':'ok')+'">'+pct+'%</td></tr>');
+        h.push('<tr><td class="l">'+esc(k)+'</td><td>'+r.spawned+'</td><td>'+r.banked+'</td><td>'+r.decayed+'</td><td>'+(r.refused??0)+'</td><td class="'+(pct<40?'hot':'ok')+'">'+pct+'%</td></tr>');
       }
       h.push('</table>');
     }

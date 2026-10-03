@@ -204,6 +204,29 @@ export class MoveClaims {
     this.h.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
   }
 
+  /** Resync claim (alt-tab catch-up): the client is about to snap onto
+   *  our stored truth, which makes that truth a declared discontinuity —
+   *  same seat discipline as a teleport. Without this the pre-stall
+   *  anchor and the hidden interval's stale reports fight the fresh
+   *  ones: the shadow stays frozen, StateHash reads a permanent desync,
+   *  and every shot claim spawns "implausible" until reconnect.
+   *  No teleport broadcast — the stored pos hasn't moved, so remote
+   *  clients already interpolate to it. */
+  handleResyncSeat(playerId: string): void {
+    const player = this.h.playerManager.getPlayer(playerId);
+    if (!player || !player.hasReceivedPosition) return;
+    const now = Date.now();
+    player.lastPosCheckPos = { ...player.position };
+    player.lastPosCheckTime = now;
+    player.consecutiveRejects = 0;
+    this.h.moveResync(playerId, player.position, player.rotation.yaw);
+    this.muteJudges(player, playerId, now);
+    // Pre-stall rewind samples are a different timeline — same poison as
+    // the pre-warp history a teleport clears.
+    player.history.length = 0;
+    pushRewindSample(player, now);
+  }
+
   /** Every re-seat (correction out, respawn, room hop, teleport) must
    *  mute BOTH judges for the drain window: plausibility via the grace
    *  timestamp, the shadow sim via moveMute/markReseated — in-flight

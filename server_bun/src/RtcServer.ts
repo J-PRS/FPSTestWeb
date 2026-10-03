@@ -3,6 +3,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { GameServer } from './GameServer.ts';
+import { WIRE_TICK } from '../../shared/wire.ts';
 
 // node-datachannel's IceServer record is {hostname, port, relayer?}, not
 // the {urls:...} objects the browser API uses — translate FPS_ICE_SERVERS
@@ -80,11 +81,11 @@ class RtcSocketAdapter {
   // per-IP flood control (join throttle) attributes correctly. Sharing the
   // literal 'webrtc' made EVERY RTC client share one throttle bucket.
   constructor(readonly remoteAddress: string) {}
-  // Two lanes per peer: 'game' (unordered/unreliable) and 'ctrl'
-  // (ordered/reliable). All game traffic rides send() → ctrl: a 33%
-  // measured drop rate on the game lane made unreliable sends strictly
-  // worse than reliable, so nothing calls it — game stays only as the
-  // fallback socket until ctrl opens.
+  // Two lanes per peer: 'game' (unordered, bounded retransmit) carries
+  // the volatile seq'd streams — WIRE_TICK down, position up — that the
+  // receiver stale-drops anyway; 'ctrl' (ordered/reliable) carries JSON
+  // and WIRE_BALLSEG, which must arrive. Routing by wire type keeps the
+  // split invisible to GameServer.
   private game: DataChannelLike | null = null;
   private ctrl: DataChannelLike | null = null;
 
@@ -96,9 +97,15 @@ class RtcSocketAdapter {
   get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
   getBufferedAmount(): number { return (this.ctrl ?? this.game)?.bufferedAmount?.() ?? 0; }
   send(msg: string | Uint8Array): number {
-    // Reliable lane always — see the lanes note above.
-    const dc = this.ctrl ?? this.game;
-    if (!dc?.isOpen()) return 0;
+    // Lane route: tick frames (WIRE_TICK) are seq'd volatile state → game;
+    // strings and everything else (ball segments) must arrive → ctrl.
+    // Each lane falls back to the other when closed so a lane that isn't
+    // up yet can't blackhole traffic.
+    const fast = typeof msg !== 'string' && msg[0] === 0x54 && msg[1] === WIRE_TICK;
+    const lane = fast ? this.game : this.ctrl;
+    const alt = fast ? this.ctrl : this.game;
+    const dc = lane?.isOpen() ? lane : alt?.isOpen() ? alt : null;
+    if (!dc) return 0;
     // isOpen() can lag the real channel state on close races; a failed
     // send must not take down the whole broadcast path.
     try {

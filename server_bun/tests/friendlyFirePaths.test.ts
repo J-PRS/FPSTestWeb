@@ -2,7 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import { CombatHandler } from '../src/CombatHandler.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
 import { WeaponType } from '../../shared/weapons.ts';
-import { CONFIG } from '../src/config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 
 /** AOE claims only resolve against a live projectile — spawn the rocket
@@ -49,7 +48,7 @@ describe('friendly fire — damage paths', () => {
       position: { x: 0, y: 10, z: -3 }, velocity: { x: 0, y: 0, z: -60 },
       weaponType: WeaponType.Chaingun, projectileId: 'proj_1', airtime: 0.05,
     });
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('aoe splash at a teammate\'s feet', () => {
@@ -62,7 +61,7 @@ describe('friendly fire — damage paths', () => {
       projectileId: 'proj_1',
       airtime: 0.05,
     });
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('melee cone on a teammate', () => {
@@ -72,7 +71,7 @@ describe('friendly fire — damage paths', () => {
       position: { x: 0, y: 10, z: -3 },
       weaponType: WeaponType.Melee,
     });
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('lightning beam tick on a teammate', () => {
@@ -83,19 +82,19 @@ describe('friendly fire — damage paths', () => {
       weaponType: WeaponType.Lightning,
       excludeTargetId: 'a2',
     });
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('bot shot on a teammate (server-authored)', () => {
     const { combat, target } = harness();
     combat.botAttack('a1', 'a2', WeaponType.Chaingun);
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('mine blast under a teammate (server-authored)', () => {
     const { combat, target } = harness();
     combat.mineBlast('a1', { x: 0, y: 10, z: -3 }, 80, 8, 20);
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 });
 
@@ -108,7 +107,7 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
       position: { x: 0, y: 10, z: -3 }, velocity: { x: 0, y: 0, z: -60 },
       weaponType: WeaponType.Chaingun, projectileId: 'proj_1', airtime: 0.05,
     });
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
 
     const after1 = target.health;
     spawnProj(combat, 'a1');
@@ -134,6 +133,6 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
       type: 'aoeShot', position: { x: 0, y: 9, z: 0 },
       weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
     });
-    expect(self.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(self.health).toBeLessThan(self.maxHealth);
   });
 });

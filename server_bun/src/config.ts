@@ -115,8 +115,8 @@ export const CONFIG = {
     // teleport skips plausibility checks by design (declared warp), so the
     // only defense is rate — a distance bound is impossible since a thrown
     // warp beacon can legally land hundreds of metres out. Legit cadence:
-    // blink 1.2s cooldown is the tightest; warp 4s, respawn 3s+.
-    teleport: { maxCount: 1, windowMs: 1100 },
+    // one-shot skills share a 1s cooldown floor; 0.9s leaves jitter margin.
+    teleport: { maxCount: 1, windowMs: 900 },
     // Team rooms gate heal claims behind server-granted credit; non-team
     // claims are free-form (local nuggets have no server backing), so the
     // only bound there is rate — 3 per 2s caps invincibility-heals at
@@ -125,6 +125,9 @@ export const CONFIG = {
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
     crawlerHit: { maxCount: 120, windowMs: 1000 }, // same claim rate vs ground crawlers
     deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
+    // Deliberate respawn — one deliberate press per second is plenty;
+    // faster spam is either a stuck key or abuse of the kill feed.
+    respawn: { maxCount: 1, windowMs: 1000 },
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },
   } as const,

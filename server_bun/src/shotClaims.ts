@@ -34,6 +34,9 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // honest lag, and nothing is won by forging it either way.
     if (target.isDead) {
       h.hb('drop.deadTarget');
+      // The shooter's predicted impact still needs clearing — this is a
+      // drop (honest lag), so notify without the warn/rej bookkeeping.
+      h.notifyDrop(playerId, 'Shot', 'target dead', targetId, msg.weaponType);
       return;
     }
     // Heal beam claims name a FRIEND — handle before the friendly-fire
@@ -102,7 +105,10 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // converge on (suppression would leave it predicting blind).
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
 
-    h.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType });
+    // The server projectile id (proj_N) joins playerHit to the earlier
+    // projectileCreated — that's the join accuracy stats group on.
+    const projId = msg.projectileId ?? (msg.shotId ? h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
+    h.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType, shotId: projId ?? undefined });
     // LG charge detonation: a non-beam hit sparks min(banked, damage)
     // off the victim's bank — the rest keeps smoldering.
     if (!result.killed && proj.weaponType !== WeaponType.Lightning) {

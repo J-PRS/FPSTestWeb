@@ -1,5 +1,6 @@
 import { CONFIG } from './config.ts';
 import { isPerkId } from '../../shared/perks.ts';
+import { DEPLOY_KINDS, type DeployKind } from '../../shared/deployables.ts';
 import type { ClientMessage, Vec3, Rotation } from './types.ts';
 
 export type ValidationResult<T> =
@@ -251,12 +252,12 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
 
   deploy: (obj) => {
     const kind = obj.kind;
-    if (kind !== 'turret' && kind !== 'mine' && kind !== 'station' && kind !== 'drone' && kind !== 'shield') {
-      return { success: false, error: 'kind must be turret|mine|station|drone|shield' };
+    if (typeof kind !== 'string' || !DEPLOY_KINDS.includes(kind as DeployKind)) {
+      return { success: false, error: `kind must be ${DEPLOY_KINDS.join('|')}` };
     }
     const dpos = validateVec3(obj.position);
     if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
-    return { success: true, data: { type: 'deploy', kind, position: dpos.data } };
+    return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data } };
   },
 
   // Mirror-only claim: the server re-derives the energy ante itself —
@@ -267,6 +268,12 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
 
   snapshotRequest: () => {
     return { success: true, data: { type: 'snapshotRequest' } };
+  },
+
+  // Deliberate respawn — carries no payload; the kill path derives
+  // everything (kill feed, respawn timer, banked loadout) itself.
+  respawn: () => {
+    return { success: true, data: { type: 'respawn' } };
   },
 
   resync: () => {

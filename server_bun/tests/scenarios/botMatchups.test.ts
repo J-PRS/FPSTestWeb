@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, step, pin } from './harness.ts';
 import { BOT_LOADOUTS, type BotLoadout } from '../../../shared/botLoadouts.ts';
+import { WeaponType } from '../../../shared/weapons.ts';
 import type { PlayerState } from '../../src/types.ts';
 
 // Bot-vs-bot duels: pin two kits at a fixed range, let the brains fight,
@@ -114,6 +115,15 @@ describe('scenario: weapon matchups at far band (43m — BOT_FIRE_RANGE cap)', (
     // Was rail dominance (5/0) after the wake proxy shrank; the strafe
     // penalty at 43m brought it back to even. Pin resolution, not winner.
     const r = series(KIT.bruiser, KIT.chaser, 43);
+    expect(r.filter((x) => x !== '-').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('mortar vs MRV volley: the heavies trade area ordnance', () => {
+    // Same bombardier artillery frame; only the far slot differs —
+    // one 300dmg shell on a point vs a bouncing carrier airbursting
+    // six contact bomblets over an area. Pin resolution, not winner.
+    const mrv: BotLoadout = { ...KIT.artillery, far: WeaponType.MRVLauncher };
+    const r = series(KIT.artillery, mrv, 43);
     expect(r.filter((x) => x !== '-').length).toBeGreaterThanOrEqual(4);
   });
 });

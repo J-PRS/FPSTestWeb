@@ -125,7 +125,7 @@ export class GameServer {
     return this.factory.quickRoom(mode, map, bots);
   }
 
-  listMaps(): { name: string; mode: string; modes: string[]; bots: number }[] {
+  listMaps(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     return this.maps.list();
   }
 
@@ -265,6 +265,7 @@ export class GameServer {
     // in /join, post-rotation state) — reload whatever spec it's playing.
     const spec = this.maps.loadMapSpec(this.maps.mapNameOf(name) ?? name);
     if (!spec) return 'no-spec';
+    room.mapSrc = this.maps.mapNameOf(name) ?? name;
     room.applySpec(spec);
     logger.info('Room spec reloaded', { room: name });
     return 'ok';

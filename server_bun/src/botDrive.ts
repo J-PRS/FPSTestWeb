@@ -72,7 +72,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
  *  could press. The arsenal's post-throw jet pin rides the same held
  *  bit as the brain's own jet key. */
 function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
-  h.room.moveSim.setInput(id, intent.moving ? {
+  h.room.moveSim.setInput(id, intent.moving && !out.move?.park ? {
     forward: 1, right: 0,
     jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
     skiHeld: !!out.move?.ski,

@@ -42,7 +42,7 @@ export class KillFeed {
     private sendToPlayer?: SendToPlayerFn,
   ) {}
 
-  announce(shooterId: string, targetId: string, weapon?: number): void {
+  announce(shooterId: string, targetId: string, weapon?: number, label?: string): void {
     const victim = this.playerManager.getPlayer(targetId);
     const ended = victim?.streak ?? 0;
     if (victim) victim.streak = 0;
@@ -51,7 +51,7 @@ export class KillFeed {
     // Self-splash reads as a death, not a frag — no streak credit, no
     // taunt, just the suicide notice.
     if (shooterId === targetId) {
-      this.broadcast({ type: 'matchNotice', text: `${targetId} fragged themselves` });
+      this.broadcast({ type: 'matchNotice', text: label === 'Respawn' ? `${targetId} respawned` : `${targetId} fragged themselves` });
       return;
     }
 

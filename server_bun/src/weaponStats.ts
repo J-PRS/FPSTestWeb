@@ -69,7 +69,7 @@ interface SpeedRow { shooter: SpeedBins; victim: SpeedBins; airShooter: number; 
 // pickups: economy funnel per pickup kind — spawned vs banked vs decayed.
 // A kind that mostly decays means drops outpace collectors (bots under-
 // farm, or the loot isn't worth the detour).
-interface PickupRow { spawned: number; banked: number; decayed: number }
+interface PickupRow { spawned: number; banked: number; decayed: number; refused: number }
 
 const CELL = 10;
 const SPEED_BIN = 5;
@@ -187,11 +187,12 @@ class WeaponStats {
     this.dirty = true;
   }
 
-  /** Pickup economy: 'spawned' at drop, 'banked' on collect, 'decayed' on TTL. */
-  recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed'): void {
+  /** Pickup economy: 'spawned' at drop, 'banked' on collect, 'decayed'
+   *  on TTL, 'refused' when the pool cap swallowed the spawn. */
+  recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed' | 'refused'): void {
     if (!this.modeOk(mode)) return;
     const m = (this.pickups[mode] ??= {});
-    const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0 });
+    const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0, refused: 0 });
     r[event]++;
     this.dirty = true;
   }

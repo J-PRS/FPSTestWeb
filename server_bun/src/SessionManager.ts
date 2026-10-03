@@ -103,23 +103,26 @@ export class SessionManager {
 
     const playerId = playerIdResult.data;
 
+    const { token, roomName, roomMode, joinMap, joinBots } = SessionManager.joinSpec(handshake);
+
+    // A reclaim must land in the room the session was in — find by playerId
+    // rather than trusting the claimed room (reconnecting to a different
+    // room mid-grace would orphan the slot in the old room). Reclaims run
+    // BEFORE the join flood guard: a flapping transport reconnects through
+    // this path, and throttling it locks a legit player out of their own
+    // seat — reclaim is already authenticated by the session token.
+    const reclaimRoom = this.d.roomOfPlayer(playerId);
+    if (reclaimRoom) {
+      this.reclaim(ws, reclaimRoom, playerId, token);
+      return;
+    }
+
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
     // the registration), so throttle by source IP — 5 joins/min is generous
     // for humans, lethal for a spammer script.
     if (!this.joinThrottleAllow(ws.remoteAddress)) {
       logger.warn('Join flood rejected', { ip: ws.remoteAddress });
       ws.close(1013, 'Join rate limited');
-      return;
-    }
-
-    const { token, roomName, roomMode, joinMap, joinBots } = SessionManager.joinSpec(handshake);
-
-    // A reclaim must land in the room the session was in — find by playerId
-    // rather than trusting the claimed room (reconnecting to a different
-    // room mid-grace would orphan the slot in the old room).
-    const reclaimRoom = this.d.roomOfPlayer(playerId);
-    if (reclaimRoom) {
-      this.reclaim(ws, reclaimRoom, playerId, token);
       return;
     }
 
@@ -195,6 +198,10 @@ export class SessionManager {
       clearTimeout(disconnected.timeout);
       room.disconnected.delete(playerId);
     }
+    // A valid-token reclaim IS liveness — without the stamp a seat that
+    // spent >60s in grace gets idle-reaped before the first inputMove
+    // lands, looping connect → reap → reconnect forever.
+    existingPlayer.lastSeen = Date.now();
     const oldSock = room.connections.getConnection(playerId);
     ws.data.playerId = playerId;
     room.connections.register(playerId, ws);

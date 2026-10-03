@@ -23,7 +23,7 @@ export function crawlerAttack(h: CombatHandler, targetId: string, damage: number
     h.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
   }
 
-export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
+export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) return;
     // Heal beam: same tick/cadence path as the damage beam, but the
@@ -56,6 +56,6 @@ export function botAttack(h: CombatHandler, shooterId: string, targetId: string,
       const victim = h.playerManager.getPlayer(targetId);
       if (victim && !victim.isDead && !h.friendly(shooterId, targetId)) h.chargeBank.bank(victim, h.chargeBank.withheldFor(n));
     }
-    h.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
+    h.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType, shotId });
   }
 

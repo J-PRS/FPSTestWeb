@@ -4,7 +4,7 @@ import { WeaponType } from '../../shared/weapons.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
-import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
+import { classCanFire } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos, CLAIM_DEFER_MS, type ClaimDefer } from './claimLedger.ts';
@@ -61,8 +61,10 @@ export interface CombatDeps {
   mode?: string;
   /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
    *  rooms without structures (offline-style lobbies). */
-  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
   pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
+  /** Dropped-flag knock — RoomFlags.knock; blasts can punt the objective. */
+  flagsKnock?: (at: Vec3, radius: number, force: number) => void;
   /** A bot chat line hit the wire — Room relays it as a 'reply' notice
    *  so squadmates can answer back. */
   onBotSpoke?: (id: string) => void;
@@ -206,6 +208,22 @@ export class CombatHandler {
     this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health });
   }
 
+  /** Honest-lag drop, not a reject — but the shooter's client already
+   *  predicted the damage, so it needs a clearing signal or its
+   *  pending-hit ledger warns phantom. Throttled per player+kind+target:
+   *  a beam held on a corpse would otherwise spam the channel at tic
+   *  rate. Distinct from reject(): no warn, no rej counter — these are
+   *  the drops the health map already tallies as drop.*. */
+  private lastDropNotify = new Map<string, number>();
+  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
+    const key = `${playerId}:${kind}:${targetId ?? ''}`;
+    const now = Date.now();
+    if (now - (this.lastDropNotify.get(key) ?? 0) < 1000) return;
+    this.lastDropNotify.set(key, now);
+    const health = this.playerManager.getPlayer(playerId)?.health;
+    this.sendToPlayer(playerId, { type: 'claimDropped', reason: `${kind}: ${reason}`, targetId, weaponType, health });
+  }
+
   friendly(shooterId: string, targetId: string): boolean {
     // friendlyFire server option opens the gate entirely; self-splash
     // stays allowed regardless (rocket jumps).
@@ -236,6 +254,9 @@ export class CombatHandler {
     }
     this.lastHeal.delete(playerId);
     this.chargeBank.delete(playerId);
+    for (const key of this.lastDropNotify.keys()) {
+      if (key.startsWith(`${playerId}:`)) this.lastDropNotify.delete(key);
+    }
     const held = this.pendingClaims.filter(p => p.playerId === playerId).length;
     if (held) {
       this.hb('drop.claim', held);
@@ -246,14 +267,18 @@ export class CombatHandler {
 
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) { this.hb('drop.deadShooter'); return; }
+    if (!player || player.isDead) {
+      this.hb('drop.deadShooter');
+      if (player) this.notifyDrop(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType);
+      return;
+    }
     this.hb('shot');
     // Any new claim activity is also a retry opportunity for deferred
     // ones — and the expiry trigger for claims whose spawn never lands.
     this.flushClaims(playerId);
     // Tier-locked ordnance — the menu filter is client-side convenience;
     // this is the real boundary for doctored clients.
-    if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
+    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
       this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType);
       return;
     }
@@ -300,6 +325,11 @@ export class CombatHandler {
   }
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
+    if (this.playerManager.getPlayer(playerId)?.isDead) {
+      this.hb('drop.deadShooter');
+      this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType);
+      return;
+    }
     this.flushClaims(playerId);
     this.deps.onFire?.(playerId);
     this.aoe.handleAOEShot(playerId, msg);
@@ -307,8 +337,8 @@ export class CombatHandler {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null): void {
-    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId);
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string): void {
+    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, shotId);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
@@ -379,7 +409,7 @@ export class CombatHandler {
    *  whoever it landed on. */
   serverHit(
     ownerId: string, targetId: string, damage: number, label: string,
-    opts: { hb?: string; weapon?: number } = {},
+    opts: { hb?: string; weapon?: number; shotId?: string } = {},
   ): void {
     const target = this.playerManager.getPlayer(targetId);
     if (!target || target.isDead) { this.hb('drop.deadTarget'); return; }
@@ -389,7 +419,7 @@ export class CombatHandler {
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon });
+    this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId });
     // Same charge rule as client claims: a non-beam direct hit detonates
     // min(banked, damage). 'environment' can't own a blast — skip it.
     if (!result.killed && opts.weapon !== WeaponType.Lightning && ownerId !== 'environment') {
@@ -416,8 +446,8 @@ export class CombatHandler {
     this.serverHit(ownerId, targetId, damage, 'Turret hit');
   }
 
-  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
-    botAttack(this, shooterId, targetId, weaponType, airtime);
+  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
+    botAttack(this, shooterId, targetId, weaponType, airtime, shotId);
   }
 
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.
@@ -426,7 +456,7 @@ export class CombatHandler {
     return shooter.ddUntil > simNow() ? POWERUP.ddMult : 1;
   }
 
-  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
+  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void {
     this.hitLedger.applyHit(this, shooterId, targetId, damage, result, opts);
   }
 

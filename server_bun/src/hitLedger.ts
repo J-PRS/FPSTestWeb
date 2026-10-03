@@ -28,7 +28,7 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
+  applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) c.hb('kill');
@@ -37,7 +37,7 @@ export class HitLedger {
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined, opts.extra?.pos as { x: number; y: number; z: number } | undefined);
     if (!result.killed) {
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
-      c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq });
+      c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq, shotId: opts.shotId });
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);

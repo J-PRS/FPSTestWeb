@@ -50,7 +50,7 @@ export class BotGoals {
         return;
       }
     }
-    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.allies && ctx.allies.length > 0) {
+    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
       const rally = this.rallyGoal(ctx, pos);
       if (rally) s.goal = rally;
       return;
@@ -68,7 +68,7 @@ export class BotGoals {
     const wander = this.wanderCandidate(ctx, pos);
     const heard = this.heardGoal(ctx, pos);
     const cands: Array<{ goal: BotVec; score: number }> = [];
-    const offer = (goal: BotVec | null | undefined, weight: number) => {
+    const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false) => {
       if (!goal) return;
       const d = Math.sqrt(distSq(pos, goal));
       const reach = 1 / (1 + d / 140);
@@ -76,15 +76,23 @@ export class BotGoals {
       // bot already died reads extra dangerous to it personally — the
       // map's graveyard is everyone else's history, this one is mine.
       const personal = this.nearDeath(goal) ? 0.2 : 0;
-      const scent = Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())) + personal);
+      const scent = ignoreScent ? 0
+        : Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())) + personal);
       cands.push({ goal, score: weight * reach * (1 - scent) });
     };
     // A runner's objective is a commitment, not a candidate: the cap
     // route is the job, so midfield noise has to beat a heavy weight to
     // pull the legs. Fights en route get answered by the fire layer
     // while the feet keep the line — humans run and shoot.
-    offer(ctx.objective, ctx.runner ? 3.5 : 1.0);
-    offer(ctx.pickup, 0.8);
+    // A posted anchor's objective is the same kind of commitment the
+    // cap route is — nothing midfield outbids the pole.
+    // The committed objective (cap route / posted pole) is exempt from
+    // the scent discount: a hot lane is the ROUTE's problem — the entry
+    // scorer already prices detours — not a license to wander midfield.
+    offer(ctx.objective, ctx.runner || ctx.posted ? 3.5 : 1.0, !!(ctx.runner || ctx.posted));
+    if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
+      offer(ctx.pickup, 0.8);
+    }
     // A posted defender hears the same gunfire — he just doesn't go
     // look. Beyond the leash it's someone else's job; wandering is
     // off the table entirely, feet stay on the post.
@@ -97,7 +105,7 @@ export class BotGoals {
       for (const c of cands) if (c.score > best.score) best = c;
       // Hysteresis: the incumbent needs beating by a margin — flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
-      const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25);
+      const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25 * 25);
       s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : { ...best.goal };
       return;
     }

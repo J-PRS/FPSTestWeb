@@ -183,28 +183,15 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
 }
 
 /** Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
- *  while moving INTO the surface counts. Terrain probes are scheduled
- *  (closed-form time-to-ground) rather than sampled every tick. */
-function groundContact(b: SimBall, dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
-  b.gt -= dt;
-  const needSample = b.gt <= 0 ||
-    (b.x - b.gx) * (b.x - b.gx) + (b.z - b.gz) * (b.z - b.gz) > 4 ||
-    b.y - b.radius <= b.ggy;
-  if (!needSample) return null;
+ *  while moving INTO the surface counts. The height is sampled at the
+ *  true position EVERY step — the old scheduled-probe scheme tested a
+ *  stale plane for up to 0.5s, so the authority could tunnel under rising
+ *  terrain while predictors (which walk the real field) parked early:
+ *  a 20-90m prediction divergence per event. 800 probes/s is nothing. */
+function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
   const gy = b.ggy = hmHeight(field, b.x, b.z);
-  b.gx = b.x; b.gz = b.z;
-  if (b.y - b.radius > gy) {
-    // Still airborne: solve the parabola's time-to-ground against the
-    // sampled plane and re-check at ~60% of it — terrain bumps get
-    // caught a few ticks early instead of clipping a whole schedule.
-    const alt = b.y - b.radius - gy;
-    const g = -BALL_GRAVITY;
-    const disc = b.vy * b.vy + 2 * g * alt;
-    const t = disc > 0 ? (b.vy + Math.sqrt(disc)) / g : 0;
-    b.gt = Math.min(0.5, Math.max(dt, t * 0.6));
-    return null;
-  }
-  b.gt = 0; // in contact — probe every tick until it's clearly airborne
+  b.gx = b.x; b.gz = b.z; b.gt = 0;
+  if (b.y - b.radius > gy) return null;
   b.y = gy + b.radius;
   hmNormal(field, b.x, b.z, _n);
   const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;

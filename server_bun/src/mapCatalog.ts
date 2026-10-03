@@ -13,6 +13,9 @@ export class MapCatalog {
   /** Which maps/<X>.json spawned each room — lets quick-join group by
    *  map rather than room name. */
   private roomMapName = new Map<string, string>();
+  /** Maps carrying the `_t2` provenance marker — the lobby badges them
+   *  so players can tell a T2 port from a native arena. */
+  private t2Flags = new Set<string>();
 
   mapNameOf(room: string): string | undefined { return this.roomMapName.get(room); }
   noteSource(room: string, src: string): void { if (src) this.roomMapName.set(room, src); }
@@ -25,7 +28,9 @@ export class MapCatalog {
     try {
       const path = `${MAPS_DIR}/${name}.json`;
       const raw = readFileSync(path, 'utf8');
-      const spec = resolveMapSpec(JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
+      const spec = resolveMapSpec(parsed);
       logger.info('Map spec loaded', { room: name, path });
       return spec;
     } catch {
@@ -82,7 +87,7 @@ export class MapCatalog {
   /** Next map in the rotation whose mode matches the room's — a mode
    *  swap would need Room reconstruction (mode wiring is ctor-time), so
    *  foreign-mode specs are skipped rather than half-applied. */
-  nextRotationSpec(room: { name: string; mode: string }): MapSpec | null {
+  nextRotationSpec(room: { name: string; mode: string; mapSrc?: string }): MapSpec | null {
     const list = this.rotation();
     if (!list.length) return null;
     for (let i = 0; i < list.length; i++) {
@@ -95,6 +100,7 @@ export class MapCatalog {
       if (!spec || (room.mode && legal.length && !legal.includes(room.mode))) continue;
       this.rotationIdx %= list.length;
       this.roomMapName.set(room.name, name);
+      room.mapSrc = name; // keep the scoreboard's map title honest too
       logger.info('Map rotated', { room: room.name, map: name });
       return spec;
     }
@@ -104,7 +110,7 @@ export class MapCatalog {
   /** Playable map list for the menu — name + legal modes + default
    *  bot count, straight from maps/*.json. `mode` stays the spec's own
    *  default so the picker can label "default ruleset" honestly. */
-  list(): { name: string; mode: string; modes: string[]; bots: number }[] {
+  list(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     try {
       return readdirSync(MAPS_DIR)
         .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
@@ -115,6 +121,7 @@ export class MapCatalog {
             mode: spec?.mode ?? '',
             modes: specModes(spec),
             bots: spec?.bots ?? spec?.botFill ?? 0,
+            t2: this.t2Flags.has(f.slice(0, -5)),
           };
         })
         .toSorted((a, b) => a.name.localeCompare(b.name));

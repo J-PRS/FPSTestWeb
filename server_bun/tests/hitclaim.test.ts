@@ -51,9 +51,9 @@ describe('hitRadiusAt', () => {
 
 describe('pointToCapsuleDistance', () => {
   it('measures distance to the capsule, not the eye point', () => {
-    // Eye is 0.8 above capsule center; cylinder half-height is 0.2, so a
-    // point at eye height sits 0.6 above the capsule surface.
-    expect(pointToCapsuleDistance(V(0, EYE_OFFSET, 0), TARGET_EYE)).toBeCloseTo(0.6);
+    // Medium capsule: eye 0.9 above center; cylinder half-height 0.45,
+    // so a point at eye height sits 0.45 above the capsule surface.
+    expect(pointToCapsuleDistance(V(0, EYE_OFFSET, 0), TARGET_EYE)).toBeCloseTo(0.45);
     // 1m to the side at capsule-center height → exactly 1m off the wall
     expect(pointToCapsuleDistance(V(1, CAPSULE_CENTER_Y, 0), TARGET_EYE)).toBeCloseTo(1);
   });

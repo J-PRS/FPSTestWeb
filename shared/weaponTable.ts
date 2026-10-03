@@ -35,6 +35,8 @@ export enum WeaponType {
   MRVBomblet = 29,    // spawned by MRVLauncher detonation — contact pop, never fired
   HealBeam = 30,      // support beam: hitscan that HEALS the friendly target it pins — jet energy is the ammo
   HealGrenade = 31,   // belt throw: small blast, strong heal for allies caught; enemies eat the sting + shove
+  ProxyGrenade = 32,  // belt throw: 1s fuse, proxy bubble inflating to 4m — toss-and-zone pop
+  SatchelCharge = 33,    // belt throw: infiltrator satchel — glues to surface/player, 4s fuse, objective-killer blast
 }
 
 export interface WeaponStats {
@@ -44,6 +46,9 @@ export interface WeaponStats {
   aoeDamage: number;
   /** Splash radius (m) — 0 = no splash */
   aoeRadius: number;
+  /** Per-weapon splash band fractions of the direct hit (inner/mid/outer
+   *  thirds of aoeRadius). Absent = global AOE_BAND_SCALES (0.75/0.5/0.25). */
+  aoeScales?: readonly [number, number, number];
   /** Impulse magnitude at blast center (m/s) */
   knockbackForce: number;
   /** 'pull' = implosion toward center (disc) */
@@ -113,7 +118,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 10.0,
-    knockbackForce: 25.0,
+    knockbackForce: 45.0, // THE disc-jump weapon — strongest launcher shove (rocket=40, MRV=45)
     forceMode: 'push', // launcher disc knocks back like everything else
     speed: 80.0,
     gravity: false,
@@ -165,10 +170,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 2.0,
   },
   [WeaponType.Mortar]: {
-    directDamage: 80,
+    directDamage: 120,
 
-    aoeDamage: 40,
+    aoeDamage: 80,
     aoeRadius: 18.0,
+    // Steep inner ring, thin outskirts: 100/80/40 across the 18m — a mortar
+    // pays out on placement, not on carpeting (that's the MRV's job).
+    aoeScales: [0.833, 0.667, 0.333],
     knockbackForce: 45.0,
     forceMode: 'push',
     speed: 55.0,
@@ -192,7 +200,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — bouncing shells shouldn't drag a huge wake
     hitGrow: 2.0,
-    maxLifetime: 2.5,
+    maxLifetime: 6.0, // fuse cap — a bouncing shell skitters a long way before the airburst
+    armTime: 1.0, // arming fuse — pre-arm shells phase through bodies and
+                // bounce off dirt; the pop only counts once it's cooked
   },
   [WeaponType.Flak]: {
     directDamage: 9,
@@ -391,7 +401,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
-    hitMax: 2.0, // sticks sit still — the blast is the reach, not the wake
+    hitMax: 0.25, // proxy barely wider than the shell — sticks on real contact, not a 2m wake
     hitGrow: 0.5,
     maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
   },
@@ -434,7 +444,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 60,
     aoeDamage: 0,
     aoeRadius: 0,
-    knockbackForce: 14.0,
+    knockbackForce: 26.0, // the stagger IS the hit feedback — a 60dmg spear shoves
     forceMode: 'push',
     speed: 120.0,  // bolt-launcher velocity — a thrown spear shouldn't lob
     gravity: true,
@@ -580,6 +590,42 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 8.0,
     hitGrow: 2.0,
     maxLifetime: 2.0,
+  },
+  [WeaponType.ProxyGrenade]: {
+    // Proximity-fused zone pop: a 1s fuse whose trigger bubble inflates
+    // 0→4m over its whole life — the closer it is to popping, the wider
+    // the net. Toss it into a fight and it cooks off the moment anyone
+    // wanders into the bubble (or the fuse lands anyway).
+    directDamage: 35,
+    aoeDamage: 30,
+    aoeRadius: 6.0,
+    knockbackForce: 22.0,
+    forceMode: 'push',
+    speed: 45.0,   // thrown lob — enough to clear a doorway, not a dart
+    gravity: true,
+    bodyRadius: 0.22,
+    hitMin: 0.0,
+    hitMax: 4.0,   // the proxy bubble ceiling — 4m radius at fuse end
+    hitGrow: 1.0,  // grows for the whole 1s life — full width AT the pop
+    maxLifetime: 1.0,
+  },
+  [WeaponType.SatchelCharge]: {
+    // Satchel charge: hand-planted bomb, not a grenade. Near-zero throw
+    // speed means you have to BE there — brush past a generator or an
+    // enemy's back, slap it on, and it glues in place for a slow 4s fuse.
+    // The payoff is the biggest belt blast in the kit.
+    directDamage: 150,
+    aoeDamage: 130,
+    aoeRadius: 17.0,
+    knockbackForce: 75.0,
+    forceMode: 'push',
+    speed: 14.0,    // an underhand lob — ~10m useful range, no tossing over walls
+    gravity: true,
+    bodyRadius: 0.28,
+    hitMin: 0.0,
+    hitMax: 0.0,   // NO proxy wake — a planted charge only sticks on true contact
+    hitGrow: 0.1,  // >0 so hitRadiusAt never divides by zero; hitMax 0 makes it moot
+    maxLifetime: 4.0, // THE fuse — long enough to walk away, short enough the victim hears it
   },
   [WeaponType.MRVLauncher]: {
 

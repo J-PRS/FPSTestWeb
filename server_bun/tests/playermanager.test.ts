@@ -7,7 +7,7 @@ describe('PlayerManager', () => {
     const pm = new PlayerManager();
     const player = pm.addPlayer('alice'); pm.breakShield('alice');
     expect(player.id).toBe('alice');
-    expect(player.health).toBe(100);
+    expect(player.health).toBe(125);
     expect(player.isDead).toBe(false);
     expect(pm.getPlayerCount()).toBe(1);
   });
@@ -25,7 +25,7 @@ describe('PlayerManager', () => {
     pm.addPlayer('alice'); pm.breakShield('alice');
     const result = pm.applyDamage('alice', 30);
     expect(result.killed).toBe(false);
-    expect(result.newHealth).toBe(70);
+    expect(result.newHealth).toBe(95);
   });
 
   it('energy shield absorbs hits without touching health', () => {
@@ -34,17 +34,17 @@ describe('PlayerManager', () => {
     pm.getPlayer('alice')!.status = STATUS.SHIELD;
     const result = pm.applyDamage('alice', 50);
     expect(result.killed).toBe(false);
-    expect(result.newHealth).toBe(100);
+    expect(result.newHealth).toBe(125);
     // Flag off → damage lands normally
     pm.getPlayer('alice')!.status = 0;
-    expect(pm.applyDamage('alice', 50).newHealth).toBe(50);
+    expect(pm.applyDamage('alice', 50).newHealth).toBe(75);
   });
 
   it('death clears the shield flag', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
     // Kill once to establish the flag is unset on death, then flag back on
-    pm.applyDamage('alice', 100);
+    pm.applyDamage('alice', 150);
     const p = pm.getPlayer('alice')!;
     p.status = STATUS.SHIELD;
     pm.respawnPlayer('alice');
@@ -66,16 +66,16 @@ describe('PlayerManager', () => {
     pm.addPlayer('tough', undefined, 'vitality');
     pm.breakShield('tank'); pm.breakShield('tough');
     // Underdog plate: full-health hits punch straight through…
-    expect(pm.applyDamage('tank', 40).newHealth).toBe(60);
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(85);
     // …resist kicks in only below 80% max HP.
-    expect(pm.applyDamage('tank', 40).newHealth).toBe(30);  // 60 - 40*0.75
-    expect(pm.getPlayer('tough')!.health).toBe(150);        // 100 + 50
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(55);  // 85 - 40*0.75
+    expect(pm.getPlayer('tough')!.health).toBe(175);        // 100 + 50 + 25
   });
 
   it('kills player when health reaches 0', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
-    const result = pm.applyDamage('alice', 100);
+    const result = pm.applyDamage('alice', 150);
     expect(result.killed).toBe(true);
     expect(result.newHealth).toBe(0);
     const player = pm.getPlayer('alice');
@@ -85,19 +85,19 @@ describe('PlayerManager', () => {
   it('spawn shield blocks damage until it expires or is broken', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice');
-    expect(pm.applyDamage('alice', 30).newHealth).toBe(100); // shielded
+    expect(pm.applyDamage('alice', 30).newHealth).toBe(125); // shielded
     pm.breakShield('alice');
-    expect(pm.applyDamage('alice', 30).newHealth).toBe(70);
+    expect(pm.applyDamage('alice', 30).newHealth).toBe(95);
     // Respawn re-arms the shield
-    pm.applyDamage('alice', 100);
+    pm.applyDamage('alice', 150);
     pm.respawnPlayer('alice');
-    expect(pm.applyDamage('alice', 30).newHealth).toBe(100);
+    expect(pm.applyDamage('alice', 30).newHealth).toBe(125);
   });
 
   it('does not damage dead players', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
-    pm.applyDamage('alice', 100);
+    pm.applyDamage('alice', 150);
     const result = pm.applyDamage('alice', 50);
     expect(result.killed).toBe(false);
   });
@@ -105,12 +105,12 @@ describe('PlayerManager', () => {
   it('respawns a dead player', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
-    pm.applyDamage('alice', 100);
+    pm.applyDamage('alice', 150);
     const result = pm.respawnPlayer('alice');
     expect(result).not.toBeNull();
     const player = pm.getPlayer('alice');
     expect(player?.isDead).toBe(false);
-    expect(player?.health).toBe(100);
+    expect(player?.health).toBe(125);
   });
 
   it('applies a banked classUpdate only on respawn', () => {
@@ -122,7 +122,7 @@ describe('PlayerManager', () => {
     pm.getPlayer('alice')!.pendingClass = 'heavy';
     expect(pm.getPlayer('alice')!.armorClass).toBe('medium');
     expect(pm.getPlayer('alice')!.maxHealth).toBe(mediumHp);
-    pm.applyDamage('alice', 100);
+    pm.applyDamage('alice', 150);
     const result = pm.respawnPlayer('alice')!;
     expect(result.armorClass).toBe('heavy');
     const p = pm.getPlayer('alice')!;
@@ -135,7 +135,7 @@ describe('PlayerManager', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
     pm.addPlayer('bob'); pm.breakShield('bob');
-    pm.applyDamage('bob', 100);
+    pm.applyDamage('bob', 150);
     pm.addKill('alice');
     expect(pm.getPlayer('alice')?.kills).toBe(1);
     expect(pm.getPlayer('bob')?.deaths).toBe(1);

@@ -8,7 +8,7 @@ import type { Room } from './Room.ts';
 import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
-import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
+import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
@@ -180,6 +180,20 @@ export class BotRoster {
           // heavy mass/speed, i.e. a medium skin on a heavy sim.
           donorP.armorClass = strict;
           this.applyClass(donorP, strict);
+          // A strict body can't carry class-locked guns — a heavy forced
+          // onto a beam-rider kit would hold a railgun it may not fire.
+          // Swap each illegal slot for a legal staple of the same band.
+          const lo = this.loadouts.get(donor);
+          if (lo) {
+            const legal = (w: number, fb: WeaponType) => classCanFire(strict, w) ? w : fb;
+            this.loadouts.set(donor, {
+              ...lo,
+              near: legal(lo.near, WeaponType.Chaingun),
+              mid: legal(lo.mid, WeaponType.Disc),
+              far: legal(lo.far, WeaponType.BoltLauncher),
+              side: legal(lo.side, WeaponType.Pistol),
+            });
+          }
         }
         // Technician is the only role that promises the deploy kit —
         // pin its builder trait instead of trusting the spawn roll.
@@ -243,6 +257,11 @@ export class BotRoster {
             if (far !== lo.far || near !== lo.near) this.loadouts.set(donor, { ...lo, far, near });
           }
         }
+        // Role kit edits (LD's beam, capper's disc) can change the body's
+        // legal tier — an LD donor grafted Lightning must run light or
+        // the class gate makes its own guns contraband. Strict roles
+        // already re-fit above; everyone else re-derives from the kit.
+        if (!strict) this.refitClass(donor);
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
         have++;
       }

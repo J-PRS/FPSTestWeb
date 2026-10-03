@@ -4,7 +4,6 @@ import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
-import { CONFIG } from '../src/config.ts';
 
 const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 const FLOOR = hmHeight(flat, 0, 0);
@@ -30,10 +29,10 @@ describe('RoomProjectiles', () => {
     const dir = { x: 1, y: 0, z: 0 }; // level shot, chest height on target
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, dir, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 10 && target.health === CONFIG.playerMaxHealth; i++) {
+    for (let i = 0; i < 10 && target.health === target.maxHealth; i++) {
       room.projectiles.tick(0.05);
     }
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
   });
 
   it('a bolt over a target\'s head whiffs — no fake damage', () => {
@@ -43,7 +42,7 @@ describe('RoomProjectiles', () => {
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 8, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 10; i++) room.projectiles.tick(0.05);
-    expect(target.health).toBe(CONFIG.playerMaxHealth);
+    expect(target.health).toBe(target.maxHealth);
   });
 
   it('terrain contact detonates: a shell aimed into the ground splashes', () => {
@@ -55,7 +54,7 @@ describe('RoomProjectiles', () => {
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: -0.1, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 10; i++) room.projectiles.tick(0.05);
     // Splash caught the target even though the segment never touched it.
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
   });
 
   it('shells die at the fuse limit without reaching anything', () => {
@@ -81,11 +80,11 @@ describe('RoomProjectiles', () => {
     // throw aimed down 1.4m over the 30m gap lands level on the target.
     room.projectiles.spawn(shooter.id, WeaponType.RemoteRailgun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: -0.05, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 20 && target.health === CONFIG.playerMaxHealth; i++) {
+    for (let i = 0; i < 20 && target.health === target.maxHealth; i++) {
       room.projectiles.tick(0.05);
     }
     expect(stats.rayDelay).toBeGreaterThan(0);
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
   });
 
   it('a ridge between shell and target blocks the beam', () => {
@@ -101,7 +100,7 @@ describe('RoomProjectiles', () => {
     room2.projectiles.spawn(s2.id, WeaponType.RemoteRailgun,
       { x: 0, y: hmHeight(berm, 0, 0) + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 20; i++) room2.projectiles.tick(0.05);
-    expect(t2.health).toBe(CONFIG.playerMaxHealth);
+    expect(t2.health).toBe(t2.maxHealth);
     void shooter; void target; void room;
   });
 
@@ -118,11 +117,11 @@ describe('RoomProjectiles', () => {
     room.projectiles.spawn(shooter.id, WeaponType.Mortar,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.993, y: 0.117, z: 0 }, { x: 0, y: 0, z: 0 });
     let flewTicks = 0;
-    for (let i = 0; i < 60 && target.health === CONFIG.playerMaxHealth; i++) {
+    for (let i = 0; i < 60 && target.health === target.maxHealth; i++) {
       room.projectiles.tick(0.05);
       flewTicks++;
     }
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
     expect(flewTicks).toBeGreaterThan(2); // actually flew, not instant pop
   });
 
@@ -135,11 +134,11 @@ describe('RoomProjectiles', () => {
     target.velocity = { x: -40, y: 0, z: 0 };
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 10 && target.health === CONFIG.playerMaxHealth; i++) {
+    for (let i = 0; i < 10 && target.health === target.maxHealth; i++) {
       room.projectiles.tick(0.05);
       target.position.x += target.velocity.x * 0.05;
     }
-    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(target.health).toBeLessThan(target.maxHealth);
   });
 
   it('a sticky blast cooks a sibling bomb in its radius', () => {

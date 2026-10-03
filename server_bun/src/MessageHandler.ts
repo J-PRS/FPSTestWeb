@@ -364,14 +364,14 @@ export class MessageHandler {
 
   /** Server-simulated projectile blast (bot rockets etc.) — combat's
    *  trusted AOE path; the sim placed the pop, no cheat check needed. */
-  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null): void {
-    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId);
+  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, shotId?: string): void {
+    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, shotId);
   }
 
   /** Server-simulated direct hit — the room's projectile sim resolved the
    *  contact; combat applies damage through the same funnel as botFire. */
-  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
-    this.combat.botAttack(shooterId, targetId, weaponType, airtime);
+  botAttack(shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
+    this.combat.botAttack(shooterId, targetId, weaponType, airtime, shotId);
   }
 
   /** Drop per-player bookkeeping when a socket closes (grace-period cleanup

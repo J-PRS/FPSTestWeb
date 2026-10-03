@@ -192,7 +192,7 @@ export class RoomProjectiles {
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
     const rampAge = bodyDirect ? proj.p.age : undefined;
-    if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge);
+    if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.id);
     // A shell that lands on a creature deals its direct line, then the
     // blast splashes the rest of the swarm — same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
@@ -207,7 +207,23 @@ export class RoomProjectiles {
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
-    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
+    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, proj.id);
+    // Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
+    // blasts around the burst point — sim shells must pay the same way or
+    // bot-fired cluster weapons ship only the weak carrier pop.
+    if (proj.stats.cluster) {
+      const bomblet = proj.weaponType === WeaponType.MRVLauncher
+        ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet;
+      for (let i = 0; i < proj.stats.cluster.count; i++) {
+        const ang = this.room.rng() * Math.PI * 2;
+        const r = this.room.rng() * proj.stats.cluster.radius;
+        this.room.messages.serverBlast(proj.ownerId, {
+          x: at.x + Math.cos(ang) * r,
+          y: at.y, // bomblets scatter on the blast plane, same as aoeCluster
+          z: at.z + Math.sin(ang) * r,
+        }, bomblet, null, proj.id);
+      }
+    }
     if (proj.stats.aoeRadius > 0) {
       this.room.ballSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, ballId);
       this.room.creatureSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, crawlerId);

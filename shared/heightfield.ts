@@ -78,6 +78,24 @@ export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): nu
   };
 }
 
+/** A dropped object's rest spot must be reachable: a tumble that ends on
+ *  a cliff lip or a steep face is unreachable for every walker, so the
+ *  rest spot slides downhill until the gradient is walkable. Mutates pos. */
+export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z: number }, lift = 0.5): void {
+  for (let i = 0; i < 12; i++) {
+    const h0 = hmHeight(f, pos.x, pos.z);
+    const gxm = hmHeight(f, pos.x - 4, pos.z), gxp = hmHeight(f, pos.x + 4, pos.z);
+    const gzm = hmHeight(f, pos.x, pos.z - 4), gzp = hmHeight(f, pos.x, pos.z + 4);
+    const sx = (gxp - gxm) / 8, sz = (gzp - gzm) / 8;
+    const slope = Math.hypot(sx, sz);
+    if (slope < 0.8) break; // walkable grade
+    const d = slope || 1;
+    pos.x -= (sx / d) * 6; pos.z -= (sz / d) * 6;
+    pos.y = hmHeight(f, pos.x, pos.z) + lift;
+    if (Math.abs(h0 - pos.y) < 0.5 && i > 4) break; // settled on a shelf
+  }
+}
+
 export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: number; y: number; z: number }): void {
   const e = CPU_STEP * 0.5;
   const hL = hmHeight(f, wx - e, wz);

@@ -1,6 +1,6 @@
 import { WeaponType, getWeaponStats } from './weapons.ts';
 import type { PerkId } from './perks.ts';
-import { HEAVY_ONLY_WEAPONS, type ArmorClass } from './botClasses.ts';
+import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, type ArmorClass } from './botClasses.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout.
@@ -20,20 +20,29 @@ export const BOT_SIDEARM_M = 8.0; // knife range: the hold-out draw is faster th
  *  weighting (CLASS_FITNESS) reads this — kit picks the body before the
  *  squad picks the job. */
 export function botClassForLoadout(lo: BotLoadout): ArmorClass {
+  const kit = [lo.near, lo.mid, lo.far, lo.belt, lo.side];
+  // Light-frame guns (Railgun/Lightning) pick the body outright — a kit
+  // built around them can't ride a heavier chassis.
+  if (kit.some((w) => LIGHT_ONLY_WEAPONS.has(w))) return 'light';
   if (HEAVY_ONLY_WEAPONS.has(lo.far) || HEAVY_ONLY_WEAPONS.has(lo.belt)) return 'heavy';
   if (lo.perk === 'plated') return 'heavy';
-  if (lo.perk === 'featherjets') return 'light';
+  // featherjets wants light, but a kit carrying medium-locked ordnance
+  // (Flak/PlasmaGun) can't shoulder it on a light frame — the class gate
+  // outranks the perk's silhouette.
+  if (lo.perk === 'featherjets') {
+    return kit.some((w) => MEDIUM_ONLY_WEAPONS.has(w)) ? 'medium' : 'light';
+  }
   return 'medium';
 }
 
 export const BOT_LOADOUTS: BotLoadout[] = [
-  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser
+  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser — light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
-  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor
+  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.Cannon,    far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only PlasmaGun
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
   { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
-  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Cannon,    far: WeaponType.Railgun,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs
-  { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.RocketLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools
+  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Cannon,    far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear now)
+  { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
   { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.DiscPull,      side: WeaponType.Pistol   }, // beam rider
   { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper

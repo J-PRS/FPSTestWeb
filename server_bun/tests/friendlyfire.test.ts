@@ -2,7 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { WeaponType } from '../../shared/weapons.ts';
-import { CONFIG } from '../src/config.ts';
 
 const TEAM_SPEC = resolveMapSpec({ mode: 'nuggets' });
 const FFA_SPEC = resolveMapSpec({ mode: 'dm' });
@@ -25,7 +24,7 @@ describe('friendly fire', () => {
     addAt(room, 'a1', 'alpha', 0);
     const mate = addAt(room, 'a2', 'alpha', 5);
     hit(room, 'a1', 'a2');
-    expect(mate.health).toBe(CONFIG.playerMaxHealth);
+    expect(mate.health).toBe(mate.maxHealth);
   });
 
   it('team rooms still damage enemies', () => {
@@ -33,7 +32,7 @@ describe('friendly fire', () => {
     addAt(room, 'a1', 'alpha', 0);
     const foe = addAt(room, 'b1', 'bravo', 5);
     hit(room, 'a1', 'b1');
-    expect(foe.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(foe.health).toBeLessThan(foe.maxHealth);
   });
 
   it('ffa rooms have no friendly-fire gate', () => {
@@ -41,13 +40,13 @@ describe('friendly fire', () => {
     addAt(room, 'p1', undefined, 0);
     const p2 = addAt(room, 'p2', undefined, 5);
     hit(room, 'p1', 'p2');
-    expect(p2.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(p2.health).toBeLessThan(p2.maxHealth);
   });
 
   it('self-splash stays legal in team rooms (rocket jumps)', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     const p = addAt(room, 'a1', 'alpha', 0);
     hit(room, 'a1', 'a1');
-    expect(p.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(p.health).toBeLessThan(p.maxHealth);
   });
 });
