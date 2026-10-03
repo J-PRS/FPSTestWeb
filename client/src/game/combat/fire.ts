@@ -68,10 +68,14 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
   deps.world.projectiles.push(p);
 
-  if (config.needsServerTracking) {
-    p.shotId = `s${++deps.world.projectileRegistry.seq}`;
-    deps.world.projectileRegistry.byShotId.set(p.shotId, p);
-  }
+  // Every spawn below claims a wire identity — the nonce is what binds
+  // the projectileCreated echo back to this shell. Minting only for
+  // needsServerTracking left untracked shells (bomblets, MRV children)
+  // registering server-side with no id to link: 'no local shell' warns.
+  // needsServerTracking keeps governing the damage-claim path; the nonce
+  // costs a map entry, pruned on death.
+  p.shotId = `s${++deps.world.projectileRegistry.seq}`;
+  deps.world.projectileRegistry.byShotId.set(p.shotId, p);
 
   // Record projectile fired event for demo
   const demoManager = deps.lazyDemoManager();

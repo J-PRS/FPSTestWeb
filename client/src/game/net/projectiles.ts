@@ -64,7 +64,14 @@ export function wireProjectiles(ctx: NetCtx): void {
     const registry = deps.world.projectileRegistry;
     const localProjectile = shotId ? registry.byShotId.get(shotId) : undefined;
     if (!localProjectile) {
-      deps.logger.warn(`[Net] projectileCreated ${projectileId} has no local shell (shotId=${shotId ?? 'none'})`);
+      // A missing entry after the nonce mint is either an echo that
+      // outlived a fast-popping shell (nonce pruned at death — benign)
+      // or a spawn that never sent shotId — a real wiring break.
+      if (shotId === undefined) {
+        deps.logger.warn(`[Net] projectileCreated ${projectileId} for an own shot carrying no shotId`);
+      } else {
+        deps.logger.debug(`[Net] projectileCreated ${projectileId} echo for a dead shell (shotId=${shotId})`);
+      }
       return;
     }
     localProjectile.serverProjectileId = projectileId;
