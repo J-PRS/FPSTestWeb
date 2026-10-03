@@ -12,7 +12,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
-import { BallTrailDots } from './ballTrails.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 import { updateAir as balAir, seat as balSeat, launch as balLaunch, solveBolt as balSolve, pathClear as balPath } from './turretBallistics.js';
 export type { Bolt } from './turretBolts.js';
 

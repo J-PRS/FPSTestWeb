@@ -182,6 +182,7 @@ export function createEntities(deps: EntitiesDeps) {
   const balls: Ball[] = [];
   const targets: Targetable[] = [];
   const nuggets: Nugget[] = [];
+  const _noVel = new THREE.Vector3(); // dropNugget scratch — at-rest tosses
   let nuggetsCollected = 0;
 
   // ?mode=classic — plain bounce-and-shoot: variant-0 balls only
@@ -199,6 +200,9 @@ export function createEntities(deps: EntitiesDeps) {
     enemyBots: deps.deployEnemyBots,
     botFoes: deps.deployBotFoes,
     damageBot: deps.deployDamageBot,
+    // Nugget pack offline: the pod lands and mints a local gem (connected
+    // play uses the server's pickupSpawn edge instead).
+    dropNugget: (pos) => spawnNuggetsAt(pos, 1, _noVel),
   });
   const {
     removeTarget, aggroFor, reportTargetDamage, kickDust, atCap,

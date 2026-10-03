@@ -8,6 +8,11 @@ import type { createCombat } from './combat.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { SpeedLines } from '../effects/speedLines.js';
+import { Implosion } from '../effects/implosion.js';
+import { Explosion } from '../effects/explosion.js';
+import { EXPLOSION_VFX_RADIUS } from '../core/config.js';
+import type { WorldState } from './worldState.js';
+import type { Terrain } from '../world/terrain.js';
 import * as sfx from '../core/sfx.js';
 import { screenShake } from '../effects/screenShake.js';
 
@@ -19,23 +24,36 @@ export interface PlayerHookCtx {
   effects: EffectsManager;
   viewModel: ViewModel | undefined;
   speedLines: SpeedLines;
+  world: WorldState;
+  scene: THREE.Scene;
+  terrain: Terrain;
 }
 
 export function wirePlayerHooks(c: PlayerHookCtx): void {
-  const { player, combat, effects, viewModel, speedLines } = c;
+  const { player, combat, effects, viewModel, speedLines, world, scene, terrain } = c;
   player.onWeaponFire = combat.onWeaponFire;
   player.onBelt = combat.onBelt;
   player.onWarpThrow = (pos) => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
   player.onWarpTick = (pos) => effects.spawnWarpTrail(pos); // spark trail ON the beacon
   player.onWarp = (from, to) => {
-  // Two-stage pop: a collapse burst where you left, a bigger discharge
-  // where you arrive — the arrival is the anchor point, it gets more.
-  effects.spawnBounce(from, player.vel);
-  effects.spawnImpact(from, player.vel);
+  // Warp sell, in three beats:
+  //  1. DEPARTURE implosion — the space you vacated caves inward (the
+  //     collapse reads as "torn out of the world", not "moved").
+  //  2. CONDUIT beam + dense streak corridor along the path — the eye
+  //     needs to see WHERE you went or the teleport reads as a cut.
+  //  3. ARRIVAL discharge — a real blast at the landing anchor; it owns
+  //     the bigger share of the FX budget.
+  world.implosions.push(new Implosion(scene, from, 0, terrain));
+  effects.spawnBeam(from, to, 0x55ffdd);
+  speedLines.surge(from, to, 0x33ffdd, 22);
+  world.explosions.push(new Explosion(
+    scene, to, true, 0, terrain, 5.5 / EXPLOSION_VFX_RADIUS, 0x66ffee, 'punch',
+  ));
   effects.spawnBounce(to, player.vel);
-  effects.spawnImpact(to, player.vel);
   effects.spawnJetpack(to); // extra sparks at the landing anchor
-  screenShake.blast(to, 2.2, player.pos);
+  viewModel?.kick(0.7);
+  screenShake.blast(to, 5.5, player.pos);
+  screenShake.add(0.3);
   sfx.warpJump(to);
   };
   player.onMelee = combat.onMelee;

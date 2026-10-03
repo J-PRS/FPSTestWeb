@@ -7,10 +7,10 @@ import { Projectile } from '../../projectiles/Projectile.js';
 import {
   GRENADE_CONFIG, BELT_DISC_CONFIG, STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
-  ARMORNADE_CONFIG,
+  ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
 } from '../../projectiles/index.js';
 import type { WeaponDef } from '../../weapons.js';
-import type { BeltItem } from '../../entities/Player.js';
+import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
@@ -19,7 +19,8 @@ import {
 } from '../../core/config.js';
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
-import { getWeaponStats, WeaponType, BELT_THROW_COST } from '../../../../shared/weapons.js';
+import { swingSwipeView } from '../../effects/swingTrails.js';
+import { getWeaponStats, WeaponType, beltThrowCost } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
@@ -41,13 +42,22 @@ export interface FireHooks {
 // Weapon trigger handlers: every onX translates a FireArgs into spawned
 // projectiles (or a melee sweep), kicks the viewmodel, and reports the shot
 // to the server. The explosion/impact side lives in combat.ts.
+// Muzzle lead: shells spawn at the EYE (FireEvent origin = player.pos)
+// so every shot's glow envelope materializes wrapped around the camera —
+// a half-meter push down the aim line clears the near plane. The CLAIMED
+// spawn moves too (same origin in the shot message), keeping server
+// tracking and remote replicas consistent with what the shooter sees.
+const MUZZLE_LEAD = 1.0;
+const _spawnOrigin = new THREE.Vector3();
+
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): void {
   if (deps.inputTracking.isTabHidden()) return;
   if (deps.lazyDemoManager()?.isPlaying) return;
 
   if (!quiet) sfx.shoot(config.weaponType);
+  _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
-  const p = new Projectile(deps.lazyScene(), e.origin, e.dir, e.playerVel, config);
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
   deps.world.projectiles.push(p);
 
   if (config.needsServerTracking) {
@@ -60,7 +70,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   if (demoManager?.isRecording) {
     const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
     p.demoProjectileId = demoManager.recordProjectileFired(
-      { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
       config.weaponType
     );
@@ -82,7 +92,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
   deps.lazyNetworkManager().sendShot({
     targetId: null, // no target yet
-    position: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+    position: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
     velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
     weaponType: config.weaponType,
     shotId: p.shotId ?? undefined,
@@ -115,23 +125,33 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   impact: IMPACT_CONFIG,
   remoterailgun: REMOTE_RAILGUN_CONFIG,
   armornade: ARMORNADE_CONFIG,
+  proxy: PROXY_CONFIG,
+  satchel: SATCHEL_CONFIG,
+  heal: HEALNADE_CONFIG,
 };
 
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   const p = deps.lazyPlayer();
   // Ordnance economy: a dry belt can't throw — server enforces the same
   // rule on the spawn claim, this gate just saves the animation/no-op.
-  if (p.beltCharges < BELT_THROW_COST) return;
-  deps.lazyViewModel()?.startThrow();
   const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
+  const cost = beltThrowCost(config.weaponType);
+  if (p.beltCharges < cost) return;
+  // Some throws are a deliberate plant, not a flick — the anim stretch and
+  // the release delay must agree or the bomb leaves the hand early.
+  const timeScale = BELT_THROW_TIME[item] ?? 1;
+  deps.lazyViewModel()?.startThrow(timeScale);
   // Dying mid wind-up must not release — the server rejects dead-player
   // claims, leaving a local ghost projectile.
   setTimeout(() => {
     const pl = deps.lazyPlayer();
-    if (pl.isDead || pl.beltCharges < BELT_THROW_COST) return;
-    pl.beltCharges -= BELT_THROW_COST;
+    if (pl.isDead || pl.beltCharges < cost) return;
+    pl.beltCharges -= cost;
+    // The javelin's juice is the THROW — a speedline whip on release so a
+    // spear leaving the hand reads as force, not a lob.
+    if (item === 'javelin') deps.lazySpeedLines?.().burst();
     spawnProjectile(deps, config, freshFireArgs(deps));
-  }, THROW_RELEASE * 1000);
+  }, THROW_RELEASE * timeScale * 1000);
 }
 
 // Pellet fan (flak/shotgun): one trigger = a poisson-disc spread of
@@ -196,10 +216,10 @@ function meleeGroundContact(playerPos: THREE.Vector3, dir: THREE.Vector3, terrai
 // scorch + dirt spray + thud on terrain hits, and a speed-line whoosh that
 // sells the arc without an arm animation (same trick as the blink surge).
 // All visuals — the damage/force side stays in melee() below.
-function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groundHit: THREE.Vector3 | null): void {
+function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groundHit: THREE.Vector3 | null, landed: boolean): void {
   const player = deps.lazyPlayer();
   const stats = getWeaponStats(WeaponType.Melee);
-  deps.lazyViewModel()?.punch(); // weapon sweeps aside — no recoil kick
+  deps.lazyViewModel()?.punch(landed); // landed = apex hold — the hit-pose dwell
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), fxPos, true, 0, deps.lazyTerrain(),
     (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
@@ -219,6 +239,12 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
     screenShake.add(0.28);
   }
   deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xaaddff, 8);
+  // The slash arc — the actual "swing" read. Hit or whiff, every punch
+  // sweeps an X of billboarded streaks across the view (~0.16s); without
+  // it a mid-air swing was just a faint puff. Pinned to the camera so it
+  // doesn't lag behind at speed; the camera kicks along with it.
+  swingSwipeView(deps.lazyScene(), deps.lazyCamera());
+  screenShake.swingKick(1, landed);
 }
 
 // Melee sweep — the arc check happens around a point pushed forward
@@ -230,7 +256,6 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
 
   const groundHit = meleeGroundContact(player.pos, e.dir, deps.lazyTerrain());
-  meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit);
 
   let connected: THREE.Vector3 | null = null;
   for (const t of deps.targets) {
@@ -262,6 +287,10 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     });
     screenShake.add(0.22);
   }
+
+  // Swing FX after hit detection — `landed` picks the connect variant
+  // (apex dwell + deeper camera kick) same frame the input resolved.
+  meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit, connected !== null);
 
   // Players go through the authoritative AOE claim; the swing itself
   // rides the cosmetic fire relay so observers see/hear the punch.

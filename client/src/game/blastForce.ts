@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
+import { getWeaponStats } from '../../../shared/weapons.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
@@ -76,6 +77,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     applyTo: (t: Forceable, f: number) => void
   ): void {
     const { pos, radius, aoeDamage, weaponType } = a;
+    const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
     for (const ball of deps.targets) {
       if (ball.dead) continue;
       const db = ball.pos.distanceTo(pos);
@@ -88,7 +90,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // Splash actually hurts enemies — falloff-scaled like players, with
       // the same damage number + health bar feedback as direct hits
       // (without it, splash damage was invisible and read as "no damage").
-      const dmg = aoeDamageOf(aoeDamage, db, radius);
+      const dmg = aoeDamageOf(aoeDamage, db, radius, scales);
       if (dmg < 1) continue;
       // Numbers are MY-hit feedback — a bot blast salting a creature
       // shouldn't stamp them under my crosshair (same gate as remotes).
@@ -110,6 +112,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // no snap-back when interpolation resumes.
   function applyForceToRemotes(a: BlastArgs): void {
     const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
+    const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
@@ -124,7 +127,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // Hitmarker is personal feedback — a bot's blast (shooterId set)
       // clipping a remote isn't my frag to celebrate.
       if (!a.shooterId) deps.lazyHud().showHitMarker();
-      const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
+      const aoeDmg = aoeDamageOf(aoeDamage, dist, radius, scales);
       // Splash on a player/bot shows a number too — direct hits had one
       // (impact.ts) but blast feedback stopped at the hitmarker, so the
       // common "rocket at their feet" read as dealing nothing.
@@ -139,6 +142,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
     const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
+    const scales = a.weaponType !== undefined ? getWeaponStats(a.weaponType).aoeScales : undefined;
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
 
@@ -176,11 +180,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const selfDmg = selfHit
         ? (enemyBlast ? 0 : aoeDamage * player.mods.selfDamage)
         : enemyBlast
-          ? aoeDamageOf(aoeDamage, dpx, radius)
+          ? aoeDamageOf(aoeDamage, dpx, radius, scales)
           // A feet-shot launch pays up to SELF_SPLASH_MAX — same rule
           // the server charges bots, so the disc-jump is a real spend
           // for humans too. The perk still shaves it.
-          : Math.min(aoeDamageOf(aoeDamage, dpx, radius) + SELF_SPLASH_MAX * (1 - dpx / radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
+          : Math.min(aoeDamageOf(aoeDamage, dpx, radius, scales) + SELF_SPLASH_MAX * (1 - dpx / radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.

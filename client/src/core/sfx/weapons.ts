@@ -96,6 +96,25 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     // release tick — the wrist-snap, not a whistle (that layer read wrong)
     ['hg_tick', 0.3, 1.8, 3000, 0.04],
   ],
+  // Demo charge: a planted satchel — slowed whoosh for the heavy underhand
+  // lob, then the strap-slap of the charge leaving the hand. No launch
+  // crack: it was never fired, it was placed.
+  [WeaponType.SatchelCharge]: [
+    ['dash2', 0.6, 0.8],
+    ['hg_tick', 0.5, 0.9, 900, 0.1],
+    ['thud_big', 0.4, 0.7, 400, 0.12],
+  ],
+  // Heal grenade: a soft underhand lob — light whoosh + a priming chirp.
+  [WeaponType.HealGrenade]: [
+    ['dash2', 0.5, 1.1],
+    ['hg_tick', 0.35, 1.4, 2400, 0.06],
+  ],
+  // Proxy grenade: a sensor ball leaving the hand — short whoosh + the
+  // arming beep that tells you the bubble is live.
+  [WeaponType.ProxyGrenade]: [
+    ['dash2', 0.45, 1.0],
+    ['hg_tick', 0.45, 1.7, 2200, 0.08],
+  ],
   [WeaponType.Chaingun]: [
     ['shot_chaingun', 0.75, 1.15, undefined, 0.08],
     ['punch', 0.35, 0.7, 700, 0.06],

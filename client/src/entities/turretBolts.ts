@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { BallTrailDots } from './ballTrails.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 
 let _boltGeo: THREE.SphereGeometry | null = null;
 function boltGeo(): THREE.SphereGeometry {

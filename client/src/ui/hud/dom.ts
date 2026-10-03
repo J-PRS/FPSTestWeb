@@ -52,16 +52,16 @@ export function createHudDom(): HudDom {
       </div>
       <div id="hud-fps"><span id="fps">0</span></div>
       <div id="hud-bc">
-        <div id="hud-speedo">
-          <span class="spd-cell"><i>A</i><b id="spd">0</b></span>
-          <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
-          <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
-        </div>
         <div id="hud-weapons">
           <span class="wslot" data-w="0"></span>
           <span class="wslot" data-w="1"></span>
           <span class="wslot" data-w="2"></span>
           <span class="wslot" data-w="3"></span>
+        </div>
+        <div id="hud-speedo">
+          <span class="spd-cell"><i>A</i><b id="spd">0</b></span>
+          <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
+          <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
         </div>
         <div class="labels">
           <span>HEALTH<span class="v" id="hp">100</span></span>
@@ -72,8 +72,7 @@ export function createHudDom(): HudDom {
           <span>ENERGY<span class="v" id="nrg">60</span></span>
           <span>KILLS<span class="v" id="kills">0</span></span>
         </div>
-        <div class="bar-wrap"><div class="bar-ghost" id="health-ghost"></div><div class="bar-fill" id="health-bar"></div></div>
-        <div class="bar-wrap thin armor"><div class="bar-fill" id="armor-bar"></div></div>
+        <div class="bar-wrap hp"><div class="bar-ghost" id="health-ghost"></div><div class="bar-fill" id="health-bar"></div><div class="bar-fill armor-fill" id="armor-bar"></div></div>
         <div class="bar-wrap thin"><div class="bar-fill" id="energy-bar"></div></div>
         <div id="buffs"></div>
       </div>
@@ -90,6 +89,7 @@ export function createHudDom(): HudDom {
       <div id="killfeed"></div>
       <div id="conn-banner"></div>
       <div id="scoreboard">
+        <div id="sb-title"></div>
         <table><thead><tr><th>#</th><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th><th>ALIVE</th></tr></thead><tbody id="sb-rows"></tbody></table>
       </div>
     `;

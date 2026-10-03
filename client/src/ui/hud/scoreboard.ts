@@ -4,7 +4,26 @@
  * row carries a team. Extracted from hud.ts; HUD forwards the setters.
  */
 
-import type { TeamId } from '../../../../shared/teams.js';
+import { MODES, type ModeId, type TeamId } from '../../../../shared/teams.js';
+
+/** Header text — "CAPTURE THE FLAG · Dangerous Crossing". The map arg
+ *  arrives already resolved server-side (spec.name ?? spec filename);
+ *  the filename fallback gets prettified (katabatic_bare → Katabatic Bare). */
+export function scoreboardTitle(mode?: string, mapName?: string): string {
+  const label = MODES[mode as ModeId]?.label ?? mode?.toUpperCase() ?? '';
+  const map = mapName ? prettifyMapName(mapName) : '';
+  return [label, map].filter(Boolean).join(' · ');
+}
+
+const MAP_ACRONYMS = new Set(['ctf', 'dm', 'tdm', 't2']);
+function prettifyMapName(file: string): string {
+  return file
+    .replace(/_nef$/i, '') // T2-conversion marker, not part of the name
+    .split(/[\s_-]/)
+    .filter(Boolean)
+    .map(w => MAP_ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))
+    .join(' ');
+}
 
 export type SbRow = {
   name: string; frags: number; score: number | null; ping: number | null;
@@ -47,10 +66,25 @@ export class Scoreboard {
   private refresh = 0;
   private rows: SbRow[] = [];
 
+  private title: HTMLElement | null;
+  private lastTitle = '';
+
   constructor(
     private root: HTMLDivElement,
     private tbody: HTMLElement,
-  ) {}
+  ) {
+    this.title = root.querySelector('#sb-title');
+  }
+
+  /** Header line — "CAPTURE THE FLAG · Dangerous Crossing". Change-guarded:
+   *  callers recompute every scoreboard tick, but the DOM only pays when
+   *  the match actually changes. */
+  setTitle(t: string): void {
+    if (t === this.lastTitle || !this.title) return;
+    this.lastTitle = t;
+    this.title.textContent = t;
+    this.title.style.display = t ? '' : 'none';
+  }
 
   setVisible(v: boolean): void {
     this.visible = v;

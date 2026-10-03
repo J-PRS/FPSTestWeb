@@ -10,6 +10,18 @@ export enum LogLevel {
   ERROR = 3
 }
 
+/** Local-time ISO stamp (`2026-10-02T19:15:48.852+02:00`) — toISOString
+ *  is UTC-only, which made Alt+Q dumps read wrong vs wall clock. */
+const padN = (n: number, w = 2) => String(n).padStart(w, '0');
+function tsLocal(d = new Date()): string {
+  const p = padN;
+  const off = -d.getTimezoneOffset(); // minutes EAST of UTC
+  const a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}` +
+    `${off >= 0 ? '+' : '-'}${p(Math.floor(a / 60))}:${p(a % 60)}`;
+}
+
 export namespace Logger {
   let currentLevel: LogLevel = LogLevel.INFO;
   // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
@@ -73,7 +85,7 @@ export namespace Logger {
     if (!shouldLog(level)) return;
 
     const levelStr = LogLevel[level];
-    const timestamp = new Date().toISOString();
+    const timestamp = tsLocal();
     const prefix = currentTag ? `[${currentTag}]` : '';
     const fullMessage = `${timestamp} ${prefix} [${levelStr}] ${message}`;
 
@@ -106,7 +118,17 @@ export namespace Logger {
     // WARN+ also queues for server shipping — the on-disk client.log
     if (level >= LogLevel.WARN) shipQueue.push(logLine);
 
+    lineListener?.(logLine, level);
     trimBuffer();
+  }
+
+  /** Live line feed for the in-game log panel — one subscriber, set once
+   *  at boot. DOM work stays out of the logger: the panel decides whether
+   *  it's worth appending (it no-ops while hidden). */
+  type LineListener = (line: string, level: LogLevel) => void;
+  let lineListener: LineListener | null = null;
+  export function setLineListener(fn: LineListener | null): void {
+    lineListener = fn;
   }
 
   /** Register a diagnostics dump — prepended to Alt+Q/export output so bug
@@ -117,7 +139,7 @@ export namespace Logger {
   }
 
   function buildHeader(): string[] {
-    const lines = [`=== DIAGNOSTICS @ ${new Date().toISOString()} ===`];
+    const lines = [`=== DIAGNOSTICS @ ${tsLocal()} ===`];
     try {
       if (diagnosticsProvider) lines.push(...diagnosticsProvider());
     } catch (e) {
@@ -136,7 +158,7 @@ export namespace Logger {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `client-${new Date().toISOString().split('T')[0]}.log`;
+    a.download = `client-${tsLocal().split('T')[0]}.log`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -234,8 +256,9 @@ export namespace Logger {
   }
 
   /** Push a line from outside the logger (console wrapper) */
-  export function pushRaw(line: string): void {
+  export function pushRaw(line: string, level: LogLevel = LogLevel.INFO): void {
     logBuffer.push(line);
+    lineListener?.(line, level);
     trimBuffer();
     if (line.includes('[WARN]') || line.includes('[ERROR]')) shipQueue.push(line);
   }
@@ -319,7 +342,10 @@ if (typeof window !== 'undefined') {
     // warn/error pass through (mirrors the Logger console filter)
     const passthrough = m === 'warn' || m === 'error';
     console[m] = (...args: unknown[]) => {
-      if (!Logger.isWritingToConsole()) Logger.pushRaw(`${new Date().toISOString()} [${m.toUpperCase()}] ${fmtArgs(args)}`);
+      // Raw console lines keep their level for the panel's coloring —
+      // log/info read as INFO, warn/error stay warn/error.
+      const lvl = m === 'warn' ? LogLevel.WARN : m === 'error' ? LogLevel.ERROR : LogLevel.INFO;
+      if (!Logger.isWritingToConsole()) Logger.pushRaw(`${tsLocal()} [${m.toUpperCase()}] ${fmtArgs(args)}`, lvl);
       if (passthrough) orig(...args);
     };
   }
@@ -330,6 +356,7 @@ if (typeof window !== 'undefined') {
   const toast = (msg: string, ok = true) => {
     if (!toastEl) {
       toastEl = document.createElement('div');
+      toastEl.id = 'altq-toast';
       toastEl.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:6px;background:rgba(10,16,22,0.9);border:1px solid rgba(255,255,255,0.2);color:#dfe;font:600 13px/1.2 "Segoe UI",Arial,sans-serif;letter-spacing:0.05em;z-index:99999;pointer-events:none;transition:opacity 0.2s;';
       document.body.appendChild(toastEl);
     }
@@ -342,6 +369,9 @@ if (typeof window !== 'undefined') {
   document.addEventListener('keydown', (e) => {
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
+      // Same chord reveals the in-game log panel (logPanel listens for it)
+      // — the lines just copied show on screen without opening devtools.
+      window.dispatchEvent(new CustomEvent('fps:altq'));
       Logger.copyLogs(300).then(n => {
         if (n >= 0) {
           toast(`Copied ${n} log lines`);

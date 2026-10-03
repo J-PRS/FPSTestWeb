@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { MAX_HEALTH } from '../core/config.js';
+import { CLASS_STATS } from '../../../shared/botClasses.js';
 
 import { Ball, Targetable } from '../entities/balls.js';
 
@@ -30,7 +31,7 @@ const BAR_WIDTH = 40;
 const BAR_HEIGHT = 5;
 const FLASH_DURATION = 0.12;
 const DELAY_DURATION = 0.3;
-const BAR_LIFETIME = 1.5;
+const BAR_LIFETIME = 5.0; // hit-popup linger — a wounded readout, not a flash
 
 export class HealthBarSystem {
   private bars: Map<string, HealthBar> = new Map();
@@ -38,6 +39,9 @@ export class HealthBarSystem {
   // Last authoritative health per player — persists beyond bar lifetime so
   // damage predictions accumulate across hits spaced wider than BAR_LIFETIME
   private knownHealth: Map<string, number> = new Map();
+  // Per-player max from the wire armorClass — a heavy bar drawn against a
+  // flat 100 reads full until the target is under half health.
+  private knownMax: Map<string, number> = new Map();
   private container: HTMLDivElement;
   private camera: THREE.Camera;
 
@@ -101,7 +105,7 @@ export class HealthBarSystem {
 
   predictDamage(playerId: string, damage: number): void {
     const bar = this.bars.get(playerId);
-    const base = bar ? bar.currentHealth : (this.knownHealth.get(playerId) ?? MAX_HEALTH);
+    const base = bar ? bar.currentHealth : (this.knownHealth.get(playerId) ?? this.knownMax.get(playerId) ?? MAX_HEALTH);
     const health = Math.max(0, base - damage);
     this.upsertBar(playerId, damage, health);
   }
@@ -113,7 +117,7 @@ export class HealthBarSystem {
       this.resetBar(bar, damage, health);
       return;
     }
-    this.bars.set(playerId, this.createHealthBar(damage, health, MAX_HEALTH, playerId));
+    this.bars.set(playerId, this.createHealthBar(damage, health, this.knownMax.get(playerId) ?? MAX_HEALTH, playerId));
   }
 
   update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string): void {
@@ -155,6 +159,9 @@ export class HealthBarSystem {
       this.tagAlly(bar, playerState?.team ?? (rp as { team?: string } | undefined)?.team, localTeam);
 
       const pos = rp ? rp.position : playerState!.position;
+      // Wire class decides the pool — vitality's +50 stays invisible until
+      // the roster carries it, which still beats a flat 100 for heavies.
+      bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
       // pos is EYE height — a small margin above it is already over the head
       const targetPos = _targetPos.set(pos.x, pos.y + 0.5, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
@@ -168,6 +175,13 @@ export class HealthBarSystem {
       ball.pos.z
     );
     this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBallBar(ball));
+  }
+
+  /** Class-aware pool — heavy reads against 200, not 100. */
+  private maxFor(playerId: string, cls: string | undefined): number {
+    const max = MAX_HEALTH + (CLASS_STATS[cls as keyof typeof CLASS_STATS]?.maxHealth ?? 0);
+    this.knownMax.set(playerId, max);
+    return max;
   }
 
   /** Friend-or-foe bar color — wire team wins; offline GameBots carry the
@@ -205,6 +219,7 @@ export class HealthBarSystem {
     }
     this.ballBars.clear();
     this.knownHealth.clear();
+    this.knownMax.clear();
   }
 
   private createBarEl(): HTMLDivElement {

@@ -6,8 +6,11 @@ export function jump(): void {
   if (!bus || !c) return;
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 0.15)) return;
-  if (sample('jump', g, 0.5)) return;
-  osc('sine', 250, 420, 0.12, 0.15, g);
+  // A hop is footwork, not a fanfare — the 'jump' sample read as a
+  // cartoon boop and autoHop machine-gunned it. Short air whoosh + a
+  // faint low thump instead; quiet enough to hold the key.
+  noise(0.1, 0.09, g, 'bandpass', 900, 400, 0.8);
+  osc('sine', 170, 95, 0.09, 0.06, g);
 }
 
 export function land(impactSpeed: number): void {

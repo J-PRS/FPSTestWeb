@@ -7,11 +7,15 @@ import type { WebGLRenderer } from 'three';
 // devtools.
 export function createPerfHud() {
   const el = document.createElement('pre');
+  el.id = 'perf-hud';
   el.style.cssText =
     // Sits directly above the stats.js chart row — both offsets are
     // reserved debug zones in hud.css (--z-br-3/-4) so the panel can't
     // land on the entity-counts or shot-feed rows.
     'position:fixed;bottom:var(--z-br-4);right:20px;z-index:10000;display:none;' +
+    // Height cap keeps the table inside the debug band — an uncapped pre
+    // on a short window towers over the top-right rows (hud-fps/timer).
+    'max-height:calc(100vh - var(--z-br-4) - 130px);overflow:hidden;' +
     'color:#8f8;background:rgba(0,0,0,0.55);padding:4px 8px;font:11px/1.35 monospace;' +
     'margin:0;pointer-events:none;text-align:right;';
   document.body.appendChild(el);

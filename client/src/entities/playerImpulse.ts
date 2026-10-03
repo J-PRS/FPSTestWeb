@@ -3,7 +3,7 @@ import { weaponDef } from '../weapons.js';
 import { DISC_RATE } from '../core/config.js';
 import { THROW_TOTAL } from './ViewModel.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
-import type { Player } from './Player.js';
+import { BELT_THROW_TIME, type Player } from './Player.js';
 
 // Trigger + impulse family: weapon/belt fire intent and every
 // pos/vel writer that must sync back into the movement controller.
@@ -28,7 +28,7 @@ export function fireWeapons(p: Player): void {
     // Belt item (C key) — the equipped throw; hold to repeat
     if (p.input.beltHeld && p.beltTimer <= 0) {
       p.beltTimer = DISC_RATE;
-      p.throwLockT = THROW_TOTAL;
+      p.throwLockT = THROW_TOTAL * (BELT_THROW_TIME[p.beltItem] ?? 1);
       p.shootAnimTimer = 0.3; // lob raise — same snap as a shot
       p.model?.weaponThrow();
       p.onBelt?.({ origin: p.pos.clone(), dir: p.getAimDir(), playerVel: p.vel.clone() }, p.beltItem);

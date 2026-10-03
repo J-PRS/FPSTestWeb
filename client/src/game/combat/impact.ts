@@ -59,6 +59,20 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   }
 }
 
+/** Kinetic-hit feedback for noExplosion shells — the bullet puff is the
+ *  floor; an embedding spear (javelin) earns a compact kinetic burst and
+ *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
+function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
+  const deps = c.deps;
+  deps.lazyEffects().spawnImpact(pos, p.vel);
+  if (p.config.embeds === undefined) return;
+  deps.world.explosions.push(new Explosion(
+    deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
+    3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, 'punch',
+  ));
+  sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
+}
+
 // Visual effect only — no AOE, no damage, no server traffic
 export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   const deps = c.deps;
@@ -66,7 +80,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   // already inside the terrain and the blast would render underground
   const pos = p.hitPointValid ? p.hitPoint : p.pos;
   if (p.config.noExplosion) {
-    deps.lazyEffects().spawnImpact(pos, p.vel);
+    kineticHitFx(c, p, pos);
     if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(pos);
     return;
   }
@@ -80,7 +94,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     // Bullet impact at the exact sweep intersection point (terrain hits
     // use the bisected hitPoint; ball/player hits use pos).
     const hitPos = p.hitPointValid ? p.hitPoint : p.pos;
-    deps.lazyEffects().spawnImpact(hitPos, p.vel);
+    kineticHitFx(c, p, hitPos);
     // Bullet hole on terrain hits only — enemy/player hits already get
     // damage numbers, bars, and spark feedback
     if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(hitPos);
@@ -96,7 +110,10 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Untracked client-local children (cluster bomblets) skip the claim —
   // their damage is the server's WeaponStats.cluster scatter, so a claim
   // would just bounce off projectile resolution.
-  const sendAOE = p.config.needsServerTracking === false || (p.serverProjectileId === null && p.shotId === null)
+  // Unarmed sticky failsafe pops (never attached — fuseAge -1) claim no
+  // blast: the shell was inert, so this explosion is cosmetic only.
+  const sendAOE = (p.config.sticks && p.fuseAge() < 0)
+    || p.config.needsServerTracking === false || (p.serverProjectileId === null && p.shotId === null)
     // Neither id means the shell predates the connection — a blast claim
     // can never resolve and only earns a reject warn.
     ? () => {}

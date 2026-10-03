@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { BallTrailDots } from './ballTrails.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 
 const getNuggetTex = () => getGlowTexture(32);
 

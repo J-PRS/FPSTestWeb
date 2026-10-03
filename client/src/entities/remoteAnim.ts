@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
 import type { PlayerModel } from './PlayerModel.js';
-import { BallTrailDots } from './ballTrails.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 
 // Model-anim drive — turns RemotePlayer's movement/state into PlayerModel

@@ -10,6 +10,7 @@ let feedEl: HTMLDivElement | null = null;
 function feed(): HTMLDivElement {
   if (!feedEl) {
     feedEl = document.createElement('div');
+    feedEl.id = 'shot-feed'; // id so hud.css can re-anchor it above the log panel
     feedEl.style.cssText = 'position:fixed;bottom:var(--z-br-2);right:16px;display:flex;flex-direction:column-reverse;gap:4px;align-items:flex-end;z-index:99990;pointer-events:none;';
     document.body.appendChild(feedEl);
   }

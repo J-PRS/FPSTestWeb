@@ -38,6 +38,9 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Remote railgun pop: the capacitor dumping — zap forward, blast behind.
   [WeaponType.RemoteRailgun]: [['shot_energy', 0.8, 0.8], ['explosion_small', 0.7, 1.1], ['sparks', 0.5, 1.0, undefined, 0.3]],
   [WeaponType.Chaingun]: [['explosion_small', 0.5, 1.6]],
+  // Spear strike: no powder — a deep impact thunk, the iron ring of the
+  // tip, and spark scatter. Reads as MASS landing, not a bang.
+  [WeaponType.Javelin]: [['thud_big', 0.9, 0.75], ['hg_clang', 0.55, 1.3, undefined, 0.25], ['sparks', 0.4, 1.3, undefined, 0.3]],
   // LG death-burst: an electric discharge, not a powder blast — zap body,
   // energy-shot tail, spark scatter on top.
   [WeaponType.Lightning]: [['shot_energy', 0.85, 0.7], ['explosion_small', 0.7, 1.1], ['sparks', 0.55, 0.9, undefined, 0.3]],
@@ -53,6 +56,14 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Bomblet contact pop — small and bright; six in a row must read as a
   // rain of pops, not one boom — thin like the plasma plip but warmer.
   [WeaponType.MRVBomblet]: [['explosion_small', 0.5, 1.3], ['sparks', 0.3, 1.1, undefined, 0.25]],
+  // Satchel pop: the loudest voice in the kit — two stacked blasts + a
+  // deep tail + iron ring. A planted charge should sound heavier than
+  // anything you can shoot.
+  [WeaponType.SatchelCharge]: [['explosion1', 1.0, 0.7], ['explosion2', 0.85, 0.55], ['thud_big', 0.9, 0.6, 350], ['hg_clang', 0.3, 1.1, undefined, 0.3]],
+  // Heal pop: a mist burst, not a bang — soft energy puff + airy sparks.
+  [WeaponType.HealGrenade]: [['shot_energy', 0.45, 1.5], ['explosion_small', 0.3, 1.7], ['sparks', 0.3, 1.2, undefined, 0.3]],
+  // Proxy pop: the sensor tripping — a zap-forward snap + compact blast.
+  [WeaponType.ProxyGrenade]: [['shot_energy', 0.6, 1.1], ['explosion_small', 0.55, 1.4], ['sparks', 0.4, 1.1, undefined, 0.3]],
 };
 
 /** LG damage connect — frying sizzle at the contact point. Caller throttles
