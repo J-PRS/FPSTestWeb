@@ -1,0 +1,30 @@
+import { launchClient, closeClient } from './browser.ts';
+import { upStack } from './env.ts';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+const OUT = join(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'shots');
+const stack = await upStack();
+const client = await launchClient(stack.clientUrl('&room=coneverify&bots=0&net=ws'));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+await client.waitFor(`t.player && t.player.pos`, 30000);
+await sleep(1500);
+await client.page.evaluate(`(async () => {
+  const t = window.__test;
+  const { Projectile } = await import('/src/projectiles/Projectile.ts');
+  const { DISC_CONFIG } = await import('/src/projectiles/discConfig.ts');
+  const cam = t.player.camera;
+  const V = cam.position.constructor;
+  const fwd = new V(0,0,-1).applyQuaternion(cam.quaternion);
+  const side = new V(1,0,0).applyQuaternion(cam.quaternion);
+  // parked disc 15m ahead, cone pointing sideways across the view
+  const origin = cam.position.clone().addScaledVector(fwd, 15);
+  const q = new Projectile(t.scene, origin, side.clone(), new V(0,0,0), DISC_CONFIG);
+  q.vel.multiplyScalar(0.0);
+  q.age = 3.0;
+  t.world.projectiles.push(q);
+})()`);
+await sleep(500);
+mkdirSync(OUT, { recursive: true });
+await client.page.screenshot({ path: join(OUT, 'coneverify.png') });
+await closeClient(client);
+stack.down();

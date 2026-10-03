@@ -1,0 +1,31 @@
+import { launchClient, closeClient } from './browser.ts';
+import { upStack } from './env.ts';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+const OUT = join(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'shots');
+const stack = await upStack();
+const client = await launchClient(stack.clientUrl('&room=conefly&bots=0&net=ws'));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+await client.waitFor(`t.player && t.player.pos`, 30000);
+await sleep(1500);
+await client.page.evaluate(`(async () => {
+  const t = window.__test;
+  const { Projectile } = await import('/src/projectiles/Projectile.ts');
+  const { DISC_CONFIG } = await import('/src/projectiles/discConfig.ts');
+  const cam = t.player.camera;
+  const V = cam.position.constructor;
+  const fwd = new V(0,0,-1).applyQuaternion(cam.quaternion);
+  const up = new V(0,1,0).applyQuaternion(cam.quaternion);
+  const side = new V(1,0,0).applyQuaternion(cam.quaternion);
+  // spawn 35m left of aim point, flying right-to-left across view at ~40m/s
+  const origin = cam.position.clone().addScaledVector(fwd, 30).addScaledVector(side, -25).addScaledVector(up, 4);
+  const q = new Projectile(t.scene, origin, side.clone(), side.clone().multiplyScalar(40), DISC_CONFIG);
+  t.world.projectiles.push(q);
+})()`);
+await sleep(350);
+mkdirSync(OUT, { recursive: true });
+await client.page.screenshot({ path: join(OUT, 'conefly.png') });
+await sleep(350);
+await client.page.screenshot({ path: join(OUT, 'conefly2.png') });
+await closeClient(client);
+stack.down();
