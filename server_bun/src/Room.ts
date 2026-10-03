@@ -254,6 +254,7 @@ export class Room {
         case 'chat': {
           const kind = chatKindFor(e.text) ?? (this.bots.nameIn(e.text) ? 'mention' : null);
           if (kind) this.bots.notice(kind, e.id, this.players.getPlayer(e.id)?.team);
+          this.noteChatPace(e.id);
           break;
         }
       }
@@ -274,6 +275,24 @@ export class Room {
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.spec.structures);
     this.registerSims();
+  }
+
+  /** Chat lines per speaker inside the spam window — a burst of fast
+   *  typing is the trigger for a single 'quiet' callout. */
+  private chatPace = new Map<string, number[]>();
+
+  /** 4+ lines inside 8s reads as spam. The callout itself is rare (~12%)
+   *  and goes to ONE random bot — VGQ works as a surprise, not a rule,
+   *  and a squad chorus of "Quiet!" would spam the feed worse. */
+  private noteChatPace(id: string): void {
+    const now = simNow();
+    const hits = (this.chatPace.get(id) ?? []).filter((t) => now - t < 8000);
+    hits.push(now);
+    if (hits.length < 4) { this.chatPace.set(id, hits); return; }
+    this.chatPace.delete(id); // burst spent — re-arm on the next run
+    if (botRand() >= 0.12) return;
+    const bots = [...this.players.getAllPlayers().values()].filter((p) => p.id.startsWith('BOT-') && !p.isDead);
+    if (bots.length) this.messages.killFeed.say(bots[(botRand() * bots.length) | 0]!.id, 'quiet', id);
   }
 
   /** Server-authoritative melee species — the crawl* wire events are the
@@ -341,9 +360,31 @@ export class Room {
       }
       this.scoring.applyPowerup(p, kind);
     };
-    if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
-      this.flags = new RoomFlags(this, this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
+    if (this.modeSpec?.flags) {
+      if (this.mode === 'rabbit') {
+        this.flags = new RoomFlags(this, { alpha: this.rabbitFlagHome() });
+      } else if (bases?.alpha && bases?.bravo) {
+        this.flags = new RoomFlags(this, this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
+      }
     }
+  }
+
+  /** Rabbit's one stand: the midpoint of a two-base map (a team's own
+   *  stand would hand them free territory), else the arena center, else
+   *  the first spawn — always de-shelved + snapped to walkable ground. */
+  private rabbitFlagHome(): Vec3 {
+    const src = (this.spec.bases?.alpha && this.spec.bases?.bravo)
+      ? {
+        x: (this.spec.bases.alpha.x + this.spec.bases.bravo.x) / 2,
+        y: 0,
+        z: (this.spec.bases.alpha.z + this.spec.bases.bravo.z) / 2,
+      }
+      : this.spec.bases?.alpha
+        ?? (this.spec.arena ? { x: this.spec.arena.x, y: 0, z: this.spec.arena.z } : null)
+        ?? this.spec.spawns?.[0]
+        ?? { x: 0, y: 0, z: 0 };
+    const p = this.flagDeShelf(src);
+    return { x: p.x, y: this.flagStandTop(p.x, p.z), z: p.z };
   }
 
   // Spec y is advisory — flags live on the walkable surface, so touch
@@ -403,6 +444,10 @@ export class Room {
    *  with the map). */
   refreshFlagHomes(): void {
     if (!this.flags) return;
+    if (this.mode === 'rabbit') {
+      this.flags.retargetHomes({ alpha: this.rabbitFlagHome() });
+      return;
+    }
     const bases = this.spec.bases;
     if (!bases?.alpha || !bases?.bravo) return;
     const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
@@ -442,9 +487,12 @@ export class Room {
     if (scoredBy) this.score(scoredBy);
   }
 
-  /** Any player death drops a carried flag — called from the damage funnel. */
+  /** Any player death drops a carried flag — called from the damage
+   *  funnel. In rabbit the same hook doubles as the flag's birth: the
+   *  first corpse of the match is where the flag enters play. */
   flagCarrierDied(playerId: string): void {
     this.flags?.dropIfCarrier(playerId);
+    this.flags?.spawnAtCorpse(playerId);
   }
 
   /** The score/kill economy — creature drops, powerup grants, team/FFA
@@ -508,6 +556,10 @@ export class Room {
       moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
       moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
       dropFlagCarrier: (pid) => this.flags?.dropIfCarrier(pid),
+      // The rabbit dep's presence IS the mode check — CombatHandler gates
+      // all PvP damage on the carrier being one side of the pair.
+      rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
+      rabbitBottom: this.mode === 'rabbit' ? () => this.scoring.bottomFeeders() : undefined,
       drainEnergy: (pid, n) => this.moveSim.drainEnergy(pid, n),
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.

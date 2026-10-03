@@ -307,6 +307,15 @@ const SALTY_LINES = [
   'noted {t}',
 ];
 
+/** A human is machine-gunning the feed — VGQ is the canon answer but
+ *  kept rare upstream so it lands as annoyance, not a reflex. */
+const QUIET_LINES = [
+  'less typing more skiing {t}',
+  'shut it {t}',
+  'my ears {t}',
+  'we get it {t}',
+];
+
 /** Someone said the bot's name — acknowledgment, nothing more. */
 const MENTION_LINES = [
   'yo',
@@ -371,7 +380,7 @@ export type ChatterKind =
   | 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop'
   | 'cheer' | 'groan' | 'alert' | 'reply'
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
-  | 'revenge' | 'streakend';
+  | 'revenge' | 'streakend' | 'quiet';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -395,6 +404,7 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   fist: FIST_LINES,
   gg: GG_LINES,
   salty: SALTY_LINES,
+  quiet: QUIET_LINES,
   mention: MENTION_LINES,
   revenge: REVENGE_LINES,
   streakend: STREAK_END_LINES,
@@ -423,6 +433,7 @@ const VGS_FOR: Partial<Record<ChatterKind, [vgs: string, text: string][]>> = {
   fist:       [['VGTT', 'THAT was graceful!']],
   gg:         [['VGCG', 'Good game!']],
   salty:      [['VGTB', 'Is that the best you can do?']],
+  quiet:      [['VGQ', 'Quiet!'], ['VGQ', 'Quiet!']],
   mention:    [['VGY', 'Yes.'], ['VGRD', "I don't know."]],
   revenge:    [['VGTA', "Awww, that's too bad!"]],
   streakend:  [['VGTB', 'Is that the best you can do?'], ['VGTT', 'THAT was graceful!']],
@@ -460,7 +471,6 @@ const KILL_VGS: [vgs: string, text: string][] = [
 ];
 const DEATH_VGS: [vgs: string, text: string][] = [
   ['VGS', 'SHAZBOT!'],
-  ['VGTW', 'When will you learn?'],
   ['VGCN', 'Nice move!'],
   ['VGTB', 'Is that the best you can do?'],
 ];
@@ -473,6 +483,22 @@ const SPREE_VGS: [vgs: string, text: string][] = [
   ['VGTG', 'I am the greatest!'],
   ['VGCA', 'Awesome!'],
   ['VWOO', 'Woohoo!'],
+];
+/** Killing the SAME victim again while the last one still stings — the
+ *  dominance beat. VGTW is double-listed: it IS the canon line here. */
+const REPEAT_KILL_LINES = [
+  'again {v}?',
+  'you again {v}',
+  'learn anything {v}?',
+  'same move twice {v}',
+  'deja vu {v}',
+  'stop feeding {v}',
+  'groundhog day {v}',
+];
+const REPEAT_KILL_VGS: [vgs: string, text: string][] = [
+  ['VGTW', 'When will you learn?'],
+  ['VGTW', 'When will you learn?'],
+  ['VGTB', 'Is that the best you can do?'],
 ];
 const TAUNT_VGS_CHANCE = 0.45;
 
@@ -506,10 +532,22 @@ function tauntPick(pool: string[], chords: [vgs: string, text: string][], fill: 
   return { text: fill(pickLine(pool)) };
 }
 
+/** Frag history for the repeat-kill read — kills are recorded whether or
+ *  not the bot speaks, so a silent frag still counts toward the pattern. */
+const lastKillOn = new Map<string, number>();
+const REPEAT_KILL_MS = 90_000;
+
 /** One taunt line for a kill where `botId` fragged `other`, or null when
- *  the bot stays quiet (cooldown or dice). */
+ *  the bot stays quiet (cooldown or dice). The same victim inside 90s
+ *  flips the pool to dominance lines — VGTW lives there, not in deaths. */
 export function killTaunt(botId: string, victim: string): TauntLine | null {
-  return maybe(botId, () => tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
+  const key = `${botId}|${victim}`;
+  const repeat = tauntNow() - (lastKillOn.get(key) ?? Number.NEGATIVE_INFINITY) < REPEAT_KILL_MS;
+  lastKillOn.set(key, tauntNow());
+  if (lastKillOn.size > 256) lastKillOn.clear();
+  return maybe(botId, () => repeat
+    ? tauntPick(REPEAT_KILL_LINES, REPEAT_KILL_VGS, (l) => l.replace('{v}', victim))
+    : tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
 }
 
 /** One taunt line when `botId` was fragged by `other`. */
