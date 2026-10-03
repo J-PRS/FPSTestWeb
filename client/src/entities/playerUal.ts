@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, normBone } from './playerClips.js';
 
 const logger = new ChildLogger('PlayerUal');
 
@@ -42,7 +42,15 @@ const SPECS: UalSpec[] = [
     prefix: 'b', hip: 'bhips', exclude: /^(broot|bspineproxy|bhandprop|bjaw|btoe)/i,
     // Vexa's Base_Human* chain is semantically the kevdev skeleton — she
     // ships no locomotion of her own, so run/walk comes from this bake.
-    mapByVariant: { vexa: VEXA_KEVDEV_BONE_MAP } },
+    // Cybersoldier's rig maps the same way (UE-style bone names).
+    mapByVariant: { vexa: VEXA_KEVDEV_BONE_MAP, cybersoldier: CYBER_KEVDEV_BONE_MAP } },
+  // CyberSoldier ships zero clips of his own — kevdev covers locomotion
+  // only, so the mannequin's native UAL set (idle/jump/death/hit/shoot)
+  // retargets onto his rig to fill every non-locomotion state. Cyber-only
+  // spec: the mannequin already has these clips natively and other rigs
+  // don't share his bone names.
+  { url: '/assets/models/mannequin.glb', boneMap: CYBER_MANNEQUIN_BONE_MAP,
+    prefix: 'def', hip: 'defhips', variants: ['cybersoldier'] },
 ];
 
 // KevDev directional clips turn the hips toward travel (authored "run
@@ -197,6 +205,8 @@ function bakeSource(
     // Delta-map the torso, keep limbs absolute.
     const TORSO = variant === 'vexa'
       ? /^Base_Human(Pelvis|Spine1|Ribcage|Neck|Head)$/
+      : variant === 'cybersoldier'
+      ? /^(Hips|Spine|Chest|Neck|Head)$/
       : variant === 'mannequin'
       ? /^DEF-(hips|spine001|spine003|neck|head)$/
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;

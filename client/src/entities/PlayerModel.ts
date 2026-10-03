@@ -27,7 +27,7 @@ import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './player
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips } from './playerUal.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'vexa' | 'polyart';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -281,8 +281,9 @@ export class PlayerModel {
     // variants filter in playerUal skips the artifact-prone UAL2 pass).
     // Knight/scifisoldier/polyart are native-only (their own rigs carry
     // their own clip sets). Cybersoldier ships zero clips — it bakes the
-    // kevdev set through the same retarget the mannequin uses.
-    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'vexa') this.retargetUAL();
+    // mannequin's state set AND the kevdev directionals; vexa bakes
+    // kevdev locomotion under her native states.
+    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'vexa' || this.variant === 'cybersoldier') this.retargetUAL();
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -764,8 +765,8 @@ export class PlayerModel {
       if (clip) this.playAnimation(clip);
       return;
     }
-    // vexa has no anims table — she resolves through ANIM_NAMES
-    // against its baked kevdev clip set like the mannequin does.
+    // cybersoldier/vexa ship no anims table — they resolve through
+    // ANIM_NAMES against their baked clip sets like the mannequin does.
     if (state === 'walk' || state === 'run') {
       const dirClip = this.directionalClip(state);
       if (dirClip) {

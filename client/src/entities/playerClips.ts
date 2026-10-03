@@ -61,9 +61,13 @@ export const CLASS_BODY_SPEC: Record<string, {
   url: string; yaw: number; fitH: number;
   anims?: Partial<Record<AnimationState, string>>;
 }> = {
-  // All three rigs author facing -Z (the camera check showed backs at
+  // All these rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
   'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS },
+  // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
+  // native UAL states (idle/jump/death/hit/shoot) via CYBER_MANNEQUIN_
+  // BONE_MAP + kevdev 8-way locomotion via CYBER_KEVDEV_BONE_MAP.
+  'cybersoldier': { url: '/assets/models/class_cyber.glb', yaw: 0, fitH: 2.2 },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
   'vexa': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2 },
@@ -73,7 +77,7 @@ export const CLASS_BODY_SPEC: Record<string, {
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
 // the whole GLB (RemotePlayer.setClass).
 export const CLASS_BODY_VARIANT: Record<string, string> = {
-  light: 'scifisoldier', medium: 'vexa', heavy: 'polyart',
+  light: 'scifisoldier', medium: 'cybersoldier', heavy: 'polyart',
 };
 
 // Death clips per class body — corpse-clamp like 'Death'/'UAL_Death01'.
@@ -183,6 +187,26 @@ export const VEXA_KEVDEV_BONE_MAP: Record<string, string> = {
   Base_HumanRForearm1: 'forearmr', Base_HumanRPalm: 'handr',
   Base_HumanLThigh: 'thighl', Base_HumanLCalf: 'shinl',
   Base_HumanRThigh: 'thighr', Base_HumanRCalf: 'shinr',
+};
+
+// CyberSoldier rig → kevdev canonical names. His Hips/Spine/UpperArml-style
+// chain is semantically 1:1 with the B-* skeleton; fingers/feet stay
+// unmapped and inherit their parent's motion.
+export const CYBER_KEVDEV_BONE_MAP: Record<string, string> = {
+  Hips: 'hips', Spine: 'spine', Chest: 'chest', Neck: 'neck', Head: 'head',
+  ShoulderL: 'shoulderl', UpperArml: 'upperarml', LowerArmL: 'forearml', HandL: 'handl',
+  ShoulderR: 'shoulderr', UpperArmr: 'upperarmr', LowerArmR: 'forearmr', HandR: 'handr',
+  UpperLegL: 'thighl', LowerLegL: 'shinl', UpperLegR: 'thighr', LowerLegR: 'shinr',
+};
+
+// CyberSoldier rig → mannequin DEF-* names (minus the 'DEF-' prefix; the
+// bake prepends spec.prefix). Same canonical space as the kevdev map —
+// MANNEQUIN_KEVDEV_BONE_MAP inverted.
+export const CYBER_MANNEQUIN_BONE_MAP: Record<string, string> = {
+  Hips: 'hips', Spine: 'spine001', Chest: 'spine003', Neck: 'neck', Head: 'head',
+  ShoulderL: 'shoulderL', UpperArml: 'upper_armL', LowerArmL: 'forearmL', HandL: 'handL',
+  ShoulderR: 'shoulderR', UpperArmr: 'upper_armR', LowerArmR: 'forearmR', HandR: 'handR',
+  UpperLegL: 'thighL', LowerLegL: 'shinL', UpperLegR: 'thighR', LowerLegR: 'shinR',
 };
 
 // Shared radial-gradient flash texture — one per process, all remote
