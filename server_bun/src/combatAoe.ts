@@ -29,7 +29,7 @@ export interface AoeHost {
   solidIndex: ColliderIndex | null;
   hb(key: string, n?: number): void;
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
-  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
+  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void;
   deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
@@ -188,7 +188,7 @@ export class AoeClaims {
     if (victim?.isDead) {
       // Beam on a corpse: honest aim→death race, but the client's
       // predicted tic still needs clearing or its ledger warns phantom.
-      this.h.notifyDrop(playerId, 'AOE', 'target dead', victim.id, msg.weaponType);
+      this.h.notifyDrop(playerId, 'AOE', 'target dead', victim.id, msg.weaponType, msg.shotId);
     }
     if (victim && !victim.isDead && !this.h.friendly(playerId, victim.id)) this.h.chargeBank.bank(victim, this.h.chargeBank.withheldFor(n));
     // The victim sits in excludeTargetId — projectile semantics would skip

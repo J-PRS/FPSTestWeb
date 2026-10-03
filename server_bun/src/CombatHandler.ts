@@ -224,13 +224,13 @@ export class CombatHandler {
    *  rate. Distinct from reject(): no warn, no rej counter — these are
    *  the drops the health map already tallies as drop.*. */
   private lastDropNotify = new Map<string, number>();
-  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
+  notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     const key = `${playerId}:${kind}:${targetId ?? ''}`;
     const now = wallNow();
     if (now - (this.lastDropNotify.get(key) ?? 0) < 1000) return;
     this.lastDropNotify.set(key, now);
     const health = this.playerManager.getPlayer(playerId)?.health;
-    this.sendToPlayer(playerId, { type: 'claimDropped', reason: `${kind}: ${reason}`, targetId, weaponType, health });
+    this.sendToPlayer(playerId, { type: 'claimDropped', reason: `${kind}: ${reason}`, targetId, weaponType, health, shotId });
   }
 
   friendly(shooterId: string, targetId: string): boolean {
@@ -294,7 +294,7 @@ export class CombatHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) {
       this.hb('drop.deadShooter');
-      if (player) this.notifyDrop(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType);
+      if (player) this.notifyDrop(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return;
     }
     this.hb('shot');
@@ -352,7 +352,7 @@ export class CombatHandler {
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     if (this.playerManager.getPlayer(playerId)?.isDead) {
       this.hb('drop.deadShooter');
-      this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType);
+      this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return;
     }
     this.flushClaims(playerId);

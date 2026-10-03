@@ -542,7 +542,7 @@ export class NetworkManager {
       dropCensus.total++;
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId) this.confirmPendingHit(data.targetId);
+      if (data.targetId || data.shotId) this.confirmPendingHit(data.targetId ?? '', data.shotId);
       logger.warn(`claim dropped — predicted damage never applied`, {
         reason: data.reason, targetId: data.targetId,
         weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,

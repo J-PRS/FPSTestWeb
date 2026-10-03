@@ -1,3 +1,4 @@
+2026-10-03 - claimDropped carries shotId end-to-end too (dead-shooter/target-dropped claims); both sides tsc clean.
 2026-10-03 - NetworkManager: pendingHit clears match shotRejected by shotId exactly (no cross-clear when claims race the same target).
 2026-10-03 - netbot: purge pending spawn/shell claims on every gameState (reconnect/hop resync makes pre-state claims stale); 2x30s drop+loss soaks zero rejects.
 2026-10-03 - shotRejected carries shotId end-to-end; netbot drops refused spawn resends (reject = verdict, not loss) so rejects stop re-firing rate-window slots.

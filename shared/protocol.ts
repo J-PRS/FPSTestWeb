@@ -245,7 +245,10 @@ export type ServerMessage =
   // honest-lag discard that must still clear the shooter's predicted-hit
   // ledger. Kept distinct from shotRejected so reject tallies stay pure.
   | { type: 'claimDropped'; reason: string; targetId?: string; weaponType?: number;
-      health?: number }
+      health?: number;
+      /** Same role as on shotRejected — lets a resending client drop the
+       *  dead claim instead of re-firing it. */
+      shotId?: string }
   // Anti-cheat verdict surfaced to the flagged player instead of a kick —
   // renders on the conn-banner slot so it reads as a warning, not chat.
   | { type: 'serverWarn'; text: string }

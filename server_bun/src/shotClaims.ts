@@ -37,7 +37,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
       h.hb('drop.deadTarget');
       // The shooter's predicted impact still needs clearing — this is a
       // drop (honest lag), so notify without the warn/rej bookkeeping.
-      h.notifyDrop(playerId, 'Shot', 'target dead', targetId, msg.weaponType);
+      h.notifyDrop(playerId, 'Shot', 'target dead', targetId, msg.weaponType, msg.shotId);
       return;
     }
     // Heal beam claims name a FRIEND — handle before the friendly-fire
