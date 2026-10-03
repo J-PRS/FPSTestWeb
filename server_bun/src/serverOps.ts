@@ -69,6 +69,11 @@ export function getMetrics(g: GameServer) {
       leaves: o.leaves,
       msgsIn: o.msgsIn,
       msgsRejected: o.msgsRejected,
+      // Session lifecycle rollup — live census + per-edge totals +
+      // anomaly counters (illegal edges, rebegin-over-live, reclaim on
+      // non-live). Anomalies > 0 means lifecycle code disagreed with the
+      // state machine — page on it.
+      sessions: g.registry.metrics(),
       tiers: { ws: o.tierWs, wt: o.tierWt, rtc: o.tierRtc, other: o.tierOther },
       tickLagMs: {
         avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,

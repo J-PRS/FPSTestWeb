@@ -37,11 +37,17 @@ interface Session {
 export class SessionRegistry {
   private sessions = new Map<string, Session>();
   private genCounter = 0;
+  /** Since-boot per-edge totals + anomaly counts — the /metrics session
+   *  rollup. Transitions log individually already; these answer "how
+   *  much churn, which edges" for scrapes without log mining. */
+  private edgeTotals = new Map<string, number>();
+  private anomalies = { illegal: 0, rebegin: 0, seatWithoutBegin: 0, reclaimNonLive: 0 };
 
   private transition(playerId: string, s: Session, to: SessionState, reason: string): boolean {
     if (!EDGES[s.state].includes(to)) {
       // Loud, not fatal — the caller's flow continues but the rejected edge
       // names the site where lifecycle logic disagrees with the machine.
+      this.anomalies.illegal++;
       logger.error('illegal session transition', { playerId, from: s.state, to, reason, gen: s.gen, room: s.room });
       return false;
     }
@@ -49,7 +55,9 @@ export class SessionRegistry {
     const from = s.state;
     s.state = to;
     s.at = wallNow();
-    logger.info('session transition', { playerId, t: `${from}->${to}`, reason, gen: s.gen, room: s.room, wallAgeMs: wallAge });
+    const edge = `${from}->${to}`;
+    this.edgeTotals.set(edge, (this.edgeTotals.get(edge) ?? 0) + 1);
+    logger.info('session transition', { playerId, t: edge, reason, gen: s.gen, room: s.room, wallAgeMs: wallAge });
     if (to === 'reaped') this.sessions.delete(playerId);
     return true;
   }
@@ -61,6 +69,7 @@ export class SessionRegistry {
   begin(playerId: string, room: string): void {
     const prior = this.sessions.get(playerId);
     if (prior) {
+      this.anomalies.rebegin++;
       logger.warn('session re-begin over live state', { playerId, from: prior.state, gen: prior.gen, room: prior.room });
     }
     this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });
@@ -71,6 +80,7 @@ export class SessionRegistry {
   seat(playerId: string, spectator: boolean, reason: string): number {
     const s = this.sessions.get(playerId);
     if (!s) {
+      this.anomalies.seatWithoutBegin++;
       logger.error('seat without begin', { playerId });
       this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room: '' });
       return this.sessions.get(playerId)!.gen;
@@ -88,6 +98,7 @@ export class SessionRegistry {
     if (!s) return undefined;
     if (s.state === 'grace') this.transition(playerId, s, 'active', reason);
     else if (s.state !== 'active') {
+      this.anomalies.reclaimNonLive++;
       logger.error('reclaim on non-live session', { playerId, from: s.state, reason });
       return undefined;
     } else {
@@ -130,5 +141,12 @@ export class SessionRegistry {
     const c: Record<SessionState, number> = { connecting: 0, active: 0, spectating: 0, grace: 0, reaped: 0 };
     for (const s of this.sessions.values()) c[s.state]++;
     return c;
+  }
+
+  /** /metrics session rollup — live census + since-boot edge totals +
+   *  anomaly counters. Anomalies > 0 is a paging condition: they mean
+   *  lifecycle code disagreed with the state machine. */
+  metrics(): { census: Record<SessionState, number>; transitions: Record<string, number>; anomalies: { illegal: number; rebegin: number; seatWithoutBegin: number; reclaimNonLive: number } } {
+    return { census: this.census(), transitions: Object.fromEntries(this.edgeTotals), anomalies: { ...this.anomalies } };
   }
 }
