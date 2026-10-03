@@ -65,6 +65,7 @@ export class NetBot {
   private posTimer: ReturnType<typeof setInterval> | null = null;
   private claimTimer: ReturnType<typeof setInterval> | null = null;
   private hopTimer: ReturnType<typeof setInterval> | null = null;
+  private dropTimer: ReturnType<typeof setInterval> | null = null;
   /** Fire silence during the last stretch before a room hop — jittered
    *  claims sent right up to the switch land in the NEW room carrying
    *  the old position, and the server rightly rejects them as
@@ -73,7 +74,7 @@ export class NetBot {
   private holdFireUntil = 0;
   private rand: () => number;
 
-  constructor(private nc: NetClient, opts: { hopEveryMs?: number; seed?: () => number; loadout?: BotLoadout } = {}) {
+  constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout } = {}) {
     if (opts.loadout) this.loadout = opts.loadout;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
@@ -95,6 +96,18 @@ export class NetBot {
         }, 200);
       }, opts.hopEveryMs);
     }
+    // Periodic raw socket drop — the reclaim path's long-run churn. The
+    // reconnect rejoins under the same identity token, so a healthy
+    // server restores state instead of logging a fresh join every time.
+    if (opts.dropEveryMs) {
+      this.dropTimer = setInterval(() => {
+        void (async () => {
+          this.nc.ws?.close();
+          await new Promise((r) => setTimeout(r, 300));
+          await this.nc.connect();
+        })();
+      }, opts.dropEveryMs);
+    }
   }
 
   start(): void {
@@ -104,7 +117,7 @@ export class NetBot {
   }
 
   stop(): void {
-    for (const t of [this.thinkTimer, this.posTimer, this.claimTimer, this.hopTimer]) {
+    for (const t of [this.thinkTimer, this.posTimer, this.claimTimer, this.hopTimer, this.dropTimer]) {
       if (t) clearInterval(t);
     }
   }
@@ -247,7 +260,15 @@ export class NetBot {
 
   private think(): void {
     const nc = this.nc;
-    if (nc.self.isDead) return;
+    if (nc.self.isDead) {
+      // Un-acked spawns resend with their fire-time origin — after a
+      // respawn that origin is ~the corpse site, which the server reads
+      // as an implausible spawn, and every resend also eats a
+      // fire-window slot. Dead players own no shells; drop the queues.
+      if (this.spawns.size) this.spawns.clear();
+      if (this.shells.length) this.shells.length = 0;
+      return;
+    }
     // Getting shot is a priority interrupt — a bot that keeps walking
     // while hit reads as exactly the sheep the meter counts on 'ignore'.
     const pain = nc.lastAttacker;

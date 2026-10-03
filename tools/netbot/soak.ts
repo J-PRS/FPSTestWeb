@@ -25,6 +25,7 @@ const PING = arg('--ping', 60, num);
 const JITTER = arg('--jitter', 120, num);
 const LOSS = arg('--loss', 0.01, num);
 const HOP_EVERY = arg('--hop-every', 0, num);
+const DROP_EVERY = arg('--drop-every', 0, num);
 const ROOM = arg('--room', '', String);
 const MODE = arg('--mode', '', String);
 const STAGGER = arg('--stagger', 50, num);
@@ -40,7 +41,7 @@ const bots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < BOTS; i++) {
   const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
   const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), { ...(ROOM ? { room: ROOM, mode: MODE } : {}), armorClass: botClassForLoadout(lo) });
-  const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined, loadout: lo });
+  const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined, dropEveryMs: DROP_EVERY > 0 ? DROP_EVERY : undefined, loadout: lo });
   bots.push({ nc, bot });
 }
 

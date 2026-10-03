@@ -1,3 +1,4 @@
+2026-10-03 - netbot: --drop-every socket churn for soak; purge pending spawn resends/shells on death (stale corpse-origin claims rejected as implausible spawn + fire-rate fallout — server correct, client queue stale). 90s soak with drops+hops: zero rejects.
 2026-10-03 - bots: VGTW moved to a repeat-kill pool (same victim inside 90s = dominance beat); VGQ "Quiet!" answers chat spam — 4+ lines in 8s, rare ~12% roll, ONE random bot speaks.
 2026-10-03 - netbot: engagement-poll waits replace fixed windows (flake was timing, not the claim path); ws+rtc timeout 45s.
 2026-10-03 - bots: VGS chords on frag/death/spree taunts (~45%); 'shazbot' chat gets answered; killFeed.test pins setTauntClock (env seam left sharedNow at epoch-0, freezing the cooldown).
