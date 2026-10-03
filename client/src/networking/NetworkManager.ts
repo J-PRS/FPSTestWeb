@@ -118,7 +118,7 @@ export class NetworkManager {
   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
-  public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
+  public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   public onMatchNotice: ((text: string) => void) | null = null;
   /** Server anti-cheat flag — renders as a banner, not a disconnect. */
   public onServerWarn: ((text: string) => void) | null = null;
@@ -228,6 +228,9 @@ export class NetworkManager {
               type: 'join',
               playerId: this.localPlayerId,
               token: this.sessionToken ?? undefined,
+              // Offset cursor — a reclaim carries the last reliable ev we
+              // saw so the server replays only the missed frames.
+              resumeSeq: this.sessionToken ? this.lastEv : undefined,
               room: urlParams.room ?? undefined,
               mode: urlParams.mode ?? undefined,
               map: urlParams.map ?? undefined,
@@ -239,6 +242,10 @@ export class NetworkManager {
             this.connected = true;
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
+            // Queued reliable commands ride the live lane after the join
+            // (bounded 16 — a dead lane never earns an unbounded backlog).
+            for (const q of this.pendingCmds) this.send(q);
+            this.pendingCmds = [];
             resolve();
           },
           onDisconnect: (code, reason) => {
@@ -318,9 +325,32 @@ export class NetworkManager {
    *  "I shot but nothing happened" windows (RTC flap, probe racing). */
   private sendDrops = 0;
 
+  /** Commands worth surviving a dead lane — time-critical claims (shots,
+   *  hits, inputMove) are dropped as before; replaying a 30s-old hit is a
+   *  stale-claim bug, not a recovery. Bounded like Colyseus
+   *  maxEnqueuedMessages so a dead lane can't queue forever. */
+  private static readonly QUEUEABLE = new Set([
+    'chat', 'deploy', 'classUpdate', 'perkUpdate', 'respawn',
+    'switchRoom', 'resync', 'snapshotRequest',
+  ]);
+  private pendingCmds: ClientMessage[] = [];
+  private static readonly MAX_PENDING_CMDS = 16;
+
+  /** Last processed reliable `ev` seq — presented as resumeSeq on a
+   *  token-carrying join so the server replays only the missed frames. */
+  private lastEv = 0;
+
   /** Outbound JSON event — typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
-    if (!this.ws?.connected()) { this.noteDrop(msg.type); return; }
+    if (!this.ws?.connected()) {
+      if (this.onlineExpected && NetworkManager.QUEUEABLE.has(msg.type)) {
+        this.pendingCmds.push(msg);
+        if (this.pendingCmds.length > NetworkManager.MAX_PENDING_CMDS) this.pendingCmds.shift();
+        return;
+      }
+      this.noteDrop(msg.type);
+      return;
+    }
     const s = JSON.stringify(msg);
     this.txBytes += s.length;
     if (this.ws.send(s) === false) this.noteDrop(msg.type);
@@ -384,10 +414,21 @@ export class NetworkManager {
   private handleMessage(data: ServerMessage): void {
     this.lastRxAt = Date.now();
     this.rxBytes += JSON.stringify(data).length; // rx approximation — JSON events are sparse
-    // Capture the server-issued session token for future reconnects
-    if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
-      this.sessionToken = data.sessionToken;
-      localStorage.setItem('fps-session-token', data.sessionToken);
+    // Offset cursor: every reliable frame carries a room-scoped `ev`.
+    // Replays only ever carry seq > our watermark, so tracking the max
+    // doubles as the dup guard if a transport ever re-delivers.
+    const ev = (data as ServerMessage & { ev?: number }).ev;
+    if (ev !== undefined && ev > this.lastEv) this.lastEv = ev;
+    // Capture the server-issued session token for future reconnects.
+    // gameState also re-seeds the ev watermark: `ev` is room-scoped, so a
+    // room hop or fresh join must adopt THIS room's seq, not max() against
+    // a stale watermark from the old room.
+    if (data?.type === 'gameState') {
+      if (ev !== undefined) this.lastEv = ev;
+      if (typeof data.sessionToken === 'string') {
+        this.sessionToken = data.sessionToken;
+        localStorage.setItem('fps-session-token', data.sessionToken);
+      }
     }
     if (NetworkManager.HEALTH_EVENT_TYPES.has(data.type)) {
       if (this.recentHealthEvents.length >= 24) this.recentHealthEvents.shift();

@@ -35,6 +35,11 @@ export class WebSocketConnection {
   // otherwise reach the close handler below and schedule a reconnect,
   // resurrecting a session the caller wanted gone.
   private closedIntentionally = false;
+  // minUptime damper (Colyseus): a session that dies before it ever
+  // stabilized is a flap candidate — immediate retry just loops connect →
+  // die → connect. Uptime <5s gets a 4x backoff instead of the base tick.
+  private openedAt = 0;
+  private static readonly MIN_UPTIME_MS = 5000;
 
   constructor(config: ConnectionConfig) {
     this.config = {
@@ -64,6 +69,7 @@ export class WebSocketConnection {
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.hasLoggedConnectionError = false;
+        this.openedAt = Date.now();
         
         // Call onConnect FIRST - let the application send its initial messages
         if (this.config.onConnect) {
@@ -90,11 +96,18 @@ export class WebSocketConnection {
         // ?? not || — an explicit 0 means "never reconnect", not "five tries"
         if (this.reconnectAttempts < (this.config.maxReconnectAttempts ?? 5)) {
           this.reconnectAttempts++;
-          logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${this.config.reconnectInterval}ms`);
-          
+          const uptime = this.openedAt ? Date.now() - this.openedAt : 0;
+          const delay = uptime < WebSocketConnection.MIN_UPTIME_MS
+            ? (this.config.reconnectInterval ?? 1000) * 4
+            : this.config.reconnectInterval;
+          if (uptime < WebSocketConnection.MIN_UPTIME_MS) {
+            logger.warn(`session died at ${Math.round(uptime)}ms uptime — backoff ${delay}ms (flap damper)`);
+          } else {
+            logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
+          }
           this.reconnectTimer = setTimeout(() => {
             this.connect();
-          }, this.config.reconnectInterval);
+          }, delay);
         }
       });
 

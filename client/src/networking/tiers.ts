@@ -4,10 +4,9 @@
  *
  *   WebTransport (QUIC datagrams) → WebRTC datachannel → WebSocket
  *
- * All three tiers are live. Probes run in parallel so the wait is the
- * slowest single probe (~3s cap), not the sum; WS needs no probe at all.
- * ?net=wt|rtc|ws pins one tier for testing; absent the param the best
- * available wins automatically.
+ * All three tiers are live. WS is the default (universally compatible);
+ * ?net=auto runs the WT/RTC probes in parallel and takes the winner;
+ * ?net=wt|rtc|ws pins one tier for testing.
  */
 
 import type { ConnectionConfig } from './WebSocketConnection.js';
@@ -42,10 +41,7 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
 
 export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
   const want = urlParams.net;
-  if (want === 'ws') return new WebSocketConnection(config);
-  if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
-  if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
-
+  if (want !== 'auto') return pinnedTier(want, config);
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
   const probeRtc = now >= missUntil.rtc;
@@ -65,6 +61,17 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   if (probeRtc && !rtc) missUntil.rtc = Date.now() + MISS_CACHE_MS;
   if (wt) { wtC.arm(); void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
   if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
+  logger.info('tier: WebSocket');
+  return new WebSocketConnection(config);
+}
+
+/** ?net=ws|wt|rtc pins a single tier for testing. WS is the production
+ *  default (no param): universally compatible, and the races tier probes
+ *  manufacture are the session layer's bug source — ?net=auto is what
+ *  opts back into the parallel probe. */
+async function pinnedTier(want: string | null | undefined, config: ConnectionConfig): Promise<GameTransport> {
+  if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
+  if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
