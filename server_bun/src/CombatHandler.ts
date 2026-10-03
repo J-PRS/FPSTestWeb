@@ -247,6 +247,10 @@ export class CombatHandler {
 
   onPlayerDisconnected(playerId: string): void {
     this.respawner.cancel(playerId);
+    // Grace keeps the player entity alive, but the flag must not ride a
+    // ghost: a disconnecting carrier fumbles on the spot, same as a dead
+    // one. Rejoin or not, the objective stays in play.
+    this.deps.dropFlagCarrier?.(playerId);
     // Per-player fire-throttle state is per-connection like the room's
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
