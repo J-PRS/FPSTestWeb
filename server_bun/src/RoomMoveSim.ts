@@ -141,6 +141,19 @@ export class RoomMoveSim {
     if (sh) sh.resyncAt = Date.now();
   }
 
+  /** Perk swap after track() baked the modifiers — role rebalance pins
+   *  (capper featherjets) would otherwise stay cosmetic on the shadow. */
+  setPerk(playerId: string, perk?: string): void {
+    const sh = this.shadows.get(playerId);
+    if (!sh) return;
+    const mods = perkMods(perk);
+    sh.energyMax = mods.energyMax;
+    sh.energy = Math.min(sh.energy, ENERGY.max * sh.energyMax);
+    sh.jetDrain = mods.jetDrain;
+    sh.jetRegen = mods.jetRegen;
+    sh.energyRegen = mods.energyRegen;
+  }
+
   /** Armor-class ground speed multiplier (server bots / future loadouts). */
   setSpeedScale(playerId: string, scale: number): void {
     const sh = this.shadows.get(playerId);

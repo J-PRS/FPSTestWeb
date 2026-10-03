@@ -212,6 +212,14 @@ export class BotRoster {
           if (lo && this.brains.get(donor)?.skill.beltPull && getWeaponStats(lo.belt)?.forceMode !== 'pull') {
             this.loadouts.set(donor, { ...lo, belt: WeaponType.DiscPull });
           }
+          // Energy economy IS the capper's weapon — a 500m route's
+          // sustained jet burns matter far more than any burst or
+          // survival perk, so the slot pins featherjets. The shadow
+          // baked its perk mods at track time: setPerk re-applies.
+          if (donorP) {
+            donorP.perk = 'featherjets';
+            this.room.moveSim.setPerk(donor, 'featherjets');
+          }
         }
         // The medic role is the DEDICATED kit — a fighter carrying a
         // heal nade is a hybrid, the medic carries the whole archetype.
