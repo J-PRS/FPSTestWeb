@@ -271,6 +271,16 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           }
           const cp = clientPlayers.get(sp.id);
           if (cp && Math.abs(cp.health - sp.health) > 0.5) networkManager.healRemoteHealth(sp.id, sp.health);
+          // Liveness heal — kill/respawn events muted by a resync gap or
+          // dropped elsewhere leave isDead divergent forever (health heals
+          // above, the flag itself never did). Server owns liveness; mirror
+          // the flip into the entity so visuals follow the roster.
+          if (cp && cp.isDead !== sp.isDead) {
+            const flip = networkManager.healRemoteLife(sp.id, sp.isDead, sp.health, sp.position);
+            const rp = ctx.remotePlayers.get(sp.id);
+            if (flip === 'revived') rp?.respawn(sp.position);
+            else if (flip === 'killed') rp?.playDeath();
+          }
         }
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);

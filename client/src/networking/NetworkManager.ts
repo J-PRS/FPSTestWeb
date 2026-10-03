@@ -956,6 +956,24 @@ export class NetworkManager {
     this.upsertRemotePlayer(playerId, { health });
   }
 
+  /** Desync-checker heal for LIVENESS: a killed/respawned event lost on
+   *  the wire leaves the remote's isDead permanently wrong (roster health
+   *  heals but the corpse flag is event-owned). The snapshot diff is the
+   *  safety net — server isDead wins outright; the caller mirrors it into
+   *  the RemotePlayer entity (respawn/playDeath visuals). Returns the
+   *  flip direction so the caller knows which visual to run. */
+  healRemoteLife(playerId: string, isDead: boolean, health: number, position?: { x: number; y: number; z: number }): 'revived' | 'killed' | null {
+    const cur = this.players.get(playerId);
+    if (!cur || cur.isDead === isDead) return null;
+    // Server position is truth either way: a revive anchors at the
+    // respawn point, a kill pins the corpse where the server saw it die.
+    this.upsertRemotePlayer(playerId, {
+      isDead, health,
+      ...(position ? { position } : {}),
+    });
+    return isDead ? 'killed' : 'revived';
+  }
+
   /**
    * Send shot event to server
    */
