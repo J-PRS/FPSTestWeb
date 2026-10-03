@@ -1,3 +1,4 @@
+2026-10-03 - netbot.test: dropped-socket rejoin test runs 4-bot dm (FFA) - two CTF hunters could sit corners >20s; FFA engages near-instantly. 3x runs all pass in ~5s.
 2026-10-03 - viewmodel: procedural (unbaked) is the default weapon look; baked GLBs only load behind ?bake (gunlab A/B). ?nobake still honored.
 2026-10-03 - netbot: claimDropped purges pending spawn/shell claims by shotId (same verdict-drop rule as shotRejected); 30s soak zero rejects.
 2026-10-03 - claimDropped carries shotId end-to-end too (dead-shooter/target-dropped claims); both sides tsc clean.

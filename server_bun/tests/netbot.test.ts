@@ -226,7 +226,11 @@ describe('netbot — real clients over real sockets', () => {
 
   it('a dropped socket rejoins cleanly — post-reconnect claims resolve', async () => {
     env = bootServer();
-    await spawn(2, { pingMs: 20, jitterMs: 60, lossRate: 0 });
+    // 'dm' + four bots — two CTF bots can sit corners hunting different
+    // flags and blow the 20s engagement window; four FFA hunters engage
+    // near-instantly, and the property under test is rejoin, not
+    // marksmanship.
+    await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { mode: 'dm' });
     await sleep(3500);
 
     const victim = bots[0]!;
