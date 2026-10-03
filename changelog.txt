@@ -1,3 +1,4 @@
+2026-10-01 - pickup SFX: gem chime + tag clink voices; server economy collects no longer silent
 2026-10-01 - VFX P4-lite: Alt+Q vfx diag now carries drivers + litAudit — one census row for pools/drivers/ribbons/orphans
 2026-10-01 - VFX P2: generational slots — TrailBatch owns claim/release/owns with a gen word; stale ribbon handles refused at push/update/clear/release
 2026-10-01 - VFX P1: TrailDriver — runtime-owned emit/jump decisions in updateVfx; caller teleport()/clear() deleted from Projectile + deployRockets

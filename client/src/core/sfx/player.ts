@@ -129,6 +129,16 @@ export function powerup(kind: string): void {
       osc('sawtooth', 320, 640, 0.15, 0.2, g);
       noise(0.2, 0.15, g, 'lowpass', 900, 300);
       break;
+    case 'gem':
+      // Crystal chime — the nugget economy's coin-drop.
+      osc('sine', 1040, 1560, 0.09, 0.25, g);
+      osc('sine', 1560, 2080, 0.14, 0.15, g);
+      break;
+    case 'tag':
+      // Metallic clink — dog-tag confirm, drier than the gem chime.
+      noise(0.05, 0.2, g, 'bandpass', 4200, 2600, 3);
+      osc('square', 880, 660, 0.07, 0.12, g);
+      break;
     default:
       osc('sine', 880, 880, 0.07, 0.15, g);
   }
@@ -142,6 +152,8 @@ function powerupTail(kind: string, g: GainNode): void {
     case 'armor': noise(0.1, 0.12, g, 'bandpass', 3000, 2000, 2); break;
     case 'regen': osc('sine', 500, 1500, 0.3, 0.1, g); break;
     case 'dd': osc('sawtooth', 180, 100, 0.25, 0.18, g); break;
+    case 'gem': osc('sine', 1560, 2080, 0.12, 0.1, g); break;
+    case 'tag': noise(0.05, 0.1, g, 'bandpass', 4200, 2600, 3); break;
   }
 }
 

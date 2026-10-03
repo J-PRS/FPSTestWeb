@@ -54,10 +54,12 @@ export function wirePickups(ctx: NetCtx): void {
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
       }
       if (e?.kind === 'tag') {
+        sfxPlayer.powerup('tag');
         chat.add(null, 'tag confirmed +1');
       } else if (e?.kind === 'gem') {
         // Server-verified collect — grant the same reward local nuggets
         // give offline (heal + jet boost), since MP drops no local loot.
+        sfxPlayer.powerup('gem');
         const p = deps.lazyPlayer();
         p.heal(0.2);
         p.grantJetBoost();
