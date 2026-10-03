@@ -79,7 +79,7 @@ export function warpThrow(): void {
   if (!c) return;
   const bus = audio.sfxBus; if (!bus) return;
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.45)) return;
+  if (!play(g, 0.45, undefined, 1)) return;
   if (layer(g, [['shot_energy', 0.7, 1.5], ['hg_tick', 0.4, 2.2, undefined, 0.06]])) return;
   osc('sawtooth', 700, 2600, 0.14, 0.35, g);
 }

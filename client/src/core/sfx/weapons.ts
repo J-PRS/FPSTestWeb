@@ -11,7 +11,7 @@ export function shoot(weaponType: number): void {
   const c = ctx();
   if (!bus || !c) return;
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.3)) return;
+  if (!play(g, 0.3, undefined, 1)) return;
   shootInto(g, weaponType);
 }
 

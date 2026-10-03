@@ -111,7 +111,7 @@ export function explosionClose(big: boolean): void {
   const bus = audio.sfxBus, c = ctx();
   if (!bus || !c) return;
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.8)) return;
+  if (!play(g, 0.8, undefined, 1)) return;
   if (explosionSample(g, big)) return;
   noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
   osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);

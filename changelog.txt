@@ -1,3 +1,4 @@
+2026-10-01 - sfx voice pool is now priority-ranked FMOD-style: UI stingers (killConfirm, flagCue, hitMarker) and self sounds steal world chatter on overflow instead of being silently dropped mid-firefight
 2026-10-01 - fire-rate gate is a client-clock violation counter, not an arrival window; one fast pair (loadout-reset refire, paused-tab bunch, out-of-order stamps) admits while sustained sub-cadence macros still reject
 2026-10-01 - remote entity liveness mirrors roster every frame; a lost kill/respawn event no longer freezes _isDead (silent corpse/ghost desync)
 2026-10-04 - "Animation not found: Idle" kill: two PlayerModel call sites hardcoded the bare clip name Idle — only knight ships one, so every cybersoldier/scifisoldier/polyart/robot default-warned at load and on post-bake re-resolve. Both now go through clipCandidates(state) like every other state change

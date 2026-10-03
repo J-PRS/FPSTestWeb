@@ -48,7 +48,12 @@ export class AudioEngine {
    *  room"), while ui/VGS bypass it so menu feedback stays crisp. */
   private duckLp!: BiquadFilterNode;
   private duckGain!: GainNode;
-  private voices = 0;
+  /** Live one-shots, FMOD-channel style: on overflow the cap steals the
+   *  oldest strictly-lower-priority voice instead of refusing the new
+   *  sound — a firefight's world chatter must never silence a flag
+   *  stinger or kill confirm. Prio tiers: 0 = world/positional,
+   *  1 = self (own weapon, hurt, land), 2 = UI/stinger. */
+  private voiceTab: { prio: number; at: number; node: AudioNode; chain?: GainNode }[] = [];
   private noiseBuf: AudioBuffer | null = null;
   private buffers = new Map<string, AudioBuffer>();
   private samplesRequested = false;
@@ -167,15 +172,31 @@ export class AudioEngine {
 
   /** Offline-dump hook: live code releases voices via timers, which would
    *  starve a batch of back-to-back renders — the dump resets instead. */
-  resetVoices(): void { this.voices = 0; }
+  resetVoices(): void { this.voiceTab = []; }
 
-  /** Voice accounting for one-shots; returns false when the cap is hit. */
-  takeVoice(): boolean {
-    if (this.voices >= MAX_VOICES) return false;
-    this.voices++;
+  /** Admit a voice; on a full pool, evict the oldest strictly-lower-
+   *  priority one (silenced, not just uncounted). A full pool of
+   *  same-or-higher prio is the only refusal — the stinger tier
+   *  effectively can't starve. */
+  takeVoice(prio: number, node: AudioNode, chain?: GainNode): boolean {
+    if (this.voiceTab.length >= MAX_VOICES) {
+      let victim = -1;
+      for (let i = 0; i < this.voiceTab.length; i++) {
+        const v = this.voiceTab[i]!;
+        if (v.prio < prio && (victim < 0 || v.at < this.voiceTab[victim]!.at)) victim = i;
+      }
+      if (victim < 0) return false;
+      const [v] = this.voiceTab.splice(victim, 1);
+      try { v!.node.disconnect(); } catch { /* already detached */ }
+      if (v!.chain) this.freeInput(v!.chain);
+    }
+    this.voiceTab.push({ prio, at: Date.now(), node, chain });
     return true;
   }
-  releaseVoice(): void { this.voices = Math.max(0, this.voices - 1); }
+  releaseVoice(node: AudioNode): void {
+    const i = this.voiceTab.findIndex(v => v.node === node);
+    if (i >= 0) this.voiceTab.splice(i, 1);
+  }
 
   /** Shared white-noise buffer for SFX synth. */
   get noise(): AudioBuffer | null { return this.noiseBuf; }

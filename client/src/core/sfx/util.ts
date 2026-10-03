@@ -6,12 +6,14 @@ import { audio } from '../audio.js';
 
 export function ctx(): BaseAudioContext | null { return audio.context; }
 
-/** One-shot through a bus node; returns false when voice-capped. */
-export function play(node: AudioNode, dur: number, chain?: GainNode): boolean {
+/** One-shot through a bus node; returns false when voice-capped.
+ *  prio: 0 = world, 1 = self, 2 = UI/stinger — the pool steals the
+ *  oldest strictly-lower-priority voice on overflow. */
+export function play(node: AudioNode, dur: number, chain?: GainNode, prio = 0): boolean {
   const c = ctx();
-  if (!c || !audio.takeVoice()) return false;
+  if (!c || !audio.takeVoice(prio, node, chain)) return false;
   setTimeout(() => {
-    audio.releaseVoice();
+    audio.releaseVoice(node);
     node.disconnect();
     // Positional calls pass their worldInput node as `chain` — without
     // freeing it the lp/pan tail stays attached to the world bus forever
