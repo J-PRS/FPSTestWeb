@@ -16,11 +16,10 @@ import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deploy
 
 export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
-import { DEPLOY_COST } from '../../shared/weapons.ts';
+import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { simNow } from './simClock.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
-const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120, nugget: 0, beacon: 300 };
 // Thrown nugget mints a pickup that can't be grabbed for a beat — the
 // gem needs to leave the thrower's grab radius before anyone banks it.
 const NUGGET_ARM_S = 0.2;
@@ -105,13 +104,13 @@ export class RoomDeployables {
     const k = kind as DeployKind;
     // Pack gear costs belt charges — the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
-    if (player.beltCharges < DEPLOY_COST) {
+    if (player.beltCharges < DEPLOY_ITEMS[k].cost) {
       logger.debug('Deploy blocked: dry belt', { owner: playerId, kind: k });
       return 'drybelt';
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return 'toofar';
-    player.beltCharges -= DEPLOY_COST;
+    player.beltCharges -= DEPLOY_ITEMS[k].cost;
     // Nugget: no planted item — the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
     // grab is first-come — a fast enemy can steal the thrower's change.
@@ -130,7 +129,7 @@ export class RoomDeployables {
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k], armor: 0 });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0 });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team });

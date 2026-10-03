@@ -37,23 +37,13 @@ import type { Targetable } from '../entities/balls.js';
 import type { TargetCandidate } from './targeting.js';
 
 export type { DeployKind } from '../../../shared/deployables.js';
-import { DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
-// Caps come from the shared table — the server authority and this UI once
-// diverged (drone max 1 here vs 2 there).
-export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
-  { kind: 'turret',  label: 'SENTRY',   max: DEPLOY_MAX.turret },
-  { kind: 'mine',    label: 'MINE',     max: DEPLOY_MAX.mine },
-  { kind: 'station', label: 'PAD',      max: DEPLOY_MAX.station },
-  { kind: 'drone',   label: 'DRONE',    max: DEPLOY_MAX.drone },
-  { kind: 'shield',  label: 'BARRIER',  max: DEPLOY_MAX.shield },
-  // Costs 2 nuggets, lobs a gem that banks 1 back for whoever grabs it
-  // first — the joke item that's secretly a charge-transfer tool.
-  { kind: 'nugget',  label: 'NUGGET',   max: DEPLOY_MAX.nugget },
-  // T2 targeting beacon — plants a sky-marked emitter and the HUD paints
-  // the solved lob arc onto it so your mortar lands exactly there.
-  { kind: 'beacon',  label: 'BEACON',   max: DEPLOY_MAX.beacon },
-];
+// Derived from the shared belt registry — caps/labels can no longer diverge
+// from the server authority (drone max 1 vs 2 did once).
+export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] =
+  DEPLOY_KINDS.map((kind) => ({ kind, label: DEPLOY_ITEMS[kind].label.toUpperCase(), max: DEPLOY_MAX[kind] }));
 
 // Sentry mini-rockets live in deployRockets.ts — a real flying body with
 // mild homing, smoke trail, and a blast on contact.

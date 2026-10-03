@@ -12,6 +12,7 @@
  */
 
 import { botRand } from './botRand.ts';
+import { sharedEnv } from './env.ts';
 import type { ChatterKind } from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotLines } from './botLines.ts';
@@ -493,8 +494,7 @@ export class BotBrain {
     dest = d2;
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
-    // Server-only debug hook — `process` doesn't exist in the browser.
-    const traceId = typeof process !== 'undefined' ? process.env?.FPS_TRACE : undefined;
+    const traceId = sharedEnv.traceId;
     if (ctx.id && traceId && ctx.id.includes(traceId)
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;

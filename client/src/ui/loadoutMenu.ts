@@ -8,6 +8,8 @@ import { MAX_HEALTH } from '../core/config.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 import type { DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_KINDS } from '../../../shared/deployables.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 export interface LoadoutDeps {
   lazyPlayer: () => Player;
@@ -48,7 +50,7 @@ interface BarUi {
 
 type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[], cols2?: boolean) => Drop;
 
-export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
+export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; closeDrops(): void } {
   const loadoutBar = document.getElementById('loadout-bar');
 
   function mkDrop(
@@ -159,7 +161,14 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
     if (ui.packLabel) ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;
   }
 
-  return { refreshLoadout };
+  // Menu close must not strand an open dropup — resume, then next ESC
+  // shows a list floating over a face that isn't asking for it.
+  function closeDrops(): void {
+    openDrop?.classList.remove('open');
+    openDrop = null;
+  }
+
+  return { refreshLoadout, closeDrops };
 }
 
 function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanElement } {
@@ -313,13 +322,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pack = mkCellDom(kitCells);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    [{ v: 'turret', label: 'Sentry' },
-     { v: 'mine', label: 'Mine' },
-     { v: 'station', label: 'Pad' },
-     { v: 'drone', label: 'Drone' },
-     { v: 'shield', label: 'Barrier' },
-     { v: 'nugget', label: 'Nugget' },
-     { v: 'beacon', label: 'Beacon' }],
+    DEPLOY_KINDS.map((kind) => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
     (v) => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.appendChild(ui.packDrop.el);

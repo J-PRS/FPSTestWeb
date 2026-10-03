@@ -4,6 +4,8 @@
  *  `process` isn't declared in browser-land, so declare + guard it. */
 declare const process: { env: Record<string, string | undefined> } | undefined;
 const ENV = typeof process === 'undefined' ? undefined : process.env;
+import { setSharedEnv, setSharedNow } from '../../shared/env.ts';
+import { wallNow } from './wallClock.ts';
 function envNum(name: string, fallback: number): number {
   const v = ENV?.[name];
   if (v === undefined || v === '') return fallback;
@@ -136,3 +138,9 @@ export const CONFIG = {
   playerIdMinLength: 1,
   playerIdMaxLength: 50,
 } as const;
+
+// Seed the shared/ env seam once — shared modules read sharedEnv/sharedNow,
+// never process.env or Date.now directly (the client compiles this file
+// too; in a browser these stay the pure defaults or bind Date.now fine).
+setSharedEnv({ traceId: ENV?.FPS_TRACE, noMuzzle: ENV?.FPS_NOMUZZLE !== undefined });
+setSharedNow(wallNow);

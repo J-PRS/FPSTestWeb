@@ -10,6 +10,7 @@
  */
 
 import { botRand } from './botRand.ts';
+import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
 import { rollSkill, type BotSkill } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
@@ -353,7 +354,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // meters decide that: a bump farther downrange just costs a miss —
   // and ballistic arcs clear lips a straight full-length ray would
   // flag, so probing the whole ray strangled fire volume for nothing.
-  if (ctx.weaponSpeed?.(d) && !process.env.FPS_NOMUZZLE) {
+  if (ctx.weaponSpeed?.(d) && !sharedEnv.noMuzzle) {
     const muzzle = { x: pos.x, y: pos.y + 1.4, z: pos.z };
     // Reach = splash radius + a stride's margin, not a constant: a lip
     // that pops the shell outside its own blast can't self-frag, and a

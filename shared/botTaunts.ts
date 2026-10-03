@@ -3,6 +3,7 @@
 // chance keep it a flavor line, not a spam channel.
 
 import { botRand } from './botRand.ts';
+import { sharedNow } from './env.ts';
 
 const KILL_LINES = [
   'wp',
@@ -498,7 +499,7 @@ export function chatKindFor(text: string): ChatterKind | null {
 /** Chatter cooldown is wall-clock by nature (a pause between lines, not a
  *  sim step) — injectable so scenario tests can pin time rather than
  *  flake on real elapsed ms. */
-let tauntNow: () => number = Date.now;
+let tauntNow: () => number = sharedNow;
 export function setTauntClock(now: () => number): void { tauntNow = now; }
 
 // Line production is lazy: a suppressed event draws no RNG and touches
