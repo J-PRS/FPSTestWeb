@@ -28,8 +28,18 @@ export class WebSocketConnection {
   private reconnectAttempts: number = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected: boolean = false;
-  private messageQueue: (string | Uint8Array)[] = [];
+  private messageQueue: { data: string | Uint8Array; type?: string; at: number }[] = [];
   private readonly MAX_QUEUE_SIZE = 100;
+  // Queue-staleness policy (mirrors the server journal's volatile split):
+  // KEEP_NEWEST types only ever flush the freshest entry — a reconnect
+  // shouldn't replay 100 stale positions. KEEP_ALWAYS types are durable
+  // intents that survive any gap (a chat line, a loadout pick). Everything
+  // else — claims and one-shot intents like deploy/shot/skillUse — is only
+  // worth sending inside STALE_MS; older than that it references a sim
+  // moment that no longer exists and the server would reject it anyway.
+  private static readonly KEEP_NEWEST = new Set(['inputMove', 'position', 'teleport', 'jump', 'jetpack', 'shotFired']);
+  private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'switchRoom', 'respawn', 'snapshotRequest', 'resync', 'pong']);
+  private static readonly STALE_MS = 3000;
   private hasLoggedConnectionError: boolean = false;
   // 'close' fires asynchronously — a deliberate disconnect() would
   // otherwise reach the close handler below and schedule a reconnect,
@@ -76,10 +86,16 @@ export class WebSocketConnection {
           this.config.onConnect();
         }
         
-        // Then send any queued messages
+        // Then flush the queue, dropping entries whose moment is gone.
+        const now = Date.now();
+        let stale = 0;
         while (this.messageQueue.length > 0) {
-          this.send(this.messageQueue.shift()!);
+          const e = this.messageQueue.shift()!;
+          if (e.type !== undefined && !WebSocketConnection.KEEP_ALWAYS.has(e.type)
+              && now - e.at > WebSocketConnection.STALE_MS) { stale++; continue; }
+          this.send(e.data);
         }
+        if (stale > 0) logger.info(`reconnect flush dropped ${stale} stale queued message(s)`);
       });
 
       this.ws.addEventListener('close', (event) => {
@@ -208,11 +224,17 @@ export class WebSocketConnection {
       // Binary frames are volatile state (position) — only the newest one
       // is worth flushing after reconnect; drop queued predecessors instead
       // of replaying 100 stale positions into the live socket.
+      let type: string | undefined;
+      if (typeof data === 'string') {
+        try { type = (JSON.parse(data) as { type?: string }).type; } catch { /* unparseable: queue anyway */ }
+      }
       if (data instanceof Uint8Array) {
-        this.messageQueue = this.messageQueue.filter(m => !(m instanceof Uint8Array));
+        this.messageQueue = this.messageQueue.filter(m => !(m.data instanceof Uint8Array));
+      } else if (type !== undefined && WebSocketConnection.KEEP_NEWEST.has(type)) {
+        this.messageQueue = this.messageQueue.filter(m => m.type !== type);
       }
       if (this.messageQueue.length < this.MAX_QUEUE_SIZE) {
-        this.messageQueue.push(data);
+        this.messageQueue.push({ data, type, at: Date.now() });
       }
       return false;
     }
