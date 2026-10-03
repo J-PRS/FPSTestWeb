@@ -74,12 +74,13 @@ function buildBody(kind: PickupKind, spec: PickupSpec): THREE.Group {
   const accentMat = mat(spec.accent, spec.accent, 0.4);
   switch (kind) {
     case 'heal': {
-      // Medkit — white case + red cross, universally readable.
+      // Medkit — white case + green cross (red-cross-on-white is a
+      // protected ICRC emblem, games get told off for using it).
       addMesh(body, geo('healBox', () => new THREE.BoxGeometry(0.6, 0.45, 0.4)), mat(0xe8e8e8));
-      const cross = mat(0xdd2222, 0xdd2222);
+      const cross = mat(0x22aa44, 0x22aa44);
       addMesh(body, geo('crossV', () => new THREE.BoxGeometry(0.12, 0.34, 0.06)), cross, 0, 0, 0.2);
       addMesh(body, geo('crossH', () => new THREE.BoxGeometry(0.34, 0.12, 0.06)), cross, 0, 0, 0.2);
-      addMesh(body, geo('healCap', () => new THREE.BoxGeometry(0.64, 0.1, 0.44)), mat(0xcc4444), 0, 0.24, 0);
+      addMesh(body, geo('healCap', () => new THREE.BoxGeometry(0.64, 0.1, 0.44)), mat(0x22aa44), 0, 0.24, 0);
       break;
     }
     case 'armor': {
