@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, normBone } from './playerClips.js';
 
 const logger = new ChildLogger('PlayerUal');
 
 /** One source animation pack: the rig's own bone map, its DEF-/UE-style
  *  name prefix, and which bone is the hip for translation scaling. */
-interface UalSpec { url: string; boneMap: Record<string, string>; mannMap?: Record<string, string>; prefix: string; hip: string; exclude?: RegExp; variants?: string[] }
+interface UalSpec { url: string; boneMap: Record<string, string>; mannMap?: Record<string, string>; mapByVariant?: Record<string, Record<string, string>>; prefix: string; hip: string; exclude?: RegExp; variants?: string[] }
 interface UalSource {
   spec: UalSpec; src: THREE.Object3D; srcBones: THREE.Object3D[];
   srcByNorm: Map<string, THREE.Object3D>; srcHip: THREE.Object3D;
@@ -39,7 +39,10 @@ const SPECS: UalSpec[] = [
   // root/proxy/finger bones are collected but unmapped, so they cost a
   // traverse pass and nothing else.
   { url: '/assets/models/kevdev-anims.glb', boneMap: KEVDEV_BONE_MAP, mannMap: MANNEQUIN_KEVDEV_BONE_MAP,
-    prefix: 'b', hip: 'bhips', exclude: /^(broot|bspineproxy|bhandprop|bjaw|btoe)/i },
+    prefix: 'b', hip: 'bhips', exclude: /^(broot|bspineproxy|bhandprop|bjaw|btoe)/i,
+    // CyberSoldier's rig is semantically the kevdev chain under Unity
+    // casing — it ships zero clips of its own, so it lives on this bake.
+    mapByVariant: { cybersoldier: CYBER_KEVDEV_BONE_MAP } },
 ];
 
 // KevDev directional clips turn the hips toward travel (authored "run
@@ -164,7 +167,8 @@ function bakeSource(
   // names: target bone name → source bone name. The mannequin maps its
   // DEF-* bones onto the UE-style UAL2 rig instead of the robot's
   // Rigify-side table.
-  const boneMap = variant === 'mannequin' ? (spec.mannMap ?? MANNEQUIN_UAL2_BONE_MAP) : spec.boneMap;
+  const boneMap = spec.mapByVariant?.[variant]
+    ?? (variant === 'mannequin' ? (spec.mannMap ?? MANNEQUIN_UAL2_BONE_MAP) : spec.boneMap);
   const names: Record<string, string> = {};
   for (const b of target.skeleton.bones) {
     const want = boneMap[b.name];
@@ -191,7 +195,9 @@ function bakeSource(
     // mannequin's spine rest pose leans differently than the chibi robot's,
     // and absolute copy bakes a constant forward hunch into every clip.
     // Delta-map the torso, keep limbs absolute.
-    const TORSO = variant === 'mannequin'
+    const TORSO = variant === 'cybersoldier'
+      ? /^(Hips|Spine|Chest|Neck|Head)$/
+      : variant === 'mannequin'
       ? /^DEF-(hips|spine001|spine003|neck|head)$/
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
     if (!TORSO.test(tName)) continue;

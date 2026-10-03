@@ -21,10 +21,13 @@ const _footPQ = new THREE.Quaternion();
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
+  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips } from './playerUal.js';
+
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'polyart';
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -118,6 +121,9 @@ export class PlayerModel {
   // swung the aimed gun side to side. Position tracks (hip bob) untouched.
   static readonly SWAY_BONES = new Set([
     'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+    // Class-body rigs (CyberSoldier / Yurowm Rig* / SciFiWarrior).
+    'hips', 'spine', 'chest', 'neck', 'head',
+    'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
   ]);
   // Hips-and-up rotation chain locked toward bind pose while the model
   // is firing — hip POSITION tracks still animate (stride bob survives,
@@ -126,6 +132,8 @@ export class PlayerModel {
   // the arm chain's parent; this kills it outright while shots go out.
   private static readonly STEADY_BONES = new Set([
     'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+    'hips', 'spine', 'chest', 'neck', 'head',
+    'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
   ]);
   private steadyBones: { bone: THREE.Object3D; bind: THREE.Quaternion }[] = [];
   // 0→1 ramp while recently fired — drives the spine lock.
@@ -152,10 +160,13 @@ export class PlayerModel {
   /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
    *  'mannequin' = the UAL's own rig — clips play natively, no retarget.
    *  'knight' = Quaternius Knight_Male — the heavy-class silhouette;
-   *  native clips, armored read at distance. */
-  readonly variant: 'robot' | 'mannequin' | 'knight';
+   *  native clips, armored read at distance.
+   *  'scifisoldier'/'cybersoldier'/'polyart' = the UAS class bodies —
+   *  each bakes its own clip set on its own rig (cybersoldier ships
+   *  none, it stands static until a clip'd medium replaces it). */
+  readonly variant: PlayerModelVariant;
 
-  constructor(scene: THREE.Scene, variant?: 'robot' | 'mannequin' | 'knight') {
+  constructor(scene: THREE.Scene, variant?: PlayerModelVariant) {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
   }
@@ -164,12 +175,14 @@ export class PlayerModel {
     const loader = new GLTFLoader();
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
+    const classBody = CLASS_BODY_SPEC[this.variant];
 
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const attempt = () => {
       loader.load(
-        knight ? '/assets/models/knight.glb'
+        classBody ? classBody.url
+          : knight ? '/assets/models/knight.glb'
           : mann ? '/assets/models/mannequin_opt.glb'
           : '/assets/models/RobotExpressive.glb',
         (gltf) => {
@@ -223,9 +236,10 @@ export class PlayerModel {
     // Hitbox: radius 0.8 (width 1.6), height 2.0
     // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
     // RobotExpressive.glb origin is at feet (y=0), not center
-    this.model.scale.setScalar(mann || knight ? 2.0 / size.y : 0.5); // mannequin+knight: fit the 2m capsule — robot stays at its calibrated 0.5
-    this.model.rotation.y = Math.PI; // Face forward
-    this.modelScale = mann || knight ? 2.0 / size.y : 0.5;
+    const classBody = CLASS_BODY_SPEC[this.variant];
+    this.model.scale.setScalar(classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5); // class bodies fit their capsule eye height — the body IS the class silhouette
+    this.model.rotation.y = classBody ? classBody.yaw : Math.PI; // Face forward
+    this.modelScale = classBody ? classBody.fitH / size.y : mann || knight ? 2.0 / size.y : 0.5;
 
     // Procedural gun in the right hand — follows every animation.
     if (this.handBone) this.attachGun(mann);
@@ -258,8 +272,10 @@ export class PlayerModel {
     // Robot bakes the full UAL set; the mannequin bakes the KevDev
     // directional locomotion only (its UAL clips ship natively — the
     // variants filter in playerUal skips the artifact-prone UAL2 pass).
-    // Knight is native-only.
-    if (!knight) this.retargetUAL();
+    // Knight/scifisoldier/polyart are native-only (their own rigs carry
+    // their own clip sets). Cybersoldier ships zero clips — it bakes the
+    // kevdev set through the same retarget the mannequin uses.
+    if (this.variant === 'robot' || this.variant === 'mannequin' || this.variant === 'cybersoldier') this.retargetUAL();
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -398,6 +414,9 @@ export class PlayerModel {
    *  geometry carries the skin weights, so swapping geo alone keeps the
    *  pose. The skeleton/mixer is untouched. Only exists for 'mannequin'. */
   setLod(level: 0 | 1): void {
+    // The decimated rig is mannequin-only — LOD-swapping it onto a class
+    // body would graft mannequin geometry onto a foreign skeleton.
+    if (this.variant !== 'mannequin') return;
     if (level === this.lod) return;
     this.lod = level;
     if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
@@ -459,13 +478,15 @@ export class PlayerModel {
   private captureBone(child: THREE.Object3D): void {
     this.bones.push(child as THREE.Bone);
     const nb = normBone(child.name);
-    if (child.name === 'Head' || nb === 'defhead' || nb === 'head') {
+    if (child.name === 'Head' || nb === 'defhead' || nb === 'head' || nb === 'righead') {
       this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
-    } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine') {
+    } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine' || nb === 'rigspine2') {
       this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
     // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R'); the
     // Quaternius rigs put the grip in FistR.
-    } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr') && !this.handBone) {
+    } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr'
+      || nb === 'handr' || nb === 'handright'
+      || nb === 'rigpistolright' || nb === 'rigarmright3') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
     // Foot-snap rig for retargeted clips on the robot rig (UAL
@@ -537,7 +558,7 @@ export class PlayerModel {
   // entity owns world position, and loop clips otherwise translate the
   // mesh out from under the hitbox each cycle. Y stays (the crouch dip).
   private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
-    if (mann || knight) {
+    if (mann || knight || CLASS_BODY_SPEC[this.variant]) {
       stripHipXZ(clip);
       if (mann && PlayerModel.isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
@@ -611,7 +632,7 @@ export class PlayerModel {
     // restarts the clip every cycle (bunny-hop midair); a frozen clamp
     // reads as a statue. The slow reversed tuck↔extend cycle reads as
     // flailing/swimming through air and needs no separate fall anim.
-    if (name === 'Death' || name === 'UAL_Death01') {
+    if (name === 'Death' || name === 'UAL_Death01' || CLASS_BODY_DEATH_CLIPS.has(name)) {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
     } else if (ONESHOT_CLIPS.has(name)) {
@@ -693,6 +714,16 @@ export class PlayerModel {
       this.playAnimation(KNIGHT_ANIMS[state]);
       return;
     }
+    const classBody = CLASS_BODY_SPEC[this.variant];
+    if (classBody?.anims) {
+      // Class-native clip tables resolve by state; a missing entry
+      // leaves the previous action running rather than snapping poses.
+      const clip = classBody.anims[state];
+      if (clip) this.playAnimation(clip);
+      return;
+    }
+    // cybersoldier has no anims table — it resolves through ANIM_NAMES
+    // against its baked kevdev clip set like the mannequin does.
     if (state === 'walk' || state === 'run') {
       const dirClip = this.directionalClip(state);
       if (dirClip) {
@@ -953,6 +984,9 @@ export class PlayerModel {
   }
 
   setScale(scale: number): void {
+    // Class bodies carry the class silhouette in the GLB itself — a
+    // _classScale bump on top would double the tiering.
+    if (CLASS_BODY_SPEC[this.variant]) return;
     if (this.model) {
       // Multiply the model's own fit scale (0.5 robot, 2.0/size.y mannequin)
       // so the armor-class bump composes with whichever GLB loaded.

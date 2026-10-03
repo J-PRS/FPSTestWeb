@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
-import { PlayerModel } from './PlayerModel.js';
+import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
+import { CLASS_BODY_VARIANT } from './playerClips.js';
 import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botClasses.js';
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
@@ -86,10 +87,44 @@ export class RemotePlayer {
   setClass(cls?: string): void {
     this.armorClass = cls;
     this._classScale = cls === 'heavy' ? CLASS_MODEL_SCALE.heavy : cls === 'light' ? CLASS_MODEL_SCALE.light : 1;
+    // The class IS the body: a tier change swaps the whole GLB, not a
+    // scale factor — class bodies carry their own proportions.
+    const want = (CLASS_BODY_VARIANT[cls ?? 'medium'] ?? 'cybersoldier') as PlayerModelVariant;
+    if (this._model.variant !== want) {
+      this._model.dispose();
+      this._loaded = false;
+      this._model = new PlayerModel(this.scene, want);
+      this._model.load().then(() => this.finishModelLoad())
+        .catch((e) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(e) }));
+      return;
+    }
     if (this._loaded) this.applyClassScale();
   }
   private applyClassScale(): void {
     this._model.setScale(this._classScale);
+  }
+
+  /** Shared async-load tail for the constructor and the setClass rebuild:
+   *  everything that was decided while the GLB was in flight gets
+   *  reasserted onto the fresh model. */
+  private finishModelLoad(): void {
+      this._loaded = true;
+      this.applyClassScale();
+      this.model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
+      this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
+      // Shield may have gone up before the GLB landed (sphere fallback)
+      // — upgrade it to the contoured shell once the bones exist.
+      this.auras.upgradeContoured();
+      // Show collider gizmo for remote players (unless already dead or stale-hidden)
+      if (!this._isDead && !this.staleHidden) {
+        this._model.setColliderVisible(true);
+      }
+      // Model may have been hidden while the GLB was still loading — reapply
+      if (this.staleHidden) {
+        this._model.setVisible(false);
+      }
+      if (this.cloakGhost) setCloakGhost(this, true);
+      if (this._isDead) this._model.setScale(this.corpse.scale);
   }
 
   teleportTo(pos: THREE.Vector3): void {
@@ -117,26 +152,13 @@ export class RemotePlayer {
     this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
 
-    // Everyone wears the UAL mannequin — the class reads through the
-    // 1.15/0.92 silhouette scale (a chibi knight read as a different game).
-    // Fixed at spawn (a mid-match class swap lands next join).
-    this._model = new PlayerModel(scene, 'mannequin');
+    // Everyone wears their class body — light/medium/heavy are the UAS
+    // silhouettes, picked from the constructor's wire class when present
+    // (a mid-match re-fit rebuilds via setClass).
+    this._model = new PlayerModel(scene,
+      (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'cybersoldier') as PlayerModelVariant);
     this.model.load().then(() => {
-      this._loaded = true;
-      this.applyClassScale();
-      this.model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
-      this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
-      // Shield may have gone up before the GLB landed (sphere fallback)
-      // — upgrade it to the contoured shell once the bones exist.
-      this.auras.upgradeContoured();
-      // Show collider gizmo for remote players (unless already dead or stale-hidden)
-      if (!this._isDead && !this.staleHidden) {
-        this._model.setColliderVisible(true);
-      }
-      // Model may have been hidden while the GLB was still loading — reapply
-      if (this.staleHidden) {
-        this._model.setVisible(false);
-      }
+      this.finishModelLoad();
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
     }).catch((e) => {
       // load() rejects after 4 retries — the player stays a sphere

@@ -36,6 +36,46 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
   'jet': 'Jump', 'hit': 'RecieveHit', 'shoot': 'Shoot_OneHanded',
 };
 
+// UAS class bodies (paid packs) — each GLB bakes its own clip set on its
+// own rig, so clips bind natively with no retarget. CyberSoldier's pack
+// ships ZERO clips (its anims were Unity-Humanoid-retargeted): it runs
+// the kevdev retarget path instead — see CYBER_KEVDEV_BONE_MAP below.
+export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
+  'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
+  'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
+  'jet': 'Jump_Rifle', 'hit': 'Hit', 'shoot': 'Fire_SniperRifle',
+};
+export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
+  'idle': 'Idle_gunMiddle_ar', 'walk': 'WalkFront_Shoot_ar', 'run': 'Run_gunMiddle_AR',
+  'jump': 'Jump', 'death': 'Die', 'ski': 'Idle_Ducking_ar',
+  'jet': 'Jump', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
+};
+
+// armorClass → dedicated body GLB. Table presence marks the variant as
+// class-native: the silhouette IS the class (no _classScale stack). A
+// present `anims` table means the GLB's own clips drive it; cybersoldier
+// ships no clips, so it bakes the kevdev set through bakeUALClips like
+// the mannequin (CYBER_KEVDEV_BONE_MAP) and resolves via ANIM_NAMES.
+export const CLASS_BODY_SPEC: Record<string, {
+  url: string; yaw: number; fitH: number;
+  anims?: Partial<Record<AnimationState, string>>;
+}> = {
+  // All three rigs author facing -Z (the camera check showed backs at
+  // the legacy π flip) — unlike mannequin/robot/knight, no yaw needed.
+  'scifisoldier': { url: '/assets/models/class_light.glb', yaw: 0, fitH: 1.8, anims: SCIFISOLDIER_ANIMS },
+  'cybersoldier': { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.0 },
+  'polyart': { url: '/assets/models/class_heavy.glb', yaw: 0, fitH: 2.5, anims: POLYART_ANIMS },
+};
+
+// armorClass from the wire → class-body variant. A mid-match re-fit swaps
+// the whole GLB (RemotePlayer.setClass).
+export const CLASS_BODY_VARIANT: Record<string, string> = {
+  light: 'scifisoldier', medium: 'cybersoldier', heavy: 'polyart',
+};
+
+// Death clips per class body — corpse-clamp like 'Death'/'UAL_Death01'.
+export const CLASS_BODY_DEATH_CLIPS = new Set(['Death_Rifle', 'Die']);
+
 // RobotExpressive bone → UAL source bone. RobotExpressive bones carry
 // Blender names (UpperArm.L); UAL uses DEF-* (DEF-upper_arm.L). Both sides
 // get name-sanitized by GLTFLoader, so matching is done on lowercase
@@ -74,7 +114,11 @@ export const UAL2_BONE_MAP: Record<string, string> = {
 // twitch loop instead of a single reaction. Callers time-revert the state.
 export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest', 'UAL_Hit_Head',
   // Knight-native singles — a fire/flinch that loops reads as a twitch.
-  'Shoot_OneHanded', 'RecieveHit', 'Punch']);
+  'Shoot_OneHanded', 'RecieveHit', 'Punch',
+  // Class-body flinches + fires (Yurowm / SciFiWarrior clip names).
+  'Hit', 'Damage1', 'Damage2', 'Damage3', 'Reload',
+  'Fire_1Pistol', 'Fire_2Pistol', 'Fire_SniperRifle',
+  'Shoot_SingleShot_AR', 'Shoot_BurstShot_AR', 'Shoot_AutoShot_AR']);
 
 // Mannequin (DEF-* Rigify rig) → UAL2 source bones. GLTFLoader strips dots
 // from node names, so 'DEF-upper_arm.L' arrives as 'DEF-upper_armL'.
@@ -122,6 +166,15 @@ export const MANNEQUIN_KEVDEV_BONE_MAP: Record<string, string> = {
 };
 
 export const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// CyberSoldier rig → kevdev B-* names. The rig's Mixamo-ish names map
+// 1:1 — same semantic chain, just Unity 'l'/'r' casing quirks.
+export const CYBER_KEVDEV_BONE_MAP: Record<string, string> = {
+  Hips: 'hips', Spine: 'spine', Chest: 'chest', Neck: 'neck', Head: 'head',
+  ShoulderL: 'shoulderl', UpperArml: 'upperarml', LowerArmL: 'forearml', HandL: 'handl',
+  ShoulderR: 'shoulderr', UpperArmr: 'upperarmr', LowerArmR: 'forearmr', HandR: 'handr',
+  UpperLegL: 'thighl', LowerLegL: 'shinl', UpperLegR: 'thighr', LowerLegR: 'shinr',
+};
 
 // Shared radial-gradient flash texture — one per process, all remote
 // muzzle sprites reuse it
