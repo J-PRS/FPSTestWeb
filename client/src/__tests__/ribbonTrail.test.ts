@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { RibbonTrail } from '../effects/RibbonTrail.js';
 
 // Trails need no GL — BufferGeometry is pure data; the batch mesh just
 // sits in the scene graph.

@@ -60,6 +60,7 @@ export const GL_CONFIG: ProjectileConfig = {
   terrainOffset: WEAPONS[5].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[5].maxLifetime,
+  armTime: WEAPONS[5].armTime, // T2 arming fuse — bounce/phase until cooked, then contact pops
   trailMeshType: 'sphere',
   bounces: true,
   bounceSfx: 'ricochet1',

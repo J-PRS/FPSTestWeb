@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { markProbe, registerDiag } from '../core/fxDiag.js';
+import { fxBufferHeight } from '../core/fxViewport.js';
 import { urlParams } from '../core/params.js';
 
 const TRAIL_COUNT = 14;
@@ -280,7 +281,10 @@ export class BallTrailDots {
     // alpha/size is invisible; aging/pruning above still runs full rate.
     this._half = !this._half;
     if (this._half && this.dots.length > 0) return;
-    trailMat().uniforms.uHeight!.value = window.innerHeight || 800;
+    // gl_PointSize is in FRAMEBUFFER px — the buffer is innerHeight/pscale
+    // in chunky modes and upscales afterward, so feeding the CSS height
+    // made trails render pscale× too big (the chunky-mode fat trails).
+    trailMat().uniforms.uHeight!.value = fxBufferHeight();
     let w = 0; // live-dot write cursor over the attribute pair
     for (const d of this.dots) {
       const t = 1.0 - d.age / d.life;

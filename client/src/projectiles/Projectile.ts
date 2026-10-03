@@ -9,10 +9,10 @@ import type { Targetable } from '../entities/balls.js';
 import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
 
-import { RibbonTrail } from './RibbonTrail.js';
-import { ProjectileTrail } from './trailParticles.js';
+import { RibbonTrail } from '../effects/RibbonTrail.js';
+import { ProjectileTrail } from '../effects/trailParticles.js';
 import { QuarksTrail } from '../effects/vfx.js';
-import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from './visuals.js';
+import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import { tickRemote } from './projRemote.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
@@ -193,12 +193,17 @@ export class Projectile {
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: RibbonTrail[] = [];
+  // Last position the trail layers sampled — the backstop discontinuity
+  // detector compares against this, not prevPos (collision code rewinds
+  // prevPos for swept segments, so it can't mark a render jump).
+  private readonly _lastTrailPos: THREE.Vector3;
 
   constructor(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, config: ProjectileConfig) {
     this.scene = scene;
     this.config = config;
     this.pos = origin.clone();
     this.prevPos = origin.clone();
+    this._lastTrailPos = origin.clone();
     this.shotOrigin = origin.clone();
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
@@ -265,8 +270,10 @@ export class Projectile {
     this.pos.addScaledVector(this.vel, seconds);
     this.age += seconds;
     // The jump is a discontinuity — ribbons must not bridge it with a
-    // quad between the spawn point and here (streak across the map).
+    // quad between the spawn point and here, and the quarks emitter must
+    // resync or emissionOverDistance dumps a streak across the map.
     for (const r of this.ribbons) r.clear();
+    this.trail.teleport();
     if (this.mesh) { this.mesh.position.copy(this.pos); syncProjectileInstance(this.mesh); }
   }
 
@@ -275,6 +282,7 @@ export class Projectile {
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
+    this.tickArmedFx();
 
     // Absolute backstop: fuseless configs (bolt/disc/chaingun fly-until-
     // contact) or a remote replica whose destroy edge never arrived used
@@ -295,8 +303,12 @@ export class Projectile {
     if (this.config.gravity) this.vel.y += GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
 
-    // Fuse: auto-explode if max lifetime is reached
-    if (this.fuseTtl() && this.age >= this.fuseTtl()!) {
+    // Fuse: auto-explode once the ARMED fuse burns out. Sticky ordnance
+    // is inert in flight (fuseAge -1) — a bomb that never attaches gets
+    // a failsafe triple-fuse so it can't drift forever.
+    const ttl = this.fuseTtl();
+    const fa = this.fuseAge();
+    if (ttl && ((fa >= 0 && fa >= ttl) || (fa < 0 && this.age >= ttl * 3))) {
       this.explode();
       return;
     }
@@ -312,8 +324,10 @@ export class Projectile {
       this.prevPos.copy(this.pos);
       this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
       // The discharge is a teleport — the ribbon would bridge it with a
-      // streak across the whole beam range (same hazard advanceBy covers).
+      // streak across the whole beam range (same hazard advanceBy covers),
+      // and emit-over-distance would lay particles along the full ray.
       for (const r of this.ribbons) r.clear();
+      this.trail.teleport();
     }
 
     // Remote (server-authoritative/demo) replicas skip all collision —
@@ -325,8 +339,23 @@ export class Projectile {
     }
 
     this.updateMesh();
+    this.emitTrails(dt);
+  }
+
+  // Trail emission + the discontinuity backstop: explicit teleports call
+  // trail.teleport()/ribbon clear() already, but pos can also jump via
+  // sticky-anchor chases, depenetration, demo seeks, or future callers.
+  // Anything beyond ~3x this frame's legit travel isn't motion — it's a
+  // jump, and neither ribbons nor emit-over-distance may bridge it.
+  private emitTrails(dt: number): void {
+    const maxStep = this.vel.length() * dt * 3 + 4;
+    if (this.pos.distanceToSquared(this._lastTrailPos) > maxStep * maxStep) {
+      for (const r of this.ribbons) r.clear();
+      this.trail.teleport();
+    }
     this.trail.emitSegment();
     for (const r of this.ribbons) r.push(this.pos, this.vel);
+    this._lastTrailPos.copy(this.pos);
   }
 
   // Discharge aftermath: beam visual fires once with the resolved
@@ -360,6 +389,27 @@ export class Projectile {
     return this.config.armTime === undefined || this.age >= this.config.armTime;
   }
 
+  /** Fuse clock — for sticky ordnance the fuse starts at ATTACH, not
+   *  spawn: a lobbed bomb midair is inert (no fuse burn, no armed-light
+   *  ramp). -1 = not armed yet; everything else just reads `age`. */
+  fuseAge(): number {
+    if (!this.config.sticks) return this.age;
+    return this.glue.armAge === undefined ? -1 : this.age - this.glue.armAge;
+  }
+
+  // Arming tell — the moment a fused shell cooks off it picks up a hot
+  // streak, so "this one can hurt you" reads at a glance instead of
+  // requiring fuse math. Lives in `ribbons` so trail push/stop/pooling
+  // treat it exactly like a launcher-attached ribbon.
+  private armedFxDone = false;
+  private tickArmedFx(): void {
+    if (this.armedFxDone || !this.armed || this.config.armTime === undefined) return;
+    this.armedFxDone = true;
+    this.ribbons.push(RibbonTrail.acquire(this.scene, {
+      color: 0xffbb33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
+    }));
+  }
+
   // GL/flak shells always bounce; a mortar only bounces while unarmed —
   // once armed it's impact-fused like any other shell.
   get canBounce(): boolean {
@@ -389,7 +439,7 @@ export class Projectile {
   updateMesh(): void {
     updateProjectileMesh(this.mesh, this.glowMesh, this.pos, this.vel,
       this.config, this.age, this.hitRadius,
-      { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt);
+      { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());
   }
 
   removeProjectileMesh(): void {

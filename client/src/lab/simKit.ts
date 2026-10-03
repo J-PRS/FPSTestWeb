@@ -17,7 +17,7 @@ import { projStep, segFieldHit, type SimProjectile } from '../../../shared/projS
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
 import { getProjectileConfig } from '../projectiles/index.js';
-import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../projectiles/visuals.js';
+import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import { QuarksTrail } from '../effects/vfx.js';
 import { Explosion } from '../effects/explosion.js';
 import { hitRadiusAt } from '../../../shared/combat.js';

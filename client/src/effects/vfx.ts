@@ -21,7 +21,7 @@ import { registerDiag } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import {
   vfxPressure, vfxReady, vfxBatcher,
-  live, pools, takeSystem, activateSystem, returnSystem,
+  live, pools, takeSystem, activateSystem, returnSystem, resyncEmission,
   queueIfCold, buildQueue, activeTrailPs, trailStats,
   poolDump,
 } from './vfxRuntime.js';
@@ -255,6 +255,26 @@ export class QuarksTrail {
       attached: ps ? !!vfxBatcher()?.systemToBatchIndex.has(ps) : false,
       paused: ps?.paused ?? false,
       waiting: +((ps?.emissionState as { waitEmiting?: number } | undefined)?.waitEmiting ?? 0).toFixed(2),
+      // Silent-emission discriminators: emitEnded pauses emit() forever,
+      // looping gates the time-wrap, travelDistance/prevWorldPos say whether
+      // emit-over-distance ever deposits, emVis/emRoot catch an emitter
+      // culled out of getVisibleSystems (frozen matrixWorld) or detached
+      // from the scene root (update() self-disposes on !Scene).
+      ended: (ps as unknown as { emitEnded?: boolean } | undefined)?.emitEnded ?? null,
+      loop: ps?.looping ?? null,
+      emT: ps ? +ps.time.toFixed(2) : null,
+      travel: +((ps?.emissionState as { travelDistance?: number } | undefined)?.travelDistance ?? -1).toFixed(2),
+      emVis: ps?.emitter.visible ?? null,
+      emRoot: ps ? (() => {
+        let o: THREE.Object3D = ps.emitter;
+        while (o.parent) o = o.parent;
+        return o.type;
+      })() : null,
+      emScale: ps ? +ps.emitter.scale.x.toFixed(3) : null,
+      // Double-checkout detector: a trail ps that also sits in a pool means
+      // two owners share one system — emit bookkeeping is then torn between
+      // them (the classic "sometimes no trail" split-brain).
+      inPool: ps ? [...(pools.get(this.key) ?? [])].some(e => e.ps === ps) : null,
       // Emitter WORLD position vs the first live particle's spawn point —
       // particles drifting far from the emitter mean the distance deposit
       // landed at a stale matrixWorld (parked-teleport burst elsewhere),
@@ -268,6 +288,15 @@ export class QuarksTrail {
         return `${p.position.x.toFixed(1)},${p.position.y.toFixed(1)},${p.position.z.toFixed(1)}`;
       })() : '-',
     };
+  }
+
+  /** The host projectile teleported (latency advance, ray-burst discharge)
+   *  — resync the emitter or the next emit() reads the jump as traveled
+   *  distance and dumps a straight line of particles across the gap. */
+  teleport(): void {
+    if (!this.ps) return;
+    this.ps.emitter.position.copy(this.host.pos);
+    resyncEmission(this.ps, this.ps.emitter);
   }
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.

@@ -55,8 +55,10 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   glowOpacity: 0.5,
   glowScale: 0.7,
   meshRampIn: true,
-  meshRampInDuration: 0.02,
-  meshStartScale: 0.6,
+  // Slow the ramp and start smaller — at 160 m/s a 2-frame ramp left a
+  // near-full-size bolt+glow hanging at the muzzle on spawn.
+  meshRampInDuration: 0.1,
+  meshStartScale: 0.25,
   terrainOffset: W.hitMin,
   needsServerTracking: true,
   trailMeshType: 'sphere',

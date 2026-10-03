@@ -84,20 +84,22 @@ export const BOMBLET_CONFIG: ProjectileConfig = beltBall(22, 0x2a2d24, 0xccff66,
   needsServerTracking: false, // visual-only — damage is the server's cluster scatter
 });
 
-// Javelin: a fast near-flat dart — no splash, precision throw.
+// Javelin: a fast near-flat dart — no splash, precision throw. The whole
+// sell is SPEED: a fat bright streak behind a real spear, not a dust puff.
 export const JAVELIN_CONFIG: ProjectileConfig = {
   ...beltBall(20, 0x8a8f96, 0xccddff, { displayName: 'Javelin' }),
   meshType: 'javelin', // real spear — shaft + flared tip, ~2m long
   noExplosion: true,  // contact is a thunk + bullet mark, not a blast
   embeds: 2.0,        // planted for 2s, then shrinks away
   damageColor: '#ccddff',
-  trailOpacity: 0.25,
-  // Single thin ribbon lane — the bolt-launcher line streak, not a smoke
-  // plume; particles still ride alongside.
+  trailOpacity: 0.5,
+  trailParticlesPerUnit: 1.6, // was ~1 — a thrown spear wants a readable wake
+  // Triple ribbon lane (wide band + bright core pair) — the power-throw
+  // streak that sells "this one's lethal".
   ribbonTrail: true,
-  ribbonLanes: 1,
-  ribbonWidth: 0.16,
-  ribbonLife: 0.3,
+  ribbonLanes: 3,
+  ribbonWidth: 0.34,
+  ribbonLife: 0.6,
   ribbonColor: 0x9db8ff,
 };
 

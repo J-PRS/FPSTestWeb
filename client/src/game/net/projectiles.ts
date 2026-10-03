@@ -7,6 +7,7 @@ import { Projectile } from '../../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
 import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
 import { Explosion } from '../../effects/explosion.js';
+import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
 import type { NetCtx } from './ctx.js';
 
@@ -34,6 +35,9 @@ export function wireProjectiles(ctx: NetCtx): void {
       deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
       (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
     ));
+    // Enemy swings get the slash arc too — the streak is what makes a
+    // punch readable at range (there's no arm animation to read).
+    swingSwipe(deps.lazyScene(), origin, dirV);
   };
 
   // Swing markers and beam-class weapon fire carry no projectile body —

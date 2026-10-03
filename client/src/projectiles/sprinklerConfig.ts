@@ -55,8 +55,10 @@ export const SPRINKLER_CONFIG: ProjectileConfig = {
   glowOpacity: 0.5,
   glowScale: 0.7,
   meshRampIn: true,
-  meshRampInDuration: 0.02,
-  meshStartScale: 0.6,
+  // Long ramp — the 9/s stream used to spawn near-full-size and screen-flood;
+  // grow over 0.12s so the bolt is meters away before it's big.
+  meshRampInDuration: 0.12,
+  meshStartScale: 0.2,
   terrainOffset: W.hitMin,
   needsServerTracking: true,
   trailMeshType: 'sphere',

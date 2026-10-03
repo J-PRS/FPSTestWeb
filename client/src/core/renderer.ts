@@ -16,6 +16,7 @@ import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
 import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL } from './rendererShaders.js';
+import { setFxBufferHeight } from './fxViewport.js';
 
 export interface RendererSetup {
   renderer: THREE.WebGLRenderer;
@@ -498,8 +499,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // Post buffers track render res: composer pixel modes render at
     // 1/pscale; the plain path uses the fractional resScale.
     const div = pscale > 1 ? pscale : 1 / resScale;
-    const w = Math.floor(window.innerWidth / div);
-    const h = Math.floor(window.innerHeight / div);
+    const w = Math.floor(window.innerWidth / div), h = Math.floor(window.innerHeight / div);
+    setFxBufferHeight(h); // point-sprite shaders scale on BUFFER height, not CSS
     composer.setSize(w, h);
     upscaleEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
     xbrEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);

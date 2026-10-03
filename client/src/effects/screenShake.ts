@@ -9,10 +9,23 @@ import * as THREE from 'three';
 class ScreenShake {
   private trauma = 0;
   private t = 0;
+  // Directional kick — a melee swing throws the head INTO it: a quick
+  // roll+nudge impulse that eases back over ~0.2s. Unlike the trauma
+  // noise this is deterministic, so it can carry a direction.
+  private kickRoll = 0;
+  private kickPitch = 0;
 
   /** Add shake. `amount` ~0.2 = nearby small pop, 0.5 = point-blank rocket. */
   add(amount: number): void {
     this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /** Swing kick — `sign` follows the swipe direction (L→R punches roll
+   *  the camera left and vice versa), `landed` deepens it on connect. */
+  swingKick(sign: number, landed: boolean): void {
+    const k = landed ? 1.6 : 1.0;
+    this.kickRoll = sign * 0.05 * k;    // ~2.9° peak roll
+    this.kickPitch = 0.03 * k;          // slight downward throw
   }
 
   /** Explosion at world pos — shake scales with blast radius and proximity. */
@@ -25,15 +38,26 @@ class ScreenShake {
 
   /** Apply jitter to the camera AFTER its look/quaternion is set for the frame. */
   update(dt: number, camera: THREE.Camera): void {
-    if (this.trauma <= 0) return;
-    this.t += dt;
-    const shake = this.trauma * this.trauma;
-    const MAX_RAD = 0.028; // ~1.6° — readable, never nauseating
-    // Layered sines at incommensurate freqs ≈ smooth noise, no allocs
-    camera.rotateX(Math.sin(this.t * 61.7) * MAX_RAD * shake);
-    camera.rotateY(Math.sin(this.t * 53.3 + 1.7) * MAX_RAD * shake);
-    camera.rotateZ(Math.sin(this.t * 47.1 + 3.4) * MAX_RAD * shake * 0.6); // roll is the nausea driver — damp it
-    this.trauma = Math.max(0, this.trauma - dt * 1.8); // ~0.55s tail
+    if (this.trauma > 0) {
+      this.t += dt;
+      const shake = this.trauma * this.trauma;
+      const MAX_RAD = 0.028; // ~1.6° — readable, never nauseating
+      // Layered sines at incommensurate freqs ≈ smooth noise, no allocs
+      camera.rotateX(Math.sin(this.t * 61.7) * MAX_RAD * shake);
+      camera.rotateY(Math.sin(this.t * 53.3 + 1.7) * MAX_RAD * shake);
+      camera.rotateZ(Math.sin(this.t * 47.1 + 3.4) * MAX_RAD * shake * 0.6); // roll is the nausea driver — damp it
+      this.trauma = Math.max(0, this.trauma - dt * 1.8); // ~0.55s tail
+    }
+    // Swing kick — applied on top of noise, decays to zero fast.
+    if (this.kickRoll !== 0 || this.kickPitch !== 0) {
+      camera.rotateZ(this.kickRoll);
+      camera.rotateX(this.kickPitch);
+      const d = Math.exp(-dt * 14);
+      this.kickRoll *= d;
+      this.kickPitch *= d;
+      if (Math.abs(this.kickRoll) < 1e-4) this.kickRoll = 0;
+      if (Math.abs(this.kickPitch) < 1e-4) this.kickPitch = 0;
+    }
   }
 }
 

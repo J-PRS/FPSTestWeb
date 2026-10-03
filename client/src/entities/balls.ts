@@ -8,8 +8,8 @@ import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js'
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
-import { RibbonTrail } from '../projectiles/RibbonTrail.js';
-import { BallTrailDots } from './ballTrails.js';
+import { RibbonTrail } from '../effects/RibbonTrail.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
@@ -171,7 +171,7 @@ export class Ball {
   /** Prediction-state snapshot for the rubberband warn — answers "which
    *  regime diverged" in one line: simT≫simNow = free-ran past the clock
    *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
-  get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean } | null {
+  get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean; anchor: { x: number; y: number; z: number; vx: number; vy: number; vz: number } } | null {
     const sim = this.netS.sim;
     if (!sim) return null;
     const simNow = Ball.netSimNow?.() ?? null;
@@ -180,6 +180,7 @@ export class Ball {
     return {
       simT: this.netS.simT, simNow, legT0: this.netS.legT0, legAge,
       enraged: sim.enraged, tgtValid: sim.tgtValid,
+      anchor: { x: sim.x, y: sim.y, z: sim.z, vx: sim.vx, vy: sim.vy, vz: sim.vz },
     };
   }
   /** Map-structure colliders from gameState — prediction ricochets off

@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { SCENARIOS, type LabInstance } from './scenarios.js';
 import { vfxScene, vfxBatcher, setVfxCamOverride } from '../effects/vfxRuntime.js';
-import { setRibbonCamera } from '../projectiles/RibbonTrail.js';
+import { setRibbonCamera } from '../effects/RibbonTrail.js';
 
 const TICK = 1 / 60;
 const DUMP_MS = 200;

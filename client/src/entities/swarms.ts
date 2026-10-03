@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SpeciesSwarm, InstancedBlobShadows, type SwarmPart, type SwarmSlotOwner } from './swarm.js';
-import { GibPool } from './gibs.js';
+import { GibPool } from '../effects/gibs.js';
 import type { Terrain } from '../world/terrain.js';
 import { registerDiag, markProbe } from '../core/fxDiag.js';
 

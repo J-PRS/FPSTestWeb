@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
-import type { ProjectileConfig } from './types.js';
+import { getGlowTexture } from './glowTexture.js';
+import type { ProjectileConfig } from '../projectiles/types.js';
 
 export interface TrailParticle {
   mesh: THREE.Mesh | THREE.Sprite;
@@ -53,6 +53,10 @@ export class ProjectileTrail {
   // sustained fire at ~zero allocation once warm.
   private static pools = new Map<string, TrailParticle[]>();
   private accum = 0; // fractional carry-over for even particle spacing
+  // Host teleported — the next emitSegment would bridge prevPos→pos with
+  // a straight line of particles across the gap. Skip it once.
+  private skipSeg = false;
+  teleport(): void { this.accum = 0; this.skipSeg = true; }
 
   private meshKey(): string { return this.host.config.trailMeshType ?? 'sphere'; }
 
@@ -63,6 +67,7 @@ export class ProjectileTrail {
   // Evenly spaced emission along prevPos→pos — spacing is in world units so
   // slow shells and fast slugs get the same particle density
   emitSegment(): void {
+    if (this.skipSeg) { this.skipSeg = false; return; }
     const { pos, prevPos } = this.host;
     const trailDist = pos.distanceTo(prevPos);
     if (trailDist < 1e-6) return;

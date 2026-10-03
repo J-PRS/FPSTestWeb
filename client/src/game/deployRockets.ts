@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Explosion } from '../effects/explosion.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { RibbonTrail, DyingRibbons } from '../projectiles/RibbonTrail.js';
+import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
 import * as sfx from '../core/sfx.js';
 import type { DeployDeps } from './deployables.js';
 

@@ -4,7 +4,7 @@
 // swarm entity, quarks system, beam. Frozen VFX bugs need "what IS that
 // thing" more than another census number.
 import * as THREE from 'three';
-import { RibbonTrail, RIBBON_TRIS_PER_SLOT, type TrailBatch } from '../projectiles/RibbonTrail.js';
+import { RibbonTrail, RIBBON_TRIS_PER_SLOT, type TrailBatch } from '../effects/RibbonTrail.js';
 import type { SpeciesSwarm, InstancedBlobShadows, SwarmSlotOwner } from '../entities/swarm.js';
 import type { ParticleSystem } from 'three.quarks';
 import type { DbgTag } from './fxDiag.js';

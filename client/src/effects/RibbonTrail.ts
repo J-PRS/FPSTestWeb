@@ -71,6 +71,9 @@ export class RibbonTrail {
   private dx = new Float32Array(MAX_SAMPLES);
   private dy = new Float32Array(MAX_SAMPLES);
   private dz = new Float32Array(MAX_SAMPLES);
+  // Per-sample width multiplier — default 1. Slash/swipe callers pinch
+  // the ends to 0 so strokes read as blades, not constant-width bars.
+  private ws = new Float32Array(MAX_SAMPLES).fill(1);
   // Last written fade bucket per ribbon position (-1 = never written).
   // Fades only need rewriting when they cross a 1/255 step — a parked
   // camera + mature trail writes nothing at all.
@@ -108,6 +111,9 @@ export class RibbonTrail {
   // buffers — surfaced in the ribbons census (see registerDiag below).
   static nanPushes = 0;
   static nanSides = 0;
+  /** push() calls that arrived after release — the owner outlived its
+   *  ribbon (swept/mass-disposed). Counted, not silent. */
+  static zombiePushes = 0;
   /** Debug dump for __trailDump — one row per live ribbon. */
   static dump(): Record<string, unknown>[] {
     const now = performance.now();
@@ -204,6 +210,12 @@ export class RibbonTrail {
 
   private claimSlot(scene: THREE.Scene): void {
     this.inPool = false;
+    // Ownership resumes NOW — a pooled ribbon kept its previous owner's
+    // lastUpdateAt, so sweepStale read it as a stale done corpse and
+    // disposed it out from under the new owner: the still-referenced
+    // object re-entered the pool, got acquired by a second projectile,
+    // and the first owner's stop() killed both trails mid-flight.
+    this.lastUpdateAt = performance.now();
     this.batch = claimableBatch(scene);
     this.slot = this.batch.free.pop()!;
     RibbonTrail.liveSet.add(this);
@@ -245,6 +257,7 @@ export class RibbonTrail {
     this.liveFrom = 0;
     this.starvedPushes = 0;
     this._lf.fill(-1);
+    this.ws.fill(1);
     this.claimSlot(scene);
   }
 
@@ -262,8 +275,14 @@ export class RibbonTrail {
   // climbs while count stays 0 emits nothing (silent no-trail bug).
   private starvedPushes = 0;
 
-  /** Record a new sample at the projectile's current position/facing. */
-  push(pos: THREE.Vector3, vel: THREE.Vector3): void {
+  /** Record a new sample at the projectile's current position/facing.
+   *  `wScale` tapers the strip at this sample (0 = pin to a point). */
+  push(pos: THREE.Vector3, vel: THREE.Vector3, wScale = 1): void {
+    // Released ribbons refuse samples — a caller still pushing after
+    // dispose (resync mass-drop, stale-owner sweep) used to keep filling
+    // the ring with slot=-1: the census row looked alive, the trail
+    // rendered nothing, and nobody could tell which owner lost it.
+    if (this.slot < 0) { RibbonTrail.zombiePushes++; return; }
     if (this.stopped) return;
     // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
     // forever: every later sideFor/glueBoundary reuses it and the whole
@@ -274,7 +293,8 @@ export class RibbonTrail {
       return;
     }
     _dir.copy(vel);
-    if (_dir.lengthSq() < 1e-6) { this.starvedPushes++; return; }
+    const spd = _dir.length();
+    if (spd * spd < 1e-6) { this.starvedPushes++; return; }
     _dir.normalize();
     // Side vector: perpendicular to velocity, biased to the world-horizontal plane
     _side.crossVectors(_dir, Math.abs(_dir.y) < 0.95 ? _up : _fwd).normalize();
@@ -287,11 +307,24 @@ export class RibbonTrail {
       oz = (_dir.x * _side.y - _dir.y * _side.x) * -this.vOffset;
     }
 
+    // Teleport guard — owners are supposed to clear() on a jump, but one
+    // missed caller draws a chord from the last sample to wherever the
+    // new owner/pos landed (the streak between two different projectiles).
+    // Beyond ~0.5s of travel + slack this "sample" is a jump: cut the strip.
+    if (this.count > 0) {
+      const jx = pos.x + ox - this.px[this.head]!;
+      const jy = pos.y + oy - this.py[this.head]!;
+      const jz = pos.z + oz - this.pz[this.head]!;
+      const jump = spd * 0.25 + 12;
+      if (jx * jx + jy * jy + jz * jz > jump * jump) this.clear();
+    }
+
     this.head = (this.head + 1) % MAX_SAMPLES;
     this.px[this.head] = pos.x + ox; this.py[this.head] = pos.y + oy; this.pz[this.head] = pos.z + oz;
     this.sx[this.head] = _side.x; this.sy[this.head] = _side.y; this.sz[this.head] = _side.z;
     this.dx[this.head] = _dir.x; this.dy[this.head] = _dir.y; this.dz[this.head] = _dir.z;
     this.st[this.head] = this.time;
+    this.ws[this.head] = wScale;
     if (this.count < MAX_SAMPLES) this.count++;
     this.pushed++;
   }
@@ -307,6 +340,11 @@ export class RibbonTrail {
     this.pushed = 0;
     this.liveFrom = 0;
     this.starvedPushes = 0;
+    this.ws.fill(1);
+    // The fade buckets are stale after a clear — a reused index whose
+    // fresh fq coincidentally matches the old bucket would skip its
+    // color write and leave the segment black/invisible.
+    this._lf.fill(-1);
     if (this.slot >= 0) {
       const b = this.slot * RIBBON_FLOATS_PER_SLOT;
       this.batch.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
@@ -417,7 +455,7 @@ export class RibbonTrail {
       const s3 = this.sideFor(s, rebillboard);
       if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
     }
-    const w = this.width * 0.5 * fade;
+    const w = this.width * 0.5 * fade * this.ws[s];
     pos[o] = this.px[s] - sx * w;
     pos[o + 1] = this.py[s] - sy * w;
     pos[o + 2] = this.pz[s] - sz * w;
@@ -430,9 +468,9 @@ export class RibbonTrail {
   private static _s3 = new Float32Array(3);
   private sideFor(s: number, camPos: THREE.Vector3): Float32Array | null {
     const vx = camPos.x - this.px[s], vy = camPos.y - this.py[s], vz = camPos.z - this.pz[s];
-    let sx = this.dy[s] * vz - this.dz[s] * vy;
-    let sy = this.dz[s] * vx - this.dx[s] * vz;
-    let sz = this.dx[s] * vy - this.dy[s] * vx;
+    const sx = this.dy[s] * vz - this.dz[s] * vy;
+    const sy = this.dz[s] * vx - this.dx[s] * vz;
+    const sz = this.dx[s] * vy - this.dy[s] * vx;
     const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
     // isFinite, not just >eps: NaN len passes `<=` comparisons (NaN < x
     // is false), so a NaN cross product used to normalize into NaN verts.
@@ -446,6 +484,11 @@ export class RibbonTrail {
   dispose(): void {
     if (this.inPool) return;
     this.inPool = true;
+    // Truthful corpse: the ring is dead with the slot. Without this a
+    // released ribbon still reported count>0 in the census — the
+    // "slot=-1 but 17 samples" rows that hid who lost their trail.
+    this.head = -1;
+    this.count = 0;
     this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);
@@ -462,6 +505,7 @@ registerDiag('ribbons', () => ({
   reapedLit,
   reapedStale: RibbonTrail.reapedStale,
   nanReject: { pushes: RibbonTrail.nanPushes, sides: RibbonTrail.nanSides },
+  zombiePushes: RibbonTrail.zombiePushes,
 }));
 
 /** Shared 'stop → update until done → dispose' drain — detonation paths

@@ -27,32 +27,51 @@ export const STICKY_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[18].aoeDamage,
   aoeRadius: WEAPONS[18].aoeRadius,
-  damageColor: '#ff88ff',
+  damageColor: '#ff7744',
+  // Fuse-spark fizz: near-white sparks pop off the bomb and scatter
+  // outward as they cool to ember — a lit fuse throws light, not a
+  // wispy smoke wisp. Dense, hot, and short-lived.
   trailColors: [
-    new THREE.Color(1.0, 0.6, 1.0),
-    new THREE.Color(0.8, 0.4, 0.9),
-    new THREE.Color(0.5, 0.25, 0.6),
-    new THREE.Color(0.3, 0.15, 0.35),
-    new THREE.Color(0.2, 0.15, 0.25),
+    new THREE.Color(1.0, 0.85, 0.4),  // spark flash — almost white-hot
+    new THREE.Color(1.0, 0.55, 0.15),
+    new THREE.Color(0.95, 0.3, 0.08),
+    new THREE.Color(0.55, 0.18, 0.06),
+    new THREE.Color(0.25, 0.1, 0.05),
   ],
-  trailParticlesPerUnit: 1,
-  trailLifeMin: 0.3,
-  trailLifeMax: 0.6,
-  trailSpread: 0.12,
-  trailForwardSpread: 0.06,
-  trailParticleGravity: 0.0,
-  trailOpacity: 0.4,
-  trailBaseSize: 0.07,
-  trailSizeRange: 0.18,
-  trailScaleMin: 0.5,
-  trailScaleMax: 1.4,
-  trailRampIn: 0.05,
-  meshColor: 0xdd55ee,
+  trailParticlesPerUnit: 4,
+  trailLifeMin: 0.15,
+  trailLifeMax: 0.45,
+  trailSpread: 0.35,          // sparks POP off the body, not trail politely
+  trailForwardSpread: 0.25,
+  trailParticleGravity: 0.6,  // embers rain — positive pulls them down
+  trailOpacity: 0.85,
+  trailBaseSize: 0.1,
+  trailSizeRange: 0.22,
+  trailScaleMin: 0.6,
+  trailScaleMax: 1.8,
+  trailRampIn: 0.03,
+  // Thin hot streak along the flight line — the fizz needs a spine or it
+  // reads as scattered sparks with no direction. Same trick the MRV
+  // carrier and RPG use.
+  ribbonTrail: true,
+  ribbonLanes: 1, // single thin streak — the fizz particles carry the volume
+  ribbonWidth: 0.22,
+  ribbonLife: 0.3,
+  ribbonColor: 0xff7733,
+  // Dark gunmetal shell + hot amber armed-light that pulses and quickens
+  // on the fuse — reads "live ordnance", not gum. The pink trail is gone
+  // with it; lobbed bombs shed embers instead.
+  meshColor: 0x4a3a26,
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xff44dd,
-  glowOpacity: 0.4,
-  glowScale: 0.8,
+  glowColor: 0xff5522,
+  glowOpacity: 0.7,
+  // Sits permanently just above the shell (pulse crests higher) — a live
+  // amber halo so the bomb reads "armed" instead of inert cannonball.
+  glowScale: 1.35,
+  // Deeper depth so the blink CREST clears the resting halo — with the
+  // base glow brightened, a shallow ±35% breathe just wobbles in place.
+  glowPulse: { hz: 1.5, depth: 0.6, fuseRamp: true },
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.3,

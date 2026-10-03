@@ -13,7 +13,7 @@ try {
   await client.waitFor(`t.player && t.player.pos`, 30000);
   // Instrument BEFORE firing so the first shot's stop is caught too.
   await client.page.evaluate(`(async () => {
-    const mod = await import('/src/projectiles/RibbonTrail.ts');
+    const mod = await import('/src/effects/RibbonTrail.ts');
     const R = mod.RibbonTrail;
     for (const k of ['stop']) {
       const orig = R.prototype[k];

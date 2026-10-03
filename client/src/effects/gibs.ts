@@ -4,7 +4,7 @@ import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA
 import { markProbe } from '../core/fxDiag.js';
 import { CapGovernor } from '../core/poolPolicy.js';
 import type { Terrain } from '../world/terrain.js';
-import type { SpeciesSwarm } from './swarm.js';
+import type { SpeciesSwarm } from '../entities/swarm.js';
 
 /**
  * Gib pool — seamless enemy shatter for instanced species.

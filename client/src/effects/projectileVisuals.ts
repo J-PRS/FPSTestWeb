@@ -15,18 +15,18 @@ const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
 const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
 const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
-// Vapor-cone silhouette: unit cone, apex biased FORWARD of the shell
-// (+Z), skirt flaring behind — the condensation collar a transonic body
-// drags. Apex-forward keeps the skirt from engulfing a first-person
-// camera at muzzle spawn.
+// Vapor-cone silhouette: unit cone running FORWARD off the shell —
+// base collar centered on the body, apex pointing downrange (+Z). The
+// trailing-skirt variant swallowed the first-person camera (its wide
+// base formed right at the eye); a forward spearhead never reaches
+// backward toward the shooter.
 const CONE_GEO = (() => {
   const g = new THREE.ConeGeometry(1, 1, 24, 1, true);
-  g.rotateX(Math.PI / 2);    // cone axis +Y → +Z (apex forward)
-  g.translate(0, 0, -0.35);  // apex +0.15 ahead, skirt -0.85 behind
+  g.rotateX(Math.PI / 2);   // cone axis +Y → +Z (apex forward)
+  g.translate(0, 0, 0.5);   // base at the shell, apex 1 unit downrange
   return g;
 })();
-// Collar length as a multiple of its base radius. Short = a skirt
-// hugging the shell; long cones read as paper planes from the side.
+// Spearhead length as a multiple of its collar radius.
 const CONE_LEN = 1.4;
 
 // Energy filaments for the cone skirt — apex-hot alpha that fades to
@@ -43,13 +43,13 @@ function getConeAlphaTex(): THREE.Texture {
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = x / S, v = y / S; // v: 0 apex → 1 base (cone UVs)
-      // Bright collar near the apex, dissolving to nothing at the skirt
-      // edge — soft falloff instead of a hard silhouette.
-      let a = Math.max(0, 1 - v * 1.6);
-      a *= a;
-      // Braided filaments: angled streaks around the skirt that break
-      // the fill into light ropes.
-      const fil = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(u * Math.PI * 14 + v * 9))
+      // Bright collar near the apex, soft falloff to the skirt edge.
+      // map-mode (not alphaMap): the texture IS the additive color, so
+      // texels must sit high — a mostly-dark map renders ~invisible.
+      let a = Math.max(0, 1 - v * 1.35);
+      a = a * a * 0.7 + 0.3 * a; // gentle shoulder, base keeps ~0.15
+      // Braided filaments: subtle rope breakup over the lit veil.
+      const fil = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(u * Math.PI * 14 + v * 9))
         * (0.5 + 0.5 * Math.sin(u * Math.PI * 6 - v * 13));
       a *= fil;
       // alphaMap samples the GREEN channel — the pattern must live in
@@ -89,8 +89,12 @@ function getGlowMat(color: number, opacity: number, flash: boolean, cone = false
       color: c.multiplyScalar(EMIT_GAIN), transparent: true, opacity,
       depthWrite: false, side: THREE.DoubleSide,
       // Energy collar: additive so the skirt ADDS light instead of a
-      // tinted veil, alphaMap for filament streaks + soft edge falloff.
-      ...(cone ? { blending: THREE.AdditiveBlending, alphaMap: getConeAlphaTex() } : {}),
+      // tinted veil. The filament pattern rides in `map`, NOT alphaMap —
+      // additive pixels only add their RGB, so dark texels already read
+      // as gaps; going through the alpha channel suppressed the whole
+      // cone in this pipeline (verified: invisible with alphaMap, solid
+      // with it nulled).
+      ...(cone ? { blending: THREE.AdditiveBlending, map: getConeAlphaTex() } : {}),
     });
     GLOW_MAT_CACHE.set(key, m);
   }
@@ -322,7 +326,14 @@ export function updateProjectileMesh(
     glowMesh.position.copy(pos);
     // Glow scales with hitRadius (wake hitbox) so they always match
     const glowMultiplier = config.glowScale ?? 1.0;
-    let gs = hitRadius * glowMultiplier;
+    // Glow always ramps in at spawn even when the body opts out — a
+    // full-size glow envelope near the muzzle swallows the camera for
+    // the first frames (fullscreen color flash).
+    const start = config.meshStartScale ?? RAMP_IN_START;
+    const maxLife = config.maxLifetime ?? 0;
+    const glowRamp = start + (1.0 - start) * Math.min(
+      age / Math.min(config.meshRampInDuration ?? RAMP_IN_DUR, maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR), 1.0);
+    let gs = hitRadius * glowMultiplier * glowRamp;
     const restTint = (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint;
     if (config.glowPulse) {
       const p = config.glowPulse;
@@ -344,9 +355,9 @@ export function updateProjectileMesh(
     }
     // Z-fight guard: a shell whose glow radius crosses its own body
     // surface (sticky: hitMax ≈ bodyRadius, pulsing) shimmers as the
-    // two instanced spheres coincide. The pulse keeps breathing once
-    // it's above the floor; inside it clamps to a stable halo.
-    gs = Math.max(gs, config.bodyRadius * 1.15 + 0.01);
+    // two instanced spheres coincide. The floor ramps too — an unscaled
+    // floor at spawn pins a body-sized glow right at the muzzle.
+    gs = Math.max(gs, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
     if (config.glowShape === 'cone') {
       // Shock collar: apex rides the shell, skirt trails -velocity.
       // Stationary frames keep the last orientation — a parked cone

@@ -50,8 +50,14 @@ export const DISC_CONFIG: ProjectileConfig = {
   meshType: 'disc',
   glowShell: true,
   glowColor: 0x00ffff,
-  glowOpacity: 0.22,
+  // Additive + alphaMap: the map's filament streaks eat most of the
+  // fill, so opacity runs hotter than the sphere needed to read.
+  glowOpacity: 0.45,
   glowScale: 0.8,
+  // Vapor-cone collar instead of the proxy bubble — apex at the disc,
+  // energy skirt flaring back along the flight line. Base radius still
+  // tracks hitRadius, so the wake's reach stays honest.
+  glowShape: 'cone',
   meshRampIn: true,
   meshRampInDuration: 0.15,
   meshStartScale: 0.25,

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { releaseProjectileInstance, syncProjectileInstance } from './visuals.js';
+import { releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import type { ProjectileConfig } from './types.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -34,6 +34,8 @@ export interface StuckHost {
   updateMesh(): void;
   explode(): void;
   fuseTtl(): number | undefined;
+  /** Seconds since arming (-1 while unarmed — sticks arm on contact). */
+  fuseAge(): number;
 }
 
 export class ProjStuck {
@@ -49,6 +51,9 @@ export class ProjStuck {
   private stuckPlayerId: string | null = null;
   private stuckMap: Map<string, THREE.Vector3> | null = null;
   private readonly stuckOffset = new THREE.Vector3();
+  /** Age at first contact — arming moment. Stays set if the bomb later
+   *  unglues (victim died): once armed it stays armed. */
+  armAge: number | undefined;
 
   constructor(private h: StuckHost) {}
 
@@ -66,6 +71,9 @@ export class ProjStuck {
     this.stuckMap = remotePlayers ?? null;
     const anchor = ball ? ball.pos : (playerId && remotePlayers?.get(playerId));
     if (anchor) this.stuckOffset.copy(p).sub(anchor);
+    // Arming is a contact event — the fuse and the armed-light ramp both
+    // start here, so flight time doesn't burn the 3s down.
+    this.armAge ??= h.age;
     h.updateMesh();
   }
 
@@ -91,7 +99,7 @@ export class ProjStuck {
       }
     }
     if (!h.stuck) return false; // dropped — fall through into physics with zero velocity
-    if (h.fuseTtl() && h.age >= h.fuseTtl()!) h.explode();
+    if (h.fuseTtl() && h.fuseAge() >= h.fuseTtl()!) h.explode();
     else h.updateMesh();
     return true;
   }
