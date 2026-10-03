@@ -83,10 +83,36 @@ export const profOct = (w: number, h: number, r: number): Ring2 => {
   ];
 };
 
+/** Build-time lint for ring profiles — catches the silent bug class we
+ *  kept hitting in the lab: clockwise rings render inside-out (watertight
+ *  but inverted — hole scans can't see it), mismatched section counts
+ *  silently skin garbage, duplicate points make degenerate faces.
+ *  Cheap enough to run on every build; warns, never throws. */
+export const validateRing = (r: Ring2, tag = 'ring'): void => {
+  let area = 0;
+  for (let i = 0; i < r.length; i++) {
+    const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % r.length]!;
+    area += x0 * y1 - x1 * y0;
+    if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) console.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);
+  }
+  if (area < 0) console.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);
+  if (r.length < 3) console.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);
+};
+const validateLoft = (sections: LoftSection[]): void => {
+  let n = -1;
+  for (const s of sections) {
+    if (!s.ring) continue;
+    if (n < 0) n = s.ring.length;
+    else if (s.ring.length !== n) console.warn(`[weaponKit] loft: section count mismatch ${s.ring.length} vs ${n} — resampleRing first`);
+    validateRing(s.ring, 'loft section');
+  }
+};
+
 /** Skin ring sections into a solid along Z, ngon-cap both ends. Non-indexed
  *  so faces are flat-shaded (hard-surface read + vertex-AO friendly).
  *  UVs are surface-relative: u wraps the ring, v runs the length. */
 export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true): THREE.Mesh => {
+  validateLoft(sections);
   const seg = (sections.find(s => s.ring)?.ring ?? []).length;
   const pos: number[] = [], uv: number[] = [];
   const pt = (s: LoftSection): [number, number, number] => [s.point![0] + (s.dx ?? 0), s.point![1] + (s.dy ?? 0), s.z];
@@ -145,6 +171,28 @@ export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
     const [bx, by] = b[i]!;
     return [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number];
   });
+};
+
+/** Profile-keyframe loft — list ring sections with DIFFERENT profiles or
+ *  counts and get back a mkLoft-ready section list with the transitions
+ *  interpolated. `subdiv` morph slices are inserted between each key pair
+ *  (point sections pass through untouched — morph only ring→ring spans).
+ *  Barrel→receiver in one call: morphLoft([{z:0, ring:profOct(...)},
+ *  {z:-0.1, ring:profCircle(...)}]) → mkLoft(...). */
+export const morphLoft = (keys: LoftSection[], subdiv = 4): LoftSection[] => {
+  const out: LoftSection[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]!, next = keys[i + 1];
+    out.push(k);
+    if (!next || !k.ring || !next.ring) continue;
+    const n = Math.max(k.ring.length, next.ring.length);
+    const a = resampleRing(k.ring, n), b = resampleRing(next.ring, n);
+    for (let s = 1; s <= subdiv; s++) {
+      const t = s / (subdiv + 1);
+      out.push({ z: k.z + (next.z - k.z) * t, ring: morphRing(a, b, t), dx: (k.dx ?? 0) + ((next.dx ?? 0) - (k.dx ?? 0)) * t, dy: (k.dy ?? 0) + ((next.dy ?? 0) - (k.dy ?? 0)) * t });
+    }
+  }
+  return out;
 };
 
 /** Revolve (lathe) — rotate a 2D [radius, z] profile around Z. Barrels,
@@ -260,7 +308,9 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   const seg = outer.length;
   // Counts mismatch? Re-sample the inner to the outer's count so e.g. a
   // hex rim can carry a 12-sided bore. Starts must be angle-aligned.
+  validateRing(outer, 'annulus outer');
   if (inner.length !== seg) inner = resampleRing(inner, seg);
+  else validateRing(inner, 'annulus inner');
   const pos: number[] = [], uv: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], u0: number, u1: number, v0: number, v1: number) => {
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);
@@ -274,6 +324,58 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
     quad(I(j, zBack), I(j + 1, zBack), I(j + 1, zFront), I(j, zFront), u0, u1, zBack, zFront); // inner wall (faces the hole)
     quad(O(j, zBack), O(j + 1, zBack), I(j + 1, zBack), I(j, zBack), u0, u1, 0, 1);           // back face (+Z)
     quad(O(j, zFront), I(j, zFront), I(j + 1, zFront), O(j + 1, zFront), u0, u1, 0, 1);        // front face (−Z)
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, mat);
+};
+
+/** Swept tube along a 3D polyline — cables, hoses, feed chutes, handguard
+ *  rails: everything we've been faking with rotated boxes. Uses parallel-
+ *  transport frames so the profile doesn't twist along the run. Radii may
+ *  vary per point ([x,y,z,r] — r optional, defaults to `radius`). */
+export const tubePath = (pts: [number, number, number, number?][], radius: number, mat: THREE.Material, seg = 8, cap = true): THREE.Mesh => {
+  const n = pts.length;
+  // Tangent per point (central differences), then parallel-transport a
+  // normal down the chain: project out the tangent component each step.
+  const T: THREE.Vector3[] = [], N: THREE.Vector3[] = [], B: THREE.Vector3[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)]!, b = pts[Math.min(n - 1, i + 1)]!;
+    T.push(new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize());
+  }
+  let nv = Math.abs(T[0]!.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < n; i++) {
+    nv.sub(T[i]!.clone().multiplyScalar(nv.dot(T[i]!))).normalize();
+    N.push(nv.clone());
+    B.push(new THREE.Vector3().crossVectors(T[i]!, nv));
+    nv = B[i]!.clone().cross(T[i]!).normalize(); // carry forward
+  }
+  const pos: number[] = [], uv: number[] = [];
+  const ring = (i: number, j: number): number[] => {
+    const a = (j / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    const p = pts[i]!, r = p[3] ?? radius;
+    return [p[0] + (N[i]!.x * c + B[i]!.x * s) * r, p[1] + (N[i]!.y * c + B[i]!.y * s) * r, p[2] + (N[i]!.z * c + B[i]!.z * s) * r];
+  };
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < seg; j++) {
+      // Winding is mirrored vs mkLoft: sections advance ALONG the ring's
+      // CCW axis (+t), where lofts travel against it.
+      const a = ring(i, j), b = ring(i, j + 1), c = ring(i + 1, j + 1), d = ring(i + 1, j);
+      pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+      uv.push(j / seg, i, (j + 1) / seg, i, (j + 1) / seg, i + 1, j / seg, i, (j + 1) / seg, i + 1, j / seg, i + 1);
+    }
+  }
+  if (cap) {
+    for (const [i, flip] of [[0, true], [n - 1, false]] as const) {
+      const p = pts[i]!;
+      for (let j = 0; j < seg; j++) {
+        const a = ring(i, j), b = ring(i, j + 1);
+        if (flip) pos.push(p[0], p[1], p[2], ...b, ...a); else pos.push(p[0], p[1], p[2], ...a, ...b);
+        uv.push(0.5, i, 1, i, 0, i);
+      }
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

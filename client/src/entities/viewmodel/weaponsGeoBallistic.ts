@@ -185,17 +185,31 @@ for (let i = 0; i < CHAIN_BARRELS; i++) {
 }
 chain.add(chainBarrels);
 // Faceplate — dark disc the barrels poke through; the depth illusion.
-chain.add(mkBore(CLUSTER_R + 0.055, -0.84));
-// Shroud — the Tribes chunky octagonal casing, enclosing the cluster.
-// Slightly tapered to the muzzle end so it reads as a gun not a tube.
+chain.add(mkBore(CLUSTER_R + 0.05, -0.50));
+// Shroud — chunky octagonal casing over the breech HALF only. Full-length
+// casing hid the whole cluster and read as a Quake rocket tube; the
+// Tribes silhouette is fat breech + exposed spinning barrels up front.
 chain.add(mkLoft([
   { z: 0.05, ring: profOct(0.31, 0.31, 0.1) },
-  { z: -0.42, ring: profOct(0.31, 0.31, 0.1) },
-  { z: -0.50, ring: profOct(0.28, 0.28, 0.09) },
-  { z: -0.84, ring: profOct(0.27, 0.27, 0.09) },
+  { z: -0.30, ring: profOct(0.31, 0.31, 0.1) },
+  { z: -0.42, ring: profOct(0.27, 0.27, 0.09) },
+  { z: -0.50, ring: profOct(0.26, 0.26, 0.085) },
 ], bodyMat, false)); // open ends — faceplate + breech cap them visually
-// Shroud collar — machined ring at the muzzle end the casing steps into.
-chain.add(mkAnnulus(profOct(0.32, 0.32, 0.1), profOct(0.28, 0.28, 0.09), -0.82, -0.86, darkMat));
+// Shroud collar — machined ring where the casing ends and the barrels
+// take over; a static step the spinning clamp sits just ahead of.
+chain.add(mkAnnulus(profOct(0.30, 0.30, 0.095), profOct(0.26, 0.26, 0.085), -0.48, -0.52, darkMat));
+// Muzzle clamp — spins WITH the barrels (journalled ahead of the static
+// collar), the gatling machine tell the shroud version lost.
+const clamp = new THREE.Mesh(new THREE.TorusGeometry(CLUSTER_R + 0.05, 0.018, 6, 14), bodyMat);
+clamp.position.z = -0.80;
+chainBarrels.add(clamp);
+for (let i = 0; i < CHAIN_BARRELS; i++) {
+  const a = (i / CHAIN_BARRELS) * Math.PI * 2;
+  const strut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.014, 0.014), bodyMat);
+  strut.rotation.z = a;
+  strut.position.set(Math.cos(a) * (CLUSTER_R / 2 + 0.015), Math.sin(a) * (CLUSTER_R / 2 + 0.015), -0.80);
+  chainBarrels.add(strut);
+}
 // Breech collar — the bearing the spinning cluster seats into. Lives
 // in chainBarrels so its bolt studs turn with the barrels; mostly hidden
 // inside the shroud but the rim reads in the breech gap.

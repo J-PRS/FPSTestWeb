@@ -4,6 +4,8 @@ dist/
 build/
 *.log
 
+*.png
+
 # Rust
 target/
 **/*.rs.bk

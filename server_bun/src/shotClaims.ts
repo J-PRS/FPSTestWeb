@@ -210,11 +210,18 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
         // (the ledger's per-projectile claim cap bounds damage anyway).
         const tsGapOk = msg.timestamp !== undefined && win.lastTs !== undefined
           && msg.timestamp - win.lastTs >= interval * 850;
-        if (!tsGapOk && win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
+        // Stampless claims can't prove their trigger spacing — without a
+        // fallback ANY compressed pair (backlog drain delivering two
+        // frames in one tick) reads as fast-fire. Judge them against the
+        // last admitted claim's arrival at half slack; the ledger's
+        // one-claim-per-projectile cap still bounds damage.
+        const arrGapOk = msg.timestamp === undefined && now - (win.lastAt ?? win.start) >= interval * 500;
+        if (!tsGapOk && !arrGapOk && win.count >= (getWeaponStats(msg.weaponType).burst ?? 1)) {
           h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType, msg.shotId);
           return;
         }
         win.count++;
+        win.lastAt = now;
         if (msg.timestamp !== undefined) win.lastTs = msg.timestamp;
       } else {
         h.fireWindows.set(key, { start: now, count: 1, lastTs: msg.timestamp });
