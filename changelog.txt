@@ -1,3 +1,4 @@
+2026-10-01 - pin the spawn-claim fire-window law: stamped cadence admit/violation-decay, sustained sub-cadence reject at 3, stampless flood bound, nonce dedup re-ack
 2026-10-01 - interior shadow-caster gate re-censuses on map swap: applyInteriors disposes the group each time, so the cached list gated dead meshes forever
 2026-10-01 - interior GLB cache no longer pins failures: a transient fetch miss poisoned the hull for the whole session — now evicted so the next map swap retries
 2026-10-01 - pickup touch is now a swept capsule like flag touch — a 60m/s skier crossing the 2.2m ring between 20Hz frames tunneled through nuggets without grabbing
