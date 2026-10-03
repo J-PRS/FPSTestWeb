@@ -21,6 +21,7 @@ import { createRepair } from './combat/repair.js';
 import { hitTargetLocal, onTargetDestroyed } from './combat/impact.js';
 import { processProjectileExplosion, slam, updateProjectiles } from './combat/projectiles.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import { classCanFire } from '../../../shared/botClasses.js';
 
 import type { GameContext } from './context.js';
 
@@ -134,6 +135,11 @@ export function createCombat(deps: CombatDeps) {
 
   return {
     onWeaponFire: (def: WeaponDef, e: FireEvent) => {
+      // Class lock is the server's law, not just a loadout-menu filter —
+      // any route that shouldered a gated weapon past the menu (gunlab,
+      // stale persisted slot, sidearm) must refuse here too, or every
+      // spawn + blast claim spam-rejects for the rest of the life.
+      if (!classCanFire(deps.lazyPlayer().appliedClass, def.weaponType)) return;
       // Hitscan kinds leave no projectile for observers — tell the server
       // so it can relay a cosmetic playerShot (muzzle audio/visual).
       if (def.kind === 'fan' || def.kind === 'beam') {
