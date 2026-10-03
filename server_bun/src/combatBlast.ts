@@ -11,6 +11,7 @@ import type { StructureCollider } from '../../shared/ballSim.ts';
 import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { clampPing, rewindPos } from './claimLedger.ts';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -141,7 +142,7 @@ export class BlastRunner {
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
       target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
-      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      target.forceSendUntil = wallNow() + FORCE_SEND_MS;
       this.h.hb('armor.nade');
       logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
     }
@@ -161,7 +162,7 @@ export class BlastRunner {
       // Center-of-blast heals full, the rim heals half — worth leading
       // the throw, not just tossing it over the wall.
       healPool(target, HEALNADE_HEAL * (1 - 0.5 * (d / radius)));
-      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      target.forceSendUntil = wallNow() + FORCE_SEND_MS;
       this.h.hb('heal.nade');
       logger.debug('Heal grenade', { shooter: playerId, target: targetId, hp: target.health });
     }
@@ -249,7 +250,7 @@ export class BlastRunner {
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;
     this.h.deps.moveImpulse?.(targetId, dv);
-    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    target.forceSendUntil = wallNow() + FORCE_SEND_MS;
     this.h.sendToPlayer(targetId, {
       type: 'knockback', targetId, position: pos, force: impulseMag,
       pull: pull || undefined,
@@ -312,7 +313,7 @@ export class BlastRunner {
       // Owner eats the blast too — mines don't pick friends.
       if (!this.h.friendly(ownerId, targetId) && damage > 0) {
         const result = this.h.playerManager.applyDamage(targetId, damage);
-        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+        target.forceSendUntil = wallNow() + FORCE_SEND_MS;
         this.h.applyHit(ownerId, targetId, damage, result, { label: 'Mine hit', extra: { dist: +dist.toFixed(2) } });
       }
     }

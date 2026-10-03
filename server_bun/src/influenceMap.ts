@@ -1,6 +1,5 @@
 import { HM_WORLD_SCALE } from '../../shared/heightfield.ts';
 import type { Vec3 } from './types.ts';
-
 /** Spatial memory for the whole room: a coarse grid where events —
  *  contacts, deaths, gem drops, flag moves — deposit influence that
  *  spreads with distance and decays with time. Bots read it for free:
@@ -16,7 +15,7 @@ import type { Vec3 } from './types.ts';
  *     gem drops, flag moves, fight noises.
  *   - traffic: where everyone has been — supports "fresh route" bias.
  *
- *  Deterministic: decay is ticked on the sim clock, never Date.now(). */
+ *  Deterministic: decay is ticked on the sim clock, never wallNow(). */
 
 export const IMAP_CELL = 32; // meters per cell — reads like "this area"
 const WORLD = HM_WORLD_SCALE; // the map is a square wrap of this size

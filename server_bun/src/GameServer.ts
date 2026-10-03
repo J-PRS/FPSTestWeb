@@ -16,6 +16,7 @@ import { RoomFactory } from './roomFactory.ts';
 import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
+import { wallNow } from './wallClock.ts';
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -37,7 +38,7 @@ export class GameServer {
   // that passed validation; tick lag measures setInterval drift (the
   // server-clock skew that makes client replays overshoot).
   ops = {
-    startedAt: Date.now(),
+    startedAt: wallNow(),
     msgsIn: 0, msgsRejected: 0, joins: 0, leaves: 0,
     // Which netcode-v2 tier clients actually land on — the cost/perf mix
     // this deployment is paying for.

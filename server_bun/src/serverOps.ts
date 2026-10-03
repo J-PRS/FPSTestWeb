@@ -1,5 +1,6 @@
 import { CONFIG } from './config.js';
 import type { GameServer } from './GameServer.js';
+import { wallNow } from './wallClock.ts';
 
 // Ops/metrics surface — totalPlayers, the server-browser card, the
 // /health row and the /metrics snapshot. GameServer is the host; these
@@ -13,7 +14,7 @@ export function totalPlayers(g: GameServer): number {
   /** Server-browser card: what a master list / LAN browser displays per
    *  host. Cheap to poll — one row per room, no per-player data. */
 export function getServerInfo(g: GameServer) {
-    const uptimeS = Math.floor((Date.now() - g.ops.startedAt) / 1000);
+    const uptimeS = Math.floor((wallNow() - g.ops.startedAt) / 1000);
     return {
       name: CONFIG.serverName,
       region: CONFIG.serverRegion || undefined,
@@ -38,7 +39,7 @@ export function getHealthStatus(g: GameServer): { status: string; players: numbe
    *  with per-room occupancy/ball counts for match-level observability. */
 export function getMetrics(g: GameServer) {
     const o = g.ops;
-    const uptimeS = Math.floor((Date.now() - o.startedAt) / 1000);
+    const uptimeS = Math.floor((wallNow() - o.startedAt) / 1000);
     const rooms = [...g.rooms.values()].map(r => ({
       name: r.name,
       players: r.playerCount(),

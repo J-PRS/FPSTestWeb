@@ -4,6 +4,7 @@ import { logger } from './logger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { CombatHandler } from './CombatHandler.ts';
 import { healPool } from './healPool.ts';
+import { wallNow } from './wallClock.ts';
 
 type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 
@@ -45,7 +46,7 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     }
     const damage = Math.min(attacker ? 80 : 40, Math.max(1, Math.round(msg.amount)));
     const result = h.playerManager.applyDamage(playerId, damage);
-    player.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    player.forceSendUntil = wallNow() + FORCE_SEND_MS;
     h.applyHit(attacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
     return true;
   }
@@ -61,7 +62,7 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
 export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): ClaimVerdict {
     const player = h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return 'gone';
-    const now = Date.now();
+    const now = wallNow();
     if ((h.lastHeal.get(playerId) ?? 0) > now) return 'cooldown';
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
     if (h.deps.teams) {
@@ -73,7 +74,7 @@ export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMess
       healPool(player, heal);
     }
     h.lastHeal.set(playerId, now + 1500); // a heal that landed sets the cadence; a refused one doesn't
-    player.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    player.forceSendUntil = wallNow() + FORCE_SEND_MS;
     logger.info('Player healed', { playerId, heal, health: player.health });
     return true;
   }

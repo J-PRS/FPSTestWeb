@@ -4,6 +4,7 @@ import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { GameServer } from './GameServer.ts';
 import { WIRE_TICK } from '../../shared/wire.ts';
+import { wallNow } from './wallClock.ts';
 
 // node-datachannel's IceServer record is {hostname, port, relayer?}, not
 // the {urls:...} objects the browser API uses — translate FPS_ICE_SERVERS
@@ -76,7 +77,7 @@ async function loadNd(): Promise<NdModule | null> {
 type DataChannelLabeled = DataChannelLike & { getLabel?(): string; label?: string };
 
 class RtcSocketAdapter {
-  readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
+  readonly data: WebSocketData = { playerId: '', connectedAt: wallNow() };
   // The datachannel has no IP, but its signalling ws did — inherit it so
   // per-IP flood control (join throttle) attributes correctly. Sharing the
   // literal 'webrtc' made EVERY RTC client share one throttle bucket.

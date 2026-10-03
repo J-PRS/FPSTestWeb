@@ -3,6 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
+import { wallNow } from './wallClock.ts';
 
 // Movement-claim family — position reports, declared teleports, and the
 // plausibility judge that guards them. Split from MessageHandler so the
@@ -41,7 +42,7 @@ export class MoveClaims {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
-    const now = Date.now();
+    const now = wallNow();
     if (!this.plausible(playerId, player, msg, now)) return;
 
     // inputSeq (not the frame seq) anchors the probe: it's the count of
@@ -174,14 +175,14 @@ export class MoveClaims {
   handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
-    const now = Date.now();
+    const now = wallNow();
     if ((this.lastTeleport.get(playerId) ?? 0) > now) {
       logger.warn('teleport dropped: cadence', { playerId });
       return;
     }
     this.lastTeleport.set(playerId, now + 3000);
     player.lastPosCheckPos = { ...msg.position };
-    player.lastPosCheckTime = Date.now();
+    player.lastPosCheckTime = wallNow();
     player.consecutiveRejects = 0;
     this.h.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, undefined);
     // updatePosition only touches lastValid on a seq bump — a declared
@@ -215,7 +216,7 @@ export class MoveClaims {
   handleResyncSeat(playerId: string): void {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || !player.hasReceivedPosition) return;
-    const now = Date.now();
+    const now = wallNow();
     player.lastPosCheckPos = { ...player.position };
     player.lastPosCheckTime = now;
     player.consecutiveRejects = 0;

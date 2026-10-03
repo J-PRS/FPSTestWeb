@@ -6,6 +6,7 @@ import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
+import { wallNow } from './wallClock.ts';
 
 export interface DemoMeta {
   filename: string;
@@ -48,7 +49,7 @@ export class DemoStorage {
           this.index.push({
             filename,
             projectileLifetime: header.projectileLifetime,
-            timestamp: Date.now(),
+            timestamp: wallNow(),
             description: header.description,
             fileSize: data.byteLength,
           });
@@ -165,7 +166,7 @@ export class DemoStorage {
     const meta: DemoMeta = {
       filename,
       projectileLifetime: header.projectileLifetime,
-      timestamp: Date.now(),
+      timestamp: wallNow(),
       description: header.description,
       fileSize: data.byteLength,
     };

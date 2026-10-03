@@ -1,4 +1,5 @@
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 /**
  * SessionRegistry — the single place that knows WHO each player is in
@@ -44,10 +45,10 @@ export class SessionRegistry {
       logger.error('illegal session transition', { playerId, from: s.state, to, reason, gen: s.gen, room: s.room });
       return false;
     }
-    const wallAge = Date.now() - s.at;
+    const wallAge = wallNow() - s.at;
     const from = s.state;
     s.state = to;
-    s.at = Date.now();
+    s.at = wallNow();
     logger.info('session transition', { playerId, t: `${from}->${to}`, reason, gen: s.gen, room: s.room, wallAgeMs: wallAge });
     if (to === 'reaped') this.sessions.delete(playerId);
     return true;
@@ -62,7 +63,7 @@ export class SessionRegistry {
     if (prior) {
       logger.warn('session re-begin over live state', { playerId, from: prior.state, gen: prior.gen, room: prior.room });
     }
-    this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: Date.now(), room });
+    this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });
   }
 
   /** connecting → active|spectating. Returns the seat generation — stamp it
@@ -71,7 +72,7 @@ export class SessionRegistry {
     const s = this.sessions.get(playerId);
     if (!s) {
       logger.error('seat without begin', { playerId });
-      this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: Date.now(), room: '' });
+      this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room: '' });
       return this.sessions.get(playerId)!.gen;
     }
     this.transition(playerId, s, spectator ? 'spectating' : 'active', reason);
@@ -93,7 +94,7 @@ export class SessionRegistry {
       logger.info('session reseat', { playerId, gen: s.gen, room: s.room, reason });
     }
     s.gen = ++this.genCounter;
-    s.at = Date.now();
+    s.at = wallNow();
     return s.gen;
   }
 

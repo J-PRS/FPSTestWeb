@@ -10,11 +10,12 @@ import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
+import { wallNow } from './wallClock.ts';
 
 let internalIdCounter = 0;
 
 function nextInternalId(): string {
-  return `${Date.now()}_${++internalIdCounter}`;
+  return `${wallNow()}_${++internalIdCounter}`;
 }
 
 export class PlayerManager {
@@ -79,7 +80,7 @@ export class PlayerManager {
       kills: 0,
       deaths: 0,
       streak: 0,
-      lastSeen: Date.now(),
+      lastSeen: wallNow(),
       pendingRespawn: false,
       lastSeq: 0,
       lastValidPosition: { ...spawn },
@@ -198,7 +199,7 @@ export class PlayerManager {
       player.position = { ...position };
       player.rotation = { ...rotation };
       player.velocity = { ...velocity };
-      player.lastSeen = Date.now();
+      player.lastSeen = wallNow();
       if (seq !== undefined && seq > player.lastSeq) {
         player.lastSeq = seq;
         player.lastValidPosition = { ...position };
@@ -313,7 +314,7 @@ export class PlayerManager {
     // Rewind buffer: corpse-side samples must not survive the respawn —
     // hit validation and muzzle checks would rewind to the death site.
     player.history.length = 0;
-    player.history.push({ t: Date.now(), x: spawn.x, y: spawn.y, z: spawn.z });
+    player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z });
     player.protectedUntil = simNow() + PlayerManager.SPAWN_PROTECT_MS;
 
     return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };

@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 /**
  * WebRTC signalling relay — the server's only role in P2P mode. Two peers
@@ -35,7 +36,7 @@ export class RtcRelay {
       return;
     }
     members.add(ws);
-    if (members.size === 1 && ws.data.open) this.openRooms.set(room, Date.now());
+    if (members.size === 1 && ws.data.open) this.openRooms.set(room, wallNow());
     // First member hosts; the second's arrival kicks off the offer.
     ws.send(JSON.stringify({ t: 'role', host: members.size === 1 }));
     if (members.size === 2) {

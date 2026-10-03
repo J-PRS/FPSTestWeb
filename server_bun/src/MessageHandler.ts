@@ -18,6 +18,7 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
+import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -289,7 +290,7 @@ export class MessageHandler {
       ping: (id, m) => {
         const p = this.playerManager.getPlayer(id);
         if (!p) return;
-        p.lastSeen = Date.now(); // ping is a liveness signal too —
+        p.lastSeen = wallNow(); // ping is a liveness signal too —
         // without it a non-moving client could still go "stale"
         this.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
       },
@@ -367,7 +368,7 @@ export class MessageHandler {
   botFire(shooterId: string, targetId: string | null, position: Vec3, velocity: Vec3, weaponType: number, hit: boolean): void {
     this.broadcast({
       type: 'projectileCreated',
-      projectileId: `bot-${shooterId}-${Date.now()}`,
+      projectileId: `bot-${shooterId}-${wallNow()}`,
       ownerId: shooterId,
       position,
       velocity,
@@ -457,7 +458,7 @@ export class MessageHandler {
       // The judge anchors reseat on stored truth for the same reason.
       player.lastSeq = 0;
       player.lastPosCheckPos = { ...player.position };
-      player.lastPosCheckTime = Date.now();
+      player.lastPosCheckTime = wallNow();
       player.consecutiveRejects = 0;
       this.roomInfo.moveMute?.(playerId);
     }
@@ -569,7 +570,7 @@ export class MessageHandler {
 
     if (!this.rateLimiter.check(playerId, msg.type)) {
       const warnKey = `${playerId}:${msg.type}`;
-      const now = Date.now();
+      const now = wallNow();
       const lastWarn = this.rateLimitWarnings.get(warnKey);
       this.hb('ratelimit');
       if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
@@ -585,7 +586,7 @@ export class MessageHandler {
     // Any valid, rate-limit-passing message proves the socket is alive —
     // liveness can't live per-handler or a chatty-but-untracked type
     // (inputMove in authority mode) starves the idle reaper mid-match.
-    player.lastSeen = Date.now();
+    player.lastSeen = wallNow();
 
     const handler = this.handlers[msg.type] as ((id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
@@ -632,7 +633,7 @@ export class MessageHandler {
     this.sendToPlayer(playerId, {
       type: 'snapshot',
       players,
-      timestamp: Date.now(),
+      timestamp: wallNow(),
     });
 
     // Log full state for desync debugging

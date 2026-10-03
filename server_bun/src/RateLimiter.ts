@@ -1,4 +1,5 @@
 import { CONFIG } from './config.ts';
+import { wallNow } from './wallClock.ts';
 
 interface RateLimitEntry {
   count: number;
@@ -20,7 +21,7 @@ export class RateLimiter {
       this.limits.set(playerId, playerLimits);
     }
 
-    const now = Date.now();
+    const now = wallNow();
     let entry = playerLimits.get(configKey);
     if (!entry) {
       entry = { count: 0, windowStart: now };

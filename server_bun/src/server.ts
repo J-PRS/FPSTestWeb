@@ -9,6 +9,7 @@ import { WtServer } from './WtServer.ts';
 import { join } from 'node:path';
 import { clientLogRoute, rotateLogs } from './clientLogs.ts';
 import { adminRoute, corsResponse, demoRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
+import { wallNow } from './wallClock.ts';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
@@ -73,7 +74,7 @@ const server = Bun.serve<WebSocketData>({
     }
 
     if (url.pathname === '/ws') {
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now() });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow() });
     }
 
     // P2P signalling: /rtc?room=CODE — two sockets per room, opaque relay.
@@ -83,13 +84,13 @@ const server = Bun.serve<WebSocketData>({
         return new Response('Bad room', { status: 400 });
       }
       const open = url.searchParams.get('open') === '1';
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtc: true, room, open });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtc: true, room, open });
     }
 
     // Server-peer WebRTC signalling: /rtcs — one shot offer/answer, then
     // the DataChannel becomes the game socket.
     if (url.pathname === '/rtcs') {
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtcs: true });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtcs: true });
     }
 
     const route = ROUTES[url.pathname];

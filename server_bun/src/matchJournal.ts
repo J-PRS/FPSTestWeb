@@ -7,6 +7,7 @@
 import { join } from 'node:path';
 import { mkdirSync, appendFileSync } from 'node:fs';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 interface MatchRec {
   t: number;
@@ -26,7 +27,7 @@ export class MatchJournal {
     room: string; mode: string; winner: string; scores: Record<string, number>;
     players?: { id: string; team?: string; kills: number; deaths: number }[];
   }): void {
-    const entry = { t: Date.now(), ...rec };
+    const entry = { t: wallNow(), ...rec };
     this.ring.push(entry);
     if (this.ring.length > 100) this.ring.shift();
     try {

@@ -12,6 +12,7 @@ import { freshDefer } from './claimLedger.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
+import { wallNow } from './wallClock.ts';
 
 // AOE claim adjudication — the blast detonation a client claims: pop the
 // named shell, sanity-check the blast point per weapon contract (named
@@ -89,13 +90,13 @@ export class AoeClaims {
     // Reorder case: same age-vs-airtime fix as direct hits — the spawn
     // stamp understates true flight age when the claim beat the spawn
     // registration, so bound it by the claimed airtime instead.
-    if (defer) proj.spawnAt = Math.min(proj.spawnAt, Date.now() - msg.airtime * 1000);
+    if (defer) proj.spawnAt = Math.min(proj.spawnAt, wallNow() - msg.airtime * 1000);
     const verdict = validateAoeClaim({
       projectile: proj,
       blastPos: msg.position,
       airtime: msg.airtime,
       shooterVel: player.velocity,
-      now: Date.now(),
+      now: wallNow(),
       solids: this.h.solids,
     });
     if (!verdict.ok) {

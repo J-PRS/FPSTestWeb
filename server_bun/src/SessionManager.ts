@@ -7,6 +7,7 @@ import { logger } from './logger.ts';
 import { isPerkId } from '../../shared/perks.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { createHmac, randomBytes } from 'node:crypto';
+import { wallNow } from './wallClock.ts';
 
 /** Everything the socket lifecycle needs from GameServer — supplied as
  *  closures/maps so ownership stays with the dispatcher. */
@@ -54,7 +55,7 @@ export class SessionManager {
     // Loopback is the dev box and the pvptest harness — fleets spawn 24+
     // joins/minute legitimately. Flood control is for real traffic only.
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
-    const now = Date.now();
+    const now = wallNow();
     let w = this.joinWindows.get(ip);
     if (!w || now - w.start >= SessionManager.JOIN_WINDOW_MS) {
       w = { count: 0, start: now };
@@ -209,7 +210,7 @@ export class SessionManager {
     // A valid-token reclaim IS liveness — without the stamp a seat that
     // spent >60s in grace gets idle-reaped before the first inputMove
     // lands, looping connect → reap → reconnect forever.
-    existingPlayer.lastSeen = Date.now();
+    existingPlayer.lastSeen = wallNow();
     const oldSock = room.connections.getConnection(playerId);
     ws.data.playerId = playerId;
     ws.data.gen = this.d.registry.reclaim(playerId, 'reclaim');

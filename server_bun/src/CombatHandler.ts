@@ -21,6 +21,7 @@ import { hitClaim, registerMiss } from './shotClaims.ts';
 import { simNow } from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
+import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -150,7 +151,7 @@ export class CombatHandler {
   private static CLAIM_DEFER_CAP = 64;
 
   deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void {
-    if (d.left <= 0 || Date.now() - d.at > CLAIM_DEFER_MS) {
+    if (d.left <= 0 || wallNow() - d.at > CLAIM_DEFER_MS) {
       this.reject(playerId, kind, 'no known projectile — spawn claim never arrived', targetId, weaponType);
       return;
     }
@@ -217,7 +218,7 @@ export class CombatHandler {
   private lastDropNotify = new Map<string, number>();
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
     const key = `${playerId}:${kind}:${targetId ?? ''}`;
-    const now = Date.now();
+    const now = wallNow();
     if (now - (this.lastDropNotify.get(key) ?? 0) < 1000) return;
     this.lastDropNotify.set(key, now);
     const health = this.playerManager.getPlayer(playerId)?.health;
@@ -313,7 +314,7 @@ export class CombatHandler {
   handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
-    const now = Date.now();
+    const now = wallNow();
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
     this.lastFireNotify.set(playerId, now);
     this.deps.onFire?.(playerId);
@@ -418,7 +419,7 @@ export class CombatHandler {
     const owner = ownerId === 'environment' ? null : this.playerManager.getPlayer(ownerId);
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
-    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    target.forceSendUntil = wallNow() + FORCE_SEND_MS;
     this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId });
     // Same charge rule as client claims: a non-beam direct hit detonates
     // min(banked, damage). 'environment' can't own a blast — skip it.

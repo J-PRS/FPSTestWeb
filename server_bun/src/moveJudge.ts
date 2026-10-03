@@ -9,6 +9,7 @@ import { MoveSim, ENERGY, type MoveInput, type MoveState, type Vec3Like } from '
 import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
+import { wallNow } from './wallClock.ts';
 
 export { FieldSurface };
 
@@ -136,7 +137,7 @@ export class MoveJudge {
     // seed the fresh shadow at the old position and flag the real spawn
     // landing ~60m away as a cheat. The hop grace mutes them; the first
     // post-gameState report seeds at the true spawn instead.
-    if (Date.now() - sh.resyncAt < CONFIG.reportGraceMs) return null;
+    if (wallNow() - sh.resyncAt < CONFIG.reportGraceMs) return null;
     if (!sh.seeded) {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };
@@ -175,7 +176,7 @@ export class MoveJudge {
     if (dist <= tol) return null;
 
     this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);
-    const now = Date.now();
+    const now = wallNow();
     if (now - sh.lastCorrection < this.host.correctMs()) return null;
     sh.lastCorrection = now;
     // The sim keeps its own position — resyncing onto the rejected report
@@ -207,7 +208,7 @@ export class MoveJudge {
     // sim authority nothing ever corrects the shadow, so two honest
     // sims drifting on cresty terrain is the expected steady state,
     // not a warn — the plausibility gate is the real judge there.
-    const transient = !this.host.authoritative() || dist < tol * 1.5 || Date.now() - sh.lastImpulseAt < 2000;
+    const transient = !this.host.authoritative() || dist < tol * 1.5 || wallNow() - sh.lastImpulseAt < 2000;
     if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;
     const s = sh.sim.state;
     logger[transient ? 'info' : 'warn']('Move sim divergence', {
@@ -230,7 +231,7 @@ export class MoveJudge {
    *  the shadow as a teleporter, not a drifter. */
   private noteSevere(sh: Shadow, playerId: string, dist: number): void {
     if (dist <= SEVERE_M || sh.cheated) return;
-    const now = Date.now();
+    const now = wallNow();
     sh.severeT = sh.severeT.filter((t) => now - t < SEVERE_MS);
     sh.severeT.push(now);
     if (sh.severeT.length >= SEVERE_N) {

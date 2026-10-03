@@ -3,6 +3,7 @@ import type { Room } from './Room.ts';
 import { computeStateHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
+import { wallNow } from './wallClock.ts';
 
 // Heal/suppression helpers live in tickHelpers.ts so tickRecords doesn't
 // import this file — re-exported here because scenario tests import them
@@ -66,7 +67,7 @@ export class TickLoop {
   private startTickBroadcast(): void {
     const tickMs = 1000 / CONFIG.tickRate;
     this.tickTimer = setInterval(() => {
-      const now0 = Date.now();
+      const now0 = wallNow();
       // Tick lag: how late this interval fired vs the nominal cadence.
       // Sustained lag = sim clock drifts behind wall time — the skew that
       // pushes client ball replays ahead of authority.
@@ -118,7 +119,7 @@ export class TickLoop {
   /** Test seam: run one room tick synchronously (prod path goes through
    *  startTickBroadcast's interval). Public so scenario tests can drive
    *  ticks deterministically — tick bodies stay identical. */
-  tickRoomNow(room: Room, now0 = Date.now()): void {
+  tickRoomNow(room: Room, now0 = wallNow()): void {
     this.tickRoom(room, room.players.getAllPlayers(), now0);
   }
 
@@ -193,7 +194,7 @@ export class TickLoop {
     // client's loss telemetry counts that phantom skip as a dropped
     // frame (~3% bogus loss at the hash cadence).
     const hash = this.computeStateHash(room);
-    const timestamp = Date.now();
+    const timestamp = wallNow();
 
     room.broadcast({
       type: 'stateHash',

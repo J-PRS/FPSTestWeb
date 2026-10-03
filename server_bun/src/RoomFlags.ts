@@ -102,8 +102,11 @@ export class RoomFlags {
 
   /** Snapshot for gameState joins and the flagUpdate broadcast. */
   snapshot() {
+    // home rides every snapshot — the stand mesh + socket marker are
+    // placed from it, including by clients who join mid-run while the
+    // flag itself is away (a 'home'-state pos alone can't tell them).
     return [...this.flags.values()].map((f) => ({
-      team: f.team, pos: { ...f.pos }, state: f.state, carrier: f.carrier,
+      team: f.team, pos: { ...f.pos }, home: { ...f.home }, state: f.state, carrier: f.carrier,
     }));
   }
 

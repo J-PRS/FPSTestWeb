@@ -4,6 +4,7 @@ import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { CombatHandler } from './CombatHandler.ts';
+import { wallNow } from './wallClock.ts';
 
 // Server-owned attacks — no client claim to validate because the sim
 // (creature AI, server bots) IS the attacker. They still route through
@@ -38,7 +39,7 @@ export function botAttack(h: CombatHandler, shooterId: string, targetId: string,
       if (tank.energyOf && (tank.energyOf(shooterId) ?? 0) < HEALBEAM_ENERGY) return;
       tank.drainEnergy?.(shooterId, HEALBEAM_ENERGY);
       healPool(target, HEALBEAM_PER_TICK);
-      target.forceSendUntil = Date.now() + 900;
+      target.forceSendUntil = wallNow() + 900;
       h.hb('heal.beam');
       return;
     }

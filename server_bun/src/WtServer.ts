@@ -2,6 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import type { GameServer } from './GameServer.ts';
+import { wallNow } from './wallClock.ts';
 
 // @webtransport-bun/webtransport is a native (napi-rs/wtransport) module.
 // Loaded lazily like node-datachannel — if the native addon fails, WT is
@@ -37,7 +38,7 @@ type WtModule = {
  * ServerWebSocket shape GameServer uses — send/close/readyState/data.
  */
 export class WtSocketAdapter {
-  readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
+  readonly data: WebSocketData = { playerId: '', connectedAt: wallNow() };
   // The session knows its peer — a literal string put EVERY WT client in
   // one per-IP join-throttle bucket (the same bug the RTC adapter had).
   readonly remoteAddress: string;

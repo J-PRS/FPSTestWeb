@@ -12,6 +12,7 @@ import type { PlayerState } from './types.ts';
 import type { TransportKind } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
+import { wallNow } from './wallClock.ts';
 
 // Room/map/mode name grammar — bad values fall through to 'default'.
 const word = (v: unknown): string | undefined =>
@@ -102,7 +103,7 @@ export class RoomSwitcher {
     // report then reads as an impossible 100m+ jump). Mute the
     // plausibility gate + shadow judge for the same drain window a
     // correction gets.
-    joined.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
+    joined.correctionGraceUntil = wallNow() + CONFIG.reportGraceMs;
     this.host.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
@@ -112,7 +113,7 @@ export class RoomSwitcher {
   }
 
   private throttled(playerId: string): boolean {
-    const now = Date.now();
+    const now = wallNow();
     if (now - (this.cooldowns.get(playerId) ?? 0) < RoomSwitcher.SWITCH_COOLDOWN_MS) return true;
     // Mark on attempt — denied paths (room full, dead, no-op) stay
     // throttled too or switchRoom name-spam churns roomFor unbounded.

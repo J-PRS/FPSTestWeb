@@ -9,6 +9,7 @@ import { rewindPos, rewindNearest, clampPing, freshDefer, type ClaimDefer } from
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
+import { wallNow } from './wallClock.ts';
 
 // Shot-claim gates: legality checks for a claimed hit, plus the spawn
 // sanity check before a miss becomes a tracked projectile.
@@ -73,7 +74,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // the ledger's spawnAt understates true flight age. Bound the age by
     // the claim's own airtime — the reach/arc/occlusion checks still pin
     // the flight geometry to the real registered origin.
-    if (defer) proj.spawnAt = Math.min(proj.spawnAt, Date.now() - msg.airtime * 1000);
+    if (defer) proj.spawnAt = Math.min(proj.spawnAt, wallNow() - msg.airtime * 1000);
     // Lag compensation: validate against the target's rewind PATH —
     // where the shooter saw it is anywhere in (now-ping-interp, now),
     // so a fast target's legit claim can sit several meters off the
@@ -85,7 +86,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
       targetPos,
       airtime: msg.airtime,
       shooterVel: player.velocity,
-      now: Date.now(),
+      now: wallNow(),
       solids: h.solids,
       targetClass: target.armorClass,
     });
@@ -103,7 +104,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // Full-rate tick updates for the hit window — the shooter's client is
     // extrapolating this target's knockback and needs real positions to
     // converge on (suppression would leave it predicting blind).
-    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    target.forceSendUntil = wallNow() + FORCE_SEND_MS;
 
     // The server projectile id (proj_N) joins playerHit to the earlier
     // projectileCreated — that's the join accuracy stats group on.
@@ -129,7 +130,7 @@ function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, 
     // Tick law, same shape as the repair beam: one heal tick per
     // shooter+target pair per window — 15% slack for ping jitter.
     const key = `${playerId}|${targetId}`;
-    const now = Date.now();
+    const now = wallNow();
     const last = h.healTicks.get(key) ?? 0;
     if (now - last < HEALBEAM_MIN_TICK_S * 850) {
       h.hb('drop.healRate');
@@ -198,7 +199,7 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
     // in one pull); 15% slack absorbs ping jitter.
     const interval = msg.weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType] : undefined;
     if (interval !== undefined) {
-      const now = Date.now();
+      const now = wallNow();
       const key = `${playerId}:${msg.weaponType}`;
       const win = h.fireWindows.get(key);
       if (win && now - win.start < interval * 850) {

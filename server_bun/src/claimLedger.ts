@@ -1,5 +1,6 @@
 import type { Vec3, PlayerState } from './types.ts';
 import type { TrackedProjectile } from '../../shared/combat.ts';
+import { wallNow } from './wallClock.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -19,7 +20,7 @@ export interface ClaimDefer { at: number; left: number }
 export const CLAIM_DEFER_TRIES = 3;
 export const CLAIM_DEFER_MS = 600;
 export function freshDefer(): ClaimDefer {
-  return { at: Date.now(), left: CLAIM_DEFER_TRIES };
+  return { at: wallNow(), left: CLAIM_DEFER_TRIES };
 }
 export function clampPing(ping: number): number {
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
@@ -29,7 +30,7 @@ export function clampPing(ping: number): number {
 export function rewindPos(target: PlayerState, backMs: number): { x: number; y: number; z: number } {
   const h = target.history;
   if (h.length === 0) return target.position;
-  const tAt = Date.now() - backMs;
+  const tAt = wallNow() - backMs;
   if (tAt <= h[0]!.t) return h[0]!;
   const last = h[h.length - 1]!;
   if (tAt >= last.t) return target.position;
@@ -49,7 +50,7 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
 // target's recorded path in [now-backMs-extraMs, now] bounds the error
 // by the target's own measured motion instead of a flat slack.
 export function rewindNearest(target: PlayerState, backMs: number, extraMs: number, pt: Vec3): Vec3 {
-  const floor = Date.now() - backMs - extraMs;
+  const floor = wallNow() - backMs - extraMs;
   let best = rewindPos(target, backMs);
   let bestD = dist3(best, pt);
   for (const s of target.history) {
@@ -116,7 +117,7 @@ export class ClaimLedger {
       weaponType,
       origin: { ...position },
       velocity: { ...velocity },
-      spawnAt: Date.now(),
+      spawnAt: wallNow(),
       clientShotId,
     });
     if (clientShotId) this.clientIds.set(`${ownerId}|${clientShotId}`, id);
@@ -173,13 +174,13 @@ export class ClaimLedger {
     if (live) {
       if (live.ownerId !== playerId) return undefined;
       this.projectiles.delete(projectileId);
-      const rec: SpentRecord = { proj: live, shot: false, aoe: false, at: Date.now() };
+      const rec: SpentRecord = { proj: live, shot: false, aoe: false, at: wallNow() };
       this.spent.set(projectileId, rec);
       this.sweepSpent();
       return this.take(rec, claim);
     }
     const rec = this.spent.get(projectileId);
-    if (rec && rec.proj.ownerId === playerId && Date.now() - rec.at < SPENT_CLAIM_MS) {
+    if (rec && rec.proj.ownerId === playerId && wallNow() - rec.at < SPENT_CLAIM_MS) {
       return this.take(rec, claim);
     }
     return undefined;
@@ -200,7 +201,7 @@ export class ClaimLedger {
     for (const [id, proj] of this.projectiles) {
       if (!this.matches(proj, playerId, weaponType)) continue;
       this.projectiles.delete(id);
-      const rec: SpentRecord = { proj, shot: false, aoe: false, at: Date.now() };
+      const rec: SpentRecord = { proj, shot: false, aoe: false, at: wallNow() };
       this.spent.set(id, rec);
       if (!claimable) claimable = rec; // first live match = oldest
     }
@@ -214,7 +215,7 @@ export class ClaimLedger {
     // free — taking a consumed rec would just bounce the claim.
     for (const rec of this.spent.values()) {
       if (!this.matches(rec.proj, playerId, weaponType)) continue;
-      if (Date.now() - rec.at >= SPENT_CLAIM_MS) continue;
+      if (wallNow() - rec.at >= SPENT_CLAIM_MS) continue;
       const t = this.take(rec, claim);
       if (t) return t;
     }
@@ -248,7 +249,7 @@ export class ClaimLedger {
     const proj = this.projectiles.get(projectileId);
     this.projectiles.delete(projectileId);
     if (proj) {
-      this.spent.set(projectileId, { proj, shot: false, aoe: false, at: Date.now() });
+      this.spent.set(projectileId, { proj, shot: false, aoe: false, at: wallNow() });
       this.sweepSpent();
     }
   }
@@ -272,7 +273,7 @@ export class ClaimLedger {
   /** Bound the spent map — same cap as live projectiles, plus a lazy
    *  age sweep so stale ids can't resolve hours later. */
   private sweepSpent(): void {
-    const now = Date.now();
+    const now = wallNow();
     for (const [id, rec] of this.spent) {
       if (now - rec.at > SPENT_SWEEP_MS) this.dropSpent(id, rec);
     }

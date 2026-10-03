@@ -5,6 +5,7 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
 import { FieldSurface, MoveJudge, type Shadow } from './moveJudge.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
+import { wallNow } from './wallClock.ts';
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -144,7 +145,7 @@ export class RoomMoveSim {
    *  shadow: pre-gameState frames still in flight are muted ~1 RTT. */
   markReseated(playerId: string): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.resyncAt = Date.now();
+    if (sh) sh.resyncAt = wallNow();
   }
 
   /** Perk swap after track() baked the modifiers — role rebalance pins
@@ -268,7 +269,7 @@ export class RoomMoveSim {
     if (!sh) return;
     const v = sh.sim.state.vel;
     v.x += dv.x; v.y += dv.y; v.z += dv.z;
-    sh.lastImpulseAt = Date.now();
+    sh.lastImpulseAt = wallNow();
   }
 
   /** Tick-set confirm for the wire frame — the highest inputMove seq
@@ -296,7 +297,7 @@ export class RoomMoveSim {
     // reports ahead means events were lost, not queued.
     if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
       sh.gapStreak++;
-      const now = Date.now();
+      const now = wallNow();
       if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
         sh.lastHintAt = now;
         this.onInputGap?.(playerId, sh.lastInputSeq);
@@ -336,7 +337,7 @@ export class RoomMoveSim {
     sh.sim.setInput({ forward: 0, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false });
     sh.jetWanted = false;
     sh.resyncSeq = sh.lastInputSeq;
-    sh.resyncAt = Date.now();
+    sh.resyncAt = wallNow();
     sh.divergences = 0; // new trajectory — don't carry old accumulation
   }
 

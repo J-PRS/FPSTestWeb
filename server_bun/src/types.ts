@@ -11,7 +11,6 @@ export type {
 import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
-
 export interface WebSocketData {
   playerId: string;
   connectedAt: number;
@@ -84,13 +83,13 @@ export interface PlayerState {
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not
   // the live position. Capped ~400ms / appended in handlePosition.
   history: { t: number; x: number; y: number; z: number }[];
-  // Tick-send override: while Date.now() < forceSendUntil, this player is
+  // Tick-send override: while wallNow() < forceSendUntil, this player is
   // included in every tick regardless of movement/distance suppression.
   // Set on hit/knockback — the victim's real trajectory MUST flow during
   // the shooter's ~0.6s predicted-knockback window, or remotes flap
   // between the predicted sim and the stale suppressed position.
   forceSendUntil: number;
-  // Spawn protection: while Date.now() < protectedUntil, applyDamage
+  // Spawn protection: while wallNow() < protectedUntil, applyDamage
   // no-ops on this player. Set on join/respawn; firing clears it —
   // shooting from inside your own shield is the standard trade.
   protectedUntil: number;

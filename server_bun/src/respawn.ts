@@ -8,6 +8,7 @@ import { simNow } from './simClock.ts';
 import { logger } from './logger.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
+import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 
@@ -78,7 +79,7 @@ export class RespawnManager {
       // reports from the corpse spot) read as impossible speed/
       // divergence against the reseated anchors. Same drain window a
       // correction gets.
-      player.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
+      player.correctionGraceUntil = wallNow() + CONFIG.reportGraceMs;
 
       this.broadcast({
         type: 'playerRespawn',
