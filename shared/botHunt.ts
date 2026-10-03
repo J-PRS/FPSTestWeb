@@ -13,6 +13,7 @@ import { botRand } from './botRand.ts';
 import { GRAVITY } from './movement.ts';
 import { rollSkill, type BotSkill } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
+import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
 // LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
@@ -354,13 +355,29 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // flag, so probing the whole ray strangled fire volume for nothing.
   if (ctx.weaponSpeed?.(d) && !process.env.FPS_NOMUZZLE) {
     const muzzle = { x: pos.x, y: pos.y + 1.4, z: pos.z };
-    const reach = Math.min(d, 12);
+    const reach = Math.min(d, 16);
     const nearAim = {
       x: pos.x + ((aim.x - pos.x) / d) * reach,
       y: pos.y + ((aim.y - pos.y) / d) * reach,
       z: pos.z + ((aim.z - pos.z) / d) * reach,
     };
-    if (!losClear(ctx, muzzle, nearAim)) {
+    // Raw march of the shell's own segment — the shared LOS sense lifts
+    // its endpoints to eye height and declines to look inside 4m, which
+    // is exactly the band the lip pops live in (impact@6m, foe@98m: a
+    // sub-eye-height lip the lifted ray sailed over and the shell ate).
+    // The shell flies the unlifted segment, so probe the unlifted
+    // segment at ~1m steps, solids included — a wall eats it too.
+    let blocked = false;
+    const steps = Math.max(2, Math.ceil(reach));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      if (ctx.groundY(muzzle.x + (nearAim.x - muzzle.x) * t,
+                      muzzle.z + (nearAim.z - muzzle.z) * t)
+          >= muzzle.y + (nearAim.y - muzzle.y) * t - 0.2) { blocked = true; break; }
+    }
+    if (!blocked && ctx.solids?.length &&
+        segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined)) blocked = true;
+    if (blocked) {
       st.fireT = 0.3;
       return undefined;
     }
