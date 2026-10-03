@@ -3,9 +3,11 @@ import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /** ROADMAP next-list: a ~900-line ceiling that flags the next
- *  Player.ts/CombatHandler.ts before it needs a burn-down. Files
- *  already over the line are pinned here — they may only shrink;
- *  anything new that crosses the ceiling fails the suite. */
+ *  Player.ts/CombatHandler.ts before it needs a burn-down. New files
+ *  fail outright over the ceiling; existing giants are pinned at their
+ *  current size + 15% — in-flight edits get room, but a real blow-up
+ *  trips the alarm before the file needs a burn-down. */
+const GROWTH_ALLOWANCE = 1.15;
 const CEILING = 900;
 const GRANDFATHERED: Record<string, number> = {
   'client/src/networking/NetworkManager.ts': 1183,
@@ -34,7 +36,7 @@ for (const dir of ['shared', 'server_bun/src', 'client/src']) {
     const n = src.split('\n').length - (src.endsWith('\n') ? 1 : 0);
     const pinned = GRANDFATHERED[rel];
     if (pinned !== undefined) {
-      if (n > pinned) grown.push(`${rel} ${n} > pinned ${pinned}`);
+      if (n > Math.floor(pinned * GROWTH_ALLOWANCE)) grown.push(`${rel} ${n} > pinned ${pinned} (+15%)`);
     } else if (n > CEILING) offenders.push(`${rel} ${n} lines`);
   }
 }

@@ -96,6 +96,232 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
 const SKY_FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'] as const;
 const SKY_VFLIP = new Set<string>();
 
+// ── Sky seam solver ────────────────────────────────────────────────────
+// T2 sky exports have shipped faces in wrong slots / orientations for
+// whole map families (same source DML, same breakage). Trusting the file
+// names produced wedge-seamed skies. Instead of a per-map fix table the
+// loader verifies the claimed cube: downsample faces to 32px, score the
+// 12 shared edges, and when the named assembly is clearly broken, search
+// slot permutations x orientations for the assembly the pixels actually
+// describe. A coherent cube wins over the label — port of
+// _tools/tershot/skysolve/skyperm.
+const SKY_SOLVE_PX = 32;
+type SkyEdge = Uint16Array; // per-texel r+g+b, one edge of a 32px face
+// GL cube adjacency (mirrors seamcheck.py ADJA): slot, edge, neighbor
+// slot, neighbor edge, whether the neighbor edge runs reversed.
+const SKY_PAIRS: [number, number, number, number, boolean][] = (() => {
+  const s = { px: 0, nx: 1, py: 2, ny: 3, pz: 4, nz: 5 } as const;
+  const e = { T: 0, R: 1, B: 2, L: 3 } as const;
+  const adj: [keyof typeof s, keyof typeof e, keyof typeof s, keyof typeof e, boolean][] = [
+    ['px','T','py','R',true],['px','R','nz','T',false],['px','B','ny','R',true],['px','L','pz','T',false],
+    ['nx','T','py','L',true],['nx','R','pz','T',false],['nx','B','ny','L',true],['nx','L','nz','T',false],
+    ['py','T','nz','L',true],['py','R','px','T',false],['py','B','pz','L',true],['py','L','nx','T',false],
+    ['ny','T','pz','B',false],['ny','R','px','B',false],['ny','B','nz','B',false],['ny','L','nx','B',false],
+    ['pz','T','py','B',false],['pz','R','px','L',false],['pz','B','ny','T',false],['pz','L','nx','R',false],
+    ['nz','T','py','T',false],['nz','R','nx','L',false],['nz','B','ny','B',false],['nz','L','px','R',false],
+  ];
+  const seen = new Set<string>();
+  return adj.filter(([f, fe, g, ge]) => {
+    const k = [f + fe, g + ge].toSorted().join('|');
+    return seen.has(k) ? false : (seen.add(k), true);
+  }).map(([f, fe, g, ge, fl]) => [s[f], e[fe], s[g], e[ge], fl]);
+})();
+
+/** 8 orientations per face: k<4 = pure quarter-turns, k>=4 = mirrored
+ *  first. Returns edges[k][edge] sampled as r+g+b per texel. */
+function skyOrientEdges(d: Uint8ClampedArray): SkyEdge[][] {
+  const S = SKY_SOLVE_PX;
+  const out: SkyEdge[][] = [];
+  const sum = (x: number, y: number) => {
+    const i = (y * S + x) * 4;
+    return d[i]! + d[i + 1]! + d[i + 2]!;
+  };
+  for (let k = 0; k < 8; k++) {
+    const flip = k >= 4, rot = k % 4;
+    // Oriented sample coords for each output edge. For a square face:
+    // rotate CCW k quarter-turns after an optional horizontal mirror.
+    const at = (x: number, y: number): number => {
+      let sx = flip ? S - 1 - x : x, sy = y;
+      for (let r = 0; r < rot; r++) { const t = sx; sx = sy; sy = S - 1 - t; }
+      return sum(sx, sy);
+    };
+    const edges: SkyEdge[] = [new Uint16Array(S), new Uint16Array(S), new Uint16Array(S), new Uint16Array(S)];
+    for (let i = 0; i < S; i++) {
+      edges[0]![i] = at(i, 0);          // T
+      edges[1]![i] = at(S - 1, i);      // R
+      edges[2]![i] = at(i, S - 1);      // B
+      edges[3]![i] = at(0, i);          // L
+    }
+    out.push(edges);
+  }
+  return out;
+}
+
+/** Total seam error for an assembly: assign[slot] -> face index,
+ *  orient[slot] -> orientation key. */
+function skySeamErr(E: SkyEdge[][][], assign: number[], orient: number[]): number {
+  let tot = 0;
+  for (const [f, fe, g, ge, flip] of SKY_PAIRS) {
+    const a = E[assign[f]!]![orient[f]!]![fe]!;
+    const b = E[assign[g]!]![orient[g]!]![ge]!;
+    if (flip) for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);
+    else for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[i]!);
+  }
+  return tot;
+}
+
+interface SkyCand { s: number; assign: number[]; orient: number[] }
+
+/** Keep the best-K assemblies — the seam score can't tell a right-side-up
+ *  cube from a rotated one, so near-ties get re-picked by the up-prior. */
+function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: number[], cap = 64): void {
+  if (list.length >= cap && s >= list[list.length - 1]!.s) return;
+  list.push({ s, assign: assign.slice(), orient: orient.slice() });
+  list.sort((a, b) => a.s - b.s);
+  if (list.length > cap) list.length = cap;
+}
+
+/** Cap faces (sky dome, ground haze) are flat in both directions; side
+ *  faces carry the horizon, so they have a strong gradient along some
+ *  axis. capScore = max directional gradient — the two lowest-scoring
+ *  faces are structurally ineligible for anything but py/ny, which is
+ *  the hard constraint that stops a seamless-but-sideways cube. */
+/** Signed third-vs-third gradient down one axis of one face. */
+function skyAxisGrad(d: Uint8ClampedArray, horizontal: boolean): number {
+  const S = SKY_SOLVE_PX, T = (S / 3) | 0;
+  let g = 0;
+  for (let u = 0; u < S; u++) {
+    let band = 0;
+    for (let v = 0; v < S; v++) {
+      const i = (horizontal ? v * S + u : u * S + v) * 4;
+      band += d[i]! + d[i + 1]! + d[i + 2]!;
+    }
+    if (u < T) g += band; else if (u >= S - T) g -= band;
+  }
+  return g;
+}
+
+function skyCapFaces(data: Uint8ClampedArray[]): { up: number; dn: number } {
+  const scores: number[] = [], lum: number[] = [];
+  for (const d of data) {
+    let l = 0;
+    for (let i = 0; i < d.length; i += 4) l += d[i]! + d[i + 1]! + d[i + 2]!;
+    scores.push(Math.max(Math.abs(skyAxisGrad(d, false)), Math.abs(skyAxisGrad(d, true))));
+    lum.push(l);
+  }
+  const ranked = [0, 1, 2, 3, 4, 5].toSorted((a, b) => scores[a]! - scores[b]!);
+  const [a, b] = ranked;
+  return lum[a!]! > lum[b!]! ? { up: a!, dn: b! } : { up: b!, dn: a! };
+}
+
+/** Pick the best-seamed assembly that is also structurally upright:
+ *  the cap faces must sit in py/ny (brightest up) — seam score alone
+ *  can't tell a sideways cube from a correct one, and luminance alone
+ *  can't tell a horizon face from a cap. */
+function skyPickUpright(cands: SkyCand[], caps: { up: number; dn: number }): SkyCand | undefined {
+  for (const c of cands) {
+    if (c.assign[2] === caps.up && c.assign[3] === caps.dn) return c;
+  }
+  return undefined;
+}
+
+/** Rotation-only pass (4^6) — cheap first try; fixes upside-down faces. */
+function skySolveRots(E: SkyEdge[][][]): SkyCand[] {
+  const assign = [0, 1, 2, 3, 4, 5];
+  const cands: SkyCand[] = [];
+  const o = [0, 0, 0, 0, 0, 0];
+  for (let n = 0; n < 4096; n++) {
+    let m = n;
+    for (let i = 0; i < 6; i++) { o[i] = m & 3; m >>= 2; }
+    skyCandPush(cands, skySeamErr(E, assign, o), assign, o);
+  }
+  return cands;
+}
+
+/** Full search: 720 slot assignments x coordinate-descent over the 8
+ *  orientations per slot. The one to reach for when the names are just
+ *  wrong — finds the cube the pixels describe, labels be damned. */
+function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
+  const perm = [0, 1, 2, 3, 4, 5];
+  const cands: SkyCand[] = [];
+  const o = [0, 0, 0, 0, 0, 0];
+  const next = (): boolean => {
+    // Iterative lexicographic next_permutation.
+    let i = 4;
+    while (i >= 0 && perm[i]! > perm[i + 1]!) i--;
+    if (i < 0) return false;
+    let j = 5;
+    while (perm[j]! < perm[i]!) j--;
+    [perm[i], perm[j]] = [perm[j]!, perm[i]!];
+    for (let a = i + 1, b = 5; a < b; a++, b--) [perm[a], perm[b]] = [perm[b]!, perm[a]!];
+    return true;
+  };
+  // One coordinate-descent polish per permutation: each slot takes the
+  // orientation that minimises total seam error, three rounds.
+  const polish = (): number => {
+    o.fill(0);
+    for (let round = 0; round < 3; round++) {
+      for (let slot = 0; slot < 6; slot++) {
+        let bs = Infinity, bk = 0;
+        for (let k = 0; k < 8; k++) {
+          o[slot] = k;
+          const s = skySeamErr(E, perm, o);
+          if (s < bs) { bs = s; bk = k; }
+        }
+        o[slot] = bk;
+      }
+    }
+    return skySeamErr(E, perm, o);
+  };
+  do { skyCandPush(cands, polish(), perm, o); } while (next());
+  return cands;
+}
+
+/** Downsample faces and decide whether the file-named assembly holds.
+ *  Returns slot-ordered full-res canvases/images ready for CubeTexture. */
+function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof faces | HTMLCanvasElement[] {
+  const S = SKY_SOLVE_PX;
+  const small = document.createElement('canvas');
+  small.width = small.height = S;
+  const sctx = small.getContext('2d', { willReadFrequently: true })!;
+  const data: Uint8ClampedArray[] = [];
+  const E = faces.map((img, fi) => {
+    sctx.drawImage(img, 0, 0, S, S);
+    const d = sctx.getImageData(0, 0, S, S).data;
+    data[fi] = d;
+    return skyOrientEdges(d);
+  });
+  const caps = skyCapFaces(data);
+  const ident = skySeamErr(E, [0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 0]);
+  const cands = skySolveRots(E);
+  // Only rebuild the cube when the named assembly loses decisively —
+  // a near-tie means authentic T2 edge discontinuity, not misassembly.
+  if (cands[0]!.s > ident * 0.7) {
+    const perm = skySolvePerm(E);
+    if (perm.length && perm[0]!.s < Math.min(ident, cands[0]!.s) * 0.75) {
+      cands.push(...perm);
+      cands.sort((a, b) => a.s - b.s);
+    }
+  }
+  const pick = skyPickUpright(cands, caps);
+  if (!pick || pick.s >= ident) return faces; // names were fine
+  const { assign, orient } = pick;
+  const out: HTMLCanvasElement[] = [];
+  for (let slot = 0; slot < 6; slot++) {
+    const src = faces[assign[slot]!]!;
+    const k = orient[slot]!;
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext('2d')!;
+    g.translate(c.width / 2, c.height / 2);
+    if (k >= 4) g.scale(-1, 1);
+    g.rotate((k % 4) * Math.PI / 2);
+    g.drawImage(src, -src.width / 2, -src.height / 2);
+    out.push(c);
+  }
+  return out;
+}
+
 /** A missing face must not kill the terrain swap — loader rejections
  *  are ProgressEvents, which used to surface as "undefined" here. */
 async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
@@ -119,7 +345,12 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
       ctx.drawImage(img, 0, 0);
       return c;
     }));
-    const cube = new THREE.CubeTexture(faces);
+    let assembled: typeof faces | HTMLCanvasElement[] = faces;
+    try {
+      assembled = skyAssemble(faces);
+      if (assembled !== faces) deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);
+    } catch { /* canvas taint/security — keep the named assembly */ }
+    const cube = new THREE.CubeTexture(assembled);
     cube.colorSpace = THREE.SRGBColorSpace;
     cube.needsUpdate = true;
     deps.lazyScene().background = cube;
@@ -321,7 +552,6 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
  *  these are static hulls, no skeletons. */
 export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
   const { deps } = ctx;
-  deps.logger.warn(`applyInteriors: list=${list === undefined ? 'undef' : list.length}`);
   const scene = deps.lazyScene();
   if (interiorGroup) {
     scene.remove(interiorGroup);

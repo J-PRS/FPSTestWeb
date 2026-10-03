@@ -66,14 +66,18 @@ export interface BlastHost {
 export class BlastRunner {
   constructor(private h: BlastHost) {}
 
-  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string } = {}): void {
-    const { weapon, trusted = false, shotId } = opts;
+  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string; bound?: boolean } = {}): void {
+    const { weapon, trusted = false, shotId, bound = false } = opts;
     const player = this.h.playerManager.getPlayer(playerId);
     // Trusted server blasts still run from dead owners — a corpse's
     // in-flight ordnance and its charge-pop both outlive the kill.
     if (!player || (player.isDead && !trusted)) return;
 
-    if (!trusted && !this.blastInReach(playerId, player, position, weapon)) return;
+    // Projectile-bound blasts already passed validateAoeClaim (airtime,
+    // flight reach, occlusion) — the flat shooter-distance gate is for
+    // self-positioned claims only, and wrongly rejects legit cross-map
+    // lobs on ~1km maps (652m mortar splash on surreal).
+    if (!trusted && !bound && !this.blastInReach(playerId, player, position, weapon)) return;
 
     const pull = stats.forceMode === 'pull';
     // Perk modifies the blast envelope, not the damage numbers — a

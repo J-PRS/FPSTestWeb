@@ -113,7 +113,7 @@ export class AoeClaims {
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
     const projId = msg.projectileId ?? (msg.shotId ? this.h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId });
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId, bound: true });
 
     if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster, projId);
   }
@@ -224,7 +224,7 @@ export class AoeClaims {
         x: msg.position.x + Math.cos(ang) * r,
         y: msg.position.y, // bomblets scatter on the blast plane
         z: msg.position.z + Math.sin(ang) * r,
-      }, msg.excludeTargetId, bomblet, { weapon: msg.weaponType, shotId });
+      }, msg.excludeTargetId, bomblet, { weapon: msg.weaponType, shotId, bound: true });
     }
   }
 }
