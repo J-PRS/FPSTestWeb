@@ -1,6 +1,10 @@
 {
   "mode": "duel",
-  "modes": ["duel", "dm"],
+  "modes": [
+    "duel",
+    "dm",
+    "rabbit"
+  ],
   "bots": 0,
   "arena": {
     "x": 0,

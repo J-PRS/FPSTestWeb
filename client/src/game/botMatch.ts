@@ -1,6 +1,7 @@
 import { TEAM_COLORS, TEAM_LABEL, MODES, bank, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
+import type { RabbitBridge } from './botRabbit.js';
 
 /** What the match referee reads/mutates — flat fields on TeamBots. */
 export interface MatchHost {
@@ -12,6 +13,7 @@ export interface MatchHost {
   teamOf: Map<string, string>;
   bots: GameBot[];
   ctf: CtfBridge | null;
+  rabbit: RabbitBridge | null;
   deps: {
     world: { localTeam?: string; remotePlayers: { rename(oldId: string, newId: string): void } };
     lazyHud(): { setTeamScore?(a: number, b: number): void };
@@ -26,7 +28,7 @@ export interface MatchHost {
 export function winText(m: MatchHost, w: string): string {
   if (!m.spec.ffa) return `${TEAM_LABEL[w as TeamId]} WINS — ${m.scores.alpha}:${m.scores.bravo}`;
   const name = w === 'local' ? 'YOU' : w.replace('bot:', '');
-  return `${name} WINS the deathmatch — ${m.ffaScores.get(w)} pts`;
+  return `${name} WINS the ${m.spec.label.toLowerCase()} — ${m.ffaScores.get(w)} pts`;
 }
 
 export function checkWin(m: MatchHost): string | null {
@@ -59,6 +61,7 @@ export function resetMatch(m: MatchHost): void {
     }
   }
   m.ctf?.reset();
+  m.rabbit?.reset();
   pushScore(m);
   m.hooks.remoteKillFeed(`${m.spec.label} — NEW MATCH`);
 }

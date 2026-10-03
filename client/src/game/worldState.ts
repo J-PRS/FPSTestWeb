@@ -50,8 +50,10 @@ export interface WorldState {
   flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
   /** Wire CTF flag meshes + carrier ids — the per-frame loop projects
    *  these into HUD diamonds; flags.ts owns the entries (set on
-   *  flagUpdate, deleted on roster prune). */
-  flagMarkers: Map<TeamId, { mesh: THREE.Group; carrier: string | null; wirePos: THREE.Vector3 }>;
+   *  flagUpdate, deleted on roster prune). `mesh` is the flag alone;
+   *  `stand` is the permanent pole+base planted at `home` (homeKnown
+   *  gates it until the wire/base spec tells us where that is). */
+  flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.

@@ -19,7 +19,7 @@ export interface CtfBridgeDeps {
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number } };
-  lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string): void };
+  lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
   world: {
     remotePlayers: Map<string, { pos: THREE.Vector3; isDead: boolean }>;
     explosions: { push(e: Explosion): void };
@@ -76,6 +76,11 @@ export class CtfBridge {
       m.pos.y += 3.4;
       hud.updateFlagIndicator(`flag:${m.team}`, m.pos, cam, m.team);
       m.pos.y -= 3.4;
+      // The stand's hollow socket sits at gem height — flag home reads
+      // as a flag-over-stand pin stack, flag away leaves the socket.
+      m.home.y += 0.5;
+      hud.updateFlagIndicator(`stand:${m.team}`, m.home, cam, m.team, 'stand');
+      m.home.y -= 0.5;
     }
   }
 

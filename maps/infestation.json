@@ -1,6 +1,11 @@
 {
   "mode": "nuggets",
-  "modes": ["nuggets", "dm", "tdm"],
+  "modes": [
+    "nuggets",
+    "dm",
+    "tdm",
+    "rabbit"
+  ],
   "balls": {
     "base": 20,
     "perPlayer": 4,

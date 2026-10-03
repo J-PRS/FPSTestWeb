@@ -9,45 +9,116 @@ import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 
 const _burstPos = new THREE.Vector3();
 
+export interface FlagVis { flag: THREE.Group; stand: THREE.Group }
+
+/** Stand + flag mesh pair. The STAND is just the gem socket — planted at
+ *  home forever, a bare socket is how you read "flag's out". The FLAG
+ *  (pole + banner + finial) is the piece that gets ripped out, carried,
+ *  dropped, and returned; home state reseats the pole in the socket so
+ *  the pair reads as one complete flag. */
+function buildFlagVis(team: TeamId): FlagVis {
+  const teamColor = team === 'alpha' ? 0x55aaff : 0xff8855;
+  const stand = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.4, 0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor).multiplyScalar(1.4) }));
+  base.position.y = 0.4;
+  stand.add(base);
+  stand.visible = false; // until the wire's home plants it
+  const flag = new THREE.Group();
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
+    new THREE.MeshBasicMaterial({ color: 0x888888 }));
+  pole.position.y = 2;
+  const banner = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 1.2, 4),
+    new THREE.MeshBasicMaterial({ color: teamColor }));
+  banner.position.set(0.55, 3.4, 0);
+  const finial = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.14, 0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor).multiplyScalar(1.4) }));
+  finial.position.y = 4.05;
+  flag.add(pole, banner, finial);
+  return { flag, stand };
+}
+
+/** Rabbit announcements — the flag is neutral, so no OUR/ENEMY split:
+ *  what matters is WHO the rabbit is. First-blood spawn reads as a
+ *  dropped-flag banner ("FLAG LOOSE — GRAB IT"). */
+function rabbitCallout(
+  f: { state: string; carrier: string | null; pos: { x: number; y: number; z: number } },
+  iAmCarrier: boolean, carrierName: string | null,
+  burst: (scale: number) => void,
+  frag: { show(t: string): void },
+  log: (t: string) => void,
+): void {
+  if (f.state === 'carried') {
+    frag.show(iAmCarrier ? 'YOU ARE THE RABBIT!' : `${carrierName ?? 'Someone'} IS THE RABBIT`);
+    sfx.flagCue('taken', iAmCarrier);
+    burst(1.4);
+    log(`${iAmCarrier ? 'You are' : `${carrierName ?? 'Someone'} is`} the rabbit`);
+  } else if (f.state === 'dropped') {
+    frag.show('FLAG LOOSE — GRAB IT');
+    sfx.flagCue('dropped', false);
+    burst(1.0);
+    log('the rabbit flag is loose');
+  } else if (f.state === 'home') {
+    frag.show('FLAG RETURNED');
+    sfx.flagCue('returned', false);
+    burst(1.4);
+    log('the flag returned to the stand');
+  }
+}
+
+interface CalloutCtx {
+  prev?: string; mine: boolean; iAmCarrier: boolean; carrierName: string | null;
+  frag: { show(t: string): void }; log(t: string): void;
+  burst(scale: number): void; homeCallout(): void;
+}
+
+/** Team-mode transitions: carried = grab, dropped = fumble, home =
+ *  capture (carried→home) or return (dropped→home — the homing is a
+ *  closure because it owns the cap-spot ceremony). */
+function ctfCallout(
+  f: { team: TeamId; state: string; carrier: string | null },
+  c: CalloutCtx,
+): void {
+  if (f.state === 'carried') {
+    c.frag.show(c.iAmCarrier ? 'YOU HAVE THE FLAG!' : c.mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
+    sfx.flagCue('taken', c.mine);
+    c.burst(1.4);
+    c.log(`${c.iAmCarrier ? 'You' : (c.carrierName ?? 'Someone')} took the ${f.team} flag`);
+  } else if (f.state === 'dropped') {
+    c.frag.show(c.mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
+    sfx.flagCue('dropped', c.mine);
+    c.burst(1.0);
+    c.log(`${f.team} flag dropped`);
+  } else if (f.state === 'home') {
+    c.homeCallout();
+  }
+}
+
 export function wireFlags(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
 
   // Carried flags get no position stream (server stopped broadcasting it) —
   // remotes.ts tickFlagMarkers pins the mesh to the carrier's rendered body
   // every frame instead, which is smoother than any wire rate anyway.
-  const flagMeshes = new Map<string, THREE.Group>();
+  const flagMeshes = new Map<string, FlagVis>();
   // Teams already in 'dropped' on the previous update — the drop frame
   // itself snaps (mesh is at the corpse anyway); only continued-flight
   // updates ease toward the wire pos.
   const wasDropped = new Set<string>();
-  const ensureFlagMesh = (team: TeamId): THREE.Group => {
-    let g = flagMeshes.get(team);
-    if (g) return g;
-    g = new THREE.Group();
-    const teamColor = team === 'alpha' ? 0x55aaff : 0xff8855;
-    // The dropped flag IS this ball on the ground — same nugget look as a
-    // pickup gem — with the pole planted upright through it. Always shown:
-    // on the stand it reads as the base the pole grows out of.
-    const base = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(0.4, 0),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor).multiplyScalar(1.4) }));
-    base.position.y = 0.4;
-    base.position.y = 0.4;
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
-      new THREE.MeshBasicMaterial({ color: 0x888888 }));
-    pole.position.y = 2;
-    const banner = new THREE.Mesh(
-      new THREE.ConeGeometry(0.5, 1.2, 4),
-      new THREE.MeshBasicMaterial({ color: teamColor }));
-    banner.position.set(0.55, 3.4, 0);
-    g.add(base, pole, banner);
+  const ensureFlagMesh = (team: TeamId): FlagVis => {
+    let vis = flagMeshes.get(team);
+    if (vis) return vis;
     // No onBeforeRender hook here — three.js never invokes it on a bare
     // Group (only renderable objects reach the render list). The per-frame
     // carrier pin + flight lerp lives in remotes.ts tickFlagMarkers.
-    deps.lazyScene().add(g);
-    flagMeshes.set(team, g);
-    return g;
+    vis = buildFlagVis(team);
+    deps.lazyScene().add(vis.stand, vis.flag);
+    flagMeshes.set(team, vis);
+    return vis;
   };
   // Center-screen callouts on flag transitions — the Tribes "FLAG TAKEN"
   // beat. Previous state decides what happened: →carried = grab,
@@ -66,26 +137,20 @@ export function wireFlags(ctx: NetCtx): void {
   const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }) => {
     const prev = prevState.get(f.team);
     prevState.set(f.team, f.state);
-    if (prev === f.state || prev === undefined) return;
+    const rabbit = deps.world.mode === 'rabbit';
+    // Rabbit's flag enters play already 'dropped' — first blood spawns
+    // it — so its very first update IS the announce-worthy transition.
+    if (prev === f.state || (prev === undefined && !(rabbit && f.state !== 'home'))) return;
     const mine = f.team === deps.world.localTeam;
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
     const log = (text: string) => deps.lazyHud().logEvent(text, mine ? 'mine' : 'foe');
     const carrierName = f.carrier?.replace('bot:', '') ?? null;
-    if (f.state === 'carried') {
-      if (iAmCarrier) frag.show('YOU HAVE THE FLAG!');
-      else frag.show(mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
-      sfx.flagCue('taken', mine);
-      burst(f, 1.4);
-      log(`${iAmCarrier ? 'You' : (carrierName ?? 'Someone')} took the ${f.team} flag`);
-    } else if (f.state === 'dropped') {
-      frag.show(mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
-      sfx.flagCue('dropped', mine);
-      burst(f, 1.0);
-      log(`${f.team} flag dropped`);
-    } else if (f.state === 'home') {
-      homeCallout(f, prev, mine, frag, log, carrierName);
+    if (rabbit) {
+      rabbitCallout(f, iAmCarrier, carrierName, (s) => burst(f, s), frag, log);
+      return;
     }
+    ctfCallout(f, { prev, mine, iAmCarrier, carrierName, frag, log, burst: (s) => burst(f, s), homeCallout: () => homeCallout(f, prev, mine, frag, log, carrierName) });
   };
   /** Home transition: carried→home = capture, dropped→home = return. */
   const homeCallout = (
@@ -125,35 +190,52 @@ export function wireFlags(ctx: NetCtx): void {
     const live = new Set(flags.map(f => f.team));
     for (const team of flagMeshes.keys()) { // Map delete-during-iterate is safe
       if (live.has(team as TeamId)) continue;
-      deps.lazyScene().remove(flagMeshes.get(team)!);
+      const vis = flagMeshes.get(team)!;
+      deps.lazyScene().remove(vis.flag, vis.stand);
       flagMeshes.delete(team);
       wasDropped.delete(team);
       prevState.delete(team);
       deps.world.flagMarkers.delete(team as TeamId);
       deps.lazyHud().removePlayerIndicator(`flag:${team}`);
+      deps.lazyHud().removePlayerIndicator(`stand:${team}`);
       delete deps.world.flagStates[team as TeamId];
     }
-    for (const f of flags) {
-      callout(f);
-      const g = ensureFlagMesh(f.team);
-      let marker = deps.world.flagMarkers.get(f.team);
-      if (!marker || marker.mesh !== g) {
-        marker = { mesh: g, carrier: null, wirePos: new THREE.Vector3() };
-      }
-      marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
-      // 'dropped' streams 20Hz while the flag flies — don't snap the mesh
-      // mid-flight, tickFlagMarkers eases toward wirePos. The drop frame
-      // itself and every other state snap as before.
-      if (!(f.state === 'dropped' && wasDropped.has(f.team))) {
-        g.position.copy(marker.wirePos);
-      }
-      if (f.state === 'dropped') wasDropped.add(f.team);
-      else wasDropped.delete(f.team);
-      marker.carrier = f.state === 'carried' ? f.carrier : null;
-      deps.world.flagStates[f.team] = f.state;
-      // Per-frame HUD diamond + mesh drive read this — tickFlagMarkers
-      // runs every frame regardless of frustum, unlike a render hook.
-      deps.world.flagMarkers.set(f.team, marker);
+    for (const f of flags) applyFlagUpdate(f);
+  };
+
+  const applyFlagUpdate = (f: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }): void => {
+    callout(f);
+    const vis = ensureFlagMesh(f.team);
+    let marker = deps.world.flagMarkers.get(f.team);
+    if (!marker || marker.mesh !== vis.flag) {
+      marker = { mesh: vis.flag, stand: vis.stand, home: new THREE.Vector3(), homeKnown: false, carrier: null, wirePos: new THREE.Vector3() };
     }
+    // Stand anchor: the wire's home is authoritative; a 'home'-state
+    // pos is the same spot — the fallback covers a legacy snapshot.
+    if (f.home) {
+      marker.home.set(f.home.x, f.home.y, f.home.z);
+      marker.homeKnown = true;
+    } else if (f.state === 'home') {
+      marker.home.set(f.pos.x, f.pos.y, f.pos.z);
+      marker.homeKnown = true;
+    }
+    if (marker.homeKnown) {
+      vis.stand.visible = true;
+      vis.stand.position.copy(marker.home);
+    }
+    marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
+    // 'dropped' streams 20Hz while the flag flies — don't snap the mesh
+    // mid-flight, tickFlagMarkers eases toward wirePos. The drop frame
+    // itself and every other state snap as before.
+    if (!(f.state === 'dropped' && wasDropped.has(f.team))) {
+      vis.flag.position.copy(marker.wirePos);
+    }
+    if (f.state === 'dropped') wasDropped.add(f.team);
+    else wasDropped.delete(f.team);
+    marker.carrier = f.state === 'carried' ? f.carrier : null;
+    deps.world.flagStates[f.team] = f.state;
+    // Per-frame HUD diamond + mesh drive read this — tickFlagMarkers
+    // runs every frame regardless of frustum, unlike a render hook.
+    deps.world.flagMarkers.set(f.team, marker);
   };
 }

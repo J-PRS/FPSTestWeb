@@ -141,9 +141,10 @@ export class ServerBotSenses {
     const out: BotEnemy[] = [];
     for (const q of this.room.players.getAllPlayers().values()) {
       if (q.id === p.id || q.isDead) continue;
-      if (this.room.modeSpec?.teams) {
-        if (q.team === p.team) continue;
-      } else if (q.isBot) continue;
+      // FFA has no friendly ids — every other live player is a legal
+      // target. (Bots used to skip other bots here, which left bot-only
+      // dm/duel/rabbit rooms firing zero shots at anything.)
+      if (this.room.modeSpec?.teams && q.team === p.team) continue;
       if (q.status & STATUS.CLOAK) continue; // bots can't aim what they can't see
       out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead,
         aimY: classCapsule(q.armorClass).centerOff });
@@ -183,7 +184,9 @@ export class ServerBotSenses {
     for (const q of this.room.players.getAllPlayers().values()) {
       if (q.id === p.id || q.isDead) continue;
       others.push(q.position);
-      if (teams ? q.team !== p.team : !q.isBot) {
+      // Same rule as enemiesOf: teamless modes are open season on every
+      // other live body — bot or human makes no difference to the gun.
+      if (teams ? q.team !== p.team : true) {
         if (!(q.status & STATUS.CLOAK))
           enemies.push({ id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff });
       } else if (p.team && q.team === p.team) allies.push(q.position);
@@ -273,7 +276,21 @@ export class ServerBotSenses {
    *  recovery/intercept outranks pressing the enemy stand. */
   flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
     const flags = this.room.flags;
-    if (!flags || !p.team) return null;
+    if (!flags) return null;
+    // Rabbit: no teams, one neutral flag. Hunters converge on the flag
+    // itself (stand or loose drop) or the carrier's live beacon — the
+    // rabbit keeps moving on a defensive circuit instead of sitting.
+    if (this.room.mode === 'rabbit') {
+      const flag = flags.flags.get('alpha');
+      if (!flag || flag.state === 'unspawned') return null;
+      if (flag.state === 'carried' && flag.carrier === p.id) {
+        return { pos: this.waitSpotFor(p.id, flag.home, duty), infiltrating: false, running: true, runner: true };
+      }
+      const rabbitP = flag.carrier ? this.room.players.getPlayer(flag.carrier) : null;
+      const pos = flag.state === 'carried' && rabbitP ? rabbitP.position : flag.pos;
+      return { pos, infiltrating: false, running: true };
+    }
+    if (!p.team) return null;
     const me = p.team as TeamId;
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);

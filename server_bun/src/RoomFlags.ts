@@ -11,7 +11,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, TEAMS, type TeamId } from '../../shared/teams.ts';
+import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, type TeamId } from '../../shared/teams.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -19,7 +19,9 @@ import { simNow } from './simClock.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
 
-export type FlagState = 'home' | 'carried' | 'dropped';
+// 'unspawned' is server-internal — rabbit's flag doesn't exist until
+// first blood, and it never reaches the wire (snapshot filters it).
+export type FlagState = 'unspawned' | 'home' | 'carried' | 'dropped';
 
 export interface RoomFlag {
   team: TeamId;        // the flag's owning team (whose base it defends)
@@ -35,6 +37,8 @@ export interface RoomFlag {
    *  drop ms on return (flags dying on the stand vs midfield transit). */
   carriedAt: number;
   droppedAt: number;
+  /** Rabbit hold-time accumulator — each whole second carried pays out. */
+  holdAcc: number;
 }
 
 // Dropped-flag ballistics — a nugget-class loose object: pops out of the
@@ -65,11 +69,17 @@ export class RoomFlags {
    *  20Hz frames, so the check must test the path, not the snapshot. */
   private prevPos = new Map<string, Vec3>();
 
-  constructor(room: Room, bases: { alpha: Vec3; bravo: Vec3 }) {
+  /** Rabbit rooms run a single neutral flag (keyed 'alpha' on the wire) —
+   *  Partial bases are how the room declares it. */
+  private get rabbit(): boolean { return this.room.mode === 'rabbit'; }
+
+  constructor(room: Room, bases: Partial<Record<TeamId, Vec3>>) {
     this.room = room;
-    for (const team of TEAMS) {
-      const home = bases[team];
-      this.flags.set(team, { team, home, pos: { ...home }, vel: { x: 0, y: 0, z: 0 }, state: 'home', carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0 });
+    for (const [team, home] of Object.entries(bases) as [TeamId, Vec3][]) {
+      // Rabbit flags begin unspawned — the FIRST corpse of the match is
+      // what brings the flag into the world, exactly like T2.
+      const state: FlagState = this.rabbit ? 'unspawned' : 'home';
+      this.flags.set(team, { team, home, pos: { ...home }, vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0 });
     }
   }
 
@@ -77,10 +87,10 @@ export class RoomFlags {
    *  moved. Homes update unconditionally; a flag sitting 'home' also moves
    *  its live pos, carried/dropped flags keep theirs — the wire shows
    *  where they are, not where the stand is. */
-  retargetHomes(homes: { alpha: Vec3; bravo: Vec3 }): void {
-    for (const team of TEAMS) {
-      const f = this.flags.get(team)!;
+  retargetHomes(homes: Partial<Record<TeamId, Vec3>>): void {
+    for (const [team, f] of this.flags) {
       const home = homes[team];
+      if (!home) continue;
       if (f.home.x === home.x && f.home.y === home.y && f.home.z === home.z) continue;
       f.home = { ...home };
       if (f.state === 'home') f.pos = { ...home };
@@ -88,14 +98,16 @@ export class RoomFlags {
     }
   }
 
-  /** Reset both flags on a fresh match. */
+  /** Reset flags on a fresh match — rabbit's goes back to unspawned
+   *  so the new match's first blood re-seeds it. */
   reset(): void {
     for (const f of this.flags.values()) {
       f.pos = { ...f.home };
       f.vel = { x: 0, y: 0, z: 0 };
-      f.state = 'home';
+      f.state = this.rabbit ? 'unspawned' : 'home';
       f.carrier = null;
       f.dropT = 0;
+      f.holdAcc = 0;
     }
     this.dirty = true;
   }
@@ -105,8 +117,10 @@ export class RoomFlags {
     // home rides every snapshot — the stand mesh + socket marker are
     // placed from it, including by clients who join mid-run while the
     // flag itself is away (a 'home'-state pos alone can't tell them).
-    return [...this.flags.values()].map((f) => ({
-      team: f.team, pos: { ...f.pos }, home: { ...f.home }, state: f.state, carrier: f.carrier,
+    return [...this.flags.values()].filter((f) => f.state !== 'unspawned').map((f) => ({
+      team: f.team, pos: { ...f.pos }, home: { ...f.home },
+      // 'unspawned' is filtered above — the wire union only knows live states.
+      state: f.state as 'home' | 'carried' | 'dropped', carrier: f.carrier,
     }));
   }
 
@@ -127,6 +141,25 @@ export class RoomFlags {
       f.dropT = FLAG_RESET_S;
       f.droppedAt = simNow();
       this.loose(f, p?.velocity);
+      this.dirty = true;
+    }
+  }
+
+  /** Rabbit: the flag isn't on a stand at match start — first blood
+   *  drops it at the corpse. Called on EVERY death like dropIfCarrier;
+   *  only the first 'unspawned' flag takes the corpse's position. */
+  spawnAtCorpse(playerId: string): void {
+    if (!this.rabbit) return;
+    for (const f of this.flags.values()) {
+      if (f.state !== 'unspawned') continue;
+      const corpse = this.room.players.getPlayer(playerId);
+      f.pos = corpse ? { ...corpse.position } : { ...f.home };
+      f.state = 'dropped';
+      f.dropT = FLAG_RESET_S;
+      f.droppedAt = simNow();
+      this.loose(f, corpse?.velocity);
+      logger.info('Rabbit flag spawned', { room: this.room.name, at: f.pos });
+      this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
     }
   }
@@ -163,8 +196,9 @@ export class RoomFlags {
     let captureBy: TeamId | null = null;
 
     for (const f of this.flags.values()) {
+      if (f.state === 'unspawned') continue; // rabbit: not in play yet
       if (f.state === 'carried') {
-        captureBy = this.tickCarried(f) ?? captureBy;
+        captureBy = this.tickCarried(f, dt) ?? captureBy;
         continue;
       }
       if (f.state === 'dropped') this.tickDropped(f, dt);
@@ -192,7 +226,17 @@ export class RoomFlags {
    *  20Hz pos stream would buy zero visible difference). A vanished or
    *  dead carrier drops it on the spot; reaching the own-base ring with
    *  own flag home scores. Returns the capturing team, if any. */
-  private tickCarried(f: RoomFlag): TeamId | null {
+  /** Rabbit's only truth: which player currently holds the neutral flag.
+   *  The damage gate and scoring both read this — a null return means the
+   *  flag is loose and nobody on the field can hurt anybody. */
+  carrierId(): string | null {
+    for (const f of this.flags.values()) {
+      if (f.state === 'carried') return f.carrier;
+    }
+    return null;
+  }
+
+  private tickCarried(f: RoomFlag, dt: number): TeamId | null {
     const carrier = f.carrier ? this.room.players.getPlayer(f.carrier) : undefined;
     if (!carrier || carrier.isDead) {
       // Refresh pos from the corpse when it's still around — otherwise
@@ -207,6 +251,16 @@ export class RoomFlags {
       return null;
     }
     f.pos = { ...carrier.position };
+    // Rabbit: no cap ring — the carrier IS the score. Every second held
+    // pays one FFA point through the same awardFfa → matchEnd funnel.
+    if (this.rabbit) {
+      f.holdAcc += dt;
+      while (f.holdAcc >= 1) {
+        f.holdAcc -= 1;
+        this.room.scoring.grantFfa(carrier.id, 1);
+      }
+      return null;
+    }
     // Classic CTF: the cap only counts while your own flag is home —
     // otherwise a team could score with its flag in enemy hands.
     const ownFlag = this.flags.get(carrier.team as TeamId)!;
@@ -281,6 +335,22 @@ export class RoomFlags {
   private tickTouch(f: RoomFlag): void {
     const t = this.nearestTouching(f);
     if (!t) return;
+    // Rabbit: the flag is neutral — anyone touching it becomes the
+    // carrier, home or dropped. No return-by-touch exists; the only
+    // way home is the drop timer.
+    if (this.rabbit) {
+      logger.info('Rabbit flag grabbed', { room: this.room.name, by: t.id });
+      this.room.messages.killFeed.say(t.id, 'flaggrab');
+      this.room.bots?.notice('flaggrab', t.id, undefined);
+      f.state = 'carried';
+      f.carrier = t.id;
+      f.carriedAt = simNow();
+      f.holdAcc = 0;
+      this.grabLog.push({ by: t.id, team: f.team, at: simNow() });
+      this.room.influence.splat(f.pos, 'opportunity', 1.2);
+      this.dirty = true;
+      return;
+    }
     if (t.team === f.team && f.state === 'dropped') {
       logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flagreturn');
@@ -308,7 +378,9 @@ export class RoomFlags {
   private nearestTouching(f: RoomFlag): { id: string; team?: string } | null {
     let best: { id: string; team?: string; d: number } | null = null;
     for (const p of this.room.players.getAllPlayers().values()) {
-      if (p.isDead || !p.team) continue;
+      // Rabbit is FFA — hunters carry no team, so the !p.team guard
+      // would make the flag untouchable; it's a CTF-only filter.
+      if (p.isDead || (!this.rabbit && !p.team)) continue;
       // Swept capsule: closest point on the player's path segment to the
       // flag, so a full-speed graze can't tunnel through the ring the
       // way a snapshot check does. Planar reach + vertical cap keep a

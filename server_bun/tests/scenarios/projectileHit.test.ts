@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { WeaponType } from '../../../shared/weapons.ts';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, freeze, watch } from './harness.ts';
 
 describe('scenario: direct projectile', () => {
   it('a bolt fired at a pinned enemy lands and applies damage', () => {
@@ -8,8 +8,12 @@ describe('scenario: direct projectile', () => {
     const w = watch(room);
     const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
     const [shooter, target] = bots;
-    pin(room, target!.id, { x: 20, y: 32, z: 0 });
-    pin(room, shooter!.id, { x: 0, y: 32, z: 0 });
+    // freeze, not pin: live FFA brains now see each other — an unfrozen
+    // shooter fires its own weapon (and pops SHIELD) before the staged
+    // bolt lands, so the playerHit the watch catches isn't the scripted
+    // one. Quiet brains leave spawn→fly→hit as the only projectile path.
+    freeze(room, target!.id, { x: 20, y: 32, z: 0 });
+    freeze(room, shooter!.id, { x: 0, y: 32, z: 0 });
     const hp = target!.health;
     // Fire straight at the target — the sim owns flight and the capsule
     // sweep; this exercises the spawn → fly → hit → damage funnel without

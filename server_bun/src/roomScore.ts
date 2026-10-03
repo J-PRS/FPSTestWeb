@@ -145,6 +145,26 @@ export class RoomScore {
     if (w) this.h.endMatch(w);
   }
 
+  /** Rabbit's bottom-feeder rule: everyone tied for the LEAST points is
+   *  last place — those hunters get open season. A full-field tie means
+   *  nobody is uniquely behind, so nobody earns the exemption. */
+  bottomFeeders(): Set<string> {
+    const out = new Set<string>();
+    const ids: string[] = [];
+    let min = Infinity;
+    for (const p of this.h.players.getAllPlayers().values()) {
+      const s = this.ffaScores.get(p.id) ?? 0;
+      ids.push(p.id);
+      if (s < min) min = s;
+    }
+    for (const id of ids) if ((this.ffaScores.get(id) ?? 0) === min) out.add(id);
+    return out.size === ids.length ? new Set() : out;
+  }
+
+  /** Objective-time payout (rabbit hold ticks) — same broadcast +
+   *  win-check funnel as frag points. */
+  grantFfa(id: string, n: number): void { this.awardFfa(id, n); }
+
   private awardFfa(id: string, n: number): void {
     const spec = this.h.modeSpec!;
     const pts = (this.ffaScores.get(id) ?? 0) + n;

@@ -73,6 +73,9 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
     // CombatHandler does — without it P2P-host/offline kills teammates.
     const aTeam = b.teamOf.get(attackerId), vTeam = b.teamOf.get(playerId);
     if (attackerId !== playerId && aTeam && aTeam === vTeam) return true; // claim swallowed, like a server reject
+    // Rabbit: while a carrier exists, only pairs involving the rabbit
+    // (or a bottom feeder) resolve — same gate the server applies.
+    if (b.rabbit?.blocks(attackerId, playerId, b.bottomFeeders())) return true;
     if (playerId === 'local') {
       hurtLocal(b, dmg, fromPos, attackerId, { src: attackerId.replace('bot:', ''), weapon });
       return true;
@@ -118,6 +121,15 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     b.deps.world.killCounts.set(killerId, (b.deps.world.killCounts.get(killerId) ?? 0) + 1);
     b.creditKill(killerId, false);
     b.ctf?.dropCarried(bot.playerId, bot.position);
+    // Rabbit: every corpse is a flag event — first kill spawns it, a
+    // rabbit's death drops it loose. Local deaths ride localDied().
+    b.rabbit?.onDeath(bot.playerId, bot.position);
+    killChatter(b, killerId, bot, weapon);
+  }
+
+/** Feed row + taunts + the local-player frag banner — all the "tell the
+ *  humans a kill happened" work of botKilledF. */
+function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: number): void {
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
     noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
     b.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);

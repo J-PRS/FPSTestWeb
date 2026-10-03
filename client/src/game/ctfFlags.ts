@@ -7,7 +7,12 @@ import { roleObjective, ROLE_PRIORITY, STRICT_CLASS } from '../../../shared/flag
 import * as sfx from '../core/sfx.js';
 
 export interface Flag {
-  mesh: THREE.Group; home: THREE.Vector3; pos: THREE.Vector3;
+  /** The movable piece — pole + banner + finial; rides carriers and drops. */
+  mesh: THREE.Group;
+  /** The permanent piece — just the gem socket planted at home. A bare
+   *  socket is the "flag's out" read; it never moves. */
+  stand: THREE.Group;
+  home: THREE.Vector3; pos: THREE.Vector3;
   state: 'home' | 'carried' | 'dropped'; carrier: string | null; dropT: number;
   /** Carrier's measured velocity — the flag rides the body, so the
    *  banner's own displacement IS the thief's velocity for aim lead. */
@@ -37,6 +42,8 @@ export interface FlagCtx {
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
 const FLAG_POLE_MAT = new THREE.MeshBasicMaterial({ color: 0x888888 });
 const FLAG_BANNER_GEO = new THREE.ConeGeometry(0.5, 1.2, 4);
+const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
+const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
 /**
  * CTF flag entities — a pole + banner at each base, carried above a head,
@@ -53,22 +60,36 @@ export class CtfFlags {
       const sign = team === 'alpha' ? -1 : 1;
       const home = new THREE.Vector3(around.x + sign * 70, 0, around.z);
       home.y = terrain.getHeight(home.x, home.z);
+      // Stand (bare gem socket) is planted once at home and never moves;
+      // the flag (pole + banner + finial) is the ripped-out piece —
+      // home reseats the pole in the socket so the pair reads as one flag.
+      const stand = new THREE.Group();
+      const base = new THREE.Mesh(FLAG_BASE_GEO,
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
+      base.position.y = 0.4;
+      stand.add(base);
+      stand.position.copy(home);
       const g = new THREE.Group();
       const pole = new THREE.Mesh(FLAG_POLE_GEO, FLAG_POLE_MAT);
+      pole.position.y = 2;
       const banner = new THREE.Mesh(FLAG_BANNER_GEO, new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] }));
       banner.position.set(0.55, 3.4, 0);
-      pole.position.y = 2;
-      g.add(pole, banner);
+      const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
+      finial.position.y = 4.05;
+      g.add(banner, finial);
       g.position.copy(home);
-      ctx.lazyScene().add(g);
-      this.flags.set(team, { mesh: g, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3() });
+      ctx.lazyScene().add(stand, g);
+      this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3() });
     }
   }
 
-  /** Flag positions for the HUD markers — DOM overlay, reads every frame. */
-  markers(): { team: TeamId; pos: THREE.Vector3 }[] {
-    const out: { team: TeamId; pos: THREE.Vector3 }[] = [];
-    for (const [team, f] of this.flags) out.push({ team, pos: f.pos });
+  /** Flag + stand positions for the HUD markers — DOM overlay, reads
+   *  every frame. `pos` is the flag (diamond); `home` is the stand
+   *  (hollow socket). They coincide while the flag is home. */
+  markers(): { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3 }[] {
+    const out: { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3 }[] = [];
+    for (const [team, f] of this.flags) out.push({ team, pos: f.pos, home: f.home });
     return out;
   }
 

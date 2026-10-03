@@ -11,6 +11,7 @@ import type { GameContext } from './context.js';
 import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import type { Terrain } from '../world/terrain.js';
 import { CtfBridge } from './botCtf.js';
+import { RabbitBridge } from './botRabbit.js';
 import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
@@ -87,6 +88,9 @@ export class TeamBots {
 
   // Public — botMatch.ts (the match referee) reads/resets flags through it.
   ctf: CtfBridge | null = null;
+  /** Single neutral flag + carrier gate — offline mirror of the
+   *  server's rabbit rules (botRabbit.ts owns flag state + scoring). */
+  rabbit: RabbitBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
   // Anti-pedestrian meter (idle/ignore/bleed/coverage) lives in
@@ -164,7 +168,9 @@ export class TeamBots {
       mk('alpha', counts.alpha);
       mk('bravo', counts.bravo);
     }
-    if (this.spec.flags) {
+    // CtfBridge is a two-team sim — rabbit's single neutral flag has no
+    // offline referee yet, so only team-flag modes wire it.
+    if (this.spec.flags && this.spec.teams) {
       this.ctf = new CtfBridge(deps, {
         bots: this.bots,
         teamOf: this.teamOf,
@@ -174,6 +180,9 @@ export class TeamBots {
         onCapture: () => pushScore(this),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
       });
+    }
+    if (mode === 'rabbit') {
+      this.rabbit = new RabbitBridge(deps, (t) => this.hooks.remoteKillFeed(t));
     }
   }
 
@@ -203,6 +212,7 @@ export class TeamBots {
     bodies.push({ id: 'local', x: player.pos.x, y: player.pos.y, z: player.pos.z, h: pst.eyeHeight, mass: pst.mass, r: pst.radius, vx: player.vel.x, vz: player.vel.z });
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
+    this.rabbit?.update(dt, this.collectors(), (id) => this.posOf(id), (id) => this.holdPoint(id));
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);
     if (!this.over) {
@@ -266,7 +276,19 @@ export class TeamBots {
     this.thinkAccum.set(bot.playerId, acc);
     if (acc < TeamBots.THINK_PERIOD) return;
     this.thinkAccum.set(bot.playerId, 0);
-    const foes = this.senses.enemyList(bot);
+    let foes = this.senses.enemyList(bot);
+    // Rabbit: while a carrier exists, a plain hunter's only legal
+    // targets are the rabbit and any bottom feeders — feeding the
+    // brain the full roster just wastes bolts on blocked hits. The
+    // rabbit itself (and bottom feeders) keeps open season.
+    const rb = this.rabbit;
+    if (rb) {
+      const c = rb.carrierId();
+      const bottom = this.bottomFeeders();
+      if (c && bot.playerId !== c && !bottom.has(bot.playerId)) {
+        foes = foes.filter(e => e.id === c || bottom.has(e.id));
+      }
+    }
     const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
     // Standing down between rounds is correct play — metering it would
     // charge every bot a guaranteed ~150 idle points per match end.
@@ -360,10 +382,17 @@ export class TeamBots {
     ctx.terrain = terrain;
     ctx.enemies = enemies;
     ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
-    ctx.objective = info?.pos ?? null;
+    ctx.objective = info?.pos ?? this.rabbit?.goalFor(bot.playerId, (id) => this.posOf(id)) ?? null;
     ctx.infiltrating = info?.infiltrating ?? false;
     ctx.running = info?.running ?? false;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
+    this.fillSenses(ctx, bot, others);
+    return ctx;
+  }
+
+  /** Sense fields that don't depend on the objective info — wildlife,
+   *  squad, reach, hearing, repair jobs. */
+  private fillSenses(ctx: Parameters<GameBot['think']>[1], bot: GameBot, others: THREE.Vector3[]): void {
     // Nuggets rooms farm wildlife for the objective — the server
     // flips the same flag only in economy modes.
     ctx.huntCreatures = this.mode === 'nuggets';
@@ -377,7 +406,6 @@ export class TeamBots {
     ctx.sounds = this.senses.recentNoises(bot.position);
     ctx.threats = this.senses.incomingNear(bot.position);
     ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
-    return ctx;
   }
 
   /** Rally channel = live teammates (incl. the local player). Team
@@ -482,9 +510,39 @@ export class TeamBots {
     this.creditKill(attackerId, true);
   }
 
-  /** The local player died (any mode) — release a carried flag. */
+  /** The local player died (any mode) — release a carried flag; in
+   *  rabbit every corpse is a flag event (first one spawns it). */
   localDied(): void {
-    this.ctf?.dropCarried('local', this.deps.lazyPlayer().pos);
+    const pos = this.deps.lazyPlayer().pos;
+    this.ctf?.dropCarried('local', pos);
+    this.rabbit?.onDeath('local', pos);
+  }
+
+  /** Live position by roster id — 'local' or a bot. */
+  private posOf(id: string): THREE.Vector3 | null {
+    if (id === 'local') return this.deps.lazyPlayer().pos;
+    return this.bots.find(b => b.playerId === id)?.position ?? null;
+  }
+
+  /** Rabbit +1/sec — same FFA board the wire's hold grants write. */
+  private holdPoint(id: string): void {
+    this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + 1);
+    const me = this.ffaScores.get('local') ?? 0;
+    let lead = 0;
+    for (const [, v] of this.ffaScores) if (v > lead) lead = v;
+    this.deps.lazyHud().setTeamScore?.(me, lead);
+  }
+
+  /** Tied-for-last FFA ids — the server's bottomFeeders rule: exempt
+   *  only while someone is actually below them (full-field tie = none). */
+  bottomFeeders(): ReadonlySet<string> {
+    if (this.ffaScores.size === 0) return _emptySet;
+    let min = Infinity;
+    for (const [, v] of this.ffaScores) if (v < min) min = v;
+    _bottomScratch.clear();
+    for (const [id, v] of this.ffaScores) if (v === min) _bottomScratch.add(id);
+    if (_bottomScratch.size === this.ffaScores.size) _bottomScratch.clear();
+    return _bottomScratch;
   }
 
 
@@ -514,10 +572,13 @@ export class TeamBots {
     for (const b of this.bots) this.deps.world.remotePlayers.remove(b.playerId);
     this.bots.length = 0;
     this.fire.dispose();
+    this.rabbit?.dispose();
   }
 }
 
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
 const _alliesScratch: THREE.Vector3[] = [];
+const _bottomScratch = new Set<string>();
+const _emptySet: ReadonlySet<string> = new Set();
 // Small accessor so update() reads deps once per frame.
 function deps0(m: TeamBots) { return m.deps; }
