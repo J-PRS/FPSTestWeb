@@ -253,7 +253,10 @@ describe('netbot — real clients over real sockets', () => {
   it('ws and rtc clients fight in the same room — SCTP lanes resolve claims too', async () => {
     if (!nd) return; // native addon unavailable in this environment
     env = bootServer();
-    await spawn(4, { pingMs: 20, jitterMs: 80, lossRate: 0 }, { transports: ['ws', 'rtc'] });
+    // 'dm' (FFA) — every other player is an enemy, so a same-team rtc
+    // pairing or a scattered respawn can't park both rtc bots out of
+    // claim range for the whole window. The lane is what's under test.
+    await spawn(4, { pingMs: 20, jitterMs: 80, lossRate: 0 }, { transports: ['ws', 'rtc'], mode: 'dm' });
     await until(() => bots.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 25000);
     await sleep(400);
 
