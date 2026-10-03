@@ -95,6 +95,53 @@ export function pickup(): void {
   o2.start(c.currentTime + 0.07); o2.stop(c.currentTime + 0.25);
 }
 
+/** Server powerup collect — one synth voice per kind so the reward reads
+ *  by ear: heal chirps warm, armor clanks metal, regen bubbles up, dd
+ *  growls. Falls back to the plain pickup chirp when a 'powerup' sample
+ *  exists in the bank. */
+export function powerup(kind: string): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.6)) return;
+  if (sample(`powerup_${kind}`, g, 0.5)) return;
+  if (sample('powerup', g, 0.45)) { powerupTail(kind, g); return; }
+  switch (kind) {
+    case 'heal':
+      osc('sine', 520, 1040, 0.16, 0.3, g);
+      osc('sine', 780, 1560, 0.2, 0.18, g);
+      break;
+    case 'armor':
+      osc('square', 220, 180, 0.1, 0.3, g);
+      noise(0.12, 0.25, g, 'bandpass', 3200, 1800, 2);
+      osc('triangle', 900, 1500, 0.22, 0.12, g);
+      break;
+    case 'regen':
+      osc('sine', 300, 1200, 0.3, 0.25, g);
+      osc('sine', 600, 1800, 0.35, 0.12, g);
+      noise(0.25, 0.08, g, 'highpass', 2500, 6000, 1);
+      break;
+    case 'dd':
+      osc('sawtooth', 160, 90, 0.3, 0.4, g);
+      osc('sawtooth', 320, 640, 0.15, 0.2, g);
+      noise(0.2, 0.15, g, 'lowpass', 900, 300);
+      break;
+    default:
+      osc('sine', 880, 880, 0.07, 0.15, g);
+  }
+}
+
+/** Light shimmer layered under a real 'powerup' sample so each kind keeps
+ *  a bit of its own color on top of the shared recording. */
+function powerupTail(kind: string, g: GainNode): void {
+  switch (kind) {
+    case 'heal': osc('sine', 780, 1400, 0.18, 0.12, g); break;
+    case 'armor': noise(0.1, 0.12, g, 'bandpass', 3000, 2000, 2); break;
+    case 'regen': osc('sine', 500, 1500, 0.3, 0.1, g); break;
+    case 'dd': osc('sawtooth', 180, 100, 0.25, 0.18, g); break;
+  }
+}
+
 export function equip(): void {
   const bus = audio.sfxBus, c = ctx();
   if (!bus || !c) return;

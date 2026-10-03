@@ -2,48 +2,33 @@
 // a team can touch to bank a point; TDM kills drop a dog tag. Dumb renderers;
 // all rules (radius, TTL, team credit) live in RoomPickups server-side.
 
-import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 import { BELT_MAX } from '../../../../shared/weapons.js';
+import { buildPickupModel, pickupBurst, type PickupModel } from '../../entities/PickupModel.js';
+import * as sfxPlayer from '../../core/sfx/player.js';
 
 export function wirePickups(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
 
-  const pickupMeshes = new Map<number, { mesh: THREE.Mesh; kind: PickupKind }>();
-  const pickupGeos: Record<PickupKind, THREE.BufferGeometry> = {
-    gem: new THREE.OctahedronGeometry(0.5),
-    // Dog tag — flat plate reads as "kill token", not loot.
-    tag: new THREE.BoxGeometry(0.7, 0.14, 0.45),
-    heal: new THREE.OctahedronGeometry(0.55),
-    armor: new THREE.BoxGeometry(0.8, 0.8, 0.8),
-    regen: new THREE.OctahedronGeometry(0.6),
-    dd: new THREE.OctahedronGeometry(0.65),
-  };
-  const pickupMats: Record<PickupKind, THREE.Material> = {
-    gem: new THREE.MeshBasicMaterial({ color: 0xffcc44 }),
-    tag: new THREE.MeshBasicMaterial({ color: 0xff3355 }),
-    heal: new THREE.MeshBasicMaterial({ color: 0x44ff66 }),
-    armor: new THREE.MeshBasicMaterial({ color: 0xffaa22 }),
-    regen: new THREE.MeshBasicMaterial({ color: 0x66ffee }),
-    dd: new THREE.MeshBasicMaterial({ color: 0xff4422 }),
-  };
+  const pickupMeshes = new Map<number, { model: PickupModel; kind: PickupKind }>();
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
     // A re-spawn for a live id is a blast-knock rest spot — the server's
-    // truth lands where the tumble ended; snap the mesh there.
+    // truth lands where the tumble ended; snap the model there.
     const live = pickupMeshes.get(id);
-    if (live) { live.mesh.position.set(pos.x, pos.y + 0.8, pos.z); return; }
-    const m = new THREE.Mesh(pickupGeos[kind], pickupMats[kind]);
-    m.position.set(pos.x, pos.y + 0.8, pos.z);
-    deps.lazyScene().add(m);
-    pickupMeshes.set(id, { mesh: m, kind });
+    if (live) { live.model.root.position.set(pos.x, pos.y, pos.z); return; }
+    const model = buildPickupModel(kind, pos.y);
+    model.root.position.set(pos.x, pos.y, pos.z);
+    deps.lazyScene().add(model.root);
+    pickupMeshes.set(id, { model, kind });
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
   ctx.reconcilePickups = (liveIds) => {
     for (const [id, e] of pickupMeshes) {
       if (liveIds.has(id)) continue;
-      deps.lazyScene().remove(e.mesh);
+      deps.lazyScene().remove(e.model.root);
+      e.model.dispose();
       pickupMeshes.delete(id);
     }
   };
@@ -55,7 +40,12 @@ export function wirePickups(ctx: NetCtx): void {
   networkManager.onPickupGone = (id, by) => {
     if (deps.world.playbackMode) return;
     const e = pickupMeshes.get(id);
-    if (e) { deps.lazyScene().remove(e.mesh); pickupMeshes.delete(id); }
+    if (e) {
+      pickupBurst(e.model.root.position.clone(), e.kind);
+      deps.lazyScene().remove(e.model.root);
+      e.model.dispose();
+      pickupMeshes.delete(id);
+    }
     if (by === nm().getLocalPlayerId()) {
       // Nuggets are the belt economy's income — gem or tag, one charge
       // back, capped at the spawn stock. Server owns the truth count.
@@ -73,6 +63,8 @@ export function wirePickups(ctx: NetCtx): void {
         p.grantJetBoost();
         nm().sendHeal(20);
         chat.add(null, 'nugget banked +1');
+      } else if (e) {
+        sfxPlayer.powerup(e.kind);
       }
       // Powerup kinds apply via the 'buff' message — no local effect here.
     }
