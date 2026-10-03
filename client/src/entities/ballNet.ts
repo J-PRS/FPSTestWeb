@@ -17,11 +17,12 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { stepBall, BALL_REST_SPEED, type SimBall, type StructureCollider } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
-import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
+import { hmHeight, hmNormal, type Heightfield } from '../../../shared/heightfield.js';
 
 const BALL_GRAVITY = GRAVITY;
 const _tgt = { x: 0, y: 0, z: 0 };
 const _rpos = new THREE.Vector3();
+const _n = { x: 0, y: 0, z: 0 };
 
 /** Replay cursors the segment pipeline owns — Ball keeps the bag and the
  *  replay mutates it in place. */
@@ -136,7 +137,16 @@ function tickNetInert(st: NetStatics, bag: NetBag, host: NetHost, dt: number, s:
   let tc = T;
   for (let tt = 0.05; tt < T; tt += 0.05) {
     const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
-    if (yy <= hmHeight(field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) { tc = tt; break; }
+    const cx = s.x + s.vx * tt, cz = s.z + s.vz * tt;
+    if (yy <= hmHeight(field, cx, cz) + s.radius) {
+      // groundContact only resolves when moving INTO the surface — a
+      // shallow graze with outward velocity is a fly-over server-side,
+      // not a contact; parking here instead cost a whole resync
+      // interval of false divergence (the 10-60m heartbeat errors).
+      hmNormal(field, cx, cz, _n);
+      const dot = s.vx * _n.x + (s.vy + BALL_GRAVITY * tt) * _n.y + s.vz * _n.z;
+      if (dot < 0) { tc = tt; break; }
+    }
   }
   const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
   // Park at the predicted contact point either way: slow contacts get no

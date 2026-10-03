@@ -216,8 +216,13 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     const sup = rbSuppressed.get(m.id) ?? 0;
     rbLastWarn.set(m.id, nowMs);
     rbSuppressed.delete(m.id);
+    const diag = b.netDiag;
+    const regime = diag
+      ? ` enr=${diag.enraged ? 1 : 0} tgt=${diag.tgtValid ? 1 : 0} leg=${diag.legAge.toFixed(1)} simT=${diag.simT.toFixed(1)} now=${diag.simNow !== null ? diag.simNow.toFixed(1) : '?'}` +
+        ` py=${b.pos.y.toFixed(0)} ty=${m.position.y.toFixed(0)} gy=${Ball.netField ? hmHeight(Ball.netField, m.position.x, m.position.z).toFixed(0) : '?'}`
+      : '';
     logger.warn(
-      `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`,
+      `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${regime}${sup ? ` (×${sup + 1})` : ''}`,
       rubberbandForensics(deps, b, m));
   }
 
