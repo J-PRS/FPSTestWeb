@@ -1,11 +1,13 @@
 import { settings } from '../core/settings.js';
 import { SLOT_COUNT } from '../weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
-import type { PlayerModel } from './PlayerModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
 import type { PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
+import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
+import { CLASS_BODY_VARIANT } from './playerClips.js';
+import type * as THREE from 'three';
 import type { BeltItem } from './Player.js';
 import type { DeployKind } from '../../../shared/deployables.js';
 
@@ -28,6 +30,7 @@ export interface LoadoutHost {
   packItem: DeployKind;
   fireTimer: number;
   model: PlayerModel | null;
+  scene: THREE.Scene;
   movement: MovementController;
   input: PlayerInput;
   onWeaponSwitch: ((index: number) => void) | null;
@@ -80,9 +83,21 @@ export class PlayerLoadout {
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
     if (c !== 'heavy') this.unshoulderHeavy();
-    // One cast for all tiers — the class reads as a scale bump, not a
-    // different model, so a tier swap is a rescale, not a rebuild.
-    this.h.model?.setScale(CLASS_MODEL_SCALE[c]);
+    // The class IS the body — same GLB remotes see on this player. A
+    // tier swap rebuilds the whole model, not a rescale; the hidden /
+    // gizmo-off local state reasserts once the new GLB lands.
+    const want = CLASS_BODY_VARIANT[c] ?? 'cybersoldier';
+    if (this.h.model && this.h.model.variant !== want) {
+      const old = this.h.model;
+      const m = new PlayerModel(this.h.scene, want as PlayerModelVariant);
+      this.h.model = m;
+      void m.load().then(() => {
+        m.setScale(CLASS_MODEL_SCALE[c]);
+        m.setVisible(false);
+        m.setColliderVisible(false);
+        old.dispose();
+      });
+    }
   }
 
   /** Unshoulder restricted ordnance — swap each gated slot for the

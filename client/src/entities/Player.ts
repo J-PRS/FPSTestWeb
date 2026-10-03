@@ -14,7 +14,8 @@ import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
 import { PlayerInput } from './player/input.js';
-import { PlayerModel } from './PlayerModel.js';
+import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
+import { CLASS_BODY_VARIANT } from './playerClips.js';
 import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
@@ -304,9 +305,9 @@ export class Player {
     this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight, CLASS_STATS[this.appliedClass].radius);
     if (this.appliedClass !== 'heavy') this.armory.unshoulderHeavy();
 
-    // Your third-person body is the mannequin at your tier's silhouette
-    // scale — the same read remotes get (one cast, class reads as bulk).
-    this.model = new PlayerModel(scene, 'mannequin');
+    // Your third-person body wears the same class GLB remotes see on
+    // you — what you see looking down IS the hitbox class you claim.
+    this.model = new PlayerModel(scene, (CLASS_BODY_VARIANT[this.appliedClass] ?? 'cybersoldier') as PlayerModelVariant);
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills + input routing — the two ctx objects live in

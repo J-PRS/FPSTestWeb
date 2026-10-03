@@ -20,6 +20,9 @@ client/nul.old
 maps/t2/
 _tools/dif2glb_in/
 
+# Unity Asset Store bodies — licensed, not owned; stay out of git
+client/public/assets/models/class_*.glb
+
 # Heavy local scratch — extraction dumps, screenshots, zips (not for git)
 _tools/animpacks/
 _tools/ualgrab/
