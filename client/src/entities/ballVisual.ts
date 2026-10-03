@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getSwarm, freeSlots } from './swarms.js';
 import { GRAVITY } from '../core/config.js';
+import { TrailDriver } from '../effects/vfxRuntime.js';
 // Type-only back-import — Ball calls into these helpers per tick, so a
 // value import would make the pair a runtime cycle. viewPos comes in as
 // a param instead of reaching into Ball's statics.
@@ -53,31 +54,33 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
   }
 
 export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): void {
+    // Emission rides the runtime TrailDriver like every other trail pack:
+    // it detects the renderOffset correction sweep (host maxStep policy —
+    // the same >max(6, travel×4) predicate this used to hand-roll) and
+    // cuts ribbons + suppresses that frame's deposit in ONE place.
     // Far balls: skip sparkle emission — a 0.5m dot trail is sub-pixel past
-    // ~200m but each emit still churns the dot list. Aging keeps running
-    // so a ball arcing back into range doesn't pop stale sparkles.
-    const nearCam = b._rpos.distanceToSquared(viewPos) < 200 * 200;
-    // Net corrections sweep _rpos smoothly over ~0.2s via renderOffset
-    // decay — that sweep isn't flight, and depositing dots/ribbon samples
-    // along it lays a dotted line across the map (the per-frame step is
-    // under every jump threshold, so guards never see it). While the
-    // correction dominates real travel, emit nothing.
-    const travel = Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * dt);
-    const correcting = b._rpos.distanceTo(b._lastTrailPos) > Math.max(6, travel * 4);
-    if (nearCam && !correcting) {
-      b.trails.emit(dt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color);
+    // ~200m but each emit still churns the dot list.
+    b._trailNear = b._rpos.distanceToSquared(viewPos) < 200 * 200;
+    b._trailDt = dt;
+    if (!b.trailDriver) {
+      b.trailDriver = new TrailDriver(
+        {
+          pos: b._rpos, vel: b.vel,
+          // Dead balls fade only — updateBallDead emits nothing, so the
+          // driver must not keep sparkling a corpse on the stale near flag.
+          emitting: () => !b.dead && b._trailNear,
+          ribbonEmitting: () => !b.dead && b.vel.lengthSq() > 0.5,
+          emitOnJump: false,
+          maxStep: (d) => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
+        },
+        [{
+          emitSegment: () => b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color),
+          teleport: () => { /* dot deposits die fast — suppression is the cut */ },
+        }],
+        b.ribbons,
+      );
     }
     b.trails.fade(dt);
-    // Position discontinuity (teleport, playback keyframe snap, or an
-    // active correction sweep) — cut the ribbons so they don't streak
-    // across the jump
-    if (correcting || b._rpos.distanceToSquared(b._lastTrailPos) > 400) {
-      for (const r of b.ribbons) r.clear();
-    }
-    b._lastTrailPos.copy(b._rpos);
-    if (!correcting && b.vel.lengthSq() > 0.5) {
-      for (const r of b.ribbons) r.push(b._rpos, b.vel);
-    }
     for (const r of b.ribbons) r.update(dt, viewPos);
   }
 

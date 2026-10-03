@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import type { PlayerModel } from './PlayerModel.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
+import { TrailDriver } from '../effects/vfxRuntime.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 
 // Model-anim drive — turns RemotePlayer's movement/state into PlayerModel
@@ -10,7 +11,6 @@ import { pickLocomotionAnim } from './locomotionAnim.js';
 // oneshots and the distance-tiered mixer LOD. Split out of RemotePlayer so
 // that file stays netcode; this family owns all its internal timers.
 
-const _trailP = new THREE.Vector3();
 const _trailTint = new THREE.Color(0.75, 0.85, 1.0); // cool air-sheen — jets tint it warmer on top
 
 export interface AnimHost {
@@ -45,12 +45,19 @@ export class RemoteAnim {
   // Faint air trail — the ballistic arc read a bouncing ball gets for
   // free. Innate to every flyer; the jetpack flame stacks on top.
   private airTrail: BallTrailDots | null = null;
-  private _lastTrailPos = new THREE.Vector3();
+  private trailDriver: TrailDriver | null = null;
+  // Driver host state — tickAirTrail refreshes these; the driver's own
+  // jump detection replaces the hand-rolled _lastTrailPos correction cut.
+  private _trailAnchor = new THREE.Vector3();
+  private _trailOn = false;
+  private _trailDt = 0;
   private animAcc = 0;
 
   constructor(private h: AnimHost) {}
 
   dispose(): void {
+    this.trailDriver?.release();
+    this.trailDriver = null;
     this.airTrail?.dispose();
     this.airTrail = null;
   }
@@ -157,17 +164,27 @@ export class RemoteAnim {
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;
-    // Snapshot corrections sweep the render pos smoothly — depositing
-    // dots along that sweep lays a dotted streak, so emit only while the
-    // per-frame move is explained by real travel, not correction decay.
-    const correcting = this._lastTrailPos.distanceTo(h.position) > Math.max(6, speed * dt * 4);
-    if (airborne && speed > 6 && !correcting) {
-      if (!this.airTrail) this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
-      _trailP.copy(h.position); _trailP.y -= 0.7;
-      this.airTrail.emit(dt, _trailP, h.velocity, 0.4, _trailTint);
+    this._trailAnchor.copy(h.position); this._trailAnchor.y -= 0.7;
+    this._trailOn = airborne && speed > 6;
+    this._trailDt = dt;
+    if (!this.trailDriver) {
+      this.trailDriver = new TrailDriver(
+        {
+          pos: this._trailAnchor, vel: h.velocity,
+          emitting: () => this._trailOn,
+          emitOnJump: false, // a snapshot-correction sweep IS the streak to hide
+          maxStep: (d) => Math.max(6, this._speed * d * 4),
+        },
+        [{
+          emitSegment: () => {
+            if (!this.airTrail) this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
+            this.airTrail.emit(this._trailDt, this._trailAnchor, h.velocity, 0.4, _trailTint);
+          },
+          teleport: () => { /* dots fade fast — emit suppression is the cut */ },
+        }],
+      );
     }
     this.airTrail?.fade(dt);
-    this._lastTrailPos.copy(h.position);
   }
 
   // Powered climb reads as jetting (same inference the jet audio makes) —

@@ -126,6 +126,26 @@ describe('TrailDriver', () => {
     d.release();
   });
 
+  it('emitOnJump=false suppresses the jump frame entirely; ribbonEmitting gates pushes', () => {
+    let moving = true;
+    const host = {
+      pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(10, 0, 0),
+      ribbonEmitting: () => moving,
+      emitOnJump: false, // correction-sweep host: the sweep IS the motion to hide
+      maxStep: (d: number) => Math.max(6, 10 * d * 4),
+    };
+    const layer = fakeLayer(); const rib = fakeRibbon();
+    const d = new TrailDriver(host, [layer], [rib]);
+    host.pos.x += 1; d.tick(0.016);
+    expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1);
+    host.pos.x += 50; d.tick(0.016); // correction sweep — layers still cut…
+    expect(rib.clears).toBe(1); expect(layer.teleports).toBe(1);
+    expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1); // …but nothing deposits
+    moving = false; host.pos.x += 1; d.tick(0.016);
+    expect(layer.emits).toBe(2); expect(rib.pushes).toBe(1); // dots sparkle, ribbon starves
+    d.release();
+  });
+
   it('release() unregisters — updateVfx no longer ticks it', () => {
     const host = { pos: new THREE.Vector3(), vel: new THREE.Vector3(1, 0, 0) };
     const layer = fakeLayer();

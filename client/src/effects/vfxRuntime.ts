@@ -370,6 +370,16 @@ export interface TrailDriverHost {
   vel: THREE.Vector3;
   /** False while the host is dead/detonated — layers fade but stop emitting. */
   emitting?(): boolean;
+  /** Extra gate for ribbon pushes only — a resting host shouldn't pile
+   *  co-located samples while its dot emitters still sparkle. */
+  ribbonEmitting?(): boolean;
+  /** Host's jump policy: how far one tick's move can reach before it
+   *  counts as a discontinuity. Default: ~3 frames of travel + 4m slack. */
+  maxStep?(dt: number): number;
+  /** Default true: emit on the jump frame (each layer's own cut swallows
+   *  the deposit). False = suppress emit+push on discontinuity frames —
+   *  correction-sweep hosts, where the sweep IS the motion to hide. */
+  emitOnJump?: boolean;
 }
 export interface DriveLayer { emitSegment(): void; teleport(): void }
 export interface DriveRibbon { push(pos: THREE.Vector3, vel: THREE.Vector3): void; clear(): void }
@@ -391,18 +401,30 @@ export class TrailDriver {
     const { pos, vel } = this.host;
     // Same budget the old host-side backstop used: ~3 frames of legit
     // travel + slack — beyond that it's a discontinuity every layer cuts.
-    const maxStep = vel.length() * dt * 3 + 4;
-    if (pos.distanceToSquared(this.last) > maxStep * maxStep) {
+    const maxStep = this.host.maxStep?.(dt) ?? vel.length() * dt * 3 + 4;
+    const jump = pos.distanceToSquared(this.last) > maxStep * maxStep;
+    if (jump) {
       for (const r of this.ribbons) r.clear();
       for (const e of this.emitters) e.teleport();
     }
-    // emitSegment runs even on the jump frame — each layer's own skipSeg/
-    // jump-cut swallows the teleported deposit, same as the old caller path.
-    if (this.host.emitting?.() ?? true) {
-      for (const e of this.emitters) e.emitSegment();
+    if (this.shouldEmit(jump)) this.emit();
+    this.last.copy(pos);
+  }
+
+  private shouldEmit(jump: boolean): boolean {
+    if (!(this.host.emitting?.() ?? true)) return false;
+    // Even on the jump frame layers emit by default — their own skipSeg/
+    // jump-cut swallows the deposit; emitOnJump=false covers hosts whose
+    // correction sweep IS the motion to hide.
+    return !jump || this.host.emitOnJump !== false;
+  }
+
+  private emit(): void {
+    const { pos, vel } = this.host;
+    for (const e of this.emitters) e.emitSegment();
+    if (this.host.ribbonEmitting?.() ?? true) {
       for (const r of this.ribbons) r.push(pos, vel);
     }
-    this.last.copy(pos);
   }
 }
 

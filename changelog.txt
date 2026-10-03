@@ -1,3 +1,4 @@
+2026-10-01 - VFX P3: every trail emitter on TrailDriver — ballVisual + remoteAnim bespoke correction-sweep cuts deleted; driver host options maxStep/emitOnJump/ribbonEmitting carry the per-host policies
 2026-10-01 - remote interp: snapshot timeline stamped in server time (tickSeq×50) not arrival wall time — jitter slots correctly instead of moving the render window; velocity estimate uses server-time deltas
 2026-10-01 - pickup SFX: gem chime + tag clink voices; server economy collects no longer silent
 2026-10-01 - VFX P4-lite: Alt+Q vfx diag now carries drivers + litAudit — one census row for pools/drivers/ribbons/orphans

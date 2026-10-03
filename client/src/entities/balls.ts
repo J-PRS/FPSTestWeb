@@ -9,6 +9,7 @@ import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
 import { RibbonTrail } from '../effects/RibbonTrail.js';
+import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
@@ -125,7 +126,10 @@ export class Ball {
   // state-bag pattern as the *Visual splits).
   trails: BallTrailDots;
   ribbons: RibbonTrail[];
-  _lastTrailPos = new THREE.Vector3();
+  /** Driver-owned emit path — tickBallTrails only refreshes _trailNear. */
+  trailDriver?: TrailDriver;
+  _trailNear = true;
+  _trailDt = 0;
   flashTimer = 0;
   meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
   _disposed = false;
@@ -379,6 +383,7 @@ export class Ball {
     if (this._disposed) { Ball.live.delete(this); return; }
     Ball.live.delete(this);
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
+    this.trailDriver?.release();
     this.trails.dispose();
     for (const r of this.ribbons) r.dispose();
   }
