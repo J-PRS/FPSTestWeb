@@ -119,7 +119,7 @@ export class BotRoster {
     p.maxHealth += delta;
     healPool(p, Math.max(0, delta));
     this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);
-    this.room.moveSim.setBody(p.id, CLASS_STATS[cls].mass, CLASS_STATS[cls].eyeHeight);
+    this.room.moveSim.setBody(p.id, CLASS_STATS[cls].mass, CLASS_STATS[cls].eyeHeight, CLASS_STATS[cls].radius);
   }
 
   /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag

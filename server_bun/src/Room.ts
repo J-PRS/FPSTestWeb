@@ -28,7 +28,7 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3 } from './types.ts';
-import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
+import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
@@ -144,7 +144,7 @@ export class Room {
     const cls = this.players.getPlayer(playerId)?.armorClass as ArmorClass | undefined;
     const st = CLASS_STATS[cls ?? 'medium'];
     this.moveSim.setSpeedScale(playerId, st?.speedScale ?? 1);
-    this.moveSim.setBody(playerId, st?.mass ?? 1, st?.eyeHeight ?? 1.8);
+    this.moveSim.setBody(playerId, st?.mass ?? 1, st?.eyeHeight ?? 1.8, st?.radius ?? classCapsule().radius);
   }
 
   /** Room's current heightfield — GameServer updates it on terrain
@@ -178,7 +178,7 @@ export class Room {
       for (const p of this.players.getAllPlayers().values()) {
         if (p.isDead) continue;
         const st = CLASS_STATS[p.armorClass as ArmorClass];
-        out.push({ id: p.id, x: p.position.x, y: p.position.y, z: p.position.z, h: st.eyeHeight, mass: st.mass, vx: p.velocity.x, vz: p.velocity.z });
+        out.push({ id: p.id, x: p.position.x, y: p.position.y, z: p.position.z, h: st.eyeHeight, mass: st.mass, r: st.radius, vx: p.velocity.x, vz: p.velocity.z });
       }
       return out;
     };

@@ -82,6 +82,7 @@ export class RoomMoveSim {
       // ride the class row, so a stale default would diverge on jets.
       sh.sim.speedScale = old.speedScale;
       sh.sim.mass = old.mass; sh.sim.eyeHeight = old.eyeHeight;
+      sh.sim.bodyRadius = old.bodyRadius;
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos) {
@@ -166,9 +167,9 @@ export class RoomMoveSim {
 
   /** Armor-class body — mass divides jet thrust/impulses, eyeHeight sets
    *  the grounded stand height. Must mirror the client's prediction. */
-  setBody(playerId: string, mass: number, eyeHeight: number): void {
+  setBody(playerId: string, mass: number, eyeHeight: number, bodyRadius: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) { sh.sim.mass = mass; sh.sim.eyeHeight = eyeHeight; }
+    if (sh) { sh.sim.mass = mass; sh.sim.eyeHeight = eyeHeight; sh.sim.bodyRadius = bodyRadius; }
   }
 
   /** inputMove → sim input. Rotation/yaw comes from position reports.

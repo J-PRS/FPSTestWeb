@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS } from '../core/config.js';
+import { classCapsule } from '../../../shared/botClasses.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
@@ -197,7 +197,7 @@ export class ProjCollide {
     if (h.sweepLocal) {
       const lp = h.sweepLocal();
       if (lp && sweepPlayer(h, lp, 'local', h.localClass?.())) {
-        this.recordHit(h.minHitDist - PLAYER_RADIUS);
+        this.recordHit(h.minHitDist - classCapsule(h.localClass?.()).radius);
         h.hitPlayerId = 'local';
         if (h.config.sticks) {
           h.stickAt(h.hitPoint, undefined, 'local', remotePlayers);
@@ -210,7 +210,7 @@ export class ProjCollide {
     if (!remotePlayers) return false;
     for (const [playerId, playerPos] of remotePlayers) {
       if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
-        this.recordHit(h.minHitDist - PLAYER_RADIUS);
+        this.recordHit(h.minHitDist - classCapsule(playerClasses?.get(playerId)).radius);
         h.hitPlayerId = playerId;
         if (h.config.sticks) {
           h.stickAt(h.hitPoint, undefined, playerId, remotePlayers);

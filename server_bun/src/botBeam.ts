@@ -7,7 +7,6 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
@@ -111,7 +110,7 @@ function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, w
     if (pid === shooterId || t.isDead) continue;
     const cap = classCapsule(t.armorClass);
     const c = { x: t.position.x, y: t.position.y + cap.centerOff, z: t.position.z };
-    if (segPointDist(muzzle, end, c) > PLAYER_RADIUS + 0.2 + cap.half) continue;
+    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }
   }

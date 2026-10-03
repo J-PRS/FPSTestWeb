@@ -509,6 +509,13 @@ export class NetBot {
         pos: { ...nc.self.pos }, vel: { ...nc.self.vel },
         yaw: 0, pitch: 0, onGround: true,
       });
+      // Same class body as the server shadow — mass/eye/radius/speed all
+      // ride the class row or the contact resolve diverges by design.
+      const st = CLASS_STATS[this.cls];
+      this.sim.speedScale = st.speedScale;
+      this.sim.mass = st.mass;
+      this.sim.eyeHeight = st.eyeHeight;
+      this.sim.bodyRadius = st.radius;
     }
     return this.sim;
   }
@@ -544,7 +551,7 @@ export class NetBot {
       for (const [id, r] of nc.roster) {
         if (r.isDead) continue;
         const st = CLASS_STATS[r.cls as keyof typeof CLASS_STATS] ?? CLASS_STATS.medium;
-        bodies.push({ id, x: r.pos.x, y: r.pos.y, z: r.pos.z, h: st.eyeHeight, mass: st.mass, vx: r.vel.x, vz: r.vel.z });
+        bodies.push({ id, x: r.pos.x, y: r.pos.y, z: r.pos.z, h: st.eyeHeight, mass: st.mass, r: st.radius, vx: r.vel.x, vz: r.vel.z });
       }
       sim.update(1 / POS_HZ);
       nc.self.pos = { x: sim.state.pos.x, y: sim.state.pos.y, z: sim.state.pos.z };

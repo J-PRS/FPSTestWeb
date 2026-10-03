@@ -4,8 +4,6 @@
  *  the anchor that tanks the stand. Mass is now real too: jet thrust and
  *  blast impulses divide by it, so the mech anchor that shrugs off
  *  shoves also burns more sky per drop of fuel. */
-import { PLAYER_RADIUS } from './constants.ts';
-
 export type ArmorClass = 'light' | 'medium' | 'heavy';
 
 export interface ClassStats {
@@ -16,6 +14,8 @@ export interface ClassStats {
   /** Eye height above feet — the networked pos.y IS the eye point, so
    *  this is also the body's grounded stand height. */
   eyeHeight: number;
+  /** Hit/contact capsule half-width — narrow frames are harder to hit. */
+  radius: number;
 }
 
 /** Tier-locked ordnance — WeaponType ids only heavies may fire (Mortar,
@@ -35,9 +35,9 @@ export const CLASS_MODEL_SCALE: Record<ArmorClass, number> = {
 };
 
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
-  light:  { maxHealth: -25, speedScale: 1.18, mass: 0.75, eyeHeight: 1.8 },
-  medium: { maxHealth: 0,   speedScale: 1.0,  mass: 1.0,  eyeHeight: 2.0 },
-  heavy:  { maxHealth: 50,  speedScale: 0.78, mass: 1.25, eyeHeight: 2.5 },
+  light:  { maxHealth: -25, speedScale: 1.2, mass: 1.25, eyeHeight: 1.8, radius: 0.5 },
+  medium: { maxHealth: 0,   speedScale: 1.0,  mass: 1.5,  eyeHeight: 2.0, radius: 0.65 },
+  heavy:  { maxHealth: 50,  speedScale: 0.8, mass: 2.0, eyeHeight: 2.5, radius: 0.8 },
 };
 
 /** Headroom above the eye — the helmet must live inside the capsule. */
@@ -46,12 +46,13 @@ const HEADROOM = 0.2;
 /** Per-class hit capsule derived from the eye height. `centerOff` is the
  *  capsule center's offset FROM the eye position (always negative —
  *  the axis midpoint sits below the eyes); `half` is the cylinder
- *  half-height. Radius stays shared: bulk reads through height. */
-export function classCapsule(cls?: string): { eye: number; height: number; centerOff: number; half: number } {
-  const eye = cls === 'light' || cls === 'medium' || cls === 'heavy'
-    ? CLASS_STATS[cls].eyeHeight : CLASS_STATS.medium.eyeHeight;
-  const height = eye + HEADROOM;
-  return { eye, height, centerOff: height / 2 - eye, half: Math.max(0, (height - 2 * PLAYER_RADIUS) / 2) };
+ *  half-height; `radius` is the class's own half-width — every hit test
+ *  and the bodyblock resolve read it, so a narrower class is harder to
+ *  hit AND harder to block. */
+export function classCapsule(cls?: string): { eye: number; height: number; centerOff: number; half: number; radius: number } {
+  const st = cls === 'light' || cls === 'medium' || cls === 'heavy' ? CLASS_STATS[cls] : CLASS_STATS.medium;
+  const height = st.eyeHeight + HEADROOM;
+  return { eye: st.eyeHeight, height, centerOff: height / 2 - st.eyeHeight, half: Math.max(0, (height - 2 * st.radius) / 2), radius: st.radius };
 }
 
 /** Sim mass for impulse scaling — jets and blast shoves divide by it. */

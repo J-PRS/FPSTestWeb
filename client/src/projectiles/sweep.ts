@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, TERRAIN_HEIGHT_SCALE } from '../core/config.js';
+import { TERRAIN_HEIGHT_SCALE } from '../core/config.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import { maxHeightInRect } from '../world/heightmap.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -190,9 +190,10 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
   const cap = classCapsule(cls);
   const centerY = playerPos.y + cap.centerOff;
   const capHalf = cap.half;
+  const capRadius = cap.radius;
   // Same sphere reject; capsule half-height inflates the reach so a
   // head/foot catch can't slip past the midpoint estimate.
-  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, PLAYER_RADIUS + capHalf + p.hitRadius + 0.5)) return false;
+  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, capRadius + capHalf + p.hitRadius + 0.5)) return false;
 
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
@@ -207,8 +208,8 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
     const yDelta = vy - clampedY;
     const totalDist = Math.sqrt(hx * hx + yDelta * yDelta + hz * hz);
 
-    const directThresh = PLAYER_RADIUS + p.config.bodyRadius;
-    if (totalDist <= PLAYER_RADIUS + p.hitRadius) {
+    const directThresh = capRadius + p.config.bodyRadius;
+    if (totalDist <= capRadius + p.hitRadius) {
       p.minHitDist = totalDist;
       p.directHit = totalDist <= directThresh;
       p.hitAt(p.pos.x, p.pos.y, p.pos.z, 1);
@@ -236,8 +237,8 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
 
   const totalDist = Math.sqrt(vx * vx + yDelta * yDelta + vz * vz);
 
-  const directThresh = PLAYER_RADIUS + p.config.bodyRadius;
-  if (totalDist <= PLAYER_RADIUS + p.hitRadius) {
+  const directThresh = capRadius + p.config.bodyRadius;
+  if (totalDist <= capRadius + p.hitRadius) {
     p.minHitDist = totalDist;
 
     if (totalDist <= directThresh) {
@@ -254,7 +255,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
       return false;
     } else if (totalDist > prevMin && passedCenter) {
       p.directHit = false;
-      logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + p.hitRadius).toFixed(2)}`);
+      logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(capRadius + p.hitRadius).toFixed(2)}`);
       p.hitAt(closestX, closestY, closestZ, tClamped);
       return true;
     }

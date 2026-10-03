@@ -235,7 +235,7 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   _contactBodies.length = 0;
   for (const rp of deps.world.remotePlayers.values()) {
     if (rp.isDead) continue;
-    _contactBodies.push({ x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, h: classCapsule(rp.armorClass).eye, mass: classMass(rp.armorClass), vx: rp.vel.x, vz: rp.vel.z });
+    _contactBodies.push({ x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, h: classCapsule(rp.armorClass).eye, mass: classMass(rp.armorClass), r: classCapsule(rp.armorClass).radius, vx: rp.vel.x, vz: rp.vel.z });
   }
   player.movement.bodies = _contactBodies;
   player.update(dt);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { LG_RANGE, LG_CHAIN_RANGE, PLAYER_RADIUS } from '../../core/config.js';
+import { LG_RANGE, LG_CHAIN_RANGE } from '../../core/config.js';
 import { classCapsule } from '../../../../shared/botClasses.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
@@ -114,8 +114,6 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
   return hitId;
 }
 
-const CAP_PAD = PLAYER_RADIUS + 0.2; // beam is thin but not needle-thin
-
 /** Entry distance along _lgD for the player capsule at eyePos, or null.
  *  Closest-approach between the ray and the capsule's vertical axis
  *  segment, then back off the surface by sqrt(r²−d²) — the standard
@@ -123,8 +121,9 @@ const CAP_PAD = PLAYER_RADIUS + 0.2; // beam is thin but not needle-thin
  *  ones vs a true cylindrical cast). */
 function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): number | null {
   const cap = classCapsule(cls);
-  const yLo = eyePos.y - cap.eye + PLAYER_RADIUS;
-  const axisH = (cap.height - 2 * PLAYER_RADIUS); // yLo .. yLo+axisH
+  const capPad = cap.radius + 0.2; // beam is thin but not needle-thin
+  const yLo = eyePos.y - cap.eye + cap.radius;
+  const axisH = (cap.height - 2 * cap.radius); // yLo .. yLo+axisH
   const wx = _lgO.x - eyePos.x;
   const wy = _lgO.y - yLo;
   const wz = _lgO.z - eyePos.z;
@@ -142,8 +141,8 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
   const py = _lgO.y + _lgD.y * t - (yLo + s);
   const pz = _lgO.z + _lgD.z * t - eyePos.z;
   const d2 = px * px + py * py + pz * pz;
-  if (d2 >= CAP_PAD * CAP_PAD) return null;
-  const entry = t - Math.sqrt(CAP_PAD * CAP_PAD - d2);
+  if (d2 >= capPad * capPad) return null;
+  const entry = t - Math.sqrt(capPad * capPad - d2);
   return entry < hitT ? Math.max(entry, 0) : null;
 }
 

@@ -78,7 +78,7 @@ export class PlayerLoadout {
     if (this.h.appliedClass === c) return;
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
-    this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight);
+    this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
     if (c !== 'heavy') this.unshoulderHeavy();
     // One cast for all tiers — the class reads as a scale bump, not a
     // different model, so a tier swap is a rescale, not a rebuild.

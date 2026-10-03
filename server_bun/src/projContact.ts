@@ -1,6 +1,5 @@
 import type { Vec3 } from './types.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
-import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
 import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
@@ -17,7 +16,8 @@ function capsuleCenter(t: { position: Vec3; armorClass: string }): Vec3 {
   return { x: t.position.x, y: t.position.y + cap.centerOff, z: t.position.z };
 }
 function capsuleReach(t: { armorClass: string }, reach: number): number {
-  return reach + classCapsule(t.armorClass).half;
+  const cap = classCapsule(t.armorClass);
+  return reach + cap.half + cap.radius;
 }
 
 export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, dt: number): boolean {
@@ -57,8 +57,9 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // prediction gates the same sweeps on config.armTime.
     if (stats.armTime !== undefined && p.age < stats.armTime) return false;
     // Player sweep — same legal radius the hit-claim validator allows:
-    // capsule radius + the larger of body/wake radius at this airtime.
-    const reach = PLAYER_RADIUS + Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
+    // the target's class radius (in capsuleReach) + the larger of
+    // body/wake radius at this airtime.
+    const reach = Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
     return bodySweep(r, proj, stats, from, reach, dt) || creatureSweep(r, proj, stats, from, reach);
   }
 
@@ -79,7 +80,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       if (pd <= capsuleReach(target, reach)) {
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
-        r.detonate(proj, { ...p.pos }, pid, undefined, pd <= PLAYER_RADIUS + stats.bodyRadius);
+        r.detonate(proj, { ...p.pos }, pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
         return true;
       }
     }
@@ -90,11 +91,11 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
  *  client's creatureHit claim does: earliest ball contact along the leg. */
 function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number): boolean {
     const p = proj.p;
-    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach - PLAYER_RADIUS);
+    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach);
     // Species pops contest the same lane — earliest of ball/crawler
     // contact eats the shell, so a crawler body-blocks a shot meant
     // for a ball behind it (and vice versa).
-    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach - PLAYER_RADIUS);
+    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach);
     const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
     if (!best) return false;
     const at: Vec3 = {
@@ -120,7 +121,7 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
       y: p.pos.y + (p.vel.y / speed) * range,
       z: p.pos.z + (p.vel.z / speed) * range,
     };
-    const reach = PLAYER_RADIUS + proj.stats.bodyRadius;
+    const reach = proj.stats.bodyRadius;
     // Track the earliest contact as a segment parameter [0..1].
     let bestT = 1, hitId: string | null = null;
     if (r.field) {

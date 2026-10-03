@@ -11,9 +11,6 @@ import { getWeaponStats } from './weapons.js';
 import { GRAVITY } from './movement.js';
 import { segSolidHit } from './solidWorld.js';
 import type { StructureCollider } from './ballSim.js';
-import {
-  PLAYER_RADIUS,
-} from './constants.js';
 import { classCapsule } from './botClasses.js';
 
 export interface Vec3Like {
@@ -273,8 +270,9 @@ export function validateHitClaim(args: {
   const stats = getWeaponStats(projectile.weaponType);
   const legalRadius = Math.max(stats.bodyRadius, hitRadiusAt(projectile.weaponType, flight.airtime));
   const dist = pointToCapsuleDistance(hitPos, targetPos, args.targetClass);
-  if (dist > PLAYER_RADIUS + legalRadius + TARGET_SLACK) {
-    return { ok: false, reason: `target ${dist.toFixed(1)}m outside legal radius ${(PLAYER_RADIUS + legalRadius).toFixed(1)}m` };
+  const bodyRadius = classCapsule(args.targetClass).radius;
+  if (dist > bodyRadius + legalRadius + TARGET_SLACK) {
+    return { ok: false, reason: `target ${dist.toFixed(1)}m outside legal radius ${(bodyRadius + legalRadius).toFixed(1)}m` };
   }
 
   return flight;

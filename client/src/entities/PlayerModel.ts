@@ -326,11 +326,11 @@ export class PlayerModel {
 
   /** Re-size the debug gizmo to the class hit capsule — the gizmo was
    *  built from the generic constants and never matched light/heavy sim
-   *  capsules (radius stays shared; only height/half differ per class). */
-  setColliderCapsule(cap: { height: number; half: number }): void {
+   *  capsules. */
+  setColliderCapsule(cap: { height: number; half: number; radius: number }): void {
     if (!this.colliderGizmo) return;
     this.colliderGizmo.geometry.dispose();
-    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
+    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
     this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale - this.feetOffsetY;
   }
 

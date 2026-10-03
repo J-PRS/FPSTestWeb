@@ -63,7 +63,7 @@ export class GameBot extends RemotePlayer {
     this.armorClass = cls;
     const st = CLASS_STATS[cls];
     this.movement.setSpeedScale(st.speedScale);
-    this.movement.setBody(st.mass, st.eyeHeight);
+    this.movement.setBody(st.mass, st.eyeHeight, st.radius);
     this.recalcMaxHp();
     this.setClass(cls); // silhouette
   }

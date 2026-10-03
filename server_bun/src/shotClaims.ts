@@ -1,9 +1,9 @@
 import type { ClientMessage } from './types.ts';
 import type { PlayerState } from './types.ts';
-import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_MIN_TICK_S, HEALBEAM_ENERGY, BELT_THROW_WEAPONS, BELT_THROW_COST } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_MIN_TICK_S, HEALBEAM_ENERGY, BELT_THROW_WEAPONS, beltThrowCost } from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
 import { validateHitClaim, pointToCapsuleDistance } from '../../shared/combat.ts';
-import { PLAYER_RADIUS } from '../../shared/constants.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { rewindPos, rewindNearest, clampPing, freshDefer, type ClaimDefer } from './claimLedger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
@@ -94,7 +94,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // wake proxy is still a legal hit (flat directDamage) but doesn't earn
     // the airtime multiplier. Re-derived server-side, never trusted.
     const bodyHit = pointToCapsuleDistance(msg.position, targetPos, target.armorClass)
-      <= PLAYER_RADIUS + getWeaponStats(proj.weaponType).bodyRadius;
+      <= classCapsule(target.armorClass).radius + getWeaponStats(proj.weaponType).bodyRadius;
     const shotDamage = scaledDirectDamage(proj.weaponType, bodyHit ? msg.airtime : undefined) * perkMods(player.perk).directDamage * h.ddMult(player);
     const result = h.playerManager.applyDamage(targetId, shotDamage);
     // Full-rate tick updates for the hit window — the shooter's client is
@@ -236,11 +236,12 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
     // spawn one. Deduct on the spawn claim only: hit/blast claims ride
     // the registered shell and never re-pay.
     if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
-      if (player.beltCharges < BELT_THROW_COST) {
+      const cost = beltThrowCost(msg.weaponType);
+      if (player.beltCharges < cost) {
         h.hb('drop.beltDry');
         return;
       }
-      player.beltCharges -= BELT_THROW_COST;
+      player.beltCharges -= cost;
     }
     const projectileId = h.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity, msg.shotId);
     // A registered shell may satisfy claims that arrived out of order —

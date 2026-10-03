@@ -69,9 +69,10 @@ export class MovementController {
   /** Armor-class body: jet thrust divides by mass, and grounded/ceiling
    *  checks stand the body `eyeHeight` tall — must match the server's
    *  shadow or jets/headroom read as divergence. */
-  setBody(mass: number, eyeHeight: number): void {
+  setBody(mass: number, eyeHeight: number, bodyRadius: number): void {
     this.sim.mass = mass;
     this.sim.eyeHeight = eyeHeight;
+    this.sim.bodyRadius = bodyRadius;
   }
   /** Other players' capsules for contact resolve — the frame fills this
    *  from the remote roster (server shadows resolve the same bodies). */

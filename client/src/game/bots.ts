@@ -197,10 +197,10 @@ export class TeamBots {
     bodies.length = 0;
     for (const b of this.bots) {
       if (b.isDead) continue;
-      bodies.push({ id: b.playerId, x: b.position.x, y: b.position.y, z: b.position.z, h: classCapsule(b.armorClass).eye, mass: classMass(b.armorClass), vx: b.vel.x, vz: b.vel.z });
+      bodies.push({ id: b.playerId, x: b.position.x, y: b.position.y, z: b.position.z, h: classCapsule(b.armorClass).eye, mass: classMass(b.armorClass), r: classCapsule(b.armorClass).radius, vx: b.vel.x, vz: b.vel.z });
     }
     const pst = CLASS_STATS[player.appliedClass];
-    bodies.push({ id: 'local', x: player.pos.x, y: player.pos.y, z: player.pos.z, h: pst.eyeHeight, mass: pst.mass, vx: player.vel.x, vz: player.vel.z });
+    bodies.push({ id: 'local', x: player.pos.x, y: player.pos.y, z: player.pos.z, h: pst.eyeHeight, mass: pst.mass, r: pst.radius, vx: player.vel.x, vz: player.vel.z });
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
     this.wd.step(dt, this.bots);

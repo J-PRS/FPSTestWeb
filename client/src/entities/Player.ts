@@ -37,7 +37,13 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'remoterailgun', 'armornade'] as const;
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal'] as const;
+
+/** Per-item throw-anim stretch — the satchel plant is a deliberate
+ *  two-beat reach, not a flick; multiplies THROW_RELEASE/THROW_TOTAL. */
+export const BELT_THROW_TIME: Partial<Record<BeltItem, number>> = {
+  satchel: 1.9,
+};
 export type BeltItem = typeof BELT_ITEMS[number];
 
 export class Player {
@@ -268,6 +274,9 @@ export class Player {
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
   onDeploy: (() => void) | null = null;
+  /** Deliberate respawn key → the server's self-kill claim (or the
+   *  offline kill path when there's no wire). */
+  onRespawn: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -292,7 +301,7 @@ export class Player {
     this.appliedClass = this.armorClass;
     this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
-    this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight);
+    this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight, CLASS_STATS[this.appliedClass].radius);
     if (this.appliedClass !== 'heavy') this.armory.unshoulderHeavy();
 
     // Your third-person body is the mannequin at your tier's silhouette

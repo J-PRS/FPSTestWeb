@@ -98,7 +98,7 @@ export interface MoveSurface {
 /** A neighbor body for contact resolution — eye-position capsule like
  *  the sim's own (feet span y-h..y); vx/vz let the bump price closing
  *  speed instead of pure geometry. Hosts rebuild this list each tick. */
-export interface BodyCapsule { x: number; y: number; z: number; h: number; mass: number; vx: number; vz: number; id?: string }
+export interface BodyCapsule { x: number; y: number; z: number; h: number; mass: number; vx: number; vz: number; r: number; id?: string }
 
 export const GRAVITY = -28.0;
 
@@ -138,6 +138,9 @@ export class MoveSim {
   /** Eye height above feet — pos.y IS the eye point; grounded checks and
    *  the floor clamp stand the body this tall. */
   eyeHeight: number = MOVEMENT_CONFIG.playerHeight;
+  /** Contact half-width — set per armor class like mass/eyeHeight; a
+   *  narrow class is harder to block, same as its hit capsule. */
+  bodyRadius: number = MOVEMENT_CONFIG.playerRadius;
 
   /** Other players' capsules this tick — contact resolve reads it after
    *  terrain so a stand mate is as solid as the deck under him. */
@@ -270,8 +273,8 @@ export class MoveSim {
     const s = this.state;
     if (this.bodies.length === 0) return;
     const feet = s.pos.y - this.eyeHeight;
-    const rr = MOVEMENT_CONFIG.playerRadius * 2;
     for (const b of this.bodies) {
+      const rr = this.bodyRadius + b.r;
       if (feet >= b.y || s.pos.y <= b.y - b.h) continue;
       const dx = s.pos.x - b.x, dz = s.pos.z - b.z;
       const d2 = dx * dx + dz * dz;
