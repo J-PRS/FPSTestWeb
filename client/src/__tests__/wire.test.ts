@@ -61,7 +61,7 @@ describe('tick frame round-trip', () => {
     const p1 = encodeTickPlayer({
       playerId: 'player_abc', position: { x: 1, y: 2, z: 3 },
       rotation: { yaw: 0.5, pitch: -0.5 }, velocity: { x: 4, y: 5, z: 6 },
-      health: 80, isDead: false, ping: 55, ski: 1,
+      health: 300, isDead: false, ping: 55, ski: 1,
     });
     const p2 = encodeTickPlayer({
       playerId: 'player_xyz', position: { x: -1, y: -2, z: -3 },
@@ -76,7 +76,8 @@ describe('tick frame round-trip', () => {
     expect(decoded.updates).toHaveLength(2);
     const [a, b] = decoded.updates;
     expect(a!.playerId).toBe('player_abc');
-    expect(a!.health).toBe(80);
+    // Heavy/bot hp runs past the old u8 record — >255 must survive the wire.
+    expect(a!.health).toBe(300);
     expect(a!.ping).toBe(55);
     expect(a!.ski).toBe(1);
     expect(a!.isDead).toBe(false);
