@@ -6,6 +6,7 @@ import { urlParams } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
 import { updateGibs } from '../entities/swarms.js';
+import { updateSwings } from '../effects/swingTrails.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
@@ -41,6 +42,8 @@ import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPe
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import { classCapsule, classMass } from '../../../shared/botClasses.js';
+import type { BodyCapsule } from '../../../shared/movement.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
 import Logger from '../core/Logger.js';
@@ -212,6 +215,10 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   terrain.updateFog(fog.color, fog.near, fog.far);
 }
 
+/** Contact bodies the local player's prediction resolves against —
+ *  refilled each frame so the sim matches the server's shadow. */
+const _contactBodies: BodyCapsule[] = [];
+
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
@@ -222,6 +229,15 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   // at 5% speed and bots keep slowly fighting — a real pause matches user
   // intent. Online rooms must keep simulating: the server doesn't stop.
   if (document.hidden && !networkManager.isConnected()) return false;
+  // Player-vs-player contact: remotes + lobby bots all live in this set —
+  // corpses don't block. Interpolated positions are a half-RTT stale but
+  // the push only has to agree with the shadow's, not be perfect.
+  _contactBodies.length = 0;
+  for (const rp of deps.world.remotePlayers.values()) {
+    if (rp.isDead) continue;
+    _contactBodies.push({ x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, h: classCapsule(rp.armorClass).eye, mass: classMass(rp.armorClass), vx: rp.vel.x, vz: rp.vel.z });
+  }
+  player.movement.bodies = _contactBodies;
   player.update(dt);
   if (_posPrimed) {
     const jump = player.pos.distanceTo(_posPrev);
@@ -328,6 +344,7 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
       }
     }],
     ['gibs', () => updateGibs(fxDt)],
+    ['swipes', () => updateSwings(fxDt, deps.camera)],
     ['scorch', () => updateDeadList(deps.world.scorches, fxDt)],
     ['explosions', () => {
       const ex = deps.world.explosions;
@@ -376,7 +393,10 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   }
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
   budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
-  hud.setNuggets(entities.getNuggetsCollected());
+  // Belt charges ARE the nugget wallet — spawn stock + pickups, spent by
+  // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
+  // read 0 at spawn even though the belt economy starts at BELT_MAX.)
+  hud.setNuggets(player.beltCharges);
   hud.setTimer(deps.waveDirector().elapsed);
   hud.setMatchStatus(
     deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,

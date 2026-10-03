@@ -1,4 +1,4 @@
-import { MoveSim, ENERGY, cloakDrainPerSec, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
+import { MoveSim, ENERGY, cloakDrainPerSec, type BodyCapsule, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
@@ -46,6 +46,10 @@ export class RoomMoveSim {
    *  inside SEVERE_MS — the kick wiring lives at the Room level (this
    *  sim only knows movement truth). */
   onCheat?: (playerId: string, dist: number) => void;
+  /** Live player capsules for body-vs-body contact — the Room supplies
+   *  records each tick (corpses excluded upstream); each shadow gets a
+   *  self-less view so its own sim does the pushing. */
+  bodySource?: () => Iterable<{ id: string } & BodyCapsule>;
 
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
@@ -279,7 +283,12 @@ export class RoomMoveSim {
   }
 
   tick(dt: number): void {
-    for (const sh of this.shadows.values()) {
+    const bodies = this.bodySource ? [...this.bodySource()] : null;
+    for (const [pid, sh] of this.shadows) {
+      if (bodies) {
+        sh.sim.bodies.length = 0;
+        for (const b of bodies) if (b.id !== pid) sh.sim.bodies.push(b);
+      }
       // Jet economy: thrust only while the modeled tank has fuel, drain
       // while burning, recharge only when off jet AND no toggle skill is
       // running (client-side rule — all three pause recharge).

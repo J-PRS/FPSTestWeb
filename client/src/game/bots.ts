@@ -35,6 +35,8 @@ import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLoca
  */
 
 import { BOT_NAMES } from '../../../shared/botNames.js';
+import { CLASS_STATS, classCapsule, classMass } from '../../../shared/botClasses.js';
+import type { BodyCapsule } from '../../../shared/movement.js';
 
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
@@ -99,6 +101,7 @@ export class TeamBots {
     private mode: ModeId,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
+    this.deps.world.mode = mode; // wire rooms set this on gameState; offline must too (scoreboard title)
     this.senses = new BotSenses({
       bots: this.bots,
       teamOf: this.teamOf,
@@ -177,6 +180,9 @@ export class TeamBots {
   // Rebuilt each frame but never reallocated — one ~10-slot array of
   // Vector3 refs per frame was steady GC churn for zero benefit.
   private readonly othersScratch: THREE.Vector3[] = [];
+  // Contact capsules for the same live bodies — bodyblock physics reads
+  // this (the steerer's separation sense reads the positions above).
+  private readonly bodyScratch: BodyCapsule[] = [];
 
   /** Per-frame: brains, fire resolution, respawns, win check. */
   update(dt: number): void {
@@ -187,7 +193,15 @@ export class TeamBots {
     others.length = 0;
     for (const b of this.bots) if (!b.isDead) others.push(b.position);
     others.push(player.pos);
-    this.tickBots(dt, others);
+    const bodies = this.bodyScratch;
+    bodies.length = 0;
+    for (const b of this.bots) {
+      if (b.isDead) continue;
+      bodies.push({ id: b.playerId, x: b.position.x, y: b.position.y, z: b.position.z, h: classCapsule(b.armorClass).eye, mass: classMass(b.armorClass), vx: b.vel.x, vz: b.vel.z });
+    }
+    const pst = CLASS_STATS[player.appliedClass];
+    bodies.push({ id: 'local', x: player.pos.x, y: player.pos.y, z: player.pos.z, h: pst.eyeHeight, mass: pst.mass, vx: player.vel.x, vz: player.vel.z });
+    this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);
@@ -207,7 +221,7 @@ export class TeamBots {
   overAt = 0; // public — botMatch writes it via the host interface
 
   /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
-  private tickBots(dt: number, others: THREE.Vector3[]): void {
+  private tickBots(dt: number, others: THREE.Vector3[], bodies: BodyCapsule[]): void {
     const terrain = this.deps.lazyTerrain();
     this.fire.tickBolts(dt); // frame-rate, not per-bot — it was over-integrating in the loop
     // Sheep coverage windows run on sim ms advanced ONCE per frame —
@@ -215,7 +229,7 @@ export class TeamBots {
     // size (9 bots → windows fired ~9x too often, cover-dominated max-outs).
     this.sheep.advance(dt);
     let i = 0;
-    for (const bot of this.bots) this.tickBot(bot, dt, others, terrain, i++);
+    for (const bot of this.bots) this.tickBot(bot, dt, others, bodies, terrain, i++);
   }
 
   // Think rate: brains decide at ~10Hz (staggered per bot so thinks
@@ -225,7 +239,7 @@ export class TeamBots {
   private static readonly THINK_PERIOD = 0.1;
   private thinkAccum = new Map<string, number>();
 
-  private tickBot(bot: GameBot, dt: number, others: THREE.Vector3[], terrain: Terrain, rosterIdx = 0): void {
+  private tickBot(bot: GameBot, dt: number, others: THREE.Vector3[], bodies: BodyCapsule[], terrain: Terrain, rosterIdx = 0): void {
     // Local bots aren't in the wire roster, so remotes.ts never ticks
     // them — tick() is what advances the snapshot interpolation and
     // AnimationMixer onto the model. Without it think() moves the
@@ -238,6 +252,9 @@ export class TeamBots {
     }
     // Movement integrates every frame — the 10Hz think gate below is for
     // decisions only; gating movement made every bot warp in 100ms hops.
+    const own = bot.movement.bodies;
+    own.length = 0;
+    for (const b of bodies) if (b.id !== bot.playerId) own.push(b);
     bot.stepFrame(dt, { terrain });
     // Roster-indexed start phase spreads thinks across the period —
     // without it every bot thinks on the same frame and stays aligned.

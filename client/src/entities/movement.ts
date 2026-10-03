@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MoveSim, MOVEMENT_CONFIG, type MoveState, type MoveInput, type Vec3Like } from '../../../shared/movement.js';
+import { MoveSim, MOVEMENT_CONFIG, type BodyCapsule, type MoveState, type MoveInput, type Vec3Like } from '../../../shared/movement.js';
 import { SolidWorld } from '../../../shared/solidWorld.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 
@@ -73,6 +73,11 @@ export class MovementController {
     this.sim.mass = mass;
     this.sim.eyeHeight = eyeHeight;
   }
+  /** Other players' capsules for contact resolve — the frame fills this
+   *  from the remote roster (server shadows resolve the same bodies). */
+  get bodies(): BodyCapsule[] { return this.sim.bodies; }
+  set bodies(list: BodyCapsule[]) { this.sim.bodies = list; }
+
   getState(): MovementState { return this.state; }
   setState(newState: MovementState): void { this.sim.setState(newState); }
   update(dt: number): void { this.sim.update(dt); }

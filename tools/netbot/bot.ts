@@ -8,6 +8,7 @@
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
 import { MoveSim, ENERGY, GRAVITY } from '../../shared/movement.ts';
+import { CLASS_STATS } from '../../shared/botClasses.ts';
 
 import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor } from '../../shared/botSkill.ts';
@@ -536,6 +537,15 @@ export class NetBot {
       this.energy = Math.max(0, Math.min(ENERGY.max,
         this.energy + (this.jetting ? -ENERGY.jetDrain : ENERGY.jetCharge) * (1 / POS_HZ)));
       sim.setInput({ forward: this.wantMove.forward, right: this.wantMove.right, jumpHeld: this.wantMove.jump, skiHeld: true, jetHeld: this.jetting });
+      // Body contact: the server shadow resolves every live roster body,
+      // so the local mirror sees the same shoves or it reads divergence.
+      const bodies = sim.bodies;
+      bodies.length = 0;
+      for (const [id, r] of nc.roster) {
+        if (r.isDead) continue;
+        const st = CLASS_STATS[r.cls as keyof typeof CLASS_STATS] ?? CLASS_STATS.medium;
+        bodies.push({ id, x: r.pos.x, y: r.pos.y, z: r.pos.z, h: st.eyeHeight, mass: st.mass, vx: r.vel.x, vz: r.vel.z });
+      }
       sim.update(1 / POS_HZ);
       nc.self.pos = { x: sim.state.pos.x, y: sim.state.pos.y, z: sim.state.pos.z };
       nc.self.vel = { x: sim.state.vel.x, y: sim.state.vel.y, z: sim.state.vel.z };

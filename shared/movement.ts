@@ -33,6 +33,11 @@ export const MOVEMENT_CONFIG = {
   // skills.ts economy.
   jetForceUp: 35.0,
   jetForceDir: 10.0,
+  // Player-vs-player contact: capsule half-width and the elastic share
+  // of the bump — a juggernaut eating a capper keeps most of its line,
+  // the light one takes the shove (Tribes bodyblock, not a brick wall).
+  playerRadius: 0.6,
+  bodyRestitution: 0.55,
 } as const;
 
 /** Jet/skill energy economy — the authoritative copy for the server
@@ -90,6 +95,11 @@ export interface MoveSurface {
   resolveBody?(s: MoveState, height: number): void;
 }
 
+/** A neighbor body for contact resolution — eye-position capsule like
+ *  the sim's own (feet span y-h..y); vx/vz let the bump price closing
+ *  speed instead of pure geometry. Hosts rebuild this list each tick. */
+export interface BodyCapsule { x: number; y: number; z: number; h: number; mass: number; vx: number; vz: number; id?: string }
+
 export const GRAVITY = -28.0;
 
 // Scalar scratch — no Vec3 allocation in the hot path.
@@ -128,6 +138,10 @@ export class MoveSim {
   /** Eye height above feet — pos.y IS the eye point; grounded checks and
    *  the floor clamp stand the body this tall. */
   eyeHeight: number = MOVEMENT_CONFIG.playerHeight;
+
+  /** Other players' capsules this tick — contact resolve reads it after
+   *  terrain so a stand mate is as solid as the deck under him. */
+  bodies: BodyCapsule[] = [];
 
   setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
 
@@ -249,6 +263,38 @@ export class MoveSim {
     s.pos.z += s.vel.z * dt;
 
     this.collideTerrain();
+    this.collideBodies();
+  }
+
+  private collideBodies(): void {
+    const s = this.state;
+    if (this.bodies.length === 0) return;
+    const feet = s.pos.y - this.eyeHeight;
+    const rr = MOVEMENT_CONFIG.playerRadius * 2;
+    for (const b of this.bodies) {
+      if (feet >= b.y || s.pos.y <= b.y - b.h) continue;
+      const dx = s.pos.x - b.x, dz = s.pos.z - b.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= rr * rr) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      const nx = dx / d, nz = dz / d;
+      // Half-separation per side — the neighbor's own sim moves its half
+      // on its tick, so a mutual contact opens to the full overlap
+      // without either side teleporting.
+      const push = (rr - d) * 0.5;
+      s.pos.x += nx * push;
+      s.pos.z += nz * push;
+      const vn1 = s.vel.x * nx + s.vel.z * nz;
+      const vn2 = b.vx * nx + b.vz * nz;
+      if (vn1 - vn2 < 0) {
+        // Momentum-weighted bump along the contact normal — mass is the
+        // whole point of a juggernaut eating a light capper's line.
+        const m1 = this.mass, m2 = b.mass;
+        const vn1p = (m1 * vn1 + m2 * vn2 + MOVEMENT_CONFIG.bodyRestitution * m2 * (vn2 - vn1)) / (m1 + m2);
+        s.vel.x += (vn1p - vn1) * nx;
+        s.vel.z += (vn1p - vn1) * nz;
+      }
+    }
   }
 
   private applyGround(dt: number, dir: Vec3Like): void {
