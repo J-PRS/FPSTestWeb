@@ -790,13 +790,14 @@ export class Deployables {
   // (T2 mortar read); flat-trajectory weapons aim straight at the post.
   private readonly _beaconOrigin = new THREE.Vector3();
   private readonly _beaconAim = new THREE.Vector3();
+  private readonly _beaconLob = new THREE.Vector3();
   private readonly _beaconDir = new THREE.Vector3();
 
   private updateBeaconAim(): void {
     const beacon = this.items.find(i => i.kind === 'beacon' && !i.dead && i.owner === undefined);
     const hud = this.deps.lazyHud();
     const cam = this.deps.camera;
-    if (!beacon) { hud.updateBeaconAim(null, cam, true); return; }
+    if (!beacon) { hud.updateBeaconAim(null, null, cam, true); return; }
     const p = this.deps.lazyPlayer();
     const cfg = getProjectileConfig(weaponDef(p.currentWeapon).weaponType);
     cam.getWorldPosition(this._beaconOrigin);
@@ -805,12 +806,12 @@ export class Deployables {
     const dx = t.x - o.x, dz = t.z - o.z;
     const dy = (t.y + 0.6) - o.y; // aim at the emitter, not the dirt
     const d = Math.hypot(dx, dz);
-    if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, cam, true); return; }
+    if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, null, cam, true); return; }
     if (!cfg.gravity) {
       // Flat gun — the reticle IS the beacon; still worth marking.
       beacon.beacon?.setAimDir(_UP);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
-      hud.updateBeaconAim(this._beaconAim, cam, true);
+      hud.updateBeaconAim(this._beaconAim, null, cam, true);
       return;
     }
     const v = cfg.speed, g = Math.abs(GRAVITY);
@@ -820,21 +821,29 @@ export class Deployables {
       // instead of lying about a lob that falls short.
       beacon.beacon?.setAimDir(_UP);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
-      hud.updateBeaconAim(this._beaconAim, cam, false);
+      hud.updateBeaconAim(this._beaconAim, null, cam, false);
       return;
     }
-    // High-arc root — the T2 mortar lob over obstacles, not the flat one.
-    const theta = Math.atan((v * v + Math.sqrt(disc)) / (g * d));
-    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    // Two roots to the lob quadratic: the direct low arc and the T2
+    // mortar lob over obstacles — both reticles, distinct styles.
+    const sqrtD = Math.sqrt(disc);
+    const thetaLow = Math.atan((v * v - sqrtD) / (g * d));
+    const thetaLob = Math.atan((v * v + sqrtD) / (g * d));
     const hx = dx / d, hz = dz / d;
-    // The reticle marks the aim direction; projecting a point far enough
-    // along it keeps the marker off the near field.
-    const dist = Math.max(d, 40);
-    this._beaconAim.set(o.x + hx * cosT * dist, o.y + sinT * dist, o.z + hz * cosT * dist);
-    // The sky shaft leans along the same lob — it reaches from the emitter
+    const dist = Math.max(d, 40); // keep the projected point off the near field
+    this._beaconAim.set(
+      o.x + hx * Math.cos(thetaLow) * dist,
+      o.y + Math.sin(thetaLow) * dist,
+      o.z + hz * Math.cos(thetaLow) * dist);
+    this._beaconLob.set(
+      o.x + hx * Math.cos(thetaLob) * dist,
+      o.y + Math.sin(thetaLob) * dist,
+      o.z + hz * Math.cos(thetaLob) * dist);
+    // The sky shaft leans along the lob — it reaches from the emitter
     // toward the reticle so the pointer reads "aim along this".
-    beacon.beacon?.setAimDir(this._beaconDir.set(hx * cosT, sinT, hz * cosT));
-    hud.updateBeaconAim(this._beaconAim, cam, true);
+    beacon.beacon?.setAimDir(this._beaconDir.set(
+      hx * Math.cos(thetaLob), Math.sin(thetaLob), hz * Math.cos(thetaLob)));
+    hud.updateBeaconAim(this._beaconAim, this._beaconLob, cam, true);
   }
 
   // A server-acked local item also sits in byId — drop it or

@@ -379,6 +379,17 @@
    not a false promise. */
 .beacon-aim.noarc::before { border-color: #ff6b6b; filter: none; }
 .beacon-aim.noarc::after { background: #ff6b6b; }
+/* The two lob roots get distinct reads: low/direct = solid diamond, high
+   arc = hollow ring-and-core. */
+.beacon-aim.lob::before {
+  clip-path: none;
+  border-radius: 50%;
+}
+.beacon-aim.lob::after {
+  inset: 40%;
+  border-radius: 50%;
+  clip-path: none;
+}
 /* Edge-clamped (arc apex off-screen): shrink to a plain rim marker — the
    direction is the information, not the diamond read. */
 .beacon-aim.edge { width: 12px; height: 12px; }

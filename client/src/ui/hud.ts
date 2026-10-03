@@ -339,28 +339,32 @@ export class HUD {
     this.indicators.update(id, position, camera, { variant: `flag ${team}` });
   }
 
-  /** Targeting-beacon aim reticle — Deployables solves the lob each frame
-   *  and hands the world-space aim point here; null hides the marker.
-   *  `reachable=false` means the current gun's arc can't carry that far. */
-  private beaconAimEl: HTMLDivElement | null = null;
+  /** Targeting-beacon aim reticles — Deployables solves both lob roots
+   *  each frame (low/direct + high arc) and hands the world-space aim
+   *  points here; null hides that marker. `reachable=false` means the
+   *  current gun's arc can't carry that far (single shared marker). */
+  private readonly beaconEls = new Map<string, HTMLDivElement>();
   private readonly _beaconProj = new THREE.Vector3();
-  updateBeaconAim(point: THREE.Vector3 | null, camera: THREE.Camera, reachable: boolean): void {
-    if (!point) {
-      this.beaconAimEl?.classList.add('hidden');
-      return;
+  updateBeaconAim(low: THREE.Vector3 | null, lob: THREE.Vector3 | null, camera: THREE.Camera, reachable: boolean): void {
+    this.paintBeaconEl('low', low, camera, reachable);
+    this.paintBeaconEl('lob', lob, camera, reachable);
+  }
+  private paintBeaconEl(key: string, point: THREE.Vector3 | null, camera: THREE.Camera, reachable: boolean): void {
+    let el = this.beaconEls.get(key);
+    if (!point) { el?.classList.add('hidden'); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = `beacon-aim ${key}`;
+      this.el.appendChild(el);
+      this.beaconEls.set(key, el);
     }
-    if (!this.beaconAimEl) {
-      this.beaconAimEl = document.createElement('div');
-      this.beaconAimEl.className = 'beacon-aim';
-      this.el.appendChild(this.beaconAimEl);
-    }
-    this.beaconAimEl.classList.toggle('noarc', !reachable);
+    el.classList.toggle('noarc', !reachable);
     const v = this._beaconProj.copy(point).project(camera);
     if (v.z > 1) { // behind the camera — no honest on-screen position
-      this.beaconAimEl.classList.add('hidden');
+      el.classList.add('hidden');
       return;
     }
-    this.beaconAimEl.classList.remove('hidden');
+    el.classList.remove('hidden');
     let x = (v.x * 0.5 + 0.5) * window.innerWidth;
     let y = (-v.y * 0.5 + 0.5) * window.innerHeight;
     // Long lobs aim nearly overhead — the aim point leaves the frustum but
@@ -375,11 +379,11 @@ export class HUD {
       const r = Math.min(hw / Math.abs(Math.cos(ang)), hh / Math.abs(Math.sin(ang)));
       x = cx + Math.cos(ang) * r;
       y = cy + Math.sin(ang) * r;
-      this.beaconAimEl.classList.add('edge');
+      el.classList.add('edge');
     } else {
-      this.beaconAimEl.classList.remove('edge');
+      el.classList.remove('edge');
     }
-    this.beaconAimEl.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 
   removePlayerIndicator(playerId: string): void {
