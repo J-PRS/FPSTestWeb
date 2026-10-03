@@ -18,6 +18,9 @@ import { screenShake } from '../effects/screenShake.js';
 import { Explosion } from '../effects/explosion.js';
 import { updateVfx } from '../effects/vfx.js';
 import { collectDiag } from '../core/fxDiag.js';
+import '../core/visAudit.js'; // side-effect: registers the Alt+Q visAudit section
+import { setLogOverlayVisible } from '../ui/logPanel.js';
+import { reportHudOverlap } from '../ui/overlapAudit.js';
 import { installGeoNaNWatch } from '../core/geoNaN.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
@@ -461,6 +464,7 @@ function makeStatsPanels(): Stats[] {
     const s = new Stats();
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
+    dom.id = `stats-${i}`;
     // bottom:40 — above the "⟳ files changed" badge strip (bottom:8, ~24px tall)
     // --z-br-3: reserved debug row in hud.css — hardcoding an offset here
     // is what parked the charts on top of the entity-counts row.
@@ -516,6 +520,11 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       perf.setVisible(show);
       // Bottom-right entity census is debug data too — same toggle.
       deps.lazyHud().setEntCountsVisible(show);
+      // The log mirror rides the same debug view.
+      setLogOverlayVisible(show);
+      // Debug chrome changes the corner stack — audit for collisions the
+      // frame after the layout settles.
+      if (show) requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap));
     }
   });
 }
