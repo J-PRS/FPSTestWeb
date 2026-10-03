@@ -32,6 +32,10 @@ interface Session {
   /** Wall-clock ms of the last accepted transition (for the log line). */
   at: number;
   room: string;
+  /** Grace-period expiry — armed on disconnect, cleared by reclaim/terminate.
+   *  Owned here (not a parallel room map) so "the seat's countdown" can't
+   *  outlive the session it counts down. */
+  graceTimer?: ReturnType<typeof setTimeout>;
 }
 
 export class SessionRegistry {
@@ -42,6 +46,10 @@ export class SessionRegistry {
    *  much churn, which edges" for scrapes without log mining. */
   private edgeTotals = new Map<string, number>();
   private anomalies = { illegal: 0, rebegin: 0, seatWithoutBegin: 0, reclaimNonLive: 0 };
+
+  private clearGrace(s: Session): void {
+    if (s.graceTimer) { clearTimeout(s.graceTimer); s.graceTimer = undefined; }
+  }
 
   private transition(playerId: string, s: Session, to: SessionState, reason: string): boolean {
     if (!EDGES[s.state].includes(to)) {
@@ -58,6 +66,9 @@ export class SessionRegistry {
     const edge = `${from}->${to}`;
     this.edgeTotals.set(edge, (this.edgeTotals.get(edge) ?? 0) + 1);
     logger.info('session transition', { playerId, t: edge, reason, gen: s.gen, room: s.room, wallAgeMs: wallAge });
+    // Leaving grace for any reason retires the countdown — reclaim clears
+    // it in-place, terminate deletes the session below.
+    if (from === 'grace' || to === 'reaped') this.clearGrace(s);
     if (to === 'reaped') this.sessions.delete(playerId);
     return true;
   }
@@ -110,11 +121,18 @@ export class SessionRegistry {
   }
 
   /** active → grace: the socket died, the seat stays warm. False when the
-   *  player wasn't active (e.g. spectator close, never-seated socket). */
-  disconnect(playerId: string, reason: string): boolean {
+   *  player wasn't active (e.g. spectator close, never-seated socket).
+   *  The grace countdown arms here — onExpire runs exactly once when the
+   *  timer wins; a reclaim or terminate clears it. */
+  disconnect(playerId: string, reason: string, graceMs?: number, onExpire?: () => void): boolean {
     const s = this.sessions.get(playerId);
     if (!s) return false;
-    return this.transition(playerId, s, 'grace', reason);
+    const ok = this.transition(playerId, s, 'grace', reason);
+    if (ok && graceMs !== undefined && onExpire) {
+      this.clearGrace(s);
+      s.graceTimer = setTimeout(onExpire, graceMs);
+    }
+    return ok;
   }
 
   /** any → reaped: grace expiry, idle reap, kick, admin remove. Every
@@ -141,6 +159,13 @@ export class SessionRegistry {
     const c: Record<SessionState, number> = { connecting: 0, active: 0, spectating: 0, grace: 0, reaped: 0 };
     for (const s of this.sessions.values()) c[s.state]++;
     return c;
+  }
+
+  /** Grace seats parked in a room — Room.empty's "no ghosts left" test. */
+  graceInRoom(room: string): number {
+    let n = 0;
+    for (const s of this.sessions.values()) if (s.state === 'grace' && s.room === room) n++;
+    return n;
   }
 
   /** /metrics session rollup — live census + since-boot edge totals +

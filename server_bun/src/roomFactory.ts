@@ -16,6 +16,8 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 export interface RoomFactoryHost {
   /** Live room index — created rooms register here before returning. */
   rooms: Map<string, Room>;
+  /** Session lifecycle owner — rooms read grace state through it. */
+  sessions: import('./sessionRegistry.ts').SessionRegistry;
   maps: MapCatalog;
   /** Shared default field (null until the boot heightmap lands). */
   field(): Heightfield | null;
@@ -76,6 +78,7 @@ export class RoomFactory {
       const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
       this.host.maps.noteSource(name, src);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
+      room.sessions = this.host.sessions;
       room.mapSrc = src; // spec source filename — scoreboard map title fallback
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.

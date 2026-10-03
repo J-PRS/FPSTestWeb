@@ -46,7 +46,7 @@ export function getMetrics(g: GameServer) {
       balls: r.ballSim.ballCount,
       scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
       pickups: r.pickups?.snapshot().length ?? 0,
-      gracePending: r.disconnected.size,
+      gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
       ballSimNow: r.ballSim.simNow,
       // Since-boot judge/claim counters — the room's 15s rollup clears
       // per flush, so scrapes need the cumulative mirror.

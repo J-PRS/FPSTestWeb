@@ -26,6 +26,8 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
   const playerRoom = new Map<string, typeof room>();
   const specRooms = new Map<string, typeof room>();
   const ops = { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 };
+  const registry = new SessionRegistry();
+  room.sessions = registry; // grace reads (empty check, tick skip) resolve here
   return {
     mgr: new SessionManager({
       rooms, playerRoom, specRooms,
@@ -33,11 +35,15 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       roomOfPlayer: (id) => rooms.has(room.name) && room.players.getPlayer(id) ? room : undefined,
       totalPlayers: () => playerRoom.size,
       ops,
-      registry: new SessionRegistry(),
+      registry,
     }),
-    playerRoom, ops,
+    playerRoom, ops, registry,
   };
 }
+
+// A dropped socket in registry terms: seat already exists from the
+// real join; disconnect moves it to grace with a parked countdown.
+const dropToGrace = (reg: SessionRegistry, id: string, ms = 60_000) => reg.disconnect(id, 'socket closed', ms, () => {});
 
 const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string, resumeSeq?: number) =>
   mgr.handle(ws as never, { type: 'join', playerId, room: 't', token, resumeSeq });
@@ -45,19 +51,19 @@ const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string,
 describe('grace reconnect', () => {
   it('reclaims the slot with the session token — state preserved', () => {
     const room = mkRoom({}, 'tdm');
-    const { mgr, playerRoom } = mkSessions(room);
+    const { mgr, playerRoom, registry } = mkSessions(room);
     const ws1 = fakeWs();
     join(mgr, ws1, 'p1');
     const p = room.players.getPlayer('p1')!;
     p.health = 42;
     p.position.x = 7;
     // Socket drops → grace bookkeeping (mirrors GameServer.onClose).
-    room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
+    dropToGrace(registry, 'p1');
 
     const ws2 = fakeWs();
     join(mgr, ws2, 'p1', room.sessionTokens.get('p1'));
     expect(ws2.closed.length).toBe(0);
-    expect(room.disconnected.has('p1')).toBe(false); // grace cancelled
+    expect(registry.state('p1')).toBe('active'); // grace cancelled, re-seated
     expect(room.players.getPlayer('p1')!.health).toBe(42); // state kept
     expect(room.players.getPlayer('p1')!.position.x).toBe(7);
     // Reclaim re-seats the existing playerRoom mapping rather than
@@ -67,13 +73,13 @@ describe('grace reconnect', () => {
 
   it('rejects a reclaim with a wrong token', () => {
     const room = mkRoom({}, 'tdm');
-    const { mgr } = mkSessions(room);
+    const { mgr, registry } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
-    room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
+    dropToGrace(registry, 'p1');
     const ws2 = fakeWs();
     join(mgr, ws2, 'p1', 'forged');
     expect(ws2.closed[0]?.reason).toBe('Invalid session token');
-    expect(room.disconnected.has('p1')).toBe(true); // slot still held for owner
+    expect(registry.state('p1')).toBe('grace'); // slot still held for owner
   });
 
   it('rejects a duplicate id while the original is connected', () => {
@@ -91,7 +97,7 @@ describe('grace reconnect', () => {
     // 'already connected' loops the client forever. The session token
     // proves ownership, so the stale socket is closed and re-seated.
     const room = mkRoom({}, 'tdm');
-    const { mgr } = mkSessions(room);
+    const { mgr, registry } = mkSessions(room);
     const ws1 = fakeWs();
     join(mgr, ws1, 'p1');
     const ws2 = fakeWs();
@@ -99,7 +105,7 @@ describe('grace reconnect', () => {
     expect(ws2.closed.length).toBe(0); // reclaimed, not rejected
     expect(ws1.closed[0]?.reason).toBe('replaced by reconnect'); // zombie evicted
     expect(room.connections.getConnection('p1') as unknown).toBe(ws2); // live seat is the new socket
-    expect(room.disconnected.has('p1')).toBe(false); // no phantom grace entry
+    expect(registry.state('p1')).toBe('active'); // no phantom grace entry
   });
 
   it('reclaim replays only the reliable frames missed since resumeSeq', () => {
@@ -107,11 +113,11 @@ describe('grace reconnect', () => {
     // processed, the journal replays the gap, and gameState stays the
     // final word. Broadcasts qualify; frames aimed at others don't.
     const room = mkRoom({}, 'tdm');
-    const { mgr } = mkSessions(room);
+    const { mgr, registry } = mkSessions(room);
     const ws1 = fakeWs();
     join(mgr, ws1, 'p1');
     join(mgr, fakeWs(), 'p2');
-    room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
+    dropToGrace(registry, 'p1');
     // p1's watermark: the last frame it processed before dying (gameState).
     const ev = (ws1.sent[ws1.sent.length - 1] as { ev?: number }).ev ?? 0;
     // Events that land while p1's socket is dead.

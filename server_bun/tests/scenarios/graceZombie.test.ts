@@ -2,6 +2,18 @@ import { describe, it, expect } from 'bun:test';
 import { mkRoom, watch } from './harness.ts';
 import { PlayerManager } from '../../src/PlayerManager.ts';
 import { CombatHandler } from '../../src/CombatHandler.ts';
+import { SessionRegistry } from '../../src/sessionRegistry.ts';
+
+// Arm a real grace session — mirrors GameServer.onClose end to end:
+// seat the player, drop the socket, arm the expiry the registry owns.
+function graceArm(room: ReturnType<typeof mkRoom>, playerId: string, ms: number): SessionRegistry {
+  const reg = new SessionRegistry();
+  room.sessions = reg;
+  reg.begin(playerId, room.name);
+  reg.seat(playerId, false, 't');
+  reg.disconnect(playerId, 'socket closed', ms, () => room.removePlayerCompletely(playerId, 'grace period', () => {}));
+  return reg;
+}
 
 // A kicked/switched player mid-grace used to leave the grace timer
 // armed: when it fired, removePlayerCompletely ran a SECOND time —
@@ -12,16 +24,10 @@ describe('scenario: grace timer teardown', () => {
     const room = mkRoom({}, 'tdm');
     const a = room.players.addPlayer('p1');
     const w = watch(room);
-    // Mirrors GameServer.onClose: socket dropped, grace timer armed.
-    room.disconnected.set(a.id, {
-      timeout: setTimeout(() => {
-        room.disconnected.delete(a.id);
-        room.removePlayerCompletely(a.id, 'grace period', () => {});
-      }, 10),
-    });
+    const reg = graceArm(room, a.id, 10);
     // Kicked before the timer fires.
     room.removePlayerCompletely(a.id, 'adminKick', () => {});
-    expect(room.disconnected.has(a.id)).toBe(false);
+    expect(reg.state(a.id)).toBeUndefined(); // reaped — session deleted
     await new Promise((r) => setTimeout(r, 30));
     expect(w.count('playerLeft')).toBe(1);
   });
@@ -30,12 +36,7 @@ describe('scenario: grace timer teardown', () => {
     const room = mkRoom({}, 'tdm');
     const a = room.players.addPlayer('p1');
     const w = watch(room);
-    room.disconnected.set(a.id, {
-      timeout: setTimeout(() => {
-        room.disconnected.delete(a.id);
-        room.removePlayerCompletely(a.id, 'grace period', () => {});
-      }, 10),
-    });
+    graceArm(room, a.id, 10);
     await new Promise((r) => setTimeout(r, 30));
     expect(room.players.getPlayer(a.id)).toBeUndefined();
     expect(w.count('playerLeft')).toBe(1);
@@ -46,8 +47,9 @@ describe('scenario: grace timer teardown', () => {
     const combat = new CombatHandler(pm, () => {}, () => {});
     pm.addPlayer('p1'); pm.breakShield('p1');
     // Kill through the env-damage funnel so scheduleRespawn arms.
-    for (let i = 0; i < 3; i++) {
-      combat.handleEnvironmentDamage('p1', { type: 'environmentDamage', amount: 40 });
+    // Claims clamp at 40/hit and medium is 125hp now — needs four.
+    for (let i = 0; i < 4; i++) {
+      combat.handleEnvironmentDamage('p1', { type: 'environmentDamage', amount: 50 });
     }
     expect(pm.getPlayer('p1')!.isDead).toBe(true);
     const timers = (combat as unknown as {

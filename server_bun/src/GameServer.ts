@@ -87,6 +87,7 @@ export class GameServer {
     });
     this.factory = new RoomFactory({
       rooms: this.rooms,
+      sessions: this.registry,
       maps: this.maps,
       field: () => this.field,
       recordEnd: (rec) => this.journal.recordEnd(rec),
@@ -227,21 +228,14 @@ export class GameServer {
     if (room.connections.getConnection(playerId) !== ws) return;
     if (ws.data.gen !== undefined && ws.data.gen !== this.registry.gen(playerId)) return;
 
-    this.registry.disconnect(playerId, 'socket closed');
+    // The grace countdown arms inside the session itself — reclaim and
+    // terminate clear it, so the timer can't outlive the seat.
+    this.registry.disconnect(playerId, 'socket closed', this.reconnectGraceMs,
+      () => this.removePlayerCompletely(room, playerId, 'grace period'));
     room.connections.unregister(playerId);
     room.rateLimiter.removePlayer(playerId);
     room.messages.onPlayerDisconnected(playerId);
 
-    // Keep player state for grace period to allow seamless F5 reconnect
-    const existingTimeout = room.disconnected.get(playerId);
-    if (existingTimeout) clearTimeout(existingTimeout.timeout);
-
-    const timeout = setTimeout(() => {
-      room.disconnected.delete(playerId);
-      this.removePlayerCompletely(room, playerId, 'grace period');
-    }, this.reconnectGraceMs);
-
-    room.disconnected.set(playerId, { timeout });
     logger.info('Player disconnected, grace period started', { playerId, room: room.name, graceMs: this.reconnectGraceMs });
   }
 

@@ -69,8 +69,8 @@ describe('switchRoom', () => {
     gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
     // Simulated socket death: the new room must accept a reclaim with the
     // same identity token it re-issued at hop time.
-    (gs as unknown as { roomOfPlayer(id: string): { disconnected: Map<string, { timeout: unknown }>; sessionTokens: Map<string, string> } | undefined })
-      .roomOfPlayer('p1')?.disconnected.set('p1', { timeout: setTimeout(() => {}, 60000) });
+    (gs as unknown as { registry: { disconnect(id: string, reason: string, ms: number, cb: () => void): boolean } })
+      .registry.disconnect('p1', 'simulated socket death', 60000, () => {});
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p1', token: tok }));
     expect(ws2.data.playerId).toBe('p1');

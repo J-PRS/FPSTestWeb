@@ -202,11 +202,8 @@ export class SessionManager {
       ws.close(1008, 'Invalid session token');
       return;
     }
-    const disconnected = room.disconnected.get(playerId);
-    if (disconnected) {
-      clearTimeout(disconnected.timeout);
-      room.disconnected.delete(playerId);
-    }
+    // The armed grace timer clears inside registry.reclaim's transition —
+    // no parallel bookkeeping survives from the old room map.
     // A valid-token reclaim IS liveness — without the stamp a seat that
     // spent >60s in grace gets idle-reaped before the first inputMove
     // lands, looping connect → reap → reconnect forever.

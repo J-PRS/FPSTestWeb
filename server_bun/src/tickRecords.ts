@@ -111,7 +111,7 @@ export class TickFanout {
    *  clock — a shared timestamp meant only the first stale player in map
    *  order ever heartbeat. */
   private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
-    if (room.disconnected.has(playerId)) return true;
+    if (room.sessions?.state(playerId) === 'grace') return true;
     const silenceMs = now - p.lastSeen;
     // Idle reap FIRST: a menu-sitter's dead socket must still be collected
     // — checking hasReceivedPosition before this left unreported ghosts
@@ -178,7 +178,7 @@ export class TickFanout {
     for (const [recipientId, rp] of players) {
       // Grace-period entries have no socket — record filtering for them
       // is wasted work
-      if (room.disconnected.has(recipientId)) continue;
+      if (room.sessions?.state(recipientId) === 'grace') continue;
       const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
       const others = this.scratchOthers;
       others.length = 0;
