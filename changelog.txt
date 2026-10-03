@@ -1,3 +1,4 @@
+2026-10-01 - edge wear line goes world-space: bary weight x baked per-corner altitude gives true meters-to-edge, wear band ~5mm physical (was constant screen pixels via fwidth)
 2026-10-01 - weapon edge wear: crisp barycentric edge line restored (per-tri distance field on flagged sharp edges); .blend-exported edge bakes (w{n}_edge.png) load on the baked GLBs own unwrap as a texture layer; runtime per-tri UV-atlas baker remains as fallback; shader samples uWearMap + barycentric line + vertex accent
 2026-10-01 - botLines orbit latch: the give-up path stays armed until goal distance nets 30m from where it armed - pocket-lap 'progress' (<8m/replan) no longer releases it (kata/raindance orbit fix)
 2026-10-01 - capper sweep evolution: brain/disposition dims join the genome (33 total); (u/u,l)-ES under --gens/--pop; multi-map fitness across 6 real T2 imports so map quirks average out; capMeasure wall-clock watchdog vs pathological genomes

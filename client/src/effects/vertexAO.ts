@@ -791,10 +791,12 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   // seam can cut it. The vertex-level accent stays: hot corner verts
   // read as chipped paint, but the 0.6 floor keeps smooth-normal
   // divergence on curved walls (≈0.5 baked) from painting whole faces.
-  vec3 ew = vBary + (1.0 - vAedge) * 4.0;
+  // World-space width: bary weight × the corner's baked altitude is the
+  // distance-to-edge in METERS — the line is a fixed ~5mm wear band that
+  // scales with zoom like the metal, not a constant-pixel overlay.
+  vec3 ew = (vBary + (1.0 - vAedge) * 4.0) * vAlt;
   float eDist = min(ew.x, min(ew.y, ew.z));
-  float ePx = fwidth(vBary.x) + fwidth(vBary.y) + fwidth(vBary.z);
-  float eline = 1.0 - smoothstep(0.0, ePx * 2.4, eDist);
+  float eline = 1.0 - smoothstep(0.0015, 0.005, eDist);
   float edge = max(eline, max(texture2D(uWearMap, vUvW).r * 0.5, smoothstep(0.6, 0.95, vWear) * 0.4));
 
   // Patchy mask so wear clumps in zones like real abrasion, gated to
