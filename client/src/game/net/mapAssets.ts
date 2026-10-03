@@ -545,7 +545,12 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
       .catch(() => null);
     glbCache.set(name, p);
   }
-  return p;
+  const out = await p;
+  // A cached miss is poison: a transient blip at first load would hide
+  // the hull for the whole session. Drop the entry so the next map swap
+  // or rejoin retries the fetch.
+  if (!out) glbCache.delete(name);
+  return out;
 }
 
 /** Instance a converted T2 interior. Clone shares geometry/materials —
