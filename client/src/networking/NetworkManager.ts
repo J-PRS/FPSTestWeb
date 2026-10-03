@@ -527,7 +527,7 @@ export class NetworkManager {
       rejectCensus.total++;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId) this.confirmPendingHit(data.targetId);
+      if (data.targetId || data.shotId) this.confirmPendingHit(data.targetId ?? '', data.shotId);
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
         targetId: data.targetId,
@@ -701,10 +701,12 @@ export class NetworkManager {
   private lastPendingSweep = 0;
   private static readonly HIT_CONFIRM_MS = 1500;
 
-  private confirmPendingHit(targetId: string): void {
-    // shotId isn't echoed on playerHit, so confirm is by target — oldest
-    // pending entry wins (a second claim on the same target stays
-    // pending until its own confirm arrives).
+  private confirmPendingHit(targetId: string, shotId?: string): void {
+    // shotRejected echoes the claim's shotId — match it exactly (two
+    // claims racing the same target must not cross-clear). playerHit
+    // carries no shotId, so confirm falls back to target — oldest
+    // pending entry wins.
+    if (shotId && this.pendingHits.delete(shotId)) return;
     for (const [id, h] of this.pendingHits) {
       if (h.targetId === targetId) { this.pendingHits.delete(id); return; }
     }
