@@ -450,6 +450,15 @@ export class ServerBotSenses {
         // close in, flipping entries costs a mountain.
         const inc = this.routeHold.get(p.id);
         const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
+        // Column check: a bot already standing where the incumbent entry
+        // sits has arrived — ring points land on faces the bot can't
+        // physically occupy (katabatic: the alpha capper orbited a
+        // ring-170 entry ~6m off for the whole match). Consume it: the
+        // scored leg that remains is entry-to-stand.
+        if (incLive && Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z) < 22) {
+          this.routeHold.delete(p.id);
+          goalPos = { ...enemyStand };
+        } else {
         const scoreEntry = (ex: number, ey: number, ez: number): number => {
           const high = ey - enemyStand.y;
           const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
@@ -552,6 +561,7 @@ export class ServerBotSenses {
           this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
         }
         goalPos = best;
+        }
         }
       }
     }
