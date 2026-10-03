@@ -94,10 +94,17 @@ function rubberbandForensics(deps: EntitiesDeps, b: Ball, m: { position: Vec3Msg
     // Regime forensics: simT>simNow = the catch-all free-ran ahead;
     // legAge pinned ~8 = inert leg extrapolating a stale anchor.
     simT: diag ? +diag.simT.toFixed(2) : null,
-    simNow: diag?.simNow ?? null,
+    simNow: diag && diag.simNow !== null ? +diag.simNow.toFixed(2) : null,
     legT0: diag ? +diag.legT0.toFixed(2) : null,
     legAge: diag ? +diag.legAge.toFixed(2) : null,
     enraged: diag?.enraged ?? null,
+    tgtValid: diag?.tgtValid ?? null,
+    // Anchor = leg start state, rounded — raw f64s made every warn line
+    // triple-wide for digits nobody reads (replay offline if needed).
+    anchor: diag?.anchor
+      ? { x: +diag.anchor.x.toFixed(1), y: +diag.anchor.y.toFixed(1), z: +diag.anchor.z.toFixed(1),
+          vx: +diag.anchor.vx.toFixed(1), vy: +diag.anchor.vy.toFixed(1), vz: +diag.anchor.vz.toFixed(1) }
+      : null,
   };
 }
 
@@ -118,6 +125,103 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
     // (pickupSpawn); collecting it is the score AND the reward.
     deps.lazyPlayer().kills++;
   }
+}
+
+// Rubberband watch: how far our predicted replay was from the event's
+// truth. >2m = visible warp worth logging; >4m means prediction diverged
+// hard (latency spike or a sim mismatch — that one's a bug, not lag).
+// Per-ball throttle folds repeats into ×N; the fleet aggregate folds
+// THROTTLED warns into one 10s summary — a desync storm reads as a
+// number, not a scroll.
+function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, logger: ChildLogger) {
+  const _truthPos = new THREE.Vector3();
+  const rbLastWarn = new Map<number, number>();
+  const rbSuppressed = new Map<number, number>();
+  const RB_WARN_MS = 2000;
+  let rbFleetCount = 0;
+  let rbFleetWorst = { id: -1, err: 0 };
+  let rbFleetFlushAt = 0;
+  const RB_FLEET_MS = 10000;
+
+  function rbFleetNote(id: number, err: number): void {
+    rbFleetCount++;
+    if (err > rbFleetWorst.err) rbFleetWorst = { id, err };
+    if (rbFleetFlushAt === 0) rbFleetFlushAt = performance.now() + RB_FLEET_MS;
+  }
+
+  function rbFleetFlush(): void {
+    if (!rbFleetCount) return;
+    const nowMs = performance.now();
+    if (nowMs < rbFleetFlushAt) return;
+    logger.warn(`ball rubberbands: ${rbFleetCount} suppressed in ${RB_FLEET_MS / 1000}s` +
+      (rbFleetWorst.id >= 0 ? `, worst #${rbFleetWorst.id} ${rbFleetWorst.err.toFixed(0)}m` : ''));
+    rbFleetCount = 0;
+    rbFleetWorst = { id: -1, err: 0 };
+    rbFleetFlushAt = nowMs + RB_FLEET_MS;
+  }
+
+  /** Predicted replay position vs the event's truth advanced to now —
+   *  the metric the header comment describes. (It previously compared
+   *  the stamped pos to itself-plus-lead, which is just speed·age and
+   *  fired on every fast ball regardless of real divergence.) */
+  function check(b: Ball, m: { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number }): void {
+    const age = ballEventAge(m.t);
+    const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
+    _truthPos.set(
+      m.position.x + m.velocity.x * age,
+      m.position.y + m.velocity.y * age,
+      m.position.z + m.velocity.z * age,
+    );
+    const err = b.pos.distanceTo(_truthPos);
+    const kind = m.kind ?? 'segment';
+    if (err <= rubberbandWarnAt(kind, speed)) {
+      if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
+      return;
+    }
+    // A terrain swap leaves prediction on the previous field until the new
+    // bin loads and rebinds — every bounce in that window diverges by
+    // design, so the warn is noise, not a desync signal.
+    if (Ball.terrainSwapping) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m during terrain swap`);
+      return;
+    }
+    // Stale-leg extrapolation isn't a desync: distance-tiered sends leave
+    // far balls on a committed anchor for many seconds, and the inert leg
+    // CAN'T track lunge/enrage retargets in between. Divergence there is
+    // the design working — warn only on a fresh anchor, where the sim
+    // genuinely disagrees with the server.
+    const legAge = b.netDiag?.legAge ?? 0;
+    if (legAge > 3) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on stale leg (legAge ${legAge.toFixed(1)}s)`);
+      return;
+    }
+    // Edge kinds (bounce/stall/enrage/lunge/teleport/spawn) aren't desync
+    // probes — they ARE the correction. A burst of stale legs lands each
+    // event ~one flight-leg off the previous snap (pred == anchor in the
+    // dump), so per-ball warns measure event spacing, not divergence.
+    // Only the 'segment' heartbeat compares fresh-anchor prediction to
+    // fresh truth — that's the signal worth a full warn + forensics.
+    // Everything else goes to the fleet counter only.
+    if (kind !== 'segment') {
+      rbFleetNote(m.id, err);
+      return;
+    }
+    const nowMs = performance.now();
+    const lastW = rbLastWarn.get(m.id) ?? -Infinity;
+    if (nowMs - lastW < RB_WARN_MS) {
+      rbSuppressed.set(m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
+      rbFleetNote(m.id, err);
+      return;
+    }
+    const sup = rbSuppressed.get(m.id) ?? 0;
+    rbLastWarn.set(m.id, nowMs);
+    rbSuppressed.delete(m.id);
+    logger.warn(
+      `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`,
+      rubberbandForensics(deps, b, m));
+  }
+
+  return { check, rbFleetFlush };
 }
 
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
@@ -161,70 +265,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     });
   }
 
-  // Rubberband watch: how far our predicted replay was from the event's
-  // truth. >2m = visible warp worth logging; >4m means prediction diverged
-  // hard (latency spike or a sim mismatch — that one's a bug, not lag).
-  // Rubberband warns throttle per-ball: first divergence in a window
-  // fires immediately, repeats within 2s are counted and folded into the
-  // next line as ×N — a desyncing ball would otherwise drown every other
-  // warn stream (and client_warning.log) at ~10 lines/sec.
-  const _truthPos = new THREE.Vector3();
-  const rbLastWarn = new Map<number, number>();
-  const rbSuppressed = new Map<number, number>();
-  const RB_WARN_MS = 2000;
-
-  /** Rubberband watch: how far our predicted replay is from the event's
-   *  truth advanced to NOW (pos + vel·age). >2m = visible warp; past the
-   *  per-kind warnAt means prediction genuinely diverged — that one's a
-   *  bug signal, not lag. Per-ball throttle folds repeats into ×N. */
-  function rubberbandCheck(b: Ball, m: { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number }): void {
-    const age = ballEventAge(m.t);
-    const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
-    _truthPos.set(
-      m.position.x + m.velocity.x * age,
-      m.position.y + m.velocity.y * age,
-      m.position.z + m.velocity.z * age,
-    );
-    // Predicted replay position vs the event's truth advanced to now —
-    // the metric the header comment describes. (It previously compared
-    // the stamped pos to itself-plus-lead, which is just speed·age and
-    // fired on every fast ball regardless of real divergence.)
-    const err = b.pos.distanceTo(_truthPos);
-    const kind = m.kind ?? 'segment';
-    if (err <= rubberbandWarnAt(kind, speed)) {
-      if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
-      return;
-    }
-    // A terrain swap leaves prediction on the previous field until the new
-    // bin loads and rebinds — every bounce in that window diverges by
-    // design, so the warn is noise, not a desync signal.
-    if (Ball.terrainSwapping) {
-      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m during terrain swap`);
-      return;
-    }
-    // Stale-leg extrapolation isn't a desync: distance-tiered sends leave
-    // far balls on a committed anchor for many seconds, and the inert leg
-    // CAN'T track lunge/enrage retargets in between. Divergence there is
-    // the design working — warn only on a fresh anchor, where the sim
-    // genuinely disagrees with the server.
-    const legAge = b.netDiag?.legAge ?? 0;
-    if (legAge > 3) {
-      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on stale leg (legAge ${legAge.toFixed(1)}s)`);
-      return;
-    }
-    const nowMs = performance.now();
-    const lastW = rbLastWarn.get(m.id) ?? -Infinity;
-    if (nowMs - lastW < RB_WARN_MS) {
-      rbSuppressed.set(m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
-      return;
-    }
-    const sup = rbSuppressed.get(m.id) ?? 0;
-    rbLastWarn.set(m.id, nowMs);
-    rbSuppressed.delete(m.id);
-    logger.warn(
-      `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`,
-      rubberbandForensics(deps, b, m));
-  }
+  const { check: rubberbandCheck, rbFleetFlush } = makeRubberbandWatch(deps, ballEventAge, logger);
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
@@ -237,6 +278,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       return;
     }
     rubberbandCheck(b, m);
+    rbFleetFlush();
     const age = ballEventAge(m.t);
     b.applyNetSegment({
       px: m.position.x, py: m.position.y, pz: m.position.z,

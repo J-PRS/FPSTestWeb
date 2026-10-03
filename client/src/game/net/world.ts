@@ -25,6 +25,38 @@ import { applyTerrain, applyInteriors, type MapSnapshot } from './mapAssets.js';
 export { firstTerrain, probeBootMap, bootPrimeTerrain } from './mapAssets.js';
 export type { MapSnapshot } from './mapAssets.js';
 
+// Session veil — an F5 boot with a stored session token waits on the
+// server to either restore the old body (gameState/localPlayerState) or
+// reject the token. Rendering the default spawn in that gap flashes a
+// fake position/health, so we cover it until the first gameState lands.
+let sessionVeil: HTMLDivElement | null = null;
+let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
+let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function armSessionVeil(): void {
+  if (sessionVeil) return;
+  const el = document.createElement('div');
+  el.id = 'session-veil';
+  document.body.appendChild(el);
+  sessionVeil = el;
+  // A label implies a wait — only show it if the veil outlives ~1s,
+  // which means the restore hit a genuinely slow path.
+  sessionVeilLabelTimer = setTimeout(() => {
+    const label = document.createElement('span');
+    label.textContent = 'RESTORING SESSION';
+    sessionVeil?.appendChild(label);
+  }, 1000);
+  // Connect may fail outright — never leave a black curtain up.
+  sessionVeilTimer = setTimeout(dropSessionVeil, 8000);
+}
+
+export function dropSessionVeil(): void {
+  if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
+  if (sessionVeilLabelTimer) { clearTimeout(sessionVeilLabelTimer); sessionVeilLabelTimer = null; }
+  sessionVeil?.remove();
+  sessionVeil = null;
+}
+
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
   const logger = deps.logger;
@@ -99,6 +131,7 @@ export function wireWorld(ctx: NetCtx): void {
     dropVolatileWorldFx(deps.world);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
+    dropSessionVeil(); // state is real now — default spawn never painted
   };
 }
 

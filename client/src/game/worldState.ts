@@ -38,6 +38,8 @@ export interface WorldState {
   // Match meta from the wire — scoreboard needs mode/team/scores to group
   // rows; populated by netHandlers on gameState/teamScore/ffaScore.
   mode?: string;
+  /** Map display name (spec `name` or filename) — scoreboard title. */
+  mapName?: string;
   localTeam?: TeamId;
   ffaScores: Map<string, number>;
   teamScores: { alpha: number; bravo: number } | null;
@@ -49,7 +51,7 @@ export interface WorldState {
   /** Wire CTF flag meshes + carrier ids — the per-frame loop projects
    *  these into HUD diamonds; flags.ts owns the entries (set on
    *  flagUpdate, deleted on roster prune). */
-  flagMarkers: Map<TeamId, { mesh: THREE.Group; carrier: string | null }>;
+  flagMarkers: Map<TeamId, { mesh: THREE.Group; carrier: string | null; wirePos: THREE.Vector3 }>;
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.

@@ -65,4 +65,8 @@ export function wireMatchEvents(ctx: NetCtx): void {
     sfx.matchHorn('start');
   };
   networkManager.onMatchNotice = (text) => chat.add(null, text);
+  networkManager.onServerWarn = (text) => {
+    deps.lazyHud().serverWarn(text);
+    chat.add(null, text);
+  };
 }

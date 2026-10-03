@@ -129,21 +129,25 @@ function tickNetInert(st: NetStatics, bag: NetBag, host: NetHost, dt: number, s:
   const field = st.field();
   const gy = field ? hmHeight(field, host.pos.x, host.pos.z) + s.radius : -Infinity;
   if (host.pos.y >= gy || !field) return;
+  // March FORWARD on the server's 0.05 grid — the same cells groundContact
+  // samples — so the predicted contact lands on the same point authority
+  // resolves. (The old backward walk from arbitrary T was off-phase and
+  // parked at last-airborne instead of first-contact.)
   let tc = T;
-  while (tc > 0.05) {
-    const tt = tc - 0.05;
+  for (let tt = 0.05; tt < T; tt += 0.05) {
     const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
-    if (yy > hmHeight(field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) break;
-    tc = tt;
+    if (yy <= hmHeight(field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) { tc = tt; break; }
   }
   const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
+  // Park at the predicted contact point either way: slow contacts get no
+  // segment (server settles silently), fast ones do — but holding the
+  // overshot position clamps the ball under terrain for the interim.
+  const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
+  host.pos.set(cx, hmHeight(field, cx, cz) + s.radius, cz);
   if (spd < BALL_REST_SPEED) {
-    const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
-    host.pos.set(cx, hmHeight(field, cx, cz) + s.radius, cz);
     host.vel.set(0, 0, 0);
   } else {
-    host.pos.y = gy;
-    if (host.vel.y < 0) host.vel.y = 0;
+    host.vel.set(s.vx, 0, s.vz); // coast until the bounce segment lands
   }
 }
 
@@ -157,11 +161,16 @@ function stepNetLeg(st: NetStatics, bag: NetBag, host: NetHost, s: SimBall): voi
   host.vel.set(s.vx, s.vy, s.vz);
 }
 
-/** Wire-ordering guard — stamps only move forward. A delayed or
- *  reordered segment carries an OLD anchor; applying it rewinds legT0
- *  and the next frames extrapolate a stale leg into a 100m rubberband. */
+/** Wire-ordering guard — anchors only move forward. The stamp is compared
+ *  against the leg START (legT0), not the sim cursor: enraged replay
+ *  steps bag.simT toward estSimNow, which leads the server clock — a
+ *  fresh segment stamped "now" arrives behind the stepped cursor and was
+ *  being dropped as stale, leaving a dead leg extrapolating blind for a
+ *  whole resync interval (the 20-120m rubberband storm, legAge≈1.2).
+ *  A stamp newer than the anchor is always fresher truth; the cursor
+ *  itself never rewinds (applySeg maxes it). */
 export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
-  return t !== undefined && t < bag.simT;
+  return t !== undefined && t <= bag.legT0;
 }
 
 /** Authoritative resync — a segment event lands mid-flight: snap the sim
@@ -201,8 +210,11 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // The leg's flight clock anchors to the stamped sim time — update()
   // measures T as estSimNow−legT0 so server-clock drift can't skew it.
   bag.legT0 = simT ?? -1; // unstamped event → wall-time fallback
-  // Sim cursor anchors to the event's stamped grid time — the banked
-  // lead is consumed by whole cells in update(), not stepped here.
+  // Sim cursor anchors to the stamped grid time. isStaleSeg only lets
+  // stamps NEWER than legT0 through, so rewinding the cursor to the
+  // stamp is always a rewind to fresher truth — and it makes the step
+  // gate replay the whole stamp→now gap on the new leg instead of just
+  // the banked-lead cells.
   if (simT !== undefined) bag.simT = simT;
   blendSegCorrection(host, s, seg);
 }

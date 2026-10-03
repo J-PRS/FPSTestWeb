@@ -19,6 +19,22 @@ const logger = new ChildLogger('NetworkManager');
 // dump line instead of a scrollback hunt.
 const rejectCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
 const dedupCensus = { hitSeqDrops: 0 };
+// Honest-lag drops (claimDropped wire) — separate from rejects so a dead
+// target mid-claim doesn't pollute the "my claims get refused" signal.
+const dropCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
+// Resync-muted claim census — a beam held through a hidden-tab replay
+// predicts damage with no wire behind it; "zapped him forever, zero
+// damage" is this counter, not a reject.
+const mutedCensus = { count: 0, lastWarnAt: 0 };
+function noteMutedClaim(): void {
+  mutedCensus.count++;
+  const now = performance.now();
+  // First muted claim warns immediately; a held beam then folds to one
+  // warn/second instead of a line per tic.
+  if (mutedCensus.lastWarnAt !== 0 && now - mutedCensus.lastWarnAt < 1000) return;
+  mutedCensus.lastWarnAt = now;
+  logger.warn(`claim muted during resync replay (${mutedCensus.count} total) — predicted damage has no wire`);
+}
 registerDiag('net', () => ({
   rejects: {
     total: rejectCensus.total,
@@ -26,6 +42,12 @@ registerDiag('net', () => ({
     last: rejectCensus.last,
   },
   dedup: { hitSeqDrops: dedupCensus.hitSeqDrops },
+  drops: {
+    total: dropCensus.total,
+    byReason: Object.fromEntries(dropCensus.byReason),
+    last: dropCensus.last,
+  },
+  mutedClaims: mutedCensus.count,
 }));
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
@@ -91,13 +113,15 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   public onMatchNotice: ((text: string) => void) | null = null;
+  /** Server anti-cheat flag — renders as a banner, not a disconnect. */
+  public onServerWarn: ((text: string) => void) | null = null;
   public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind) => void) | null = null;
   /** Powerup applied to US — server-owned buffs (armor/heal/timed). */
   public onBuff: ((msg: { kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }) => void) | null = null;
@@ -109,7 +133,7 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
+  public onMapUpdate: ((map: { mapName?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
@@ -176,9 +200,22 @@ export class NetworkManager {
   // 'never went online' (offline mode) from 'online and currently down'
   // so the HUD can warn only in the second case.
   private onlineExpected = false;
+  // Silence watchdog — a black-holed socket (dead tunnel/proxy, half-open
+  // TCP) keeps readyState OPEN and never fires close: no banner, no
+  // reconnect, frozen game. Any inbound frame proves liveness; >STALL_MS
+  // of nothing while "connected" forces a teardown + re-probe.
+  private lastRxAt = 0;
+  private stallTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly STALL_MS = 4000;
+  private lastUrl: string | null = null;
+  private lastFactory: TransportFactory | undefined;
 
   connect(url: string, makeTransport?: TransportFactory): Promise<void> {
     this.onlineExpected = true;
+    this.lastUrl = url;
+    this.lastFactory = makeTransport;
+    this.lastRxAt = Date.now();
+    this.stallTimer ??= setInterval(() => this.checkStall(), 1000);
     return new Promise((resolve, reject) => {
       try {
         const factory = makeTransport ?? ((cfg) => new TieredTransport(cfg));
@@ -250,9 +287,24 @@ export class NetworkManager {
 
   disconnect(): void {
     this.onlineExpected = false;
+    this.lastRxAt = 0;
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
+  }
+
+  private checkStall(): void {
+    if (!this.isConnected() || !this.lastUrl) return;
+    const silent = Date.now() - this.lastRxAt;
+    if (this.lastRxAt === 0 || silent < NetworkManager.STALL_MS) return;
+    logger.warn(`no server traffic in ${Math.round(silent)}ms — socket silent, reprobing`, { tier: this.ws?.tier });
+    const url = this.lastUrl;
+    // TieredTransport is one-shot after disconnect() (closed flag), so
+    // go through connect() which builds a fresh transport and re-probes.
+    this.ws?.disconnect();
+    this.ws = null;
+    this.connected = false;
+    void this.connect(url, this.lastFactory).catch(() => { /* probe errors are already logged */ });
   }
 
   /** Online session whose socket is down right now (reconnect loop
@@ -283,12 +335,12 @@ export class NetworkManager {
     }
   }
 
-  /** Outbound binary frame — pre-encoded by shared/wire.ts. Position input
-   *  rides the RELIABLE lane: the move judge sims from every claim, so a
-   *  dropped datagram starves the authority sim and earns a correction —
-   *  measured ~47% WT datagram loss on loopback, which played as warping.
-   *  Stale claims self-reject by seq, so reliability costs nothing.
-   *  (WS/RTC already degraded to reliable — only WT changed behavior.) */
+  /** Outbound binary frame — pre-encoded by shared/wire.ts. On RTC this
+   *  rides the 'game' lane (unordered, maxRetransmits:2): bounded retries
+   *  cover jitter without head-of-line stalling the association — the
+   *  reliable lane's retransmit queue was the recurring 4-5s silence.
+   *  A rare real loss just widens the judge's time-gap tolerance; stale
+   *  frames self-reject by seq, so disorder is free. WS/WT unchanged. */
   private sendBinary(data: Uint8Array): void {
     if (!this.ws?.connected()) { this.noteDrop('bin'); return; }
     this.txBytes += data.length;
@@ -330,6 +382,7 @@ export class NetworkManager {
   }
 
   private handleMessage(data: ServerMessage): void {
+    this.lastRxAt = Date.now();
     this.rxBytes += JSON.stringify(data).length; // rx approximation — JSON events are sparse
     // Capture the server-issued session token for future reconnects
     if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
@@ -387,6 +440,7 @@ export class NetworkManager {
     chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     matchNotice: (data) => this.onMatchNotice?.(data.text),
+    serverWarn: (data) => this.onServerWarn?.(data.text),
     pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos, data.kind),
     pickupGone: (data) => this.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
@@ -415,6 +469,20 @@ export class NetworkManager {
       });
       this.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
     },
+    // Honest-lag discard (dead shooter/target) — not a reject, but the
+    // predicted hit still needs clearing or the ledger warns phantom.
+    claimDropped: (data) => {
+      dropCensus.total++;
+      dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
+      dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
+      if (data.targetId) this.confirmPendingHit(data.targetId);
+      logger.warn(`claim dropped — predicted damage never applied`, {
+        reason: data.reason, targetId: data.targetId,
+        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
+        pingMs: this.telemetry.ping,
+      });
+      this.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
+    },
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
@@ -429,6 +497,7 @@ export class NetworkManager {
     this.lastHitSeq = 0;
     this.lastTickSeq = -1;
     this.pendingHits.clear();
+    this.resyncQuietUntil = 0; // truth landed — position claims are judged fresh
     const serverProto = data.protocolVersion ?? 0;
     if (serverProto !== PROTOCOL_VERSION) {
       const tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0');
@@ -454,7 +523,7 @@ export class NetworkManager {
       }
     }
     logger.warn(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
-    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
+    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
@@ -616,6 +685,7 @@ export class NetworkManager {
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
+    this.lastRxAt = Date.now();
     this.rxBytes += data.length;
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);
@@ -749,6 +819,11 @@ export class NetworkManager {
     velocity?: { x: number; y: number; z: number }; timestamp?: number;
     projectileId?: string | null; weaponType?: number; airtime?: number; shotId?: string;
   }): void {
+    // Resync gap: until the replay lands our pos may be seconds of
+    // prediction off server truth — every claim born here spawns
+    // "implausible" and logs a reject. Drop it before the ledger sees
+    // it; the returning gameState clears the window.
+    if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; }
     // Pencil the prediction into the confirm ledger — a playerHit or
     // shotRejected clears it; silence past ~1.5s warns (see
     // sweepPendingHits).
@@ -768,6 +843,14 @@ export class NetworkManager {
     excludeTargetId?: string | null; projectileId?: string | null;
     airtime?: number; power?: number; directHit?: boolean; shotId?: string;
   }): void {
+    if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; } // same resync-gap mute as sendShot
+    // Victim-named claims (beam tics, direct-hit blasts) ride the same
+    // confirm ledger shots use — keyed per victim so a held beam is one
+    // slot, not a map entry per tic. Splash claims with no named target
+    // can't confirm by target and stay unledgered by design.
+    if (a.excludeTargetId && a.excludeTargetId !== 'local') {
+      this.pendingHits.set(`aoe:${a.excludeTargetId}`, { targetId: a.excludeTargetId, weaponType: a.weaponType, t: performance.now() });
+    }
     this.send({
       type: 'aoeShot',
       ...a,
@@ -829,9 +912,19 @@ export class NetworkManager {
     this.send({ type: 'perkUpdate', perk });
   }
 
+  /** Post-resync claim mute — see sendResync. */
+  private resyncQuietUntil = 0;
+
   /** Offline authority — when there's no server, damage/heal claims apply
    *  locally through this hook instead of being dropped on the floor. */
-  localAuthority: { envDamage(amount: number): void; heal(amount: number): void } | null = null;
+  localAuthority: { envDamage(amount: number): void; heal(amount: number): void; respawn?(): void } | null = null;
+
+  /** Deliberate respawn (K) — the server owns the kill; offline falls
+   *  back to the local death path. */
+  sendRespawn(): void {
+    if (!this.connected) { this.localAuthority?.respawn?.(); return; }
+    this.send({ type: 'respawn' });
+  }
 
   /** Self-inflicted environment damage (crawler pounce, etc.) — the server
    *  clamps and applies it, then broadcasts the authoritative health. */
@@ -876,6 +969,10 @@ export class NetworkManager {
    *  (gameState + rosters) so the tab can snap to truth instead of
    *  rewinding the backgrounded interval. */
   sendResync(): void {
+    // Position-dependent claims (shot/aoeShot) are muted until the
+    // reply snaps us onto server truth — the cap is a fallback if the
+    // replay never arrives.
+    this.resyncQuietUntil = performance.now() + 5000;
     this.send({ type: 'resync' });
   }
 

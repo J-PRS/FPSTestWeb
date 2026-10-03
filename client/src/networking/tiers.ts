@@ -78,9 +78,10 @@ const MISS_CACHE_MS = 30_000;
 
 /**
  * WebRTC tier — client side. Opens a signaling WebSocket to the server's
- * rtc endpoint, exchanges SDP/ICE, then upgrades the game traffic to an
- * unordered+unreliable DataChannel (UDP semantics). Without a server-side
- * peer (node-datachannel) the offer never answers and we fall through.
+ * rtc endpoint, exchanges SDP/ICE, then runs two lanes: 'game' (unordered,
+ * bounded retransmit — volatile seq'd binary) and 'ctrl' (reliable+ordered —
+ * JSON, ball segments). Without a server-side peer (node-datachannel) the
+ * offer never answers and we fall through.
  */
 class ServerRtcTransport implements GameTransport {
   readonly tier = 'rtc' as const;
@@ -91,8 +92,8 @@ class ServerRtcTransport implements GameTransport {
     private dc: RTCDataChannel,
     private config: ConnectionConfig,
     private pc?: RTCPeerConnection,
-    // Reliable control channel for JSON events — the 'game' channel is
-    // unordered+unreliable so join/claims sent over it could be lost.
+    // Reliable control channel for JSON + ball segments — 'game' is
+    // unordered/bounded-loss so anything that must arrive rides ctrl.
     private ctrl?: RTCDataChannel,
   ) {
     dc.binaryType = 'arraybuffer';
@@ -152,14 +153,17 @@ class ServerRtcTransport implements GameTransport {
       this.declareDead('rtc lanes dead (send probe)');
       return false;
     }
-    if (this.ctrl?.readyState === 'open') {
-      if (typeof data === 'string') this.ctrl.send(data);
-      else this.ctrl.send(new Uint8Array(data));
-      return true;
-    }
-    if (this.dc.readyState !== 'open') return false;
-    if (typeof data === 'string') this.dc.send(data);
-    else this.dc.send(new Uint8Array(data));
+    // Lane route: strings (JSON claims/events) → reliable ctrl; binary
+    // (seq'd position frames) → lossy game. Whichever lane is asked for
+    // falls back to the other when closed — a lane that isn't up yet
+    // must not blackhole traffic.
+    const binary = typeof data !== 'string';
+    const lane = binary ? this.dc : this.ctrl;
+    const alt = binary ? this.ctrl : this.dc;
+    const dc = lane?.readyState === 'open' ? lane : alt?.readyState === 'open' ? alt : null;
+    if (!dc) return false;
+    if (typeof data === 'string') dc.send(data);
+    else dc.send(new Uint8Array(data));
     return true;
   }
   private dead = false;
@@ -211,11 +215,13 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
       .catch(() => []);
     pc = new RTCPeerConnection({ iceServers });
     const conn = pc;
-    // 'game' used to be unordered+unreliable, but the lossy lane measured
-    // ~33% drops and nothing calls sendUnreliable anymore — it's only the
-    // fallback until 'ctrl' opens, so make it reliable too.
-    const dc = conn.createDataChannel('game');
-    const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
+    // Lane split: 'game' is unordered with bounded retransmits — it carries
+    // only seq-stamped volatile frames (position up, tickUpdate down) that
+    // the receiver stale-drops anyway, so a lost/superseded packet must not
+    // stall the SCTP association. maxRetransmits:2 covers jitter spikes
+    // without ever head-of-line blocking behind a superseded seq.
+    const dc = conn.createDataChannel('game', { ordered: false, maxRetransmits: 2 });
+    const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events, ball segments
     // Signal over the dedicated /rtcs socket — one offer in, one answer out.
     // The offer is sent only after ICE gathering completes so candidates
     // are embedded in the SDP (non-trickle — the server doesn't accept

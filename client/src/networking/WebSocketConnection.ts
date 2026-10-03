@@ -31,6 +31,10 @@ export class WebSocketConnection {
   private messageQueue: (string | Uint8Array)[] = [];
   private readonly MAX_QUEUE_SIZE = 100;
   private hasLoggedConnectionError: boolean = false;
+  // 'close' fires asynchronously — a deliberate disconnect() would
+  // otherwise reach the close handler below and schedule a reconnect,
+  // resurrecting a session the caller wanted gone.
+  private closedIntentionally = false;
 
   constructor(config: ConnectionConfig) {
     this.config = {
@@ -44,6 +48,7 @@ export class WebSocketConnection {
    * Connect to the WebSocket server
    */
   connect(url?: string): void {
+    this.closedIntentionally = false;
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
       logger.warn('WebSocket already connected or connecting');
       return;
@@ -78,6 +83,8 @@ export class WebSocketConnection {
         if (this.config.onDisconnect) {
           this.config.onDisconnect(event.code, event.reason);
         }
+
+        if (this.closedIntentionally) return;
 
         // Attempt reconnection
         // ?? not || — an explicit 0 means "never reconnect", not "five tries"
@@ -165,6 +172,7 @@ export class WebSocketConnection {
    * Disconnect from the WebSocket server
    */
   disconnect(): void {
+    this.closedIntentionally = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
