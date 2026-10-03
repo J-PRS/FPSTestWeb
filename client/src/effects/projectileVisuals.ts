@@ -15,15 +15,14 @@ const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
 const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
 const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
-// Vapor-cone silhouette: unit cone running FORWARD off the shell —
-// base collar centered on the body, apex pointing downrange (+Z). The
-// trailing-skirt variant swallowed the first-person camera (its wide
-// base formed right at the eye); a forward spearhead never reaches
-// backward toward the shooter.
+// Vapor-cone silhouette: unit cone TRAILING the shell — apex rooted at
+// the body, skirt flaring backward along -Z. (A forward spearhead read
+// wrong; the wake belongs behind the shell. Own-shell camera overlap is
+// accepted — the proxy hitbox match is a separate problem.)
 const CONE_GEO = (() => {
   const g = new THREE.ConeGeometry(1, 1, 24, 1, true);
   g.rotateX(Math.PI / 2);   // cone axis +Y → +Z (apex forward)
-  g.translate(0, 0, 0.5);   // base at the shell, apex 1 unit downrange
+  g.translate(0, 0, -0.5);  // apex at the shell, base 1 unit behind
   return g;
 })();
 // Spearhead length as a multiple of its collar radius.
@@ -59,6 +58,7 @@ function getConeAlphaTex(): THREE.Texture {
       img.data[i + 3] = 255;
     }
   }
+  ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(cv);
   t.wrapS = THREE.RepeatWrapping;
   _coneAlphaTex = t;
@@ -94,7 +94,11 @@ function getGlowMat(color: number, opacity: number, flash: boolean, cone = false
       // as gaps; going through the alpha channel suppressed the whole
       // cone in this pipeline (verified: invisible with alphaMap, solid
       // with it nulled).
-      ...(cone ? { blending: THREE.AdditiveBlending, map: getConeAlphaTex() } : {}),
+      // fog: false — scene.fog blends fragments toward fog color, but an
+      // additive skirt can only ADD: distant texels would add fog-gray
+      // and read opaque instead of transparent. Distant shells keep the
+      // glow un-fogged so it stays a bright streak, not a gray sail.
+      ...(cone ? { blending: THREE.AdditiveBlending, map: getConeAlphaTex(), fog: false } : {}),
     });
     GLOW_MAT_CACHE.set(key, m);
   }

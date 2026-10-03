@@ -257,7 +257,7 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
       if (1 - dn > SHARP_DIHEDRAL) { sharpN++; flagged += l.length; }
     }
     let set = 0; for (let i = 0; i < count * 3; i++) if (aedge[i]! > 0) set++;
-    console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);
+    if ((window as any).__edgebakeLog) console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);
   }
   const abary = new Float32Array(count * 3);
   const aalt = new Float32Array(count * 3);

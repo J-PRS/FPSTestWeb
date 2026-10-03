@@ -248,12 +248,15 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   armorCells.appendChild(tiles);
   const classTileEls: { v: string; el: HTMLElement }[] = [];
   const pickClass = (v: string) => {
-    deps.lazyPlayer().setArmorClass(v as ArmorClass);
+    const player = deps.lazyPlayer();
+    player.setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-    // Re-flag on the tier in effect, not the pick — the banked swap
-    // lands at respawn, and ordnance the player can't shoulder yet
-    // must not masquerade as selectable.
-    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium'));
+    // Re-flag option locks on appliedClass (tier in effect — the banked
+    // swap lands at respawn) AND re-face the slot chips: setArmorClass
+    // just swapped player.loadout to the picked tier's remembered kit,
+    // so the faces must follow or they keep showing the old tier's guns.
+    const opts = weaponOptsFor(player.appliedClass);
+    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.loadout[i])); });
     refreshTiles();
   };
   const refreshTiles = () => {

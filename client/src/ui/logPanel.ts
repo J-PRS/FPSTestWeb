@@ -105,5 +105,4 @@ export function initLogPanel(): void {
   window.addEventListener('fps:set', (e) => {
     if ((e as CustomEvent<{ key: string }>).detail.key === 'fps-debug') syncVisible();
   });
-  window.addEventListener('fps:altq', toggleLogPanel);
 }

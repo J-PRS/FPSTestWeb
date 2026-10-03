@@ -369,9 +369,6 @@ if (typeof window !== 'undefined') {
   document.addEventListener('keydown', (e) => {
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
-      // Same chord reveals the in-game log panel (logPanel listens for it)
-      // — the lines just copied show on screen without opening devtools.
-      window.dispatchEvent(new CustomEvent('fps:altq'));
       Logger.copyLogs(300).then(n => {
         if (n >= 0) {
           toast(`Copied ${n} log lines`);

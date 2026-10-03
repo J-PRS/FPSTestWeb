@@ -11,25 +11,22 @@ const MAX_RINGS = 48;
 
 // Expanding ground ring draped onto the terrain — vertices are re-sampled to
 // getHeight() every frame at the live radius, so it hugs slopes (RTS
-// selection-ring style). A second "ghost" pass draws only the fragments the
-// terrain occludes (GreaterDepth) at reduced opacity, so buried arcs show
-// through as a dimmer version instead of vanishing.
+// selection-ring style). Pure decal semantics: the depth test decides
+// visibility, so arcs behind a ridge simply occlude. (An earlier
+// GreaterDepth "ghost" re-pass showed buried arcs dimly — it also painted
+// rings through entire mountains and was removed.)
 //
 // All live rings write into ONE shared vertex buffer (position + color) —
-// a ring used to cost 2 draw calls each (main + ghost), which made a busy
-// firefight spend ~40 draws on floor decals alone. Per-ring color and fade
-// are baked into vertex rgb: additive blending makes black invisible, so
-// scaling the rgb IS the opacity.
+// per-ring color and fade are baked into vertex rgb: additive blending
+// makes black invisible, so scaling the rgb IS the opacity.
 
 interface RingPool {
   pos: THREE.BufferAttribute;
   col: THREE.BufferAttribute;
-  ghostCol: THREE.BufferAttribute;
   free: number[];
   live: number;
   scene: THREE.Scene;
   geo: THREE.BufferGeometry;
-  ghostGeo: THREE.BufferGeometry;
   meshes: THREE.Mesh[];
   mats: THREE.Material[];
 }
@@ -71,27 +68,9 @@ function makePool(scene: THREE.Scene): RingPool {
   scene.add(mesh);
   markProbe(mesh, { kind: 'fxMesh', label: 'terrainRing' });
 
-  // Ghost re-pass needs its own color buffer — same positions, dimmer rgb.
-  const ghostGeo = new THREE.BufferGeometry();
-  const ghostCol = new THREE.BufferAttribute(new Float32Array(MAX_RINGS * VERTS * 3), 3);
-  ghostCol.setUsage(THREE.DynamicDrawUsage);
-  ghostGeo.setAttribute('position', pos); // shared with the main mesh
-  ghostGeo.setAttribute('color', ghostCol);
-  ghostGeo.setIndex(geo.index);
-  const ghostMat = new THREE.MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 1,
-    side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-    depthWrite: false, depthFunc: THREE.GreaterDepth,
-  });
-  const ghostMesh = new THREE.Mesh(ghostGeo, ghostMat);
-  ghostMesh.frustumCulled = false;
-  ghostMesh.layers.enable(BLOOM_LAYER);
-  scene.add(ghostMesh);
-  markProbe(ghostMesh, { kind: 'fxMesh', label: 'terrainRing:ghost' });
-
   const pool: RingPool = {
-    pos, col, ghostCol, free: [], live: 0,
-    scene, geo, ghostGeo, meshes: [mesh, ghostMesh], mats: [mat, ghostMat],
+    pos, col, free: [], live: 0,
+    scene, geo, meshes: [mesh], mats: [mat],
   };
   for (let i = MAX_RINGS - 1; i >= 0; i--) pool.free.push(i);
   return pool;
@@ -108,7 +87,7 @@ function releaseRingSlot(pool: RingPool, slot: number): void {
   pool.live--;
   retireBatch(pools, pool.scene, pool, p => p.live === 0, p => {
     for (const m of p.meshes) p.scene.remove(m);
-    p.geo.dispose(); p.ghostGeo.dispose();
+    p.geo.dispose();
     for (const m of p.mats) m.dispose();
   });
 }
@@ -121,7 +100,6 @@ export class TerrainRing {
 
   private terrain?: Terrain;
   private baseOpacity: number;
-  private ghostOpacity: number;
 
   constructor(
     scene: THREE.Scene,
@@ -129,14 +107,10 @@ export class TerrainRing {
     color: number,
     private life: number,
     private maxRadius: number,
-    ...opts: [terrain?: Terrain, baseOpacity?: number, ghostOpacity?: number]) {
-    // Ghost is a GreaterDepth re-pass: it intentionally paints the arcs
-    // terrain occludes. Kept faint — at 0.35 a ring on the far side of a
-    // hill read as a full neon circle drawn ON the hillside.
-    const [terrain, baseOpacity = 0.8, ghostOpacity = 0.12] = opts;
+    ...opts: [terrain?: Terrain, baseOpacity?: number]) {
+    const [terrain, baseOpacity = 0.8] = opts;
     this.terrain = terrain;
     this.baseOpacity = baseOpacity;
-    this.ghostOpacity = ghostOpacity;
     const a = acquireRingSlot(scene);
     this.pool = a.pool;
     this.slot = a.slot;
@@ -151,14 +125,13 @@ export class TerrainRing {
       return false;
     }
     const t = this.elapsed / this.life;
-    this.drape(this.maxRadius * t, (1 - t) * this.baseOpacity, (1 - t) * this.ghostOpacity);
+    this.drape(this.maxRadius * t, (1 - t) * this.baseOpacity);
     return true;
   }
 
-  private drape(radius: number, opacity: number, ghostOpacity: number): void {
+  private drape(radius: number, opacity: number): void {
     const pos = this.pool.pos.array as Float32Array;
     const col = this.pool.col.array as Float32Array;
-    const gcol = this.pool.ghostCol.array as Float32Array;
     const [r, g, b] = this.rgb;
     const inner = radius * 0.85;
     const { x: cx, y: cy, z: cz } = this.center;
@@ -173,7 +146,6 @@ export class TerrainRing {
         const vi = (base + i * 2 + (rr === inner ? 0 : 1)) * 3;
         pos[vi] = wx; pos[vi + 1] = wy; pos[vi + 2] = wz;
         col[vi] = r * opacity; col[vi + 1] = g * opacity; col[vi + 2] = b * opacity;
-        gcol[vi] = r * ghostOpacity; gcol[vi + 1] = g * ghostOpacity; gcol[vi + 2] = b * ghostOpacity;
       }
     }
     // Update ranges, not whole-buffer uploads — each ring writes only
@@ -183,21 +155,15 @@ export class TerrainRing {
     this.pool.pos.needsUpdate = true;
     this.pool.col.addUpdateRange(vo, VERTS * 3);
     this.pool.col.needsUpdate = true;
-    this.pool.ghostCol.addUpdateRange(vo, VERTS * 3);
-    this.pool.ghostCol.needsUpdate = true;
   }
 
   dispose(): void {
     if (this.slot < 0) return;
     const col = this.pool.col.array as Float32Array;
-    const gcol = this.pool.ghostCol.array as Float32Array;
     const base = this.slot * VERTS * 3;
     col.fill(0, base, base + VERTS * 3);
-    gcol.fill(0, base, base + VERTS * 3);
     this.pool.col.addUpdateRange(base, VERTS * 3);
     this.pool.col.needsUpdate = true;
-    this.pool.ghostCol.addUpdateRange(base, VERTS * 3);
-    this.pool.ghostCol.needsUpdate = true;
     releaseRingSlot(this.pool, this.slot);
     this.slot = -1;
   }

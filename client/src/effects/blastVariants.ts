@@ -333,48 +333,86 @@ export class BlastVariants {
     }
   }
 
-  /** Splash — a lime burst that reads as liquid, not fire:
-   *  crown droplets lobbed up and rained down, a fast fine spray, slow
-   *  pale mist puffs, and a low sheet skimming the surface. Deliberately
-   *  cheap — the hose pops at ~9/s. */
+  /** Splash — reads as LIQUID, not vapor. Two gas tells fixed here:
+   *  additive glow sprites (light emission IS the gas look — aerated
+   *  splash water is pale OPAQUE foam) and soft round puffs lingering
+   *  (droplets are velocity-stretched streaks on a hard arc). Reference
+   *  recipe: whitewater foam core + streaked crown + aerosol droplets
+   *  + surface sheet; mist is a garnish, never a layer. */
   private splash(pos: THREE.Vector3, mult: number, directHit: boolean): void {
     const dh = directHit ? 1.25 : 1.0;
-    this.h.spawnBurst(pos, { // crown — fat droplets arced skyward
-      count: 14, countMult: mult,
+    // Energy core — it's a charged hose, not plain water: a hot lime
+    // sphere that flashes fat and collapses inside ~0.25s, wrapped by a
+    // fast shock shell. Reads as the charge that drove the splash.
+    this.h.blastTinted(pos, {
+      count: 3,
+      elvBase: 0.5, elvSpan: Math.PI,   // tiny cones → near-spherical clump
+      spdMin: 0.4, spdMax: 1.6, vy: 0.5,
+      lifeMin: 0.12, lifeMax: 0.24,
+      sizeMin: 2.2 * mult, sizeMax: 3.4 * mult,
+      gravity: 0,
+      c1: [0.9, 1.0, 0.55], c2: [0.3, 0.8, 0.1],
+      opacity: 0.95,
+    });
+    this.h.allocShock(pos, 0xaaff44, 0.22, 3.2 * mult, 0.65); // shell pops
+    this.h.allocShock(pos, 0xeaffaa, 0.14, 1.8 * mult, 0.8);  // hot inner rim
+    this.h.spawnBurst(pos, { // whitewater — pale foam globs, NORMAL blend
+      count: 12, countMult: mult,   // opaque-ish: foam scatters light back
+      elvBase: 0.15, elvSpan: Math.PI * 0.45,
+      spdMin: 2, spdMax: 10, spdBoost: dh, vy: 7,
+      lifeMin: 0.3, lifeVar: 0.3, lifeBoost: dh,
+      sizeMin: 0.3, sizeVar: 0.5, sizeBoost: dh,
+      gravity: -42,
+      r1: 0.92, g1: 1.0, b1: 0.82, r2: 0.5, g2: 0.78, b2: 0.38, kind: 'solid', stagger: 0.05, spin: 2,
+    });
+    blastBurst(pos, { // crown droplets — streaked, lit (not emissive)
+      count: Math.floor(14 * mult),
       elvBase: 0.1, elvSpan: Math.PI * 0.5,
-      spdMin: 3, spdMax: 13, spdBoost: dh, vy: 6,
-      lifeMin: 0.45, lifeVar: 0.4, lifeBoost: dh,
-      sizeMin: 0.22, sizeVar: 0.4, sizeBoost: dh,
-      gravity: -30,
-      r1: 0.7, g1: 1.0, b1: 0.4, r2: 0.25, g2: 0.55, b2: 0.12, kind: 'glow', stagger: 0.08, spin: 2,
-    });
-    this.h.spawnBurst(pos, { // fine spray — many small fast droplets
-      count: 22, countMult: mult,
+      spdMin: 3 * dh, spdMax: 13 * dh, vy: 6,
+      lifeMin: 0.35 * dh, lifeMax: 0.7 * dh,
+      sizeMin: 0.45 * dh, sizeMax: 0.9 * dh,
+      gravity: -48, // water drops hard — a soft fall is what reads gassy
+      c1: [0.9, 1.0, 0.75], c2: [0.4, 0.65, 0.2], // white foam → lime
+      opacity: 0.95, stretched: true, stretchLen: 5, stagger: 0.06,
+    }, false);
+    blastBurst(pos, { // aerosol spray — many thin fast streaks
+      count: Math.floor(24 * mult),
       elvBase: 0.15, elvSpan: Math.PI * 0.7,
-      spdMin: 8, spdMax: 26, spdBoost: dh, vy: 5,
-      lifeMin: 0.2, lifeVar: 0.25, lifeBoost: dh,
-      sizeMin: 0.05, sizeVar: 0.1, sizeBoost: dh,
-      gravity: -34,
-      r1: 0.6, g1: 1.0, b1: 0.35, r2: 0.2, g2: 0.5, b2: 0.1, kind: 'glow', stagger: 0.10, spin: 2.5,
+      spdMin: 10 * dh, spdMax: 30 * dh, vy: 5,
+      lifeMin: 0.14 * dh, lifeMax: 0.34 * dh,
+      sizeMin: 0.12 * dh, sizeMax: 0.3 * dh,
+      gravity: -52,
+      c1: [0.85, 0.98, 0.68], c2: [0.35, 0.6, 0.18],
+      opacity: 0.9, stretched: true, stretchLen: 7, stagger: 0.08,
+    }, false);
+    blastBurst(pos, { // surface sheet — droplets skimming outward
+      count: Math.floor(9 * mult),
+      planar: true, elvBase: 0, elvSpan: 0,
+      spdMin: 7 * dh, spdMax: 18 * dh, vy: 1.2,
+      lifeMin: 0.18 * dh, lifeMax: 0.36 * dh,
+      sizeMin: 0.15 * dh, sizeMax: 0.4 * dh,
+      gravity: -22,
+      c1: [0.8, 0.95, 0.65], c2: [0.35, 0.6, 0.2],
+      opacity: 0.85, stretched: true, stretchLen: 4, stagger: 0.06,
+    }, false);
+    this.h.blastTinted(pos, { // glints — a few HOT streaks ride on top;
+      count: Math.floor(4 * mult), // specular pop is the only additive
+      elvBase: 0.2, elvSpan: Math.PI * 0.5,  // water is allowed to keep
+      spdMin: 8 * dh, spdMax: 22 * dh, vy: 6,
+      lifeMin: 0.1 * dh, lifeMax: 0.2 * dh,
+      sizeMin: 0.1, sizeMax: 0.2,
+      gravity: -50,
+      c1: [1, 1, 0.9], c2: [0.6, 0.9, 0.4],
+      opacity: 1.0, stretched: true, stretchLen: 9, stagger: 0.04,
     });
-    this.h.spawnBurst(pos, { // mist — pale puffs that linger a beat
-      count: 6, countMult: mult,
+    this.h.spawnBurst(pos, { // one breath of dew — a garnish, not fog
+      count: 3, countMult: mult,
       elvBase: 0, elvSpan: 0,
-      spdMin: 1, spdMax: 4, spdBoost: 1, vy: 1.8,
-      lifeMin: 0.5, lifeVar: 0.4, lifeBoost: 1,
-      sizeMin: 0.3, sizeVar: 0.35, sizeBoost: dh,
-      gravity: -3,
-      r1: 0.7, g1: 0.95, b1: 0.55, r2: 0.3, g2: 0.45, b2: 0.25, kind: 'smoke', stagger: 0.15, spin: 0.8,
-      planar: true,
-    });
-    this.h.spawnBurst(pos, { // ground sheet — droplets skimming outward
-      count: 9, countMult: mult,
-      elvBase: 0, elvSpan: 0,
-      spdMin: 6, spdMax: 17, spdBoost: dh, vy: 1.2,
-      lifeMin: 0.22, lifeVar: 0.2, lifeBoost: dh,
-      sizeMin: 0.08, sizeVar: 0.14, sizeBoost: dh,
-      gravity: -18,
-      r1: 0.65, g1: 1.0, b1: 0.4, r2: 0.25, g2: 0.55, b2: 0.12, kind: 'glow', stagger: 0.08,
+      spdMin: 1, spdMax: 3, spdBoost: 1, vy: 1.5,
+      lifeMin: 0.22, lifeVar: 0.18, lifeBoost: 1,
+      sizeMin: 0.25, sizeVar: 0.3, sizeBoost: dh,
+      gravity: -4,
+      r1: 0.7, g1: 0.95, b1: 0.55, r2: 0.3, g2: 0.45, b2: 0.25, kind: 'smoke', stagger: 0.1, spin: 0.8,
       planar: true,
     });
   }

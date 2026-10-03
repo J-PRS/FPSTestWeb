@@ -395,6 +395,31 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 }
 .player-indicator.flag.alpha { --ind-bg: #55aaff; }
 .player-indicator.flag.bravo { --ind-bg: #ff8855; }
+/* Stand marker — the empty socket the flag diamond plugs into. Hollow
+   rotated square, ~40% larger than the flag's mark via negative inset
+   (the distance-scaled inline size would otherwise shrink it to match):
+   flag home = filled diamond nested in its socket = "complete". */
+.player-indicator.stand::before {
+  inset: -20%;
+  background: transparent;
+  border: 2px solid var(--ind-bg, #888);
+  border-radius: 0;
+  clip-path: none;
+  transform: rotate(45deg);
+  box-shadow: none;
+}
+.player-indicator.stand.alpha { --ind-bg: #55aaff; }
+.player-indicator.stand.bravo { --ind-bg: #ff8855; }
+/* Offscreen the generic rim-ring override would erase the socket shape
+   — keep the hollow diamond, just smaller. */
+.player-indicator.stand.offscreen::before {
+  background: transparent;
+  border: 2px solid var(--ind-bg, #888);
+  border-radius: 0;
+  clip-path: none;
+  transform: rotate(45deg);
+  filter: none;
+}
 /* Targeting-beacon aim reticle — hollow diamond-in-ring, cyan. Unlike the
    indicators it marks an aim DIRECTION (solved lob arc), not an entity. */
 .beacon-aim {

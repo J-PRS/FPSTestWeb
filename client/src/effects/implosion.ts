@@ -112,8 +112,7 @@ export class Implosion {
     sw.life = 0.4; sw.elapsed = 0; sw.maxRadius = 8.0 * timeScale; sw.dead = false;
     this.shockwaves.push(sw);
 
-    // Layer 5b: Terrain-draped expanding ground ring (+ ghost pass for
-    // terrain-occluded arcs) — see TerrainRing
+    // Layer 5b: Terrain-draped expanding ground ring — see TerrainRing
     this.rings.push(new TerrainRing(this.scene, pos, 0x66eeff, 0.5, 10.0 * timeScale, terrain));
 
     // Layer 6: Collapsing core - bright white sphere that shrinks

@@ -7,11 +7,11 @@
 
 import {
   BIND_DEFS, codeFor, codeLabel, rebind, resetAll, captureNextInput,
-  isCapturing,
+  isCapturing, cancelCapture,
   type BindAction,
 } from '../core/keybinds.js';
 
-export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): void {
+export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(): void } {
   host.innerHTML = `
     <div class="keys-box">
       <div class="keys-head">
@@ -26,7 +26,11 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): void {
   const chips = new Map<BindAction, HTMLElement>();
 
   function open(): void { host.classList.add('open'); }
-  function close(): void { host.classList.remove('open'); }
+  function close(): void {
+    host.classList.remove('open');
+    // A capture live at menu close would eat the next gameplay input.
+    if (isCapturing()) cancelCapture();
+  }
 
   function refresh(): void {
     for (const d of BIND_DEFS) {
@@ -91,4 +95,5 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): void {
     e.stopPropagation();
     open();
   });
+  return { close };
 }

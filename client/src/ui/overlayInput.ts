@@ -34,7 +34,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
   const keysOpen = document.getElementById('keys-open');
   const keysModal = document.getElementById('keys-modal');
-  if (keysOpen && keysModal) buildKeysMenu(keysOpen, keysModal);
+  const keysMenu = keysOpen && keysModal ? buildKeysMenu(keysOpen, keysModal) : null;
   wireLabButton();
 
   // Single source of truth for menu visibility — sets overlay display AND
@@ -45,6 +45,12 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     document.body.classList.toggle('menu-open', open);
     audio.setDucked(open);
     if (open) refreshLoadout();
+    else {
+      // Nothing may strand open over a resume — dropups, the keybind
+      // popup, or a live "press any key" capture all reset here.
+      loadout.closeDrops();
+      keysMenu?.close();
+    }
   }
 
   function requestLock(): void {

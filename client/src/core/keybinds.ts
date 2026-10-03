@@ -122,10 +122,13 @@ let capturing = false;
 
 export function isCapturing(): boolean { return capturing; }
 
+let cancelActive: (() => void) | null = null;
+
 export function captureNextInput(onDone: (code: string | null) => void): void {
   capturing = true;
   const finish = (code: string | null) => {
     capturing = false;
+    cancelActive = null;
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousedown', onMouse, true);
     onDone(code);
@@ -140,6 +143,13 @@ export function captureNextInput(onDone: (code: string | null) => void): void {
     e.stopImmediatePropagation();
     finish(`Mouse${e.button}`);
   };
+  cancelActive = () => finish(null);
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('mousedown', onMouse, true);
+}
+
+/** Menu close path: a stranded capture would eat the next gameplay
+ *  keypress — cancel it so the bind stays unchanged. */
+export function cancelCapture(): void {
+  cancelActive?.();
 }

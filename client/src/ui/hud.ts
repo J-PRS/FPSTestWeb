@@ -333,10 +333,12 @@ export class HUD {
   }
 
   /** CTF flag marker — same through-terrain DOM overlay as player dots,
-   *  styled as a team-colored diamond so it can't be mistaken for a player. */
+   *  styled as a team-colored diamond so it can't be mistaken for a player.
+   *  `kind:'stand'` draws the hollow socket the flag diamond nests in —
+   *  paired at home they read as one complete mark. */
   updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
-                      camera: THREE.Camera, team: TeamId): void {
-    this.indicators.update(id, position, camera, { variant: `flag ${team}` });
+                      camera: THREE.Camera, team: TeamId, kind: 'flag' | 'stand' = 'flag'): void {
+    this.indicators.update(id, position, camera, { variant: `${kind} ${team}` });
   }
 
   /** Targeting-beacon aim reticles — Deployables solves both lob roots
