@@ -191,7 +191,14 @@ export class BotMoves {
     // the touch). Fire on them, don't fly after them.
     const targetHigh = !ctx.runner && !ctx.wave &&
       (this.host.huntPos()?.y ?? -Infinity) - pos.y > T.moves.preyRise;
-    const destHigh = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > T.moves.destHighRise;
+    // Distance-aware deficit: far out, only a real wall justifies the
+    // climb — a 3m threshold re-arms every rolling dip on a plateau and
+    // the bot burns the tank re-climbing what a glide already solves
+    // (surreal autopsy: repeated ~6m burns over 400m, arrived at the
+    // stand with E≈100). Close in, the modest threshold stays so the
+    // final approach still climbs onto an elevated stand.
+    const destDeficit = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y;
+    const destHigh = destDeficit > T.moves.destHighRise + Math.min(30, gd * 0.08);
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
     // High prey still earns altitude; everything else glides back down.

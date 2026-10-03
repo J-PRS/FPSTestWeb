@@ -1,3 +1,4 @@
+2026-10-01 - capper destHigh jet trigger now scales with distance-to-goal (surreal energy leak)
 2026-10-02 - capper grab-suicide fix: pull-belt carriers no longer lob the implosion blast onto themselves after grabbing (flag-snapshot carrying check + early return on lobAt failure)
 2026-10-02 - lightning gun rework: beam welded to the energy ball's live world center (largest sphere in weapon group, re-resolved on baked-model swap), ball swells + emissive-flares while firing and on hit-connect, tip spring snaps on >4m jumps instead of stretching the shaft
 2026-10-02 - edgebake pipeline: _tools/edgebake/bake3.py emits _grime/_edge/_edge_thin per model in one headless pass; vmdump/bake.py writes _edge/_grime per weapon atlas; w0 on real launcher.blend bakes, w12 re-baked with the energy-ball model
