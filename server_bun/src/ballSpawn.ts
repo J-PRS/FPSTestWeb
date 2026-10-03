@@ -61,6 +61,9 @@ export interface SpawnHost {
 
 export const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 export const RESYNC_INTERVAL = 1.2;
+/** Worst-case replay drift tolerated before a resync heartbeat — the
+ *  per-ball interval is min(RESYNC_INTERVAL, budget/speed). */
+export const DIVERGENCE_BUDGET_M = 15;
 export const BRAIN_BUCKETS = 8;
 
 /** Create + broadcast a ball. near = spawn near a player (drip-feed);
