@@ -654,28 +654,31 @@ export class PlayerModel {
   /** Authored clips can bake a facing turn into the hip track — the
    *  polyart pack's Idle_Ducking_ar carries the body at +95° vs the
    *  ~-138° every other clip agrees on, so skiing flipped him toward
-   *  the camera. Measure each clip's first hip key, take the set's
-   *  modal yaw as the rig's forward convention, and unwind outliers
-   *  (>~30°) back onto it in the hip's parent frame. */
+   *  the camera. Measure each clip's first key on the animated hip
+   *  node, take the set's modal yaw as the rig's forward convention,
+   *  and unwind outliers (>~30°) back onto it in the node's parent
+   *  frame. */
   private alignHipYaw(): void {
-    // Skeleton root joint = the shallowest skin joint (hips for humanoid
-    // rigs — the node every facing convention is authored on).
-    let hip: THREE.Object3D | undefined;
-    this.model?.traverse(o => {
-      const sk = o as THREE.SkinnedMesh;
-      if (hip || !sk.isSkinnedMesh || !sk.skeleton) return;
-      let root: THREE.Object3D | null = null, rd = Infinity;
-      for (const b of sk.skeleton.bones) {
-        let d = 0; for (let p = b.parent; p && p !== this.model; p = p.parent) d++;
-        if (d < rd) { root = b; rd = d; }
-      }
-      hip = root ?? undefined;
-    });
-    if (!hip?.parent) return;
+    if (!this.model) return;
     const fwd = new THREE.Vector3();
     const q = new THREE.Quaternion();
-    const yawOf = (tr: THREE.KeyframeTrack): number | null => {
-      if (!tr.name.endsWith('.quaternion')) return null;
+    // Track names may carry loader dedup suffixes (Hips_1) and rigs can
+    // contain more than one 'Hips' node, so resolve each quaternion
+    // track's target and keep the shallowest real bone — the node the
+    // clips actually rotate.
+    const hipTrackOf = (clip: THREE.AnimationClip): { tr: THREE.KeyframeTrack; node: THREE.Object3D } | null => {
+      let best: { tr: THREE.KeyframeTrack; node: THREE.Object3D } | null = null;
+      let any: { tr: THREE.KeyframeTrack; node: THREE.Object3D } | null = null;
+      for (const tr of clip.tracks) {
+        if (!tr.name.endsWith('.quaternion')) continue;
+        const node = this.model!.getObjectByName(tr.name.slice(0, -'.quaternion'.length));
+        if (!node) continue;
+        if ((node as THREE.Bone).isBone && (!best || this.depthOf(node) < this.depthOf(best.node))) best = { tr, node };
+        if (!any || this.depthOf(node) < this.depthOf(any.node)) any = { tr, node };
+      }
+      return best ?? any;
+    };
+    const yawOf = (tr: THREE.KeyframeTrack): number => {
       const v = tr.values;
       q.set(v[0], v[1], v[2], v[3]);
       fwd.set(0, 0, 1).applyQuaternion(q);
@@ -684,10 +687,9 @@ export class PlayerModel {
     const canonical = (() => {
       const buckets = new Map<number, { sum: number; n: number }>();
       for (const [, a] of this.animations) {
-        const tr = a.getClip().tracks.find(t => t.name === hip!.name + '.quaternion');
-        if (!tr) continue;
-        const y = yawOf(tr);
-        if (y === null) continue;
+        const hit = hipTrackOf(a.getClip());
+        if (!hit) continue;
+        const y = yawOf(hit.tr);
         const k = Math.round(y / (Math.PI / 18));
         const b = buckets.get(k) ?? { sum: 0, n: 0 };
         b.sum += y; b.n++;
@@ -698,24 +700,22 @@ export class PlayerModel {
       return best.n ? best.sum / best.n : null;
     })();
     if (canonical === null) return;
-    this.model!.updateMatrixWorld(true);
-    const parentQ = new THREE.Quaternion().setFromRotationMatrix(
-      new THREE.Matrix4().copy(this.model!.matrixWorld).invert().multiply(hip.parent.matrixWorld));
+    this.model.updateMatrixWorld(true);
     const fixed: string[] = [];
     for (const [, a] of this.animations) {
       const clip = a.getClip();
-      const tr = clip.tracks.find(t => t.name === hip!.name + '.quaternion');
-      if (!tr) continue;
-      const y = yawOf(tr);
-      if (y === null) continue;
-      let delta = y - canonical;
+      const hit = hipTrackOf(clip);
+      if (!hit?.node.parent) continue;
+      let delta = yawOf(hit.tr) - canonical;
       while (delta > Math.PI) delta -= 2 * Math.PI;
       while (delta < -Math.PI) delta += 2 * Math.PI;
       if (Math.abs(delta) < 0.5) continue;
+      const parentQ = new THREE.Quaternion().setFromRotationMatrix(
+        new THREE.Matrix4().copy(this.model.matrixWorld).invert().multiply(hit.node.parent.matrixWorld));
       const fix = parentQ.clone().invert()
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -delta))
         .multiply(parentQ);
-      const v = tr.values;
+      const v = hit.tr.values;
       for (let i = 0; i < v.length; i += 4) {
         q.set(v[i], v[i + 1], v[i + 2], v[i + 3]).premultiply(fix);
         v[i] = q.x; v[i + 1] = q.y; v[i + 2] = q.z; v[i + 3] = q.w;
@@ -723,6 +723,12 @@ export class PlayerModel {
       fixed.push(clip.name);
     }
     if (fixed.length) logger.debug(`Hip-yaw outliers corrected: ${fixed.join(', ')}`);
+  }
+
+  private depthOf(node: THREE.Object3D): number {
+    let d = 0;
+    for (let p = node.parent; p && p !== this.model; p = p.parent) d++;
+    return d;
   }
 
   playAnimation(name: string, startPhase = 0): void {
