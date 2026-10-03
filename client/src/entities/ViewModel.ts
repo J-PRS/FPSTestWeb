@@ -49,7 +49,7 @@ export class ViewModel {
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
-    [WeaponType.Chaingun]: -0.55, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
+    [WeaponType.Chaingun]: -0.64, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.26,
     [WeaponType.Railgun]: -0.43,
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
@@ -169,7 +169,30 @@ export class ViewModel {
   // the Quake approach: one damped oscillator, re-triggered per shot.
   // `rise` scales muzzle-up pitch + back-thrust so weapons differ in
   // character, not just shove depth (mortar heaves, pistol snaps).
-  kick(strength = 1): void { kickF(this, strength); }
+  kick(strength = 1): void {
+    kickF(this, strength);
+    if (this.activeWeapon === WeaponType.Chaingun) this.startBarrelKick();
+  }
+
+  // Chaingun per-shot tell: knock the TOP barrel (the one feeding) back a
+  // beat, spring it home before the next round. At full spin it's ~mush —
+  // a barrel holds top for ~50ms — but it reads during spin-up.
+  private barrelKickIdx = -1;
+  private barrelKickT = 0;
+  private chainSpin = 0; // accumulated spin angle — the euler can't be
+                         // read back cleanly once roll is composed in
+  private startBarrelKick(): void {
+    if (!this.chainBarrels) return;
+    const phi = -this.chainSpin; // rotateOnAxis runs about local -Z
+    let bi = -1, by = -Infinity;
+    this.chainBarrels.children.forEach((c, i) => {
+      if (!c.userData.barrel) return;
+      const y = c.position.x * Math.sin(phi) + c.position.y * Math.cos(phi);
+      if (y > by) { by = y; bi = i; }
+    });
+    this.barrelKickIdx = bi;
+    this.barrelKickT = 0.08;
+  }
 
   /** Camera-space muzzle OFFSET of the active weapon (gun sway/kick/bob
    *  included, camera rotation STRIPPED OUT). The gun group is a child of
@@ -193,8 +216,22 @@ export class ViewModel {
   private baked = new VmBaked(this);
   muzzleZ(wt: number): number { return ViewModel.MUZZLE_Z[wt] ?? -0.35; }
 
-  startThrow(): void {
-    this.env.startThrow();
+  /** Flash park point in GROUP space — the muzzle NODE's real position
+   *  plus a small forward push past the bore face. z-only parking left
+   *  the quads on the group axis (x=0,y=0): for guns whose bore sits
+   *  off-axis the flash rendered buried inside the body, never visible. */
+  muzzleGroupPos(wt: number, out: THREE.Vector3): boolean {
+    const n = this.muzzleNodes.get(wt);
+    if (!n) return false;
+    n.updateWorldMatrix(true, false);
+    n.getWorldPosition(out);
+    this.group.worldToLocal(out); // strip camera — pure group-space point
+    out.z -= 0.04; // proud of the bore face — a flush quad occludes/z-fights
+    return true;
+  }
+
+  startThrow(timeScale = 1): void {
+    this.env.startThrow(timeScale);
   }
 
   // Cloak ghosting — a true "whole-layer" fade, not per-surface alpha.
@@ -221,8 +258,8 @@ export class ViewModel {
   /** Tick the field animation on the gun shells (called from update). */
   updateShieldShells(dt: number): void { vm.updateShieldShells(this, dt); }
 
-  punch(): void {
-    this.env.punch();
+  punch(landed = false): void {
+    this.env.punch(landed);
   }
 
   switchWeapon(index: number): void {
@@ -308,8 +345,21 @@ export class ViewModel {
     // Chaingun barrel spin — decays over ~0.7s after firing stops
     if (this.chainBarrels && this.spinVel > 0) {
       this.chainBarrels.rotateOnAxis(this.spinAxis, this.spinVel * dt);
+      this.chainSpin += this.spinVel * dt;
       this.spinVel *= Math.exp(-dt * 4);
       if (this.spinVel < 0.5) this.spinVel = 0;
+    }
+
+    // Per-barrel recoil spring — the knocked barrel rides back on its
+    // own short envelope, independent of the whole-gun kick.
+    if (this.barrelKickIdx >= 0 && this.chainBarrels) {
+      const b = this.chainBarrels.children[this.barrelKickIdx];
+      if (b) {
+        this.barrelKickT = Math.max(0, this.barrelKickT - dt);
+        const k = this.barrelKickT / 0.08;
+        b.position.z = b.userData.baseZ - k * k * 0.06; // squared: snap out, settle home
+        if (this.barrelKickT <= 0) { b.position.z = b.userData.baseZ; this.barrelKickIdx = -1; }
+      } else this.barrelKickIdx = -1;
     }
 
     // Flash decay — sqrt curve: bright spike, fast falloff. The two quads

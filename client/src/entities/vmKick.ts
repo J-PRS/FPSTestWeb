@@ -1,7 +1,9 @@
+import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { ViewModel } from './ViewModel.js';
 
 const SPIN_MAX = 40;   // rad/s at full spin (chaingun spool)
+const _flashPark = new THREE.Vector3();
 const FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
 
 // Recoil family: one damped oscillator re-triggered per shot plus the
@@ -20,7 +22,7 @@ const KICK_TUNE: Record<number, [number, number, number, number, number, number,
     [WeaponType.GrenadeLauncher]: [0.30, 0.03, 0xffc866, 0.8, 0.9, 0.9],  // pump pop
     [WeaponType.Flak]:            [0.33, 0.09, 0xffbb55, 1.3, 1.0, 1.1],  // hard shove + sideways shudder
     [WeaponType.PlasmaCannon]:          [0.22, 0.00, 0x44ffbb, 0.5, 0.6, 0.7],  // light tap, green glow
-    [WeaponType.PlasmaGun]:       [0.24, 0.01, 0x66ccff, 0.35, 0.35, 0.5],// repeater — small kick, cool flash
+    [WeaponType.PlasmaGun]:       [0.24, 0.01, 0x66ccff, 0.75, 0.6, 0.5], // repeater — cool cyan flicker, ~42ms so it can't bridge the shot gap
     [WeaponType.Sprinkler]:       [0.22, 0.02, 0xaaff66, 0.55, 1.5, 0.45],// hose — light wobble; 105ms flash ~bridges the shot gap → lit nozzle
     [WeaponType.Railgun]:         [0.18, 0.01, 0x77ccff, 1.1, 0.9, 1.2],  // fast snap, cyan discharge
     [WeaponType.Lightning]:       [0.21, 0.05, 0x8fdcff, 0.4, 0.4, 0.4],  // per-tick hum — tiny flash, sideways jitter
@@ -54,6 +56,13 @@ export function kickF(v: ViewModel, strength = 1): void {
     v.flashLifeScale = t[4];
     v.flashMesh.visible = true;
     v.flashMesh2.visible = true;
+    // Re-park per shot, not just on switch — a weapon equipped without a
+    // switch dip (spawn, loadout apply) would leave the flash at the
+    // default group-axis spot, occluded inside the body forever.
+    if (v.muzzleGroupPos(v.activeWeapon, _flashPark)) {
+      v.flashMesh.position.copy(_flashPark);
+      v.flashMesh2.position.copy(_flashPark);
+    }
     v.flashMesh.rotation.z = Math.random() * Math.PI * 2;
     const s = (0.85 + Math.random() * 0.3) * t[3];
     v.flashBaseS = s;

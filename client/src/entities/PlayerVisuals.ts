@@ -5,7 +5,7 @@ import type { Terrain } from '../world/terrain.js';
 import { EYE_OFFSET } from '../core/config.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import type { AnimationState, PlayerModel } from './PlayerModel.js';
-import { BallTrailDots } from './ballTrails.js';
+import { BallTrailDots } from '../effects/ballTrails.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 
 const _airP = new THREE.Vector3();

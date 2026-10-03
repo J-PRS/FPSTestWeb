@@ -5,6 +5,9 @@ const path = require('path');
 
 const EXE = 'C:/Users/JPrice/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
 const OUT = path.join(__dirname, 'models');
+// Any vite port serving the client works — VMDUMP_PORT lets a stale
+// 5199 squatter not block the bake (vite auto-increments when busy).
+const PORT = process.env.VMDUMP_PORT || 5199;
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -12,7 +15,7 @@ const OUT = path.join(__dirname, 'models');
   const page = await browser.newPage();
   page.on('pageerror', e => { if (e.message !== '0' && e.message !== '__export_done') console.log('PAGEERROR', e.message); });
   page.on('console', m => { const t = m.text(); if (!t.includes('vite')) console.log('page:', t); });
-  await page.goto('http://localhost:5199/vmdump.html?export=1', { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/vmdump.html?export=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction('window.__ready === true', { timeout: 30000 });
   const glbs = await page.evaluate('window.__glb');
   for (const [wt, b64] of Object.entries(glbs)) {

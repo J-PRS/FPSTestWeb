@@ -94,7 +94,10 @@ for (let k = 0; k <= 6; k++) {
   const x = Math.cos(a) * DISC_HEX_R, y = Math.sin(a) * DISC_HEX_R;
   if (k === 0) fullHex.moveTo(x, y); else fullHex.lineTo(x, y);
 }
-disc.add(extrudeAt(fullHex, zFront + slitLen, 0.18, bodyMat));
+// Breech overlaps the slit section AND sits slightly proud — a same-size
+// overlap makes its side walls coplanar with the halves' walls (z-fight),
+// while a flush start makes the caps coplanar (also z-fight).
+disc.add(extrudeAt(fullHex, zFront + slitLen - 0.006, 0.186, bodyMat)).scale.set(1.02, 1.02, 1);
 // Dark collar ring where the slit ends — the visual stop of the throat
 disc.add(extrudeAt(fullHex, zFront + slitLen - 0.012, 0.024, darkMat)).scale.set(1.04, 1.04, 1);
 // Chambered disc lying flat in the slit, rim just short of the flank
@@ -123,10 +126,11 @@ disc.visible = false;
 return disc;
 }
 
-// Weapon 2 — chaingun: the ref reads as one long chamfered slab
-// swallowing the barrel cluster — barrels peek out the front of a heavy
-// shroud, dark recessed channel under the belly. Not three floating
-// sticks: the SHROUD is the gun.
+// Weapon 2 — chaingun: the ref reads as one long WEDGE — a triangular
+// prism body, wide flat belly sloping up to a narrow flat top, uniform
+// for the whole length (its apparent taper toward the muzzle is just
+// perspective). The barrel cluster peeks out of the wedge's front face.
+// Not three floating sticks: the SHROUD is the gun.
 export function mkChaingun(): { g: THREE.Group; barrels: THREE.Group } {
 const chain = new THREE.Group();
 const chainBarrels = new THREE.Group();
@@ -135,57 +139,62 @@ const chainBarrels = new THREE.Group();
 chainBarrels.name = 'barrels';
 for (let i = 0; i < 3; i++) {
   const a = (i / 3) * Math.PI * 2;
-  // longer, thicker barrels on a wider ring so they still read as a
-  // cluster where they exit the shroud
-  const barrel = mkTube(0.045, 0.045, 0.5, -0.28, bodyMat);
-  barrel.position.x = Math.cos(a) * 0.075;
-  barrel.position.y = Math.sin(a) * 0.075;
+  const barrel = mkTube(0.04, 0.04, 0.34, -0.46, bodyMat);
+  barrel.position.x = Math.cos(a) * 0.055;
+  barrel.position.y = Math.sin(a) * 0.055;
+  // Per-barrel fire recoil — kick() knocks the TOP barrel back a beat.
+  // baseZ restores it; `barrel` tag skips the collar/studs sharing the group.
+  barrel.userData.barrel = true;
+  barrel.userData.baseZ = barrel.position.z;
   chainBarrels.add(barrel);
 }
 chain.add(chainBarrels);
-// Chamfered slab shroud — a flattened octagonal prism gives the cut
-// corners the ref shows. Swallows the barrels' rear 2/3; they spin
-// inside it and protrude past the front collar.
-const chainShroud = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.14, 0.58, 8), bodyMat);
-chainShroud.rotation.x = Math.PI / 2;
-chainShroud.scale.x = 1.35;   // wide slab, chamfered shoulders
-chainShroud.scale.y = 0.85;   // NB: local y = cylinder axis → shortens, not flattens
-chainShroud.position.z = -0.02;
-chain.add(chainShroud);
-// Dark recessed channel under the belly — the ref's lower slot where
-// the drive train lives. Two stacked boxes step the underside.
-const chainBelly = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.5), darkMat);
-chainBelly.position.set(0, -0.105, -0.05);
-chain.add(chainBelly);
-const chainBelly2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.3), darkMat);
-chainBelly2.position.set(0, -0.15, 0.05);
-chain.add(chainBelly2);
+// The wedge — trapezoid cross-section extruded the full body length:
+// wide flat base, shoulders sloping to a narrower flat top. One solid
+// faceted mass, matching the ref's "big slab of metal" read.
+const wedge = new THREE.Shape();
+wedge.moveTo(-0.17, -0.12);  // bottom corners
+wedge.lineTo(0.17, -0.12);
+wedge.lineTo(0.05, 0.16);    // long sloped shoulders — the triangle read
+wedge.lineTo(-0.05, 0.16);   // sliver flat top
+wedge.closePath();
+chain.add(extrudeAt(wedge, -0.31, 0.6, bodyMat));
+// Front face plate — dark inset the barrel cluster exits through, so
+// the muzzle reads as a socket in the wedge, not a hollow shell.
+const facePlate = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 8), darkMat);
+facePlate.rotation.x = Math.PI / 2;
+facePlate.position.set(0, 0.02, -0.315);
+chain.add(facePlate);
+chain.add(mkBore(0.09, -0.331));
 // Front collar — the bearing plate the barrels exit through. A gatling
 // collar SPINS with the cluster, so it lives in chainBarrels. A symmetric
 // ring's rotation is invisible though — the bolt studs on its face are
 // what sell the spin.
-const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.04, 8), darkMat);
+const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.035, 8), darkMat);
 chainCollar.rotation.x = Math.PI / 2;
-chainCollar.position.z = -0.27;
+chainCollar.position.z = -0.345;
 chainBarrels.add(chainCollar);
 for (let i = 0; i < 3; i++) {
   const a = (i / 3) * Math.PI * 2;
-  const stud = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), bodyMat);
-  stud.position.set(Math.cos(a) * 0.105, Math.sin(a) * 0.105, -0.28);
+  const stud = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.025), bodyMat);
+  stud.position.set(Math.cos(a) * 0.078, Math.sin(a) * 0.078, -0.35);
   chainBarrels.add(stud);
 }
-// Bore face behind the collar ring so the muzzle doesn't read hollow
-chain.add(mkBore(0.1, -0.25));
+// Dark recessed channel under the belly — the ref's lower slot where
+// the drive train lives.
+const chainBelly = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.4), darkMat);
+chainBelly.position.set(0, -0.115, -0.02);
+chain.add(chainBelly);
 // Rear receiver block + top rail to match the family
-const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.16, 0.2), darkMat);
-chainRecv.position.set(0, 0, 0.32);
+const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.18), darkMat);
+chainRecv.position.set(0, -0.04, 0.32);
 chain.add(chainRecv);
-const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.3), darkMat);
-chainRail.position.set(0, 0.135, -0.08);
+const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.34), darkMat);
+chainRail.position.set(0, 0.175, -0.08); // rides the wedge's flat apex
 chain.add(chainRail);
-// Grip — the shroud's belly means it mounts lower than most guns
+// Grip — the wedge's belly means it mounts lower than most guns
 const chainGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.07), darkMat);
-chainGrip.position.set(0, -0.19, 0.18);
+chainGrip.position.set(0, -0.2, 0.18);
 chainGrip.rotation.x = 0.3;
 chain.add(chainGrip);
 chain.visible = false;
