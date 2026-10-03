@@ -21,7 +21,7 @@ const _footPQ = new THREE.Quaternion();
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
-  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS,
+  CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, VARIANT_CLIP_OVERRIDES,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
@@ -855,7 +855,17 @@ export class PlayerModel {
    *  has no dedicated stride (forward keeps the UAL jog/sprint, and a
    *  missing bake falls back to the reverse/lean tricks). */
   private directionalClip(state: 'walk' | 'run'): string | null {
-    if (this.locoDir === 'F') return null;
+    // 'F' normally defers to the UAL jog/sprint — variants that lack it
+    // (vexa has no mannequin bake) would otherwise fall to a missing
+    // native fallback and idle-hold while walking forward.
+    if (this.locoDir === 'F') {
+      if (this.animations.has(ANIM_NAMES[state][0])) return null;
+      for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01']) {
+        const f = `UAL_${s}_Forward`;
+        if (this.animations.has(f)) return f;
+      }
+      return null;
+    }
     // The Sprint set only covers the forward hemisphere — back-half
     // run sectors ride the Run clips.
     const fwdHemi = this.locoDir === 'FL' || this.locoDir === 'FR' || this.locoDir === 'L' || this.locoDir === 'R';
@@ -915,6 +925,11 @@ export class PlayerModel {
         this.playAnimation(dirClip, phase);
         return;
       }
+    }
+    const override = VARIANT_CLIP_OVERRIDES[this.variant]?.[state];
+    if (override && this.animations.has(override)) {
+      this.playAnimation(override);
+      return;
     }
     const [ual, fallback] = ANIM_NAMES[state];
     if (this.variant === 'mannequin') {

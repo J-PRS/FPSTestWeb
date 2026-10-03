@@ -134,6 +134,15 @@ export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hi
   'Fire_1Pistol', 'Fire_2Pistol', 'Fire_SniperRifle',
   'Shoot_SingleShot_AR', 'Shoot_BurstShot_AR', 'Shoot_AutoShot_AR']);
 
+// Per-variant clip overrides — states whose ANIM_NAMES pair can't resolve
+// on that rig. cybersoldier ski: mannequin's clip set has no Slide_Loop
+// (UAL2 is robot-locked) and 'Sitting' isn't a mannequin clip either, so
+// skis parked him on the idle loop — Crouch_Fwd is the same tuck the
+// mannequin itself uses for ski.
+export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationState, string>>> = {
+  cybersoldier: { ski: 'UAL_Crouch_Fwd_Loop' },
+};
+
 // Mannequin (DEF-* Rigify rig) → UAL2 source bones. GLTFLoader strips dots
 // from node names, so 'DEF-upper_arm.L' arrives as 'DEF-upper_armL'.
 export const MANNEQUIN_UAL2_BONE_MAP: Record<string, string> = {
