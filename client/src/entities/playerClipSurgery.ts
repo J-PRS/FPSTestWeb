@@ -35,6 +35,53 @@ export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<s
   }
 }
 
+// Nodes above the hips that authored rigs animate as root motion — the
+// ancestor chain of the skeleton's shallowest joint (Vexa animates
+// 'Armature', Yurowm 'Rig'). No name table covers these; computed from
+// the loaded hierarchy once per model.
+export function computeRootMotionNodes(model: THREE.Object3D): Set<string> {
+  const set = new Set<string>();
+  model.traverse(o => {
+    const sk = o as THREE.SkinnedMesh;
+    if (!sk.isSkinnedMesh || !sk.skeleton) return;
+    let root: THREE.Object3D | null = null, rootDepth = Infinity;
+    for (const b of sk.skeleton.bones) {
+      let d = 0; for (let p = b.parent; p && p !== model; p = p.parent) d++;
+      if (d < rootDepth) { root = b; rootDepth = d; }
+    }
+    for (let n = root; n && n !== model; n = n.parent) {
+      if (n.name) set.add(normBone(n.name));
+    }
+  });
+  return set;
+}
+
+// Clips the mannequin's aim layer rides under: everything EXCEPT full-body
+// oneshots (shoot/hit/death own the arms) and the Pistol_Aim_* sources.
+export function isLayeredClip(name: string): boolean {
+  return !name.includes('Aim') && !name.startsWith('Death') &&
+    !name.startsWith('Hit_') && name !== 'Pistol_Shoot';
+}
+
+// Arms only — spine/neck/head stay with the locomotion clip so the torso
+// keeps its run-bob and sway (owning them froze the torso over running
+// legs, which read as sliding). Aim pitch on the torso comes from the
+// procedural aimBones pass instead.
+export const AIM_BONE_MASK = new Set([
+  'defshoulderl', 'defshoulderr',
+  'defupperarml', 'defupperarmr', 'defforearml', 'defforearmr',
+  'defhandl', 'defhandr',
+]);
+
+// Torso chain whose locomotion sway gets halved — spine roll is what
+// swung the aimed gun side to side. Position tracks (hip bob) untouched.
+export const SWAY_BONES = new Set([
+  'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+  // Class-body rigs (CyberSoldier / Yurowm Rig* / SciFiWarrior).
+  'hips', 'spine', 'chest', 'neck', 'head',
+  'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
+]);
+
 /** Dampen torso-chain sway: full-run spine roll carries the aimed arms
  *  with it and reads as the CoD sprint wade — waving the gun side to
  *  side. Each quaternion key slerps `amt` toward the track's baseline,

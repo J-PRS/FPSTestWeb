@@ -23,9 +23,10 @@ export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
   CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, VARIANT_CLIP_OVERRIDES,
   normBone, type AnimationState } from './playerClips.js';
-import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './playerClipSurgery.js';
+import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, computeRootMotionNodes,
+  isLayeredClip, AIM_BONE_MASK, SWAY_BONES, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
-import { bakeUALClips } from './playerUal.js';
+import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
 
@@ -104,31 +105,6 @@ export class PlayerModel {
   private aimNeutral: THREE.AnimationAction | null = null;
   private aimDown: THREE.AnimationAction | null = null;
   private static readonly AIM_CLIP_RAD = 0.95; // pitch where Up/Down reaches full weight
-  // Clips the aim layer rides under: everything EXCEPT full-body oneshots
-  // (shoot/hit/death own the arms — the layer weights to 0 for them) and
-  // the Pistol_Aim_* sources themselves (they'd be stripped empty before
-  // buildAimLayer could mask them).
-  private static isLayeredClip(name: string): boolean {
-    return !name.includes('Aim') && !name.startsWith('Death') &&
-      !name.startsWith('Hit_') && name !== 'Pistol_Shoot';
-  }
-  // Arms only — spine/neck/head stay with the locomotion clip so the
-  // torso keeps its run-bob and sway (owning them froze the torso over
-  // running legs, which read as sliding). Aim pitch on the torso comes
-  // from the procedural aimBones pass instead.
-  private static readonly AIM_BONE_MASK = new Set([
-    'defshoulderl', 'defshoulderr',
-    'defupperarml', 'defupperarmr', 'defforearml', 'defforearmr',
-    'defhandl', 'defhandr',
-  ]);
-  // Torso chain whose locomotion sway gets halved — spine roll is what
-  // swung the aimed gun side to side. Position tracks (hip bob) untouched.
-  static readonly SWAY_BONES = new Set([
-    'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
-    // Class-body rigs (CyberSoldier / Yurowm Rig* / SciFiWarrior).
-    'hips', 'spine', 'chest', 'neck', 'head',
-    'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
-  ]);
   // Hips-and-up rotation chain locked toward bind pose while the model
   // is firing — hip POSITION tracks still animate (stride bob survives,
   // and leg swing lives on the thigh bones, not hip rotation). DampenSway
@@ -616,28 +592,14 @@ export class PlayerModel {
   }
 
   // Nodes above the hips that authored rigs animate as root motion —
-  // the ancestor chain of the skeleton's shallowest joint (Vexa animates
-  // 'Armature', Yurowm 'Rig'). No name table covers these; computed from
-  // the loaded hierarchy once.
+  // computed from the loaded hierarchy once per model.
   private _rootMotionNodes: Set<string> | null = null;
 
   private rootMotionNodes(): Set<string> {
-    if (this._rootMotionNodes) return this._rootMotionNodes;
-    const set = new Set<string>();
-    this.model?.traverse(o => {
-      const sk = o as THREE.SkinnedMesh;
-      if (!sk.isSkinnedMesh || !sk.skeleton) return;
-      let root: THREE.Object3D | null = null, rootDepth = Infinity;
-      for (const b of sk.skeleton.bones) {
-        let d = 0; for (let p = b.parent; p && p !== this.model; p = p.parent) d++;
-        if (d < rootDepth) { root = b; rootDepth = d; }
-      }
-      for (let n = root; n && n !== this.model; n = n.parent) {
-        if (n.name) set.add(normBone(n.name));
-      }
-    });
-    this._rootMotionNodes = set;
-    return set;
+    if (!this._rootMotionNodes) {
+      this._rootMotionNodes = this.model ? computeRootMotionNodes(this.model) : new Set();
+    }
+    return this._rootMotionNodes;
   }
 
   // Mannequin/knight clips need their hip XZ root motion stripped — the
@@ -646,10 +608,10 @@ export class PlayerModel {
   private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
     if (mann || knight || CLASS_BODY_SPEC[this.variant]) {
       stripHipXZ(clip, this.rootMotionNodes());
-      if (mann && PlayerModel.isLayeredClip(clip.name)) {
+      if (mann && isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
-          !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-        dampenSway(clip, PlayerModel.SWAY_BONES);
+          !AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+        dampenSway(clip, SWAY_BONES);
       }
     }
     const action = this.mixer!.clipAction(clip);
@@ -665,7 +627,7 @@ export class PlayerModel {
       const src = this.animations.get(name)?.getClip();
       if (!src) return null;
       const tracks = src.tracks.filter(t =>
-        PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+        AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
       if (!tracks.length) return null;
       const clip = new THREE.AnimationClip(name + '.aim', src.duration, tracks);
       const a = this.mixer!.clipAction(clip);
@@ -965,25 +927,28 @@ export class PlayerModel {
    */
   private retargetUAL(): void {
     if (!this.model) return;
-    bakeUALClips(this.model, this.variant).then(baked => {
+    const model = this.model;
+    const adopt = (baked: Map<string, THREE.AnimationClip>) => {
       if (this._disposed || !this.mixer || !this.model) return;
+      // Baked clips arrive fully cooked — hip-XZ strip and the
+      // mannequin aim-layer carve are applied at bake time.
       for (const [name, clip] of baked) {
-        // Every variant's baked clips get the hip XZ strip — the entity
-        // owns world position regardless of rig (Vexa's bake drifted her
-        // whole body until this applied outside the mannequin branch).
-        stripHipXZ(clip, this.rootMotionNodes());
-        // Mannequin's arm tracks additionally yield to the aim layer.
-        if (this.variant === 'mannequin' && PlayerModel.isLayeredClip(name)) {
-          clip.tracks = clip.tracks.filter(t =>
-            !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-          dampenSway(clip, PlayerModel.SWAY_BONES);
-        }
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Re-resolve the current state onto the better clip if one landed.
       const want = this.variant === 'knight' ? KNIGHT_ANIMS[this.currentState] : ANIM_NAMES[this.currentState][0];
       this.playAnimation(this.animations.has(want) ? want : (this.currentClipName ?? 'Idle'));
-    }).catch((e) => { logger.warn('UAL bake failed for ' + this.variant, e); });
+    };
+    const runtimeBake = () =>
+      bakeUALClips(model, this.variant).then(adopt)
+        .catch((e) => { logger.warn('UAL bake failed for ' + this.variant, e); });
+    // The offline bake (public/assets/anims/<variant>.glb) ships the
+    // whole retarget so load never flashes bind pose or burns a
+    // resample; missing file → dev rigs still runtime-bake.
+    loadBakedUALClips(this.variant).then(baked => {
+      if (baked && baked.size) adopt(baked);
+      else void runtimeBake();
+    }).catch(runtimeBake);
   }
 
   update(dt: number): void {

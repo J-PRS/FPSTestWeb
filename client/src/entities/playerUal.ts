@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
 import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, normBone } from './playerClips.js';
+import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, SWAY_BONES } from './playerClipSurgery.js';
 
 const logger = new ChildLogger('PlayerUal');
 
@@ -25,6 +26,12 @@ let ualSource: Promise<UalSource[]> | null = null;
 // name-bound to the skeleton they were baked against, so robot clips
 // can't serve the mannequin's DEF-* bones.
 const bakedByVariant = new Map<string, Map<string, THREE.AnimationClip>>();
+
+/** Headless hook — _tools/animbake passes a disk-backed loader so the
+ *  same pipeline runs offline (default = GLTFLoader over fetch). */
+export interface UalBakeEnv {
+  loadGltf?: (url: string) => Promise<{ scene: THREE.Object3D; animations: THREE.AnimationClip[] }>;
+}
 
 const SPECS: UalSpec[] = [
   // UAL1 rides a DEF-* Rigify rig; UAL2 (slide/ninja-jump) uses UE-style
@@ -107,11 +114,13 @@ function unwindDirYaw(clip: THREE.AnimationClip, model: THREE.Object3D, target: 
   }
 }
 
-function loadSources(): Promise<UalSource[]> {
+function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
   ualSource ??= (async () => {
     const sources: UalSource[] = [];
     for (const spec of SPECS) {
-      const gltf = await new GLTFLoader().loadAsync(spec.url);
+      const gltf = env?.loadGltf
+        ? await env.loadGltf(spec.url)
+        : await new GLTFLoader().loadAsync(spec.url);
       const src = gltf.scene;
       src.updateMatrixWorld(true);
       // No meshes in the trimmed GLBs — the joints arrive as plain
@@ -143,8 +152,8 @@ function loadSources(): Promise<UalSource[]> {
 /** Retargeted UAL clip table for this model's variant — baked once per
  *  variant, name-keyed 'UAL_*'. Resolves to the shared cache on repeat
  *  calls; rejects only if the source GLBs can't load/bake. */
-export async function bakeUALClips(model: THREE.Object3D, variant: string): Promise<Map<string, THREE.AnimationClip>> {
-  const sources = await loadSources();
+export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv): Promise<Map<string, THREE.AnimationClip>> {
+  const sources = await loadSources(env);
   const cached = bakedByVariant.get(variant);
   if (cached) return cached;
 
@@ -175,9 +184,41 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string): Prom
   }
   // Leave the skeleton at its authored rest, not the last baked frame.
   restoreRest();
+
+  // Clip surgery rides inside the bake so offline-baked GLBs (_tools/
+  // animbake) ship byte-identical results — runtime retarget output and
+  // shipped clips must not diverge. Every variant's clips get the hip
+  // XZ strip (entity owns world position); mannequin's layered clips
+  // additionally yield their arm tracks to the aim layer.
+  const roots = computeRootMotionNodes(model);
+  for (const [name, clip] of baked) {
+    stripHipXZ(clip, roots);
+    if (variant === 'mannequin' && isLayeredClip(name)) {
+      clip.tracks = clip.tracks.filter(t =>
+        !AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      dampenSway(clip, SWAY_BONES);
+    }
+  }
   logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
   bakedByVariant.set(variant, baked);
   return baked;
+}
+
+// Offline-baked clip packs the client prefers when present — ships the
+// whole retarget ahead of time so the async bake can't flash a T-pose
+// (and saves ~100-300ms of main-thread resample on load). Missing file
+// resolves null → runtime bake fallback keeps dev rigs working.
+const bakedFileByVariant = new Map<string, Promise<Map<string, THREE.AnimationClip> | null>>();
+
+export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.AnimationClip> | null> {
+  let p = bakedFileByVariant.get(variant);
+  if (!p) {
+    p = new GLTFLoader().loadAsync(`/assets/anims/${variant}.glb`)
+      .then(gltf => gltf.animations.length ? new Map(gltf.animations.map(c => [c.name, c])) : null)
+      .catch(() => null);
+    bakedFileByVariant.set(variant, p);
+  }
+  return p;
 }
 
 /** Bake one source pack's clips onto the target skeleton — names map, the

@@ -15,6 +15,7 @@ server_bun/demos/*.demo
 logs/
 *.jsonl
 client/nul.old
+client/.animbake-tmp/
 
 # Extracted Tribes 2 assets — local playtest only, do not redistribute
 maps/t2/
