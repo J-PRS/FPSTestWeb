@@ -34,6 +34,7 @@ import { FragMessages } from './ui/FragMessages.js';
 import { HealthBarSystem } from './ui/HealthBarSystem.js';
 import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
+import { initLogPanel } from './ui/logPanel.js';
 
 import { effectiveResist } from '../../shared/perks.js';
 import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
@@ -45,6 +46,7 @@ import { TeamBots } from './game/bots.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, type MapSnapshot } from './game/net/world.js';
 import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
+import { weaponDef } from './weapons.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
@@ -478,7 +480,11 @@ function wirePlayerStatusHooks(): void {
     sfx.playerHurt();
   };
 
-  wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
+  wirePlayerHooks({ player, combat, effects, viewModel, speedLines, world, scene, terrain });
+  // Arm the viewmodel to the persisted kit's active slot — resetLifeState
+  // re-arms on every respawn, but the FIRST life would otherwise open on
+  // the default bolt model while the HUD reads the recalled loadout.
+  viewModel?.switchWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
   // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
   player.onSpectate = (on) => {
     if (on) { hud.hide(); hud.setSpectatorHint(true); }
@@ -508,6 +514,7 @@ function wireNetworkLocal(): void {
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   player.onSkillUse = () => networkManager.sendSkillUse();
+  player.onRespawn = () => networkManager.sendRespawn();
   networkManager.localAuthority = {
     envDamage: (amount) => {
       const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));
@@ -518,6 +525,7 @@ function wireNetworkLocal(): void {
       sfx.playerHurt();
       if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
     },
+    respawn: () => killLocal('respawned'),
     heal: (amount) => {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },
@@ -629,31 +637,42 @@ init().then(async () => {
   demoManager?.fetchCoolShotsFromServer();
 
   // Desync debugging (snapshot/hash comparison + window debug functions) —
-  // dev-only or ?debug, dynamically imported so it stays out of the prod bundle
-  if (networkManager && (import.meta.env.DEV || urlParams.debug)) {
-    const { wireStateDebug } = await import('./core/stateDebug.js');
-    wireStateDebug({
-      networkManager,
-      getPlayer: () => player,
-      remotePlayers: world.remotePlayers,
-      projectiles: world.projectiles,
-      getLastSentPos: remotes.getLastSentPos,
-      world,
-      teamBots: () => teamBots,
-      getScene: () => scene,
-      getCamera: () => player.camera,
-      logger,
-    });
-  }
-
-  // Headless/probe hook — the puppeteer scripts in headless-test drive off
-  // this (spawn PlayerModels, read player.pos, aim the camera). DEV or
-  // ?debug only; absent in prod builds.
-  if (import.meta.env.DEV || urlParams.debug) {
+  // dev-only or ?debug, dynamically imported so it stays out of the prod
+  // bundle. Runs at boot when the flag is set, and again if the menu DEBUG
+  // toggle flips on mid-session (fps:set event) — no reload needed.
+  let debugWired = false;
+  const wireDebugTools = async () => {
+    if (debugWired) return;
+    debugWired = true;
+    if (networkManager) {
+      const { wireStateDebug } = await import('./core/stateDebug.js');
+      wireStateDebug({
+        networkManager,
+        getPlayer: () => player,
+        remotePlayers: world.remotePlayers,
+        projectiles: world.projectiles,
+        getLastSentPos: remotes.getLastSentPos,
+        world,
+        teamBots: () => teamBots,
+        getScene: () => scene,
+        getCamera: () => player.camera,
+        logger,
+      });
+    }
+    // Headless/probe hook — the puppeteer scripts in headless-test drive off
+    // this (spawn PlayerModels, read player.pos, aim the camera).
     window.__test = {
       player, scene, entities, world, terrain, viewModel,
       networkManager, demoManager, rendererSetup,
       chatSink: (await import('./game/chat.js')).chatSink,
     };
-  }
+  };
+  if (import.meta.env.DEV || urlParams.debug) await wireDebugTools();
+  // In-game log mirror — subscribes to Logger once so every later line
+  // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
+  initLogPanel();
+  window.addEventListener('fps:set', (e) => {
+    const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
+    if (key === 'fps-debug' && value === 1) void wireDebugTools();
+  });
 });
