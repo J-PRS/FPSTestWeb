@@ -129,8 +129,21 @@ export class PlayerLoadout {
    *  loadout parses raw and can carry a stale locked pick. */
   unshoulderLocked(): void {
     for (let i = 0; i < this.h.loadout.length; i++) {
-      if (this.lockedFor(this.h.appliedClass, this.h.loadout[i])) this.setLoadoutSlot(i, 2);
+      if (this.lockedFor(this.h.appliedClass, this.h.loadout[i])) {
+        this.setLoadoutSlot(i, PlayerLoadout.fallbackWid(this.h.appliedClass, this.h.loadout));
+      }
     }
+  }
+
+  /** Unshoulder target for a class-locked slot: the chaingun (every
+   *  tier shoulders it) unless it's already equipped — then the first
+   *  legal, not-always-carried wid so two slots never hold the same gun. */
+  static fallbackWid(cls: ArmorClass, loadout: readonly number[]): number {
+    if (!loadout.includes(2)) return 2;
+    for (let w = 0; w < SLOT_COUNT; w++) {
+      if (!loadout.includes(w) && !PlayerLoadout.lockedForClass(cls, w)) return w;
+    }
+    return 2;
   }
 
   /** Slot-space tier gate — the menu gate and unshoulder share it. */

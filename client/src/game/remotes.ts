@@ -212,8 +212,18 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
     } else if (m.position.distanceToSquared(marker.wirePos) > 1e-6) {
       m.position.lerp(marker.wirePos, 0.35);
     }
-    hud.updateFlagIndicator(`flag:${team}`,
-      _flagAnchor.set(m.position.x, m.position.y + 3.4, m.position.z), cam, team);
+    _flagAnchor.set(m.position.x, m.position.y + 3.4, m.position.z);
+    hud.updateFlagIndicator(`flag:${team}`, _flagAnchor, cam, team);
+    // The stand's hollow socket marker sits at gem height — flag home
+    // reads as a flag-over-stand pin stack; flag away leaves the empty
+    // socket marking where it belongs. While the flag is home the socket
+    // rides the flag diamond's anchor so the filled diamond nests inside
+    // it — projecting both from home would leave them ~3m apart on screen.
+    if (marker.homeKnown) {
+      const home = deps.world.flagStates[team] === 'home';
+      if (!home) _flagAnchor.set(marker.home.x, marker.home.y + 0.5, marker.home.z);
+      hud.updateFlagIndicator(`stand:${team}`, _flagAnchor, cam, team, 'stand');
+    }
   }
 }
 

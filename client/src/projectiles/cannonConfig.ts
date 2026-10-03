@@ -29,7 +29,9 @@ export const CANNON_CONFIG: ProjectileConfig = {
   vfx: 'concussion',
   damageColor: '#ffbb66',
   // No trail — the joke IS the giant ball. A smoke streak behind a
-  // beach-ball-sized cannonball just clutters the read.
+  // beach-ball-sized cannonball just clutters the read. (ribbonTrail
+  // defaults ON — it has to be opted out, not just zeroed particles.)
+  ribbonTrail: false,
   trailColors: [],
   trailParticlesPerUnit: 0,
   trailLifeMin: 0,

@@ -56,9 +56,10 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   glowScale: 0.7,
   meshRampIn: true,
   // Slow the ramp and start smaller — at 160 m/s a 2-frame ramp left a
-  // near-full-size bolt+glow hanging at the muzzle on spawn.
+  // near-full-size bolt+glow hanging at the muzzle on spawn. 10% start
+  // matches the chaingun slug's ramp.
   meshRampInDuration: 0.1,
-  meshStartScale: 0.25,
+  meshStartScale: 0.1,
   terrainOffset: W.hitMin,
   needsServerTracking: true,
   trailMeshType: 'sphere',

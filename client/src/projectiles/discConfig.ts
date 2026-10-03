@@ -52,7 +52,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   glowColor: 0x00ffff,
   // Additive + alphaMap: the map's filament streaks eat most of the
   // fill, so opacity runs hotter than the sphere needed to read.
-  glowOpacity: 0.45,
+  glowOpacity: 0.9,
   glowScale: 0.8,
   // Vapor-cone collar instead of the proxy bubble — apex at the disc,
   // energy skirt flaring back along the flight line. Base radius still

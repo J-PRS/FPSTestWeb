@@ -4,19 +4,38 @@ import { DISC_RATE } from '../core/config.js';
 import { THROW_TOTAL } from './ViewModel.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { BELT_THROW_TIME, type Player } from './Player.js';
+import { PlayerLoadout } from './playerLoadout.js';
 
 // Trigger + impulse family: weapon/belt fire intent and every
 // pos/vel writer that must sync back into the movement controller.
 
+  /** Primary-fire intent: weapon lowered during a belt-throw, a held
+   *  secondary auto-fires at its own cadence, and class-locked ordnance
+   *  in a stale/banked slot never predicts a shot — the menu greys it
+   *  and the server rejects every claim (same gate, appliedClass). */
+function wantFireWeapon(p: Player, wid: number, auto: boolean): boolean {
+    if (p.throwLockT > 0 || PlayerLoadout.lockedForClass(p.appliedClass, wid)) return false;
+    if (p.armory.secondaryWid !== null) return p.armory.secondaryDrawT <= 0;
+    return auto ? p.input.mouseHeld : (p.input.firePending || (p.input.mouseHeld && !p.input.needsRelease));
+  }
+
+  /** A class-locked pick can't fire — same gate the server enforces. If
+   *  one still sits equipped (stale banked loadout, console edit), the
+   *  first trigger pull silently unshoulders it to the chaingun — every
+   *  class shoulders it — and the pull falls through to the swapped gun. */
+function unshoulderOnPull(p: Player, wid: number): number {
+    if (p.armory.secondaryWid !== null
+        || !PlayerLoadout.lockedForClass(p.appliedClass, wid)) return wid;
+    p.setLoadoutSlot(p.weaponIndex, PlayerLoadout.fallbackWid(p.appliedClass, p.loadout));
+    return p.loadout[p.weaponIndex];
+  }
+
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
 export function fireWeapons(p: Player): void {
-    const wid = p.armory.secondaryWid ?? p.loadout[p.weaponIndex];
+    let wid = p.armory.secondaryWid ?? p.loadout[p.weaponIndex];
+    wid = unshoulderOnPull(p, wid);
     const def = weaponDef(wid);
-    // Weapon is lowered during a belt-throw — no primary fire mid-throw.
-    // A held secondary auto-fires at its own cadence — no click needed.
-    const wantFire = p.throwLockT <= 0 &&
-      (p.armory.secondaryWid !== null ? p.armory.secondaryDrawT <= 0
-        : def.auto ? p.input.mouseHeld : (p.input.firePending || (p.input.mouseHeld && !p.input.needsRelease)));
+    const wantFire = wantFireWeapon(p, wid, def.auto);
     if (!p.input.mouseHeld) p.input.needsRelease = false;
     if (wantFire && p.fireTimer <= 0) {
       p.fireTimer = def.rate;

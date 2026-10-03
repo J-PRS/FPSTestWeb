@@ -46,9 +46,11 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   glowShell: false,
   glowColor: 0xffee88,
   glowOpacity: 0,
-  meshRampIn: false,
-  meshRampInDuration: 0,
-  meshStartScale: 1.0,
+  meshRampIn: true,
+  // Same spawn trick as plasma — at 250 m/s a full-size bolt at the
+  // muzzle covers the crosshair on frame one; grow 10% → full over 0.1s.
+  meshRampInDuration: 0.1,
+  meshStartScale: 0.1,
   terrainOffset: 0.05,
   needsServerTracking: true,
   noExplosion: true,

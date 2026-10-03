@@ -44,6 +44,7 @@ import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
+import { MODES } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
@@ -334,6 +335,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
 // locally. Shared by bot frags and creature/environment damage.
 function killLocal(source: string): void {
   if (player.isDead) return;
+  // Any death is a flag event — carried flags drop; in rabbit the
+  // first corpse is what spawns the flag at all. Idempotent for the
+  // bot-frag path, which already ran localDied() before the banner.
+  teamBots?.localDied();
   player.isDead = true;
   player.health = 0;
   hud.hide();
@@ -350,12 +355,13 @@ function killLocal(source: string): void {
   }, 3000);
 }
 
-// ?mode=nuggets|ctf|dm offline-vs-bots roster — no server, so the TeamBots
+// ?mode=<mode> offline-vs-bots roster — no server, so the TeamBots
 // sim drives both teams and world.localTeam marks the player's side
 // (normally roomInfo.team, which never arrives offline).
 function setupOfflineMode(mode: string): void {
-  if (mode !== 'nuggets' && mode !== 'ctf' && mode !== 'dm') return;
-  if (mode !== 'dm') world.localTeam = 'alpha';
+  const spec = MODES[mode as keyof typeof MODES];
+  if (!spec) return;
+  if (!spec.ffa) world.localTeam = 'alpha';
   teamBots = new TeamBots(
     {
       lazyPlayer: () => player,
@@ -409,8 +415,8 @@ function setupOfflineMode(mode: string): void {
       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
-    mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
-    mode,
+    spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+    mode as import('../../shared/teams.js').ModeId,
   );
 }
 

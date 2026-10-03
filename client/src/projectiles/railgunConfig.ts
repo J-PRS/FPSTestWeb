@@ -52,9 +52,9 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   glowColor: 0x66ccff,
   glowOpacity: 0.6,
   glowScale: 1.2,
-  meshRampIn: false,
-  meshRampInDuration: 0,
-  meshStartScale: 1,
+  meshRampIn: true,        // classic spawn pop: 10% → full over 0.1s
+  meshRampInDuration: 0.1,
+  meshStartScale: 0.1,
   terrainOffset: WEAPONS[9].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[9].maxLifetime,

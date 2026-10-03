@@ -11,6 +11,7 @@
     "check": "tsc --noEmit -p tsconfig.json && oxlint src && vitest run"
   },
   "dependencies": {
+    "manifold-3d": "^3.5.4",
     "postprocessing": "^6.39.5",
     "sam-js": "^0.3.1",
     "stats.js": "^0.17.0",
