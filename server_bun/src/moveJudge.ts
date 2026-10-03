@@ -168,15 +168,17 @@ export class MoveJudge {
     // teleport that reseated the shadow. Judging it against the new anchor
     // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
     if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return null;
-    // Journal coverage gate: a report stamped seq N was produced by
-    // inputs up to N — if inputMove N is still in flight (jittered
-    // reorder), the shadow has NOT seen the edge that produced this
-    // position (a jet toggle inside the window reads as a phantom
-    // ~10-30m climb and the probe can't reproduce it). Judging now is
-    // premature by construction: the next report lands in ~50ms with
-    // the journal caught up, so skip rather than probe with stale
-    // input — a cheat gets judged on the very next report anyway.
-    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) return null;
+    // Journal coverage gate: a report stamped seq N was produced by the
+    // input whose seq is N. When that inputMove has arrived but is still
+    // parked in the pending slot (drains at the next tick's phase 0), the
+    // journal lacks the edge that produced this position — a jet toggle
+    // inside the window reads as a phantom ~10-30m climb, so defer one
+    // tick; coverage is guaranteed. A report stamped ahead of everything
+    // RECEIVED is different: its input is lost (inputSync recovers it)
+    // or forged to dodge the journal — judging it raw is the only
+    // authority-preserving answer.
+    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq
+      && reportInputSeq <= (sh.pending?.seq ?? 0)) return null;
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
     let dist = Math.hypot(dx0, dy0, dz0);
     if (reportInputSeq !== undefined) {

@@ -292,10 +292,11 @@ export class RoomMoveSim {
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
-    // reportInputSeq = the client's input counter at snapshot time. A gap
-    // of 1-2 for a report or two is queue-drain latency; ≥3 consecutive
-    // reports ahead means events were lost, not queued.
-    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
+    // reportInputSeq = the client's input counter at snapshot time. Only
+    // a report stamped ahead of everything RECEIVED counts as a gap — a
+    // seq parked in pending is covered, just not drained yet. ≥3
+    // consecutive uncovered reports means events were lost, not queued.
+    if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) {
       sh.gapStreak++;
       const now = wallNow();
       if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
