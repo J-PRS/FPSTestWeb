@@ -17,8 +17,11 @@ const _holoMat = new THREE.MeshBasicMaterial({
   color: 0x7df9ff, transparent: true, opacity: 0.85,
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
-// Sky pillar — tall thin additive shaft, the across-the-map read.
-const _geoPillar = new THREE.CylinderGeometry(0.06, 0.14, 40, 6, 1, true);
+// Sky pillar — unit-height additive shaft anchored at the emitter base
+// (translated so y=0 sits at the origin); update() stretches it to the
+// lob apex so the beam literally reaches the aim arc.
+const _geoPillar = new THREE.CylinderGeometry(0.18, 0.6, 1, 6, 1, true);
+_geoPillar.translate(0, 0.5, 0);
 const _UP = new THREE.Vector3(0, 1, 0);
 const _pillarMat = new THREE.MeshBasicMaterial({
   color: 0x44ddee, transparent: true, opacity: 0.12,
@@ -39,10 +42,10 @@ export class DeployBeacon {
   private holo: THREE.Mesh;
   private holoGlow: THREE.Sprite;
   private pillar: THREE.Mesh;
-  // The shaft doubles as an aim pointer: the owner's beacon tilts it along
-  // the solved lob direction so it visibly reaches toward the HUD reticle.
+  // The shaft doubles as an aim pointer: the owner's beacon stretches it
+  // to the lob apex so it visibly reaches toward the HUD reticle.
   private readonly aimDir = new THREE.Vector3(0, 1, 0);
-  private readonly _pillarMid = new THREE.Vector3();
+  private aimLen = 40;
   private animT = Math.random() * 10;
   private unfoldT = 0;
   private scene: THREE.Scene;
@@ -75,7 +78,7 @@ export class DeployBeacon {
     // The shaft is world-mounted (not in the slope-tilted group) so the
     // aim-pointer orientation isn't skewed by banked ground.
     this.pillar = new THREE.Mesh(_geoPillar, _pillarMat);
-    this.pillar.position.copy(this.pos).y += 20;
+    this.pillar.position.copy(this.pos);
     // Nothing glows until touchdown — a lit shaft streaking through the
     // air reads as a trajectory bug, not a thrown device.
     this.pillar.visible = false;
@@ -88,10 +91,12 @@ export class DeployBeacon {
     scene.add(this.group);
   }
 
-  /** Point the sky shaft along a direction (unit vector). The owner's
-   *  beacon tilts it along the solved lob arc; defaults to straight up. */
-  setAimDir(dir: THREE.Vector3): void {
+  /** Stretch the sky shaft along a direction for a given length — the
+   *  owner's beacon reaches it to the solved lob apex; defaults are a
+   *  40m straight-up column. */
+  setAim(dir: THREE.Vector3, len: number): void {
     this.aimDir.copy(dir).normalize();
+    this.aimLen = len;
   }
 
   update(dt: number): void {
@@ -99,15 +104,15 @@ export class DeployBeacon {
     this.animT += dt;
     // The emitter's pos can move after construction (pod flight → touchdown);
     // the pillar tracks it here rather than at plant sites.
-    this._pillarMid.copy(this.pos).addScaledVector(this.aimDir, 20);
-    this.pillar.position.copy(this._pillarMid);
+    this.pillar.position.copy(this.pos);
     this.pillar.quaternion.setFromUnitVectors(_UP, this.aimDir);
+    this.pillar.scale.set(1, this.aimLen, 1);
     this.holo.rotation.y += dt * 3.0;
     this.holo.position.y = 1.0 + Math.sin(this.animT * 2.2) * 0.06;
     const pulse = 0.7 + Math.sin(this.animT * 4.0) * 0.3;
     this.holoGlow.material.opacity = 0.4 + pulse * 0.4;
     this.holoGlow.scale.setScalar(0.6 + pulse * 0.4);
-    _pillarMat.opacity = 0.08 + pulse * 0.08;
+    _pillarMat.opacity = 0.18 + pulse * 0.14;
   }
 
   tickUnfold(dt: number): void {

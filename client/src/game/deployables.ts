@@ -809,7 +809,7 @@ export class Deployables {
     if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, null, cam, true); return; }
     if (!cfg.gravity) {
       // Flat gun — the reticle IS the beacon; still worth marking.
-      beacon.beacon?.setAimDir(_UP);
+      beacon.beacon?.setAim(_UP, 40);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
       hud.updateBeaconAim(this._beaconAim, null, cam, true);
       return;
@@ -819,7 +819,7 @@ export class Deployables {
     if (disc < 0) {
       // Out of this gun's arc — flag it so the reticle reads "can't reach"
       // instead of lying about a lob that falls short.
-      beacon.beacon?.setAimDir(_UP);
+      beacon.beacon?.setAim(_UP, 40);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
       hud.updateBeaconAim(this._beaconAim, null, cam, false);
       return;
@@ -839,10 +839,17 @@ export class Deployables {
       o.x + hx * Math.cos(thetaLob) * dist,
       o.y + Math.sin(thetaLob) * dist,
       o.z + hz * Math.cos(thetaLob) * dist);
-    // The sky shaft leans along the lob — it reaches from the emitter
-    // toward the reticle so the pointer reads "aim along this".
-    beacon.beacon?.setAimDir(this._beaconDir.set(
-      hx * Math.cos(thetaLob), Math.sin(thetaLob), hz * Math.cos(thetaLob)));
+    // The sky shaft reaches from the emitter to the lob apex — the
+    // physical top of the arc the reticle marks.
+    const sinT = Math.sin(thetaLob), cosT = Math.cos(thetaLob);
+    const apexDist = v * v * sinT * cosT / g;
+    const apexH = (v * sinT) * (v * sinT) / (2 * g);
+    this._beaconDir.set(
+      o.x + hx * apexDist - t.x,
+      o.y + apexH - t.y,
+      o.z + hz * apexDist - t.z);
+    const beamLen = this._beaconDir.length();
+    beacon.beacon?.setAim(this._beaconDir, Math.max(beamLen, 4));
     hud.updateBeaconAim(this._beaconAim, this._beaconLob, cam, true);
   }
 
