@@ -333,12 +333,22 @@ const sstep = (a: number, b: number, v: number) => {
 };
 
 let _blankWearTex: THREE.Texture | null = null;
+let _whiteTex: THREE.Texture | null = null;
 function blankWearTex(): THREE.Texture {
   if (!_blankWearTex) {
     _blankWearTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
     _blankWearTex.needsUpdate = true;
   }
   return _blankWearTex;
+}
+// Grime masks multiply the albedo — the no-file default must be WHITE
+// (no dirt), not the wear map's black.
+function whiteTex(): THREE.Texture {
+  if (!_whiteTex) {
+    _whiteTex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    _whiteTex.needsUpdate = true;
+  }
+  return _whiteTex;
 }
 
 /** Rasterize the flagged edge segments into a per-triangle UV atlas and
@@ -676,6 +686,7 @@ export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBo
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     for (const mat of mats) if (mat && mat.type !== 'MeshBasicMaterial') {
       mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
+      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
       enhanceWeaponMaterial(mat);
     }
   });
@@ -716,6 +727,7 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
     if (mat) {
       mat.vertexColors = true;
       mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
+      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
       mat.needsUpdate = true;
       enhanceWeaponMaterial(mat);
     }
@@ -735,6 +747,7 @@ function enhanceWeaponMaterial(mat: THREE.Material): void {
   mat.onBeforeCompile = (sh) => {
     if (WEARVIZ) sh.defines = { ...(sh.defines ?? {}), WEARVIZ: 1 };
     sh.uniforms.uWearMap = { value: (mat.userData.__wearTex as THREE.Texture) ?? blankWearTex() };
+    sh.uniforms.uGrimeMap = { value: (mat.userData.__grimeTex as THREE.Texture) ?? whiteTex() };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec2 vUvW;
@@ -754,6 +767,7 @@ vUvW = uv;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D uWearMap;
+uniform sampler2D uGrimeMap;
 varying vec2 vUvW;
 varying vec3 vWpos;
 varying float vWear;
@@ -792,11 +806,11 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   // read as chipped paint, but the 0.6 floor keeps smooth-normal
   // divergence on curved walls (≈0.5 baked) from painting whole faces.
   // World-space width: bary weight × the corner's baked altitude is the
-  // distance-to-edge in METERS — the line is a fixed ~5mm wear band that
+  // distance-to-edge in METERS — the line is a fixed ~9mm wear band that
   // scales with zoom like the metal, not a constant-pixel overlay.
   vec3 ew = (vBary + (1.0 - vAedge) * 4.0) * vAlt;
   float eDist = min(ew.x, min(ew.y, ew.z));
-  float eline = 1.0 - smoothstep(0.0015, 0.005, eDist);
+  float eline = 1.0 - smoothstep(0.002, 0.009, eDist);
   float edge = max(eline, max(texture2D(uWearMap, vUvW).r * 0.5, smoothstep(0.6, 0.95, vWear) * 0.4));
 
   // Patchy mask so wear clumps in zones like real abrasion, gated to
@@ -822,6 +836,12 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
     float scratch = wnoise(vWpos * 700.0) * 0.12;
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.84), wear * 0.95);
     diffuseColor.rgb *= 1.0 - wear * scratch;
+
+    // Baked grime map (the bakery's full-material branch): a mostly-white
+    // mask whose dark response is broad dirt — multiplies the albedo where
+    // a weapon has the file, blank everywhere else.
+    float grimeB = texture2D(uGrimeMap, vUvW).r;
+    diffuseColor.rgb *= mix(1.0, grimeB, 0.45);
 
     // Concave grime — the signed-curvature complement of edge wear:
     // baked per-vertex on valley edges, darkened + dirtied with the same

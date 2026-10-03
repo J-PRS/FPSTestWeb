@@ -32,6 +32,10 @@ const GRIME_WEAPONS = new Set<number>([WeaponType.Chaingun]);
 // Per-weapon wear-line emphasis — 0 keeps the shared look; >0 pushes
 // the white edge wear toward full brightness on this weapon only.
 const WEAR_BOOST = new Map<number, number>([[WeaponType.Chaingun, 0.7]]);
+// Weapons whose baked GLB is the DEFAULT look — no ?bake flag needed.
+// The procedural builder stays as the fallback when the file is missing
+// and under ?export (the dump pipeline must serialize procedural geo).
+const ALWAYS_BAKE = new Set<number>([WeaponType.BoltLauncher]);
 
 export class VmBaked {
   constructor(private h: BakedHost) {}
@@ -49,16 +53,23 @@ export class VmBaked {
       return;
     }
     // Procedural is the default look — baked GLBs only load behind ?bake
-    // (gunlab A/B + pipeline verification). The nobake flag still reads
-    // as off for anyone with it bookmarked.
-    if (!urlParams.has('bake') || urlParams.has('nobake')) {
-      for (const [wt, g] of this.h.weapons) bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-      return;
-    }
+    // (gunlab A/B + pipeline verification) or for ALWAYS_BAKE weapons
+    // whose GLB IS the shipping model. The nobake flag still reads as
+    // off for anyone with it bookmarked.
+    const bakeAll = urlParams.has('bake') && !urlParams.has('nobake');
     const loader = new GLTFLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
     for (const [wt, g] of this.h.weapons) {
+      if (!bakeAll && !ALWAYS_BAKE.has(wt)) {
+        bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+        continue;
+      }
+      // Forced bakes: hide the procedural placeholder NOW so the async
+      // GLB fetch doesn't flash the old model for a frame. Restored on
+      // failure below.
+      const forced = !bakeAll;
+      if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false; });
       if (done.has(g)) continue;
       done.add(g);
       try {
@@ -70,9 +81,14 @@ export class VmBaked {
         // Vite's SPA fallback can 200 a HEAD for a missing file — only a
         // non-HTML body is a real bake.
         const ct = probe.headers.get('content-type') ?? '';
-        if (!probe.ok || ct.includes('html')) { bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) }); continue; }
+        if (!probe.ok || ct.includes('html')) {
+          if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });
+          bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+          continue;
+        }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
+        if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
@@ -89,15 +105,22 @@ export class VmBaked {
    *  cloak is active. Throws on missing bakes — the caller treats 404 as
    *  "procedural stays", silently. */
   private async swapBaked(wt: number, g: THREE.Group, loader: GLTFLoader, texLoader: THREE.TextureLoader): Promise<void> {
+    // AO map is optional — a GLB whose bake predates its current mesh
+    // wears the wrong unwrap, and a missing file shouldn't kill the swap.
+    const aoProbe = await fetch(`/weapons/w${wt}_ao.png`, { method: 'HEAD' });
+    const aoOk = aoProbe.ok && !(aoProbe.headers.get('content-type') ?? '').includes('html');
     const [gltf, tex] = await Promise.all([
       loader.loadAsync(`/weapons/w${wt}_baked.glb`),
-      texLoader.loadAsync(`/weapons/w${wt}_ao.png?v=${Date.now()}`),
+      aoOk ? texLoader.loadAsync(`/weapons/w${wt}_ao.png?v=${Date.now()}`) : Promise.resolve(null),
     ]);
-    tex.flipY = false;
-    // Cycles EMIT bakes are stored linear; tagging sRGB would decode twice
-    // and render the albedo ~2 stops dark. Keep it linear.
-    tex.colorSpace = THREE.LinearSRGBColorSpace;
-    const bakedMat = new THREE.MeshLambertMaterial({ map: tex });
+    if (tex) {
+      tex.flipY = false;
+      // Cycles EMIT bakes are stored linear; tagging sRGB would decode twice
+      // and render the albedo ~2 stops dark. Keep it linear.
+      tex.colorSpace = THREE.LinearSRGBColorSpace;
+    }
+    const bakedMat = new THREE.MeshLambertMaterial({ map: tex ?? undefined });
+    if (!tex) bakedMat.color.set(0x3a3632); // gunmetal fallback until an ao bake exists
     if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
     // static geometry — a merged bake folds it into the body and the gun
@@ -107,9 +130,13 @@ export class VmBaked {
       ? await this.adoptChainSpin(gltf.scene, wt, texLoader) : null;
     if (wt === WeaponType.Chaingun && !spin) return;
     const swap = new Set<THREE.Object3D>();
+    // ALWAYS_BAKE bakes carry their own bore/glow geometry — the usual
+    // "keep Basic parts procedural" rule would leave the old mkBore disc
+    // floating at its authored spot.
+    const dropAll = ALWAYS_BAKE.has(wt);
     g.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') swap.add(o);
+      if (m.isMesh && (dropAll || (m.material as THREE.Material).type !== 'MeshBasicMaterial')) swap.add(o);
     });
     for (const o of swap) { o.parent?.remove(o); }
     gltf.scene.traverse((o) => {
@@ -122,18 +149,22 @@ export class VmBaked {
     // The blend bakes a real edge-wear mask on this same unwrap — prefer
     // it over the runtime atlas. Missing file = atlas fallback, silent.
     const edgeTex = await this.loadEdgeTex(wt, texLoader);
-    if (edgeTex) {
+    const grimeTex = await this.loadWeaponTex(wt, 'grime', texLoader);
+    if (edgeTex || grimeTex) {
       gltf.scene.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
         m.geometry.userData.__keepUv = true;
-        m.geometry.userData.__wearTex = edgeTex;
+        if (edgeTex) m.geometry.userData.__wearTex = edgeTex;
+        if (grimeTex) m.geometry.userData.__grimeTex = grimeTex;
       });
     }
-    // The swap path skips bakeVertexAO entirely (AO lives in the ao.png
-    // map) — curvature still needs baking or the wear shader has no edge
-    // signal and the gun reads flat.
-    bakeWearOnly(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+    // With an ao.png the AO lives in the texture — bake only curvature
+    // for the wear shader. Without one (new GLBs before their bake
+    // passes), run the FULL vertex bake so the mesh shades exactly like
+    // the procedural weapons — same AO, same shader base.
+    if (tex) bakeWearOnly(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+    else bakeVertexAO(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
     if (spin) this.seatChainPivot(spin.node, g);
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.
@@ -161,11 +192,17 @@ export class VmBaked {
    *  the same unwrap as _ao.png). null when absent — caller falls back
    *  to the runtime atlas. */
   private async loadEdgeTex(wt: number, texLoader: THREE.TextureLoader): Promise<THREE.Texture | null> {
+    return this.loadWeaponTex(wt, 'edge', texLoader);
+  }
+
+  /** Optional per-weapon mask bake (edge wear, broad grime) exported on
+   *  the same unwrap as _ao.png. null when absent — caller falls back. */
+  private async loadWeaponTex(wt: number, suffix: string, texLoader: THREE.TextureLoader): Promise<THREE.Texture | null> {
     for (const ext of ['png', 'jpg']) {
       try {
-        const probe = await fetch(`/weapons/w${wt}_edge.${ext}`, { method: 'HEAD' });
+        const probe = await fetch(`/weapons/w${wt}_${suffix}.${ext}`, { method: 'HEAD' });
         if (!probe.ok || (probe.headers.get('content-type') ?? '').includes('html')) continue;
-        const t = await texLoader.loadAsync(`/weapons/w${wt}_edge.${ext}?v=${Date.now()}`);
+        const t = await texLoader.loadAsync(`/weapons/w${wt}_${suffix}.${ext}?v=${Date.now()}`);
         t.flipY = false;
         t.colorSpace = THREE.LinearSRGBColorSpace;
         return t;
