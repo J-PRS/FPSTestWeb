@@ -134,6 +134,43 @@
 }
 #ent-counts .dim { color: #777; }
 #ent-counts .hot { color: #fc8; font-weight: bold; }
+
+/* In-game log mirror — bottom-right, above the debug stack (perfHud grows
+ * upward from --z-br-4, so the panel anchors past it and caps its height
+ * to stay under the killfeed's floor on short windows). Shows with the
+ * backquote debug view, the DEBUG menu toggle, or an Alt+Q peek. */
+#log-panel {
+  display: none;
+  position: fixed; right: 24px; bottom: calc(var(--z-br-4) + 16px);
+  width: min(520px, 42vw); max-height: min(240px, 32vh);
+  flex-direction: column;
+  background: rgba(8,11,16,0.88); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px; z-index: 40; overflow: hidden;
+  font-family: 'Courier New', monospace; text-shadow: none;
+}
+#log-panel.show { display: flex; }
+#log-panel .lp-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 8px; font-size: 0.6rem; letter-spacing: 0.2em;
+  color: rgba(140,170,195,0.7); border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex: none;
+}
+#log-panel .lp-close {
+  background: none; border: none; color: rgba(140,170,195,0.7);
+  font-size: 0.9rem; cursor: pointer; padding: 0 2px; line-height: 1;
+}
+#log-panel .lp-close:hover { color: #fff; }
+#log-panel .lp-body {
+  overflow-y: auto; padding: 4px 8px 6px;
+  font-size: 10.5px; line-height: 1.45;
+  /* pre-wrap so long forensic lines fold instead of scrolling sideways */
+  white-space: pre-wrap; word-break: break-word;
+}
+#log-panel .lp-line { color: #b8c4d0; }
+#log-panel .lp-line.inf { color: #9fd0a8; }
+#log-panel .lp-line.dbg { color: #77828e; }
+#log-panel .lp-line.wrn { color: #fc8; }
+#log-panel .lp-line.err { color: #f77; }
 #hud-timer {
   /* Top-right stack under FPS — top-center belongs to the team score. */
   position: absolute; top: var(--z-tr-3); right: 20px;
@@ -342,6 +379,11 @@
    not a false promise. */
 .beacon-aim.noarc::before { border-color: #ff6b6b; filter: none; }
 .beacon-aim.noarc::after { background: #ff6b6b; }
+/* Edge-clamped (arc apex off-screen): shrink to a plain rim marker — the
+   direction is the information, not the diamond read. */
+.beacon-aim.edge { width: 12px; height: 12px; }
+.beacon-aim.edge::before { clip-path: none; border-radius: 50%; border-color: #7df9ff; background: transparent; }
+.beacon-aim.edge::after { content: none; }
 .beacon-aim.hidden { opacity: 0; }
 .sb-open .beacon-aim { opacity: 0; }
 /* A flag offscreen stays a filled diamond — losing the flag's edge marker

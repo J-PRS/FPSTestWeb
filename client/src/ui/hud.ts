@@ -356,14 +356,29 @@ export class HUD {
     }
     this.beaconAimEl.classList.toggle('noarc', !reachable);
     const v = this._beaconProj.copy(point).project(camera);
-    // A point behind the camera projects inverted — hide rather than lie.
-    if (v.z > 1 || Math.abs(v.x) > 1.3 || Math.abs(v.y) > 1.3) {
+    if (v.z > 1) { // behind the camera — no honest on-screen position
       this.beaconAimEl.classList.add('hidden');
       return;
     }
     this.beaconAimEl.classList.remove('hidden');
-    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    let x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    let y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    // Long lobs aim nearly overhead — the aim point leaves the frustum but
+    // the reticle must survive, so off-screen positions clamp to the edge
+    // pointing at the arc (same read as off-screen player indicators).
+    const m = 14;
+    const onScreen = x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
+    if (!onScreen) {
+      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      const ang = Math.atan2(y - cy, x - cx);
+      const hw = cx - m, hh = cy - m;
+      const r = Math.min(hw / Math.abs(Math.cos(ang)), hh / Math.abs(Math.sin(ang)));
+      x = cx + Math.cos(ang) * r;
+      y = cy + Math.sin(ang) * r;
+      this.beaconAimEl.classList.add('edge');
+    } else {
+      this.beaconAimEl.classList.remove('edge');
+    }
     this.beaconAimEl.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 

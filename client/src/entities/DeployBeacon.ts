@@ -81,6 +81,9 @@ export class DeployBeacon {
   update(dt: number): void {
     if (this.dead) return;
     this.animT += dt;
+    // The emitter's pos can move after construction (pod flight → touchdown);
+    // the pillar tracks it here rather than at plant sites.
+    this.pillar.position.set(this.pos.x, this.pos.y + 20, this.pos.z);
     this.holo.rotation.y += dt * 3.0;
     this.holo.position.y = 1.0 + Math.sin(this.animT * 2.2) * 0.06;
     const pulse = 0.7 + Math.sin(this.animT * 4.0) * 0.3;
