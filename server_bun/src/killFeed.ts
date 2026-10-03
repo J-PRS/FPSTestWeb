@@ -75,7 +75,10 @@ export class KillFeed {
       if (revenge) this.say(shooterId, 'revenge', targetId);
       else if (weapon === WeaponType.Melee) this.say(shooterId, 'fist', targetId);
       else if (ended >= 3) this.say(shooterId, 'streakend', targetId);
-      else this.botSay(shooterId, killTaunt(shooterId, targetId));
+      else {
+        const t = killTaunt(shooterId, targetId);
+        this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
+      }
     }
   }
 
@@ -87,9 +90,12 @@ export class KillFeed {
     this.deathStreak.set(targetId, streak);
     if (this.deathStreak.size > 256) this.deathStreak.clear();
     if (streak >= 3) this.say(targetId, 'tilt', shooterId);
-    else this.botSay(targetId, shooterId === 'environment'
-      ? envDeathTaunt(targetId)
-      : deathTaunt(targetId, shooterId));
+    else {
+      const t = shooterId === 'environment'
+        ? envDeathTaunt(targetId)
+        : deathTaunt(targetId, shooterId);
+      this.botSay(targetId, t?.text ?? null, true, t?.vgs);
+    }
   }
 
   /** Match notices for a scored frag: first blood once, the spree tier
@@ -102,7 +108,10 @@ export class KillFeed {
     const tier = SPREE_TIERS.find(([n]) => n === streak);
     if (tier) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
-      if (shooterId.startsWith('BOT-')) this.botSay(shooterId, spreeTaunt(shooterId));
+      if (shooterId.startsWith('BOT-')) {
+        const t = spreeTaunt(shooterId);
+        this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
+      }
     } else if (streak > 12 && streak % 4 === 0) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} is godlike (${streak})` });
     }

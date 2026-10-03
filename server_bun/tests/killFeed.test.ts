@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import { KillFeed } from '../src/killFeed.ts';
 import { botRng } from '../../shared/botRand.ts';
-import { resetTauntCooldowns } from '../../shared/botTaunts.ts';
+import { resetTauntCooldowns, setTauntClock } from '../../shared/botTaunts.ts';
 import type { PlayerManager } from '../src/PlayerManager.ts';
 import type { PlayerState, ServerMessage } from '../src/types.ts';
 
@@ -21,6 +21,10 @@ const rig = (opts: { roster?: PlayerState[]; killTotal?: number; delay?: number 
 };
 
 const notices = (sent: ServerMessage[]) => sent.filter((m) => m.type === 'matchNotice');
+
+// sharedNow's unseeded default is epoch-0 — without a clock the 20s
+// cooldown reads as permanent and every taunt stays silent.
+setTauntClock(() => 1_700_000_000_000);
 
 afterEach(() => { botRng(Math.random); resetTauntCooldowns(); });
 

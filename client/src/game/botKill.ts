@@ -60,7 +60,8 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     b.localDied();
     noteKill(attackerId, 'local', opts.weapon ?? (opts.melee ? WeaponType.Melee : undefined));
     b.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true);
-    botSay(attackerId, killTaunt(attackerId, 'YOU'));
+    const kt = killTaunt(attackerId, 'YOU');
+    botSay(attackerId, kt?.text ?? null, kt?.vgs);
     b.hooks.localPlayerKilled(attackerId.replace('bot:', ''));
   }
 
@@ -120,8 +121,12 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
     noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
     b.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
-    if (killerId !== 'local') botSay(killerId, killTaunt(killerId, kn));
-    botSay(bot.playerId, deathTaunt(bot.playerId, kn));
+    if (killerId !== 'local') {
+      const kt = killTaunt(killerId, kn);
+      botSay(killerId, kt?.text ?? null, kt?.vgs);
+    }
+    const dt = deathTaunt(bot.playerId, kn);
+    botSay(bot.playerId, dt?.text ?? null, dt?.vgs);
     if (killerId === 'local') {
       // Same center headline the wire path (onPlayerKill) gives connected
       // frags — offline kills were feed-row-only and read as no credit.

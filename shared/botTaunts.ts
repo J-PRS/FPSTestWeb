@@ -448,6 +448,34 @@ export function chatter(kind: ChatterKind, botId: string, other?: string): { tex
   });
 }
 
+/** Chords the personal taunts (kill/death/spree) speak ~45% of the
+ *  time — the loudest moments were the ones missing VGS entirely, which
+ *  is why bot chat read as Quake, not Tribes. All VG* (global scope);
+ *  lines are each chord's canonical text. */
+const KILL_VGS: [vgs: string, text: string][] = [
+  ['VGTB', 'Is that the best you can do?'],
+  ['VGTA', "Awww, that's too bad!"],
+  ['VGTT', 'THAT was graceful!'],
+  ['VGCN', 'Nice move!'],
+];
+const DEATH_VGS: [vgs: string, text: string][] = [
+  ['VGS', 'SHAZBOT!'],
+  ['VGTW', 'When will you learn?'],
+  ['VGCN', 'Nice move!'],
+  ['VGTB', 'Is that the best you can do?'],
+];
+const ENV_DEATH_VGS: [vgs: string, text: string][] = [
+  ['VGO', 'Ooops!'],
+  ['VGS', 'SHAZBOT!'],
+  ['VWOO', 'Woohoo!'],
+];
+const SPREE_VGS: [vgs: string, text: string][] = [
+  ['VGTG', 'I am the greatest!'],
+  ['VGCA', 'Awesome!'],
+  ['VWOO', 'Woohoo!'],
+];
+const TAUNT_VGS_CHANCE = 0.45;
+
 const SPEAK_CHANCE = 0.55;
 const COOLDOWN_MS = 20_000;
 
@@ -465,25 +493,38 @@ const pickLine = (pool: string[]): string => {
   return line;
 };
 
+export interface TauntLine { text: string; vgs?: string }
+
+/** Roll text-vs-chord for a personal taunt — returns the feed-ready
+ *  {text, vgs} pair. Chord lines are canon text; the feed prints the
+ *  [VGS] prefix itself. */
+function tauntPick(pool: string[], chords: [vgs: string, text: string][], fill: (line: string) => string): TauntLine {
+  if (botRand() < TAUNT_VGS_CHANCE) {
+    const [chord, text] = pick(chords);
+    return { text, vgs: chord };
+  }
+  return { text: fill(pickLine(pool)) };
+}
+
 /** One taunt line for a kill where `botId` fragged `other`, or null when
  *  the bot stays quiet (cooldown or dice). */
-export function killTaunt(botId: string, victim: string): string | null {
-  return maybe(botId, () => pickLine(KILL_LINES).replace('{v}', victim));
+export function killTaunt(botId: string, victim: string): TauntLine | null {
+  return maybe(botId, () => tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
 }
 
 /** One taunt line when `botId` was fragged by `other`. */
-export function deathTaunt(botId: string, killer: string): string | null {
-  return maybe(botId, () => pickLine(DEATH_LINES).replace('{k}', killer));
+export function deathTaunt(botId: string, killer: string): TauntLine | null {
+  return maybe(botId, () => tauntPick(DEATH_LINES, DEATH_VGS, (l) => l.replace('{k}', killer)));
 }
 
 /** One taunt line when `botId` died to nobody (fall, own blast, lava). */
-export function envDeathTaunt(botId: string): string | null {
-  return maybe(botId, () => pickLine(ENV_DEATH_LINES));
+export function envDeathTaunt(botId: string): TauntLine | null {
+  return maybe(botId, () => tauntPick(ENV_DEATH_LINES, ENV_DEATH_VGS, (l) => l));
 }
 
 /** One boast line when `botId` hits a spree tier. */
-export function spreeTaunt(botId: string): string | null {
-  return maybe(botId, () => pickLine(SPREE_LINES));
+export function spreeTaunt(botId: string): TauntLine | null {
+  return maybe(botId, () => tauntPick(SPREE_LINES, SPREE_VGS, (l) => l));
 }
 
 /** A human chat line → the chatter kind it might trigger, or null.
@@ -493,6 +534,9 @@ export function chatKindFor(text: string): ChatterKind | null {
   const t = text.toLowerCase();
   if (/^gg\b/.test(t) || /\bgg(\s|$)/.test(t)) return 'gg';
   if (/\bez\b/.test(t)) return 'salty';
+  // The canonical tribes greeting/curse — answering a shazbot is what
+  // makes a lobby feel inhabited. 'reply' keeps it low-key.
+  if (/shazbot/.test(t)) return 'reply';
   return null;
 }
 
