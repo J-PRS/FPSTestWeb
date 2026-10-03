@@ -36,8 +36,11 @@ describe('RoomPickups', () => {
     const p = addAt(room, 'p1', undefined, 10, 0);
     p.protectedUntil = 0;
     p.armor = 100;
+    const hp0 = p.health;
     const r = room.players.applyDamage('p1', 100);
-    expect(p.health).toBe(80);
+    // Armor soaks 80 (armorAbsorb) → only 20 leaks to health, whatever the
+    // class base is (medium's +25 made the literal 80 stale).
+    expect(p.health).toBe(hp0 - 20);
     expect(p.armor).toBe(20);
     expect(r.newArmor).toBe(20);
   });

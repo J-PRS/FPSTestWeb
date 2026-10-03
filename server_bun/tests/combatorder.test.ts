@@ -155,7 +155,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
   // validate against eye→tip reach and wall occlusion instead.
   it('a beam tip within range applies splash damage', () => {
     const { players, combat, sentTo } = harness();
-    const p1 = players.addPlayer('p1');
+    const p1 = players.addPlayer('p1', undefined, 'none', 'light');
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10.5 }; // inside the 1.6m shaft of a tip at -10
@@ -173,7 +173,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
 
   it('a tip beyond the beam range rejects', () => {
     const { players, combat, sentTo } = harness();
-    const p1 = players.addPlayer('p1');
+    const p1 = players.addPlayer('p1', undefined, 'none', 'light');
     p1.position = { x: 0, y: 10, z: 0 };
 
     combat.handleAOEShot('p1', {
@@ -187,7 +187,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
 
   it('the excluded victim still eats the tick — the beam has no paired shot claim', () => {
     const { players, combat, sentTo } = harness();
-    const p1 = players.addPlayer('p1');
+    const p1 = players.addPlayer('p1', undefined, 'none', 'light');
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10 };
@@ -210,7 +210,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
 
   it('held ticks on one victim ramp down like botAttack beams', () => {
     const { players, combat } = harness();
-    const p1 = players.addPlayer('p1');
+    const p1 = players.addPlayer('p1', undefined, 'none', 'light');
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10 };
@@ -235,7 +235,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
   it('a tip behind a wall rejects — beams cannot pierce structures', async () => {
     const { structureColliders } = await import('../../shared/ballSim.ts');
     const { players, combat, sentTo } = harness();
-    const p1 = players.addPlayer('p1');
+    const p1 = players.addPlayer('p1', undefined, 'none', 'light');
     p1.position = { x: 0, y: 10, z: 0 };
     combat.solids = structureColliders([
       { kind: 'wall', pos: { x: 0, y: 10, z: -5 }, size: { x: 20, y: 5, z: 1 } },
