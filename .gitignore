@@ -35,6 +35,10 @@ screenshots/
 screenshots_legacy/
 TEMP_WEBual/
 client/x
+nul
+soak_multi_out.txt
+client/shots/
+_tools/sweeps/out/
 client/public/mespeak.old/
 terrain_gen/*.png
 _tools/io_dif/
