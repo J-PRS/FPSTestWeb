@@ -44,3 +44,10 @@ _tools/sweeps/out/
 client/public/mespeak.old/
 terrain_gen/*.png
 _tools/io_dif/
+
+# Tool binaries/dumps + asset scratch — local only, not for git
+_tools/vmdump/.tb/
+_tools/vmdump/tbout/
+client/tmp_assets/
+zzz/
+_reports/*.mp4
