@@ -195,39 +195,57 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
     // Fire-rate validation (the UE ServerFire_Validate pattern) on the
     // SPAWN claim — hit claims don't need it: the ledger already caps them
     // at one per registered projectile, so bounding spawns bounds damage.
-    // A window admits `burst` claims (fan weapons register every pellet
-    // in one pull); 15% slack absorbs ping jitter.
+    // Stamped claims carry cadence evidence on the client's own clock:
+    // a sub-cadence stamp pair is one violation — honest sources exist
+    // (loadout-reset instant refire, a tab pause bunching pulls) — so a
+    // single fast pair admits while a cheat macro's sustained rate racks
+    // violations to the reject. Legal gaps decay the count. A window
+    // admits `burst` claims before cadence law applies (fan weapons
+    // register every pellet in one pull).
     const interval = msg.weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType] : undefined;
     if (interval !== undefined) {
       const now = wallNow();
       const key = `${playerId}:${msg.weaponType}`;
-      const win = h.fireWindows.get(key);
-      if (win && now - win.start < interval * 850) {
-        // Jitter compresses arrival spacing — two spawns fired a legal
-        // interval apart can land inside one window on an unordered
-        // transport. The claim's own fire timestamp is the escape hatch:
-        // legal spacing on the client's clock still counts as one shot
-        // (the ledger's per-projectile claim cap bounds damage anyway).
-        const tsGapOk = msg.timestamp !== undefined && win.lastTs !== undefined
-          && msg.timestamp - win.lastTs >= interval * 850;
-        // Stampless claims can't prove trigger spacing — judging a pair's
-        // arrival gap flags every honest backlog drain, so bound the
-        // SUSTAINED rate instead: arrivals inside a rolling second,
-        // legal rate + backlog slack. A backlog burst passes; a cheater
-        // firing >2× rate across a second still reads as fast-fire.
-        const burst = getWeaponStats(msg.weaponType).burst ?? 1;
-        const stamplessFlood = msg.timestamp === undefined
-          && (win.arr = win.arr.filter(t => now - t < 1000)).length
-            >= Math.ceil(1000 / (interval * 850)) + 2;
-        if ((!tsGapOk && msg.timestamp !== undefined || stamplessFlood) && win.count >= burst) {
-          h.reject(playerId, 'Shot', `fire rate (${win.count + 1} claims in ${(interval * 0.85).toFixed(2)}s window)`, undefined, msg.weaponType, msg.shotId);
+      const burst = getWeaponStats(msg.weaponType).burst ?? 1;
+      const slack = interval * 850;
+      let win = h.fireWindows.get(key);
+      if (!win) {
+        win = { start: now, count: 0, lastTs: undefined, arr: [], violations: 0 };
+        h.fireWindows.set(key, win);
+      }
+      if (msg.timestamp !== undefined) {
+        const gap = win.lastTs !== undefined ? msg.timestamp - win.lastTs : Infinity;
+        if (gap >= slack) {
+          // A legal gap proves a new pull — fresh pellet budget, and one
+          // step of violation decay.
+          win.violations = Math.max(0, win.violations - 1);
+          win.count = 0;
+        } else if (gap >= 0 && win.count >= burst) {
+          // Sub-cadence past the pull's pellet budget. One fast pair is
+          // honest (loadout-reset instant refire, paused-tab stamp bunch);
+          // a cheat macro reads as sustained — reject on violations, not
+          // on the first evidence.
+          win.violations++;
+          if (win.violations >= 3) {
+            h.reject(playerId, 'Shot', `fire rate (sustained sub-cadence: ${(gap / 1000).toFixed(2)}s < ${interval * 0.85}s)`, undefined, msg.weaponType, msg.shotId);
+            return;
+          }
+        }
+        // Out-of-order stamps (redelivery on unordered lanes) admit
+        // leniently — dedup by shotId owns replays.
+        win.count++;
+        win.lastTs = Math.max(win.lastTs ?? 0, msg.timestamp);
+      } else {
+        // Stampless claims can't prove trigger spacing — bound the
+        // SUSTAINED rate: arrivals inside a rolling second, legal rate +
+        // backlog slack. A backlog burst passes; >2× rate still reads.
+        win.arr = win.arr.filter(t => now - t < 1000);
+        win.arr.push(now);
+        win.count++;
+        if (win.arr.length >= Math.ceil(1000 / slack) + 2) {
+          h.reject(playerId, 'Shot', `fire rate (stampless flood: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
           return;
         }
-        win.count++;
-        if (msg.timestamp !== undefined) win.lastTs = msg.timestamp;
-        else win.arr.push(now);
-      } else {
-        h.fireWindows.set(key, { start: now, count: 1, lastTs: msg.timestamp, arr: [] });
       }
     }
 
