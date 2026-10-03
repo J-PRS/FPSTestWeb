@@ -1,3 +1,4 @@
+2026-10-03 - netbot: engagement-poll waits replace fixed windows (flake was timing, not the claim path); ws+rtc timeout 45s.
 2026-10-03 - bots: VGS chords on frag/death/spree taunts (~45%); 'shazbot' chat gets answered; killFeed.test pins setTauntClock (env seam left sharedNow at epoch-0, freezing the cooldown).
 2026-10-03 - tests: beam shooters spawned as medium vs light-only Lightning (class-lock rejects for the wrong reason); armor-soak test expected literal 80 health vs medium +25. Expectations pinned to intent.
 2026-10-03 - netcode: tier-probe pending queue bounded — same keep-newest-binary rule as the WS queue; a probe that stalls can't pile unbounded frames.
