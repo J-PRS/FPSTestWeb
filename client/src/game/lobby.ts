@@ -10,6 +10,7 @@
 
 import { buildLobbyPanel } from './lobbyPanel.js';
 import { urlParams } from '../core/params.js';
+import Logger from '../core/Logger.js';
 
 export interface RoomRow {
   name: string;
@@ -70,6 +71,7 @@ export class Lobby {
   private botsInput: HTMLInputElement;
   private leaveBtn: HTMLButtonElement;
   private maps: MapRow[] = [];
+  private mapsFailed = false;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   currentRoom(): string {
@@ -94,8 +96,13 @@ export class Lobby {
   private async refreshMaps(): Promise<void> {
     try {
       this.maps = await this.deps.listMaps();
+      this.mapsFailed = false;
     } catch {
       this.maps = [];
+      // Rooms poll shows "server offline" on the same failure — an empty
+      // map picker with only "server default" hid the identical problem.
+      this.mapsFailed = true;
+      Logger.warn('lobby: listMaps failed — map picker degraded');
     }
     this.modeSelect.textContent = '';
     const any = document.createElement('option');
@@ -118,7 +125,7 @@ export class Lobby {
     this.mapSelect.textContent = '';
     if (!this.maps.length) {
       const o = document.createElement('option');
-      o.textContent = 'server default';
+      o.textContent = this.mapsFailed ? 'server offline' : 'server default';
       o.value = ''; o.dataset.mode = '';
       this.mapSelect.appendChild(o);
       return;
