@@ -830,10 +830,12 @@ export class PlayerModel {
       action.clampWhenFinished = true;
     } else if (ONESHOT_CLIPS.has(name)) {
       action.setLoop(THREE.LoopOnce, 1);
-      // Shoot clips clamp their tail: sustained fire can outlast a 1.3s
-      // oneshot, and an unclamped finish fades the action to zero — the
-      // unarmed locomotion grip bleeds back mid-volley.
-      action.clampWhenFinished = this.currentState === 'shoot' || this.currentState === 'throw';
+      // A finished unclamped action gets deactivated by the mixer, and a
+      // deactivated binding restores the bone's ORIGINAL transform — the
+      // literal bind-pose flash when the sole covering action ends before
+      // the next state takes over. Clamp every oneshot's tail; the state
+      // machine time-reverts these anyway, so the freeze is invisible.
+      action.clampWhenFinished = true;
     } else if (name === 'Jump') {
       action.setLoop(THREE.LoopPingPong, Infinity);
       action.timeScale = 0.35;
@@ -958,6 +960,16 @@ export class PlayerModel {
   }
 
   update(dt: number): void {
+    // Stalled-cover guard: a disabled sole action restores bind pose the
+    // next mixer tick. If the current action ever stops running outside
+    // death, re-enter the state rather than let the body T-pose.
+    if (this.currentAction && !this.currentAction.isRunning() && this.currentState !== 'death') {
+      if (!this._warnedAnims.has('__stall')) {
+        this._warnedAnims.add('__stall');
+        logger.warn(`Anim action stalled in state '${this.currentState}' (${this.currentClipName}) — re-entering`);
+      }
+      this.forceAnimationState(this.currentState);
+    }
     this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined);
     if (this.gunMountBone && this.gun && this.model) {
       // Refresh the fx base fields from the bone's live world transform —
