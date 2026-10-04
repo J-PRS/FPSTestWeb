@@ -15,9 +15,6 @@ const _pitchQuat = new THREE.Quaternion();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
-const _handW = new THREE.Vector3();
-const _mq = new THREE.Quaternion();
-const _hq = new THREE.Quaternion();
 const _d2r = (x: number, y: number, z: number): [number, number, number] =>
   [x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180];
 
@@ -99,18 +96,17 @@ export class PlayerModel {
   private static buildHoldChains(): void {
     if (PlayerModel.HOLD_CHAINS) return;
     PlayerModel.HOLD_CHAINS = [
-      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-48, 25, 42)],
-      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-47, 6, 37)],
+      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-75, -30, -15)],
+      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-70, 0, 0)],
       [new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']), _d2r(0, 0, 0)],
     ];
   }
   private wantHoldPose = false;
   private holdW = 0;
 
-  /** Live-tune the palm→gun mount rotation (posedump loop) — deg euler. */
+  /** Live-tune the hand-bone mount rotation (posedump loop) — deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
-    PlayerModel.HAND_GUN_ROT.setFromEuler(new THREE.Euler(
-      x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180));
+    this.gun?.rotation.set(x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180);
   }
 
   /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
@@ -138,10 +134,6 @@ export class PlayerModel {
   gunKickZ = 0;
   gunBaseQuat: THREE.Quaternion | null = null;
   private socketGun = false;
-  // Hand world→gun grip: palm-mount orientation constant, tuned per rig
-  // family on posedump shots (UE-style rigs share the convention).
-  private static readonly HAND_GUN_ROT = new THREE.Quaternion()
-    .setFromEuler(new THREE.Euler(-100 * Math.PI / 180, 19 * Math.PI / 180, -46 * Math.PI / 180));
   muzzleFlash: THREE.Sprite | null = null;
   // Damage flash — same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
@@ -600,7 +592,7 @@ export class PlayerModel {
     // Socket rigs without native armed anims get the canned grip pose —
     // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
     // need arms posed on top of them.
-    this.wantHoldPose = !!classGun && !CLASS_BODY_SPEC[this.variant]?.anims;
+    this.wantHoldPose = !CLASS_BODY_SPEC[this.variant]?.anims && !!handBone;
     if (!PlayerModel._gunMat) {
       PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
     }
@@ -619,12 +611,11 @@ export class PlayerModel {
     // Measure bone world scale AFTER model.scale so the gun lands
     // real-world size (bones carry the armature's ~100x scale)
     this.model!.updateMatrixWorld(true);
-    if (classGun) {
-      // Socket mount: class bodies keep bones in armature frames up to
+    if (!handBone && classGun) {
+      // Socket fallback: class bodies keep bones in armature frames up to
       // ~100 units off the rendered mesh (cyber's hips bind at -98Z), so
-      // a bone-mounted gun renders nowhere near the hand. Park the gun
-      // on the model root at the per-variant socket instead — anchored
-      // to the body, immune to retargeted hip drift.
+      // rigs that never captured a hand bone park the gun on the model
+      // root at the per-variant socket instead.
       const ws = this.modelScale;
       this.gun.scale.setScalar(0.7 / ws);
       this.gunUnit = 1 / ws;
@@ -657,7 +648,14 @@ export class PlayerModel {
     // UAL hand bones (measured via gun-math probe under the live aim
     // pose): barrel -X on plain yaw is the sideways look. X-90 sends the
     // barrel forward along the aim axis; Z180 rolls the top rail back up.
+    // Class-body hand bones (cyber/vexa): measured on the posedump loop —
+    // the palm's axes differ per rig family, tune via debugSetGunRot.
     if (mann) { this.gun.rotation.set(Math.PI / 2, 0, 0); this.gunBaseX = Math.PI / 2; }
+    else if (classGun) {
+      // Solved on the posedump loop: gun -Z lands on the model's facing
+      // with the top rail up under the palm's bind axes.
+      this.gun.rotation.set(0.7 * Math.PI / 180, -23.9 * Math.PI / 180, 3.9 * Math.PI / 180);
+    }
     else this.gun.rotation.y = Math.PI;
 
     // Muzzle flash: additive sprite at the barrel tip, flashed on
@@ -1035,20 +1033,6 @@ export class PlayerModel {
       ab.bone.quaternion.multiply(ab.last);
     }
     this.snapFeetToShins();
-    if (this.socketGun && this.handBone && this.gun) {
-      // Anchor the socket gun to the palm's world transform — the fixed
-      // gunLocal socket never tracked the arm, so it floated while clips
-      // moved the hands. Must run after the hold/aim bone writes so the
-      // anchor reads the rendered pose, not the pre-pose matrices.
-      // grip quat = model-relative palm rot × mount rot.
-      this.handBone.getWorldPosition(_handW);
-      this.gun.parent!.worldToLocal(_handW);
-      this.gunRestX = _handW.x; this.gunBaseY = _handW.y; this.gunBaseZ = _handW.z;
-      this.gun.parent!.getWorldQuaternion(_mq).invert();
-      this.handBone.getWorldQuaternion(_hq);
-      if (!this.gunBaseQuat) this.gunBaseQuat = new THREE.Quaternion();
-      this.gunBaseQuat.copy(_mq.multiply(_hq)).multiply(PlayerModel.HAND_GUN_ROT);
-    }
     this.fx.tick(dt);
   }
 
