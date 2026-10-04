@@ -1,5 +1,5 @@
 import { settings } from '../core/settings.js';
-import { SLOT_COUNT } from '../weapons.js';
+import { SLOT_COUNT, weaponDef } from '../weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
@@ -228,7 +228,10 @@ export class PlayerLoadout {
    *  lower→raise swap dip; the hand prop becomes the real weapon. */
   emitWeaponSwitch(wid: number): void {
     this.h.onWeaponSwitch?.(wid);
-    this.h.model?.setWeapon(wid);
+    // The model's hand prop keys on the WIRE weaponType (remote fires feed
+    // it enums) — a raw wid would look the slot index up as an enum and
+    // draw the wrong gun (plasma slot 6 → enum 6 = flak).
+    this.h.model?.setWeapon(weaponDef(wid).weaponType);
     this.h.model?.weaponSwap();
   }
 
