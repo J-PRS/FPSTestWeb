@@ -32,6 +32,12 @@ const mod = (p: string) => pathToFileURL(path.join(NM, p)).href;
 
 const THREE = await import(mod('build/three.module.js')) as typeof import('three');
 const { GLTFLoader } = await import(mod('examples/jsm/loaders/GLTFLoader.js')) as { GLTFLoader: typeof GLTFLoaderT };
+// Repacked model GLBs are meshopt-quantized — without the decoder the
+// parse promise never settles and the bake exits silently.
+const { MeshoptDecoder } = await import(mod('examples/jsm/libs/meshopt_decoder.module.js')) as {
+  MeshoptDecoder: { ready: Promise<void>; decode(buffer: ArrayBuffer, count: number, size: number, source: Uint8Array, offset: number): Uint8Array };
+};
+await MeshoptDecoder.ready;
 const { GLTFExporter } = await import(mod('examples/jsm/exporters/GLTFExporter.js')) as {
   GLTFExporter: new () => {
     parse(input: THREE.Object3D, onDone: (r: ArrayBuffer) => void, onErr: (e: Error) => void, opts?: object): void;
@@ -104,7 +110,7 @@ function loadGlb(file: string): Promise<{ scene: THREE.Object3D; animations: THR
   const abs = path.isAbsolute(file) ? file : path.join(MODELS, file);
   const buf = stripTextures(fs.readFileSync(abs));
   return new Promise((resolve, reject) => {
-    new GLTFLoader().parse(buf, '', g =>
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parse(buf, '', g =>
       resolve({ scene: g.scene, animations: g.animations }), reject);
   });
 }
@@ -120,10 +126,14 @@ function exportClips(scene: THREE.Object3D, clips: THREE.AnimationClip[]): Promi
 }
 
 fs.mkdirSync(OUT, { recursive: true });
+console.log('bake: RIGS=' + Object.keys(RIGS).join(','));
 for (const [variant, glb] of Object.entries(RIGS)) {
+  console.log('bake: ' + variant + ' loading');
   const { scene } = await loadGlb(glb);
   const baked = await bakeUALClips(scene as THREE.Object3D, variant, env);
-  if (!baked.size) { console.log(`${variant}: no clips baked — skipped`); continue; }
+  // A marker-only pack would still satisfy loadBakedUALClips' non-empty
+  // check and leave the rig with zero real clips at runtime.
+  if (baked.size <= (baked.has('__holdbake1') ? 1 : 0)) { console.log(`${variant}: no real clips — skipped`); continue; }
   // Export the bone hierarchy only: a mesh-free armature scene keeps the
   // pack small; clip tracks bind by node name at load.
   const armature = new THREE.Scene();

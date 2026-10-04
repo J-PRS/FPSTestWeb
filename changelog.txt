@@ -1,3 +1,4 @@
+2026-10-04 - animbake: attach meshopt decoder (quantized model GLBs made parse hang, bake died silently); skip marker-only clip packs; re-emit robot pack so Aim_ arm tracks survive the hold-bake
 2026-10-01 - enraged ball legs resync at 6m divergence budget (was flat 15m)
 2026-10-01 - hip-fire hold baked into retargeted arm tracks (cyber/vexa/robot); runtime compose gated by __holdbake1 marker
 2026-10-01 - Turretter creature block commented as distinct from sentry DEPLOY_ITEMS (TURRET_RANGE name collision)
