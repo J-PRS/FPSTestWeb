@@ -48,6 +48,8 @@ const DIMS: Dim[] = [
   ['moves.skiVetoRise', 1, 8],
   ['moves.skiVetoSpeed', 3, 16],
   ['moves.climbRise', 0.5, 6],
+  ['moves.tapEnergyMin', 4, 50],
+  ['moves.diveAglMin', 4, 40],
   ['lines.commitS', 0.5, 6],
   ['lines.reach', 25, 140],
   ['lines.runnerReachK', 1, 4],
