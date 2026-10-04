@@ -1,3 +1,4 @@
+2026-10-01 - Perf: aim-pitch un-apply pass now skips when no procedural pose is active (idle bodies no longer pay N quaternion ops per frame)
 2026-10-01 - Observability: reclaim journal wrap and missed-frame gaps now surface as journalWrap/reclaimGap room-health counters
 2026-10-01 - Anim: smooth procedural aim pitch so head/torso chase aim instead of snapping per input frame
 2026-10-01 - Anim: clamp all oneshot clips and re-enter stalled states so a finished sole action can no longer flash bind pose
