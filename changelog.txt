@@ -1,3 +1,4 @@
+2026-10-01 - Shared body-contact list, MoveSim skips own capsule by selfId
 2026-10-01 - flagCarriedBy direct check replaces per-tick flag snapshot clones
 2026-10-01 - Senses: deployables iterate live map, pickups share per-step cache
 2026-10-01 - Bot senses share one roster build per sim step (was per think)
