@@ -9,7 +9,7 @@ import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botC
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
 import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
@@ -339,7 +339,7 @@ export class RemotePlayer {
   private static readonly THROW_TYPES = new Set([
     WeaponType.DiscPull, WeaponType.Grenade, WeaponType.ClusterBomb,
     WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
-    WeaponType.ArmorGrenade,
+    WeaponType.ArmorGrenade, WeaponType.Concussion,
   ]);
 
   // Remote fired a weapon — kick the gun's procedural recoil
@@ -348,7 +348,14 @@ export class RemotePlayer {
     // its arm-chain aim layer owns the upper body, so playing the
     // Pistol_Shoot clip only flickers the arms off-aim. Other variants
     // still arm the shoot oneshot.
-    if (!this._isDead && this.anim.shootT <= 0 && this._model.variant !== 'mannequin') this.anim.shootT = 0.3;
+    // The shoot-state window must outlast the weapon's own fire interval:
+    // a shot arriving while the timer is still ticking used to skip the
+    // re-arm entirely (`<= 0` gate), so at fast cadences the pose dropped
+    // to the neutral grip between every shot. +0.12 covers wire jitter.
+    if (!this._isDead && this._model.variant !== 'mannequin') {
+      const hold = Math.max(0.3, (weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0 : 0) + 0.12);
+      this.anim.shootT = Math.max(this.anim.shootT, hold);
+    }
     if (this._loaded) {
       if (weaponType === WeaponType.Melee) this._model.weaponPunch();
       else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this._model.weaponThrow();
