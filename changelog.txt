@@ -1,3 +1,5 @@
+2026-10-01 - Turretter creature block commented as distinct from sentry DEPLOY_ITEMS (TURRET_RANGE name collision)
+
 2026-10-01 - rubberband watch: endpoint-matched truth replay + parked-leg gate
 2026-10-01 - ball rubberband watch replays truth via stepBall to pred cursor
 2026-10-01 - CombatHandler drops healTicks entries on player removal
