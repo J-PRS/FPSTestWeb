@@ -19,7 +19,7 @@ export interface MatchHost {
   applySpec(spec: MapSpec): void;
   reshuffleBots?(): void;      // re-deal bot team assignments for the next match
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
-  onEnded?: () => void;         // the horn fired — bots get their 'gg' beat
+  onEnded?: (winner: string) => void;  // the horn fired — bots get their 'gg' beat
 }
 
 /**
@@ -33,6 +33,10 @@ export class MatchClock {
   private endsAt = 0;
   private warned = false;    // 60s warning — once per match
   private overtime = false;  // tied horn → next score wins
+  /** Intermission deadline — end broadcast fired, reset+matchStart
+   *  waits here so clients can sit on the standings (T:A's podium beat). */
+  private intermissionAt = 0;
+  private static readonly INTERMISSION_MS = 10_000;
 
   constructor(private host: MatchHost) {}
 
@@ -46,6 +50,12 @@ export class MatchClock {
   tick(now: number): void {
     const spec = this.host.modeSpec;
     if (!spec) return;
+    // Intermission owns the tick: nothing else may re-arm or re-end
+    // until the standings window has played out.
+    if (this.intermissionAt) {
+      if (now >= this.intermissionAt) this.startNext();
+      return;
+    }
     if (this.endsAt === 0) {
       if (this.host.getHumanCount() > 0) {
         this.endsAt = now + spec.timeLimitS * 1000;
@@ -107,17 +117,30 @@ export class MatchClock {
     return true;
   }
 
-  /** The reset funnel: end broadcast, journal, field reset, matchStart.
-   *  Rotation lands between reset and matchStart so players spawn onto
-   *  the NEW map (applySpec re-points spawnPoints) rather than eating
-   *  one old-map spawn before mapUpdate lands. */
+  /** Phase 1: end broadcast + record. The reset waits INTERMISSION_MS —
+   *  clients pin the scoreboard on matchEnd and get their standings
+   *  window before the world wipes. */
   end(w: string): void {
+    // A second end during the standings window (admin force, late score
+    // cap) must not re-fire the broadcast or restart the countdown.
+    if (this.intermissionAt) return;
     const host = this.host;
     const spec = host.modeSpec!;
     const scores = spec.teams ? { ...host.scores } : Object.fromEntries(host.ffaScores);
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
     host.onMatchEnd?.({ room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() });
-    host.onEnded?.();
+    host.onEnded?.(w);
+    this.intermissionAt = simNow() + MatchClock.INTERMISSION_MS;
+  }
+
+  /** Phase 2 (post-intermission): field reset, journal, matchStart.
+   *  Rotation lands between reset and matchStart so players spawn onto
+   *  the NEW map (applySpec re-points spawnPoints) rather than eating
+   *  one old-map spawn before mapUpdate lands. */
+  private startNext(): void {
+    const host = this.host;
+    const spec = host.modeSpec!;
+    this.intermissionAt = 0;
     host.scores.alpha = 0;
     host.scores.bravo = 0;
     host.ffaScores.clear();

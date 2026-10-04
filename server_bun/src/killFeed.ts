@@ -6,7 +6,7 @@
  */
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, type ChatterKind } from '../../shared/botTaunts.ts';
+import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -131,15 +131,23 @@ export class KillFeed {
     this.botSay(id, c?.text ?? null, kind !== 'reply', c?.vgs, c?.team);
   }
 
+  /** Match-end chatter — one rolled outcome line per bot, spread across
+   *  the standings window so the lobby reads as staggered voices rather
+   *  than a chorus. */
+  matchEnd(entries: { id: string; line: TauntLine }[]): void {
+    const step = entries.length > 1 ? Math.min(5000 / entries.length, 1200) : 0;
+    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + Math.random() * 400));
+  }
+
   /** A bot's chat line lands like a typed reply — a beat after the
    *  event, not inside the kill frame, and dropped if the speaker left
    *  the room meanwhile. Timers are tracked so room teardown can drain. */
-  private botSay(id: string, line: string | null, inviteReply = true, vgs?: string, vgsTeam?: boolean): void {
+  private botSay(id: string, line: string | null, inviteReply = true, vgs?: string, vgsTeam?: boolean, extraDelay = 0): void {
     if (!line) return;
     let delay = this.tauntDelayMs();
     // Typing pace — a two-letter "ez" lands fast, a gripe takes a beat.
     // Only when the host delays at all (tests pin 0 = instant speech).
-    if (delay > 0) delay += Math.min(line.length * 35, 1400);
+    if (delay > 0) delay += Math.min(line.length * 35, 1400) + extraDelay;
     const speak = () => {
       if (!this.playerManager.getPlayer(id)) return;
       // Tactical VGS is team-scoped (canon); plain lines and VG*/VV*

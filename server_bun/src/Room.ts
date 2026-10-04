@@ -19,7 +19,7 @@ import { structureColliders } from '../../shared/ballSim.ts';
 import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
-import { type MapSpec, type Vec3like, resolveMapSpec } from '../../shared/mapSpec.ts';
+import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
@@ -242,7 +242,7 @@ export class Room {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
     };
-    this.moveSim.attachStructures(this.spec.structures);
+    this.moveSim.attachStructures(this.effStructures());
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
@@ -256,7 +256,7 @@ export class Room {
     );
     if (this.spec.balls) this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
-    this.ballSim.colliders = structureColliders(this.spec.structures);
+    this.ballSim.colliders = structureColliders(this.effStructures());
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.players.teamSpawns = this.spec.teamSpawns ?? null;
@@ -297,7 +297,7 @@ export class Room {
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
     this.projectiles = new RoomProjectiles(this, field);
-    this.projectiles.attachStructures(this.spec.structures);
+    this.projectiles.attachStructures(this.effStructures());
     this.registerSims();
   }
 
@@ -481,6 +481,37 @@ export class Room {
     if (this.modeSpec?.teams) {
       this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
     }
+    // Stands may have moved with the re-snap — their collision hulls
+    // are spec entries, so the sims must re-attach the merged list.
+    this.attachAllStructures();
+  }
+
+  /** The spec's authored structures PLUS collision hulls for the flag
+   *  daises — 'stand' entries collide everywhere (move sim, shells,
+   *  balls, blast LOS) and ride the wire echo, but the client never
+   *  draws them as generic boxes (the dais mesh is their visual). */
+  private effStructures(): StructureSpec[] {
+    const out = [...(this.spec.structures ?? [])];
+    if (!this.modeSpec?.flags) return out;
+    if (this.mode === 'rabbit') {
+      out.push(...flagStandSpecs(this.rabbitFlagHome()));
+      return out;
+    }
+    const bases = this.spec.bases;
+    if (bases?.alpha && bases?.bravo) {
+      const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
+      out.push(...flagStandSpecs(snapped.alpha, 'alpha'), ...flagStandSpecs(snapped.bravo, 'bravo'));
+    }
+    return out;
+  }
+
+  /** Re-attach the merged structure list everywhere it feeds — called
+   *  at boot and whenever flag homes re-snap (terrain attach, map swap). */
+  private attachAllStructures(): void {
+    const list = this.effStructures();
+    this.moveSim.attachStructures(list);
+    this.projectiles?.attachStructures(list);
+    if (this.ballSim) this.ballSim.colliders = structureColliders(list);
   }
 
   // The tick registry — GameServer steps every entry per tick; new
@@ -547,7 +578,7 @@ export class Room {
       ffaScores: () => Object.fromEntries(this.scoring.ffaScores),
       simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
       bases: this.spec.bases,
-      structures: this.spec.structures,
+      structures: this.effStructures(),
       arena: this.spec.arena,
       ambient: this.spec.ambient,
       // Authored spec title wins; the maps/<X>.json source filename is the
@@ -680,8 +711,10 @@ export class Room {
       onMatchEnd: (r) => this.onMatchEnd?.(r),
       // 'match' isn't a bot id — nobody's actor-excluded, so every bot
       // sees the gg notice on its own think phase and the usual dice
-      // decide who bothers replying.
-      onEnded: () => this.bots.notice('gg', 'match'),
+      // decide who bothers replying. matchEnd adds the staggered
+      // outcome lines on top — the shared chatter cooldown keeps the
+      // two paths from double-speaking the same bot.
+      onEnded: (w) => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
     };
   }
 
@@ -800,9 +833,7 @@ export class Room {
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.players.teamSpawns = spec.teamSpawns ?? null;
-    this.ballSim.colliders = structureColliders(spec.structures);
-    this.moveSim.attachStructures(spec.structures);
-    this.projectiles.attachStructures(spec.structures);
+    this.attachAllStructures(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
     // Bases can move with a new spec — re-snap homes. If the terrain is
     // also rotating the attach below corrects them once it lands.
     this.refreshFlagHomes();
@@ -810,12 +841,14 @@ export class Room {
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.creatureSim.pops = spec.creatures ?? {};
     this.creatureSim.colliders = this.ballSim.colliders;
-    this.messages.setMap(spec);
+    // The echo carries the merged list too — joiners get stand hulls in
+    // their gameState structures, and combat occlusion sees the dais.
+    this.messages.setMap({ ...spec, structures: this.effStructures() });
     this.broadcast({
       type: 'mapUpdate',
       mapName: spec.name ?? (this.mapSrc || undefined),
       bases: spec.bases,
-      structures: spec.structures,
+      structures: this.effStructures(),
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       terrain: spec.terrain,

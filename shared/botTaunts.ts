@@ -296,6 +296,82 @@ const GG_LINES = [
   'gg — same time tomorrow?',
 ];
 
+// ---- Match-end pools — the horn beat: what a bot says depends on how
+// its side finished, so the room's chatter reads the scoreboard too. ----
+
+/** Won the match — the celebrate-and-gg mix a winning lobby sounds like. */
+const END_WIN_LINES = [
+  'gg',
+  'gg wp',
+  'ggs',
+  'ez',
+  'good game',
+  'wp team',
+  'we did it',
+  'gg ez',
+  'too easy',
+  'thats a wrap',
+];
+/** Lost the match — salt-and-respect mix; losing bots still say gg. */
+const END_LOSS_LINES = [
+  'gg',
+  'gg wp',
+  'we had it',
+  'close one',
+  'shazbot',
+  'unlucky',
+  'gg anyway',
+  'next map is ours',
+  'rough one',
+  'gg, rematch',
+];
+/** Margin of 1 — the down-to-the-wire read both sides share. */
+const END_CLOSE_LINES = [
+  'gg',
+  'gg wp',
+  'down to the wire',
+  'so close',
+  'wp both teams',
+  'what a finish',
+  'heart attack game',
+];
+/** Tied at the horn — the rare nobody-won lobby. */
+const END_DRAW_LINES = [
+  'gg all',
+  'a tie??',
+  'draw game',
+  'shazbot of a finish',
+  'nobody wins huh',
+];
+
+export type EndOutcome = 'win' | 'loss' | 'close' | 'draw';
+const END_POOLS: Record<EndOutcome, string[]> = {
+  win: END_WIN_LINES,
+  loss: END_LOSS_LINES,
+  close: END_CLOSE_LINES,
+  draw: END_DRAW_LINES,
+};
+const END_VGS: Record<EndOutcome, [vgs: string, text: string][]> = {
+  win:   [['VGCG', 'Good game!'], ['VWOO', 'Woohoo!'], ['VGCA', 'Awesome!']],
+  loss:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
+  close: [['VGCG', 'Good game!'], ['VGCA', 'Awesome!']],
+  draw:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
+};
+
+/** One match-end line for `botId`, shaped by how its side finished.
+ *  Same cooldown+chance gate as everything else — a bot that just spoke
+ *  sits the gg beat out, which is itself lobby-accurate. */
+export function endTaunt(botId: string, outcome: EndOutcome): TauntLine | null {
+  return maybe(botId, () => {
+    const chords = END_VGS[outcome];
+    if (botRand() < TAUNT_VGS_CHANCE) {
+      const [chord, text] = pick(chords);
+      return { text, vgs: chord };
+    }
+    return { text: pickLine(END_POOLS[outcome]) };
+  });
+}
+
 /** A human called it ez — salt is the honest response. */
 const SALTY_LINES = [
   'we\'ll see',

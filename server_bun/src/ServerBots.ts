@@ -19,7 +19,7 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { losClear } from '../../shared/botLos.ts';
 import type { BotSkill } from '../../shared/botSkill.ts';
-import type { ChatterKind } from '../../shared/botTaunts.ts';
+import { endTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -180,6 +180,32 @@ export class ServerBots {
    *  channel; each bot's brain decides on its own whether to remark. */
   notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
     this.sense.notice(kind, actorId, actorTeam);
+  }
+
+  /** The horn beat — every bot rolls an outcome-appropriate line (winners
+   *  celebrate, losers say gg anyway, a one-point finish reads as close
+   *  for everyone). killFeed staggers delivery inside the intermission. */
+  matchEnd(winner: string): void {
+    const spec = this.room.modeSpec;
+    const entries: { id: string; line: TauntLine }[] = [];
+    for (const id of this.brains.keys()) {
+      const p = this.room.players.getPlayer(id);
+      if (!p) continue;
+      let outcome: EndOutcome;
+      if (winner === 'draw') outcome = 'draw';
+      else if (spec?.teams) {
+        const margin = Math.abs(this.room.scores.alpha - this.room.scores.bravo);
+        outcome = margin <= 1 ? 'close' : (p.team === winner ? 'win' : 'loss');
+      } else {
+        const pts = [...this.room.ffaScores.values()];
+        const top = Math.max(...pts);
+        const runnerUp = pts.filter((v) => v < top).reduce((a, b) => Math.max(a, b), 0);
+        outcome = pts.length > 1 && top - runnerUp <= 1 ? 'close' : (id === winner ? 'win' : 'loss');
+      }
+      const line = endTaunt(id, outcome);
+      if (line) entries.push({ id, line });
+    }
+    this.room.messages.killFeed.matchEnd(entries);
   }
 
   /** Does chat text name a live bot? Callsigns are 'BOT-VEKTOR-01' — the
