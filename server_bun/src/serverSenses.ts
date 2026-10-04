@@ -87,6 +87,10 @@ export class ServerBotSenses {
    *  probe: capper lapped ~150m off the stand for 100s). 8s covers the
    *  ~80m run-in at a walk; expiry falls back to a normal re-pick. */
   private static readonly PRESS_MS = 8000;
+  /** Meters past the flag a capper aims on the committed run — the
+   *  pass-through aim that makes the approach wrap to the home-side
+   *  exit instead of beeline-and-stop. */
+  private static readonly PASS_M = 40;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
    *  wanders its own mini-route instead of parking. */
   private waitSpot = new Map<string, { pos: BotVec; at: number }>();
@@ -533,9 +537,26 @@ export class ServerBotSenses {
             const mLen = Math.hypot(mx, mz), cap = 15;
             if (mLen > cap) { mx *= cap / mLen; mz *= cap / mLen; }
           }
-          goalPos = { x: enemyStand.x + mx - ux * pull,
+          // The grab is a pass-through, not an arrival: a human capper
+          // flanks so his momentum exits toward home, and that whole
+          // shape falls out of aiming at a point PAST the flag on the
+          // home side — the approach wraps to the far side for free.
+          let px2 = 0, pz2 = 0;
+          if (capper && this.field) {
+            const hx = own.home.x - enemyStand.x, hz = own.home.z - enemyStand.z;
+            const hd = Math.hypot(hx, hz) || 1;
+            const cx = enemyStand.x + (hx / hd) * ServerBotSenses.PASS_M;
+            const cz = enemyStand.z + (hz / hd) * ServerBotSenses.PASS_M;
+            // …only when the pass point is open airspace — on rim maps
+            // the home-side wrap point sits inside the crater wall and
+            // aiming there buries the run in rock (kata no-grab).
+            if (hmHeight(this.field, cx, cz) - enemyStand.y < 15) {
+              px2 = cx - enemyStand.x; pz2 = cz - enemyStand.z;
+            }
+          }
+          goalPos = { x: enemyStand.x + mx + px2 - ux * pull,
                       y: enemyStand.y,
-                      z: enemyStand.z + mz - uz * pull };
+                      z: enemyStand.z + mz + pz2 - uz * pull };
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —
