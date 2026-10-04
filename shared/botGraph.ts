@@ -105,7 +105,21 @@ export class TerrainFlow {
           const rise = this.h[u]! - this.h[v]!;
           let k = 1;
           if (rise > 0) k += rise * T.graph.climbTax;
-          else k += rise * T.graph.diveCredit;
+          else {
+            // Sustained-descent credit only: a dive earns speed only
+            // when the route keeps falling toward the goal — a lone
+            // dip into a bowl gets priced as a trap, not a discount,
+            // because the exit climb is where the "earned" speed dies
+            // (capper air-steer lessons: descent-chasing into craters
+            // is how routes strand). Fall-through past the next cell
+            // is the human "land ON the downslope" read at leg scale.
+            const pu = parent[u]!;
+            // Descending INTO the goal is sustained by definition — the
+            // last dive onto the stand is the grab, not a trap.
+            const keepsFalling = u === goal || (pu !== -1 && this.h[pu]! < this.h[u]!);
+            if (keepsFalling) k += rise * T.graph.diveCredit;
+            else k -= rise * T.graph.dipTax;
+          }
           const slope = rise / d;
           if (slope > T.graph.wallSlope) k += (slope - T.graph.wallSlope) * T.graph.wallTax;
           const nd = dist[u]! + d * k;
