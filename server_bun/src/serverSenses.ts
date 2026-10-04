@@ -22,6 +22,7 @@ import { TeamCommand, type CommandMember } from './botCommand.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
+import type { PickupKind } from '../../shared/pickups.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
 
@@ -200,7 +201,7 @@ export class ServerBotSenses {
    *  identical roster plus call ballSim/creatureSim roster() (both
    *  allocate). Positions are live refs, so the cached list stays
    *  correct within the tick. */
-  private tickPartiesCache: { seq: number; players: { id: string; pos: Vec3; vel: Vec3; team?: string; dead: boolean; cloaked: boolean; aimY: number; en: BotEnemy }[]; bodies: BotEnemy[]; roster: { id: string; pos: Vec3; team?: string }[] } = { seq: -1, players: [], bodies: [], roster: [] };
+  private tickPartiesCache: { seq: number; players: { id: string; pos: Vec3; vel: Vec3; team?: string; dead: boolean; cloaked: boolean; aimY: number; en: BotEnemy }[]; bodies: BotEnemy[]; roster: { id: string; pos: Vec3; team?: string }[]; pickups: { id: number; pos: Vec3; kind: PickupKind }[] } = { seq: -1, players: [], bodies: [], roster: [], pickups: [] };
   private tickParties(): typeof this.tickPartiesCache {
     const c = this.tickPartiesCache;
     // Keyed on the sim clock, not room.tickSeq: bots think at their own
@@ -209,7 +210,7 @@ export class ServerBotSenses {
     const seq = simNow();
     if (c.seq === seq) return c;
     c.seq = seq;
-    c.players.length = 0; c.bodies.length = 0; c.roster.length = 0;
+    c.players.length = 0; c.bodies.length = 0; c.roster.length = 0; c.pickups.length = 0;
     for (const q of this.room.players.getAllPlayers().values()) {
       c.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK), aimY: classCapsule(q.armorClass).centerOff,
         en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff } });
@@ -219,6 +220,11 @@ export class ServerBotSenses {
       c.bodies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
     for (const cr of this.room.creatureSim.roster())
       c.bodies.push({ id: `c:${cr.id}`, pos: cr.position, vel: cr.velocity, alive: true, aimY: 0 });
+    // Pickups ride the same cache — pickupFor used to clone the whole
+    // list per think; gems only move on rare blast edges, so per-step
+    // freshness matches every other channel here.
+    const snaps = this.room.pickups?.snapshot();
+    if (snaps) for (const g of snaps) c.pickups.push(g);
     return c;
   }
 
@@ -231,7 +237,10 @@ export class ServerBotSenses {
     // Lob from the edge of turret sight (42m) — a bot that must first
     // survive to 30m never gets the shot off.
     let bestD = 40;
-    for (const d of this.room.deployables.snapshot()) {
+    // items.values() directly — snapshot() built per-item clones + a
+    // redundant owner lookup per call (per think). Read-only iteration
+    // is deletion-safe on this Map (clearOwner relies on it).
+    for (const d of this.room.deployables.items.values()) {
       if (d.kind === 'station') continue; // pads aren't a threat
       const owner = this.room.players.getPlayer(d.owner);
       if (p.team && owner?.team === p.team) continue;
@@ -890,8 +899,8 @@ export class ServerBotSenses {
    *  hurt the contested walk is suicide. Enemies near the GEM camp the
    *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
   private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
-    const snaps = this.room.pickups?.snapshot();
-    if (!snaps?.length) return null;
+    const snaps = this.tickParties().pickups;
+    if (!snaps.length) return null;
     // Greedy like the capper's roam shell, not a wall: close gems always
     // pull, far ones only sometimes — acceptance odds fall with distance
     // so a nuggets map spreads the fleet over the field instead of every
