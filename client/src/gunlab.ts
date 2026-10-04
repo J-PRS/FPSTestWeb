@@ -59,7 +59,10 @@ scene.add(new THREE.AmbientLight(0x8899aa, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(0.5, 1, 0.4);
 scene.add(sun);
-(window as any).__gunlab = { scene }; // debug hook — lets headless probes dump baked attributes
+// Probes read state.pick AND dump baked attributes off scene — same
+// object both times: a second assignment here silently dropped the
+// state side once this module finished booting.
+Object.assign((window as any).__gunlab ??= {}, { scene });
 
 // Sketchfab-style orbit rig — the convention everyone copies: LMB
 // orbits, wheel dollies, RMB pans. Enabled only in inspect mode; in FPS
