@@ -78,6 +78,8 @@ export class MovementController {
    *  from the remote roster (server shadows resolve the same bodies). */
   get bodies(): BodyCapsule[] { return this.sim.bodies; }
   set bodies(list: BodyCapsule[]) { this.sim.bodies = list; }
+  /** Shared-list capsule skip — the sim ignores the body with this id. */
+  set selfId(id: string) { this.sim.selfId = id; }
 
   getState(): MovementState { return this.state; }
   setState(newState: MovementState): void { this.sim.setState(newState); }

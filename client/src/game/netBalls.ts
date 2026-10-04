@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import * as sfx from '../core/sfx.js';
 import { hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
+import { stepBall, makeSimBall, type SimBall, type SimVec } from '../../../shared/ballSim.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
 import { Nugget } from '../entities/Nugget.js';
@@ -138,6 +139,8 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // number, not a scroll.
 function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, logger: ChildLogger) {
   const _truthPos = new THREE.Vector3();
+  const _rbSim: SimBall = makeSimBall(0, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+  const _rbTgt: SimVec = { x: 0, y: 0, z: 0 };
   const rbLastWarn = new Map<number, number>();
   const rbSuppressed = new Map<number, number>();
   const RB_WARN_MS = 2000;
@@ -163,30 +166,59 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     rbFleetFlushAt = nowMs + RB_FLEET_MS;
   }
 
-  /** Predicted replay position vs the event's truth advanced to now —
-   *  the metric the header comment describes. (It previously compared
-   *  the stamped pos to itself-plus-lead, which is just speed·age and
-   *  fired on every fast ball regardless of real divergence.) */
-  function check(b: Ball, m: { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number }): void {
-    const age = ballEventAge(m.t);
-    const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
-    _truthPos.set(
-      m.position.x + m.velocity.x * age,
-      m.position.y + m.velocity.y * age,
-      m.position.z + m.velocity.z * age,
-    );
-    const err = b.pos.distanceTo(_truthPos);
-    const kind = m.kind ?? 'segment';
+  /** Where the segment's own state lands by now when replayed through the
+   *  same integrator the prediction ran — a ballistic pos+vel*age can't
+   *  follow gravity or the enrage pull, so pulled balls were tripping the
+   *  warn on the metric, not the desync. Falls back to ballistic when the
+   *  field isn't bound yet. */
+  function truthAt(b: Ball, m: RbMsg, age: number): void {
+    const field = Ball.netField;
+    // Advance truth to the predictor's OWN cursor, not the capped event
+    // age — the replay free-runs past estSimNow in bursts (simT≫now), and
+    // comparing endpoints at different sim times misreads clock lead as
+    // divergence. No diag → fall back to the age window.
+    const span = b.netDiag && m.t !== undefined ? Math.max(0, b.netDiag.simT - m.t) : age;
+    if (!field || span <= 0) {
+      _truthPos.set(
+        m.position.x + m.velocity.x * age,
+        m.position.y + m.velocity.y * age,
+        m.position.z + m.velocity.z * age,
+      );
+      return;
+    }
+    const s = _rbSim;
+    s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
+    s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
+    s.enraged = m.enraged ?? false;
+    s.enrageTimer = m.et ?? 0; s.slowTimer = m.slowT ?? 0; s.dampNextBounce = m.damp ?? false;
+    if (m.tp) { s.tx = m.tp.x; s.ty = m.tp.y; s.tz = m.tp.z; s.tgtValid = true; } else s.tgtValid = false;
+    s.radius = b.radius; s.gt = 0; s.dead = false;
+    _rbTgt.x = s.tx; _rbTgt.y = s.ty; _rbTgt.z = s.tz;
+    const steps = Math.min(48, Math.floor(span / 0.05));
+    for (let i = 0; i < steps; i++) {
+      stepBall(s, 0.05, field, s.tgtValid ? _rbTgt : null, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
+    }
+    // Sub-cell remainder is ballistic — a partial step would leave the
+    // probe off the server's 0.05 phase (same rule stepNetLeg obeys).
+    const rem = span - steps * 0.05;
+    _truthPos.set(s.x + s.vx * rem, s.y + s.vy * rem, s.z + s.vz * rem);
+  }
+
+  interface RbMsg { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }
+
+  /** Noise gates between the error measurement and the warn — every early
+   *  out is a divergence that's the design working, not a desync signal. */
+  function gated(b: Ball, m: RbMsg, kind: string, err: number, speed: number): boolean {
     if (err <= rubberbandWarnAt(kind, speed)) {
       if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
-      return;
+      return true;
     }
     // A terrain swap leaves prediction on the previous field until the new
     // bin loads and rebinds — every bounce in that window diverges by
     // design, so the warn is noise, not a desync signal.
     if (Ball.terrainSwapping) {
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m during terrain swap`);
-      return;
+      return true;
     }
     // Stale-leg extrapolation isn't a desync: distance-tiered sends leave
     // far balls on a committed anchor for many seconds, and the inert leg
@@ -196,8 +228,18 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     const legAge = b.netDiag?.legAge ?? 0;
     if (legAge > 3) {
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on stale leg (legAge ${legAge.toFixed(1)}s)`);
-      return;
+      return true;
     }
+    return false;
+  }
+
+  function check(b: Ball, m: RbMsg): void {
+    const age = ballEventAge(m.t);
+    const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
+    truthAt(b, m, age);
+    const err = b.pos.distanceTo(_truthPos);
+    const kind = m.kind ?? 'segment';
+    if (gated(b, m, kind, err, speed)) return;
     // Edge kinds (bounce/stall/enrage/lunge/teleport/spawn) aren't desync
     // probes — they ARE the correction. A burst of stale legs lands each
     // event ~one flight-leg off the previous snap (pred == anchor in the
