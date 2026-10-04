@@ -138,6 +138,7 @@ export class ServerBotSenses {
     this.noticed.delete(id);
     this.routeHold.delete(id);
     this.routeFailed.delete(id);
+    this.routePrefs.delete(id);
     this.waitSpot.delete(id);
   }
 
