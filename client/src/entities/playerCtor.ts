@@ -21,7 +21,7 @@ export function buildSkillsCtx(p: Player, terrain: Terrain, scene: THREE.Scene):
     markTeleport: () => p.markTeleport(),
     blinkFrame: () => {
       p.movement.setState({ pos: p.pos, vel: p.vel, yaw: p.yaw, pitch: p.pitch, onGround: false });
-      p.visuals.updateCamera(p.camera, terrain, p.pos, p.yaw, p.pitch);
+      p.visuals.updateCamera(p.camera, terrain, { pos: p.pos, yaw: p.yaw, pitch: p.pitch });
       p.visuals.updateShadowBlob(terrain, p.pos);
     },
     emitBlink: (a, b) => p.onBlink?.(a, b),
@@ -51,7 +51,7 @@ export function buildInputCtx(p: Player): PlayerInputHandlers {
     melee: () => p.tryMelee(),
     toggleCamera: () => {
       p.thirdPerson = !p.thirdPerson;
-      p.model?.setVisible(p.thirdPerson && !p.isDead && !p.status.cloaked);
+      p.model?.setVisible(p.thirdPerson && !p.isDead);
       // Own bubble exists for spectators/remote eyes only — FP is the
       // gun shell + vignette, so it flips with the camera toggle.
       p.status.syncBubbleVisibility();
@@ -69,6 +69,11 @@ export function buildInputCtx(p: Player): PlayerInputHandlers {
       p.yaw -= dx * 0.002 * p.input.sensitivity;
       p.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
       p.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, p.pitch));
+    },
+    orbitLook: (dx, dy) => {
+      p.orbit.yaw -= dx * 0.002 * p.input.sensitivity;
+      p.orbit.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
+      p.orbit.pitch = Math.max(-1.4, Math.min(1.4, p.orbit.pitch));
     },
   };
 }

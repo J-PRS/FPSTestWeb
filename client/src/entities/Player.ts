@@ -271,6 +271,11 @@ export class Player {
   skiing = false;
   /** Z toggles Tribes Ascend-style chase cam — centered, under the crosshair. */
   thirdPerson = false;
+  /** Free-look orbit angles for the middle-mouse inspect cam — separate from
+   *  yaw/pitch so orbiting never moves the aim. Seeded from yaw/pitch each
+   *  time the orbit engages so the cam starts where you were looking. */
+  readonly orbit = { yaw: 0, pitch: 0 };
+  private wasMidHeld = false;
   /** Body-model barrel tip in world space — the beam/tracer anchor when
    *  the viewmodel is hidden (third person / spectating). */
   muzzleWorld(out: THREE.Vector3): boolean {
@@ -400,14 +405,22 @@ export class Player {
 
     // ---- All visual/event spawns below use the final post-physics position ----
 
-    this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
-    this.checkCameraSpinout(dt);
+    const orbiting = this.input.midHeld;
+    const orbitTransition = orbiting || this.wasMidHeld; // release frame snaps the cam back too
+    if (orbiting && !this.wasMidHeld) { this.orbit.yaw = this.yaw; this.orbit.pitch = this.pitch; }
+    this.wasMidHeld = orbiting;
+    this.visuals.updateCamera(this.camera, this.terrain, {
+      pos: this.pos, yaw: this.yaw, pitch: this.pitch,
+      thirdPerson: this.thirdPerson,
+      orbit: orbiting ? this.orbit : undefined,
+    });
+    this.checkCameraSpinout(dt, orbitTransition);
     // Model visibility follows the toggle AND death (observer cam is ghost
-    // flight â€” your corpse shouldn't fly with you). Debug renders the body
-    // wireframe + its collider even in first person so the mesh can be
-    // eyeballed against the capsule.
+    // flight â€” your corpse shouldn't fly with you). Debug and the middle-
+    // mouse orbit cam render the body (+collider under debug) in first
+    // person so the mesh can be eyeballed against the capsule.
     const dbg = !!urlParams.debug;
-    this.model?.setVisible((this.thirdPerson || dbg) && !this.isDead);
+    this.model?.setVisible((this.thirdPerson || orbiting || dbg) && !this.isDead);
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
@@ -505,9 +518,9 @@ export class Player {
   private _camQuatValid = false;
   private _spinoutCd = 0;
 
-  private checkCameraSpinout(dt: number): void {
+  private checkCameraSpinout(dt: number, intentionalOrbit = false): void {
     const q = this.camera.quaternion;
-    if (this._camQuatValid && this._spinoutCd <= 0) {
+    if (this._camQuatValid && this._spinoutCd <= 0 && !intentionalOrbit) {
       const deg = q.angleTo(this._prevCamQuat) * 180 / Math.PI;
       if (deg > 35) {
         this._spinoutCd = 0.5; // throttle â€” a stuck spinout spams otherwise

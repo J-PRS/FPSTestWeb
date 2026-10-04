@@ -33,6 +33,8 @@ export interface PlayerInputHandlers {
   respawn(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
   look(dx: number, dy: number): void;
+  /** Mouse deltas while the orbit bind is held — swings the camera, not the aim. */
+  orbitLook(dx: number, dy: number): void;
 }
 
 export class PlayerInput {
@@ -43,6 +45,9 @@ export class PlayerInput {
   // so without this the same click re-fires the gun on kill. Require a
   // mouse release before the next shot.
   needsRelease = false;
+  /** Middle mouse held: mouse-look orbits the camera around the body instead
+   *  of steering aim — lets you inspect your own 3P model. */
+  midHeld = false;
   jetPending = false;
   jumpHeld = false;
   beltHeld = false;
@@ -123,6 +128,7 @@ export class PlayerInput {
       if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
       this.keys[`Mouse${e.button}`] = true;
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
+      if (e.button === 1) { this.midHeld = true; e.preventDefault(); }
       if (e.button === 2) { this.jetPending = true; }
       // Buttons bound to key actions (keybinds allow Mouse0-4) need the
       // same press/release semantics as keyboard codes
@@ -137,6 +143,7 @@ export class PlayerInput {
       if (this.frozen) return;
       this.keys[`Mouse${e.button}`] = false;
       if (e.button === 0) this.mouseHeld = false;
+      if (e.button === 1) this.midHeld = false;
       if (e.button === 2) { this.jetPending = false; }
       if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
       if (matchCode('skill', `Mouse${e.button}`)) h.skillRelease();
@@ -157,7 +164,7 @@ export class PlayerInput {
       if (performance.now() < this.lockSettleUntil) return;
       const mx = Math.max(-800, Math.min(800, e.movementX));
       const my = Math.max(-800, Math.min(800, e.movementY));
-      h.look(mx, my);
+      if (this.midHeld) h.orbitLook(mx, my); else h.look(mx, my);
     });
   }
 

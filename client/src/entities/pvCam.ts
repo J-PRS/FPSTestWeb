@@ -6,8 +6,28 @@ import type { Terrain } from '../world/terrain.js';
 // T1/T2 observer free-fly rig — plus the feet gizmo that shares their
 // terrain reads.
 
-export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson: boolean }): void {
-  const { pos, yaw, pitch, thirdPerson } = cam;
+export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson: boolean; orbit?: { yaw: number; pitch: number } }): void {
+  const { pos, yaw, pitch, thirdPerson, orbit } = cam;
+    if (orbit) {
+      // Middle-mouse inspect cam: boom rides the ORBIT angles (detached from
+      // aim yaw/pitch) and frames the body, so spinning the view never moves
+      // the crosshair. Camera sits on the far side of `pos` from the orbit
+      // direction — drag left to walk the view around him.
+      const ax = Math.cos(orbit.pitch) * Math.sin(orbit.yaw);
+      const ay = Math.sin(orbit.pitch);
+      const az = Math.cos(orbit.pitch) * Math.cos(orbit.yaw);
+      camera.position.set(
+        pos.x - ax * PlayerVisuals.TP_BACK,
+        pos.y - ay * PlayerVisuals.TP_BACK + PlayerVisuals.TP_UP,
+        pos.z - az * PlayerVisuals.TP_BACK,
+      );
+      const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
+      if (camera.position.y < groundAtCam + 0.25) {
+        camera.position.y = groundAtCam + 0.25;
+      }
+      camera.lookAt(pos.x, pos.y - 0.4, pos.z); // chest height, not the eye
+      return;
+    }
     if (thirdPerson) {
       // Spherical orbit: the boom opposes the FULL aim vector — aim down
       // and the camera swings up overhead, aim up and it drops low behind
