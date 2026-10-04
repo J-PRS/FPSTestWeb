@@ -3,204 +3,78 @@ import type { BrainOut } from '../../shared/botBrain.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { appendFileSync } from 'node:fs';
+import { SheepCore, type SheepVec } from '../../shared/botSheep.ts';
 
-/** Sheep meter: starts at 100 — llama until proven otherwise. It drains
- *  fast only while a body demonstrably holds/converts real mechanical
- *  energy (sqrt(2E) past ~20 m/s-equiv, or actively jetting); walking,
- *  hopping, and slow falls are pedestrian motion even off the ground.
- *  Proven play buys ~20s of grace: slowing down afterward charges the
- *  meter at a trickle, because good players have reasons to pause —
- *  the full pedestrian rate returns only if the grace lapses. At 100
- *  it clamps — a readout for badges/telemetry, not a punish lever. */
+/** Wire-side sheep adapter — the meter itself lives in
+ *  shared/botSheep.ts so wire humans, offline bots, and the local
+ *  player's own readout all get the same verdict on the same inputs.
+ *  This file only translates Room state into SheepSamples and owns
+ *  the server-specific logging (file divert + 'high' info line). */
 export class BotSheepMeter {
-  private meter = new Map<string, number>();
-  private window = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
-  /** Sim-ms of the bot's last actual fire — the ignore charge needs a
-   *  recency window or legal volley cadence (0.8–1.9s between bursts)
-   *  reads as passivity and buries every other channel in the ledger. */
-  private lastFire = new Map<string, number>();
-  /** Per-source charge ledger — dumped into the maxed warn so tuning
-   *  reads "why" instead of "that". */
-  private why = new Map<string, { idle: number; ignore: number; cover: number }>();
-  /** Windows that measure play must run on sim time — wall clock lies
-   *  whenever the tick is throttled. */
-  private simMs = 0;
-  /** Per-bot EMA of mechanical energy ½v²+g·h (J/kg above ground) — the
-   *  "recent" term the tribesing credit reads: momentary ground contact
-   *  mid-ski doesn't zero the credit the kinetic peak just earned. */
-  private eSm = new Map<string, number>();
-  /** Sim-ms until which the bot's last proven play still counts —
-   *  refreshed on every tribesing tick; the credibility window that
-   *  slows refills for demonstrated skill. */
-  private provenUntil = new Map<string, number>();
-  /** Bots currently pinned at 100 — dedupes the maxed-warn so a bot
-   *  idling at the cap doesn't re-log every tick. */
-  private maxed = new Set<string>();
-  /** Last sim-ms each bot's maxed warn fired — a true llama re-maxes
+  private core = new SheepCore();
+  /** Last sim-ms each body's maxed warn fired — a true llama re-maxes
    *  every life, so the alarm needs a cooldown or it floods anyway. */
   private maxWarnedAt = new Map<string, number>();
 
   constructor(private room: Room) {}
 
-  step(dt: number): void { this.simMs += dt * 1000; }
+  step(dt: number): void { this.core.step(dt); }
 
   /** A player's real shot — humans don't emit BrainOut.fire, so the
    *  combat claim path reports fires here and the ignore debit sees
    *  the same recency evidence a bot's own fire intent gives it. */
-  noteFire(id: string): void { this.lastFire.set(id, this.simMs); }
+  noteFire(id: string): void { this.core.noteFire(id); }
 
-  clear(id: string): void {
-    this.meter.delete(id);
-    this.window.delete(id);
-
-    this.why.delete(id);
-    this.lastFire.delete(id);
-    this.eSm.delete(id);
-    this.provenUntil.delete(id);
-    this.maxed.delete(id);
-  }
+  clear(id: string): void { this.core.clear(id); }
 
   /** No ticks on record = unproven = full meter. */
-  of(id: string): number { return Math.round(this.meter.get(id) ?? 100); }
-  set(id: string, v: number): void { this.meter.set(id, v); }
+  of(id: string): number { return this.core.of(id); }
+  set(id: string, v: number): void { this.core.set(id, v); }
 
   check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, _now: number): void {
-    const bonusSpeed = this.energy(id, p.velocity, m.dt, m.height ?? 0);
-    const jetting = !!m.out.move?.jet;
-    // Tribesing = holding/converting real E: bonusSpeed covers KE and
-    // any height a moving body is carrying. Bare airborne doesn't
-    // qualify — a low-speed hop is pedestrian motion that left the
-    // ground; jetting does (tank→potential conversion IS the work).
-    // Welding the stand's gear is honest work — a parked welder is
-    // productive, not a pedestrian.
-    const tribesing = bonusSpeed > 20 || jetting || !!m.out.repair;
-    if (tribesing) this.provenUntil.set(id, this.simMs + 20_000);
-    const proven = this.simMs < (this.provenUntil.get(id) ?? 0);
-    const prev = this.meter.get(id) ?? 100;
-    let why = this.why.get(id);
-    if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
-    // Holding the post is work, not sheep: a HoF parked ON its stand
-    // dest or a technician beside its gear looks identical to a llama
-    // from speed alone. "Arrived" gets a trickle charge — it still
-    // maxes eventually if the bot truly sleeps on a stale waypoint
-    // (wander goals re-roll on arrival, so a real guard's dest stays
-    // its post while a drifter's dest moves on).
-    const atPost = m.hasDest && Math.hypot(
-      p.position.x - m.out.dest.x,
-      p.position.z - m.out.dest.z) < 14;
-    const base = this.charge(m, tribesing, bonusSpeed, jetting, atPost || proven, why);
-    let meter = prev + base;
-    // The foe-ignoring charge only counts a PARKED bot — one that's
-    // skiing/jetting/covering ground is playing Tribes even while it
-    // holds fire.
-    if (m.out.fire?.targetId) this.lastFire.set(id, this.simMs);
-    meter += this.debits(id, p, m, tribesing, why);
-    this.commit(id, prev, meter, why);
+    // The bot's own fire intent refreshes the recency window the same
+    // way a human's claim does — an engaged bot in legal volley cadence
+    // isn't refusing to shoot.
+    if (m.out.fire?.targetId) this.core.noteFire(id);
+    const v = this.core.tick(id, {
+      pos: p.position,
+      vel: p.velocity,
+      height: m.height ?? 0,
+      dt: m.dt,
+      foe: !!m.foe,
+      hasDest: m.hasDest,
+      dest: m.out.dest,
+      jetting: !!m.out.move?.jet,
+      repair: !!m.out.repair,
+    });
+    if (v.newlyMaxed) this.warnMaxed(id, v.why);
+    else if (v.crossedHigh) logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });
   }
 
-  /** Total mechanical energy (kinetic + potential) is the Tribes
-   *  currency — a fast bot low to the ground and a slow bot on a perch
-   *  are both holding real E. Returns the EMA smoothed back into the
-   *  equivalent flat-ground speed so the thresholds stay familiar.
-   *  Potential counts at half gravity past a 2m deadband — and only
-   *  while the bot is moving: a parked body at altitude isn't holding
-   *  energy to convert, it's sleeping on the deposit (the drain-forever
-   *  bug that kept sleepers at sheep=0). */
-  private energy(id: string, v: Vec3, dt: number, height: number): number {
-    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
-    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
-    const ePrev = this.eSm.get(id) ?? mech;
-    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
-    this.eSm.set(id, eSm);
-    return Math.sqrt(Math.max(0, 2 * eSm));
-  }
-
-  /** Write the new meter value with its thresholds — a full meter just
-   *  clamps and dumps the charge ledger once (the launch penalty is
-   *  retired: the meter is a readout, not a punish lever). */
-  private commit(id: string, prev: number, meter: number, why: { idle: number; ignore: number; cover: number }): void {
-    if (meter >= 100) {
-      this.meter.set(id, 100);
-      // Warn only on the rise INTO the cap — bodies start at 100 (llama
-      // until proven), so a fresh bot sitting at the cap isn't news.
-      if (prev < 100 && !this.maxed.delete(id)) {
-        this.maxed.add(id);
-        if (this.simMs - (this.maxWarnedAt.get(id) ?? -600_000) >= 600_000) {
-          this.maxWarnedAt.set(id, this.simMs);
-          // Ledger sums are charge points, not seconds — each channel's
-          // share of the fill (pedestrian ticks / refused shots / one
-          // patch of ground), so the dominant channel reads at a glance.
-          // Soak runs are flooded by these verdicts (every llama re-maxes
-          // per life), so FPS_SHEEP_LOG diverts them to a file and drops
-          // the console copy to info.
-          const whyPts = { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) };
-          const sheepLog = process.env.FPS_SHEEP_LOG;
-          if (sheepLog) {
-            try {
-              appendFileSync(sheepLog,
-                `${(this.simMs / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} cover=${whyPts.cover}\n`);
-            } catch { /* a bad log path must never break a match */ }
-            logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
-          } else {
-            logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
-          }
-        }
-      }
-      return;
+  /** Ledger sums are charge points, not seconds — each channel's share
+   *  of the fill (pedestrian ticks / refused shots / deadstops / one
+   *  patch of ground), so the dominant channel reads at a glance.
+   *  Soak runs are flooded by these verdicts (every llama re-maxes per
+   *  life), so FPS_SHEEP_LOG diverts them to a file and drops the
+   *  console copy to info. */
+  private warnMaxed(id: string, why: { idle: number; ignore: number; bleed: number; cover: number }): void {
+    if (this.core.now - (this.maxWarnedAt.get(id) ?? -600_000) < 600_000) return;
+    this.maxWarnedAt.set(id, this.core.now);
+    const whyPts = { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), bleed: +why.bleed.toFixed(1), cover: +why.cover.toFixed(1) };
+    const sheepLog = process.env.FPS_SHEEP_LOG;
+    if (sheepLog) {
+      try {
+        appendFileSync(sheepLog,
+          `${(this.core.now / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} bleed=${whyPts.bleed} cover=${whyPts.cover}\n`);
+      } catch { /* a bad log path must never break a match */ }
+      logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
+    } else {
+      logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
     }
-    this.maxed.delete(id);
-    if (meter < 0) meter = 0;
-    else if (prev < 60 && meter >= 60) {
-      logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
-    }
-    this.meter.set(id, meter);
   }
 
-  /** Fastest cowardice tell: a visible live enemy in range and the
-   *  brain elects not to shoot. The 3s recency window matters — volley
-   *  pacing means an ENGAGED bot legitimately goes ~2s between shots,
-   *  so the charge only counts a sustained refusal to fire. */
-  /** Base idle charge — negative while the bot is doing Tribes things.
-   *  The drain is rate-capped: a high-E burst (say a 60m/s plummet) used
-   *  to bleed a full meter to zero inside a second, reading as a reset.
-   *  Faster play still drains faster — just never in a single step. */
-  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, excused: boolean, why: { idle: number }): number {
-    const base = m.dt * (tribesing
-      ? -Math.min(12 + speedXZ * 0.6 + (jetting ? 15 : 0), 30)
-      // excused = at post OR still inside the proven grace — a player
-      // who just demonstrated real E gets the trickle rate when they
-      // slow down, not the pedestrian meter.
-      : excused ? 2 : m.hasDest ? 9 : 18);
-    if (base > 0) why.idle += base;
-    return base;
-  }
-
-  /** Post-grace debits: foe-ignoring (only a parked bot — a skiing one
-   *  is playing Tribes even while it holds fire) + coverage stall. */
-  private debits(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; hasDest: boolean; foe?: boolean; dt: number }, tribesing: boolean, why: { idle: number; ignore: number; cover: number }): number {
-    const ig = tribesing ? 0 : this.ignoreDebit(id, m);
-    const cov = this.coverageDebit(id, p, m.hasDest, this.simMs);
-    why.ignore += ig; why.cover += cov;
-    return ig + cov;
-  }
-
-  private ignoreDebit(id: string, m: { out: BrainOut; foe?: boolean; dt: number }): number {
-    return m.foe && this.simMs - (this.lastFire.get(id) ?? -Infinity) > 3000 ? m.dt * 40 : 0;
-  }
-
-  /** Coverage window: under ~30m of real displacement per 5s while the
-   *  brain claims a destination reads as sheeping even when the per-tick
-   *  speed check squeaks by. Returns the meter debit for the window. */
-  coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, simMs: number): number {
-    let w = this.window.get(id);
-    if (!w) { w = { start: simMs, dist: 0, lx: p.position.x, ly: p.position.y, lz: p.position.z }; this.window.set(id, w); }
-    // 3D displacement — XZ-only reads a bot grinding up a steep
-    // slope (half of every T2 port) as covering no ground.
-    w.dist += Math.hypot(p.position.x - w.lx, p.position.y - w.ly, p.position.z - w.lz);
-    w.lx = p.position.x; w.ly = p.position.y; w.lz = p.position.z;
-    if (simMs - w.start < 5000) return 0;
-    const owed = hasDest && w.dist < 30 ? 20 : 0;
-    w.start = simMs; w.dist = 0;
-    return owed;
+  /** Test hook — the 5s coverage window, driven by explicit sim ms. */
+  coverageDebit(id: string, p: { position: SheepVec }, hasDest: boolean, simMs: number): number {
+    return this.core.coverageDebit(id, p.position, hasDest, simMs);
   }
 }

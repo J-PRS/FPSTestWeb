@@ -37,7 +37,6 @@ export class PlayerSheep {
     const foe = this.foeNear(player, remotes, localTeam);
     this.meter.tick(this.body, dt, terrain, {
       foe,
-      ignoring: foe && this.meter.notShooting(this.body.playerId),
       // A live player always intends somewhere — the coverage stall is
       // the ground truth a parked player is measured by, same as the
       // server's wire-human metering.
