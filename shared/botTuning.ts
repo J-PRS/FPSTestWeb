@@ -7,12 +7,12 @@
 export const BOT_TUNING = {
   // botMoves — jet/ski/jump intent
   moves: {
-    jetHoldBase: 0.45,   // s — minimum committed burn on arm
-    jetHoldRand: 0.4,    // s — extra randomized burn window
+    jetHoldBase: 0.7,    // s — minimum committed burn on arm (sweep: longer holds beat feather-tapping)
+    jetHoldRand: 0.3,    // s — extra randomized burn window
     breathArm: 12,       // energy below which a dry climber perches
     breathHold: 38,      // energy needed to step off the perch
     breathRise: 3,       // m rise ahead that qualifies as "on the face"
-    tankedMin: 15,       // energy reserve jets won't dip below
+    tankedMin: 8,        // energy reserve jets won't dip below (sweep: holding a large reserve strangles transit)
     tapEnergyMin: 4,     // runner airborne-tap floor (featherjet on flats)
     runwayBase: 45,      // m — dive-runway base before arrival
     runwayDropK: 2,      // runway growth per m of altitude to shed
@@ -25,18 +25,18 @@ export const BOT_TUNING = {
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch
     skiVetoRise: 3,      // m — steep-climb grade that releases ski
     skiVetoSpeed: 8,     // m/s — below this on a steep grade, don't ski
-    ceilingAgl: 30,      // m AGL — held burn above this is ballooning
-    comfyEnergy: 30,     // energy floor for discretionary burns
+    ceilingAgl: 18,      // m AGL — held burn above this is ballooning (sweep winner: early brake saves tank for transitions)
+    comfyEnergy: 24,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
     boostGdMin: 15,      // m — boost only with ground to cover
     boostRise: 1.5,      // m — boost only on flat/downhill ahead
     runInGdMin: 12,      // m — runner run-in burn inner window
-    runInGdMax: 90,      // m — runner run-in burn outer window
+    runInGdMax: 70,      // m — runner run-in burn outer window (sweep: past ~70m the hop chain owns the approach)
     runInRise: 4,        // m — run-in only when objective near-level
-    runInSpeed: 26,      // m/s — run-in stops boosting past this
+    runInSpeed: 40,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
-    climbRise: 2,        // m rise ahead that counts as a climb
+    climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
     hopSpeed: 6,         // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
@@ -77,7 +77,7 @@ export const BOT_TUNING = {
     diveAgl: 25,         // m AGL — runner this high aims the descent at the objective
     diveGlideK: 4,       // objective within altitude*this → in glide range
     apexMax: 40,         // m — max banked apex altitude credited
-    apexW: 0.8,          // apex bonus weight
+    apexW: 0.8,          // apex bonus weight — high-arc lines are how a bowl rim (katabatic) gets crested; zeroing it stranded the kata route
     climbTaxRise: 4,     // m — landings above this get taxed
     climbTaxW: 1.8,      // climb tax weight
     earlyClimbW: 26,     // first-stretch climb penalty weight
