@@ -112,6 +112,11 @@ export interface RigManifest {
    *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
    *  target so the whole set unwinds onto the authored forward. */
   clipYawFix?: number;
+  /** Directional walk strides the GLB ships natively (polyart's
+   *  WalkLeft/WalkRight/WalkBack family). 8-way sectors snap to the
+   *  nearest authored axis — a strafe-leaning diagonal reads better as
+   *  a strafe than as a forward walk. */
+  walkDirs?: Partial<Record<LocoDir, string>>;
   /** Native clips also register under their UAL_ alias (mannequin's set
    *  IS the UAL library). */
   ualAlias?: boolean;
@@ -143,6 +148,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'], clipYawFix: Math.PI,
                     mount: { quat: [0.8778, -0.1951, -0.3364, -0.2796] } },
   'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
+                    walkDirs: { B: 'WalkBack_Shoot_ar', L: 'WalkLeft_Shoot_ar', R: 'WalkRight_Shoot_ar' },
                     mount: { bone: 'handleft', world: true, quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 1.3, pos: [0, 0, -15] } },
 };
 
@@ -157,10 +163,11 @@ export const CLASS_BODY_SPEC: Record<string, {
   anims?: Partial<Record<AnimationState, string>>;
   gunLocal?: [number, number, number];
   mount?: RigManifest['mount'];
+  walkDirs?: RigManifest['walkDirs'];
 }> = Object.fromEntries(
   Object.entries(RIG_MANIFEST)
     .filter(([, r]) => r.fitH !== undefined && r.fixedScale === undefined && r.url.includes('/class_'))
-    .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal, mount: r.mount }]),
+    .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal, mount: r.mount, walkDirs: r.walkDirs }]),
 );
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
@@ -248,8 +255,20 @@ export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationStat
 export interface ClipCandidate { name: string; dir: boolean }
 export function clipCandidates(variant: string, state: AnimationState, dir: LocoDir): ClipCandidate[] {
   if (variant === 'knight') return [{ name: KNIGHT_ANIMS[state], dir: false }];
-  const anims = CLASS_BODY_SPEC[variant]?.anims;
-  if (anims) return anims[state] ? [{ name: anims[state]!, dir: false }] : [];
+  const spec = CLASS_BODY_SPEC[variant];
+  if (spec?.anims) {
+    const out: ClipCandidate[] = [];
+    // Rigs shipping directional strides (polyart's Walk* family) resolve
+    // lateral/back sectors onto them; diagonals snap to their side clip.
+    if (state === 'walk' && dir !== 'F' && spec.walkDirs) {
+      const axis = dir === 'L' || dir === 'FL' || dir === 'BL' ? 'L'
+        : dir === 'R' || dir === 'FR' || dir === 'BR' ? 'R' : 'B';
+      const n = spec.walkDirs[axis];
+      if (n) out.push({ name: n, dir: true });
+    }
+    if (spec.anims[state]) out.push({ name: spec.anims[state]!, dir: false });
+    return out;
+  }
   const out: ClipCandidate[] = [];
   if (state === 'walk' || state === 'run') {
     if (dir === 'F') {
