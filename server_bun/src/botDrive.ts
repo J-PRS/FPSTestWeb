@@ -15,7 +15,7 @@ import type { MoveState } from '../../shared/movement.ts';
 import type { BotSheepMeter } from './botSheep.ts';
 import type { BotArsenal } from './botArsenal.ts';
 import { isSuper } from './superBot.ts';
-import type { BotWatchdog, MobilitySample } from './botWatchdog.ts';
+import type { MobilityWatchdog, MobilitySample } from './botMobility.ts';
 import type { Room } from './Room.ts';
 
 const SPEED = 14;          // m/s ground move (legacy path)
@@ -27,7 +27,7 @@ export interface DriveHost {
   room: Room;
   sheep: BotSheepMeter;
   arsenal: BotArsenal;
-  watchdog: BotWatchdog;
+  watchdog: MobilityWatchdog;
   readonly foeNear: Map<string, number>;
   readonly field: Heightfield | null;
   seq: number;

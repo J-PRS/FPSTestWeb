@@ -30,12 +30,14 @@ export interface MobilitySample {
 }
 
 /**
- * Bot mobility watchdog — two alarms that catch "sheepish" behavior in
+ * MobilityWatchdog — two alarms that catch "sheepish" behavior in
  * logs rather than in playtests: a stuck warn when an alive bot covers
  * no ground for a few seconds, and a rolling mobility audit that flags
  * bots staying flat-footed while they claim to be travelling.
+ * Renamed off "botWatchdog" — the client's BotWatchdog is a DIFFERENT
+ * tool (logic-vs-render stall detection), not a port of this.
  */
-export class BotWatchdog {
+export class MobilityWatchdog {
   private stuck = new Map<string, StuckState>();
   private sheep = new Map<string, SheepState>();
 

@@ -26,7 +26,7 @@ import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import { type BotLoadout } from '../../shared/botLoadouts.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
-import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
+import { MobilityWatchdog, type MobilitySample } from './botMobility.ts';
 import { BotArsenal } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
 import { ServerBotSenses } from './serverSenses.ts';
@@ -72,16 +72,16 @@ export class ServerBots {
   arsenal: BotArsenal;
   readonly room: Room;
   readonly field: Heightfield | null;
-  /** Mobility watchdog — stuck + sheep alarms live in botWatchdog.ts so
+  /** Mobility watchdog — stuck + sheep alarms live in botMobility.ts so
    *  this file stays about driving bots, not auditing them. */
-  watchdog: BotWatchdog;
+  watchdog: MobilityWatchdog;
   /** What brains may see — serverSenses.ts builds the wire-legal ctx. */
   private sense: ServerBotSenses;
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
     this.field = field;
-    this.watchdog = new BotWatchdog(room.name);
+    this.watchdog = new MobilityWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
     this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id), (id) => this.brains.get(id)?.currentHuntSeen ?? null, (id) => this.brains.get(id)?.skill);
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id) => this.untrack(id), ServerBots.THINK_DIV);
