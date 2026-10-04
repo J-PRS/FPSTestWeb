@@ -1,3 +1,19 @@
+2026-10-01 - GLB payload cut ~3x across the board (85 files): public
+models 62->27MB, T2 interior difs 56->39MB, anims 3->2MB. gltf-transform
+weld+quantize+webp+keyframe-resample, decoder-free (KHR_mesh_quantization
+is native to our GLTFLoader), simplify off so silhouettes are identical.
+All 3 class rigs verified skinned+posing on the lineup page.
+
+2026-10-04 - Ichor de-marbled and decals made physical (see
+_docs/2026-10-04_ICHOR_DECAL_RESEARCH.md): droplets are faceted
+icosahedron chunks on matte Lambert (Phong shininess-90 marble path
+deleted, glossy bucket keying gone with it). Stains now take the
+droplet's landing velocity — splatDir smears the projected mask into a
+streak and throws two slot-hashed satellite specks, like Source blood
+painting along the shot line. SplatDecal grows in over ~0.14s (wet
+splash, not pop-in) and darkens its tint as it dries over 12s. Droplet
+stain radius gets a +/-25% jitter so splat fields don't read flat.
+
 2026-10-01 - Map payload cut 172MB -> 23MB: baked albedo/sky/tile PNGs
 re-encoded to WebP (albedo q90, tiles q92, sky q88) across all 23 T2
 ports. Specs and mats.json repointed, /maps route serves .webp, sky
