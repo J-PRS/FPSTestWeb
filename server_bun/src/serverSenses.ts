@@ -43,6 +43,11 @@ export class ServerBotSenses {
   private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
   private noticed = new Map<string, number>();
   private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number; minD?: number }>();
+  // Entries that were chased and failed: without this memory a dead
+  // incumbent is re-elected by the very next probe (it scores best on
+  // the same terms it died on), and the bot orbits it forever —
+  // raindance's pit orbit was exactly this loop.
+  private routeFailed = new Map<string, { pos: BotVec; at: number }>();
   /** Squad push-call: a capper within ETA of the enemy stand posts it
    *  here; teammates' goal ladders read it for a few seconds so the
    *  stand floods BEFORE the runner lands — the same "capper's 10 out"
@@ -128,7 +133,17 @@ export class ServerBotSenses {
   forget(id: string): void {
     this.noticed.delete(id);
     this.routeHold.delete(id);
+    this.routeFailed.delete(id);
     this.waitSpot.delete(id);
+  }
+
+  /** Mark an entry position as failed-to-reach so the next probe can't
+   *  re-elect it — bounded memory (a few recent failures per bot). */
+  private failRoute(id: string, pos: BotVec): void {
+    const f = this.routeFailed.get(id) ?? { pos, at: 0 };
+    f.pos = pos;
+    f.at = simNow();
+    this.routeFailed.set(id, f);
   }
 
   /** Room code reports an event worth a reaction (flag cap/grab/return/
@@ -434,7 +449,9 @@ export class ServerBotSenses {
         // probe for its window — see PRESS_MS.
         const pressing = incLive && dist3(incLive.pos, enemyStand) < 1
           && simNow() - incLive.at < ServerBotSenses.PRESS_MS;
-        if (incLive && dist3(incLive.pos, enemyStand) < 1 && !pressing) this.routeHold.delete(p.id); // stale press — re-probe
+        if (incLive && dist3(incLive.pos, enemyStand) < 1 && !pressing) {
+          this.routeHold.delete(p.id); // stale press — re-probe
+        }
         let routed = false;
         if (pressing) {
           goalPos = { ...enemyStand };
@@ -460,6 +477,7 @@ export class ServerBotSenses {
             goalPos = { ...incLive.pos };
           } else if (simNow() - incLive.at > 30_000) {
             this.routeHold.delete(p.id);
+            this.failRoute(p.id, incLive.pos);
           } else {
             goalPos = { ...incLive.pos };
           }
@@ -590,6 +608,12 @@ export class ServerBotSenses {
               if (ed < 80) { score -= (80 - ed) * 0.05; break; }
             }
           }
+          // Graveyard penalty: an entry the bot already failed to reach
+          // loses by a landslide — without memory the probe re-elects
+          // the same unreachable point every re-score (raindance orbit).
+          const fr = this.routeFailed.get(p.id);
+          if (fr && simNow() - fr.at < 90_000
+            && Math.hypot(fr.pos.x - ex, fr.pos.z - ez) < 80) score -= 400;
           return score;
         };
         // Route temperament: two runners reading the same terrain pick
