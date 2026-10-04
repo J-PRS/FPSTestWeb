@@ -11,7 +11,16 @@
  * timeouts) must keep Date.now().
  */
 let warpOffsetMs = 0;
+let frozenBaseMs: number | null = null;
 
-export const simNow = (): number => Date.now() + warpOffsetMs;
+export const simNow = (): number =>
+  frozenBaseMs !== null ? frozenBaseMs + warpOffsetMs : Date.now() + warpOffsetMs;
 export const simNowAdvance = (ms: number): void => { warpOffsetMs += ms; };
-export const simNowReset = (): void => { warpOffsetMs = 0; };
+/** Reset starts a frozen clock: sim time then moves ONLY via
+ *  simNowAdvance — wall-time gaps between step() calls can't leak into
+ *  brain cooldowns or timers, which is what made harness runs
+ *  non-deterministic. Production never calls this (identity path). */
+export const simNowReset = (base: number = Date.now()): void => {
+  frozenBaseMs = base;
+  warpOffsetMs = 0;
+};

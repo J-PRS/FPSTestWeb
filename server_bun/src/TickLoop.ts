@@ -4,6 +4,7 @@ import { computeStateHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
+import { simNow } from './simClock.ts';
 
 // Heal/suppression helpers live in tickHelpers.ts so tickRecords doesn't
 // import this file — re-exported here because scenario tests import them
@@ -88,7 +89,7 @@ export class TickLoop {
           logger.info('Room disposed', { room: room.name });
           continue;
         }
-        room.checkMatchClock(now0);
+        room.checkMatchClock(simNow());
         // Hibernation: nobody watching → freeze ball sim + skip the whole
         // room tick. Bots alone don't count as an audience — they exist
         // to serve humans, and a bot-only 'default' would otherwise sim

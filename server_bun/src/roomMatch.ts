@@ -41,6 +41,8 @@ export class MatchClock {
     return this.endsAt ? Math.max(0, this.endsAt - simNow()) : 0;
   }
 
+  /** `now` is a simClock stamp — callers must pass simNow(), never a
+   *  wall clock (mixing domains shifts the horn by the warp offset). */
   tick(now: number): void {
     const spec = this.host.modeSpec;
     if (!spec) return;

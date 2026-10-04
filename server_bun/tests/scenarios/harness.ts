@@ -1,5 +1,6 @@
 import { Room } from '../../src/Room.ts';
 import { botRng } from '../../../shared/botRand.ts';
+import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
@@ -25,6 +26,11 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // builder rolls) draw from this stream at `new Room` time, so injecting
   // after would leave them on the previous room's leftovers.
   botRng(lcg(seed + 3));
+  // Sim clock starts at wall now; step() advances it with sim ticks so
+  // respawns/cooldowns/notice TTLs track sim time, not wall speed — two
+  // runs of the same genome must differ only by seed, never by how fast
+  // the host happened to execute the loop.
+  simNowReset();
   // Staged arenas stay sterile unless the test asks for wildlife: a
   // stepping BallSim fills the field near every player, and lunging
   // balls pop on pinned bots — leaking damage into unrelated scenarios.
@@ -57,6 +63,7 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
 export function step(room: Room, ticks: number, dt = 0.05): void {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) s.tick(dt);
+    simNowAdvance(dt * 1000);
   }
 }
 

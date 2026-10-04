@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { MatchClock, type MatchHost } from '../../src/roomMatch.ts';
+import { simNow } from '../../src/simClock.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // An empty room's clock must stay disarmed after a match end — otherwise
@@ -22,7 +23,9 @@ function mkHost(humans: { n: number }) {
   };
   return { host, sent };
 }
-const t0 = Date.now();
+// simNow() stamp — tick() takes sim-clock time, and wall time diverges
+// once another suite's harness has warped the clock.
+const t0 = simNow();
 
 describe('scenario: match clock in an empty room', () => {
   it('stays disarmed after a force-end with no humans', () => {

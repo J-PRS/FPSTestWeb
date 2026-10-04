@@ -2,13 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { Room } from '../src/Room';
 import { resolveMapSpec } from '../../shared/mapSpec';
 import { MODES } from '../../shared/teams';
+import { simNow } from '../src/simClock';
 
 describe('match clock', () => {
   test('no mode → clock never arms', () => {
     const room = new Room('c', null, '', resolveMapSpec({}));
     room.players.addPlayer('h');
-    room.checkMatchClock(Date.now());
-    room.checkMatchClock(Date.now() + 10_000_000);
+    room.checkMatchClock(simNow());
+    room.checkMatchClock(simNow() + 10_000_000);
     // still alive, no crash, scores untouched
     expect(room.players.getPlayerCount()).toBe(1);
   });
@@ -17,7 +18,7 @@ describe('match clock', () => {
     const room = new Room('c1', null, '', resolveMapSpec({ mode: 'nuggets' }));
     let endedWinner = '';
     room.onMatchEnd = (r) => { endedWinner = r.winner; };
-    const t0 = Date.now();
+    const t0 = simNow();
     room.checkMatchClock(t0); // nobody home → not armed
         room.players.addPlayer('h1');
     room.checkMatchClock(t0); // arms now
@@ -32,7 +33,7 @@ describe('match clock', () => {
     const room = new Room('c2', null, '', resolveMapSpec({ mode: 'ctf' }));
     let endedWinner = '';
     room.onMatchEnd = (r) => { endedWinner = r.winner; };
-    const t0 = Date.now();
+    const t0 = simNow();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
     const horn = t0 + MODES.ctf.timeLimitS * 1000 + 1;
@@ -46,7 +47,7 @@ describe('match clock', () => {
     const room = new Room('ot', null, '', resolveMapSpec({ mode: 'nuggets' }));
     let endedWinner = '';
     room.onMatchEnd = (r) => { endedWinner = r.winner; };
-    const t0 = Date.now();
+    const t0 = simNow();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
     const horn = t0 + MODES.nuggets.timeLimitS * 1000 + 1;
@@ -61,7 +62,7 @@ describe('match clock', () => {
     const priv = room.matchClock as unknown as { endsAt: number; warned: boolean };
     const hornOf = () => priv.endsAt;
     const warnedOf = () => priv.warned;
-    const t0 = Date.now();
+    const t0 = simNow();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
     const horn = hornOf();
@@ -82,7 +83,7 @@ describe('match clock', () => {
     const room = new Room('c3', null, '', resolveMapSpec({ mode: 'dm' }));
     let endedWinner = '';
     room.onMatchEnd = (r) => { endedWinner = r.winner; };
-    const t0 = Date.now();
+    const t0 = simNow();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
     room.ffaScores.set('h1', 30);
