@@ -352,12 +352,66 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
   return out;
 }
 
+// Cube-sky horizon band: scene.background can't tint toward the haze, so
+// a cube sky rides a camera-locked dome whose shader melts the horizon
+// into the live fog color — saturated-fog terrain then dissolves into
+// sky instead of cutting a hard silhouette (the T2 look). uFog is fed
+// the sun-tinted scene.fog.color every frame via updateCubeSky.
+let cubeDome: THREE.Mesh | null = null;
+
+function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
+  if (!cubeDome) {
+    cubeDome = new THREE.Mesh(
+      new THREE.SphereGeometry(60, 48, 24),
+      new THREE.ShaderMaterial({
+        uniforms: { tCube: { value: cube }, uFog: { value: new THREE.Color(FOG_COLOR) } },
+        vertexShader: `varying vec3 vWorld;
+          void main() {
+            vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: `uniform samplerCube tCube;
+          uniform vec3 uFog;
+          varying vec3 vWorld;
+          void main() {
+            vec3 dir = normalize(vWorld - cameraPosition);
+            // SRGBColorSpace uploads as SRGB8_ALPHA8 — the sample is
+            // already linear here, matching scene.fog.color's space.
+            vec3 sky = textureCube(tCube, dir).rgb;
+            // Melt starts above the horizon so fogged ridges never show
+            // a crisp line; below the horizon it's pure haze.
+            float band = smoothstep(0.30, -0.02, dir.y);
+            gl_FragColor = vec4(mix(sky, uFog, band), 1.0);
+          }`,
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthTest: false,
+      }));
+    cubeDome.name = '__cubeDome';
+    cubeDome.frustumCulled = false;
+    cubeDome.renderOrder = -100;
+  } else {
+    (cubeDome.material as THREE.ShaderMaterial).uniforms.tCube.value = cube;
+  }
+  cubeDome.visible = true;
+  scene.add(cubeDome);
+}
+
+/** Per-frame: keep the dome glued to the camera and its haze band on the
+ *  live (sun-tinted) fog color. */
+export function updateCubeSky(camera: THREE.Camera, fogColor: THREE.Color): void {
+  if (!cubeDome || !cubeDome.visible) return;
+  cubeDome.position.copy(camera.position);
+  ((cubeDome.material as THREE.ShaderMaterial).uniforms.uFog.value as THREE.Color).copy(fogColor);
+}
+
 /** A missing face must not kill the terrain swap — loader rejections
  *  are ProgressEvents, which used to surface as "undefined" here. */
 async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
   const skyMesh = deps.lazyScene().getObjectByName('__sky');
   if (!skyDir) {
     deps.lazyScene().background = null;
+    if (cubeDome) cubeDome.visible = false;
     if (skyMesh) skyMesh.visible = true;
     return;
   }
@@ -383,7 +437,8 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     const cube = new THREE.CubeTexture(assembled);
     cube.colorSpace = THREE.SRGBColorSpace;
     cube.needsUpdate = true;
-    deps.lazyScene().background = cube;
+    applyCubeDome(deps.lazyScene(), cube);
+    deps.lazyScene().background = null;
     if (skyMesh) skyMesh.visible = false;
   } catch (e) {
     const src = (e as ProgressEvent)?.target as { src?: string } | undefined;

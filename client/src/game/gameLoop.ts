@@ -29,6 +29,7 @@ import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { updateDirectionalFog } from '../world/directionalFog.js';
+import { updateCubeSky } from './net/mapAssets.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { createEntities } from './entities.js';
@@ -219,6 +220,7 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
   fog.color.copy(tinted);
   deps.sceneSetup.atmosphericSky.setFogColor(tinted);
+  updateCubeSky(deps.camera, fog.color);
   terrain.updateFog(fog.color, fog.near, fog.far);
 }
 
@@ -261,7 +263,9 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   // unconditionally: sends no-op while disconnected (ws?.connected()
   // guards inside), but gating the whole tick on the socket froze every
   // remote/bot indicator mid-screen for the life of a flap.
-  if (!player.isDead && !demoManager?.isPlaying) {
+  // Remotes keep ticking while you're dead — the death cam still watches
+  // the world, and the position send is also the server's liveness proof.
+  if (!demoManager?.isPlaying) {
     deps.remotes().networkTick(dt);
   }
   perf.mark('player');
@@ -404,6 +408,9 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
   // read 0 at spawn even though the belt economy starts at BELT_MAX.)
   hud.setNuggets(player.beltCharges);
+  // The run clock only ticks offline — show it only then, else it's a
+  // frozen 00:00 under the FPS counter in every match.
+  hud.setTimerVisible(!(demoManager?.isPlaying ?? false) && !networkManager.isConnected());
   hud.setTimer(deps.waveDirector().elapsed);
   hud.setMatchStatus(
     deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
