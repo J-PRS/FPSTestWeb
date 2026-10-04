@@ -980,13 +980,19 @@ export class PlayerModel {
     // re-apply it the moment a gun mount exists instead of dropping it.
     this.heldWeapon = wt;
     if (!this.gunMesh) return;
-    const geo = handWeaponGeo(wt) ?? PlayerModel._gunGeo!;
-    if (this.gunMesh.geometry === geo) return;
-    this.gunMesh.geometry = geo;
-    // Flash rides the baked model's real muzzle, not a fixed offset —
-    // each baked geo already carries its bounding box from the baker.
-    if (this.muzzleFlash && geo.boundingBox) {
-      this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
+    const hit = handWeaponGeo(wt);
+    const geo = hit?.geo ?? PlayerModel._gunGeo!;
+    if (this.gunMesh.geometry !== geo) {
+      this.gunMesh.geometry = geo;
+      // Baked models carry their own per-part materials; the generic prop
+      // keeps its shared grey.
+      this.gunMesh.material = hit ? hit.mats : PlayerModel._gunMat!;
+      if (this.wireframeOn) this.captureWireframeMats();
+      // Flash rides the baked model's real muzzle, not a fixed offset —
+      // each baked geo already carries its bounding box from the baker.
+      if (this.muzzleFlash && geo.boundingBox) {
+        this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
+      }
     }
   }
 
@@ -1093,19 +1099,23 @@ export class PlayerModel {
   private wireframeOn = false;
   /** Debug (?debug / menu DEBUG): render the body as wireframe so it can be
    *  eyeballed against the collider capsule. */
+  private captureWireframeMats(): void {
+    if (!this.model) return;
+    const mats = new Set<THREE.Material>();
+    this.model.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
+    });
+    this.wireframeMats = [...mats];
+  }
   setWireframe(on: boolean): void {
     if (!this.model || on === this.wireframeOn) return;
     this.wireframeOn = on;
-    if (!this.wireframeMats) {
-      const mats = new Set<THREE.Material>();
-      this.model.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
-      });
-      this.wireframeMats = [...mats];
+    if (on) {
+      this.captureWireframeMats();
     }
-    for (const m of this.wireframeMats) (m as THREE.MeshBasicMaterial).wireframe = on;
+    for (const m of this.wireframeMats || []) (m as THREE.MeshBasicMaterial).wireframe = on;
   }
 
   private colliderShown = true;

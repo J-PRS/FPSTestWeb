@@ -24,11 +24,18 @@ const ALIASES = new Map<number, number>([
 const builders = new Map<number, () => THREE.Group>(MODEL_BUILDERS);
 builders.set(WeaponType.Chaingun, () => mkChaingun().g);
 
-const cache = new Map<number, THREE.BufferGeometry>();
+export interface HandWeaponModel {
+  geo: THREE.BufferGeometry;
+  /** Per-part materials in group order — mergeGeometries(useGroups) numbers
+   *  each group by source-part index, so index i answers part i. */
+  mats: THREE.Material[];
+}
 
-/** Merged hand-prop geometry for a weapon, or undefined when the type
- *  has no authored model (the caller's generic prop covers it). */
-export function handWeaponGeo(wt: number): THREE.BufferGeometry | undefined {
+const cache = new Map<number, HandWeaponModel>();
+
+/** Merged hand-prop geometry + materials for a weapon, or undefined when
+ *  the type has no authored model (the caller's generic prop covers it). */
+export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   const id = ALIASES.get(wt) ?? wt;
   const hit = cache.get(id);
   if (hit) return hit;
@@ -38,6 +45,7 @@ export function handWeaponGeo(wt: number): THREE.BufferGeometry | undefined {
   const group = mk();
   group.updateMatrixWorld(true);
   const parts: THREE.BufferGeometry[] = [];
+  const mats: THREE.Material[] = [];
   group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -45,8 +53,13 @@ export function handWeaponGeo(wt: number): THREE.BufferGeometry | undefined {
     const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
     g.applyMatrix4(mesh.matrixWorld);
     parts.push(g);
+    // Flattened multi-material parts can't keep their sub-ranges — take
+    // the head material; every authored part here is single-material.
+    mats.push(Array.isArray(mesh.material) ? mesh.material[0]! : mesh.material);
   });
-  const merged = mergeGeometries(parts, false);
+  // useGroups keeps the per-part material split — without it the merged
+  // gun renders in one stock grey and the glow bits lose their emissive.
+  const merged = mergeGeometries(parts, true);
   parts.forEach((p) => p.dispose());
   if (!merged) return undefined;
 
@@ -62,6 +75,7 @@ export function handWeaponGeo(wt: number): THREE.BufferGeometry | undefined {
   const box = merged.boundingBox!;
   merged.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, -box.min.z - 0.2);
   merged.computeBoundingSphere();
-  cache.set(id, merged);
-  return merged;
+  const out = { geo: merged, mats };
+  cache.set(id, out);
+  return out;
 }
