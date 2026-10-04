@@ -76,6 +76,10 @@ export class PoseControl {
   // Aim-pitch bones: quaternion pitch stacked on top of the animated pose.
   private aimBones: { bone: THREE.Object3D; factor: number; last: THREE.Quaternion }[] = [];
   aimPitch = 0;
+  // Applied pitch lags the input — local mouse flicks and 20Hz wire
+  // steps otherwise whip the head at frame/input rate. ~12/s chases
+  // real aim while smoothing single-frame jumps.
+  private aimPitchSm = 0;
   // Socket-gun rigs: canned right-arm grip pose stacked post-mixer — their
   // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
   // is posed procedurally to meet the fixed gun socket.
@@ -229,15 +233,16 @@ export class PoseControl {
     // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
     // arms so it doesn't fight the reaction pose.
     const oneshot = oneshotOwnsArms(currentAction, currentClipName);
-    let procPitch = this.aimPitch;
+    this.aimPitchSm += (this.aimPitch - this.aimPitchSm) * Math.min(dt * 12, 1);
+    let procPitch = this.aimPitchSm;
     if (this.aimNeutral) {
-      const t = Math.max(-1, Math.min(1, this.aimPitch / PoseControl.AIM_CLIP_RAD));
+      const t = Math.max(-1, Math.min(1, this.aimPitchSm / PoseControl.AIM_CLIP_RAD));
       const w = oneshot ? 0 : 1;
       this.aimNeutral.setEffectiveWeight((1 - Math.abs(t)) * w);
       this.aimUp?.setEffectiveWeight(Math.max(0, t) * w);
       this.aimDown?.setEffectiveWeight(Math.max(0, -t) * w);
       // The clips cover ±AIM_CLIP_RAD; procedural pitch tops up the rest.
-      procPitch = this.aimPitch - t * PoseControl.AIM_CLIP_RAD;
+      procPitch = this.aimPitchSm - t * PoseControl.AIM_CLIP_RAD;
     }
     if (mixer) {
       mixer.update(dt);
