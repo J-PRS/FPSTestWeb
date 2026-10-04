@@ -137,7 +137,7 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // Per-ball throttle folds repeats into ×N; the fleet aggregate folds
 // THROTTLED warns into one 10s summary — a desync storm reads as a
 // number, not a scroll.
-function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, logger: ChildLogger) {
+function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger) {
   const _truthPos = new THREE.Vector3();
   const _rbSim: SimBall = makeSimBall(0, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
   const _rbTgt: SimVec = { x: 0, y: 0, z: 0 };
@@ -173,11 +173,12 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
    *  field isn't bound yet. */
   function truthAt(b: Ball, m: RbMsg, age: number): void {
     const field = Ball.netField;
-    // Advance truth to the predictor's OWN cursor, not the capped event
-    // age — the replay free-runs past estSimNow in bursts (simT≫now), and
-    // comparing endpoints at different sim times misreads clock lead as
-    // divergence. No diag → fall back to the age window.
-    const span = b.netDiag && m.t !== undefined ? Math.max(0, b.netDiag.simT - m.t) : age;
+    // Advance truth to the SAME endpoint the prediction evaluates at:
+    // enraged legs step to the simT cursor, inert legs solve the arc at
+    // estSimNow (simT stays at the anchor) — take whichever leads, so
+    // the compare can't misread clock lead as divergence. The 8s cap is
+    // the same bound the inert T evaluation uses.
+    const span = m.t !== undefined ? Math.min(8, Math.max(b.netDiag?.simT ?? 0, estSimNow()) - m.t) : age;
     if (!field || span <= 0) {
       _truthPos.set(
         m.position.x + m.velocity.x * age,
@@ -228,6 +229,13 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     const legAge = b.netDiag?.legAge ?? 0;
     if (legAge > 3) {
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on stale leg (legAge ${legAge.toFixed(1)}s)`);
+      return true;
+    }
+    // A parked leg is the predictor's own guess at a terrain settle — if
+    // the authority bounced instead, the event is simply still in flight
+    // and the gap is the park-vs-bounce ambiguity, not desync.
+    if (b.netDiag?.parked) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on parked leg`);
       return true;
     }
     return false;
@@ -315,7 +323,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     });
   }
 
-  const { check: rubberbandCheck, rbFleetFlush } = makeRubberbandWatch(deps, ballEventAge, logger);
+  const { check: rubberbandCheck, rbFleetFlush } = makeRubberbandWatch(deps, ballEventAge, estSimNow, logger);
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);

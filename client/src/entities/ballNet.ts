@@ -40,10 +40,13 @@ export interface NetBag {
    *  authority. -1 = unstamped (wall-time fallback). */
   legT0: number;
   netTargetId: string | null;
+  /** The inert leg walked its arc into terrain and parked — divergence
+   *  vs a still-flying authority is the park-vs-bounce guess, not desync. */
+  parked: boolean;
 }
 
 export function newNetBag(): NetBag {
-  return { sim: null, simT: 0, netAcc: 0, flightT: 0, legT0: -1, netTargetId: null };
+  return { sim: null, simT: 0, netAcc: 0, flightT: 0, legT0: -1, netTargetId: null, parked: false };
 }
 
 /** Live ball state the replay mutates — all shared refs, no copies. */
@@ -154,6 +157,7 @@ function tickNetInert(st: NetStatics, bag: NetBag, host: NetHost, dt: number, s:
   // overshot position clamps the ball under terrain for the interim.
   const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
   host.pos.set(cx, hmHeight(field, cx, cz) + s.radius, cz);
+  bag.parked = true;
   if (spd < BALL_REST_SPEED) {
     host.vel.set(0, 0, 0);
   } else {
@@ -230,6 +234,7 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // gate replay the whole stamp→now gap on the new leg instead of just
   // the banked-lead cells.
   if (simT !== undefined) bag.simT = simT;
+  bag.parked = false;
   blendSegCorrection(host, s, seg);
 }
 

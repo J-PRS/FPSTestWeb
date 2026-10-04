@@ -79,6 +79,9 @@ export interface Targetable {
   hideHealthBar?: boolean;
   /** 'brush' = fluttering twigs/feathers; 'goo' = sticky splat blobs. */
   debrisKind?: 'rock' | 'brush' | 'goo';
+  /** Ichor hex — creatures bleed tinted goo: hit spray droplets and
+   *  projected ground stains. Absent = mechanical/prop (no spray). */
+  ichor?: number;
   /** Real fragment geometries for the death burst (tumbleweed twigs) —
    *  debris shards use these instead of generated chunks. */
   debrisGeos?: THREE.BufferGeometry[];
@@ -175,7 +178,7 @@ export class Ball {
   /** Prediction-state snapshot for the rubberband warn — answers "which
    *  regime diverged" in one line: simT≫simNow = free-ran past the clock
    *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
-  get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean; anchor: { x: number; y: number; z: number; vx: number; vy: number; vz: number } } | null {
+  get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean; parked: boolean; anchor: { x: number; y: number; z: number; vx: number; vy: number; vz: number } } | null {
     const sim = this.netS.sim;
     if (!sim) return null;
     const simNow = Ball.netSimNow?.() ?? null;
@@ -183,7 +186,7 @@ export class Ball {
       ? simNow - this.netS.legT0 : -1;
     return {
       simT: this.netS.simT, simNow, legT0: this.netS.legT0, legAge,
-      enraged: sim.enraged, tgtValid: sim.tgtValid,
+      enraged: sim.enraged, tgtValid: sim.tgtValid, parked: this.netS.parked,
       anchor: { x: sim.x, y: sim.y, z: sim.z, vx: sim.vx, vy: sim.vy, vz: sim.vz },
     };
   }
