@@ -47,11 +47,12 @@ export class KillFeed {
     const ended = victim?.streak ?? 0;
     if (victim) victim.streak = 0;
     if (targetId.startsWith('BOT-')) this.victimLine(targetId, shooterId);
-    if (shooterId === 'environment') return;
+    if (shooterId === 'environment') { this.witness(targetId); return; }
     // Self-splash reads as a death, not a frag — no streak credit, no
     // taunt, just the suicide notice.
     if (shooterId === targetId) {
       this.broadcast({ type: 'matchNotice', text: label === 'Respawn' ? `${targetId} respawned` : `${targetId} fragged themselves` });
+      this.witness(targetId);
       return;
     }
 
@@ -131,12 +132,36 @@ export class KillFeed {
     this.botSay(id, c?.text ?? null, kind !== 'reply', c?.vgs, c?.team);
   }
 
+  /** A bot died to terrain or its own blast — one nearby spectator gets
+   *  the peanut-gallery roll. Proximity keeps it truthful: you mock the
+   *  crater you actually watched happen. */
+  private witness(targetId: string): void {
+    const victim = this.playerManager.getPlayer(targetId);
+    if (!victim?.position) return;
+    const NEAR = 50;
+    const near: string[] = [];
+    for (const [id, p] of this.playerManager.getAllPlayers()) {
+      if (!id.startsWith('BOT-') || id === targetId || p.isDead || !p.position) continue;
+      const dx = p.position.x - victim.position.x, dz = p.position.z - victim.position.z;
+      if (dx * dx + dz * dz < NEAR * NEAR) near.push(id);
+    }
+    if (!near.length) return;
+    this.say(near[(Math.random() * near.length) | 0]!, 'witness', targetId);
+  }
+
   /** Match-end chatter — one rolled outcome line per bot, spread across
    *  the standings window so the lobby reads as staggered voices rather
    *  than a chorus. */
   matchEnd(entries: { id: string; line: TauntLine }[]): void {
     const step = entries.length > 1 ? Math.min(5000 / entries.length, 1200) : 0;
     entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + Math.random() * 400));
+  }
+
+  /** Match-start chatter — the gl-hf opener, tighter spread than the gg
+   *  beat since the round is already live. */
+  matchStart(entries: { id: string; line: TauntLine }[]): void {
+    const step = entries.length > 1 ? Math.min(3000 / entries.length, 900) : 0;
+    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 100 + i * step + Math.random() * 300));
   }
 
   /** A bot's chat line lands like a typed reply — a beat after the

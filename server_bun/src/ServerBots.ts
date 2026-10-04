@@ -19,7 +19,7 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { losClear } from '../../shared/botLos.ts';
 import type { BotSkill } from '../../shared/botSkill.ts';
-import { endTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
+import { endTaunt, startTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -195,17 +195,29 @@ export class ServerBots {
       if (winner === 'draw') outcome = 'draw';
       else if (spec?.teams) {
         const margin = Math.abs(this.room.scores.alpha - this.room.scores.bravo);
-        outcome = margin <= 1 ? 'close' : (p.team === winner ? 'win' : 'loss');
+        outcome = margin <= 1 ? (p.team === winner ? 'winclose' : 'close') : (p.team === winner ? 'win' : 'loss');
       } else {
         const pts = [...this.room.ffaScores.values()];
         const top = Math.max(...pts);
         const runnerUp = pts.filter((v) => v < top).reduce((a, b) => Math.max(a, b), 0);
-        outcome = pts.length > 1 && top - runnerUp <= 1 ? 'close' : (id === winner ? 'win' : 'loss');
+        outcome = pts.length > 1 && top - runnerUp <= 1 ? (id === winner ? 'winclose' : 'close') : (id === winner ? 'win' : 'loss');
       }
       const line = endTaunt(id, outcome);
       if (line) entries.push({ id, line });
     }
     this.room.messages.killFeed.matchEnd(entries);
+  }
+
+  /** The opener beat — every bot rolls a gl-hf line as the round goes
+   *  live. Same once-per-match shape as matchEnd: high flat roll, no
+   *  shared cooldown, killFeed staggers delivery. */
+  matchStart(): void {
+    const entries: { id: string; line: TauntLine }[] = [];
+    for (const id of this.brains.keys()) {
+      const line = startTaunt(id);
+      if (line) entries.push({ id, line });
+    }
+    this.room.messages.killFeed.matchStart(entries);
   }
 
   /** Does chat text name a live bot? Callsigns are 'BOT-VEKTOR-01' — the

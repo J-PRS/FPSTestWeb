@@ -715,6 +715,8 @@ export class Room {
       // outcome lines on top — the shared chatter cooldown keeps the
       // two paths from double-speaking the same bot.
       onEnded: (w) => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
+      // The opener half of the beat — gl-hf as the round goes live.
+      onStarted: () => this.bots.matchStart(),
     };
   }
 

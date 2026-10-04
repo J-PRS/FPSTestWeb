@@ -21,6 +21,7 @@ export interface MatchHost {
   reshuffleBots?(): void;      // re-deal bot team assignments for the next match
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
   onEnded?: (winner: string) => void;  // the horn fired — bots get their 'gg' beat
+  onStarted?(): void;                  // a match went live — bots get their gl-hf beat
 }
 
 /**
@@ -60,6 +61,7 @@ export class MatchClock {
     if (this.endsAt === 0) {
       if (this.host.getHumanCount() > 0) {
         this.endsAt = now + spec.timeLimitS * 1000;
+        this.host.onStarted?.();
       }
       return;
     }
@@ -164,5 +166,6 @@ export class MatchClock {
     this.warned = false;
     this.overtime = false;
     host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores } });
+    host.onStarted?.();
   }
 }

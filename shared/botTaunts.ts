@@ -344,19 +344,59 @@ const END_DRAW_LINES = [
   'nobody wins huh',
 ];
 
-export type EndOutcome = 'win' | 'loss' | 'close' | 'draw';
+/** Won BY A POINT — winners of a squeaker trash-talk ironically; the
+ *  respect lines stay in the mix so it lands as banter, not a script. */
+const END_WINCLOSE_LINES = [
+  'easiest game of my life',
+  'barely broke a sweat',
+  'ez',
+  'gg (sweating)',
+  'almost had to try',
+  'down to the wire',
+  'what a finish',
+  'wp both teams',
+];
+/** Match start — the gl-hf lobby opener. */
+const START_LINES = [
+  'gl hf',
+  'gl',
+  'hf',
+  'lets ski',
+  'gl all',
+  'ski fast die young',
+  'game on',
+  'gg in advance',
+  'warmup over',
+  'lets go',
+];
+
+export type EndOutcome = 'win' | 'loss' | 'close' | 'winclose' | 'draw';
 const END_POOLS: Record<EndOutcome, string[]> = {
   win: END_WIN_LINES,
   loss: END_LOSS_LINES,
   close: END_CLOSE_LINES,
+  winclose: END_WINCLOSE_LINES,
   draw: END_DRAW_LINES,
 };
 const END_VGS: Record<EndOutcome, [vgs: string, text: string][]> = {
   win:   [['VGCG', 'Good game!'], ['VWOO', 'Woohoo!'], ['VGCA', 'Awesome!']],
   loss:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
   close: [['VGCG', 'Good game!'], ['VGCA', 'Awesome!']],
+  winclose: [['VGCG', 'Good game!'], ['VGCA', 'Awesome!']],
   draw:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
 };
+
+/** One match-start line — same once-per-match shape as endTaunt: high
+ *  flat participation, no shared cooldown, stamps lastSpoke. */
+export function startTaunt(botId: string): TauntLine | null {
+  if (botRand() > 0.7) return null;
+  lastSpoke.set(botId, tauntNow());
+  if (botRand() < 0.25) {
+    const [chord, text] = pick([['VGH', 'Hi.'], ['VWOO', 'Woohoo!']] as [string, string][]);
+    return { text, vgs: chord };
+  }
+  return { text: pickLine(START_LINES) };
+}
 
 /** One match-end line for `botId`, shaped by how its side finished.
  *  NOT the shared cooldown gate — the gg beat is a once-per-match moment
@@ -392,6 +432,19 @@ const QUIET_LINES = [
   'shut it {t}',
   'my ears {t}',
   'we get it {t}',
+];
+
+/** A bot watched someone crater or frag themselves nearby — the
+ *  peanut-gallery quip. `{t}` is the victim. */
+const WITNESS_LINES = [
+  'nice one {t}',
+  'smooth',
+  '10/10 landing',
+  'did the ground hurt {t}',
+  'rofl',
+  'watch and learn {t}',
+  'graceful',
+  'clip it {t}',
 ];
 
 /** Someone said the bot's name — acknowledgment, nothing more. */
@@ -458,7 +511,7 @@ export type ChatterKind =
   | 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop'
   | 'cheer' | 'groan' | 'alert' | 'reply'
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
-  | 'revenge' | 'streakend' | 'quiet';
+  | 'revenge' | 'streakend' | 'quiet' | 'witness';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -486,6 +539,7 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   mention: MENTION_LINES,
   revenge: REVENGE_LINES,
   streakend: STREAK_END_LINES,
+  witness: WITNESS_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and
@@ -514,6 +568,7 @@ const VGS_FOR: Partial<Record<ChatterKind, [vgs: string, text: string][]>> = {
   quiet:      [['VGQ', 'Quiet!'], ['VGQ', 'Quiet!']],
   mention:    [['VGY', 'Yes.'], ['VGRD', "I don't know."]],
   revenge:    [['VGTA', "Awww, that's too bad!"]],
+  witness:    [['VGCN', 'Nice move!'], ['VGTB', 'Is that the best you can do?']],
   streakend:  [['VGTB', 'Is that the best you can do?'], ['VGTT', 'THAT was graceful!']],
 };
 const VGS_CHANCE = 0.4;
