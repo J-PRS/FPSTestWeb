@@ -596,4 +596,8 @@ function maybe<T>(botId: string, line: () => T): T | null {
 }
 
 /** Test hook — cooldown/repeat state is per-process, tests need a clean table. */
-export function resetTauntCooldowns(): void { lastSpoke.clear(); recent.length = 0; }
+export function resetTauntCooldowns(): void {
+  lastSpoke.clear();
+  lastKillOn.clear();
+  recent.length = 0;
+}

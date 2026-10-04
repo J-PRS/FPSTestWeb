@@ -55,8 +55,12 @@ export class Room {
   readonly messages: MessageHandler;
   readonly ballSim: BallSim;
   readonly creatureSim: CreatureSim;
-  /** Host-side randomness (loot scatter) — tests inject a seeded fn. */
-  rng: () => number = Math.random;
+  /** Host-side randomness (loot scatter) — tests inject a seeded fn.
+   *  Defaults to the injectable botRand stream: construction-time
+   *  consumers (bot populate → spawn scatter) run before a harness can
+   *  assign `room.rng`, so a plain Math.random default made every room
+   *  after the first diverge — spawn layout is part of the seed. */
+  rng: () => number = () => botRand();
 
   /** Grace seats live on the registry session itself (timer included) —
    *  assigned post-ctor by the factory. `graceInRoom` replaces the old

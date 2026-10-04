@@ -1,5 +1,7 @@
 import { Room } from '../../src/Room.ts';
 import { botRng } from '../../../shared/botRand.ts';
+import { losMemoReset } from '../../../shared/botLos.ts';
+import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
@@ -26,6 +28,14 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // builder rolls) draw from this stream at `new Room` time, so injecting
   // after would leave them on the previous room's leftovers.
   botRng(lcg(seed + 3));
+  // Sight answers memoize on coordinate cells with a 1s TTL — a prior
+  // room's (or map's) LOS results would otherwise read as fresh here.
+  losMemoReset();
+  // Taunt cooldowns and the recent-lines ring are process-global — a
+  // prior room's chatter changes draw counts on the shared botRand
+  // stream (a recent-hit re-rolls), which silently re-sequences every
+  // behavior roll downstream.
+  resetTauntCooldowns();
   // Sim clock starts at wall now; step() advances it with sim ticks so
   // respawns/cooldowns/notice TTLs track sim time, not wall speed — two
   // runs of the same genome must differ only by seed, never by how fast

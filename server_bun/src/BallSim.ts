@@ -21,6 +21,7 @@
  * pulling toward the same player's live position.
  */
 import { type Heightfield, hmFingerprint, hmParseBin } from '../../shared/heightfield.ts';
+import { botRand } from '../../shared/botRand.ts';
 import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
   stepBall, type StructureCollider,
@@ -108,7 +109,7 @@ export class BallSim {
   dormant = false;
   /** Spawn/host-side randomness — tests inject a seeded fn so scenario
    *  runs are reproducible; the wire only carries resolved outcomes. */
-  rng: () => number = Math.random;
+  rng: () => number = () => botRand();
 
   /** Attach an already-loaded heightfield — rooms share one parsed field
    *  rather than re-reading the file each. The room tick drives step();

@@ -11,6 +11,7 @@
  * edge per attack cycle — a 6-crawler room ≈ a few hundred bytes/sec.
  */
 import { type Heightfield } from '../../shared/heightfield.ts';
+import { botRand } from '../../shared/botRand.ts';
 import {
   SPECIES_FAMILY,
   type SimBaneling,
@@ -67,7 +68,7 @@ export class CreatureSim {
 
   /** Spawn/host-side randomness — tests inject a seeded fn so scenario
    *  runs are reproducible; the per-creature LCG stays the wire seed. */
-  rng: () => number = Math.random;
+  rng: () => number = () => botRand();
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
   /** Extra gnawables — Room injects deployable candidates (`dep:N` ids)
