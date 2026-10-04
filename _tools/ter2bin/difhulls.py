@@ -69,9 +69,12 @@ def main():
             ly = (h.minZ + h.maxZ) / 2 * s['y']
             lz = (h.minY + h.maxY) / 2 * s['z']
             sx, sy, sz = eu * s['x'], ew * s['y'], ev * s['z']
-            # yaw the center into world space
-            cx = p['x'] + lx * c + lz * sn
-            cz = p['z'] - lx * sn + lz * c
+            # yaw the center into world space — rendered offset is
+            # R(-theta) in standard convention: (x c + z s, -x s + z c)
+            # with c=cos(theta), s=sin(theta); rot_y=-theta makes c,s land
+            # exactly as the mesh's own transform computes them.
+            cx = p['x'] + lx * c - lz * sn
+            cz = p['z'] + lx * sn + lz * c
             cy = p['y'] + ly
             out.append({
                 'kind': 'hull',
