@@ -96,9 +96,14 @@ export class PlayerModel {
   private static buildHoldChains(): void {
     if (PlayerModel.HOLD_CHAINS) return;
     PlayerModel.HOLD_CHAINS = [
-      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-75, -30, -15)],
-      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-70, 0, 0)],
+      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-45, -30, -15)],
+      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-50, 0, 0)],
       [new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']), _d2r(0, 0, 0)],
+      // Left arm comes across to the foregrip — without it the retargeted
+      // clip tracks flail the free arm every frame.
+      [new Set(['upperarml', 'basehumanlupperarm']), _d2r(-60, 25, 15)],
+      [new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm']), _d2r(-70, 0, 0)],
+      [new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']), _d2r(0, 0, 0)],
     ];
   }
   private wantHoldPose = false;
@@ -110,8 +115,8 @@ export class PlayerModel {
   }
 
   /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
-  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number]): void {
-    const rads = [upper, lower, hand].map(e =>
+  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
+    const rads = [upper, lower, hand, lUpper, lLower, lHand].map(e =>
       new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
     for (const hb of this.holdBones) hb.off.copy(rads[hb.role]!);
   }
@@ -652,9 +657,12 @@ export class PlayerModel {
     // the palm's axes differ per rig family, tune via debugSetGunRot.
     if (mann) { this.gun.rotation.set(Math.PI / 2, 0, 0); this.gunBaseX = Math.PI / 2; }
     else if (classGun) {
-      // Solved on the posedump loop: gun -Z lands on the model's facing
-      // with the top rail up under the palm's bind axes.
-      this.gun.rotation.set(0.7 * Math.PI / 180, -23.9 * Math.PI / 180, 3.9 * Math.PI / 180);
+      // Solved on the posedump loop: hand-local mount quat that puts
+      // the barrel on the facing with the rail up. Written to gunBaseQuat
+      // so fx envelopes compose on top instead of stomping rotation.x/z.
+      this.gunBaseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        22.3 * Math.PI / 180, 27.3 * Math.PI / 180, 2.5 * Math.PI / 180));
+      this.gun.quaternion.copy(this.gunBaseQuat);
     }
     else this.gun.rotation.y = Math.PI;
 
@@ -770,13 +778,17 @@ export class PlayerModel {
       return best.n ? best.sum / best.n : null;
     })();
     if (canonical === null) return;
+    // clipYawFix rotates the TARGET: rigs whose whole retarget set agrees
+    // on the wrong convention (100%-bake rigs — every clip reads flipped)
+    // get every hip track unwound by the fix, not just outliers.
+    const target = canonical + (RIG_MANIFEST[this.variant]?.clipYawFix ?? 0);
     this.model.updateMatrixWorld(true);
     const fixed: string[] = [];
     for (const [, a] of this.animations) {
       const clip = a.getClip();
       const hit = hipTrackOf(clip);
       if (!hit?.node.parent) continue;
-      let delta = yawOf(hit.tr) - canonical;
+      let delta = yawOf(hit.tr) - target;
       while (delta > Math.PI) delta -= 2 * Math.PI;
       while (delta < -Math.PI) delta += 2 * Math.PI;
       if (Math.abs(delta) < 0.5) continue;
@@ -953,6 +965,10 @@ export class PlayerModel {
       for (const [name, clip] of baked) {
         this.animations.set(name, this.mixer.clipAction(clip));
       }
+      // Baked clips land AFTER the load-time alignHipYaw ran — for
+      // retarget-only rigs that pass saw an empty table and did nothing.
+      // Re-run so the bake's own hip convention gets canonicalized.
+      if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
       // Re-resolve the current state onto the better clip if one landed —
       // the baked names now sit in the same candidate table the state
       // resolver reads, so let it pick (a bare 'Idle' name doesn't exist
