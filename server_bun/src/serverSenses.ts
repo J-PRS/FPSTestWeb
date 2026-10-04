@@ -179,25 +179,47 @@ export class ServerBotSenses {
    *  stand threats, enemies/allies/others); callers share one pass per
    *  think so the bot tick stays O(players), not O(players × channels). */
   partiesOf(p: { id: string; team?: string }): { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[]; roster: { id: string; pos: Vec3; team?: string }[] } {
+    const shared = this.tickParties();
     const enemies: BotEnemy[] = [], allies: Vec3[] = [], others: Vec3[] = [];
-    const roster: { id: string; pos: Vec3; team?: string }[] = [];
     const teams = !!this.room.modeSpec?.teams;
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead) continue;
-      roster.push({ id: q.id, pos: q.position, team: q.team });
-      others.push(q.position);
+    for (const q of shared.players) {
+      if (q.id === p.id || q.dead) continue;
+      others.push(q.pos);
       // Same rule as enemiesOf: teamless modes are open season on every
       // other live body — bot or human makes no difference to the gun.
       if (teams ? q.team !== p.team : true) {
-        if (!(q.status & STATUS.CLOAK))
-          enemies.push({ id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff });
-      } else if (p.team && q.team === p.team) allies.push(q.position);
+        if (!q.cloaked) enemies.push(q.en);
+      } else if (p.team && q.team === p.team) allies.push(q.pos);
+    }
+    for (const b of shared.bodies) enemies.push(b);
+    return { enemies, allies, others, roster: shared.roster };
+  }
+
+  /** Roster + non-player bodies, cached per tickSeq — several bots think
+   *  in the same tick (staggered buckets) and each used to rebuild the
+   *  identical roster plus call ballSim/creatureSim roster() (both
+   *  allocate). Positions are live refs, so the cached list stays
+   *  correct within the tick. */
+  private tickPartiesCache: { seq: number; players: { id: string; pos: Vec3; vel: Vec3; team?: string; dead: boolean; cloaked: boolean; aimY: number; en: BotEnemy }[]; bodies: BotEnemy[]; roster: { id: string; pos: Vec3; team?: string }[] } = { seq: -1, players: [], bodies: [], roster: [] };
+  private tickParties(): typeof this.tickPartiesCache {
+    const c = this.tickPartiesCache;
+    // Keyed on the sim clock, not room.tickSeq: bots think at their own
+    // cadence and scenario steps advance simNow without bumping tickSeq
+    // — a tickSeq key left cloak/death/beast edges stale between thinks.
+    const seq = simNow();
+    if (c.seq === seq) return c;
+    c.seq = seq;
+    c.players.length = 0; c.bodies.length = 0; c.roster.length = 0;
+    for (const q of this.room.players.getAllPlayers().values()) {
+      c.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK), aimY: classCapsule(q.armorClass).centerOff,
+        en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff } });
+      if (!q.isDead) c.roster.push({ id: q.id, pos: q.position, team: q.team });
     }
     for (const b of this.room.ballSim.roster())
-      enemies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
-    for (const c of this.room.creatureSim.roster())
-      enemies.push({ id: `c:${c.id}`, pos: c.position, vel: c.velocity, alive: true, aimY: 0 });
-    return { enemies, allies, others, roster };
+      c.bodies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
+    for (const cr of this.room.creatureSim.roster())
+      c.bodies.push({ id: `c:${cr.id}`, pos: cr.position, vel: cr.velocity, alive: true, aimY: 0 });
+    return c;
   }
 
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
