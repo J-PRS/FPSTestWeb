@@ -778,7 +778,9 @@ const watched = new Map<string, string>();
 async function pollBakes(): Promise<void> {
   const files = [
     `/weapons/w${state.wt}_baked.glb`,
+    `/weapons/w${state.wt}_ao.webp`,
     `/weapons/w${state.wt}_ao.png`,
+    `/weapons/w${state.wt}b_ao.webp`,
     `/weapons/w${state.wt}b_ao.png`,
   ];
   for (const url of files) {

@@ -107,11 +107,10 @@ export class VmBaked {
   private async swapBaked(wt: number, g: THREE.Group, loader: GLTFLoader, texLoader: THREE.TextureLoader): Promise<void> {
     // AO map is optional — a GLB whose bake predates its current mesh
     // wears the wrong unwrap, and a missing file shouldn't kill the swap.
-    const aoProbe = await fetch(`/weapons/w${wt}_ao.png`, { method: 'HEAD' });
-    const aoOk = aoProbe.ok && !(aoProbe.headers.get('content-type') ?? '').includes('html');
+    const ao = await this.probeTex(`/weapons/w${wt}_ao`);
     const [gltf, tex] = await Promise.all([
       loader.loadAsync(`/weapons/w${wt}_baked.glb`),
-      aoOk ? texLoader.loadAsync(`/weapons/w${wt}_ao.png?v=${Date.now()}`) : Promise.resolve(null),
+      ao ? texLoader.loadAsync(`${ao}?v=${Date.now()}`) : Promise.resolve(null),
     ]);
     if (tex) {
       tex.flipY = false;
@@ -199,15 +198,23 @@ export class VmBaked {
   /** Optional per-weapon mask bake (edge wear, broad grime) exported on
    *  the same unwrap as _ao.png. null when absent — caller falls back. */
   private async loadWeaponTex(wt: number, suffix: string, texLoader: THREE.TextureLoader): Promise<THREE.Texture | null> {
-    for (const ext of ['png', 'jpg']) {
-      try {
-        const probe = await fetch(`/weapons/w${wt}_${suffix}.${ext}`, { method: 'HEAD' });
-        if (!probe.ok || (probe.headers.get('content-type') ?? '').includes('html')) continue;
-        const t = await texLoader.loadAsync(`/weapons/w${wt}_${suffix}.${ext}?v=${Date.now()}`);
-        t.flipY = false;
-        t.colorSpace = THREE.LinearSRGBColorSpace;
-        return t;
-      } catch { continue; }
+    const url = await this.probeTex(`/weapons/w${wt}_${suffix}`);
+    if (!url) return null;
+    try {
+      const t = await texLoader.loadAsync(`${url}?v=${Date.now()}`);
+      t.flipY = false;
+      t.colorSpace = THREE.LinearSRGBColorSpace;
+      return t;
+    } catch { return null; }
+  }
+
+  /** HEAD-probes the base path across shipped extensions — webp first
+   *  (pipeline output), png/jpg as pre-webp legacy. Returns the URL that
+   *  exists or null. */
+  private async probeTex(base: string): Promise<string | null> {
+    for (const ext of ['webp', 'png', 'jpg']) {
+      const probe = await fetch(`${base}.${ext}`, { method: 'HEAD' });
+      if (probe.ok && !(probe.headers.get('content-type') ?? '').includes('html')) return `${base}.${ext}`;
     }
     return null;
   }
@@ -223,12 +230,15 @@ export class VmBaked {
     if (!node) return null;
     this.h.chainBarrels = node as THREE.Group;
     let barrelMat: THREE.MeshLambertMaterial | null = null;
-    try {
-      const btex = await texLoader.loadAsync(`/weapons/w${wt}b_ao.png?v=${Date.now()}`);
-      btex.flipY = false;
-      btex.colorSpace = THREE.LinearSRGBColorSpace;
-      barrelMat = new THREE.MeshLambertMaterial({ map: btex });
-    } catch { barrelMat = null; }
+    const burl = await this.probeTex(`/weapons/w${wt}b_ao`);
+    if (burl) {
+      try {
+        const btex = await texLoader.loadAsync(`${burl}?v=${Date.now()}`);
+        btex.flipY = false;
+        btex.colorSpace = THREE.LinearSRGBColorSpace;
+        barrelMat = new THREE.MeshLambertMaterial({ map: btex });
+      } catch { barrelMat = null; }
+    }
     return { node, barrelMat };
   }
 
