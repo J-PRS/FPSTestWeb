@@ -811,7 +811,10 @@ export class PlayerModel {
       action.clampWhenFinished = true;
     } else if (ONESHOT_CLIPS.has(name)) {
       action.setLoop(THREE.LoopOnce, 1);
-      action.clampWhenFinished = false;
+      // Shoot clips clamp their tail: sustained fire can outlast a 1.3s
+      // oneshot, and an unclamped finish fades the action to zero — the
+      // unarmed locomotion grip bleeds back mid-volley.
+      action.clampWhenFinished = this.currentState === 'shoot';
     } else if (name === 'Jump') {
       action.setLoop(THREE.LoopPingPong, Infinity);
       action.timeScale = 0.35;

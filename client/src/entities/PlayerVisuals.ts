@@ -199,7 +199,11 @@ export class PlayerVisuals {
   private applyShootKick(model: PlayerModel, animState: AnimationState, shootT: number): void {
     if (shootT > this.lastShootT) {
       model.fire();
-      if (animState === 'shoot') model.forceAnimationState('shoot');
+      // Enter the shoot state once — re-forcing it every shot restarts the
+      // oneshot clip, and at fast cadences the fadeIn/fadeOut pair cycles
+      // the arms through the unarmed grip mid-volley. Sustained fire keeps
+      // the armed clip asserted; only the procedural kick pulses per shot.
+      if (animState === 'shoot' && model.animationState !== 'shoot') model.forceAnimationState('shoot');
       else model.setAnimationState(animState);
     } else {
       model.setAnimationState(animState);
