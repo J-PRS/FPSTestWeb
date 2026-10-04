@@ -861,7 +861,11 @@ export class PlayerModel {
       if (this._disposed || !this.mixer || !this.model) return;
       // Baked clips arrive fully cooked — hip-XZ strip and the
       // mannequin aim-layer carve are applied at bake time.
+      // `__holdbake1` marks packs whose arm tracks already carry the
+      // hip-fire grip — the runtime holdBones compose stands down.
+      this.pose.holdBaked = baked.has('__holdbake1');
       for (const [name, clip] of baked) {
+        if (name === '__holdbake1') continue;
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Baked clips land AFTER the load-time alignHipYaw ran — for

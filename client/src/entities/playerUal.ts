@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, RIG_MANIFEST, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
 import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, SWAY_BONES } from './playerClipSurgery.js';
+import { HOLD_QUATS, holdChains } from './playerPose.js';
 
 const logger = new ChildLogger('PlayerUal');
 
@@ -202,9 +203,53 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
       dampenSway(clip, SWAY_BONES);
     }
   }
+  if (bakeArmHold(baked, target, variant)) {
+    // Marks the pack so PlayerModel skips the runtime holdBones compose —
+    // pre-bake anims files simply lack the marker and keep the old path.
+    baked.set('__holdbake1', new THREE.AnimationClip('__holdbake1', 0.01, []));
+  }
   logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
   bakedByVariant.set(variant, baked);
   return baked;
+}
+
+/** Bake the hip-fire grip into arm-chain tracks — the same bind×off
+ *  compose PoseControl used to run every frame post-mixer. Only rigs
+ *  without a native anims table take it (same predicate as
+ *  wantHoldPose); mannequin/robot limb names just don't resolve into
+ *  the chains, so the predicate's second half is data-driven.
+ *  Oneshot/death clips keep authored arm tracks — the runtime
+ *  suppression rule (oneshotOwnsArms) hands them the arms either way.
+ *  Skeleton is at authored rest when this runs (post-restoreRest), so
+ *  bone.quaternion IS the bind local. Returns whether it baked. */
+function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
+  if (CLASS_BODY_SPEC[variant]?.anims) return false;
+  const chains = holdChains();
+  const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
+  const roleOf = new Map<string, number>();
+  for (const b of target.skeleton.bones) {
+    const nb = normBone(b.name);
+    for (let r = 0; r < chains.length; r++) {
+      if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
+    }
+  }
+  if (!roleOf.size) return false;
+  const _hold = new THREE.Quaternion();
+  const _off = new THREE.Quaternion();
+  for (const [name, clip] of baked) {
+    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01') continue;
+    for (const tr of clip.tracks) {
+      if (!tr.name.endsWith('.quaternion')) continue;
+      const role = roleOf.get(tr.name.slice(0, tr.name.indexOf('.')));
+      if (role === undefined) continue;
+      const bone = target.skeleton.getBoneByName(tr.name.slice(0, tr.name.indexOf('.')));
+      if (!bone) continue;
+      _hold.copy(bone.quaternion).multiply(_off.set(...quats[role]!));
+      tr.times = new Float32Array([0, clip.duration]);
+      tr.values = new Float32Array([_hold.x, _hold.y, _hold.z, _hold.w, _hold.x, _hold.y, _hold.z, _hold.w]);
+    }
+  }
+  return true;
 }
 
 // Offline-baked clip packs the client prefers when present — ships the
