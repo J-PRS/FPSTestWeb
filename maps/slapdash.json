@@ -52,6 +52,15 @@
   "terrain": "t2/slapdash/terrain.bin",
   "terrainTex": "t2/slapdash/albedo.png",
   "sky": "t2/slapdash/sky",
+  "fog": {
+    "color": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "distance": 280.0,
+    "visible": 500.0
+  },
   "heightScale": 1.5475,
   "tileSize": 2048.0,
   "interiors": [

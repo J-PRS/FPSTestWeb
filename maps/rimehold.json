@@ -64,6 +64,15 @@
   "terrain": "t2/rimehold/terrain.bin",
   "terrainTex": "t2/rimehold/albedo.png",
   "sky": "t2/rimehold/sky",
+  "fog": {
+    "color": [
+      0.7,
+      0.7,
+      0.7
+    ],
+    "distance": 0.0,
+    "visible": 600.0
+  },
   "heightScale": 1.6,
   "tileSize": 2048.0,
   "interiors": [

@@ -33,6 +33,12 @@ export function fogTint(base: THREE.Color, camDir: THREE.Vector3, sunDir: THREE.
 let _base: THREE.Color | null = null;
 const _tinted = new THREE.Color();
 
+/** Map-spec fog replaces the ambient haze — re-seed the base the sun
+ *  tints from, since fog.color itself is overwritten each frame. */
+export function setFogBase(color: THREE.Color): void {
+  _base = color.clone();
+}
+
 export function updateDirectionalFog(fog: THREE.Fog, camera: THREE.Camera, sunDir: THREE.Vector3): THREE.Color {
   if (!_base) _base = fog.color.clone();
   camera.getWorldDirection(_camDir);

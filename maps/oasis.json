@@ -38,6 +38,15 @@
   "terrain": "t2/oasis/terrain.bin",
   "terrainTex": "t2/oasis/albedo.png",
   "sky": "t2/oasis/sky",
+  "fog": {
+    "color": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "distance": 275.0,
+    "visible": 500.0
+  },
   "heightScale": 1.2,
   "tileSize": 2048.0,
   "interiors": [

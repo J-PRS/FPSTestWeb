@@ -69,6 +69,10 @@ export interface MapSpec {
    *  native 2048m tile so nothing on the map is squished horizontally.
    *  Absent = the engine default 1500. Rides the wire like heightScale. */
   tileSize?: number;
+  /** Mission-authored haze (T2 Sky block): `color` is the fog tint
+   *  [r,g,b], `distance` the fog start, `visible` where full fog
+   *  swallows the world. Absent = engine default haze. Client-only. */
+  fog?: { color: [number, number, number]; distance?: number; visible?: number };
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
@@ -171,6 +175,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
     heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
+    fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
@@ -246,6 +251,22 @@ function parseTileSize(raw: unknown): number | undefined {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
   const v = Math.max(256, Math.min(4096, raw));
   return v === 1500 ? undefined : v;
+}
+
+function parseFog(raw: unknown): MapSpec['fog'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const f = raw as { color?: unknown; distance?: unknown; visible?: unknown };
+  if (!Array.isArray(f.color) || f.color.length < 3 ||
+      !f.color.slice(0, 3).every((v) => typeof v === 'number' && Number.isFinite(v)))
+    return undefined;
+  const num = (v: unknown, lo: number, hi: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  return {
+    color: [clamp01(f.color[0]), clamp01(f.color[1]), clamp01(f.color[2])],
+    distance: num(f.distance, 0, 4000),
+    visible: num(f.visible, 0, 8000),
+  };
 }
 
 /** maps/-relative path — word-char dirs, filename must carry the

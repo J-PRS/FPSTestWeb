@@ -47,6 +47,15 @@
   "terrain": "t2/equinox/terrain.bin",
   "terrainTex": "t2/equinox/albedo.png",
   "sky": "t2/equinox/sky",
+  "fog": {
+    "color": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "distance": 375.0,
+    "visible": 550.0
+  },
   "heightScale": 1.8,
   "tileSize": 2048.0,
   "interiors": [

@@ -88,6 +88,15 @@
   "terrain": "t2/sirocco/terrain.bin",
   "terrainTex": "t2/sirocco/albedo.png",
   "sky": "t2/sirocco/sky",
+  "fog": {
+    "color": [
+      0.6,
+      0.3,
+      0.0
+    ],
+    "distance": 250.0,
+    "visible": 700.0
+  },
   "heightScale": 0.48,
   "tileSize": 2048.0,
   "interiors": [

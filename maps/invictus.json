@@ -38,6 +38,15 @@
   "terrain": "t2/invictus/terrain.bin",
   "terrainTex": "t2/invictus/albedo.png",
   "sky": "t2/invictus/sky",
+  "fog": {
+    "color": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "distance": 235.0,
+    "visible": 270.0
+  },
   "heightScale": 1.8,
   "tileSize": 2048.0,
   "interiors": [

@@ -84,6 +84,15 @@
   "terrain": "t2/tombstone/terrain.bin",
   "terrainTex": "t2/tombstone/albedo.png",
   "sky": "t2/tombstone/sky",
+  "fog": {
+    "color": [
+      0.59,
+      0.52,
+      0.45
+    ],
+    "distance": 75.0,
+    "visible": 400.0
+  },
   "heightScale": 2.4,
   "tileSize": 2048.0,
   "interiors": [

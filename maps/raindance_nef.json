@@ -52,6 +52,15 @@
   "terrain": "t2/raindance_nef/terrain.bin",
   "terrainTex": "t2/raindance_nef/albedo.png",
   "sky": "t2/raindance_nef/sky",
+  "fog": {
+    "color": [
+      0.62,
+      0.62,
+      0.62
+    ],
+    "distance": 200.0,
+    "visible": 450.0
+  },
   "heightScale": 0.769,
   "tileSize": 2048.0,
   "interiors": [

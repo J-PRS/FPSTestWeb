@@ -250,6 +250,26 @@ def extract_sky(mis_text, dest: Path):
     return faces
 
 
+def extract_fog(mis_text):
+    """T2 Sky block haze: fogColor is the mission's authored air tint,
+    fogDistance the start, visibleDistance where full fog swallows the
+    world. Per-map — Katabatic's blue-grey is not SunDried's dust."""
+    m = re.search(r'new Sky\(.*?\{(.*?)\};', mis_text, re.S)
+    if not m:
+        return None
+    body = m.group(1)
+    c = re.search(r'fogColor\s*=\s*"([^"]+)"', body)
+    if not c:
+        return None
+    rgb = [float(v) for v in c.group(1).split()][:3]
+    def num(key):
+        v = re.search(rf'{key}\s*=\s*"([-\d.e]+)"', body)
+        return float(v.group(1)) if v else None
+    return {"color": [round(v, 4) for v in rgb],
+            "distance": num("fogDistance"),
+            "visible": num("visibleDistance")}
+
+
 def parse_mis(name: str):
     try:
         text = vl2_read(f"missions/{name}.mis").decode("latin1")
@@ -518,6 +538,7 @@ def main():
             "terrain": f"t2/{key}/terrain.bin",
             "terrainTex": f"t2/{key}/albedo.png",
             **({"sky": f"t2/{key}/sky"} if faces else {}),
+            **({"fog": fog} if (fog := extract_fog(mis_text)) else {}),
             **({"heightScale": round(hscale, 4)} if hscale != 1.0 else {}),
             **({"tileSize": args.tilesize} if args.tilesize != OUR_TILE_M else {}),
             "interiors": [sinterior(i) for i in interiors],

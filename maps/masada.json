@@ -70,6 +70,15 @@
   "terrain": "t2/masada/terrain.bin",
   "terrainTex": "t2/masada/albedo.png",
   "sky": "t2/masada/sky",
+  "fog": {
+    "color": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "distance": 305.0,
+    "visible": 630.0
+  },
   "heightScale": 2.2,
   "tileSize": 2048.0,
   "interiors": [

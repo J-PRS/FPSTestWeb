@@ -76,6 +76,15 @@
   "terrain": "t2/rollercoaster_nef/terrain.bin",
   "terrainTex": "t2/rollercoaster_nef/albedo.png",
   "sky": "t2/rollercoaster_nef/sky",
+  "fog": {
+    "color": [
+      0.85,
+      0.7,
+      0.5
+    ],
+    "distance": 150.0,
+    "visible": 400.0
+  },
   "tileSize": 2048.0,
   "interiors": [
     {

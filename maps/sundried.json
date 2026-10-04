@@ -7,9 +7,9 @@
   "botFill": 10,
   "bases": {
     "bravo": {
-      "x": 89.9,
+      "x": -218.3,
       "y": 0,
-      "z": 186.2
+      "z": 412.0
     },
     "alpha": {
       "x": -657.6,
@@ -80,6 +80,15 @@
   "terrain": "t2/sundried/terrain.bin",
   "terrainTex": "t2/sundried/albedo.png",
   "sky": "t2/sundried/sky",
+  "fog": {
+    "color": [
+      0.55,
+      0.45,
+      0.38
+    ],
+    "distance": 200.0,
+    "visible": 500.0
+  },
   "heightScale": 0.5767,
   "tileSize": 2048.0,
   "interiors": [

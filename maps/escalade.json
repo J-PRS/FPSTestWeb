@@ -118,6 +118,15 @@
   "terrain": "t2/escalade/terrain.bin",
   "terrainTex": "t2/escalade/albedo.png",
   "sky": "t2/escalade/sky",
+  "fog": {
+    "color": [
+      0.42,
+      0.42,
+      0.42
+    ],
+    "distance": 150.0,
+    "visible": 600.0
+  },
   "heightScale": 1.582,
   "tileSize": 2048.0,
   "interiors": [
