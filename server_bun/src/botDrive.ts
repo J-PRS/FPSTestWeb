@@ -81,7 +81,12 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
     skiHeld: !!out.move?.ski,
     jetHeld: !!out.move?.jet || h.arsenal.jetPinUntil(id) > now,
   } : {
+    // Idle = every key released. Omitting jetHeld left a stale 1 pinned
+    // in the shadow (setInput treats undefined as "unchanged"), so one
+    // transient commit kept jetWanted true forever — the tank burned
+    // every regen tick and sat at ~0 for the rest of the match.
     forward: 0, right: 0,
+    jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false,
   }, p.status, h.seq++);
 }
 

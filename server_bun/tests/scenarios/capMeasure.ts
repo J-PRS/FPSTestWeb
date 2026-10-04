@@ -123,6 +123,9 @@ export function measureCap(
         `    t=${simT.toFixed(0)}s y=${capper.position.y.toFixed(0)} ` +
         `v=${Math.hypot(capper.velocity.x, capper.velocity.z).toFixed(0)} vy=${capper.velocity.y.toFixed(0)} ` +
         `E=${mechE().toFixed(0)} ` +
+        `en=${(room.moveSim.energyOf(capper.id) ?? -1).toFixed(0)} ` +
+        `sh=${(() => { const s = (room.moveSim as unknown as { shadows: Map<string, { jetWanted: boolean; skillDrainPerSec: number }> }).shadows.get(capper.id); return s ? `jw${s.jetWanted ? 1 : 0}/sd${s.skillDrainPerSec.toFixed(0)}` : '-'; })()} ` +
+        `st=${capper.status} ` +
         `jet=${jd?.why ?? '?'}/${jd?.out ? '1' : '0'} hold=${jd?.hold.toFixed(1) ?? '?'} esc=${jd?.escapeT.toFixed(1) ?? '?'}`,
       );
     }

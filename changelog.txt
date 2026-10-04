@@ -1,3 +1,4 @@
+2026-10-01 - Bots: idle input is a full zero-input packet — a stale jet:true commit left jetWanted pinned forever, so the shadow burned every regen tick and the tank sat at ~0 all match (the en=0 plateau crawl). capMeasure verbose now logs tank+shadow state
 2026-10-01 - Terrain textures: setAlbedo/setMaterialBlend now dispose the replaced albedo+mats textures — each map rotation used to leak the atlas + 2 alpha DataTextures (~2-4MB GPU) since the uniforms were just overwritten
 2026-10-01 - pin the spawn-claim fire-window law: stamped cadence admit/violation-decay, sustained sub-cadence reject at 3, stampless flood bound, nonce dedup re-ack
 2026-10-01 - interior shadow-caster gate re-censuses on map swap: applyInteriors disposes the group each time, so the cached list gated dead meshes forever
