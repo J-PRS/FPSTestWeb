@@ -431,6 +431,9 @@ def main():
     ap.add_argument("--base", type=Path, default=None,
                     help="T2 GameData/base dir — remembered in t2porter.json once used")
     ap.add_argument("--vscale", type=float, default=0.0)
+    ap.add_argument("--keeprelief", action="store_true",
+                    help="keep T2's real relief: emit spec.heightScale and skip "
+                         "the 125m Y-compression on structures/interiors")
     ap.add_argument("--res", type=int, default=ALBEDO_RES)
     args = ap.parse_args()
 
@@ -472,10 +475,15 @@ def main():
         faces = extract_sky(mis_text, dest / "sky")
         print(f"  albedo.png {args.res}px, sky faces: {faces}")
 
-        # T2 (u,v,w-up) -> ours (x,y,z): x=u·XZ, z=v·XZ, y=(w-lo)·125/relief.
-        # Scale is emitted in OUR axes: u,v get XZ_SCALE, w gets the
-        # terrain's vertical compression, so buildings squash with the map.
-        hs = HEIGHT_SCALE_M / max(relief, 1e-6)
+        # T2 (u,v,w-up) -> ours (x,y,z): x=u·XZ, z=v·XZ, y=(w-lo)·vsampled/relief
+        # where vsampled = 125·heightScale — the relief the engine actually
+        # renders once the spec's heightScale multiplies the u8 field. Scale
+        # is emitted in OUR axes: u,v get XZ_SCALE, w gets the terrain's
+        # vertical compression, so buildings squash with the map.
+        # --keeprelief: heightScale=relief/125 restores true relief, vsampled
+        # becomes `relief` itself and every Y lands at raw T2 meters.
+        hscale = relief / HEIGHT_SCALE_M if args.keeprelief else 1.0
+        hs = HEIGHT_SCALE_M * hscale / max(relief, 1e-6)
         def sinterior(i):
             (u, v, w) = i["pos"]
             (su, sv, sw) = i.get("scale", (1, 1, 1))
@@ -501,8 +509,9 @@ def main():
             "terrain": f"t2/{key}/terrain.bin",
             "terrainTex": f"t2/{key}/albedo.png",
             **({"sky": f"t2/{key}/sky"} if faces else {}),
+            **({"heightScale": round(hscale, 4)} if hscale != 1.0 else {}),
             "interiors": [sinterior(i) for i in interiors],
-            "_t2": f"ported from Tribes 2 '{mapname}' - relief {relief:.0f}m -> 125m",
+            "_t2": f"ported from Tribes 2 '{mapname}' - relief {relief:.0f}m" + ("" if args.keeprelief else " -> 125m"),
             "_interiors": interiors,
         }
         (REPO / "maps" / f"{key}.json").write_text(json.dumps(spec, indent=2) + "\n")
