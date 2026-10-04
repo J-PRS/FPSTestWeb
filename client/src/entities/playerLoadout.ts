@@ -62,6 +62,17 @@ export class PlayerLoadout {
   // waits for the raise, so the gun isn't shooting through its own holster.
   secondaryDrawT = 0;
 
+  // Banked kit — non-null while armorClass ≠ appliedClass: the loadout
+  // you're building for the tier you'll respawn as. Live fire always
+  // reads h.loadout; the menu and setLoadoutSlot edit THIS, and respawn
+  // installs it. Without it a class pick would rewrite the live array
+  // and silently change the gun in your hand mid-life.
+  pendingLoadout: number[] | null = null;
+
+  /** The kit the menu should display/edit — pending while a class swap
+   *  is banked, live otherwise. */
+  menuKit(): readonly number[] { return this.pendingLoadout ?? this.h.loadout; }
+
   constructor(private h: LoadoutHost) {}
 
   static parseLoadout(raw: string): number[] {
@@ -79,15 +90,20 @@ export class PlayerLoadout {
    *  classUpdate so both ends flip together). */
   setArmorClass(c: ArmorClass): void {
     if (c !== this.h.armorClass) {
-      // Stash the kit under the tier being left, then recall the target
-      // tier's remembered kit. First visit keeps the carried loadout —
-      // unshoulderLocked scrubs anything illegal at respawn anyway.
-      settings.set(PlayerLoadout.CLASS_KEY[this.h.armorClass], this.h.loadout.join(','));
-      const saved = settings.get(PlayerLoadout.CLASS_KEY[c]);
-      if (saved) {
-        this.h.loadout = PlayerLoadout.parseLoadout(saved);
-        settings.set('fps-loadout', this.h.loadout.join(','));
-        this.emitWeaponSwitch(this.h.loadout[this.h.weaponIndex]);
+      // Stash the kit under the tier being left — the PENDING kit if one
+      // was being built, live otherwise — then recall the target tier's
+      // remembered kit into the pending slot. Nothing here may touch
+      // h.loadout or emit a switch: the class banks at respawn, and the
+      // gun in your hand belongs to this life.
+      const leaving = this.pendingLoadout ?? this.h.loadout;
+      settings.set(PlayerLoadout.CLASS_KEY[this.h.armorClass], leaving.join(','));
+      if (c === this.h.appliedClass) {
+        this.pendingLoadout = null; // back to the tier you're wearing — live edits again
+      } else {
+        const saved = settings.get(PlayerLoadout.CLASS_KEY[c]);
+        // First visit to a tier carries the current kit as a starting
+        // point — unshoulderLocked scrubs the illegal picks at respawn.
+        this.pendingLoadout = saved ? PlayerLoadout.parseLoadout(saved) : [...this.h.loadout];
       }
     }
     this.h.armorClass = c;
@@ -99,6 +115,13 @@ export class PlayerLoadout {
    *  when the silhouette tier flips. */
   applyPendingClass(): void {
     const c = this.h.armorClass;
+    // Install the banked kit FIRST — even when the tier didn't change,
+    // a pending loadout is a respawn pick waiting to land.
+    if (this.pendingLoadout) {
+      this.h.loadout = this.pendingLoadout;
+      this.pendingLoadout = null;
+      settings.set('fps-loadout', this.h.loadout.join(','));
+    }
     if (this.h.appliedClass === c) return;
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
@@ -178,25 +201,34 @@ export class PlayerLoadout {
     // appliedClass (the tier the server enforces), not armorClass — a mid-
     // life heavy pick banks until respawn; letting it shoulder now would
     // spam class-locked rejections for the rest of the life.
-    if (this.lockedFor(h.appliedClass, weaponId)) return;
+    //
+    // While a class swap is banked the edit lands on the PENDING kit —
+    // gated by the tier being built (armorClass), so banking heavy and
+    // picking a mortar is legal; it shoulders at respawn. Live edits
+    // still gate on appliedClass, the tier the server enforces.
+    const kit = this.pendingLoadout ?? h.loadout;
+    const gate = this.pendingLoadout ? h.armorClass : h.appliedClass;
+    if (this.lockedFor(gate, weaponId)) return;
     // Picking a weapon that's already equipped elsewhere swaps the slots
     // instead of duplicating it — standard loadout-menu behavior.
-    const other = h.loadout.indexOf(weaponId);
-    if (other >= 0 && other !== slot) h.loadout[other] = h.loadout[slot];
-    h.loadout[slot] = weaponId;
-    settings.set('fps-loadout', h.loadout.join(','));
-    // Edits belong to the picked tier — persist under it too so a
-    // loadout tweak isn't lost if the session ends before a class hop.
-    settings.set(PlayerLoadout.CLASS_KEY[h.armorClass], h.loadout.join(','));
+    const other = kit.indexOf(weaponId);
+    if (other >= 0 && other !== slot) kit[other] = kit[slot]!;
+    kit[slot] = weaponId;
+    // Persist under the tier the kit belongs to; 'fps-loadout' mirrors
+    // the LIVE kit only — it's the construction-time default.
+    settings.set(PlayerLoadout.CLASS_KEY[h.armorClass], kit.join(','));
+    if (this.pendingLoadout) return; // banked kit — nothing re-draws now
+    settings.set('fps-loadout', kit.join(','));
     if (h.weaponIndex === slot || h.weaponIndex === other) {
-      this.emitWeaponSwitch(h.loadout[h.weaponIndex]);
+      this.emitWeaponSwitch(kit[h.weaponIndex]!);
     }
   }
 
   /** Weapon changed: viewmodel/audio hook + the third-person body's
-   *  lower→raise swap dip on the held prop gun. */
+   *  lower→raise swap dip; the hand prop becomes the real weapon. */
   emitWeaponSwitch(wid: number): void {
     this.h.onWeaponSwitch?.(wid);
+    this.h.model?.setWeapon(wid);
     this.h.model?.weaponSwap();
   }
 

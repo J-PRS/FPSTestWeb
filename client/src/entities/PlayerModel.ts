@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -15,6 +15,18 @@ const _pitchQuat = new THREE.Quaternion();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
+
+// Several body GLBs ship flat normals (per-face corners) — the robot
+// reads faceted because it IS faceted. toCreasedNormals re-averages
+// normals across coplanar verts: curvature goes smooth, edges past the
+// 60° crease stay hard. One pass per geometry — GLBs share geo across
+// meshes, so cache by source.
+const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+function smoothShade(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  let g = _creased.get(geo);
+  if (!g) { g = toCreasedNormals(geo); _creased.set(geo, g); }
+  return g;
+}
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
 // testable without loading the rig.
@@ -27,6 +39,8 @@ import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, SWAY_BONES, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
+import { handWeaponGeo } from './handWeapons.js';
+import { WeaponType } from '../../../shared/weapons.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
 
@@ -80,6 +94,8 @@ export class PlayerModel {
   lastRoll = 0;
   private handBone: THREE.Bone | null = null;
   gun: THREE.Group | null = null;
+  private gunMesh: THREE.Mesh | null = null;
+  private heldWeapon = -1;
   gunBaseZ = 0;
   gunRestX = 0; // socket-mounted guns park at a lateral offset
   gunBaseX = 0; // mannequin attach pitch — recoil adds on top
@@ -435,7 +451,7 @@ export class PlayerModel {
       this.lodLoadP = new GLTFLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
         const geos: THREE.BufferGeometry[] = [];
         g.scene.traverse((o) => {
-          if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push((o as THREE.SkinnedMesh).geometry);
+          if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));
         });
         this.lodGeos = geos;
         if (this.lod === 1) this.applyLodGeos();
@@ -462,6 +478,7 @@ export class PlayerModel {
   private prepareMesh(child: THREE.Mesh): void {
       child.castShadow = true;
       child.receiveShadow = true;
+      child.geometry = smoothShade(child.geometry);
       // SkinnedMesh bind-pose bounds don't track bone-driven verts —
       // wrong bounds get it frustum-culled when it shouldn't be. Compute
       // the skinned bounds at load (three walks verts through the
@@ -539,7 +556,8 @@ export class PlayerModel {
       body.dispose(); barrel.dispose();
     }
     this.gun = new THREE.Group();
-    this.gun.add(new THREE.Mesh(PlayerModel._gunGeo, PlayerModel._gunMat));
+    this.gunMesh = new THREE.Mesh(PlayerModel._gunGeo, PlayerModel._gunMat);
+    this.gun.add(this.gunMesh);
     // Measure bone world scale AFTER model.scale so the gun lands
     // real-world size (bones carry the armature's ~100x scale)
     this.model!.updateMatrixWorld(true);
@@ -972,18 +990,40 @@ export class PlayerModel {
   // Recoil: exponential decay kick on the gun (position + muzzle flip);
   // muzzle flash is a ~90ms pop decaying on the same curve.
   /** Third-person weapon swap — the same lower→switch→raise the
-   *  viewmodel plays (its timings: 0.12s down, 0.16s up). The prop gun
-   *  doesn't actually change; the dip IS the swap read. */
+   *  viewmodel plays (its timings: 0.12s down, 0.16s up). */
   weaponSwap(): void { this.fx.weaponSwap(); }
   weaponThrow(): void { this.fx.weaponThrow(); }
   weaponPunch(): void { this.fx.weaponPunch(); }
   landPulse(impactSpeed: number): void { this.fx.landPulse(impactSpeed); }
 
+  /** Swap the hand prop to the real weapon's silhouette. The wire only
+   *  reveals a remote's weapon when they use it (playerShot/kill feed),
+   *  so types without a baked model — or not yet seen firing — keep the
+   *  generic prop rather than guess wrong. */
+  setWeapon(wt: number | undefined): void {
+    if (wt === undefined || !this.gunMesh) return;
+    const geo = handWeaponGeo(wt) ?? PlayerModel._gunGeo!;
+    if (wt === this.heldWeapon && this.gunMesh.geometry === geo) return;
+    this.heldWeapon = wt;
+    this.gunMesh.geometry = geo;
+    // Flash rides the baked model's real muzzle, not a fixed offset —
+    // each baked geo already carries its bounding box from the baker.
+    if (this.muzzleFlash && geo.boundingBox) {
+      this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
+    }
+  }
+
   /** Damage white-pop — creature-style hit readability on the robot body. */
   damageFlash(): void { this.fx.damageFlash(); }
 
   // Procedural fire kick + muzzle flash — call when the remote player shoots.
-  fire(weaponType?: number): void { this.armedT = 0.45; this.fx.fire(weaponType); }
+  fire(weaponType?: number): void {
+    this.armedT = 0.45;
+    // A shot reveals the held weapon — swapping the prop first means the
+    // muzzle flash frames the right barrel.
+    if (weaponType !== undefined && weaponType !== WeaponType.Melee) this.setWeapon(weaponType);
+    this.fx.fire(weaponType);
+  }
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
