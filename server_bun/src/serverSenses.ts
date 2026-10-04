@@ -173,47 +173,6 @@ export class ServerBotSenses {
     }
   }
 
-  /** Hostiles this bot may hunt. Team modes fight the other side; FFA
-   *  bots pick any non-bot (fighting filler-vs-filler burns ticks nobody
-   *  asked for). */
-  enemiesOf(p: { id: string; team?: string }): BotEnemy[] {
-    const out: BotEnemy[] = [];
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead) continue;
-      // FFA has no friendly ids — every other live player is a legal
-      // target. (Bots used to skip other bots here, which left bot-only
-      // dm/duel/rabbit rooms firing zero shots at anything.)
-      if (this.room.modeSpec?.teams && q.team === p.team) continue;
-      if (q.status & STATUS.CLOAK) continue; // bots can't aim what they can't see
-      out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead,
-        aimY: classCapsule(q.armorClass).centerOff });
-    }
-    // Creatures are huntable too — in nuggets rooms they're the whole
-    // objective (each kill drops the gem that scores), and shooting
-    // hunters off your back is correct behavior in every mode.
-    for (const b of this.room.ballSim.roster()) {
-      out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
-    }
-    // Species pops too — creatures bite players for real, so a bot that
-    // can't shoot back is feeding the ecosystem for free. `c:` ids route
-    // through the same crawlerHit claim funnel a client uses.
-    for (const c of this.room.creatureSim.roster()) {
-      out.push({ id: `c:${c.id}`, pos: c.position, vel: c.velocity, alive: true, aimY: 0 });
-    }
-    return out;
-  }
-
-  /** Positions of every other live player — the brain's separation
-   *  sense, so a squad spreads instead of stacking on one slot. */
-  othersOf(p: { id: string }): Vec3[] {
-    const out: Vec3[] = [];
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead) continue;
-      out.push(q.position);
-    }
-    return out;
-  }
-
   /** One pass producing all three per-think lists — build() ran the
    *  same player scan three times (enemies/allies/others); that's the
    *  top line of the bot-tick profile (~29% of room wall-time). */
@@ -806,7 +765,7 @@ export class ServerBotSenses {
       // chase is weighed like a player weighs it: only gems in real
       // reach, and a contested gem costs a hurt bot nothing but a death
       // walk — a healthy one fights through for it.
-      pickup: this.pickupFor(p) ?? undefined,
+      pickup: this.pickupFor(p, parties.enemies) ?? undefined,
       // Gem-economy rooms make hunting creatures the actual objective;
       // on any map that spawns real creatures they're threats worth
       // shooting too. Structureless-free: pops is {} where spec doesn't
@@ -904,10 +863,9 @@ export class ServerBotSenses {
   /** Which gem to chase: nearest within real reach, unless the bot is so
    *  hurt the contested walk is suicide. Enemies near the GEM camp the
    *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
-  private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }): BotVec | null {
+  private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
     const snaps = this.room.pickups?.snapshot();
     if (!snaps?.length) return null;
-    const foes = this.enemiesOf(p);
     // Greedy like the capper's roam shell, not a wall: close gems always
     // pull, far ones only sometimes — acceptance odds fall with distance
     // so a nuggets map spreads the fleet over the field instead of every

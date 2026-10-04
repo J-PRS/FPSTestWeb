@@ -1,3 +1,8 @@
+2026-10-01 - Bot senses: pickupFor re-ran enemiesOf (full player+creature
+scan) per think on top of partiesOf — now takes the parties list. The
+dead enemiesOf/othersOf twins (zero callers, same rules copy-pasted)
+are deleted so partiesOf stays the only roster-scan implementation.
+
 2026-10-01 - LG charge-pop moved inside HitLedger.applyHit: shot claims and
 serverHit each carried an identical inline detonate-min(banked,dmg) tail
 while blast and mine hits silently skipped it, so the same banked victim
