@@ -265,9 +265,10 @@ export class TeamBots {
     }
     // Movement integrates every frame — the 10Hz think gate below is for
     // decisions only; gating movement made every bot warp in 100ms hops.
-    const own = bot.movement.bodies;
-    own.length = 0;
-    for (const b of bodies) if (b.id !== bot.playerId) own.push(b);
+    // Shared list like the server shadows — the sim skips its own
+    // capsule by selfId instead of keeping a filtered copy per bot.
+    bot.movement.selfId = bot.playerId;
+    bot.movement.bodies = bodies;
     bot.stepFrame(dt, { terrain });
     // Roster-indexed start phase spreads thinks across the period —
     // without it every bot thinks on the same frame and stays aligned.

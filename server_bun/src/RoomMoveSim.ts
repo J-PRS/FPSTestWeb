@@ -347,8 +347,10 @@ export class RoomMoveSim {
     const bodies = this.bodySource ? [...this.bodySource()] : null;
     for (const [pid, sh] of this.shadows) {
       if (bodies) {
-        sh.sim.bodies.length = 0;
-        for (const b of bodies) if (b.id !== pid) sh.sim.bodies.push(b);
+        // Shared list for every shadow — collideBodies skips selfId, so
+        // rebuilding N-1 copies per tick was pure churn.
+        sh.sim.selfId = pid;
+        sh.sim.bodies = bodies;
       }
       // Jet economy: thrust only while the modeled tank has fuel, drain
       // while burning, recharge only when off jet AND no toggle skill is

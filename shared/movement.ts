@@ -146,8 +146,11 @@ export class MoveSim {
   bodyRadius: number = MOVEMENT_CONFIG.playerRadius;
 
   /** Other players' capsules this tick — contact resolve reads it after
-   *  terrain so a stand mate is as solid as the deck under him. */
+   *  terrain so a stand mate is as solid as the deck under him. Hosts
+   *  assign the shared list directly; selfId excludes this sim's own
+   *  capsule (a zero-distance hit would push it off itself). */
   bodies: BodyCapsule[] = [];
+  selfId = '';
 
   setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
 
@@ -277,6 +280,7 @@ export class MoveSim {
     if (this.bodies.length === 0) return;
     const feet = s.pos.y - this.eyeHeight;
     for (const b of this.bodies) {
+      if (b.id === this.selfId) continue;
       const rr = this.bodyRadius + b.r;
       if (feet >= b.y || s.pos.y <= b.y - b.h) continue;
       const dx = s.pos.x - b.x, dz = s.pos.z - b.z;
