@@ -113,9 +113,9 @@ export interface RigManifest {
    *  target so the whole set unwinds onto the authored forward. */
   clipYawFix?: number;
   /** Directional walk strides the GLB ships natively (polyart's
-   *  WalkLeft/WalkRight/WalkBack family). 8-way sectors snap to the
-   *  nearest authored axis — a strafe-leaning diagonal reads better as
-   *  a strafe than as a forward walk. */
+   *  WalkLeft/WalkRight/WalkBack family). Only pure lateral sectors
+   *  snap to the side clips — forward diagonals keep the forward
+   *  stride (per JP: strafes are for actual strafing). */
   walkDirs?: Partial<Record<LocoDir, string>>;
   /** Native clips also register under their UAL_ alias (mannequin's set
    *  IS the UAL library). */
@@ -259,10 +259,10 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
   if (spec?.anims) {
     const out: ClipCandidate[] = [];
     // Rigs shipping directional strides (polyart's Walk* family) resolve
-    // lateral/back sectors onto them; diagonals snap to their side clip.
-    if (state === 'walk' && dir !== 'F' && spec.walkDirs) {
-      const axis = dir === 'L' || dir === 'FL' || dir === 'BL' ? 'L'
-        : dir === 'R' || dir === 'FR' || dir === 'BR' ? 'R' : 'B';
+    // pure lateral/back sectors onto them — forward diagonals keep the
+    // forward stride (strafe clips only for actual strafing).
+    if (state === 'walk' && dir !== 'F' && dir !== 'FL' && dir !== 'FR' && spec.walkDirs) {
+      const axis = dir === 'L' ? 'L' : dir === 'R' ? 'R' : 'B';
       const n = spec.walkDirs[axis];
       if (n) out.push({ name: n, dir: true });
     }
