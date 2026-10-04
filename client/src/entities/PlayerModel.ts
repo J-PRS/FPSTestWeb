@@ -120,6 +120,12 @@ export class PlayerModel {
   private static GUN_MOUNT_BONE: Record<string, string> = {
     polyart: 'handleft',
   };
+  // Per-variant gun size (meters) + bone-space seat when the generic
+  // near-origin seat hides the receiver inside the fist.
+  private static GUN_SIZE: Record<string, number> = { polyart: 1.4 };
+  private static GUN_MOUNT_POS: Record<string, [number, number, number]> = {
+    polyart: [0, 0, -15],
+  };
   private wantHoldPose = false;
   private holdW = 0;
 
@@ -660,12 +666,21 @@ export class PlayerModel {
     }
     const ws = handBone!.getWorldScale(new THREE.Vector3());
     logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.aimBones.length });
-    this.gun.scale.setScalar(0.7 / ws.x); // ~0.7m gun in world space
+    // Per-axis: some rigs (polyart) carry non-uniform bone scale that
+    // squeezes the prop into a needle when only ws.x is compensated.
+    const gunSize = PlayerModel.GUN_SIZE[this.variant] ?? 0.7;
+    this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
     this.gunUnit = 1 / ws.x;
     this.gunBaseY = 0.05 * this.gunUnit;
-    this.gun.position.set(0, this.gunBaseY, this.gunBaseZ);
+    const mp = PlayerModel.GUN_MOUNT_POS[this.variant];
+    if (mp) {
+      this.gunRestX = mp[0];
+      this.gunBaseY = mp[1];
+      this.gunBaseZ = mp[2];
+    }
+    this.gun.position.set(this.gunRestX, this.gunBaseY, this.gunBaseZ);
     // Robot palm bones: barrel forward = local -Z flipped by π yaw.
     // UAL hand bones (measured via gun-math probe under the live aim
     // pose): barrel -X on plain yaw is the sideways look. X-90 sends the

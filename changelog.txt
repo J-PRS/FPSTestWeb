@@ -1,3 +1,8 @@
+2026-10-01 - polyart gun visible: fist gauntlet swallowed the 0.7m prop —
+per-variant gun size (heavy carries a 1.4m bore) + bone-space seat that
+slides the receiver back into the grip, and per-axis bone-scale
+decompensation (its arm chain squeezes non-uniformly).
+
 2026-10-01 - polyart gun moved to the forward hand: its aim pose extends the
 left arm, so the mount bone is per-variant now (GUN_MOUNT_BONE) with a solved
 mount quat on Hand_Left. Was parked on the trailing right wrist.
