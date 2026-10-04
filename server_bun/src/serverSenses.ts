@@ -42,7 +42,7 @@ export class ServerBotSenses {
    *  Nothing dispatches "a crowd" — the chattiness is emergent. */
   private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
   private noticed = new Map<string, number>();
-  private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number }>();
+  private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number; minD?: number }>();
   /** Squad push-call: a capper within ETA of the enemy stand posts it
    *  here; teammates' goal ladders read it for a few seconds so the
    *  stand floods BEFORE the runner lands — the same "capper's 10 out"
@@ -428,27 +428,37 @@ export class ServerBotSenses {
         const pressing = incLive && dist3(incLive.pos, enemyStand) < 1
           && simNow() - incLive.at < ServerBotSenses.PRESS_MS;
         if (incLive && dist3(incLive.pos, enemyStand) < 1 && !pressing) this.routeHold.delete(p.id); // stale press — re-probe
+        let routed = false;
         if (pressing) {
           goalPos = { ...enemyStand };
+          routed = true;
         } else if (incLive) {
           // An incumbent entry is a commitment, not a suggestion: chase
           // it to arrival. Re-probing the wall every think let the
           // verdict oscillate as the bot moved through a valley —
           // stand/entry flip-flops had it orbiting 150m out (kata
           // probe). Arrival can't be exact — ring points land on faces
-          // the bot can't occupy — so it is consumed into a press when
-          // the bot reaches the face base (~45m), or when a long chase
-          // still hasn't closed: the remaining leg is the stand either
-          // way, and a stale entry must never become a wall to grind.
-          const arrived = Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z) < 45
-            || simNow() - incLive.at > ServerBotSenses.PRESS_MS;
-          if (arrived) {
+          // the bot can't occupy — so it is consumed into a press at the
+          // face base. The bail is progress, not time: a detour chase
+          // legitimately outlasts any short fuse (timing out into a
+          // press recreates the same stand/entry orbit one level up),
+          // but an entry the bot hasn't approached in 30s is a wall.
+          const dEntry = Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z);
+          if (dEntry < 45) {
             this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
             goalPos = { ...enemyStand };
+          } else if (incLive.minD === undefined || dEntry < incLive.minD - 20) {
+            incLive.minD = dEntry;
+            incLive.at = simNow();
+            goalPos = { ...incLive.pos };
+          } else if (simNow() - incLive.at > 30_000) {
+            this.routeHold.delete(p.id);
           } else {
             goalPos = { ...incLive.pos };
           }
-        } else {
+          routed = goalPos !== pick;
+        }
+        if (!routed) {
         // …unless the straight line to the stand is already open. Ring
         // entries only earn their detour when terrain actually rises
         // into the approach; without this check a bot on the anchor
