@@ -254,7 +254,10 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
     if (mine) deps.lazyPlayer().kills++;
     deps.onCreatureKilled?.(shooterId);
   }
-  if (!ball.lootless) {
+  // Connected, the server's RoomPickups drop is the backed loot — a
+  // local nugget here collects into a heal claim the server never
+  // minted credit for (nocredit reject → predicted health desyncs).
+  if (!ball.lootless && !deps.lazyNetworkManager().isConnected()) {
     for (let n = 0; n < Math.round(ball.scale); n++) {
       deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
     }
