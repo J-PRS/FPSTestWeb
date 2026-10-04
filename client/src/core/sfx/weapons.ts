@@ -115,13 +115,17 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['dash2', 0.45, 1.0],
     ['hg_tick', 0.45, 1.7, 2200, 0.08],
   ],
+  // Chaingun @ ~11/s: voice is the authentic T2 fire crack (bright
+  // high-band snap — 60% of its energy sits >2kHz, vs the old sample's
+  // mid-heavy body that stacked into sputter). Low-mid layers are lean:
+  // one bolt thump for oomph, no thud_big (the stacked sub-thumps were
+  // the "fart"). Cut stays tight so every trigger is one crack.
   [WeaponType.Chaingun]: [
-    ['shot_chaingun', 0.75, 1.15, undefined, 0.08],
-    ['punch', 0.35, 0.7, 700, 0.06],
-    // Low body — the chest-thump under the crack. LPF'd hard, cut at 70ms
-    // so it adds weight without ringing into the next shot
-    ['thud_big', 0.5, 0.95, 500, 0.07],
-    ['hg_clang', 0.12, 2.2, undefined, 0.04],
+    ['shot_chaingun', 0.85, 1.0, undefined, 0.08],
+    ['punch', 0.5, 0.65, 700, 0.06],
+    // Faint bolt tick for mechanical detail — quiet enough to read as
+    // texture under sustained fire, not a second transient.
+    ['hg_tick', 0.15, 1.6, 3000, 0.03],
   ],
 };
 
@@ -158,9 +162,10 @@ function shootInto(g: GainNode, weaponType: number): void {
   if (weaponType === WeaponType.Melee &&
       layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) return;
   const layered = SHOT_LAYERS[weaponType];
-  // Chaingun gets extra jitter — at 11 shots/s it's the recipe where the
-  // identical-waveform buzz is most audible
-  if (layered && layer(g, layered, weaponType === WeaponType.Chaingun ? 0.22 : 0.1)) return;
+  // Chaingun gets the widest jitter — at 11 shots/s it's the recipe where
+  // the identical-waveform buzz is most audible; ±15% pitch + gain spread
+  // keeps successive cracks from phasing into a drone.
+  if (layered && layer(g, layered, weaponType === WeaponType.Chaingun ? 0.3 : 0.1)) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1], s[2])) return;
   (SYNTH_SHOTS[weaponType] ?? synthDefault)(g);
@@ -168,12 +173,12 @@ function shootInto(g: GainNode, weaponType: number): void {
 
 // Synth fallbacks — only reached when no sample is loaded for the weapon.
 function synthChaingun(g: GainNode): void {
-  // Crack (randomized band) + bolt thump + metal tick — jittered so a
-  // held trigger doesn't phase into one continuous buzz
-  const j = 1 + (Math.random() - 0.5) * 0.25;
-  noise(0.05, 0.28, g, 'bandpass', 2500 * j, 1100 * j, 2);
-  osc('square', 380 * j, 190, 0.05, 0.14, g);
-  osc('sine', 140, 90, 0.05, 0.12, g);
+  // Dark crack band + bolt thump — centered lower than it used to be so
+  // sustained fire rasps less; wide jitter so a held trigger never phases.
+  const j = 1 + (Math.random() - 0.5) * 0.3;
+  noise(0.05, 0.26, g, 'bandpass', 1900 * j, 900 * j, 2);
+  osc('square', 340 * j, 170, 0.05, 0.14, g);
+  osc('sine', 130, 85, 0.05, 0.14, g);
 }
 function synthPlasmaGun(g: GainNode): void {
   // Quick zap — jittered like chaingun so the volley doesn't phase
