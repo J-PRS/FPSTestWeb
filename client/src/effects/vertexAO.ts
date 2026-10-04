@@ -697,9 +697,12 @@ export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBo
 export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
   group.updateWorldMatrix(true, true);
 
-  // One merged occluder mesh so rays hit every part of the weapon
+  // One merged occluder mesh so rays hit every part of the weapon.
+  // InstancedMesh is skipped — its buffer serves N instances at N
+  // positions; baking scene-space AO into it double-darkens the swarm
+  // species that already got their own bake via SwarmSpec.bake.
   const meshes: THREE.Mesh[] = [];
-  group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+  group.traverse((o) => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) meshes.push(o as THREE.Mesh); });
   if (!meshes.length) return;
 
   const occluderGeo = mergeGeometries(meshes);
@@ -748,6 +751,9 @@ function enhanceWeaponMaterial(mat: THREE.Material): void {
     if (WEARVIZ) sh.defines = { ...(sh.defines ?? {}), WEARVIZ: 1 };
     sh.uniforms.uWearMap = { value: (mat.userData.__wearTex as THREE.Texture) ?? blankWearTex() };
     sh.uniforms.uGrimeMap = { value: (mat.userData.__grimeTex as THREE.Texture) ?? whiteTex() };
+    // Materials can dose the effect up — gunmetal swarm species need a
+    // heavier hand than viewmodel weapons or the bake reads flat.
+    sh.uniforms.uWearInt = { value: (mat.userData.__wearInt as number) ?? 1 };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec2 vUvW;
@@ -768,6 +774,7 @@ vUvW = uv;`);
       .replace('#include <common>', `#include <common>
 uniform sampler2D uWearMap;
 uniform sampler2D uGrimeMap;
+uniform float uWearInt;
 varying vec2 vUvW;
 varying vec3 vWpos;
 varying float vWear;
@@ -790,7 +797,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
 {
   // Large-scale mottled variation — reads as paint/finish, not speckle.
   float g = wfbm(vWpos * 35.0);
-  diffuseColor.rgb *= 0.92 + 0.14 * g;
+  diffuseColor.rgb *= mix(1.0, 0.92 + 0.14 * g, uWearInt);
 
   // Edge wear: the DOMINANT term is the baked barycentric line — each
   // corner's weight → 0 only at triangle edges flagged sharp (>~50°
@@ -830,7 +837,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
     float exposure = 1.0;
   #endif
     // awear: per-weapon boost attr (unbaked/absent → 0 → ×1 unchanged).
-    float wear = min(1.0, edge * patches * exposure * (1.0 + vAw));
+    float wear = min(1.0, edge * patches * exposure * (1.0 + vAw) * uWearInt);
 
     // Worn metal: desaturate and brighten edges; slight micro-scratch noise.
     float scratch = wnoise(vWpos * 700.0) * 0.12;
@@ -847,7 +854,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
     // baked per-vertex on valley edges, darkened + dirtied with the same
     // patchy clumping so seams read as collected crud, not a uniform
     // shade ramp.
-    float dirt = vGrime * (0.6 + 0.4 * wnoise(vWpos * 110.0 + 31.7));
+    float dirt = vGrime * (0.6 + 0.4 * wnoise(vWpos * 110.0 + 31.7)) * uWearInt;
     diffuseColor.rgb *= 1.0 - dirt * 0.38;
   #ifdef WEARVIZ
     // R=final wear, G=baked AO (the exposure gate input), B=edge flag.

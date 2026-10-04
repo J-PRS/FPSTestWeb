@@ -70,12 +70,12 @@ function eyeGeo(): THREE.PlaneGeometry {
 // Shared materials — per-turret variations ride on instanceColor instead.
 let _baseMat: THREE.MeshLambertMaterial | null = null;
 function baseMat(): THREE.MeshLambertMaterial {
-  if (!_baseMat) _baseMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 });
+  if (!_baseMat) { _baseMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 }); _baseMat.userData.__wearInt = 2.2; }
   return _baseMat;
 }
 let _domeMatS: THREE.MeshLambertMaterial | null = null;
 function domeMatS(): THREE.MeshLambertMaterial {
-  if (!_domeMatS) _domeMatS = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x101820 });
+  if (!_domeMatS) { _domeMatS = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x101820 }); _domeMatS.userData.__wearInt = 2.2; }
   return _domeMatS;
 }
 let _eyeMat: THREE.MeshBasicMaterial | null = null;

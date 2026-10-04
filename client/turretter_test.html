@@ -40,7 +40,7 @@ scene.add(new THREE.GridHelper(10, 20, 0x445066, 0x2a3242));
 const parts = turretterParts();
 // Approximate the in-game instanceColor (0x3a4a5a gunmetal) so the bake
 // reads at the brightness the turret actually renders at.
-for (const p of parts) if (p.material.color) p.material.color.set(0x3a4a5a);
+for (const p of parts) if (p.material.color) p.material.color.set(0x4a5560);
 for (const p of parts) {
   if (p.geometry.index) p.geometry = p.geometry.toNonIndexed();
   const host = new THREE.Group();
