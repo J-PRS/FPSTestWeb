@@ -436,7 +436,9 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.
-  viewModel.group.visible = !player.isDead && !player.thirdPerson && !player.isSpectating;
+  // The middle-click orbit cam IS a third-person view while it's on —
+  // hiding the FP gun is what stops "your own gun plus your own model".
+  viewModel.group.visible = !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
   viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera, player.shootAnimTimer > 0);
   st.lastYaw = player.yaw;
