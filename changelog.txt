@@ -1,3 +1,4 @@
+2026-10-01 - HealthBarSystem forgets departed players fully
 2026-10-01 - Drop lastTintOf entry when a remote player leaves
 2026-10-01 - Drop aliveSince entry when a remote player leaves
 2026-10-01 - Drop bot routePrefs on roster forget

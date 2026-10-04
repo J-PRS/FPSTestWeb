@@ -201,6 +201,16 @@ export class HealthBarSystem {
     }
   }
 
+  /** Player left the roster — drop the bar AND the remembered vitals.
+   *  Kept separate from removeBar, which also runs on fade expiry:
+   *  knownMax must survive a faded bar or a heavy's next hit re-maxes
+   *  at the light default. */
+  forgetPlayer(playerId: string): void {
+    this.removeBar(playerId);
+    this.knownHealth.delete(playerId);
+    this.knownMax.delete(playerId);
+  }
+
   removeBallBar(ball: Targetable): void {
     const bar = this.ballBars.get(ball);
     if (bar) {

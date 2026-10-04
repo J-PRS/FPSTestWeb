@@ -61,7 +61,7 @@ function makeRemoteHooks(deps: RemotesDeps) {
     onCreate: (id: string, rp: RemotePlayer) => deps.logger.debug('CREATED remote player', { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
     onRemove: (id: string) => {
       deps.lazyHud().removePlayerIndicator(id);
-      deps.lazyHealthBarSystem().removeBar(id);
+      deps.lazyHealthBarSystem().forgetPlayer(id);
       sfxWorld.remoteMoveAudioGone(id);
       // aliveSince keys on live ids — a leaver who was alive drops here
       // or the module map grows one entry per departed player forever.
