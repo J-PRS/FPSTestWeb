@@ -232,7 +232,7 @@ export class ServerBots {
   }
 
   private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
-    const carrying = this.room.flags?.snapshot().some(f => f.carrier === id) ?? false;
+    const carrying = this.room.flagCarriedBy(id);
     this.watchdog.checkStuck(id, p.position, brain, carrying, now);
   }
 

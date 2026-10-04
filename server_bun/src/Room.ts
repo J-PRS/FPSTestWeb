@@ -137,6 +137,15 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
+
+  /** Direct carrier check — snapshot() clones every flag just to answer
+   *  "is id carrying", and per-tick callers (checkStuck, propel gate)
+   *  paid it every bot every tick. */
+  flagCarriedBy(playerId: string): boolean {
+    if (!this.flags) return false;
+    for (const f of this.flags.flags.values()) if (f.carrier === playerId) return true;
+    return false;
+  }
   /** Server-owned ground loot — gems/tags score in team modes, powerups
    *  (heal/armor/regen/dd) drop from creature kills in every mode. */
   pickups: RoomPickups | null = null;

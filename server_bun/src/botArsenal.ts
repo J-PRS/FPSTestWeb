@@ -399,8 +399,9 @@ export class BotArsenal implements BeamHost {
     // Carrier truth lives in the flag sim, not the brain's goal pick —
     // a carrier fighting at the stand can hold a combat goal (running
     // unset) and the feet blast then fires as if he weren't loaded.
-    const carrying = this.room.flags?.snapshot().some(f => f.carrier === id)
-      ?? !!(goal as { running?: boolean }).running;
+    const carrying = this.room.flags
+      ? this.room.flagCarriedBy(id)
+      : !!(goal as { running?: boolean }).running;
     if (carrying && !this.wasCarrying.get(id)) this.propelT.delete(id);
     this.wasCarrying.set(id, carrying);
     // Self-splash costs real health now. A wounded bot holds fire —
