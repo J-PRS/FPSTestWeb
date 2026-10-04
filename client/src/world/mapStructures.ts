@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
+import { structureColliders } from '../../../shared/ballCollide.js';
+import { urlParams } from '../core/params.js';
 
 // Static map structures — the server's map spec arrives on gameState and
 // every client builds identical geometry locally. Primitives stay dumb:
@@ -15,6 +17,7 @@ const TINTS = {
 } as const;
 
 let built: THREE.Group | null = null;
+let colliderGizmos: THREE.LineSegments | null = null;
 
 let dome: THREE.Mesh | null = null;
 
@@ -126,4 +129,49 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   }
   built.updateMatrixWorld(true);
   scene.add(built);
+  buildColliderGizmos(list, scene);
+}
+
+// Non-terrain collider wireframes — same ?debug / menu DEBUG gate as the
+// player hitbox + AOE blast gizmos. Drawn straight from structureColliders
+// output, so the overlay IS the set the sim resolves against (dif hulls,
+// stands, cover) rather than a second guess at it.
+function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
+  if (colliderGizmos) {
+    scene.remove(colliderGizmos);
+    colliderGizmos.geometry.dispose();
+    colliderGizmos = null;
+  }
+  const colliders = structureColliders(list);
+  if (!colliders.length) return;
+  const unitEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
+  const edges: THREE.BufferGeometry[] = [];
+  for (const c of colliders) {
+    _p.set(c.cx, c.cy, c.cz);
+    _e.set(0, Math.atan2(c.sin, c.cos), 0);
+    _q.setFromEuler(_e);
+    _s.set(c.hx * 2, c.hy * 2, c.hz * 2);
+    _m.compose(_p, _q, _s);
+    edges.push(unitEdges.clone().applyMatrix4(_m));
+  }
+  const merged = mergeGeometries(edges, false);
+  for (const g of edges) g.dispose();
+  unitEdges.dispose();
+  if (!merged) return;
+  colliderGizmos = new THREE.LineSegments(
+    merged,
+    new THREE.LineBasicMaterial({ color: 0x33ff88, transparent: true, opacity: 0.55, depthTest: false }),
+  );
+  colliderGizmos.renderOrder = 999;
+  colliderGizmos.matrixAutoUpdate = false;
+  colliderGizmos.matrixWorldAutoUpdate = false;
+  colliderGizmos.visible = urlParams.debug;
+  scene.add(colliderGizmos);
+}
+
+/** The debug toggle is live — menu flips mid-session must reach the
+ *  overlay, so visibility re-reads the flag each frame. */
+export function refreshColliderGizmoVisibility(): void {
+  if (colliderGizmos) colliderGizmos.visible = urlParams.debug;
 }

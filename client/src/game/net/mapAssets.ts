@@ -378,9 +378,11 @@ function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
             // SRGBColorSpace uploads as SRGB8_ALPHA8 — the sample is
             // already linear here, matching scene.fog.color's space.
             vec3 sky = textureCube(tCube, dir).rgb;
-            // Melt starts above the horizon so fogged ridges never show
-            // a crisp line; below the horizon it's pure haze.
-            float band = smoothstep(0.30, -0.02, dir.y);
+            // The melt must stay thin: fully-fogged terrain meets the sky
+            // right AT the horizon, so only the few degrees straddling it
+            // get fog — wider bands drown the sky's own painted haze and
+            // darken the whole low sky.
+            float band = smoothstep(0.09, -0.02, dir.y);
             gl_FragColor = vec4(mix(sky, uFog, band), 1.0);
           }`,
         side: THREE.BackSide,

@@ -30,6 +30,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { updateDirectionalFog } from '../world/directionalFog.js';
 import { updateCubeSky } from './net/mapAssets.js';
+import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { createEntities } from './entities.js';
@@ -221,6 +222,7 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   fog.color.copy(tinted);
   deps.sceneSetup.atmosphericSky.setFogColor(tinted);
   updateCubeSky(deps.camera, fog.color);
+  refreshColliderGizmoVisibility();
   terrain.updateFog(fog.color, fog.near, fog.far);
 }
 
