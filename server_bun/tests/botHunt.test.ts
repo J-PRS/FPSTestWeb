@@ -76,6 +76,27 @@ describe('pickHunt', () => {
   });
 });
 
+describe('difficulty tiers', () => {
+  it('harder bands roll a sharper population — mean aim and speed rise', () => {
+    const mean = (tier: 'easy' | 'medium' | 'impossible') => {
+      let aim = 0, move = 0, jit = 0;
+      const N = 60;
+      for (let i = 0; i < N; i++) {
+        const st = newHuntState({ x: i * 7, y: 0, z: i * 3 }, tier);
+        aim += (st.skill.axes.snap.moving + st.skill.axes.track.moving) / 2;
+        move += st.skill.movement;
+        jit += st.jitter;
+      }
+      return { aim: aim / N, move: move / N, jit: jit / N };
+    };
+    const easy = mean('easy'), mid = mean('medium'), god = mean('impossible');
+    expect(easy.aim).toBeLessThan(mid.aim);
+    expect(mid.aim).toBeLessThan(god.aim);
+    expect(easy.move).toBeLessThan(god.move);
+    expect(god.jit).toBeLessThan(easy.jit); // steadier hands
+  });
+});
+
 describe('pickFire', () => {
   const armed = () => {
     const st = newHuntState(P);

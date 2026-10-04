@@ -50,6 +50,10 @@ export interface MapSpec {
    *  spawning/retiring bots as humans come and go. Distinct from `bots`
    *  (a fixed spawn count) — fill reacts to joins and quits. */
   botFill?: number;
+  /** Difficulty band for spawned bots — one tier for the whole lobby, or
+   *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
+   *  around the band, so a team's bots aren't clones. */
+  botSkill?: import('./botSkill.ts').BotTier | { alpha?: import('./botSkill.ts').BotTier; bravo?: import('./botSkill.ts').BotTier };
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
@@ -148,6 +152,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     bases: parseBases((src as { bases?: unknown }).bases),
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0) || undefined,
+    botSkill: parseBotSkill((src as { botSkill?: unknown }).botSkill),
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
     // filename-only — the value is resolved under maps/ server-side, so
     // anything with a slash or dot-traversal is dropped on the floor
@@ -160,6 +165,20 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };
+}
+
+/** botSkill — a bare tier name, or {alpha,bravo} per-side; unknown
+ *  strings fall back to the room default (medium). */
+function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
+  const TIER = new Set(['easy', 'medium', 'hard', 'impossible']);
+  const one = (v: unknown) => (typeof v === 'string' && TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined);
+  if (typeof raw === 'string') return one(raw);
+  if (raw && typeof raw === 'object') {
+    const o = raw as { alpha?: unknown; bravo?: unknown };
+    const alpha = one(o.alpha), bravo = one(o.bravo);
+    if (alpha || bravo) return { alpha, bravo };
+  }
+  return undefined;
 }
 
 /** Display title — printable words only; the wire echoes it verbatim

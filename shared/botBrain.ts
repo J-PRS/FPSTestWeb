@@ -218,10 +218,11 @@ const DEATH_RANGE = 10;  // m — repel radius around each remembered death
 
 
 export class BotBrain {
-  /** Set the spawn point as the initial goal. */
-  constructor(spawn: BotVec) {
+  /** Set the spawn point as the initial goal. `tier` picks the
+   *  difficulty band the skill matrix and hunt draws are rolled from. */
+  constructor(spawn: BotVec, tier: import('./botSkill.ts').BotTier = 'medium') {
     this.goalS.goal = { ...spawn };
-    this.h = newHuntState(spawn);
+    this.h = newHuntState(spawn, tier);
   }
 
   private thinkT = botRand() * T.brain.thinkS;

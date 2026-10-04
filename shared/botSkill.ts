@@ -17,6 +17,33 @@ export type AimAxis = 'snap' | 'track' | 'arcLead' | 'arcJudge';
 
 export interface AxisPair { moving: number; still: number }
 
+/** Named difficulty band — one object scales every skill draw and
+ *  reaction constant, so a lobby knob (easy→impossible) moves the
+ *  whole distribution instead of one constant at a time. Team variance
+ *  stays: the band shifts the distribution's center, each bot still
+ *  rolls its own spread around it. */
+export type BotTier = 'easy' | 'medium' | 'hard' | 'impossible';
+export interface BotTierMods {
+  /** Multiplies every aim-axis draw. */
+  aim: number;
+  /** Multiplies the movement (ski/jet competence) draw. */
+  move: number;
+  /** Reaction-delay multiplier — lower reacts sooner. */
+  react: number;
+  /** Aim-error multiplier — lower lands steadier shots. */
+  jitter: number;
+  /** Volley-cadence multiplier — higher fires faster. */
+  temper: number;
+}
+export const BOT_TIERS: Record<BotTier, BotTierMods> = {
+  // A new player wins duels by accident: sees late, sprays wide, slow volleys.
+  easy: { aim: 0.55, move: 0.7, react: 2.2, jitter: 1.8, temper: 0.8 },
+  medium: { aim: 1, move: 1, react: 1, jitter: 1, temper: 1 },
+  hard: { aim: 1.25, move: 1.15, react: 0.7, jitter: 0.7, temper: 1.15 },
+  // Ceiling-ish, not superhuman — axes still cap at 1.5 like any phenom.
+  impossible: { aim: 1.45, move: 1.3, react: 0.45, jitter: 0.5, temper: 1.3 },
+};
+
 export interface BotSkill {
   axes: Record<AimAxis, AxisPair>;
   /** Ski/jet competence — how well it holds speed and picks lines. */
@@ -33,6 +60,10 @@ export interface BotSkill {
    *  cautious ones swap to a safe slot before the splash does them in.
    *  Personality draw like beltPull, so duels end differently per bot. */
   courage: number;
+  /** The band this roll was drawn from — hunt/brain reads its mods for
+   *  reaction delay, jitter and cadence. */
+  readonly tier: BotTier;
+  readonly mods: BotTierMods;
   /** Private stream — form drift consumes it, not the shared botRand. */
   rng: () => number;
 }
@@ -49,12 +80,13 @@ function prng(seed: number): () => number {
   };
 }
 
-export function rollSkill(spawn: BotVec): BotSkill {
+export function rollSkill(spawn: BotVec, tier: BotTier = 'medium'): BotSkill {
   const seed = Math.imul(spawn.x | 0, 73856093) ^ Math.imul(spawn.z | 0, 19349663) ^ Math.imul(spawn.y | 0, 83492791);
   const rng = prng(seed || 1);
+  const mods = BOT_TIERS[tier];
   const clamp = (v: number) => Math.min(1.5, Math.max(0.45, v));
   const axis = (): AxisPair => {
-    const base = 0.55 + rng() * 0.9;
+    const base = (0.55 + rng() * 0.9) * mods.aim;
     const spread = 0.3;
     return {
       moving: clamp(base + (rng() - 0.5) * spread),
@@ -63,10 +95,12 @@ export function rollSkill(spawn: BotVec): BotSkill {
   };
   return {
     axes: { snap: axis(), track: axis(), arcLead: axis(), arcJudge: axis() },
-    movement: clamp(0.7 + rng() * 0.8),
+    movement: clamp((0.7 + rng() * 0.8) * mods.move),
     form: 1,
     beltPull: rng() < 0.45,
     courage: rng(),
+    tier,
+    mods,
     rng,
   };
 }

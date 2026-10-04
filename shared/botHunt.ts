@@ -12,7 +12,7 @@
 import { botRand } from './botRand.ts';
 import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
-import { rollSkill, type BotSkill } from './botSkill.ts';
+import { rollSkill, type BotSkill, type BotTier } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
@@ -95,7 +95,9 @@ export interface HuntState {
   readonly skill: BotSkill;
 }
 
-export function newHuntState(spawn: BotVec): HuntState {
+export function newHuntState(spawn: BotVec, tier: BotTier = 'medium'): HuntState {
+  const skill = rollSkill(spawn, tier);
+  const m = skill.mods;
   return {
     hunt: null,
     lastSeen: { ...spawn },
@@ -104,17 +106,17 @@ export function newHuntState(spawn: BotVec): HuntState {
     leadId: '',
     lastSeenAt: 0,
     lastAimY: CENTER_AIM_Y,
-    skill: rollSkill(spawn),
+    skill,
     fireT: 0,
     burstLeft: 0,
     fightPos: null,
     acquiredAt: new Map(),
     huntTick: 0,
     lastHitAt: -1e9,
-    reactTicks: 1 + Math.round(botRand()),
+    reactTicks: Math.max(1, Math.round((1 + Math.round(botRand())) * m.react)),
     leadSkew: 0.9 + botRand() * 0.2,
-    jitter: 0.7 + botRand() * 0.6,
-    temper: 0.7 + botRand() * 0.6,
+    jitter: (0.7 + botRand() * 0.6) * m.jitter,
+    temper: (0.7 + botRand() * 0.6) * m.temper,
     orbitFar: ORBIT_FAR * (0.85 + botRand() * 0.3),
     orbitClose: ORBIT_TOO_CLOSE * (0.85 + botRand() * 0.3),
   };
