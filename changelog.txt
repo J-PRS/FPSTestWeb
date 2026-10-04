@@ -1,3 +1,4 @@
+2026-10-04 - gravity now applies every tick, grounded or not (true T1 model): contact kills only the into-slope component so tangential slide is free — replaces the grounded-ski special case
 2026-10-04 - grounded skier gets tangential gravity: parked on a slope you now slide downhill (T1 constant-gravity feel) and ski skips ground friction entirely; flat stays parked
 2026-10-04 - ski contact now frictionless: inward velocity killed 100% on terrain contact (tangential preserved perfectly); snap band owns surface tracking
 2026-10-04 - ski scrape was wired but inaudible: pure-speed gain curve reached 0.2 only at ~90 m/s so normal skiing was silent under wind/jets. Gain floor + tighter curve — audible from a slow carve, caps at 0.28 (remotes 0.24)

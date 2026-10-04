@@ -269,10 +269,12 @@ export class MoveSim {
       const mag = Math.hypot(s.vel.x, s.vel.z);
       if (mag > startMag && mag > 0) { s.vel.x *= startMag / mag; s.vel.z *= startMag / mag; }
       s.vel.y = startY;
-      // Gravity + terminal velocity, air only.
-      s.vel.y += GRAVITY * dt;
-      if (s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
     }
+    // Gravity applies always — grounded contact kills the into-slope
+    // component every tick and only the tangential slide survives
+    // (T1 model: no grounded/airborne gravity distinction).
+    s.vel.y += GRAVITY * dt;
+    if (s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
 
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
@@ -345,17 +347,6 @@ export class MoveSim {
       } else {
         s.vel.x = s.vel.y = s.vel.z = 0;
       }
-    }
-
-    // Grounded gravity pull for a skier: only the tangential component,
-    // so a parked skier slides downhill (T1 achieves the same by
-    // applying gravity constantly — our grounded path skips it, and
-    // the normal component would just be killed by the clamp anyway).
-    if (this.input.skiHeld) {
-      const gDotN = GRAVITY * n.y;
-      s.vel.x += -n.x * gDotN * dt;
-      s.vel.y += (GRAVITY - n.y * gDotN) * dt;
-      s.vel.z += -n.z * gDotN * dt;
     }
 
     // Redirect velocity along the slope (kill the into-ground component).
