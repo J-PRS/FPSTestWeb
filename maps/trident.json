@@ -73,7 +73,7 @@
     ]
   },
   "terrain": "t2/trident/terrain.bin",
-  "terrainTex": "t2/trident/albedo.png",
+  "terrainTex": "t2/trident/albedo.webp",
   "sky": "t2/trident/sky",
   "fog": {
     "color": [

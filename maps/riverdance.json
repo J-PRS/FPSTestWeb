@@ -50,7 +50,7 @@
     ]
   },
   "terrain": "t2/riverdance/terrain.bin",
-  "terrainTex": "t2/riverdance/albedo.png",
+  "terrainTex": "t2/riverdance/albedo.webp",
   "sky": "t2/riverdance/sky",
   "fog": {
     "color": [

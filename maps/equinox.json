@@ -45,7 +45,7 @@
     ]
   },
   "terrain": "t2/equinox/terrain.bin",
-  "terrainTex": "t2/equinox/albedo.png",
+  "terrainTex": "t2/equinox/albedo.webp",
   "sky": "t2/equinox/sky",
   "fog": {
     "color": [

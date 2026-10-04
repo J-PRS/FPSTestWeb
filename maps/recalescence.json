@@ -78,7 +78,7 @@
     ]
   },
   "terrain": "t2/recalescence/terrain.bin",
-  "terrainTex": "t2/recalescence/albedo.png",
+  "terrainTex": "t2/recalescence/albedo.webp",
   "sky": "t2/recalescence/sky",
   "fog": {
     "color": [

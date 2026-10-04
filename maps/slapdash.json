@@ -50,7 +50,7 @@
     ]
   },
   "terrain": "t2/slapdash/terrain.bin",
-  "terrainTex": "t2/slapdash/albedo.png",
+  "terrainTex": "t2/slapdash/albedo.webp",
   "sky": "t2/slapdash/sky",
   "fog": {
     "color": [

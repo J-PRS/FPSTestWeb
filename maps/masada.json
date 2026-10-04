@@ -68,7 +68,7 @@
     ]
   },
   "terrain": "t2/masada/terrain.bin",
-  "terrainTex": "t2/masada/albedo.png",
+  "terrainTex": "t2/masada/albedo.webp",
   "sky": "t2/masada/sky",
   "fog": {
     "color": [

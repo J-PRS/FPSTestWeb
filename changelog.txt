@@ -1,3 +1,10 @@
+2026-10-01 - Map payload cut 172MB -> 23MB: baked albedo/sky/tile PNGs
+re-encoded to WebP (albedo q90, tiles q92, sky q88) across all 23 T2
+ports. Specs and mats.json repointed, /maps route serves .webp, sky
+loader tries .webp then .png fallback, and t2map emits webp natively
+so future ports ship small. maps/t2/escalade_test tiles were already
+absent pre-conversion (stale manifest, unchanged behavior).
+
 2026-10-01 - Bot senses: pickupFor re-ran enemiesOf (full player+creature
 scan) per think on top of partiesOf — now takes the parties list. The
 dead enemiesOf/othersOf twins (zero callers, same rules copy-pasted)

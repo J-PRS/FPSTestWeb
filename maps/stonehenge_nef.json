@@ -138,7 +138,7 @@
     ]
   },
   "terrain": "t2/stonehenge_nef/terrain.bin",
-  "terrainTex": "t2/stonehenge_nef/albedo.png",
+  "terrainTex": "t2/stonehenge_nef/albedo.webp",
   "fog": {
     "color": [
       0.52,

@@ -86,7 +86,7 @@
     ]
   },
   "terrain": "t2/sirocco/terrain.bin",
-  "terrainTex": "t2/sirocco/albedo.png",
+  "terrainTex": "t2/sirocco/albedo.webp",
   "sky": "t2/sirocco/sky",
   "fog": {
     "color": [

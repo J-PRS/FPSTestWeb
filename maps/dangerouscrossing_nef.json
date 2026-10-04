@@ -50,7 +50,7 @@
     ]
   },
   "terrain": "t2/dangerouscrossing_nef/terrain.bin",
-  "terrainTex": "t2/dangerouscrossing_nef/albedo.png",
+  "terrainTex": "t2/dangerouscrossing_nef/albedo.webp",
   "fog": {
     "color": [
       0.7,

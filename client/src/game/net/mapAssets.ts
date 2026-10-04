@@ -417,11 +417,14 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     if (skyMesh) skyMesh.visible = true;
     return;
   }
-  const order = SKY_FACES.map((f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
+  // Baked ports ship .webp faces; .png is the fallback for a sky
+  // dropped in by hand without the converter.
+  const base = (f: string) => `${httpUrl}/maps/${skyDir}/${f}`;
   try {
     const loader = new THREE.ImageLoader();
-    const faces = await Promise.all(order.map(async (url, i) => {
-      const img = await loader.loadAsync(url);
+    const faces = await Promise.all(SKY_FACES.map(async (f, i) => {
+      const img = await loader.loadAsync(`${base(f)}.webp`)
+        .catch(() => loader.loadAsync(`${base(f)}.png`));
       if (!SKY_VFLIP.has(SKY_FACES[i]!)) return img;
       const c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;

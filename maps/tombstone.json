@@ -82,7 +82,7 @@
     ]
   },
   "terrain": "t2/tombstone/terrain.bin",
-  "terrainTex": "t2/tombstone/albedo.png",
+  "terrainTex": "t2/tombstone/albedo.webp",
   "sky": "t2/tombstone/sky",
   "fog": {
     "color": [

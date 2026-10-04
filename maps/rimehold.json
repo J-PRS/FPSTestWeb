@@ -62,7 +62,7 @@
     ]
   },
   "terrain": "t2/rimehold/terrain.bin",
-  "terrainTex": "t2/rimehold/albedo.png",
+  "terrainTex": "t2/rimehold/albedo.webp",
   "sky": "t2/rimehold/sky",
   "fog": {
     "color": [

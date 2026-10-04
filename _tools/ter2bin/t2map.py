@@ -183,8 +183,8 @@ def export_mats(dest: Path, names, used, alpha, matmap, xz=XZ_SCALE):
     tdir.mkdir(parents=True, exist_ok=True)
     tiles = []
     for k, i in enumerate(used):
-        (tdir / f"m{k}.png").write_bytes(tex_blob(names[i]))
-        tiles.append(f"tiles/m{k}.png")
+        Image.open(io.BytesIO(tex_blob(names[i]))).save(tdir / f"m{k}.webp", "WEBP", quality=92, method=6)
+        tiles.append(f"tiles/m{k}.webp")
     (dest / "matmap.bin").write_bytes(half_shift(matmap).astype(np.uint8).tobytes())
     (dest / "alphas.bin").write_bytes(half_shift(alpha).tobytes())
     manifest = {
@@ -261,7 +261,7 @@ def extract_sky(mis_text, dest: Path):
         if seam_err(flipped) < seam_err(px_i):
             out[1] = ("px", flipped)
     for cube, im in out:
-        im.save(dest / f"{cube}.png")
+        im.save(dest / f"{cube}.webp", "WEBP", quality=88, method=6)
     return {cube: name for (cube, _), (name, _) in zip(out, imgs)}
 
 
@@ -513,10 +513,10 @@ def main():
 
         print(f"{mapname}: {lo:.0f}..{hi:.0f}m ({relief:.0f}m relief), mats {[names[i] for i in used]}")
         alb = np.asarray(bake_albedo(matmap, names, used, alpha, args.res))
-        Image.fromarray(half_shift(alb)).save(dest / "albedo.png")
+        Image.fromarray(half_shift(alb)).save(dest / "albedo.webp", "WEBP", quality=90, method=6)
         export_mats(dest, names, used, alpha, matmap, args.tilesize / T2_TILE_M)
         faces = extract_sky(mis_text, dest / "sky")
-        print(f"  albedo.png {args.res}px, sky faces: {faces}")
+        print(f"  albedo.webp {args.res}px, sky faces: {faces}")
 
         # T2 (u,v,w-up) -> ours (x,y,z): x=u·XZ, z=v·XZ, y=(w-lo)·vsampled/relief
         # where vsampled = 125·heightScale — the relief the engine actually
@@ -551,7 +551,7 @@ def main():
                 if any(s["team"] == t for s in spawns)
             },
             "terrain": f"t2/{key}/terrain.bin",
-            "terrainTex": f"t2/{key}/albedo.png",
+            "terrainTex": f"t2/{key}/albedo.webp",
             **({"sky": f"t2/{key}/sky"} if faces else {}),
             **({"fog": fog} if (fog := extract_fog(mis_text)) else {}),
             **({"heightScale": round(hscale, 4)} if hscale != 1.0 else {}),

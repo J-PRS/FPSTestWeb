@@ -78,7 +78,7 @@
     ]
   },
   "terrain": "t2/sundried/terrain.bin",
-  "terrainTex": "t2/sundried/albedo.png",
+  "terrainTex": "t2/sundried/albedo.webp",
   "sky": "t2/sundried/sky",
   "fog": {
     "color": [

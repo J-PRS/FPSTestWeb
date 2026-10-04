@@ -152,7 +152,7 @@
     ]
   },
   "terrain": "t2/surreal/terrain.bin",
-  "terrainTex": "t2/surreal/albedo.png",
+  "terrainTex": "t2/surreal/albedo.webp",
   "sky": "t2/surreal/sky",
   "fog": {
     "color": [

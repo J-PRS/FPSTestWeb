@@ -36,7 +36,7 @@
     ]
   },
   "terrain": "t2/invictus/terrain.bin",
-  "terrainTex": "t2/invictus/albedo.png",
+  "terrainTex": "t2/invictus/albedo.webp",
   "sky": "t2/invictus/sky",
   "fog": {
     "color": [

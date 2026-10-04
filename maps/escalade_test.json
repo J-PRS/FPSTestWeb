@@ -148,7 +148,7 @@
     ]
   },
   "terrain": "t2/escalade/terrain.bin",
-  "terrainTex": "t2/escalade/albedo.png",
+  "terrainTex": "t2/escalade/albedo.webp",
   "sky": "t2/escalade_test/sky",
   "interiors": [
     {

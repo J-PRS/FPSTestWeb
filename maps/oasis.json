@@ -36,7 +36,7 @@
     ]
   },
   "terrain": "t2/oasis/terrain.bin",
-  "terrainTex": "t2/oasis/albedo.png",
+  "terrainTex": "t2/oasis/albedo.webp",
   "sky": "t2/oasis/sky",
   "fog": {
     "color": [

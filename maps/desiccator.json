@@ -68,7 +68,7 @@
     ]
   },
   "terrain": "t2/desiccator/terrain.bin",
-  "terrainTex": "t2/desiccator/albedo.png",
+  "terrainTex": "t2/desiccator/albedo.webp",
   "sky": "t2/desiccator/sky",
   "fog": {
     "color": [
