@@ -443,6 +443,13 @@ export class BotArsenal implements BeamHost {
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
+    // Hard floor only: a 50% grab-hp budget can't survive the route —
+    // propels ARE the speed and starving them flatlines transit (capRun
+    // regression: kata never grabbed at all). A quarter-hp floor keeps
+    // the grab from arriving one hit from a corpse while the blow-by
+    // stays armed inside the ring.
+    const maxHp = this.room.players.getAllPlayers().get(id)?.maxHealth ?? 200;
+    if (goal.runner && dist > 60 && hp < maxHp * 0.25) return;
     // Runners keep the burn going until the pole — the last blast IS
     // the blow-by through the intercept line (overshoot = the grab).
     if (dist < (surge ? 10 : 35)) return;
@@ -451,7 +458,14 @@ export class BotArsenal implements BeamHost {
     // ahead drags him forward with ZERO self-splash — the feet blast at
     // the stand is how healthy grabs turned into one-hit carriers
     // (grab re-arm stacked a second blast right after the approach one).
-    if (carrying && getWeaponStats(lo.belt)?.forceMode === 'pull') {
+    // The nitron trick powers the APPROACH too — but only once the route
+    // has spent real hp: the pull pop is a weaker shove than the feet
+    // blast, so a healthy runner pays hp for full-speed launches, then
+    // swaps to hp-free pull surfs so the grab still arrives half-alive.
+    // A carrier never pays: hp at the flag is the whole game.
+    const beltPull = getWeaponStats(lo.belt)?.forceMode === 'pull';
+    const spendHp = goal.runner === true && hp > maxHp * 0.6;
+    if (beltPull && (carrying || (goal.runner && !spendHp))) {
       const nx = dx / dist, nz = dz / dist;
       if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
         this.propelMark(id, 'pull', now);
@@ -460,10 +474,10 @@ export class BotArsenal implements BeamHost {
         logger.info('Bot pull surf', { id });
         return;
       }
-      // Dry belt or unsafe arc: a carrier just holds. Falling through
+      // Dry belt or unsafe arc: a CARRIER just holds — falling through
       // to the feet/crest blast is the suicide this branch exists to
-      // remove — a slow ride home beats a dead drop at the stand.
-      return;
+      // remove; a runner still pays hp for speed as the fallback.
+      if (carrying) return;
     }
     if (!sh.onGround) {
       // Crest blast: jetting up a face, the hill drops away under the
