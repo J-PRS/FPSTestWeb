@@ -173,14 +173,17 @@ export class ServerBotSenses {
     }
   }
 
-  /** One pass producing all three per-think lists — build() ran the
-   *  same player scan three times (enemies/allies/others); that's the
-   *  top line of the bot-tick profile (~29% of room wall-time). */
-  private partiesOf(p: { id: string; team?: string }): { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[] } {
+  /** One pass producing every per-think roster view — flagGoal and
+   *  build() each scanned the player map for their own channel (foes,
+   *  stand threats, enemies/allies/others); callers share one pass per
+   *  think so the bot tick stays O(players), not O(players × channels). */
+  partiesOf(p: { id: string; team?: string }): { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[]; roster: { id: string; pos: Vec3; team?: string }[] } {
     const enemies: BotEnemy[] = [], allies: Vec3[] = [], others: Vec3[] = [];
+    const roster: { id: string; pos: Vec3; team?: string }[] = [];
     const teams = !!this.room.modeSpec?.teams;
     for (const q of this.room.players.getAllPlayers().values()) {
       if (q.id === p.id || q.isDead) continue;
+      roster.push({ id: q.id, pos: q.position, team: q.team });
       others.push(q.position);
       // Same rule as enemiesOf: teamless modes are open season on every
       // other live body — bot or human makes no difference to the gun.
@@ -193,7 +196,7 @@ export class ServerBotSenses {
       enemies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
     for (const c of this.room.creatureSim.roster())
       enemies.push({ id: `c:${c.id}`, pos: c.position, vel: c.velocity, alive: true, aimY: 0 });
-    return { enemies, allies, others };
+    return { enemies, allies, others, roster };
   }
 
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
@@ -272,7 +275,7 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerBotSenses['partiesOf']>): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
     const flags = this.room.flags;
     if (!flags) return null;
     // Rabbit: no teams, one neutral flag. Hunters converge on the flag
@@ -320,7 +323,7 @@ export class ServerBotSenses {
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
-      threat: this.standThreat(own.home, me),
+      threat: this.standThreat(own.home, me, (parties ?? this.partiesOf(p)).roster),
       push: this.pushFor(me),
       me: p.position,
     };
@@ -400,8 +403,8 @@ export class ServerBotSenses {
       // same board and flanks the blob. Charged per entry candidate so a
       // route through the DMZ loses to a wide arc around it.
       const foes: { x: number; z: number }[] = [];
-      for (const q of this.room.players.getAllPlayers().values()) {
-        if (!q.isDead && q.team && q.team !== me) foes.push({ x: q.position.x, z: q.position.z });
+      for (const q of (parties ?? this.partiesOf(p)).roster) {
+        if (q.team && q.team !== me) foes.push({ x: q.pos.x, z: q.pos.z });
       }
       // Stay live until the last hop: snapping the goal to the raw
       // stand at 90m beelines the bot into the rim wall it probed its
@@ -716,12 +719,12 @@ export class ServerBotSenses {
   /** Closest hostile pressing our stand — the HoF body-block anchor.
    *  Only counts enemies inside the ring so a fighter out in the field
    *  doesn't drag the anchor off the flag. */
-  private standThreat(home: Vec3, me: TeamId): Vec3 | null {
+  private standThreat(home: Vec3, me: TeamId, roster: { pos: Vec3; team?: string }[]): Vec3 | null {
     let best: Vec3 | null = null, bestD = 26;
-    for (const [, q] of this.room.players.getAllPlayers()) {
-      if (q.team === me || q.isDead) continue;
-      const d = Math.hypot(q.position.x - home.x, q.position.z - home.z);
-      if (d < bestD) { bestD = d; best = q.position; }
+    for (const q of roster) {
+      if (q.team === me) continue;
+      const d = Math.hypot(q.pos.x - home.x, q.pos.z - home.z);
+      if (d < bestD) { bestD = d; best = q.pos; }
     }
     return best;
   }
@@ -743,11 +746,11 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
-    const parties = this.partiesOf(p);
+    const parties = sharedParties ?? this.partiesOf(p);
     const ctx: BrainCtx = {
       id: p.id,
       pos: p.position,

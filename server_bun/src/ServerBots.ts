@@ -563,9 +563,12 @@ export class ServerBots {
       if (phaseNow === (this.thinkPhase.get(id) ?? 0) || !out) {
         const prof = this.stageProf;
         let tm = prof ? performance.now() : 0;
-        const goal = this.sense.flagGoal(p, brain.dutyLevel);
+        // One roster pass feeds the whole think — flagGoal/build each
+        // re-scanned the player map per channel before sharing it.
+        const parties = this.sense.partiesOf(p);
+        const goal = this.sense.flagGoal(p, brain.dutyLevel, parties);
         if (prof) { prof[0]! += performance.now() - tm; tm = performance.now(); }
-        const ctx = this.sense.build(id, p, goal, now, brain.skill);
+        const ctx = this.sense.build(id, p, goal, now, brain.skill, parties);
         if (prof) { prof[1]! += performance.now() - tm; tm = performance.now(); }
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
