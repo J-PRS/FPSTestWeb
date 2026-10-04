@@ -1,3 +1,10 @@
+2026-10-01 - LG charge-pop moved inside HitLedger.applyHit: shot claims and
+serverHit each carried an identical inline detonate-min(banked,dmg) tail
+while blast and mine hits silently skipped it, so the same banked victim
+paid back differently by weapon. One rule in the funnel now — surviving
+enemy victims pop on every non-beam hit (beams, self-hits and
+environment still exempt), and blast/mine paths detonate like shots do.
+
 2026-10-01 - Bot-stack drift cleanup: BRAWL_RANGE (45m) + FOE_CONE_MIN_DOT
 (-0.4, ~113deg) now live in shared/botBrain — client foeSeen was missing
 the view-cone gate entirely, so offline bots were charged for ignoring

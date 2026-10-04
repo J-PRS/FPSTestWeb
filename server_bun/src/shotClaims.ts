@@ -109,13 +109,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // The server projectile id (proj_N) joins playerHit to the earlier
     // projectileCreated — that's the join accuracy stats group on.
     const projId = msg.projectileId ?? (msg.shotId ? h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
-    h.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType, shotId: projId ?? undefined });
-    // LG charge detonation: a non-beam hit sparks min(banked, damage)
-    // off the victim's bank — the rest keeps smoldering.
-    if (!result.killed && proj.weaponType !== WeaponType.Lightning) {
-      const acc = h.chargeBank.of(target);
-      if (acc > 0) h.chargeBank.discharge(playerId, target, Math.min(acc, shotDamage));
-    }
+    h.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType, shotId: projId ?? undefined, air: msg.airtime });
   }
 
   /** Heal-beam claim: friendly target only, server re-derives the tick

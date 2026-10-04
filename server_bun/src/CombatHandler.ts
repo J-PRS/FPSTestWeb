@@ -1,6 +1,5 @@
 import type { ClientMessage, ServerMessage, Vec3, ClaimVerdict } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { WeaponType } from '../../shared/weapons.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -434,7 +433,7 @@ export class CombatHandler {
    *  whoever it landed on. */
   serverHit(
     ownerId: string, targetId: string, damage: number, label: string,
-    opts: { hb?: string; weapon?: number; shotId?: string } = {},
+    opts: { hb?: string; weapon?: number; shotId?: string; air?: number } = {},
   ): void {
     const target = this.playerManager.getPlayer(targetId);
     if (!target || target.isDead) { this.hb('drop.deadTarget'); return; }
@@ -444,13 +443,7 @@ export class CombatHandler {
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = wallNow() + FORCE_SEND_MS;
-    this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId });
-    // Same charge rule as client claims: a non-beam direct hit detonates
-    // min(banked, damage). 'environment' can't own a blast — skip it.
-    if (!result.killed && opts.weapon !== WeaponType.Lightning && ownerId !== 'environment') {
-      const acc = this.chargeBank.of(target);
-      if (acc > 0) this.chargeBank.discharge(ownerId, target, Math.min(acc, dmg));
-    }
+    this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId, air: opts.air });
   }
 
   /** Deliberate respawn (the client's K bind) — routed through the same
@@ -481,7 +474,7 @@ export class CombatHandler {
     return shooter.ddUntil > simNow() ? POWERUP.ddMult : 1;
   }
 
-  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void {
+  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     this.hitLedger.applyHit(this, shooterId, targetId, damage, result, opts);
   }
 

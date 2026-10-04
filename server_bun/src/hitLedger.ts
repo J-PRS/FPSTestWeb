@@ -1,4 +1,5 @@
 import { weaponStats } from './weaponStats.ts';
+import { WeaponType } from '../../shared/weapons.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
 export const selfKillImpactDist: number[] = [];
@@ -28,14 +29,26 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void {
+  applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) c.hb('kill');
-    c.deps.emit?.({ type: 'hit', targetId, shooterId });
+    c.deps.emit?.({ type: 'hit', targetId, shooterId, damage });
     const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined });
     if (!result.killed) {
+      // Surviving victim pops min(banked, damage) of their LG charge —
+      // one rule for every damage path so a splash or mine can't carry
+      // less detonation than a body shot. Beams, self-hits and
+      // 'environment' never pop (a beam's bank is still accumulating,
+      // and the bank's owner attacks things, not victimless forces).
+      if (opts.weapon !== WeaponType.Lightning && shooterId !== targetId && shooterId !== 'environment') {
+        const v = c.playerManager.getPlayer(targetId);
+        if (v) {
+          const acc = c.chargeBank.of(v);
+          if (acc > 0) c.chargeBank.discharge(shooterId, v, Math.min(acc, damage));
+        }
+      }
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
       c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq, shotId: opts.shotId });
       return;
@@ -119,7 +132,7 @@ export class HitLedger {
 
   /** The kill tail: score credit, kill broadcast, spree callouts, and the
    *  respawn timer — every damage path converges here. */
-  private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
+  private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; air?: number }): void {
     // Self-frags are deaths, not kills — the kill feed already says so;
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
@@ -127,7 +140,7 @@ export class HitLedger {
     logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak });
+    c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak, air: opts.air });
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label);
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
