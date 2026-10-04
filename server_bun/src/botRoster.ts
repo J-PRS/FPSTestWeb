@@ -80,13 +80,25 @@ export class BotRoster {
         team: p.team,
         armorClass: cls,
       });
-      this.brains.set(id, new BotBrain(p.position));
+      this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
       this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
+  }
+
+  /** Team's difficulty spec from spec.botSkill — a bare tier covers
+   *  the lobby, {alpha,bravo} handicaps sides, and either can be an
+   *  axis mix ({aim:'impossible',move:'easy'}); unset is medium. */
+  private tierFor(team: string | undefined): import('../../shared/botSkill.ts').BotSkillSpec {
+    const s = this.room.spec.botSkill;
+    // A team wrapper always carries alpha or bravo; a bare spec is a
+    // string or an axis mix, which never does.
+    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) return s as import('../../shared/botSkill.ts').BotSkillSpec;
+    if (s) return (team === 'alpha' ? s.alpha : s.bravo) ?? 'medium';
+    return 'medium';
   }
 
   /** Re-fit a bot's body to its CURRENT loadout — scenarios that swap

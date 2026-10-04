@@ -44,6 +44,25 @@ export const BOT_TIERS: Record<BotTier, BotTierMods> = {
   impossible: { aim: 1.45, move: 1.3, react: 0.45, jitter: 0.5, temper: 1.3 },
 };
 
+/** Per-axis mix — each field names the band to borrow that axis from,
+ *  so a team can be {aim:'impossible', move:'easy'} (stormtrooper
+ *  skiers) vs the inverse. Missing axes default to medium. */
+export type BotSkillMix = Partial<Record<keyof BotTierMods, BotTier>>;
+export type BotSkillSpec = BotTier | BotSkillMix;
+
+/** Resolve a tier name or per-axis mix into one mods row. */
+export function skillMods(spec: BotSkillSpec | undefined): BotTierMods {
+  if (!spec || spec === 'medium') return BOT_TIERS.medium;
+  if (typeof spec === 'string') return BOT_TIERS[spec];
+  const m = BOT_TIERS.medium;
+  const out = { ...m } as BotTierMods;
+  for (const k of ['aim', 'move', 'react', 'jitter', 'temper'] as const) {
+    const t = spec[k];
+    if (t) out[k] = BOT_TIERS[t][k];
+  }
+  return out;
+}
+
 export interface BotSkill {
   axes: Record<AimAxis, AxisPair>;
   /** Ski/jet competence — how well it holds speed and picks lines. */
@@ -60,9 +79,9 @@ export interface BotSkill {
    *  cautious ones swap to a safe slot before the splash does them in.
    *  Personality draw like beltPull, so duels end differently per bot. */
   courage: number;
-  /** The band this roll was drawn from — hunt/brain reads its mods for
-   *  reaction delay, jitter and cadence. */
-  readonly tier: BotTier;
+  /** The spec this roll was drawn from — hunt/brain reads the resolved
+   *  mods for reaction delay, jitter and cadence. */
+  readonly spec: BotSkillSpec;
   readonly mods: BotTierMods;
   /** Private stream — form drift consumes it, not the shared botRand. */
   rng: () => number;
@@ -80,10 +99,10 @@ function prng(seed: number): () => number {
   };
 }
 
-export function rollSkill(spawn: BotVec, tier: BotTier = 'medium'): BotSkill {
+export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkill {
   const seed = Math.imul(spawn.x | 0, 73856093) ^ Math.imul(spawn.z | 0, 19349663) ^ Math.imul(spawn.y | 0, 83492791);
   const rng = prng(seed || 1);
-  const mods = BOT_TIERS[tier];
+  const mods = skillMods(spec);
   const clamp = (v: number) => Math.min(1.5, Math.max(0.45, v));
   const axis = (): AxisPair => {
     const base = (0.55 + rng() * 0.9) * mods.aim;
@@ -99,7 +118,7 @@ export function rollSkill(spawn: BotVec, tier: BotTier = 'medium'): BotSkill {
     form: 1,
     beltPull: rng() < 0.45,
     courage: rng(),
-    tier,
+    spec,
     mods,
     rng,
   };

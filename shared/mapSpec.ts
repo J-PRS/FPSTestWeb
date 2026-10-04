@@ -53,7 +53,7 @@ export interface MapSpec {
   /** Difficulty band for spawned bots — one tier for the whole lobby, or
    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
    *  around the band, so a team's bots aren't clones. */
-  botSkill?: import('./botSkill.ts').BotTier | { alpha?: import('./botSkill.ts').BotTier; bravo?: import('./botSkill.ts').BotTier };
+  botSkill?: import('./botSkill.ts').BotSkillSpec | { alpha?: import('./botSkill.ts').BotSkillSpec; bravo?: import('./botSkill.ts').BotSkillSpec };
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
@@ -167,11 +167,24 @@ export function resolveMapSpec(raw: unknown): MapSpec {
   };
 }
 
-/** botSkill — a bare tier name, or {alpha,bravo} per-side; unknown
- *  strings fall back to the room default (medium). */
+/** botSkill — a bare tier name, a per-axis mix ({aim:'impossible',
+ *  move:'easy'}), or {alpha,bravo} per-side; unknown values fall back
+ *  to the room default (medium). */
 function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
   const TIER = new Set(['easy', 'medium', 'hard', 'impossible']);
-  const one = (v: unknown) => (typeof v === 'string' && TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined);
+  const AXES = ['aim', 'move', 'react', 'jitter', 'temper'] as const;
+  const one = (v: unknown): import('./botSkill.ts').BotSkillSpec | undefined => {
+    if (typeof v === 'string') return TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const mix: import('./botSkill.ts').BotSkillMix = {};
+      for (const k of AXES) {
+        const t = (v as Record<string, unknown>)[k];
+        if (typeof t === 'string' && TIER.has(t)) mix[k] = t as import('./botSkill.ts').BotTier;
+      }
+      return Object.keys(mix).length ? mix : undefined;
+    }
+    return undefined;
+  };
   if (typeof raw === 'string') return one(raw);
   if (raw && typeof raw === 'object') {
     const o = raw as { alpha?: unknown; bravo?: unknown };

@@ -12,7 +12,7 @@
 import { botRand } from './botRand.ts';
 import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
-import { rollSkill, type BotSkill, type BotTier } from './botSkill.ts';
+import { rollSkill, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
@@ -95,8 +95,8 @@ export interface HuntState {
   readonly skill: BotSkill;
 }
 
-export function newHuntState(spawn: BotVec, tier: BotTier = 'medium'): HuntState {
-  const skill = rollSkill(spawn, tier);
+export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): HuntState {
+  const skill = rollSkill(spawn, spec);
   const m = skill.mods;
   return {
     hunt: null,
