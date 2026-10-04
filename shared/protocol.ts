@@ -14,6 +14,7 @@
 import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
+import type { StructureSpec } from './mapSpec.ts';
 export const PROTOCOL_VERSION = 12; // claimSeq + claimAck — uniform claim verdicts, no more fire-and-forget drops
 
 export interface Vec3 {
@@ -138,7 +139,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -155,7 +156,10 @@ export type ServerMessage =
   | { type: 'playerKill'; shooterId: string; targetId: string; weapon?: number;
       /** Shooter's consecutive-kill count after this frag — kill feed can
        *  render "🔥x5" without tracking streaks itself. */
-      streak?: number }
+      streak?: number;
+      /** Projectile airtime (s) at the kill — feed shows `[1.3s]` so long
+       *  lobs get credit. Absent for hitscan/melee/env kills. */
+      air?: number }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string }
   | { type: 'jump'; playerId: string; position: Vec3 }
@@ -259,7 +263,7 @@ export type ServerMessage =
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; mapName?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
+  | { type: 'mapUpdate'; mapName?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
 
 export interface GameStatePlayer {
   id: string;

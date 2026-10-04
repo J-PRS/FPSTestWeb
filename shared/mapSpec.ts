@@ -65,6 +65,10 @@ export interface MapSpec {
    *  (0.1–8). Applies to spec.terrain AND the default field alike; the
    *  value rides the wire so client prediction and render agree. */
   heightScale?: number;
+  /** Meters one heightmap wrap covers (256–4096) — T2 ports carry their
+   *  native 2048m tile so nothing on the map is squished horizontally.
+   *  Absent = the engine default 1500. Rides the wire like heightScale. */
+  tileSize?: number;
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
@@ -166,6 +170,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     // anything with a slash or dot-traversal is dropped on the floor
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
     heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
+    tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
@@ -235,6 +240,12 @@ function parseHeightScale(raw: unknown): number | undefined {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
   const v = Math.max(0.1, Math.min(8, raw));
   return v === 1 ? undefined : v;
+}
+
+function parseTileSize(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  const v = Math.max(256, Math.min(4096, raw));
+  return v === 1500 ? undefined : v;
 }
 
 /** maps/-relative path — word-char dirs, filename must carry the

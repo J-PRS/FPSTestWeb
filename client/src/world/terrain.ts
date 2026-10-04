@@ -7,7 +7,16 @@ import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 export { loadHeightmap, getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
-const HM_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+
+export interface FieldRing {
+  x: number; z: number; r: number;
+  intensity: number;
+  tint: readonly [number, number, number];
+  /** Set = dome-contact mode: this is the sphere center's Y and the ring
+   *  traces the true sphere∩terrain contour, not a circle. */
+  domeY?: number;
+}
 
 interface ClipmapLevel {
   mesh: THREE.Mesh;
@@ -72,6 +81,13 @@ export class Terrain {
   private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
   private scorchArr = new Float32Array(16 * 4);
   private scorchEmberArr = new Float32Array(16);
+  // Projected deployable field rings (recharge pad envelope) — shader
+  // decal slots like scorch; a mesh ring can't survive the clipmap's
+  // 5m chord approximation.
+  private fieldRingList: FieldRing[] = [];
+  private fieldRingArr = new Float32Array(8 * 4);
+  private fieldYArr = new Float32Array(8);
+  private fieldTintArr = new Float32Array(8 * 3);
 
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
@@ -123,8 +139,8 @@ export class Terrain {
           useMats:         { value: false },
           tileMeters:      { value: 5.86 },
           tileMeans:       { value: new Float32Array(8).fill(0.5) },
-          hmWorldScale:    { value: HM_WORLD_SCALE },
-          hmWorldScaleFrag:{ value: HM_WORLD_SCALE },
+          hmWorldScale:    { value: DEFAULT_WORLD_SCALE },
+          hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },
           hScale:          { value: HSCALE },
           gridOrigin:      { value: new THREE.Vector2(0, 0) },
           levelScale:      { value: levelScale },
@@ -142,6 +158,9 @@ export class Terrain {
           fogEnd:          { value: 400.0 },
           scorchData:      { value: this.scorchArr },
           scorchEmber:     { value: this.scorchEmberArr },
+          fieldRing:       { value: this.fieldRingArr },
+          fieldTint:       { value: this.fieldTintArr },
+          fieldY:          { value: this.fieldYArr },
         },
       });
 
@@ -183,6 +202,24 @@ export class Terrain {
     this.heightTexture.needsUpdate = true;
     for (const level of this.levels) {
       level.material.uniforms.heightMap.value = this.heightTexture;
+    }
+  }
+
+  /** Per-map vertical gain (spec.heightScale): uniforms only — the
+   *  displacement texture bytes are gain-agnostic, so no re-upload. */
+  setHeightScale(worldScale: number): void {
+    for (const level of this.levels) {
+      level.material.uniforms.hScale.value = worldScale;
+      level.material.uniforms.hscale.value = worldScale;
+    }
+  }
+
+  /** Per-map tile span (spec.tileSize): the heightmap/albedo UV stretch —
+   *  uniforms only, same as the vertical gain. */
+  setWorldScale(meters: number): void {
+    for (const level of this.levels) {
+      level.material.uniforms.hmWorldScale.value = meters;
+      level.material.uniforms.hmWorldScaleFrag.value = meters;
     }
   }
 
@@ -249,6 +286,23 @@ export class Terrain {
       this.scorchArr[o + 3] = s.intensity;
       this.scorchEmberArr[i] = s.ember;
     }
+
+    // Upload field-ring decal slots
+    this.fieldRingArr.fill(0);
+    this.fieldTintArr.fill(0);
+    for (let i = 0; i < this.fieldRingList.length; i++) {
+      const s = this.fieldRingList[i];
+      const o = i * 4;
+      this.fieldRingArr[o] = s.x;
+      this.fieldRingArr[o + 1] = s.z;
+      // Sign on r selects the shader mode: + flat annulus, − dome contour.
+      this.fieldRingArr[o + 2] = s.domeY !== undefined ? -s.r : s.r;
+      this.fieldRingArr[o + 3] = s.intensity;
+      this.fieldYArr[i] = s.domeY ?? 0;
+      this.fieldTintArr[i * 3] = s.tint[0];
+      this.fieldTintArr[i * 3 + 1] = s.tint[1];
+      this.fieldTintArr[i * 3 + 2] = s.tint[2];
+    }
   }
 
   // Register a projected scorch decal. Returns a handle whose `intensity`
@@ -263,6 +317,21 @@ export class Terrain {
   removeScorch(entry: { x: number; z: number; r: number; intensity: number; ember: number }): void {
     const i = this.scorchList.indexOf(entry);
     if (i >= 0) this.scorchList.splice(i, 1);
+  }
+
+  // Projected field-ring decal — same contract as addScorch: mutate the
+  // returned handle's intensity/tint to animate, pass it back to release.
+  addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number], domeY?: number): FieldRing {
+    const entry: FieldRing = { x, z, r, intensity: 0.5, tint };
+    if (domeY !== undefined) entry.domeY = domeY;
+    if (this.fieldRingList.length >= 8) this.fieldRingList.shift();
+    this.fieldRingList.push(entry);
+    return entry;
+  }
+
+  removeFieldRing(entry: FieldRing): void {
+    const i = this.fieldRingList.indexOf(entry);
+    if (i >= 0) this.fieldRingList.splice(i, 1);
   }
 
   updateFog(color: THREE.Color, start: number, end: number): void {

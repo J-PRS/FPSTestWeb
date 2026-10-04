@@ -10,12 +10,12 @@ import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js'
 import { Ball } from '../../entities/balls.js';
 import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
-import { loadHeightfieldBin, setHeightScale } from '../../world/heightmap.js';
-import { TERRAIN_HEIGHT_SCALE } from '../../core/config.js';
+import { loadHeightfieldBin, setHeightScale, setWorldScale } from '../../world/heightmap.js';
+import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../../core/config.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
  *  Serializes concurrent loads — a mapUpdate racing a re-join can't
@@ -35,9 +35,10 @@ export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; 
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
-export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number): Promise<void> {
+export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number, tileSize?: number): Promise<void> {
   const mult = heightScale ?? 1;
-  const key = `${file}@${mult}|${texPath}|${skyDir}`;
+  const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
+  const key = `${file}@${mult}@${wscale}|${texPath}|${skyDir}`;
   if (terrainActive === key) return;
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
@@ -47,7 +48,9 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       // Scale applies to whichever field is resident — a scale-only map
       // change still needs CPU samples + shader uniforms re-keyed.
       setHeightScale(mult);
+      setWorldScale(wscale);
       deps.lazyTerrain().setHeightScale(TERRAIN_HEIGHT_SCALE * mult);
+      deps.lazyTerrain().setWorldScale(wscale);
       interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
       const { httpUrl } = await resolveServerEndpoints();
       const fieldKey = `${file}@${mult}`;

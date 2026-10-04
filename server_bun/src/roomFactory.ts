@@ -11,7 +11,7 @@ import { BallSim } from './BallSim.ts';
 import { logger } from './logger.ts';
 import type { MapCatalog } from './mapCatalog.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
-import type { Heightfield } from '../../shared/heightfield.ts';
+import { hmScaled, type Heightfield } from '../../shared/heightfield.ts';
 
 export interface RoomFactoryHost {
   /** Live room index — created rooms register here before returning. */
@@ -35,16 +35,17 @@ export class RoomFactory {
   // a room always plays on the default field until its own terrain lands.
   private fields = new Map<string, Promise<Heightfield | null>>();
 
-  private loadField(file: string): Promise<Heightfield | null> {
-    let p = this.fields.get(file);
+  private loadField(file: string, heightScale = 1, worldScale?: number): Promise<Heightfield | null> {
+    const key = `${file}@${heightScale}@${worldScale ?? 0}`;
+    let p = this.fields.get(key);
     if (!p) {
       const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
       p = bunFile
         ? bunFile(join(import.meta.dir, '..', '..', 'maps', file)).arrayBuffer()
-            .then(ab => BallSim.parseHeightmap(new Uint8Array(ab)))
+            .then(ab => BallSim.parseHeightmap(new Uint8Array(ab), heightScale, worldScale))
             .catch(err => { logger.warn('map terrain load failed', { file, err: String(err) }); return null; })
         : Promise.resolve(null);
-      this.fields.set(file, p);
+      this.fields.set(key, p);
     }
     return p;
   }
@@ -55,7 +56,12 @@ export class RoomFactory {
     const roomName = room.name;
     // No spec.terrain → the room plays on the default field. Rotation can
     // land on a terrain-less map after a terrain one, so reverting matters.
-    const target = spec.terrain ? this.loadField(spec.terrain) : Promise.resolve(this.host.field());
+    // heightScale wraps the bytes (default field included) via hmScaled —
+    // the shared field object is never mutated.
+    const scale = spec.heightScale ?? 1;
+    const wscale = spec.tileSize;
+    const def = () => Promise.resolve(this.host.field()).then(f => f && hmScaled(f, scale, wscale));
+    const target = spec.terrain ? this.loadField(spec.terrain, scale, wscale) : def();
     target.then(f => {
       if (!f || this.host.rooms.get(roomName) !== room) return;
       room.field = f;
@@ -95,7 +101,7 @@ export class RoomFactory {
       };
       room.onRotate = () => this.host.maps.nextRotationSpec(r);
       room.onTerrain = (s) => this.attachTerrain(r, s);
-      if (spec?.terrain) this.attachTerrain(room, spec);
+      if (spec?.terrain || spec?.heightScale || spec?.tileSize) this.attachTerrain(room, spec);
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     }

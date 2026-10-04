@@ -115,14 +115,14 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
-    if (map.terrain) void applyTerrain(ctx, map.terrain, map.terrainTex, map.sky);
+    if (map.terrain || map.heightScale || map.tileSize) void applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);
     void applyInteriors(ctx, map.interiors);
     void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
     chat.add(null, 'map updated by admin');
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
     logger.warn(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
     // The snapshot replaces the world — any volatile layer still alive
     // pre-reconnect is stale fast-forward, not truth. Purge before
@@ -225,7 +225,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
     clearArenaDome(deps.lazyScene());
   }
   setAmbientCaps(map?.ambient);
-  void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky);
+  void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize);
   void applyInteriors(ctx, map?.interiors)
     .catch((e) => ctx.deps.logger.warn(`applyInteriors failed: ${e instanceof Error ? e.message : String(e)}`));
 }

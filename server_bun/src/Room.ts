@@ -17,7 +17,7 @@ import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { InfluenceMap } from './influenceMap.ts';
-import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -167,8 +167,9 @@ export class Room {
     this.commands.length = 0;
   }
   /** Spatial memory — kills/fights/gems/flags leave decaying scent the
-   *  brains read for where-the-action-was. See influenceMap.ts. */
-  readonly influence = new InfluenceMap();
+   *  brains read for where-the-action-was. See influenceMap.ts. Sized to
+   *  the map's tile span; resized by applySpec when that changes. */
+  readonly influence: InfluenceMap;
   /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
    *  against reported positions. Judge mode: reported pos stays truth,
    *  divergence is the anti-cheat signal. Authority mode
@@ -213,6 +214,7 @@ export class Room {
     this.field = field;
     this.moveAuthority = moveAuthority && !!field;
     this.spec = spec ?? resolveMapSpec(null);
+    this.influence = new InfluenceMap(this.spec.tileSize);
     this.mode = mode || this.spec.mode || '';
     this.modeSpec = MODES[this.mode as ModeId] ?? null;
     this.messages = new MessageHandler(
@@ -586,6 +588,7 @@ export class Room {
       mapName: () => this.spec.name ?? (this.mapSrc || undefined),
       terrain: this.spec.terrain,
       heightScale: this.spec.heightScale,
+      tileSize: this.spec.tileSize,
       terrainTex: this.spec.terrainTex,
       sky: this.spec.sky,
       interiors: this.spec.interiors,
@@ -832,7 +835,8 @@ export class Room {
    *  structures, arena, ball mix/population, bot fill. Clients get a
    *  mapUpdate broadcast to rebuild their geometry. */
   applySpec(spec: MapSpec): void {
-    const terrainChanged = spec.terrain !== this.spec.terrain || spec.heightScale !== this.spec.heightScale;
+    const terrainChanged = spec.terrain !== this.spec.terrain || spec.heightScale !== this.spec.heightScale || spec.tileSize !== this.spec.tileSize;
+    if (spec.tileSize !== this.spec.tileSize) this.influence.resize(spec.tileSize ?? HM_WORLD_SCALE);
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.players.teamSpawns = spec.teamSpawns ?? null;
@@ -856,6 +860,7 @@ export class Room {
       ambient: spec.ambient,
       terrain: spec.terrain,
       heightScale: spec.heightScale,
+      tileSize: spec.tileSize,
       terrainTex: spec.terrainTex,
       sky: spec.sky,
       interiors: spec.interiors,

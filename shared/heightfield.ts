@@ -20,12 +20,21 @@ export interface Heightfield {
    *  raw R-channel dump (server heightmap.bin). */
   data: Uint8Array | Uint8ClampedArray;
   stride: number;
+  /** Per-map vertical gain — multiplies HM_HEIGHT_SCALE (spec.heightScale).
+   *  Lives on the field, not the spec, so every sim sampling it gets the
+   *  identical world height without threading the spec through. */
+  heightScale?: number;
+  /** Per-map tile span in meters (spec.tileSize) — how much world one
+   *  heightmap wrap covers. T2 ports run their native 2048m tiles; maps
+   *  without it default to HM_WORLD_SCALE. */
+  worldScale?: number;
 }
 
 export function hmHeight(f: Heightfield, wx: number, wz: number): number {
   const N = f.size;
-  const u = (((wx / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * N - 0.5;
-  const v = (((wz / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * N - 0.5;
+  const ws = f.worldScale ?? HM_WORLD_SCALE;
+  const u = (((wx / ws) % 1.0) + 1.0) % 1.0 * N - 0.5;
+  const v = (((wz / ws) % 1.0) + 1.0) % 1.0 * N - 0.5;
   const x0 = ((Math.floor(u) % N) + N) % N;
   const z0 = ((Math.floor(v) % N) + N) % N;
   const x1 = (x0 + 1) % N;
@@ -39,7 +48,7 @@ export function hmHeight(f: Heightfield, wx: number, wz: number): number {
     d[(z0 * N + x1) * s]! * fx * (1 - fz) +
     d[(z1 * N + x0) * s]! * (1 - fx) * fz +
     d[(z1 * N + x1) * s]! * fx * fz;
-  return (h / HM_DIVISOR) * HM_HEIGHT_SCALE;
+  return (h / HM_DIVISOR) * HM_HEIGHT_SCALE * (f.heightScale ?? 1);
 }
 
 /** Cheap field identity for desync forensics — not a hash, just enough
@@ -54,19 +63,27 @@ export function hmFingerprint(f: Heightfield): string {
     const cell = Math.floor((i / 64) * N * N);
     acc = (acc * 31 + d[cell * s]!) | 0;
   }
-  return `${N}:${(acc >>> 0).toString(16)}`;
+  return `${N}:${(acc >>> 0).toString(16)}:${f.heightScale ?? 1}:${f.worldScale ?? HM_WORLD_SCALE}`;
 }
 
 /** Decode a maps/<name>.bin dump — u32 width, u32 height (square),
  *  raw R-channel bytes. The one parser for server, netbots, and tools. */
-export function hmParseBin(buf: Uint8Array): Heightfield {
+export function hmParseBin(buf: Uint8Array, heightScale = 1, worldScale?: number): Heightfield {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const w = view.getUint32(0, true);
   const h = view.getUint32(4, true);
   if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) {
     throw new Error(`Bad heightmap.bin: ${w}x${h}, ${buf.byteLength} bytes`);
   }
-  return { size: w, data: buf.subarray(8), stride: 1 };
+  return { size: w, data: buf.subarray(8), stride: 1, heightScale, worldScale };
+}
+
+/** Same bytes, different gain — a spec that scales the DEFAULT field must
+ *  not mutate the shared object (other rooms read it unscaled). */
+export function hmScaled(f: Heightfield, heightScale: number, worldScale?: number): Heightfield {
+  const ws = worldScale ?? HM_WORLD_SCALE;
+  const fws = f.worldScale ?? HM_WORLD_SCALE;
+  return (heightScale === 1 && ws === fws) ? f : { ...f, heightScale, worldScale: ws };
 }
 
 /** Plain terrain-only move surface — the server wraps this shape with

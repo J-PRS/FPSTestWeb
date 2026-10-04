@@ -6,13 +6,20 @@ import {
 } from '../core/config.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
-const HM_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
 
 // Step size for CPU-side normal calculation (matches finest clipmap spacing)
 const CPU_STEP = 5.0;
 
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
+// Per-map vertical gain (spec.heightScale) — multiplies HSCALE in every
+// world-height read AND the shader uniforms, so physics, prediction and
+// the mesh scale together. Server's field carries the same multiplier.
+let hmScale = 1;
+// Per-map tile span (spec.tileSize) — meters one heightmap wrap covers.
+// T2 ports run 2048m tiles; default stays the engine's 1500.
+let hmWorldScale = DEFAULT_WORLD_SCALE;
 
 // Coarse per-cell max over the heightmap — lets a swept segment reject
 // terrain in one lookup when it flies entirely above the local ground.
@@ -52,7 +59,7 @@ function buildMaxGrid(): void {
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
   if (!hmData || !hmSize) return 0;
   const toCell = (w: number) => {
-    const u = (((w / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0;
+    const u = (((w / hmWorldScale) % 1.0) + 1.0) % 1.0;
     return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
   };
   // Walk cells from each end mod MAXGRID — a seam-crossing rect covers
@@ -74,13 +81,33 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
       if (v > m) m = v;
     }
   }
-  return (m / TERRAIN_HEIGHTMAP_DIVISOR) * HSCALE;
+  return (m / TERRAIN_HEIGHTMAP_DIVISOR) * HSCALE * hmScale;
 }
 
 /** Server-format heightmap: 8-byte LE header (w,h) + uint8 grid, stride 1.
  *  This is what maps/<name>.bin carries — same bytes the server's
  *  BallSim/RoomMoveSim parse, so client prediction and server truth sample
  *  the identical field. */
+export function setHeightScale(mult: number): void {
+  if (mult === hmScale) return;
+  hmScale = mult;
+  _hvc.clear(); // visual cache holds scaled world heights — stale otherwise
+}
+
+export function getHeightScale(): number {
+  return hmScale;
+}
+
+export function setWorldScale(meters: number): void {
+  if (meters === hmWorldScale) return;
+  hmWorldScale = meters;
+  _hvc.clear();
+}
+
+export function getWorldScale(): number {
+  return hmWorldScale;
+}
+
 export async function loadHeightfieldBin(url: string): Promise<void> {
   const buf = new Uint8Array(await (await fetch(url)).arrayBuffer());
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -135,8 +162,8 @@ function sampleHeightmap(wx: number, wz: number): number {
   // (i + 0.5)/N in UV space. Sample identically on CPU (u shifted by -0.5) or
   // physics height is offset half a texel from the rendered mesh, which puts
   // the player/projectiles inside hills on steep slopes.
-  const u = (((wx / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
-  const v = (((wz / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
+  const u = (((wx / hmWorldScale) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
+  const v = (((wz / hmWorldScale) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
   const x0 = ((Math.floor(u) % hmSize) + hmSize) % hmSize;
   const z0 = ((Math.floor(v) % hmSize) + hmSize) % hmSize;
   const x1 = (x0 + 1) % hmSize;
@@ -148,7 +175,7 @@ function sampleHeightmap(wx: number, wz: number): number {
     hmSample(x1, z0) * fx * (1 - fz) +
     hmSample(x0, z1) * (1 - fx) * fz +
     hmSample(x1, z1) * fx * fz;
-  return h * HSCALE;
+  return h * HSCALE * hmScale;
 }
 
 // No quantization memo here — a cell-keyed cache returns a neighbor's
@@ -185,7 +212,7 @@ export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | 
  *  replay flight against the identical field, so prediction lands on the
  *  same vertices as the server's sim. */
 export function getHeightfield(): Heightfield | null {
-  return hmData ? { size: hmSize, data: hmData, stride: 4 } : null;
+  return hmData ? { size: hmSize, data: hmData, stride: 4, heightScale: hmScale, worldScale: hmWorldScale } : null;
 }
 
 const _normalTmp = new THREE.Vector3();

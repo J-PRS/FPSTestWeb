@@ -174,7 +174,7 @@ def tex_blob(mat_name: str):
     raise SystemExit(f"no texture for material '{mat_name}'")
 
 
-def export_mats(dest: Path, names, used, alpha, matmap):
+def export_mats(dest: Path, names, used, alpha, matmap, xz=XZ_SCALE):
     """Full-fidelity blend inputs for the terrain shader: the client tiles
     each 256px material per 8m cell and blends by the alpha weights —
     effectively infinite detail vs the baked albedo, which stays as the
@@ -196,7 +196,7 @@ def export_mats(dest: Path, names, used, alpha, matmap):
         # matmap cells index the 8-slot name table; tiles/alphas index the
         # used[] order — map between them for the matmap fallback path.
         "matToLayer": [used.index(i) if i in used else -1 for i in range(8)],
-        "tileMeters": round(T2_TILE_M * XZ_SCALE / GRID, 3),
+        "tileMeters": round(T2_TILE_M * xz / GRID, 3),
     }
     (dest / "mats.json").write_text(json.dumps(manifest))
 
@@ -388,10 +388,15 @@ def parse_mis(name: str):
                        for p in re.finditer(r'position\s*=\s*"([^"]+)"',
                                             text[tm.start():subtree_end(tm.end())])]
         if len(pts) >= 2:
-            if our == "alpha":
+            if our == "alpha" and "bravo" not in flags:
                 pair = max(((a, b) for a in pts for b in pts),
                            key=lambda ab: (ab[0][0]-ab[1][0])**2 + (ab[0][1]-ab[1][1])**2)
                 flags["alpha"], flags["bravo"] = pair
+            else:
+                # One real flag, one missing — anchor the absent side at the
+                # spawn farthest from the known stand.
+                known = flags.get("alpha") or flags.get("bravo")
+                flags[our] = max(pts, key=lambda p: (p[0]-known[0])**2 + (p[1]-known[1])**2)
             continue
         flags[our] = (250.0 if our == "alpha" else -250.0, 0.0, 0.0)
     interiors = []
@@ -411,14 +416,14 @@ def parse_mis(name: str):
     return text, flags, all_sp, interiors
 
 
-def sxz(p):
-    return {"x": round(p[0] * XZ_SCALE, 1), "y": 0, "z": round(p[1] * XZ_SCALE, 1)}
+def sxz(p, xz=XZ_SCALE):
+    return {"x": round(p[0] * xz, 1), "y": 0, "z": round(p[1] * xz, 1)}
 
 
-def ssphere(s):
-    out = sxz(s["pos"])
+def ssphere(s, xz=XZ_SCALE):
+    out = sxz(s["pos"], xz)
     if s["r"] > 0:
-        out["r"] = round(s["r"] * XZ_SCALE, 1)
+        out["r"] = round(s["r"] * xz, 1)
     if s["w"] != 100.0:
         out["w"] = s["w"]
     return out
@@ -434,6 +439,9 @@ def main():
     ap.add_argument("--keeprelief", action="store_true",
                     help="keep T2's real relief: emit spec.heightScale and skip "
                          "the 125m Y-compression on structures/interiors")
+    ap.add_argument("--tilesize", type=float, default=OUR_TILE_M,
+                    help="meters the emitted map spans (spec.tileSize) — "
+                         "2048 keeps T2's true proportions, no XZ squish")
     ap.add_argument("--res", type=int, default=ALBEDO_RES)
     args = ap.parse_args()
 
@@ -471,7 +479,7 @@ def main():
         print(f"{mapname}: {lo:.0f}..{hi:.0f}m ({relief:.0f}m relief), mats {[names[i] for i in used]}")
         alb = np.asarray(bake_albedo(matmap, names, used, alpha, args.res))
         Image.fromarray(half_shift(alb)).save(dest / "albedo.png")
-        export_mats(dest, names, used, alpha, matmap)
+        export_mats(dest, names, used, alpha, matmap, args.tilesize / T2_TILE_M)
         faces = extract_sky(mis_text, dest / "sky")
         print(f"  albedo.png {args.res}px, sky faces: {faces}")
 
@@ -484,14 +492,15 @@ def main():
         # becomes `relief` itself and every Y lands at raw T2 meters.
         hscale = relief / HEIGHT_SCALE_M if args.keeprelief else 1.0
         hs = HEIGHT_SCALE_M * hscale / max(relief, 1e-6)
+        xz = args.tilesize / T2_TILE_M  # world-meters per T2-meter
         def sinterior(i):
             (u, v, w) = i["pos"]
             (su, sv, sw) = i.get("scale", (1, 1, 1))
             return {
                 "file": i["file"],
-                "pos": {"x": round(u * XZ_SCALE, 2), "y": round((w - lo) * hs, 2), "z": round(v * XZ_SCALE, 2)},
+                "pos": {"x": round(u * xz, 2), "y": round((w - lo) * hs, 2), "z": round(v * xz, 2)},
                 "rot": i.get("rot"),     # raw T2 axis-angle (x y z deg)
-                "scale": {"x": round(su * XZ_SCALE, 3), "y": round(sw * hs, 3), "z": round(sv * XZ_SCALE, 3)},
+                "scale": {"x": round(su * xz, 3), "y": round(sw * hs, 3), "z": round(sv * xz, 3)},
             }
 
         spec = {
@@ -499,10 +508,10 @@ def main():
             "modes": ["ctf"],
             "bots": 8,
             "botFill": 10,
-            "bases": {k: sxz(v) for k, v in flags.items()},
-            "spawns": [ssphere(s) for s in spawns],
+            "bases": {k: sxz(v, xz) for k, v in flags.items()},
+            "spawns": [ssphere(s, xz) for s in spawns],
             "teamSpawns": {
-                t: [ssphere(s) for s in spawns if s["team"] == t]
+                t: [ssphere(s, xz) for s in spawns if s["team"] == t]
                 for t in ("alpha", "bravo")
                 if any(s["team"] == t for s in spawns)
             },
@@ -510,6 +519,7 @@ def main():
             "terrainTex": f"t2/{key}/albedo.png",
             **({"sky": f"t2/{key}/sky"} if faces else {}),
             **({"heightScale": round(hscale, 4)} if hscale != 1.0 else {}),
+            **({"tileSize": args.tilesize} if args.tilesize != OUR_TILE_M else {}),
             "interiors": [sinterior(i) for i in interiors],
             "_t2": f"ported from Tribes 2 '{mapname}' - relief {relief:.0f}m" + ("" if args.keeprelief else " -> 125m"),
             "_interiors": interiors,

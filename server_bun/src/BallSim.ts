@@ -119,8 +119,8 @@ export class BallSim {
     logger.info('BallSim field attached', { heightmap: `${field.size}x${field.size}`, fp: hmFingerprint(field) });
   }
 
-  static parseHeightmap(buf: Uint8Array): Heightfield {
-    return hmParseBin(buf);
+  static parseHeightmap(buf: Uint8Array, heightScale = 1, worldScale?: number): Heightfield {
+    return hmParseBin(buf, heightScale, worldScale);
   }
 
   stop(): void {

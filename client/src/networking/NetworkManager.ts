@@ -118,7 +118,7 @@ export class NetworkManager {
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
-  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number) => void) | null = null;
+  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -153,7 +153,7 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { mapName?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
+  public onMapUpdate: ((map: { mapName?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; heightScale?: number; tileSize?: number; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
@@ -801,7 +801,7 @@ export class NetworkManager {
     if (data.shooterId === this.localPlayerId) this.confirmPendingHit(data.targetId);
     // Update REMOTE player state (local player death handled by callback)
     this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
-    this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon);
+    this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
   }
 
   private handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {

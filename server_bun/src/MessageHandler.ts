@@ -39,7 +39,7 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
-  structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
+  structures?: import('../../shared/mapSpec.ts').StructureSpec[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
   /** World-state replay frames the room's registered sims emit —
@@ -54,6 +54,12 @@ export interface RoomInfo {
   /** Heightfield file (maps/<name>.bin) — echoed on gameState so clients
    *  fetch the identical terrain the server's sims run on. */
   terrain?: string;
+  /** Vertical gain on the room's field — clients must scale their copy
+   *  identically or prediction diverges. */
+  heightScale?: number;
+  /** Meters per heightmap wrap — the field sampling span clients must
+   *  match (spec.tileSize; absent = engine default). */
+  tileSize?: number;
   /** Baked terrain albedo + skybox dir — client dressing only. */
   terrainTex?: string;
   sky?: string;
@@ -260,7 +266,7 @@ export class MessageHandler {
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */
-  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'terrainTex' | 'sky' | 'interiors'>): void {
+  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'terrainTex' | 'sky' | 'interiors'>): void {
     // Explicit field writes (not Object.assign): a spec that omits a
     // field must clear it, not leave the previous map's value behind.
     this.roomInfo.bases = m.bases;
@@ -268,6 +274,8 @@ export class MessageHandler {
     this.roomInfo.arena = m.arena;
     this.roomInfo.ambient = m.ambient;
     this.roomInfo.terrain = m.terrain;
+    this.roomInfo.heightScale = m.heightScale;
+    this.roomInfo.tileSize = m.tileSize;
     this.roomInfo.terrainTex = m.terrainTex;
     this.roomInfo.sky = m.sky;
     this.roomInfo.interiors = m.interiors;
@@ -350,8 +358,8 @@ export class MessageHandler {
       mapName: this.roomInfo.mapName?.(),
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain
-        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
           logger.warn(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),
