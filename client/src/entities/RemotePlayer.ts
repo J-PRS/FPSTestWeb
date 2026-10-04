@@ -358,12 +358,21 @@ export class RemotePlayer {
     }
     if (this._loaded) {
       if (weaponType === WeaponType.Melee) this._model.weaponPunch();
-      else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this._model.weaponThrow();
+      else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this.playThrow();
       else this._model.fire(weaponType);
     }
     // Firing decloaks: a cloaked shooter shimmers visible for a beat —
     // the price of shooting from stealth.
     shootReveal(this);
+  }
+
+  /** Belt throws (projectile spawns) and remote deploy placements both
+   *  land here — the overhand swing clip where the rig ships one, else
+   *  the procedural hand-prop dip alone. ~1.3s holds the throw state
+   *  through the clip; rigs without it fall back to their old behavior. */
+  playThrow(): void {
+    if (!this._isDead) this.anim.throwT = Math.max(this.anim.throwT, 1.3);
+    if (this._loaded) this._model.weaponThrow();
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT

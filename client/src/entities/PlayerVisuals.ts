@@ -150,8 +150,8 @@ export class PlayerVisuals {
   private _airLast = new THREE.Vector3();
   private _airLastInit = false;
 
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean, eyeOffset?: number]): number {
-    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false, eyeOff = EYE_OFFSET] = rest;
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean, eyeOffset?: number, throwT?: number]): number {
+    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false, eyeOff = EYE_OFFSET, throwT = 0] = rest;
     let jumpAnimTimer = jumpAnimTimer0;
     if (!model) { this.tickAirTrail(dt, pos, undefined, false); return jumpAnimTimer; }
     if (jumpAnimTimer > 0) {
@@ -170,7 +170,7 @@ export class PlayerVisuals {
     // ANY reason (belt lower, flinch, holster), a trigger pull is the
     // moment it must read as aimed. Airborne keeps the jump/jet pose;
     // the arm-layer aims up there regardless.
-    const animState = this.pickAnimState(model, airborne, jetting, shootT, speed, skiing);
+    const animState = this.pickAnimState(model, airborne, jetting, shootT, speed, skiing, throwT);
     // Each fresh trigger pull (shootT rising) kicks the gun — the recoil/
     // flash runs for EVERY shot including the local third-person model,
     // which previously got no fire feedback at all.
@@ -190,8 +190,11 @@ export class PlayerVisuals {
    *  procedural recoil + muzzle flash under the always-on aim layer —
    *  the Pistol_Shoot clip only flickers the arms off-aim, so it never
    *  owns the state. */
-  private pickAnimState(model: PlayerModel, airborne: boolean, jetting: boolean, shootT: number, speed: number, skiing?: boolean): AnimationState {
+  private pickAnimState(model: PlayerModel, airborne: boolean, jetting: boolean, shootT: number, speed: number, skiing?: boolean, throwT = 0): AnimationState {
     if (airborne) return jetting ? 'jet' : 'jump';
+    // A belt/deploy swing outranks the armed pose the same way a shot
+    // does — the arm is committed to the throw, not the aim.
+    if (throwT > 0) return 'throw';
     if (shootT > 0 && model.variant !== 'mannequin') return 'shoot';
     return pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
   }

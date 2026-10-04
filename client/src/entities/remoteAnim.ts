@@ -38,6 +38,7 @@ export class RemoteAnim {
   // to aim instead of flailing through the hit with the weapon down.
   hitT = 0;
   shootT = 0;
+  throwT = 0;
   private _lastShootT = 0;
   private _airborne = false;
   private _fallV = 0;
@@ -84,7 +85,12 @@ export class RemoteAnim {
     // A fired shot outranks the flinch — the shoot oneshot is itself an
     // aimed pose, so a bot shooting mid-hit snaps its gun back to aim
     // instead of flailing through the flinch with the weapon down.
-    if (this.shootT > 0) {
+    if (this.throwT > 0) {
+      this.throwT -= dt;
+      // A belt/deploy swing outranks the armed pose — the arm is
+      // committed to the throw, not the aim.
+      if (this.throwT > 0) h.model.setAnimationState('throw');
+    } else if (this.shootT > 0) {
       // Re-arm while already 'shoot' (auto fire) means a new shot —
       // force replays the clip from its aimed frame; otherwise the
       // oneshot plays once and every following pull shows nothing.
@@ -112,7 +118,7 @@ export class RemoteAnim {
    *  only CPU bone evaluation was still burning. */
   private stepMixer(dt: number): void {
     const h = this.h;
-    const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0;
+    const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0 || this.throwT > 0;
     const animDt = pickAnimCadence(h.onScreen, h.camDistSq, moving);
     // Frozen bones skip updateMatrixWorld entirely — valid only while the
     // mixer never runs (animDt Infinity), otherwise the pose stalls.

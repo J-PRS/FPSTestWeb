@@ -13,6 +13,9 @@ export function wireDeployables(ctx: NetCtx): void {
   networkManager.onDeploySpawn = (id, owner, kind, pos, team) => {
     if (owner === localId()) { mgr().ackLocal(id); return; } // pod path already rendered it
     mgr().remoteSpawn(id, { owner, kind, pos, team });
+    // The pod lands at release — swing the owner's model so the deploy
+    // reads as a throw, not a teleporting object.
+    deps.world.remotePlayers.get(owner)?.playThrow();
   };
   networkManager.onDeployGone = (id) => mgr().remoteRemove(id);
   networkManager.onTurretShot = (id, _owner, targetId) => mgr().remoteTurretShot(id, targetId);

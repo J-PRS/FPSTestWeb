@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 
-export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot' | 'jet';
+export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot' | 'jet' | 'throw';
 
 // 8-way facing-frame direction. atan2(side, fwd): 0=F, +90°=R, ±180°=B.
 export type LocoDir = 'F' | 'FR' | 'R' | 'BR' | 'B' | 'BL' | 'L' | 'FL';
@@ -32,7 +32,9 @@ export const ANIM_NAMES: Record<AnimationState, [ual: string, fallback: string]>
   // burn; the sternum lean layer is what sells thrust direction.
   'jet':    ['UAL_Jump_Loop',         'Jump'],
   'hit':    ['UAL_Hit_Chest',         'No'],
-  'shoot':  ['UAL_Pistol_Shoot',      'Punch']
+  'shoot':  ['UAL_Pistol_Shoot',      'Punch'],
+  // Belt throw / deploy swing — UAL2 is the only source that ships one.
+  'throw':  ['UAL_OverhandThrow',     'Punch']
 };
 
 // Quaternius Knight_Male (CC0) — real-proportioned heavy silhouette on
@@ -42,6 +44,7 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
   'idle': 'Idle', 'walk': 'Walk', 'run': 'Run',
   'jump': 'Jump', 'death': 'Death', 'ski': 'Roll',
   'jet': 'Jump', 'hit': 'RecieveHit', 'shoot': 'Shoot_OneHanded',
+  'throw': 'Punch',
 };
 
 // UAS class bodies (paid packs) — each GLB bakes its own clip set on its
@@ -125,12 +128,12 @@ export interface RigManifest {
   sources: string[];
 }
 export const RIG_MANIFEST: Record<string, RigManifest> = {
-  robot:        { url: '/assets/models/RobotExpressive.glb', yaw: Math.PI, fixedScale: 0.5,
+  robot:        { url: '/assets/models/RobotExpressive.glb', yaw: 0, fixedScale: 0.5,
                   sources: ['ual1', 'ual2', 'kevdev'] },
   mannequin:    { url: '/assets/models/mannequin_opt.glb', lodUrl: '/assets/models/mannequin_lod1.glb',
-                  yaw: Math.PI, fitH: 2.0, ualAlias: true, sources: ['kevdev'],
+                  yaw: 0, fitH: 2.0, ualAlias: true, sources: ['kevdev'],
                   mount: { euler: [Math.PI / 2, 0, 0] } },
-  knight:       { url: '/assets/models/knight.glb', yaw: Math.PI, fitH: 2.0, sources: [] },
+  knight:       { url: '/assets/models/knight.glb', yaw: 0, fitH: 2.0, sources: [] },
   // All class rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — no yaw needed.
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
@@ -221,7 +224,8 @@ export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hi
   // Class-body flinches + fires (Yurowm / SciFiWarrior clip names).
   'Hit', 'Damage1', 'Damage2', 'Damage3', 'Reload',
   'Fire_1Pistol', 'Fire_2Pistol', 'Fire_SniperRifle',
-  'Shoot_SingleShot_AR', 'Shoot_BurstShot_AR', 'Shoot_AutoShot_AR']);
+  'Shoot_SingleShot_AR', 'Shoot_BurstShot_AR', 'Shoot_AutoShot_AR',
+  'UAL_OverhandThrow', 'UAL_Hit_Knockback']);
 
 // Per-variant clip overrides — states whose ANIM_NAMES pair can't resolve
 // on that rig. cybersoldier ski: mannequin's clip set has no Slide_Loop
@@ -266,8 +270,10 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
       const n = spec.walkDirs[axis];
       if (n) out.push({ name: n, dir: true });
     }
-    if (spec.anims[state]) out.push({ name: spec.anims[state]!, dir: false });
-    return out;
+    if (spec.anims[state]) { out.push({ name: spec.anims[state]!, dir: false }); return out; }
+    // States the table lacks (e.g. 'throw') fall through to the generic
+    // UAL candidates — the baked pack carries them where the rig was
+    // retargeted; missing clips resolve to hold-previous, not a snap.
   }
   const out: ClipCandidate[] = [];
   if (state === 'walk' || state === 'run') {
@@ -336,7 +342,9 @@ export const MANNEQUIN_KEVDEV_BONE_MAP: Record<string, string> = {
   'DEF-thighR': 'thighr', 'DEF-shinR': 'shinr',
 };
 
-export const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+// `_N` tails are GLTFLoader dedupe suffixes (multi-skin GLBs repeat joint
+// names), not authored bones — strip before normalizing.
+export const normBone = (s: string) => s.replace(/_\d+$/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Vexa rig → kevdev B-* names. The Base_Human* chain is semantically 1:1
 // with the robot's — extra limb segments (Upperarm2/3, digits, lash/eye
@@ -351,6 +359,26 @@ export const VEXA_KEVDEV_BONE_MAP: Record<string, string> = {
   Base_HumanRForearm1: 'forearmr', Base_HumanRPalm: 'handr',
   Base_HumanLThigh: 'thighl', Base_HumanLCalf: 'shinl',
   Base_HumanRThigh: 'thighr', Base_HumanRCalf: 'shinr',
+};
+
+// Polyart (class_heavy) rig → kevdev B-* names — the rig's loco pack is
+// produced by the same retarget path as the other class bodies.
+export const POLYART_KEVDEV_BONE_MAP: Record<string, string> = {
+  Hips: 'hips', Spine: 'spine', Chest: 'chest', Neck: 'neck', Head: 'head',
+  Shoulder_Left: 'shoulderl', UpperArm_Left: 'upperarml', LowerArm_Left: 'forearml', Hand_Left: 'handl',
+  Shoulder_Right: 'shoulderr', UpperArm_Right: 'upperarmr', LowerArm_Right: 'forearmr', Hand_Right: 'handr',
+  UpperLeg_Left: 'thighl', LowerLeg_Left: 'shinl',
+  UpperLeg_Right: 'thighr', LowerLeg_Right: 'shinr',
+};
+
+// Polyart rig → UAL2 (robot-anims2, UE-style names normalized) — only the
+// oneshot set feeds it (throw/knockback/slide/ninja), not locomotion.
+export const POLYART_UAL2_BONE_MAP: Record<string, string> = {
+  Hips: 'pelvis', Spine: 'spine01', Chest: 'spine03', Neck: 'neck01', Head: 'head',
+  Shoulder_Left: 'claviclel', UpperArm_Left: 'upperarml', LowerArm_Left: 'lowerarml', Hand_Left: 'handl',
+  Shoulder_Right: 'clavicler', UpperArm_Right: 'upperarmr', LowerArm_Right: 'lowerarmr', Hand_Right: 'handr',
+  UpperLeg_Left: 'thighl', LowerLeg_Left: 'calfl', Foot_Left: 'footl', Toe_Left: 'balll',
+  UpperLeg_Right: 'thighr', LowerLeg_Right: 'calfr', Foot_Right: 'footr', Toe_Right: 'ballr',
 };
 
 // CyberSoldier rig → kevdev canonical names. His Hips/Spine/UpperArml-style

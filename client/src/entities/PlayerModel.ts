@@ -700,19 +700,29 @@ export class PlayerModel {
       return Math.atan2(fwd.x, fwd.z);
     };
     const canonical = (() => {
-      const buckets = new Map<number, { sum: number; n: number }>();
-      for (const [, a] of this.animations) {
-        const hit = hipTrackOf(a.getClip());
-        if (!hit) continue;
-        const y = yawOf(hit.tr);
-        const k = Math.round(y / (Math.PI / 18));
-        const b = buckets.get(k) ?? { sum: 0, n: 0 };
-        b.sum += y; b.n++;
-        buckets.set(k, b);
-      }
-      let best = { sum: 0, n: 0 };
-      for (const b of buckets.values()) if (b.n > best.n) best = b;
-      return best.n ? best.sum / best.n : null;
+      // A rig's own authored clips set the convention — a retarget pack
+      // can outnumber them (29 baked vs 16 native on class_heavy) and
+      // swing the vote to the bake's frame, rotating the native set.
+      // When natives exist they alone define canonical; pure-bake rigs
+      // fall through to the all-clip vote (and carry clipYawFix anyway).
+      const collect = (names: (n: string) => boolean) => {
+        const buckets = new Map<number, { sum: number; n: number }>();
+        for (const [name, a] of this.animations) {
+          if (!names(name)) continue;
+          const hit = hipTrackOf(a.getClip());
+          if (!hit) continue;
+          const y = yawOf(hit.tr);
+          const k = Math.round(y / (Math.PI / 18));
+          const b = buckets.get(k) ?? { sum: 0, n: 0 };
+          b.sum += y; b.n++;
+          buckets.set(k, b);
+        }
+        let best = { sum: 0, n: 0 };
+        for (const b of buckets.values()) if (b.n > best.n) best = b;
+        return best.n ? best.sum / best.n : null;
+      };
+      const natives = collect(n => !n.startsWith('UAL_'));
+      return natives ?? collect(() => true);
     })();
     if (canonical === null) return;
     // clipYawFix is an explicit unwind: rigs whose whole retarget set
@@ -730,15 +740,24 @@ export class PlayerModel {
       while (delta > Math.PI) delta -= 2 * Math.PI;
       while (delta < -Math.PI) delta += 2 * Math.PI;
       if (Math.abs(delta) < 0.5) continue;
-      const parentQ = new THREE.Quaternion().setFromRotationMatrix(
-        new THREE.Matrix4().copy(this.model.matrixWorld).invert().multiply(hit.node.parent.matrixWorld));
-      const fix = parentQ.clone().invert()
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -delta))
-        .multiply(parentQ);
-      const v = hit.tr.values;
-      for (let i = 0; i < v.length; i += 4) {
-        q.set(v[i], v[i + 1], v[i + 2], v[i + 3]).premultiply(fix);
-        v[i] = q.x; v[i + 1] = q.y; v[i + 2] = q.z; v[i + 3] = q.w;
+      // Every hip-skeleton copy carries the same yaw — retarget fan-out
+      // ships one track per skin joint, so the fix lands on all of them
+      // or the meshes rotate away from each other.
+      const hipBase = hit.node.name.replace(/_\d+$/, '');
+      for (const tr of clip.tracks) {
+        if (!tr.name.endsWith('.quaternion')) continue;
+        const node = this.model.getObjectByName(tr.name.slice(0, -'.quaternion'.length));
+        if (!node?.parent || node.name.replace(/_\d+$/, '') !== hipBase) continue;
+        const parentQ = new THREE.Quaternion().setFromRotationMatrix(
+          new THREE.Matrix4().copy(this.model.matrixWorld).invert().multiply(node.parent.matrixWorld));
+        const fix = parentQ.clone().invert()
+          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -delta))
+          .multiply(parentQ);
+        const v = tr.values;
+        for (let i = 0; i < v.length; i += 4) {
+          q.set(v[i], v[i + 1], v[i + 2], v[i + 3]).premultiply(fix);
+          v[i] = q.x; v[i + 1] = q.y; v[i + 2] = q.z; v[i + 3] = q.w;
+        }
       }
       fixed.push(clip.name);
     }
@@ -814,7 +833,7 @@ export class PlayerModel {
       // Shoot clips clamp their tail: sustained fire can outlast a 1.3s
       // oneshot, and an unclamped finish fades the action to zero — the
       // unarmed locomotion grip bleeds back mid-volley.
-      action.clampWhenFinished = this.currentState === 'shoot';
+      action.clampWhenFinished = this.currentState === 'shoot' || this.currentState === 'throw';
     } else if (name === 'Jump') {
       action.setLoop(THREE.LoopPingPong, Infinity);
       action.timeScale = 0.35;
@@ -1041,7 +1060,7 @@ export class PlayerModel {
     if (this.model) {
       // YXZ so lean pitch/roll resolve in the yawed (facing) frame.
       if (this.model.rotation.order !== 'YXZ') this.model.rotation.order = 'YXZ';
-      this.model.rotation.y = yaw;
+      this.model.rotation.y = yaw + (RIG_MANIFEST[this.variant]?.yaw ?? 0);
       this.lastRoll = roll;
       this.model.rotation.z = roll;
       this.pose.aimPitch = pitch;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
-import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
+import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, POLYART_KEVDEV_BONE_MAP, POLYART_UAL2_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
 import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, SWAY_BONES } from './playerClipSurgery.js';
 import { HOLD_QUATS, holdChains } from './playerPose.js';
 
@@ -41,7 +41,8 @@ const SPECS: UalSpec[] = [
   // and its UAL2 retarget bakes limb-axis artifacts (UE vs Rigify bone
   // conventions) — variants filter keeps it off that path entirely.
   { id: 'ual1', url: '/assets/models/robot-anims.glb', boneMap: UAL_BONE_MAP, prefix: 'def', hip: 'defhips' },
-  { id: 'ual2', url: '/assets/models/robot-anims2.glb', boneMap: UAL2_BONE_MAP, prefix: '', hip: 'pelvis', exclude: /^(armature|mannequin|root)$/i },
+  { id: 'ual2', url: '/assets/models/robot-anims2.glb', boneMap: UAL2_BONE_MAP, prefix: '', hip: 'pelvis', exclude: /^(armature|mannequin|root)$/i,
+    mapByVariant: { polyart: POLYART_UAL2_BONE_MAP } },
   // KevDev directional locomotion (8-dir walk/run, 5-dir sprint) — the
   // strafe/backpedal clips neither UAL free tier ships. B-* rig; the
   // root/proxy/finger bones are collected but unmapped, so they cost a
@@ -51,7 +52,7 @@ const SPECS: UalSpec[] = [
     // Vexa's Base_Human* chain is semantically the kevdev skeleton — she
     // ships no locomotion of her own, so run/walk comes from this bake.
     // Cybersoldier's rig maps the same way (UE-style bone names).
-    mapByVariant: { vexa: VEXA_KEVDEV_BONE_MAP, cybersoldier: CYBER_KEVDEV_BONE_MAP } },
+    mapByVariant: { vexa: VEXA_KEVDEV_BONE_MAP, cybersoldier: CYBER_KEVDEV_BONE_MAP, polyart: POLYART_KEVDEV_BONE_MAP } },
   // CyberSoldier ships zero clips of his own — kevdev covers locomotion
   // only, so the mannequin's native UAL set (idle/jump/death/hit/shoot)
   // retargets onto his rig to fill every non-locomotion state. Cyber-only
@@ -158,9 +159,21 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   const cached = bakedByVariant.get(variant);
   if (cached) return cached;
 
-  // Target: this model's skinned mesh + its full skeleton.
+  // Target: this model's skinned mesh + its full skeleton. Multi-skin
+  // GLBs carry a duplicate skeleton per mesh (class_heavy's head/body/
+  // backpack/arm/leg) — GLTFLoader dedupes their joint names with `_N`
+  // suffixes. Retarget onto the UNSUFFIXED skeleton: baked track names
+  // fan out to the sibling sets below, so every skin animates instead
+  // of one mesh following clips while the rest hold bind pose.
   let target: THREE.SkinnedMesh | undefined;
-  model.traverse(o => { if (!target && (o as THREE.SkinnedMesh).isSkinnedMesh) target = o as THREE.SkinnedMesh; });
+  let firstSkin: THREE.SkinnedMesh | undefined;
+  model.traverse(o => {
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) return;
+    const sm = o as THREE.SkinnedMesh;
+    firstSkin ??= sm;
+    if (!target && !/_\d+$/.test(sm.skeleton.bones[0]?.name ?? '')) target = sm;
+  });
+  target ??= firstSkin;
   if (!target) throw new Error('no skinned mesh to retarget onto');
   model.updateMatrixWorld(true);
 
@@ -284,7 +297,10 @@ function bakeSource(
     ?? (variant === 'mannequin' ? (spec.mannMap ?? MANNEQUIN_UAL2_BONE_MAP) : spec.boneMap);
   const names: Record<string, string> = {};
   for (const b of target.skeleton.bones) {
-    const want = boneMap[b.name];
+    // GLTFLoader dedupes repeated node names with a `_N` suffix —
+    // multi-skin GLBs like class_heavy list the same joints once per
+    // skin, so every bone past the first skin arrives renamed.
+    const want = boneMap[b.name] ?? boneMap[b.name.replace(/_\d+$/, '')];
     const hit = want && srcByNorm.get(spec.prefix + want);
     if (hit) names[b.name] = hit.name;
   }
@@ -310,12 +326,12 @@ function bakeSource(
     // Delta-map the torso, keep limbs absolute.
     const TORSO = variant === 'vexa'
       ? /^Base_Human(Pelvis|Spine1|Ribcage|Neck|Head)$/
-      : variant === 'cybersoldier'
+      : (variant === 'cybersoldier' || variant === 'polyart')
       ? /^(Hips|Spine|Chest|Neck|Head)$/
       : variant === 'mannequin'
       ? /^DEF-(hips|spine001|spine003|neck|head)$/
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
-    if (!TORSO.test(tName)) continue;
+    if (!TORSO.test(tName.replace(/_\d+$/, ''))) continue;
     const tb = target.skeleton.getBoneByName(tName);
     const sb = srcBones.find(b => b.name === sName);
     if (!tb || !sb) continue;
@@ -355,22 +371,57 @@ function bakeSource(
     ? tgtHipBind.length() / srcHipBind.length() : 1;
   const fixHip = (rt: THREE.AnimationClip, srcClip: THREE.AnimationClip): void => {
     if (!tgtHip || !tgtHipBind) return;
-    const hipTr = rt.tracks.find(t => t.name === tgtHip.name + '.position');
-    if (!hipTr) return;
+    // Every skeleton copy's hip needs the same correction — fanned-out
+    // tracks arrive named for their own joint variant.
     const srcTr = srcClip.tracks.find(t => t.name === srcHip.name + '.position');
-    if (!srcTr) { // no source hip motion — pin to bind
-      hipTr.times = hipTr.times.slice(0, 1);
-      hipTr.values = new Float32Array([tgtHipBind.x, tgtHipBind.y, tgtHipBind.z]);
-      return;
+    const interp = srcTr
+      ? (srcTr as unknown as { createInterpolant(): { evaluate(t: number): ArrayLike<number> } }).createInterpolant()
+      : null;
+    const hipNorm = normBone(tgtHip.name);
+    for (const hipTr of rt.tracks) {
+      if (normBone(hipTr.name.slice(0, hipTr.name.indexOf('.'))) !== hipNorm || !hipTr.name.endsWith('.position')) continue;
+      if (!interp) { // no source hip motion — pin to bind
+        hipTr.times = hipTr.times.slice(0, 1);
+        hipTr.values = new Float32Array([tgtHipBind.x, tgtHipBind.y, tgtHipBind.z]);
+        continue;
+      }
+      const v = hipTr.values, t = hipTr.times;
+      for (let i = 0; i < t.length; i++) {
+        const s = interp.evaluate(t[i]!);
+        v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
+        v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;
+        v[i * 3 + 2] = tgtHipBind.z + (s[2]! - srcHipBind.z) * deltaScale;
+      }
     }
-    const interp = (srcTr as unknown as { createInterpolant(): { evaluate(t: number): ArrayLike<number> } }).createInterpolant();
-    const v = hipTr.values, t = hipTr.times;
-    for (let i = 0; i < t.length; i++) {
-      const s = interp.evaluate(t[i]!);
-      v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
-      v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;
-      v[i * 3 + 2] = tgtHipBind.z + (s[2]! - srcHipBind.z) * deltaScale;
+  };
+
+  // Duplicate-skeleton fan-out: for every retargeted bone name, the same
+  // keyframes must bind each skin's own joint copy (Hips, Hips_1, ...).
+  // base (dedupe-stripped) → all real node names carrying that bone.
+  const altNames = new Map<string, string[]>();
+  model.traverse(o => {
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) return;
+    for (const b of (o as THREE.SkinnedMesh).skeleton.bones) {
+      const base = b.name.replace(/_\d+$/, '');
+      const list = altNames.get(base) ?? [];
+      if (!list.includes(b.name)) list.push(b.name);
+      altNames.set(base, list);
     }
+  });
+  const fanOut = (rt: THREE.AnimationClip): void => {
+    const extra: THREE.KeyframeTrack[] = [];
+    for (const t of rt.tracks) {
+      const base = t.name.slice(0, t.name.indexOf('.'));
+      const alts = altNames.get(base.replace(/_\d+$/, ''));
+      if (!alts || alts.length < 2) continue;
+      for (const alt of alts) {
+        if (alt === base) continue;
+        const c = t.clone() as THREE.KeyframeTrack;
+        c.name = alt + t.name.slice(base.length);
+        extra.push(c);
+      }
+    }
+    rt.tracks.push(...extra);
   };
 
   const baked = new Map<string, THREE.AnimationClip>();
@@ -390,6 +441,7 @@ function bakeSource(
     for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
     rt.name = 'UAL_' + clip.name;
     unwindDirYaw(rt, model, target);
+    fanOut(rt);
     fixHip(rt, clip);
     baked.set(rt.name, rt);
   }

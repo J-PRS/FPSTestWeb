@@ -427,7 +427,7 @@ export class Player {
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight, this.throwLockT);
   }
 
   private tickTimers(dt: number): void {
