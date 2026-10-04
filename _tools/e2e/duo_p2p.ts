@@ -51,13 +51,13 @@ try {
   let streamed = false;
   try {
     await guest.waitFor(
-      `Math.abs(t.world.remotePlayers.entities.get('${hostId}')?.targetPosition.x - 500) < 1`,
+      `Math.abs(t.world.remotePlayers.entities.get('${hostId}')?.position.x - 500) < 1`,
       25000,
     );
     streamed = true;
   } catch { /* fall through to diagnostics */ }
   const tpSeen = await guest.test<number>(`window.__tpSeen ?? -1`);
-  const hostPos = await guest.test(`t.world.remotePlayers.entities.get('${hostId}')?.targetPosition`);
+  const hostPos = await guest.test(`t.world.remotePlayers.entities.get('${hostId}')?.position`);
   check(streamed, `host position streams to guest (tpSeen=${tpSeen} pos=${JSON.stringify(hostPos)})`);
 
   // Chat crosses the DataChannel both ways.
