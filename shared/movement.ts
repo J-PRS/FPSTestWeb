@@ -23,6 +23,13 @@ export const MOVEMENT_CONFIG = {
   // clamp used to truncate knockback impulses (including the loft that
   // makes rocket jumps) before the body ever left the floor.
   overspeedBleed: 4.0,
+  // Generous grounding — Tribes walkers stay glued: any terrain is
+  // walkable at any angle, and a lip/crest under this height never
+  // reads airborne (the air-control steal + walk→jump anim flicker a
+  // strict gate produced). A real launch — explosion loft, jet burn,
+  // jump takeoff — clears the snap via the vel gate.
+  groundSnapDistance: 0.6,
+  groundLaunchVel: 3.0,
   // Skiing: friction toggle only — no artificial accel/boost/lift, but a
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
@@ -386,7 +393,19 @@ export class MoveSim {
       const rising = s.vel.y > 0.1;
       s.onGround = !rising;
       this.allowNextJump = !rising;
-    } else if (dist < 0.2 && s.vel.y <= 0.1) {
+    } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)
+        && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel) {
+      // Stick to the surface: bumps and crest lips inside the snap
+      // distance keep ground contact instead of flipping airborne for a
+      // frame or two. The vel gate is what separates a walker's bump
+      // from a real launch — jump/jet/blast all rise faster than it.
+      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
+      this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
+      const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+      if (velDotN < 0) {
+        s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
+      }
+      s.pos.y = groundY;
       s.onGround = true;
       this.allowNextJump = true;
     } else {
