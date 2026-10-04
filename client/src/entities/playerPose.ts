@@ -80,6 +80,10 @@ export class PoseControl {
   // steps otherwise whip the head at frame/input rate. ~12/s chases
   // real aim while smoothing single-frame jumps.
   private aimPitchSm = 0;
+  // Whether `last` quats currently hold applied pose (pitch or grip) —
+  // the un-apply pass skips entirely when flat, which is most frames on
+  // idle bodies.
+  private poseApplied = false;
   // Socket-gun rigs: canned right-arm grip pose stacked post-mixer — their
   // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
   // is posed procedurally to meet the fixed gun socket.
@@ -223,11 +227,13 @@ export class PoseControl {
     // Remove last frame's pitch BEFORE the mixer writes. The mixer skips
     // bones whose track value didn't change, so without this the multiply
     // would accumulate on a stale pitched value and the bone spins.
-    for (const ab of this.aimBones) {
-      ab.bone.quaternion.multiply(_pitchQuat.copy(ab.last).invert());
-    }
-    for (const hb of this.holdBones) {
-      hb.bone.quaternion.multiply(_pitchQuat.copy(hb.last).invert());
+    if (this.poseApplied) {
+      for (const ab of this.aimBones) {
+        ab.bone.quaternion.multiply(_pitchQuat.copy(ab.last).invert());
+      }
+      for (const hb of this.holdBones) {
+        hb.bone.quaternion.multiply(_pitchQuat.copy(hb.last).invert());
+      }
     }
     // Masked aim layer — weights must land BEFORE mixer.update samples the
     // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
@@ -281,6 +287,7 @@ export class PoseControl {
       }
       ab.bone.quaternion.multiply(ab.last);
     }
+    this.poseApplied = !!procPitch || (this.wantHoldPose && !this.holdBaked && this.holdW > 0);
     this.snapFeetToShins(playingUAL);
   }
 
