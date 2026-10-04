@@ -4,8 +4,8 @@
  *
  *   WebTransport (QUIC datagrams) → WebRTC datachannel → WebSocket
  *
- * All three tiers are live. WS is the default (universally compatible);
- * ?net=auto runs the WT/RTC probes in parallel and takes the winner;
+ * All three tiers are live. The ladder is the default: with no ?net the
+ * WT/RTC probes run in parallel and the winner serves, WS underneath.
  * ?net=wt|rtc|ws pins one tier for testing.
  */
 
@@ -40,7 +40,7 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
 }
 
 export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
-  const want = urlParams.net;
+  const want = urlParams.net ?? 'auto';
   if (want !== 'auto') return pinnedTier(want, config);
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
@@ -65,10 +65,9 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   return new WebSocketConnection(config);
 }
 
-/** ?net=ws|wt|rtc pins a single tier for testing. WS is the production
- *  default (no param): universally compatible, and the races tier probes
- *  manufacture are the session layer's bug source — ?net=auto is what
- *  opts back into the parallel probe. */
+/** ?net=ws|wt|rtc pins a single tier for testing. The raced probes were
+ *  the session layer's bug source once — muteable/gen/flap-breaker/miss-
+ *  cache now hold that fault line, so the ladder is the default again. */
 async function pinnedTier(want: string | null | undefined, config: ConnectionConfig): Promise<GameTransport> {
   if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
   if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
