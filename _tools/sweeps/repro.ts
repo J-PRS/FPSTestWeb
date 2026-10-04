@@ -1,6 +1,8 @@
 // Reproduce one sweep genome's capper run with verbose telemetry.
 //   bun _tools/sweeps/repro.ts <map> <g0|...> [v1 v2 ...]
 import { readFileSync } from 'node:fs';
+import { setSharedEnv } from '../../shared/env.ts';
+setSharedEnv({ traceId: process.env.FPS_TRACE });
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
 import { BOT_TUNING } from '../../shared/botTuning.ts';
