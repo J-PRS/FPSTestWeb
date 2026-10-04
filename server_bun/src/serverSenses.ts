@@ -73,6 +73,13 @@ export class ServerBotSenses {
   // the flood launches when the approach does, not when it's already dying.
   private static readonly PUSH_ETA_S = 45;
   private static readonly PUSH_HOLD_MS = 14000;
+  /** Once a ring entry is reached the press is committed, not re-probed:
+   *  at the lip the straight-line wall check reads the crest the entry
+   *  was picked to avoid, bounces the bot back out, and the same entry
+   *  wins the next fresh pick — consume→re-pick→consume orbit (kata
+   *  probe: capper lapped ~150m off the stand for 100s). 8s covers the
+   *  ~80m run-in at a walk; expiry falls back to a normal re-pick. */
+  private static readonly PRESS_MS = 8000;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
    *  wanders its own mini-route instead of parking. */
   private waitSpot = new Map<string, { pos: BotVec; at: number }>();
@@ -414,6 +421,34 @@ export class ServerBotSenses {
       // stand at 90m beelines the bot into the rim wall it probed its
       // way around — presses end 8m below the flag at the wall's foot.
       if (dStand > (capper ? 25 : 20)) {
+        const inc = this.routeHold.get(p.id);
+        const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
+        // A pressed-in record (pos≈stand) short-circuits the whole entry
+        // probe for its window — see PRESS_MS.
+        const pressing = incLive && dist3(incLive.pos, enemyStand) < 1
+          && simNow() - incLive.at < ServerBotSenses.PRESS_MS;
+        if (incLive && dist3(incLive.pos, enemyStand) < 1 && !pressing) this.routeHold.delete(p.id); // stale press — re-probe
+        if (pressing) {
+          goalPos = { ...enemyStand };
+        } else if (incLive) {
+          // An incumbent entry is a commitment, not a suggestion: chase
+          // it to arrival. Re-probing the wall every think let the
+          // verdict oscillate as the bot moved through a valley —
+          // stand/entry flip-flops had it orbiting 150m out (kata
+          // probe). Arrival can't be exact — ring points land on faces
+          // the bot can't occupy — so it is consumed into a press when
+          // the bot reaches the face base (~45m), or when a long chase
+          // still hasn't closed: the remaining leg is the stand either
+          // way, and a stale entry must never become a wall to grind.
+          const arrived = Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z) < 45
+            || simNow() - incLive.at > ServerBotSenses.PRESS_MS;
+          if (arrived) {
+            this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
+            goalPos = { ...enemyStand };
+          } else {
+            goalPos = { ...incLive.pos };
+          }
+        } else {
         // …unless the straight line to the stand is already open. Ring
         // entries only earn their detour when terrain actually rises
         // into the approach; without this check a bot on the anchor
@@ -476,17 +511,6 @@ export class ServerBotSenses {
         // bot's net progress read zero. The gap scales with the stand
         // distance: far out, a re-route is cheap and the bar is lower;
         // close in, flipping entries costs a mountain.
-        const inc = this.routeHold.get(p.id);
-        const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
-        // Column check: a bot already standing where the incumbent entry
-        // sits has arrived — ring points land on faces the bot can't
-        // physically occupy (katabatic: the alpha capper orbited a
-        // ring-170 entry ~6m off for the whole match). Consume it: the
-        // scored leg that remains is entry-to-stand.
-        if (incLive && Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z) < 22) {
-          this.routeHold.delete(p.id);
-          goalPos = { ...enemyStand };
-        } else {
         const scoreEntry = (ex: number, ey: number, ez: number): number => {
           const high = ey - enemyStand.y;
           const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
@@ -580,14 +604,9 @@ export class ServerBotSenses {
         // distance. The flip threshold scales with the leg remaining —
         // a re-route 400m out costs little, one 60m from the stand is
         // the difference between arriving and orbit death.
-        if (incLive) {
-          const incScore = scoreEntry(incLive.pos.x, incLive.pos.y, incLive.pos.z);
-          const margin = Math.min(120, 25 + dStand * 0.2);
-          if (incScore > bestScore - margin) { best = incLive.pos; }
-          else this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
-        } else {
-          this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
-        }
+        // No incumbent here — incumbents are chased to arrival, so this
+        // branch only runs on a fresh pick or after a stale record died.
+        this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
         goalPos = best;
         }
         }
