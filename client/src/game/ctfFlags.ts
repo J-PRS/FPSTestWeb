@@ -178,6 +178,7 @@ export class CtfFlags {
       enemyStand,
       escort: escortPos,
       threat: this.standThreat(own.home, bot.team as string),
+      me: { x: bot.position.x, z: bot.position.z },
     }, bot.dutyLevel);
     // Cloak intent is the infiltrator's alone — the drain is
     // speed-scaled, so a sprinting capper would arrive tank-dry.

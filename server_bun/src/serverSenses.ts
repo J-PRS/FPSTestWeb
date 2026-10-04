@@ -363,6 +363,7 @@ export class ServerBotSenses {
       escort: this.escortSpot(enemy.carrier, me),
       threat: this.standThreat(own.home, me),
       push: this.pushFor(me),
+      me: p.position,
     };
     // The commander names responders for contested jobs before the role
     // table runs — staffed slots are hidden from everyone else so the

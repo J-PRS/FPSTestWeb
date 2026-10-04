@@ -8,6 +8,8 @@
  * or player plumbing leaks into the rule table.
  */
 
+import { botRand } from './botRand.ts';
+
 export type BotRole =
   | 'capper'      // flag route is the job — press/escort
   | 'offense'     // light offense — clear the stand for the capper
@@ -40,6 +42,10 @@ export interface FlagSituation {
    *  floods ahead of it: attackers clear defenders, shellers lob.
    *  Carries the stand pos so a push can be joined from anywhere. */
   push?: { x: number; y: number; z: number } | null;
+  /** The deciding bot's own position — populated when a goal needs
+   *  "can I get there first" rather than pure priority (the llama
+   *  deny-grab). */
+  me?: { x: number; z: number } | null;
 }
 
 /** Role-priority table, core before luxury — the row unlocks when the
@@ -253,6 +259,21 @@ function medicGoal(s: FlagSituation) {
  *  beats shadowing a carrier who legally can't cap yet. Then escort,
  *  then press the enemy stand to clear it for the capper. */
 function offenseGoal(s: FlagSituation) {
+  // The llama deny: grabbing THEIR flag removes the cap condition
+  // outright while chasing a fast carrier the last stretch is a lost
+  // footrace. Urgency is a field, not a cutoff — odds of the deny play
+  // rise as their carrier closes on the stand AND as the flag sits
+  // reachable; a bot on the flag with the carrier 200m out nearly
+  // always takes it, a far bot with the carrier at the lip mostly
+  // still chases (he'd never reach the stand in time anyway — the
+  // chase is the only play that can still score contact).
+  if (s.thief && s.enemyStand && s.me) {
+    const thiefToStand = Math.hypot(s.thief.x - s.enemyStand.x, s.thief.z - s.enemyStand.z);
+    const meToFlag = Math.hypot(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
+    const capRisk = 1 - Math.min(1, thiefToStand / 300);
+    const reach = 1 - Math.min(1, meToFlag / Math.max(60, thiefToStand * 1.5));
+    if (botRand() < capRisk * capRisk * reach * reach) return s.enemyStand;
+  }
   if (s.thief) return s.thief;
   // A called push drops routine jobs (escort/dropped read below it):
   // the capper is ~10s out, so offense floods the stand NOW to eat
