@@ -42,10 +42,10 @@ export interface BoltHost<T> {
 
 const _v = new THREE.Vector3();
 
-export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3): void {
+export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3, muzzle?: THREE.Vector3): void {
   const mesh = new THREE.Mesh(boltGeo(), boltMat());
-  const pos = h.pos.clone();
-  pos.y += 1.0;
+  const pos = muzzle ? muzzle.clone() : h.pos.clone();
+  if (!muzzle) pos.y += 1.0; // muzzle-less hosts keep the old center-top spawn
   mesh.position.copy(pos);
   // Hot halo — the bolt reads at range even when the sphere is subpixel
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({

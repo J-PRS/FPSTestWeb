@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { nextTargetId } from './targetIds.js';
 
 import {
   TURRET_RADIUS, TURRET_HEALTH,
   TURRET_RANGE, TURRET_RELAUNCH, TURRET_MIN_DWELL,
-  TURRET_REFIRE,
+  TURRET_REFIRE, TURRET_DEPRESS,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -32,14 +33,23 @@ const _p = new THREE.Vector3();
 const FOOT_RIM = 1.28; // base cone bottom radius (1.3) minus a hair — tucks in
 
 // Shared geometries
-let _baseGeo: THREE.CylinderGeometry | null = null;
-function baseGeo(): THREE.CylinderGeometry {
-  if (!_baseGeo) _baseGeo = new THREE.CylinderGeometry(0.9, 1.3, 0.8, 8); // flared footing
+let _baseGeo: THREE.BufferGeometry | null = null;
+function baseGeo(): THREE.BufferGeometry {
+  if (!_baseGeo) {
+    const hull = new THREE.CylinderGeometry(0.9, 1.3, 0.8, 8); // flared footing
+    // Anchor skirt: the bottom face extruded down and pinched — reads as a
+    // dirt-stake when the turret's airborne; buried out of sight when planted.
+    const skirt = new THREE.CylinderGeometry(1.3, 0.65, 0.3, 8);
+    skirt.translate(0, -0.55, 0); // hangs off the hull's bottom face (y=-0.4)
+    _baseGeo = mergeGeometries([hull, skirt]);
+  }
   return _baseGeo;
 }
 let _domeGeo: THREE.SphereGeometry | null = null;
 function domeGeo(): THREE.SphereGeometry {
-  if (!_domeGeo) _domeGeo = new THREE.SphereGeometry(0.7, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  // Full sphere, not a hemisphere cap — the ball IS the gimbal housing,
+  // so the barrel stays visibly socketed at any depression angle.
+  if (!_domeGeo) _domeGeo = new THREE.SphereGeometry(0.7, 10, 8);
   return _domeGeo;
 }
 let _barrelGeo: THREE.CylinderGeometry | null = null;
@@ -203,7 +213,10 @@ export class Turretter implements Targetable {
     _root.compose(_p, this.rootQuat, _s.setScalar(1));
 
     // Head pivot at (0, 0.85, 0) in root space
-    _q.setFromEuler(_e.set(this.headPitch, this.headYaw, 0));
+    // Two-axis gimbal: YXZ = yaw the head first, then pitch about the
+    // YAWED local X — XYZ would pitch about the un-rotated axis so the
+    // barrel's elevation skews sideways as the head turns.
+    _q.setFromEuler(_e.set(this.headPitch, this.headYaw, 0, 'YXZ'));
     _local.compose(_v.set(0, 0.85, 0), _q, _s.setScalar(1));
     _head.multiplyMatrices(_root, _local);
 
@@ -218,6 +231,12 @@ export class Turretter implements Targetable {
     _local.compose(_v.set(0, 0.3, 0.6), _q.identity(), _s.setScalar(1));
     _world.multiplyMatrices(_head, _local);
     swarm.setMatrix(PART_EYE, slot, _world);
+
+    // Muzzle = barrel tip: barrel local +z 1.275 (1.25 tube at 0.65 offset)
+    // on the breech pivot at y 0.2 — bolts must leave THROUGH the tube.
+    _local.compose(_v.set(0, 0.2, 1.28), _q.identity(), _s.setScalar(1));
+    _world.multiplyMatrices(_head, _local);
+    this.muzzleWorld.setFromMatrixPosition(_world);
 
     swarm.setColor(PART_BASE, slot, HULL_R, HULL_G, HULL_B);
     swarm.setColor(PART_BARREL, slot, HULL_R, HULL_G, HULL_B);
@@ -253,12 +272,31 @@ export class Turretter implements Targetable {
     _dir.applyQuaternion(_q2);
     this.headYaw = Math.atan2(_dir.x, _dir.z);
     const hd = Math.hypot(_dir.x, _dir.z);
-    this.headPitch = Math.max(-0.5, Math.min(0.5, -Math.atan2(_dir.y, hd)));
+    // Pitch travel is asymmetric: a mortar arcs UP — full vertical, the
+    // ball housing sockets it at any angle. Down binds almost flat:
+    // ~5° below horizontal the muzzle is already kissing the hull rim.
+    this.headPitch = Math.max(-Math.PI / 2, Math.min(TURRET_DEPRESS, -Math.atan2(_dir.y, hd)));
 
     this.refire -= dt;
     if (this.refire <= 0) {
       const sol = balSolve(this, playerPos, playerVel);
-      if (sol && balPath(this, sol)) {
+      // Blind zone = the SHOT's elevation, not the sightline: if the
+      // solved launch would leave the tube below the mount's depression
+      // limit, no aim can fix it — hop to a far-side spot at proper
+      // engagement geometry instead of firing point-blank into the hull.
+      const theta = sol ? Math.atan2(sol.y, Math.hypot(sol.x, sol.z)) : 0;
+      if (sol && theta < -TURRET_DEPRESS) {
+        if (this.dwell >= TURRET_MIN_DWELL) {
+          _v.copy(this.pos).sub(playerPos);
+          _v.y = 0;
+          if (_v.lengthSq() < 1e-4) _v.set(1, 0, 0); // dead overhead — pick a side
+          _v.normalize().multiplyScalar(TURRET_RELAUNCH * 0.5).add(playerPos);
+          _v.y = this.pos.y; // launch() lands on terrain; this seeds the arc height
+          balLaunch(this, _v);
+          return;
+        }
+        this.refire = 0.4; // pinned in the blind zone — strain, don't fire
+      } else if (sol && balPath(this, sol)) {
         this.refire = TURRET_REFIRE;
         this.fireBolt(sol);
         if (this.uber) {
@@ -283,8 +321,10 @@ export class Turretter implements Targetable {
     }
   }
 
+  private muzzleWorld = new THREE.Vector3();
+
   private fireBolt(vel: THREE.Vector3): void {
-    spawnBolt(this, vel);
+    spawnBolt(this, vel, this.muzzleWorld.lengthSq() > 0 ? this.muzzleWorld : undefined);
   }
 
   /** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
