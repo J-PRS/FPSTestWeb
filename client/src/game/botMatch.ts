@@ -23,6 +23,8 @@ export interface MatchHost {
     remoteKillFeed(text: string): void;
   };
   respawnBot(bot: GameBot): void;
+  /** Jersey swap re-keys every id-keyed meter the host keeps. */
+  rekeyBot(oldId: string, newId: string): void;
 }
 
 export function winText(m: MatchHost, w: string): string {
@@ -125,6 +127,9 @@ export function syncLocalTeam(m: MatchHost): void {
       m.deps.world.remotePlayers.rename(oldId, newId);
       m.teamOf.delete(oldId);
       b.playerId = newId;
+      // Every id-keyed meter re-keys with the jersey — a stale entry is
+      // a leak AND the defector would re-think/re-meter from zero.
+      m.rekeyBot(oldId, newId);
     }
     b.team = other;
     m.teamOf.set(b.playerId, other);

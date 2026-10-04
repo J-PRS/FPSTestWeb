@@ -458,6 +458,16 @@ export class TeamBots {
 
   respawnBot(bot: GameBot): void { respawnBotF(this, bot); } // public — botMatch's resetMatch calls it
 
+  /** botMatch's jersey swap renames a bot in place — every id-keyed
+   *  meter follows or the defector leaks a stale cell and restarts
+   *  think-stagger/sheep/seen windows from zero. */
+  rekeyBot(oldId: string, newId: string): void {
+    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) m.set(newId, v); };
+    mv(this.thinkAccum); mv(this.ctxCache); mv(this.ffaScores); mv(this.dmgPool);
+    this.senses.rekey(oldId, newId);
+    this.sheep.rekey(oldId, newId);
+  }
+
 
   /** Match over → wipe scores, flags home. Rounds are seamless: live
    *  bots keep their ground (hp/meters refilled), only the dead come

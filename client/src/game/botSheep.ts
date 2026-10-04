@@ -34,6 +34,8 @@ export class SheepMeter {
 
   markShot(id: string): void { this.core.noteFire(id); }
 
+  rekey(oldId: string, newId: string): void { this.core.rekey(oldId, newId); }
+
   /** >3s since this body last fired — long enough that holding fire in
    *  front of a visible foe is a tell, not a reload beat. */
   notShooting(id: string): boolean { return this.core.notShooting(id); }

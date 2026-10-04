@@ -928,6 +928,7 @@ export class Room {
     // countdown dies with its transition to reaped.
     this.sessions?.terminate(playerId, reason);
     this.lastSentPositions.delete(playerId);
+    this.chatPace.delete(playerId);
     this.connections.broadcast({ type: 'playerLeft', playerId });
     this.rebalanceTeams();
     log('Player removed', { room: this.name, playerId, reason, remaining: this.playerCount() });

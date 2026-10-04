@@ -1,3 +1,4 @@
+2026-10-01 - Rekey bot meters on jersey swap + chatPace cleanup on leave
 2026-10-04 - Weapon bake textures to WebP: 30 shipped AO/edge/grime maps 13MB->2MB; loaders probe webp first with png/jpg fallback so re-bakes still load
 2026-10-04 - Creature projectile hits judged at impact point, not shooter frame: onBoltHit now carries the bolt/beam hit pos; turretter shells + totem rays dealt zero damage (reach check measured from the far-away shooter) while boltPop still exploded at the player — VFX now fires only when the funnel applies damage; strifer bolts same fix
 2026-10-04 - Blast aftermath onto roomEvents bus: deployBlast/pickupsKnock/flagsKnock/preySplash/creatureArmor/moveImpulse/dropFlagCarrier hooks replaced by blast/knock/preySplash/armor/impulse/flagDrop events; RoomInfo loses 7 dep fields, claimed blasts still punt flags only

@@ -83,6 +83,16 @@ export class SheepCore {
     return this.simMs - (this.lastFire.get(id) ?? -Infinity) > 3000;
   }
 
+  /** Identity change (team defect/rekey) — carry every per-id cell so the
+   *  body keeps its earned meter instead of reading as a fresh leash. */
+  rekey(oldId: string, newId: string): void {
+    if (oldId === newId) return;
+    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) m.set(newId, v); };
+    mv(this.meter); mv(this.cov); mv(this.lastFire); mv(this.eSm); mv(this.eLast);
+    mv(this.eParts); mv(this.provenUntil); mv(this.why);
+    if (this.maxed.delete(oldId)) this.maxed.add(newId);
+  }
+
   /** Respawn is a fresh leash — unproven = 100. */
   clear(id: string): void {
     this.meter.delete(id);

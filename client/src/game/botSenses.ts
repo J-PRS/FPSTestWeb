@@ -152,6 +152,14 @@ export class BotSenses {
   // foeSeen was one raycast per foe per bot per frame.
   private foeSeenCache = new Map<string, { t: number; v: boolean }>();
 
+  /** Jersey swap — carry the 200ms 'recently seen' window so a defector
+   *  doesn't instantly re-see (or re-miss) foes under the new id. */
+  rekey(oldId: string, newId: string): void {
+    const v = this.foeSeenCache.get(oldId);
+    this.foeSeenCache.delete(oldId);
+    if (v !== undefined) this.foeSeenCache.set(newId, v);
+  }
+
   /** Any living PLAYER foe in brawl range with a clear eye line?
    *  Creatures don't count — walking past wildlife isn't fear. Mirrors
    *  ServerBots.markFoeNear: the same visible-enemy evidence the server
