@@ -9,66 +9,11 @@ import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
-import { registerDiag } from '../core/fxDiag.js';
 import type { TeamId } from '../../../shared/teams.js';
+import { ClaimLedger, noteMutedClaim, rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
+import { InputStream } from './inputStream.js';
 
 const logger = new ChildLogger('NetworkManager');
-
-// Reject census for the Alt+Q dump — the ERROR line logs the instance,
-// this counts the PATTERN so "half my damage doesn't apply" is one
-// dump line instead of a scrollback hunt.
-const rejectCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
-const dedupCensus = { hitSeqDrops: 0 };
-// Honest-lag drops (claimDropped wire) — separate from rejects so a dead
-// target mid-claim doesn't pollute the "my claims get refused" signal.
-const dropCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
-// Resync-muted claim census — a beam held through a hidden-tab replay
-// predicts damage with no wire behind it; "zapped him forever, zero
-// damage" is this counter, not a reject.
-const mutedCensus = { count: 0, lastWarnAt: 0 };
-// Non-shot claim ledger (claimAck wire) — every stamped claim ends as
-// accepted / rejected(reason) / unconfirmed (acked never came in the
-// window) / lost (lane died first). The pattern line answers "did my
-// deploy/heal/repair ever land" without a scrollback hunt.
-const claimCensus = {
-  accepted: 0,
-  rejected: 0,
-  unconfirmed: 0,
-  lost: 0,
-  byReason: new Map<string, number>(),
-  last: '',
-};
-function noteMutedClaim(): void {
-  mutedCensus.count++;
-  const now = performance.now();
-  // First muted claim warns immediately; a held beam then folds to one
-  // warn/second instead of a line per tic.
-  if (mutedCensus.lastWarnAt !== 0 && now - mutedCensus.lastWarnAt < 1000) return;
-  mutedCensus.lastWarnAt = now;
-  logger.warn(`claim muted during resync replay (${mutedCensus.count} total) — predicted damage has no wire`);
-}
-registerDiag('net', () => ({
-  rejects: {
-    total: rejectCensus.total,
-    byReason: Object.fromEntries(rejectCensus.byReason),
-    last: rejectCensus.last,
-  },
-  dedup: { hitSeqDrops: dedupCensus.hitSeqDrops },
-  claims: {
-    accepted: claimCensus.accepted,
-    rejected: claimCensus.rejected,
-    unconfirmed: claimCensus.unconfirmed,
-    lost: claimCensus.lost,
-    byReason: Object.fromEntries(claimCensus.byReason),
-    last: claimCensus.last,
-  },
-  drops: {
-    total: dropCensus.total,
-    byReason: Object.fromEntries(dropCensus.byReason),
-    last: dropCensus.last,
-  },
-  mutedClaims: mutedCensus.count,
-}));
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
 const ROSTER_FIELDS = ['internalId', 'position', 'rotation', 'velocity', 'isDead',
@@ -282,12 +227,10 @@ export class NetworkManager {
             logger.info('Disconnected', { code, reason });
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
-            this.pendingHits.clear(); // claims sent on the dead lane are
-            // void — the server replays in-flight hits, not lost ones
-            // Same for stamped claims — acks can't arrive on a dead lane,
-            // so they classify as transport-lost, not unconfirmed.
-            claimCensus.lost += this.pendingClaims.size;
-            this.pendingClaims.clear();
+            // Claims sent on the dead lane are void — the server replays
+            // in-flight hits, not lost ones; stamped claims classify as
+            // transport-lost, not unconfirmed.
+            this.ledger.dropAll(true);
             this.lastHitSeq = 0;   // hit seqs are per-room — a stale high
                                    // watermark would drop every later hit
             // Same for the cadence metric — else the dead period counts as
@@ -412,9 +355,12 @@ export class NetworkManager {
   private bwLastRx = 0;
   private bwUp = 0;
   private bwDown = 0;
+  private ledger = new ClaimLedger();
+  private inputs = new InputStream();
+
   bandwidth(): { up: number; down: number } {
     const now = performance.now();
-    this.sweepPendingHits(now);
+    this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier });
     if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
     const dt = (now - this.bwT) / 1000;
     if (dt >= 0.5) {
@@ -492,8 +438,8 @@ export class NetworkManager {
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
     correction: (data) => this.handleCorrection(data),
-    inputSync: (data) => this.resendInput(data.lastSeq),
-    claimAck: (data) => this.handleClaimAck(data),
+    inputSync: (data) => this.inputs.resend(data.lastSeq, (m) => this.send(m), this.isConnected()),
+    claimAck: (data) => this.ledger.ack(data),
     teleport: (data) => this.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
     ballSpawn: (data) => this.onBallSpawn?.(data),
     ballSegment: (data) => this.onBallSegment?.(data),
@@ -527,7 +473,7 @@ export class NetworkManager {
       rejectCensus.total++;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.confirmPendingHit(data.targetId ?? '', data.shotId);
+      if (data.targetId || data.shotId) this.ledger.confirmHit(data.targetId ?? '', data.shotId);
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
         targetId: data.targetId,
@@ -542,7 +488,7 @@ export class NetworkManager {
       dropCensus.total++;
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.confirmPendingHit(data.targetId ?? '', data.shotId);
+      if (data.targetId || data.shotId) this.ledger.confirmHit(data.targetId ?? '', data.shotId);
       logger.warn(`claim dropped — predicted damage never applied`, {
         reason: data.reason, targetId: data.targetId,
         weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
@@ -563,7 +509,7 @@ export class NetworkManager {
     // reconnect would otherwise freeze every remote for the session.
     this.lastHitSeq = 0;
     this.lastTickSeq = -1;
-    this.pendingHits.clear();
+    this.ledger.dropAll(false);
     this.resyncQuietUntil = 0; // truth landed — position claims are judged fresh
     const serverProto = data.protocolVersion ?? 0;
     if (serverProto !== PROTOCOL_VERSION) {
@@ -606,7 +552,7 @@ export class NetworkManager {
     // Tick-set confirm: the server consumed inputs ≤ inputAck — those
     // journal entries are dead weight and only matter to replay.
     if (data.inputAck !== undefined && data.inputAck > 0) {
-      while (this.inputJournal.length && this.inputJournal[0].seq <= data.inputAck) this.inputJournal.shift();
+      this.inputs.inputsAfter(data.inputAck);
     }
     if (!data.updates || !Array.isArray(data.updates)) return;
     const now = Date.now();
@@ -697,91 +643,8 @@ export class NetworkManager {
    *  session — the "half my damage instances don't work" desync. */
   private lastHitSeq = 0;
 
-  /** Predicted-hit ledger: every shot claim against a player is penciled
-   *  in by shotId; an inbound playerHit (me→same target) or a
-   *  shotRejected clears it. If neither lands inside ~1.5s the predicted
-   *  impact was phantom — the claim died on a transport flap or the
-   *  server swallowed it without a reject — which is exactly the
-   *  "exploded on his model but no damage" report. Swept lazily from
-   *  bandwidth() (per-frame caller, gated to 250ms). */
-  private pendingHits = new Map<string, { targetId: string; weaponType?: number; t: number }>();
-  private lastPendingSweep = 0;
-  private static readonly HIT_CONFIRM_MS = 1500;
-
-  private confirmPendingHit(targetId: string, shotId?: string): void {
-    // shotRejected echoes the claim's shotId — match it exactly (two
-    // claims racing the same target must not cross-clear). playerHit
-    // carries no shotId, so confirm falls back to target — oldest
-    // pending entry wins.
-    if (shotId && this.pendingHits.delete(shotId)) return;
-    for (const [id, h] of this.pendingHits) {
-      if (h.targetId === targetId) { this.pendingHits.delete(id); return; }
-    }
-  }
-
-  /** Non-shot claims (deploy/heal/repair/env/skill/creature hits) —
-   *  seq-stamped on send, classified by claimAck or by expiry. */
-  private pendingClaims = new Map<number, { kind: string; t: number }>();
-  private claimSeq = 0;
-  private creatureClaimN = 0;
-
-  /** Stamp a claimSeq + ledger entry. `sparse` kinds (creature hits at
-   *  chaingun rates) ack 1-in-4 — verdict traffic stays bounded, a
-   *  rejected pattern still surfaces. Returns undefined when unsampled
-   *  → legacy fire-and-forget, no ack expected. */
-  private stampClaim(kind: string, sparse = false): number | undefined {
-    if (sparse && (this.creatureClaimN++ & 3) !== 0) return undefined;
-    const seq = ++this.claimSeq;
-    this.pendingClaims.set(seq, { kind, t: performance.now() });
-    if (this.pendingClaims.size > 256) {
-      // Acks aren't arriving at all — every waiting entry died with its
-      // lane or its server; classify and reset rather than grow.
-      claimCensus.lost += this.pendingClaims.size;
-      claimCensus.last = 'ledger-full';
-      logger.warn(`${this.pendingClaims.size} claim acks never arrived — classifying transport-lost`);
-      this.pendingClaims.clear();
-    }
-    return seq;
-  }
-
-  private handleClaimAck(data: Extract<ServerMessage, { type: 'claimAck' }>): void {
-    this.pendingClaims.delete(data.seq);
-    if (data.ok) { claimCensus.accepted++; return; }
-    claimCensus.rejected++;
-    const key = `${data.kind}:${data.reason ?? '?'}`;
-    claimCensus.byReason.set(key, (claimCensus.byReason.get(key) ?? 0) + 1);
-    claimCensus.last = key;
-    logger.warn(`claim rejected: ${key}`);
-  }
-
-  private sweepPendingHits(now: number): void {
-    if (now - this.lastPendingSweep < 250) return;
-    this.lastPendingSweep = now;
-    for (const [seq, c] of this.pendingClaims) {
-      if (now - c.t < NetworkManager.HIT_CONFIRM_MS) continue;
-      this.pendingClaims.delete(seq);
-      claimCensus.unconfirmed++;
-      const key = `${c.kind}:unconfirmed`;
-      claimCensus.byReason.set(key, (claimCensus.byReason.get(key) ?? 0) + 1);
-      claimCensus.last = key;
-      logger.warn(`${c.kind} claim never acked — dropped server-side or the ack died`, { seq, ageMs: Math.round(now - c.t) });
-    }
-    for (const [id, h] of this.pendingHits) {
-      if (now - h.t < NetworkManager.HIT_CONFIRM_MS) continue;
-      this.pendingHits.delete(id);
-      rejectCensus.total++;
-      rejectCensus.byReason.set('unconfirmed', (rejectCensus.byReason.get('unconfirmed') ?? 0) + 1);
-      rejectCensus.last = `unconfirmed →${h.targetId}`;
-      logger.warn(`predicted hit never confirmed — claim lost or silently dropped`, {
-        shotId: id, targetId: h.targetId,
-        weapon: h.weaponType !== undefined ? WeaponType[h.weaponType] ?? h.weaponType : undefined,
-        ageMs: Math.round(now - h.t), pingMs: this.telemetry.ping, tier: this.ws?.tier,
-      });
-    }
-  }
-
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
-    if (data.shooterId === this.localPlayerId) this.confirmPendingHit(data.targetId);
+    if (data.shooterId === this.localPlayerId) this.ledger.confirmHit(data.targetId);
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
         dedupCensus.hitSeqDrops++;
@@ -798,7 +661,7 @@ export class NetworkManager {
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
     // A kill IS the confirm — the fatal blow arrives as playerKill, not
     // playerHit, so the pending ledger would warn phantom otherwise.
-    if (data.shooterId === this.localPlayerId) this.confirmPendingHit(data.targetId);
+    if (data.shooterId === this.localPlayerId) this.ledger.confirmHit(data.targetId);
     // Update REMOTE player state (local player death handled by callback)
     this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
     this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
@@ -876,7 +739,7 @@ export class NetworkManager {
 
     // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
     // hot path; the message still passes through the same validation.
-    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputSeq));
+    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputs.seq));
 
     // Send ping if interval elapsed
     if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
@@ -892,50 +755,14 @@ export class NetworkManager {
    * binary position frame, so the rotation payload only matters when the
    * input bits themselves change.
    */
-  private lastSentInput = '';
-  private inputSeq = 0;
-  // Last transmitted input payload + rotation — an inputSync resend
-  // re-emits exactly this (the change-only stream's current edge).
-  private lastInputState: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } | null = null;
-  private lastInputRotation: { yaw: number; pitch: number } = { yaw: 0, pitch: 0 };
-  /** Journal of transmitted input events (change-only stream). On a server
-   *  correction the client rewinds to the echoed state and replays every
-   *  entry with seq > the server's last consumed inputSeq — CFWK-style
-   *  input replay so missed packets converge instead of re-diverging. */
-  private inputJournal: { seq: number; t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] = [];
-  private static readonly INPUT_JOURNAL_MAX = 128;
-
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
-    const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.jet ?? 0},${input.status ?? 0}`;
-    if (key === this.lastSentInput) return;
-    this.lastSentInput = key;
-    // Change-only stream → unordered transports can deliver stale events
-    // after fresh ones; the seq lets the server drop them.
-    const seq = ++this.inputSeq;
-    this.inputJournal.push({ seq, t: performance.now(), input: { ...input } });
-    if (this.inputJournal.length > NetworkManager.INPUT_JOURNAL_MAX) this.inputJournal.shift();
-    this.lastInputState = { ...input };
-    this.lastInputRotation = { ...rotation };
-    this.send({ type: 'inputMove', seq, input, rotation });
-  }
-
-  /** Hard-tolerance answer: the server's consumed input watermark fell
-   *  behind ours across several reports — an edge died in flight. Re-emit
-   *  the current input with a fresh seq so the shadow converges. */
-  private resendInput(lastSeq: number): void {
-    if (!this.lastInputState || !this.isConnected()) return;
-    const seq = ++this.inputSeq;
-    this.inputJournal.push({ seq, t: performance.now(), input: { ...this.lastInputState } });
-    if (this.inputJournal.length > NetworkManager.INPUT_JOURNAL_MAX) this.inputJournal.shift();
-    logger.info(`inputSync: re-emitting input at seq ${seq} (server consumed ${lastSeq})`);
-    this.send({ type: 'inputMove', seq, input: { ...this.lastInputState }, rotation: this.lastInputRotation });
+    this.inputs.sendMove(input, rotation, (m) => this.send(m));
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed
    *  when it issued a correction. Also prunes consumed entries. */
   inputsAfter(after: number): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
-    while (this.inputJournal.length && this.inputJournal[0].seq <= after) this.inputJournal.shift();
-    return this.inputJournal;
+    return this.inputs.inputsAfter(after);
   }
 
   /**
@@ -991,7 +818,7 @@ export class NetworkManager {
     // shotRejected clears it; silence past ~1.5s warns (see
     // sweepPendingHits).
     if (a.targetId && a.targetId !== 'local' && a.shotId) {
-      this.pendingHits.set(a.shotId, { targetId: a.targetId, weaponType: a.weaponType, t: performance.now() });
+      this.ledger.noteShot(a.shotId, a.targetId, a.weaponType);
     }
     this.send({ type: 'shot', ...a });
   }
@@ -1012,7 +839,7 @@ export class NetworkManager {
     // slot, not a map entry per tic. Splash claims with no named target
     // can't confirm by target and stay unledgered by design.
     if (a.excludeTargetId && a.excludeTargetId !== 'local') {
-      this.pendingHits.set(`aoe:${a.excludeTargetId}`, { targetId: a.excludeTargetId, weaponType: a.weaponType, t: performance.now() });
+      this.ledger.noteShot(`aoe:${a.excludeTargetId}`, a.excludeTargetId, a.weaponType);
     }
     this.send({
       type: 'aoeShot',
@@ -1045,21 +872,21 @@ export class NetworkManager {
    *  position is the settled one the server will enforce caps/TTL on. */
   sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
     if (!this.connected) return;
-    this.send({ type: 'deploy', kind, position, claimSeq: this.stampClaim('deploy') });
+    this.send({ type: 'deploy', kind, position, claimSeq: this.ledger.stamp('deploy') });
   }
 
   /** Repair claim — only the target id crosses the wire; the server
    *  re-derives range, LOS, team, heal amount, and pacing itself. */
   sendRepair(targetId: number): void {
     if (!this.connected) return;
-    this.send({ type: 'repair', targetId, claimSeq: this.stampClaim('repair') });
+    this.send({ type: 'repair', targetId, claimSeq: this.ledger.stamp('repair') });
   }
 
   /** Instant-skill ante mirror — skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
   sendSkillUse(): void {
     if (!this.connected) return;
-    this.send({ type: 'skillUse', claimSeq: this.stampClaim('skillUse') });
+    this.send({ type: 'skillUse', claimSeq: this.ledger.stamp('skillUse') });
   }
 
   /** Loadout class pick mid-match — the server banks it for the next
@@ -1097,20 +924,20 @@ export class NetworkManager {
     // self-splash, creature bites, and bot melee, so the buffer answers
     // "did the client even claim it?" before any server-side question.
     logger.info(`envDamage claim: ${Math.round(amount * 10) / 10}`, { attacker });
-    this.send({ type: 'environmentDamage', amount, attacker, claimSeq: this.stampClaim('environmentDamage') });
+    this.send({ type: 'environmentDamage', amount, attacker, claimSeq: this.ledger.stamp('environmentDamage') });
   }
 
   /** Client-claimed heal (nugget pickup) — keeps server health the truth. */
   sendHeal(amount: number): void {
     if (!this.connected) { this.localAuthority?.heal(amount); return; }
-    this.send({ type: 'heal', amount, claimSeq: this.stampClaim('heal') });
+    this.send({ type: 'heal', amount, claimSeq: this.ledger.stamp('heal') });
   }
 
   /** Hit claim on a server-owned creature (netDriven ball). kx/ky/kz is the
    *  impulse the shot imparted — server clamps magnitude and rebroadcasts
    *  the new segment so every client sees the same shove. */
   sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
-    this.send({ type: 'crawlerHit', id, damage, kx, ky, kz, claimSeq: this.stampClaim('crawlerHit', true) });
+    this.send({ type: 'crawlerHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('crawlerHit', true) });
   }
 
   private creatureHitLogN = 0;
@@ -1121,7 +948,7 @@ export class NetworkManager {
     if ((this.creatureHitLogN++ & 15) === 0) {
       logger.info(`creatureHit claim x${this.creatureHitLogN}`, { id, damage });
     }
-    this.send({ type: 'creatureHit', id, damage, kx, ky, kz, claimSeq: this.stampClaim('creatureHit', true) });
+    this.send({ type: 'creatureHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('creatureHit', true) });
   }
 
   sendSnapshotRequest(): void {
@@ -1143,7 +970,7 @@ export class NetworkManager {
    *  hard-snaps to the echoed state instead of replaying seconds of
    *  queued inputs at once (the "rewinding" storm after alt-tab). */
   dropInputJournal(): void {
-    this.inputJournal.length = 0;
+    this.inputs.dropJournal();
   }
 
   sendChat(text: string, team = false, vgs?: string): void {
