@@ -283,6 +283,23 @@ export class Room {
           this.noteChatPace(e.id);
           break;
         }
+        // Blast aftermath — each emit once carried a bespoke RoomInfo
+        // hook; the bus fans it out instead. Claimed blasts punt only
+        // flags ('flag'): a client-claimed origin is untrusted, so it
+        // must not punt loose pickups — 'pickup' emits only come from
+        // server-owned blast paths (shells, mines).
+        case 'blast': this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales); break;
+        case 'knock': (e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force); break;
+        case 'preySplash':
+          this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
+          this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
+          break;
+        case 'armor':
+          this.ballSim.armorBlast(e.pos, e.radius, e.amount);
+          this.creatureSim.armorBlast(e.pos, e.radius, e.amount);
+          break;
+        case 'impulse': this.moveSim.applyImpulse(e.playerId, e.dv); break;
+        case 'flagDrop': this.flags?.dropIfCarrier(e.playerId); break;
       }
     });
     // Posted roles spawn at home — a defender materializing on a
@@ -599,19 +616,8 @@ export class Room {
       pickups: () => this.pickups?.snapshot() ?? [],
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
-      deployBlast: (pos, damage, radius, shooter, scales) => this.deployables.applyBlast(pos, damage, radius, shooter, scales),
-      pickupsKnock: (at, radius, force) => this.pickups?.knock(at, radius, force),
-      flagsKnock: (at, radius, force) => this.flags?.knock(at, radius, force),
-      preySplash: (ownerId, pos, radius, maxDamage) => {
-        this.ballSim.splashDamage(ownerId, pos, radius, maxDamage);
-        this.creatureSim.splashDamage(ownerId, pos, radius, maxDamage);
-      },
-      influence: this.influence,
-      creatureArmor: (pos, amount, radius) => {
-        this.ballSim.armorBlast(pos, radius, amount);
-        this.creatureSim.armorBlast(pos, radius, amount);
-      },
       deployables: () => this.deployables.snapshot(),
+      influence: this.influence,
       matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
       moveInput: (pid, i, status, seq) => this.moveSim.queueInput(pid, {
         forward: i.forward, right: i.right,
@@ -619,8 +625,6 @@ export class Room {
         jetHeld: !!i.jet,
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
-      moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
-      dropFlagCarrier: (pid) => this.flags?.dropIfCarrier(pid),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,

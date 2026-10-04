@@ -46,12 +46,6 @@ export interface CombatDeps {
   /** Server option: set = teammates CAN damage each other — friendly()
    *  returns false even in team rooms. Splash knockback is unaffected. */
   friendlyFire?: boolean;
-  /** Movement shadow sim — gets the same impulse deltas we apply to
-   *  target.velocity so a legit blast doesn't read as divergence. */
-  moveImpulse?: (playerId: string, dv: Vec3) => void;
-  /** Concussion payload hook — RoomFlags.dropIfCarrier; absent = no
-   *  flag sim, so the strip is a no-op outside CTF rooms. */
-  dropFlagCarrier?: (playerId: string) => void;
   /** Rabbit rooms: returns the flag carrier's id (null when the flag is
    *  loose). Presence of the dep IS the mode check — friendly() blocks
    *  damage unless one side of the pair is the rabbit. */
@@ -68,12 +62,7 @@ export interface CombatDeps {
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
   mode?: string;
-  /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
-   *  rooms without structures (offline-style lobbies). */
-  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
-  pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
-  /** Dropped-flag knock — RoomFlags.knock; blasts can punt the objective. */
-  flagsKnock?: (at: Vec3, radius: number, force: number) => void;
+
   /** A bot chat line hit the wire — Room relays it as a 'reply' notice
    *  so squadmates can answer back. Emitted as 'botSpoke'. */
   /** Room heartbeat counters — claims/rejects/applied damage tally here
@@ -89,12 +78,7 @@ export interface CombatDeps {
    *  autopsy discriminates a terrain lip from a body that hopped into
    *  the shell. */
   preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
-  /** Armor-grenade plating sweep — grants `amount` armor to every sim
-   *  creature inside `radius` of the blast point (overcap health). */
-  creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
-  /** Splash falloff into both prey sims (balls + species pops) — used by
-   *  server-owned blasts that skip the projectile path, like mines. */
-  preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
+
   /** Spatial memory: hits and kills deposit danger scent on the victim's
    *  team layer; the map itself lives on Room. */
   influence?: InfluenceMap;
@@ -268,7 +252,7 @@ export class CombatHandler {
     // Grace keeps the player entity alive, but the flag must not ride a
     // ghost: a disconnecting carrier fumbles on the spot, same as a dead
     // one. Rejoin or not, the objective stays in play.
-    this.deps.dropFlagCarrier?.(playerId);
+    this.deps.emit?.({ type: 'flagDrop', playerId });
     // Per-player fire-throttle state is per-connection like the room's
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.

@@ -89,12 +89,9 @@ export interface RoomInfo {
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => ClaimVerdict;
   /** Repair-beam claim sink — Room.deployables.repair. */
   onRepair?: (playerId: string, targetId: number) => ClaimVerdict;
-  /** AOE blast sink for deployables — Room.deployables.applyBlast. */
-  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
-  pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
-  /** Dropped-flag punt — RoomFlags.knock. */
-  flagsKnock?: (at: Vec3, radius: number, force: number) => void;
-  preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
+  /** Blast aftermath (deployables, flag/pickup punts, wildlife splash,
+   *  armor sweeps, shadow impulses, flag drops) rides the emit channel —
+   *  subscribe to the bus instead of hanging a hook here. */
   influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
   onSkillUse?: (playerId: string) => ClaimVerdict;
@@ -106,9 +103,6 @@ export interface RoomInfo {
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
-  /** Server-side impulses (knockback) the sim must also receive. */
-  moveImpulse?: (playerId: string, dv: Vec3) => void;
-  dropFlagCarrier?: (playerId: string) => void;
   /** Rabbit rooms: current flag carrier (null = flag loose). Present only
    *  in rabbit rooms — CombatHandler gates all PvP damage on the pair
    *  involving the carrier. */
@@ -140,8 +134,6 @@ export interface RoomInfo {
   envRange?: (playerId: string) => number;
   /** Nearest ball / crawler to a point — self-frag autopsy. */
   preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
-  /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
-  creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
   /** A legit fire claim lands as a 'fire' event — the sheep meter's
    *  human ignore debit reads its recency (bots report via BrainOut). */
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
@@ -156,8 +148,6 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     rng: roomInfo?.rng,
     teams: roomInfo?.teams,
     friendlyFire: roomInfo?.friendlyFire,
-    moveImpulse: roomInfo?.moveImpulse,
-    dropFlagCarrier: roomInfo?.dropFlagCarrier,
     rabbitCarrier: roomInfo?.rabbitCarrier,
     rabbitBottom: roomInfo?.rabbitBottom,
     drainEnergy: roomInfo?.drainEnergy,
@@ -165,15 +155,10 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     moveResync: roomInfo?.moveResync,
 
     mode: roomInfo?.mode,
-    deployBlast: roomInfo?.deployBlast,
-    pickupsKnock: roomInfo?.pickupsKnock,
-    flagsKnock: roomInfo?.flagsKnock,
-    preySplash: roomInfo?.preySplash,
     influence: roomInfo?.influence,
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
     preyNear: roomInfo?.preyNear,
-    creatureArmor: roomInfo?.creatureArmor,
   };
 }
 

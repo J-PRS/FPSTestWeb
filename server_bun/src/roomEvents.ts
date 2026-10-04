@@ -10,12 +10,26 @@
  * claim verdicts, snapshot suppliers) stay direct calls; an event
  * never carries a verdict back to its producer.
  */
+import type { Vec3 } from './types.ts';
+
 export type RoomEvent =
   | { type: 'kill'; targetId: string; shooterId: string }
-  | { type: 'hit'; targetId: string; shooterId: string }
+  | { type: 'hit'; targetId: string; shooterId: string; damage: number }
   | { type: 'fire'; playerId: string }
   | { type: 'botSpoke'; id: string }
-  | { type: 'chat'; id: string; text: string };
+  | { type: 'chat'; id: string; text: string }
+  // Blast aftermath notifications — what a resolved explosion did to the
+  // non-player world. Producers emit once per blast; the Room fans out to
+  // whichever subsystems care (deployables eat splash, dropped flags punt,
+  // loose pickups punt, wildlife takes splash, armor-nades plate sims).
+  | { type: 'blast'; pos: Vec3; damage: number; radius: number; shooterId: string; scales?: readonly number[] }
+  | { type: 'knock'; pos: Vec3; radius: number; force: number; kind: 'flag' | 'pickup' }
+  | { type: 'preySplash'; ownerId: string; pos: Vec3; radius: number; maxDamage: number }
+  | { type: 'armor'; pos: Vec3; amount: number; radius: number }
+  // Player-world notifications without a verdict — the shadow sim gets
+  // the same impulse the blast applied; a conc'd carrier drops the flag.
+  | { type: 'impulse'; playerId: string; dv: Vec3 }
+  | { type: 'flagDrop'; playerId: string };
 
 export type RoomEventSink = (e: RoomEvent) => void;
 

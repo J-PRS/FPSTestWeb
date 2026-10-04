@@ -12,6 +12,7 @@ import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { clampPing, rewindPos } from './claimLedger.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import type { RoomEventSink } from './roomEvents.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -39,13 +40,10 @@ interface BlastCtx {
 export interface BlastHost {
   playerManager: PlayerManager;
   deps: {
-    deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]) => void;
-    pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
-    flagsKnock?: (at: Vec3, radius: number, force: number) => void;
-    creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
-    preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
-    moveImpulse?: (playerId: string, dv: Vec3) => void;
-    dropFlagCarrier?: (playerId: string) => void;
+    /** Blast aftermath lands as room events — the Room fans each one
+     *  out to the subsystem that owns it (deployables, loose flags and
+     *  pickups, wildlife, armor sweeps, the move shadow). */
+    emit?: RoomEventSink;
     /** Jet-tank access — the concussion payload saps victim energy. */
     drainEnergy?: (playerId: string, amount: number) => void;
     health?: Map<string, number>;
@@ -100,12 +98,12 @@ export class BlastRunner {
 
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
-    this.h.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId, ctx.scales);
+    this.h.deps.emit?.({ type: 'blast', pos: position, damage: ctx.baseDamage, radius, shooterId: playerId, scales: ctx.scales });
 
     // A dropped flag is a loose physical object — every blast (claimed or
     // trusted) can punt it. Lives inside processAOE so claimed shots,
     // server blasts and splashes all knock it through one funnel.
-    this.h.deps.flagsKnock?.(position, radius, stats.knockbackForce);
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'flag' });
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
@@ -154,7 +152,7 @@ export class BlastRunner {
       this.h.hb('armor.nade');
       logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
     }
-    this.h.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
+    this.h.deps.emit?.({ type: 'armor', pos: position, amount: ARMORNADE_ARMOR, radius });
   }
 
   /** Heal-grenade sweep: self + allies only — a heal that tops off the
@@ -241,7 +239,7 @@ export class BlastRunner {
     // a carrier clipped by the blast fumbles it like in T2, and the
     // victim's jet tank takes a bite so the escape is hobbled too.
     if (ctx.weapon === WeaponType.Concussion) {
-      this.h.deps.dropFlagCarrier?.(targetId);
+      this.h.deps.emit?.({ type: 'flagDrop', playerId: targetId });
       this.h.deps.drainEnergy?.(targetId, CONC_JET_DRAIN);
     }
   }
@@ -264,7 +262,7 @@ export class BlastRunner {
     target.velocity.x += dv.x;
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;
-    this.h.deps.moveImpulse?.(targetId, dv);
+    this.h.deps.emit?.({ type: 'impulse', playerId: targetId, dv });
     target.forceSendUntil = wallNow() + FORCE_SEND_MS;
     this.h.sendToPlayer(targetId, {
       type: 'knockback', targetId, position: pos, force: impulseMag,
@@ -301,7 +299,7 @@ export class BlastRunner {
     this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // (flagsKnock is inside processAOE above — every blast reaches it.)
-    this.h.deps.pickupsKnock?.(position, stats.aoeRadius, stats.knockbackForce);
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius: stats.aoeRadius, force: stats.knockbackForce, kind: 'pickup' });
   }
 
   /** Server-owned mine blast — owner is the shooter for scoring/friendly
@@ -310,10 +308,10 @@ export class BlastRunner {
   mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
     const owner = this.h.playerManager.getPlayer(ownerId);
     const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
-    this.h.deps.pickupsKnock?.(pos, radius, knockback);
-    this.h.deps.flagsKnock?.(pos, radius, knockback);
+    this.h.deps.emit?.({ type: 'knock', pos, radius, force: knockback, kind: 'pickup' });
+    this.h.deps.emit?.({ type: 'knock', pos, radius, force: knockback, kind: 'flag' });
     // Wildlife isn't mine-savvy — a popping trap catches the swarm too.
-    this.h.deps.preySplash?.(ownerId, pos, radius, baseDamage);
+    this.h.deps.emit?.({ type: 'preySplash', ownerId, pos, radius, maxDamage: baseDamage });
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
       const dx = target.position.x - pos.x;

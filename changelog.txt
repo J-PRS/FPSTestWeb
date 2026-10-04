@@ -1,3 +1,4 @@
+2026-10-04 - Blast aftermath onto roomEvents bus: deployBlast/pickupsKnock/flagsKnock/preySplash/creatureArmor/moveImpulse/dropFlagCarrier hooks replaced by blast/knock/preySplash/armor/impulse/flagDrop events; RoomInfo loses 7 dep fields, claimed blasts still punt flags only
 2026-10-04 - _tools/README.md: declared canonical pipelines (e2e/animbake/mapbake/pvptest/dif2glb/ter2bin/edgebake/poseshot...) vs root-level scratch archaeology
 2026-10-04 - NetworkManager split: claim ledger + censuses -> claimLedger.ts, change-only input stream + replay journal -> inputStream.ts (1208->1035); retired gunlab copy.html to .old
 2026-10-04 - duo_p2p E2E read dead RemotePlayer.targetPosition (privatized into RemoteInterp); assert on .position which hard-snaps on teleportTo — test field rot, not a wire bug
