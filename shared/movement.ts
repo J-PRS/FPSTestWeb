@@ -337,7 +337,7 @@ export class MoveSim {
         s.vel.x += sx * acc * dt;
         s.vel.z += sz * acc * dt;
       }
-    } else {
+    } else if (!this.input.skiHeld) {
       const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
       if (speed > MOVEMENT_CONFIG.stopThreshold) {
         const f = MOVEMENT_CONFIG.groundFriction * dt / speed;
@@ -345,6 +345,17 @@ export class MoveSim {
       } else {
         s.vel.x = s.vel.y = s.vel.z = 0;
       }
+    }
+
+    // Grounded gravity pull for a skier: only the tangential component,
+    // so a parked skier slides downhill (T1 achieves the same by
+    // applying gravity constantly — our grounded path skips it, and
+    // the normal component would just be killed by the clamp anyway).
+    if (this.input.skiHeld) {
+      const gDotN = GRAVITY * n.y;
+      s.vel.x += -n.x * gDotN * dt;
+      s.vel.y += (GRAVITY - n.y * gDotN) * dt;
+      s.vel.z += -n.z * gDotN * dt;
     }
 
     // Redirect velocity along the slope (kill the into-ground component).
