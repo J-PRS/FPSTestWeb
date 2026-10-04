@@ -74,6 +74,15 @@ export const AIM_BONE_MASK = new Set([
   'handl', 'handr',
 ]);
 
+// Torso norms that may join the aim mask on rigs whose aim clips carry
+// pitch in the spine tracks (robot: the arm-only residual sweeps
+// horizontally). Hips/legs stay out so locomotion still owns them.
+export const AIM_TORSO_BONES = new Set([
+  'abdomen', 'torso', 'torso1', 'neck', 'head',
+  'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+  'spine', 'chest', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
+]);
+
 // Torso chain whose locomotion sway gets halved — spine roll is what
 // swung the aimed gun side to side. Position tracks (hip bob) untouched.
 export const SWAY_BONES = new Set([

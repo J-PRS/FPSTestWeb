@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { ONESHOT_CLIPS, normBone } from './playerClips.js';
-import { AIM_BONE_MASK } from './playerClipSurgery.js';
+import { AIM_BONE_MASK, AIM_TORSO_BONES } from './playerClipSurgery.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('playerPose');
@@ -178,13 +178,14 @@ export class PoseControl {
   /** Build the masked aim layer: Pistol_Aim_* clips filtered down to
    *  the arm chain so they pose the weapon hold over any locomotion clip. LoopOnce+clamp — they are static poses, so they
    *  play once and hold at full weight set per frame from aimPitch. */
-  buildAimLayer(mixer: THREE.AnimationMixer, animations: Map<string, THREE.AnimationAction>): void {
+  buildAimLayer(mixer: THREE.AnimationMixer, animations: Map<string, THREE.AnimationAction>, torso = false): void {
     if (this.aimNeutral && this.aimUp && this.aimDown) return;
+    const mask = torso ? new Set([...AIM_BONE_MASK, ...AIM_TORSO_BONES]) : AIM_BONE_MASK;
     const mk = (name: string): THREE.AnimationAction | null => {
       const src = animations.get(name)?.getClip();
       if (!src) return null;
       const tracks = src.tracks.filter(t =>
-        AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+        mask.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
       if (!tracks.length) return null;
       const clip = new THREE.AnimationClip(name + '.aim', src.duration, tracks);
       const a = mixer.clipAction(clip);

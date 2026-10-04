@@ -876,8 +876,10 @@ export class PlayerModel {
       if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
       // Aim clips ride inside the retarget pack for rigs like robot —
       // the load-time aim-layer build saw an empty table for them.
+      // Robot's aim clips carry pitch in the spine tracks, so his mask
+      // includes the torso chain (arm-only sweeps horizontally).
       if ([...baked.keys()].some(n => n.includes('Aim_')))
-        this.pose.buildAimLayer(this.mixer, this.animations);
+        this.pose.buildAimLayer(this.mixer, this.animations, this.variant === 'robot');
       // Re-resolve the current state onto the better clip if one landed —
       // the baked names now sit in the same candidate table the state
       // resolver reads, so let it pick (a bare 'Idle' name doesn't exist
