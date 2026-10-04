@@ -111,6 +111,11 @@ export class PoseControl {
   // 0→1 ramp while recently fired — drives the spine lock.
   private armedT = 0;
   private armed = 0;
+  /** The lock exists for UAL-retargeted clips that carry stride roll into
+   *  the torso; a native shoot clip poses its own torso consistently, and
+   *  locking it to bind pivots the arm chain (and the mounted gun) around
+   *  the torso/clip stance mismatch — the sideways gun swing on fire. */
+  wantSpineLock = true;
   // Foot bones are IK targets detached from the leg chain — retargeted
   // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
   // to its shin tip (the *_end leaf node follows the skinned leg).
@@ -281,7 +286,7 @@ export class PoseControl {
   private applySpineLock(dt: number): void {
     this.armedT = Math.max(0, this.armedT - dt);
     this.armed += ((this.armedT > 0 ? 1 : 0) - this.armed) * Math.min(dt * 12, 1);
-    if (this.armed > 0.01) {
+    if (this.armed > 0.01 && this.wantSpineLock) {
       for (const sb of this.steadyBones) sb.bone.quaternion.slerp(sb.bind, this.armed);
     }
   }

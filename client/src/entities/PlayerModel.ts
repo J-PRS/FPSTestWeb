@@ -146,6 +146,11 @@ export class PlayerModel {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
     this.pose = new PoseControl(this.variant);
+    // Native shoot clips carry a self-consistent torso stance — the bind
+    // slerp only helps UAL-retargeted clips whose stride roll waves the
+    // muzzle (see PoseControl.wantSpineLock).
+    const shootClip = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
+    this.pose.wantSpineLock = !shootClip || shootClip.startsWith('UAL_');
   }
 
   async load(): Promise<void> {
