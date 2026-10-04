@@ -47,6 +47,7 @@ import { ENERGY } from '../../../shared/movement.js';
 // The constants that remain here are visual/VFX scales only.
 export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
 export const SCORCH_MAX = 48;          // terrain char decals — oldest evicted first
+export const SPLAT_MAX = 24;           // ichor stain decals — matches terrain slot count
 
 
 
@@ -189,7 +190,7 @@ export const SNAKE_MAX = 8;
 export const SNAKE_SPAWN_INTERVAL = 9.0;
 export const SNAKE_SPAWN_MIN = 30.0;
 export const SNAKE_SPAWN_MAX = 60.0;
-export const SNAKE_RADIUS = 0.5;
+export const SNAKE_RADIUS = 0.85;
 export const SNAKE_HEALTH = 45;
 export const SNAKE_SPEED = 6.5;           // weaves in FAST
 export const SNAKE_AGGRO_DIST = 70.0;
@@ -228,6 +229,8 @@ export const GNAT_STUN = 0.3;
 // ballistic arc when they get far. Inert in flight: the hop IS the
 // shoot-it window.
 export const TURRET_MAX = 3;
+// Turretter creature params — NOT the sentry deployable (that range/damage
+// lives in shared/deployItems.ts as DEPLOY_ITEMS.turret.*).
 export const TURRET_SPAWN_INTERVAL = 12.0; // spawn attempts are slow — they're persistent threats
 export const TURRET_SPAWN_MIN = 60.0;
 export const TURRET_SPAWN_MAX = 120.0;
@@ -239,6 +242,7 @@ export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between 
 export const TURRET_HOP_T = 1.6;          // solved flight time of the launch arc
 export const TURRET_REFIRE = 1.6;         // s between bolts
 export const TURRET_BOLT_SPEED = 60.0;    // m/s muzzle speed — elevation solved per shot
+export const TURRET_DEPRESS = 0.087;      // ~5° below horizontal — muzzle kisses the hull rim past this
 export const TURRET_BOLT_DAMAGE = 12;
 
 // Roller — a big ball that just rolls at you. No hops, no brains:
