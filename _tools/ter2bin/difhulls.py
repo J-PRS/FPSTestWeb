@@ -61,16 +61,23 @@ def main():
         c, sn = math.cos(rot_y), math.sin(rot_y)
 
         for h in hulls:
-            eu = abs(h.maxX - h.minX); ev = abs(h.maxY - h.minY); ew = abs(h.maxZ - h.minZ)
+            # .dif hull bounds are stored interleaved per axis —
+            # (minX,maxX,minY,maxY,minZ,maxZ) — NOT minXYZ/maxXYZ.
+            # Reading them grouped scrambles y/z into world offsets
+            # ~90m from the mesh (verified vs the hull's own vertex run).
+            u0, u1 = h.minX, h.minY
+            v0, v1 = h.minZ, h.maxX
+            w0, w1 = h.maxY, h.maxZ
+            eu, ev, ew = u1 - u0, v1 - v0, w1 - w0
             if max(eu, ev, ew) < MIN_EXT or eu * ev * ew < MIN_VOL:
                 continue
             # ours-local center/extents: u->x, w->y, v->z (spec.scale axes)
-            lx = (h.minX + h.maxX) / 2 * s['x']
-            ly = (h.minZ + h.maxZ) / 2 * s['y']
-            lz = (h.minY + h.maxY) / 2 * s['z']
+            lx = (u0 + u1) / 2 * s['x']
+            ly = (w0 + w1) / 2 * s['y']
+            lz = (v0 + v1) / 2 * s['z']
             sx, sy, sz = eu * s['x'], ew * s['y'], ev * s['z']
             # yaw the center into world space — rendered offset is
-            # R(-theta) in standard convention: (x c + z s, -x s + z c)
+            # R(-theta) in T2 (u,v) space: u' = u c + v s, v' = -u s + v c
             # with c=cos(theta), s=sin(theta); rot_y=-theta makes c,s land
             # exactly as the mesh's own transform computes them.
             cx = p['x'] + lx * c - lz * sn
