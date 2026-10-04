@@ -2,6 +2,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import type { ModeSpec, TeamScores } from '../../shared/teams.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 import { simNow } from './simClock.ts';
+import { setMatchMuted } from '../../shared/botTaunts.ts';
 
 /** The pieces of Room the match lifecycle touches — typed as an
  *  interface so RoomMatchClock stays a leaf (no Room import cycle). */
@@ -124,6 +125,9 @@ export class MatchClock {
     // A second end during the standings window (admin force, late score
     // cap) must not re-fire the broadcast or restart the countdown.
     if (this.intermissionAt) return;
+    // Standings window is for the gg beat only — kills/contacts past the
+    // horn shouldn't keep barking over the scoreboard.
+    setMatchMuted(true);
     const host = this.host;
     const spec = host.modeSpec!;
     const scores = spec.teams ? { ...host.scores } : Object.fromEntries(host.ffaScores);
@@ -141,6 +145,7 @@ export class MatchClock {
     const host = this.host;
     const spec = host.modeSpec!;
     this.intermissionAt = 0;
+    setMatchMuted(false);
     host.scores.alpha = 0;
     host.scores.bravo = 0;
     host.ffaScores.clear();

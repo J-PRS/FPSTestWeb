@@ -359,17 +359,19 @@ const END_VGS: Record<EndOutcome, [vgs: string, text: string][]> = {
 };
 
 /** One match-end line for `botId`, shaped by how its side finished.
- *  Same cooldown+chance gate as everything else — a bot that just spoke
- *  sits the gg beat out, which is itself lobby-accurate. */
+ *  NOT the shared cooldown gate — the gg beat is a once-per-match moment
+ *  and a bot that just taunted shouldn't sit it out; participation is a
+ *  flat high roll of its own. Still stamps lastSpoke so a bot that got
+ *  its line doesn't then double-speak through another path. */
 export function endTaunt(botId: string, outcome: EndOutcome): TauntLine | null {
-  return maybe(botId, () => {
-    const chords = END_VGS[outcome];
-    if (botRand() < TAUNT_VGS_CHANCE) {
-      const [chord, text] = pick(chords);
-      return { text, vgs: chord };
-    }
-    return { text: pickLine(END_POOLS[outcome]) };
-  });
+  if (botRand() > END_SPEAK_CHANCE) return null;
+  lastSpoke.set(botId, tauntNow());
+  const chords = END_VGS[outcome];
+  if (botRand() < TAUNT_VGS_CHANCE) {
+    const [chord, text] = pick(chords);
+    return { text, vgs: chord };
+  }
+  return { text: pickLine(END_POOLS[outcome]) };
 }
 
 /** A human called it ez — salt is the honest response. */
@@ -580,6 +582,14 @@ const TAUNT_VGS_CHANCE = 0.45;
 
 const SPEAK_CHANCE = 0.55;
 const COOLDOWN_MS = 20_000;
+// Match-over participation — nearly everyone says something at the horn;
+// the stagger (killFeed) is what keeps it from reading as a chorus.
+const END_SPEAK_CHANCE = 0.8;
+// Set by the match lifecycle (roomMatch.end/startNext): once the horn
+// fires, gameplay chatter (kills, contacts, 'incoming') is dead air —
+// only the outcome-shaped endTaunt beat should land on the scoreboard.
+let matchMuted = false;
+export function setMatchMuted(muted: boolean): void { matchMuted = muted; }
 
 const lastSpoke = new Map<string, number>();
 const pick = <T>(arr: readonly T[]): T => arr[(botRand() * arr.length) | 0]!;
@@ -663,6 +673,7 @@ export function setTauntClock(now: () => number): void { tauntNow = now; }
 // Line production is lazy: a suppressed event draws no RNG and touches
 // no ring — quiet rolls cost nothing and can't starve a replay's seed.
 function maybe<T>(botId: string, line: () => T): T | null {
+  if (matchMuted) return null;
   const now = tauntNow();
   const last = lastSpoke.get(botId) ?? 0;
   if (now - last < COOLDOWN_MS || botRand() > SPEAK_CHANCE) return null;
@@ -676,4 +687,5 @@ export function resetTauntCooldowns(): void {
   lastSpoke.clear();
   lastKillOn.clear();
   recent.length = 0;
+  matchMuted = false;
 }
