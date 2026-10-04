@@ -11,8 +11,6 @@ const _pitchQuat = new THREE.Quaternion();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
-const _d2r = (x: number, y: number, z: number): [number, number, number] =>
-  [x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180];
 
 /** True while a full-body oneshot (shoot/hit/death) actually OWNS the
  *  arms: during fadeOut the clip is still isRunning but its weight is
@@ -37,20 +35,43 @@ export class PoseControl {
   // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
   // is posed procedurally to meet the fixed gun socket.
   private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion; bind: THREE.Quaternion }[] = [];
-  // Right-arm grip pose per bone role — norm-name set + euler offset in
-  // bone-local space. Tuned on the posedump screenshot loop per rig.
-  private static HOLD_CHAINS: [Set<string>, [number, number, number]][] | null = null;
+  // Right-arm grip pose per bone role — norm-name set + quat offset in
+  // bone-local space. Solved analytically against the bind pose (target
+  // world direction per bone's +Y axis → back-converted to a local offset);
+  // blind euler tuning in bone space produces unpredictable world poses.
+  private static HOLD_CHAINS: Set<string>[] | null = null;
+  // Same hip-fire target pose solved per rig — each rig's bind local
+  // differs, so a quat that drops cyber's arm leaves vexa's hanging.
+  private static HOLD_QUATS: Record<string, [number, number, number, number][]> = {
+    cybersoldier: [
+      [0.3696, 0, 0.082, 0.9256],
+      [0.5198, 0, -0.6705, 0.5294],
+      [0.5661, 0, -0.4822, 0.6686],
+      [-0.208, 0, -0.0373, 0.9774],
+      [0.1679, 0, -0.5729, 0.8023],
+      [0.092, 0, -0.4257, 0.9002],
+    ],
+    vexa: [
+      [-0.1, 0, -0.8276, 0.5524],
+      [0.568, 0, 0.7929, 0.2204],
+      [0.7046, 0, -0.0591, 0.7072],
+      [0.0822, 0, -0.8304, 0.5511],
+      [-0.8729, 0, 0.4465, 0.1968],
+      [-0.7144, 0, -0.0469, 0.6982],
+    ],
+  };
+  private holdQuats: [number, number, number, number][];
   private static buildHoldChains(): void {
     if (PoseControl.HOLD_CHAINS) return;
     PoseControl.HOLD_CHAINS = [
-      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-45, -30, -15)],
-      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-50, 0, 0)],
-      [new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']), _d2r(0, 0, 0)],
+      new Set(['upperarmr', 'basehumanrupperarm', 'basehumanrupperarm1']),
+      new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']),
+      new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']),
       // Left arm comes across to the foregrip — without it the retargeted
       // clip tracks flail the free arm every frame.
-      [new Set(['upperarml', 'basehumanlupperarm']), _d2r(-60, 25, 15)],
-      [new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm']), _d2r(-70, 0, 0)],
-      [new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']), _d2r(0, 0, 0)],
+      new Set(['upperarml', 'basehumanlupperarm', 'basehumanlupperarm1']),
+      new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm']),
+      new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']),
     ];
   }
   wantHoldPose = false;
@@ -84,8 +105,9 @@ export class PoseControl {
   // to its shin tip (the *_end leaf node follows the skinned leg).
   private footSnaps: { foot: THREE.Object3D; shin: THREE.Object3D; tip: THREE.Object3D }[] = [];
 
-  constructor() {
+  constructor(variant: string = 'cybersoldier') {
     PoseControl.buildHoldChains();
+    this.holdQuats = PoseControl.HOLD_QUATS[variant] ?? PoseControl.HOLD_QUATS['cybersoldier']!;
   }
 
   /** Bones the far-LOD swap must keep real (freeze-proof) — pose control
@@ -122,9 +144,9 @@ export class PoseControl {
     // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
     if (PoseControl.HOLD_CHAINS) {
       for (let role = 0; role < PoseControl.HOLD_CHAINS.length; role++) {
-        const [norms, euler] = PoseControl.HOLD_CHAINS[role]!;
+        const norms = PoseControl.HOLD_CHAINS[role]!;
         if (norms.has(nb)) {
-          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
+          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion(...this.holdQuats[role]!), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
           break;
         }
       }

@@ -132,11 +132,11 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // lands facing +Z (toward the third-person camera), so the whole set
   // gets a π unwind onto the rig's -Z forward.
   'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: Math.PI,
-                    mount: { quat: [0.1926, -0.5309, 0.2594, -0.3372] } },
+                    mount: { quat: [-0.4085, 0.3914, -0.0042, 0.8246] } },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
   'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'], clipYawFix: Math.PI,
-                    mount: { quat: [0.1926, -0.5309, 0.2594, -0.3372] } },
+                    mount: { quat: [0.8778, -0.1951, -0.3364, -0.2796] } },
   'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
                     mount: { bone: 'handleft', quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 2.5, fat: 4, pos: [0, 0, -15] } },
 };

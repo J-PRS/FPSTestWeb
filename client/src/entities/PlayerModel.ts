@@ -76,7 +76,7 @@ export class PlayerModel {
   // Post-mixer pose corrections (aim pitch, hip-fire hold, spine lock,
   // IK foot snap) live in playerPose.ts — PoseControl owns the bone
   // lists it writes into.
-  private pose = new PoseControl();
+  private pose: PoseControl;
 
   /** Live-tune the hand-bone mount rotation (posedump loop) — deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
@@ -145,6 +145,7 @@ export class PlayerModel {
   constructor(scene: THREE.Scene, variant?: PlayerModelVariant) {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
+    this.pose = new PoseControl(this.variant);
   }
 
   async load(): Promise<void> {
