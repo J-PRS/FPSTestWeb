@@ -1044,6 +1044,25 @@ export class PlayerModel {
     if (this.colliderGizmo) this.colliderGizmo.visible = this.colliderShown && urlParams.debug;
   }
 
+  private wireframeMats: THREE.Material[] | null = null;
+  private wireframeOn = false;
+  /** Debug (?debug / menu DEBUG): render the body as wireframe so it can be
+   *  eyeballed against the collider capsule. */
+  setWireframe(on: boolean): void {
+    if (!this.model || on === this.wireframeOn) return;
+    this.wireframeOn = on;
+    if (!this.wireframeMats) {
+      const mats = new Set<THREE.Material>();
+      this.model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
+      });
+      this.wireframeMats = [...mats];
+    }
+    for (const m of this.wireframeMats) (m as THREE.MeshBasicMaterial).wireframe = on;
+  }
+
   private colliderShown = true;
   setColliderVisible(visible: boolean): void {
     this.colliderShown = visible;

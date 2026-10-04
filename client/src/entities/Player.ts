@@ -23,6 +23,7 @@ import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
 import { ENERGY } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
+import { urlParams } from '../core/params.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('Player');
@@ -345,8 +346,9 @@ export class Player {
       // A cloak running before the GLB arrived never got its ghost —
       // capture it now or the TP body renders opaque while invisible.
       if (this.status.cloaked) this.model.setGhost(true);
-      // Hide collider gizmo for local player (only show for remote players)
-      this.model.setColliderVisible(false);
+      // Collider gizmo stays armed — the update loop refreshes it so the
+      // menu DEBUG toggle shows/hides it like every other remote.
+      this.model.setColliderVisible(true);
     }
   }
 
@@ -401,8 +403,13 @@ export class Player {
     this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
     this.checkCameraSpinout(dt);
     // Model visibility follows the toggle AND death (observer cam is ghost
-    // flight â€” your corpse shouldn't fly with you)
-    this.model?.setVisible(this.thirdPerson && !this.isDead);
+    // flight â€” your corpse shouldn't fly with you). Debug renders the body
+    // wireframe + its collider even in first person so the mesh can be
+    // eyeballed against the capsule.
+    const dbg = !!urlParams.debug;
+    this.model?.setVisible((this.thirdPerson || dbg) && !this.isDead);
+    this.model?.setWireframe(dbg);
+    this.model?.setColliderVisible(true);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
