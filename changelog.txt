@@ -1,3 +1,5 @@
+2026-10-01 - gunlab split: previews.ts (creature/pickup/item builders) + scans.ts (z/hole/gap/vol lints); 1355 -> 963 lines
+2026-10-01 - vite config: dropped stale colyseus.js optimizeDeps entry (package uninstalled, was 504-ing every dev page)
 2026-10-01 - bot loadout: wounded-explosive gate shared via pickBotWeaponSafe (offline bots now swap off aoe at low hp like wire bots)
 2026-10-01 - GLB payload cut ~3x across the board (85 files): public
 models 62->27MB, T2 interior difs 56->39MB, anims 3->2MB. gltf-transform

@@ -110,7 +110,7 @@ export default defineConfig(({ mode }) => ({
     },
   }] : [])],
   optimizeDeps: {
-    include: ['colyseus.js'],
+    include: [], // colyseus.js is .old-retired + uninstalled; leaving it here 504s the server
   },
   build: {
     outDir: 'dist',
