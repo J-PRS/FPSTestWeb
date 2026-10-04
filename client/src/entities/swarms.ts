@@ -3,6 +3,7 @@ import { SpeciesSwarm, InstancedBlobShadows, type SwarmPart, type SwarmSlotOwner
 import { GibPool } from '../effects/gibs.js';
 import type { Terrain } from '../world/terrain.js';
 import { registerDiag, markProbe } from '../core/fxDiag.js';
+import { bakeVertexAO } from '../effects/vertexAO.js';
 
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
@@ -10,7 +11,20 @@ export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 // scene only pays for species actually in play. `capacity` is the
 // initial buffer size: species grow when full and idle-shrink after
 // ~30s of low occupancy (checkShrink driven from updateGibs).
-export interface SwarmSpec { parts: () => SwarmPart[]; capacity: number }
+// `bake` runs the shared AO+grunge+wear pass over the part geometries —
+// for mechanical species that want the gun-metal pipeline, not organics.
+// What the gunlab needs to run a live specimen — every swarm-rendered
+// entity shares this shape, so a preview needs no per-species wiring.
+export interface LabEntity {
+  pos: THREE.Vector3; radius: number;
+  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void;
+  dispose(): void;
+}
+export interface SwarmSpec {
+  parts: () => SwarmPart[]; capacity: number; bake?: boolean;
+  /** Lab/debug spawn — entities that don't fit the shared ctor (Ball) omit it. */
+  spawn?: (scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => LabEntity;
+}
 
 const swarms = new Map<string, SpeciesSwarm>();
 const gibPools = new Map<string, GibPool>();
@@ -32,7 +46,22 @@ export function getSwarm(species: string): SpeciesSwarm | null {
   if (existing) return existing;
   const spec = specTable[species];
   if (!spec || !registryScene) return null;
-  const swarm = new SpeciesSwarm(registryScene, spec.parts(), spec.capacity);
+  const parts = spec.parts();
+  if (spec.bake) {
+    for (const p of parts) {
+      // bakeMesh de-indexes geometry into a CLONE (indexed verts can't
+      // hold per-corner attributes) — de-index in place FIRST, or every
+      // baked attribute lands on a throwaway clone and the instanced
+      // mesh renders the virgin buffer. And bake ONE part per host:
+      // stacked parts at origin mutually occlude and the whole bake
+      // floors out black — each part wants its own self-occlusion only.
+      if (p.geometry.index) p.geometry = p.geometry.toNonIndexed();
+      const host = new THREE.Group();
+      host.add(new THREE.Mesh(p.geometry, p.material));
+      bakeVertexAO(host, { grime: true }); // crevice darkening — the mottle the gun pipeline gets
+    }
+  }
+  const swarm = new SpeciesSwarm(registryScene, parts, spec.capacity);
   // Aim-probe tags — a crosshair hit on any part mesh resolves to this
   // species + the owning entity through swarm.ownerAt.
   swarm.meshes.forEach((m, i) => markProbe(m, { kind: 'species', species, swarm, part: i }));
