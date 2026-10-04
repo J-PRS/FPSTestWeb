@@ -1,3 +1,7 @@
+2026-10-01 - polyart gun moved to the forward hand: its aim pose extends the
+left arm, so the mount bone is per-variant now (GUN_MOUNT_BONE) with a solved
+mount quat on Hand_Left. Was parked on the trailing right wrist.
+
 2026-10-01 - heavy/light gun mounts: per-variant hand-local mount quats
 (solved on the posedump loop, euler extraction was lossy) riding gunBaseQuat,
 plus a bone-space seat override for polyart whose palm buried the prop in

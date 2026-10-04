@@ -113,12 +113,12 @@ export class PlayerModel {
     cybersoldier: [0.1926, -0.5309, 0.2594, -0.3372],
     vexa: [0.1926, -0.5309, 0.2594, -0.3372],
     scifisoldier: [-0.471, 0.1186, 0.0367, 0.5126],
-    polyart: [0.3609, -0.3991, 0.315, -0.3336],
+    polyart: [-0.0171, -0.0844, -0.7012, -0.0297],
   };
-  // Bone-space mount position overrides (hand-bone local units) where the
-  // generic near-origin seat buries the prop inside the wrist.
-  private static GUN_MOUNT_POS: Record<string, [number, number, number]> = {
-    polyart: [-5, 8, 15],
+  // Which hand carries the gun (normBone key) when a rig's aim pose puts
+  // the gun grip on the left — polyart's forward arm is the left one.
+  private static GUN_MOUNT_BONE: Record<string, string> = {
+    polyart: 'handleft',
   };
   private wantHoldPose = false;
   private holdW = 0;
@@ -144,6 +144,7 @@ export class PlayerModel {
   gunBaseY = 0;
   lastRoll = 0;
   private handBone: THREE.Bone | null = null;
+  private mountBone: THREE.Bone | null = null;
   gun: THREE.Group | null = null;
   private gunMesh: THREE.Mesh | null = null;
   private heldWeapon = -1;
@@ -572,6 +573,8 @@ export class PlayerModel {
       || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
+    const mbn = PlayerModel.GUN_MOUNT_BONE[this.variant];
+    if (mbn && nb === mbn) this.mountBone = child as THREE.Bone;
     // Socket-gun rig arm chain — norms collapse the per-pack naming
     // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
     if (PlayerModel.HOLD_CHAINS) {
@@ -606,7 +609,7 @@ export class PlayerModel {
   private static _gunMat: THREE.MeshStandardMaterial | null = null;
   private attachGun(mann: boolean): void {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
-    const handBone = this.handBone;
+    const handBone = this.mountBone ?? this.handBone;
     if (!handBone && !classGun) return;
     // Socket rigs without native armed anims get the canned grip pose —
     // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
@@ -680,13 +683,6 @@ export class PlayerModel {
         this.gun.quaternion.copy(this.gunBaseQuat);
       } else {
         this.gun.rotation.y = Math.PI;
-      }
-      const mp = PlayerModel.GUN_MOUNT_POS[this.variant];
-      if (mp) {
-        this.gunRestX = mp[0];
-        this.gunBaseY = mp[1];
-        this.gunBaseZ = mp[2];
-        this.gun.position.set(mp[0], mp[1], mp[2]);
       }
     }
 
