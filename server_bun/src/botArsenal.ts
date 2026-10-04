@@ -80,6 +80,7 @@ export class BotArsenal implements BeamHost {
     this.wasCarrying.delete(id);
     this.lastShot.delete(id);
     this.lastPropelAt.delete(id);
+    this.propels.delete(id);
   }
 
   /** Players can't out-run a weapon's rate either — the drawn gun owns
