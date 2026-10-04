@@ -381,16 +381,15 @@ export class MoveSim {
     const dist = s.pos.y - groundY;
 
     if (dist < 0) {
-      const anyGrounded = s.onGround || this.groundedBuffered;
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
       this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
 
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-      if (this.input.skiHeld && anyGrounded) {
-        // Skiing: preserve speed, kill ~98% of the into-slope component.
-        const d = velDotN * 0.98;
-        s.vel.x -= n.x * d; s.vel.y -= n.y * d; s.vel.z -= n.z * d;
-      } else if (velDotN < 0) {
+      // Frictionless contact for everyone: the inward component dies
+      // completely (tangential speed preserved 100%), the positive
+      // leaving component is never touched. The snap band is what
+      // keeps the body tracking terrain instead of floating.
+      if (velDotN < 0) {
         s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
       }
 
