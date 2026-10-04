@@ -106,6 +106,20 @@ export class PlayerModel {
       [new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']), _d2r(0, 0, 0)],
     ];
   }
+  // Solved hand-local mount quats (x,y,z,w) per class-body variant —
+  // barrel on facing, rail up. Quats, not eulers: euler extraction was
+  // lossy under these bone spaces. Mannequin keeps its own path above.
+  private static GUN_MOUNT_QUAT: Record<string, [number, number, number, number]> = {
+    cybersoldier: [0.1926, -0.5309, 0.2594, -0.3372],
+    vexa: [0.1926, -0.5309, 0.2594, -0.3372],
+    scifisoldier: [-0.471, 0.1186, 0.0367, 0.5126],
+    polyart: [0.3609, -0.3991, 0.315, -0.3336],
+  };
+  // Bone-space mount position overrides (hand-bone local units) where the
+  // generic near-origin seat buries the prop inside the wrist.
+  private static GUN_MOUNT_POS: Record<string, [number, number, number]> = {
+    polyart: [-5, 8, 15],
+  };
   private wantHoldPose = false;
   private holdW = 0;
 
@@ -656,15 +670,25 @@ export class PlayerModel {
     // Class-body hand bones (cyber/vexa): measured on the posedump loop —
     // the palm's axes differ per rig family, tune via debugSetGunRot.
     if (mann) { this.gun.rotation.set(Math.PI / 2, 0, 0); this.gunBaseX = Math.PI / 2; }
-    else if (classGun) {
-      // Solved on the posedump loop: hand-local mount quat that puts
-      // the barrel on the facing with the rail up. Written to gunBaseQuat
-      // so fx envelopes compose on top instead of stomping rotation.x/z.
-      this.gunBaseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        22.3 * Math.PI / 180, 27.3 * Math.PI / 180, 2.5 * Math.PI / 180));
-      this.gun.quaternion.copy(this.gunBaseQuat);
+    else {
+      // Hand-local mount eulers solved per rig on the posedump loop —
+      // palm axes differ per family. Written to gunBaseQuat so fx
+      // envelopes compose on top instead of stomping rotation.x/z.
+      const mount = PlayerModel.GUN_MOUNT_QUAT[this.variant];
+      if (mount) {
+        this.gunBaseQuat = new THREE.Quaternion(mount[0], mount[1], mount[2], mount[3]);
+        this.gun.quaternion.copy(this.gunBaseQuat);
+      } else {
+        this.gun.rotation.y = Math.PI;
+      }
+      const mp = PlayerModel.GUN_MOUNT_POS[this.variant];
+      if (mp) {
+        this.gunRestX = mp[0];
+        this.gunBaseY = mp[1];
+        this.gunBaseZ = mp[2];
+        this.gun.position.set(mp[0], mp[1], mp[2]);
+      }
     }
-    else this.gun.rotation.y = Math.PI;
 
     // Muzzle flash: additive sprite at the barrel tip, flashed on
     // fire() and faded in update(). Cheap (one sprite per remote),
@@ -778,17 +802,18 @@ export class PlayerModel {
       return best.n ? best.sum / best.n : null;
     })();
     if (canonical === null) return;
-    // clipYawFix rotates the TARGET: rigs whose whole retarget set agrees
-    // on the wrong convention (100%-bake rigs — every clip reads flipped)
-    // get every hip track unwound by the fix, not just outliers.
-    const target = canonical + (RIG_MANIFEST[this.variant]?.clipYawFix ?? 0);
+    // clipYawFix is an explicit unwind: rigs whose whole retarget set
+    // shares the wrong convention (100%-bake rigs) can't derive a target
+    // from local-track yaw — the armature parent carries its own offset —
+    // so every hip track just gets premultiplied by the fix, no measure.
+    const fixRad = RIG_MANIFEST[this.variant]?.clipYawFix ?? 0;
     this.model.updateMatrixWorld(true);
     const fixed: string[] = [];
     for (const [, a] of this.animations) {
       const clip = a.getClip();
       const hit = hipTrackOf(clip);
       if (!hit?.node.parent) continue;
-      let delta = yawOf(hit.tr) - target;
+      let delta = fixRad !== 0 ? -fixRad : yawOf(hit.tr) - canonical;
       while (delta > Math.PI) delta -= 2 * Math.PI;
       while (delta < -Math.PI) delta += 2 * Math.PI;
       if (Math.abs(delta) < 0.5) continue;
