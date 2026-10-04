@@ -1,3 +1,4 @@
+2026-10-01 - botArsenal untrack clears propels telemetry map
 2026-10-01 - Shared body-contact list, MoveSim skips own capsule by selfId
 2026-10-01 - flagCarriedBy direct check replaces per-tick flag snapshot clones
 2026-10-01 - Senses: deployables iterate live map, pickups share per-step cache
