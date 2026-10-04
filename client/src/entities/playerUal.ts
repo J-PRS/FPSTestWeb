@@ -237,7 +237,9 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
   const _hold = new THREE.Quaternion();
   const _off = new THREE.Quaternion();
   for (const [name, clip] of baked) {
-    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01') continue;
+    // Aim poses feed the masked aim layer — flattening them would pin the
+    // pitch blend to a single constant frame.
+    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01' || name.includes('Aim_')) continue;
     for (const tr of clip.tracks) {
       if (!tr.name.endsWith('.quaternion')) continue;
       const role = roleOf.get(tr.name.slice(0, tr.name.indexOf('.')));
