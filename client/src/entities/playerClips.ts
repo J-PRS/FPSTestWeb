@@ -102,6 +102,11 @@ export interface RigManifest {
     size?: number;
     fat?: number;
     pos?: [number, number, number];
+    /** Parent the prop to the model root and drive it from the bone's
+     *  world transform per frame — for rigs whose bone chain carries
+     *  rotated non-uniform scale (shear no diagonal compensation can
+     *  undo). pos/quat keep their bone-space meanings. */
+    world?: boolean;
   };
   /** Post-bake facing fix: when a rig's retarget sources agree on a hip
    *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
@@ -138,7 +143,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'], clipYawFix: Math.PI,
                     mount: { quat: [0.8778, -0.1951, -0.3364, -0.2796] } },
   'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
-                    mount: { bone: 'handleft', quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 2.5, pos: [0, 0, -15] } },
+                    mount: { bone: 'handleft', world: true, quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 1.3, pos: [0, 0, -15] } },
 };
 
 // armorClass → dedicated body GLB, derived from the manifest — table

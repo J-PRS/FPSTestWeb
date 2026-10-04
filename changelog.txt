@@ -1,3 +1,4 @@
+2026-10-04 - world-frame gun mount for shear-scaled rigs: polyart's hand bone carries rotated non-uniform armature scale that no per-axis compensation can undo — prop now parents to the model root, tracks the bone's world transform per frame, uniform 1.3 scale (was a 2.6m needle)
 2026-10-04 - hip Y root motion clamped to +/-0.25m of each clip's first key: polyart Jump baked +0.8m into the hips and floated the mesh out of the collider
 2026-10-04 - debug mode (?debug / menu DEBUG) renders the local player's 3P body as wireframe + collider capsule so the mesh can be checked against the hitbox in first person
 2026-10-04 - fire spine-lock gated to UAL-retargeted rigs: locking a native shoot clip's torso to bind swung the mounted gun ~50deg sideways on polyart

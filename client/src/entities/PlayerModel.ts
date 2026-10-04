@@ -16,6 +16,9 @@ const logger = new ChildLogger('PlayerModel');
 // 60° crease stay hard. One pass per geometry — GLBs share geo across
 // meshes, so cache by source.
 const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+const _gunV = new THREE.Vector3();
+const _gunQ = new THREE.Quaternion();
+const _gunMQ = new THREE.Quaternion();
 function smoothShade(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   let g = _creased.get(geo);
   if (!g) { g = toCreasedNormals(geo); _creased.set(geo, g); }
@@ -98,6 +101,14 @@ export class PlayerModel {
   lastRoll = 0;
   private handBone: THREE.Bone | null = null;
   private mountBone: THREE.Bone | null = null;
+  // Bone-mounted gun: world scale is renormalized every update — rigs
+  // like polyart carry non-uniform armature scale that shifts with the
+  // pose, so a one-time per-axis divide still let the prop stretch
+  // needle-thin (the "sword" gun).
+  private gunMountBone: THREE.Object3D | null = null;
+  private gunSize = 0.7;
+  private gunMountPos: [number, number, number] = [0, 0, 0];
+  private gunMountQuat: THREE.Quaternion | null = null;
   gun: THREE.Group | null = null;
   private gunMesh: THREE.Mesh | null = null;
   private heldWeapon = -1;
@@ -565,9 +576,29 @@ export class PlayerModel {
     const ws = handBone!.getWorldScale(new THREE.Vector3());
     const mount = RIG_MANIFEST[this.variant]?.mount;
     logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.pose.aimBoneCount });
+    if (mount?.world && this.model) {
+      // World-frame mount: the prop parents to the model root and tracks
+      // the bone's world transform in update() — rigs with rotated
+      // non-uniform armature scale shear a bone-parented prop into a
+      // needle, which no per-axis scale compensation can undo.
+      this.gunMountBone = handBone;
+      this.gunMountPos = mount.pos ?? [0, 0, 0];
+      this.gunMountQuat = mount.quat ? new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]) : new THREE.Quaternion();
+      this.gunSize = mount.size ?? 0.7;
+      this.gunUnit = 1 / this.modelScale;
+      this.gunKickZ = 0.15 * this.gunUnit;
+      this.gunBaseQuat = new THREE.Quaternion();
+      this.gun.scale.setScalar(this.gunSize / this.modelScale);
+      this.muzzleFlash = ModelFx.buildMuzzleFlash();
+      this.gun.add(this.muzzleFlash);
+      this.model.add(this.gun);
+      if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
+      return;
+    }
     // Per-axis: some rigs (polyart) carry non-uniform bone scale that
     // squeezes the prop into a needle when only ws.x is compensated.
     const gunSize = mount?.size ?? 0.7;
+    this.gunSize = gunSize;
     this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
     if (mount?.fat) this.gunMesh!.scale.set(mount.fat, mount.fat, 1);
     this.gunBaseZ = 0.05 / ws.x;
@@ -906,6 +937,19 @@ export class PlayerModel {
 
   update(dt: number): void {
     this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined);
+    if (this.gunMountBone && this.gun && this.model) {
+      // Refresh the fx base fields from the bone's live world transform —
+      // tickGunFx composes kick/swap/throw deltas on top of these.
+      const mb = this.gunMountBone;
+      mb.updateWorldMatrix(true, false);
+      mb.localToWorld(_gunV.set(this.gunMountPos[0], this.gunMountPos[1], this.gunMountPos[2]));
+      this.model.worldToLocal(_gunV);
+      this.gunRestX = _gunV.x; this.gunBaseY = _gunV.y; this.gunBaseZ = _gunV.z;
+      mb.getWorldQuaternion(_gunQ);
+      this.model.getWorldQuaternion(_gunMQ).invert();
+      this.gunBaseQuat!.copy(_gunMQ).multiply(_gunQ).multiply(this.gunMountQuat!);
+      this.gun.scale.setScalar(this.gunSize / this.modelScale);
+    }
     this.fx.tick(dt);
   }
 
