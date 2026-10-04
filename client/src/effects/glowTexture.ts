@@ -4,8 +4,9 @@ import * as THREE from 'three';
 // billboarded glow particle (trails, explosions, nuggets, impacts).
 const cache = new Map<number, THREE.Texture>();
 
-export function getGlowTexture(size = 64): THREE.Texture {
-  let tex = cache.get(size);
+export function getGlowTexture(size = 64, falloff = 0.35, midA = 0.65): THREE.Texture {
+  const key = size + falloff * 1000 + midA; // distinct curve = distinct cache entry
+  let tex = cache.get(key);
   if (!tex) {
     const c = document.createElement('canvas');
     c.width = c.height = size;
@@ -13,12 +14,12 @@ export function getGlowTexture(size = 64): THREE.Texture {
     const half = size / 2;
     const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
     grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.35, 'rgba(255,255,255,0.65)');
+    grad.addColorStop(falloff, `rgba(255,255,255,${midA})`);
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     tex = new THREE.CanvasTexture(c);
-    cache.set(size, tex);
+    cache.set(key, tex);
   }
   return tex;
 }
