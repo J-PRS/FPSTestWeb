@@ -244,11 +244,15 @@ function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayer
   // knows nothing about them; cleanup is owned by TeamBots.
   // 'dummy' is the ?dummy debug body — gameLoop ticks it from a closure,
   // so pruning it would leave a disposed model animating forever.
+  // Wire 'BOT-' ids are NOT exempt: they live and die by the roster like
+  // humans, or a bot that left keeps an unticked frozen shell forever —
+  // shootable, but every claim lands 'Shot: unknown target'.
   deps.world.remotePlayers.prune(
-    (id) => isBotId(id) || id.startsWith('dummy') || players.has(id),
-    // Bots/dummies keep their body across death+respawn — the death
+    (id) => id.startsWith('bot:') || id.startsWith('dummy') || players.has(id),
+    // Local bots/dummies keep their body across death+respawn — the death
     // shrink must NOT reap them or they respawn invisible and off-board.
-    (id) => isBotId(id) || id.startsWith('dummy'),
+    // A wire bot's corpse shrink may reap it: roster truth recreates it.
+    (id) => id.startsWith('bot:') || id.startsWith('dummy'),
   );
 }
 

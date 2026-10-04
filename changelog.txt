@@ -1,3 +1,4 @@
+2026-10-04 - remote prune: wire BOT- ids were exempt from roster cleanup (isBotId covered them) — a bot that left kept an unticked frozen shell, shootable but every claim landed Shot: unknown target. Exemption now local-only (bot:/dummy)
 2026-10-01 - heal grenade: self now admitted to healAll (friendly() excluded the thrower — feet-heals did nothing, FFA healed nobody); armor nade verified plates all incl. foes by design
 2026-10-01 - scoreboard: dropped diamond/dot glyph before names (redundant next to [BOT] badge)
 2026-10-01 - bot names: scoreboard shows [BOT] NAME badge (no pretense); chat stays plain callsigns
