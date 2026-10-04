@@ -1,3 +1,6 @@
+2026-10-01 - heavy gun reads as a weapon: 2.5m bore with a 4x cross-section
+fatten on gun-local xy (was a rod lost inside the gauntlet).
+
 2026-10-01 - polyart gun visible: fist gauntlet swallowed the 0.7m prop —
 per-variant gun size (heavy carries a 1.4m bore) + bone-space seat that
 slides the receiver back into the grip, and per-axis bone-scale

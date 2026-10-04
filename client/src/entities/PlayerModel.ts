@@ -122,7 +122,10 @@ export class PlayerModel {
   };
   // Per-variant gun size (meters) + bone-space seat when the generic
   // near-origin seat hides the receiver inside the fist.
-  private static GUN_SIZE: Record<string, number> = { polyart: 1.4 };
+  private static GUN_SIZE: Record<string, number> = { polyart: 2.5 };
+  // Cross-section fatten (gun-local x/y) for rigs whose silhouette would
+  // otherwise shrink the prop to a rod.
+  private static GUN_FAT: Record<string, number> = { polyart: 4 };
   private static GUN_MOUNT_POS: Record<string, [number, number, number]> = {
     polyart: [0, 0, -15],
   };
@@ -670,6 +673,8 @@ export class PlayerModel {
     // squeezes the prop into a needle when only ws.x is compensated.
     const gunSize = PlayerModel.GUN_SIZE[this.variant] ?? 0.7;
     this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
+    const fat = PlayerModel.GUN_FAT[this.variant];
+    if (fat) this.gunMesh!.scale.set(fat, fat, 1);
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
     this.gunUnit = 1 / ws.x;
