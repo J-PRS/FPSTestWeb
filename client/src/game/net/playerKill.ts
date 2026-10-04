@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
+import { botDisplayName } from '../../../../shared/botNames.js';
 import { noteKill } from '../../core/stateDebug.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
@@ -21,14 +22,16 @@ const STREAK_NAMES: [number, string][] = [
 
 /** A kill landed somewhere: feed row for everyone, death overlay when it's
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
-export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number): void {
+export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number): void {
   const { deps, nm } = ctx;
   const logger = deps.logger;
   if (deps.world.playbackMode) return;
   noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
-  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId, weapon);
+  const roster = nm().getPlayers();
+  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId, weapon,
+    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team }, air);
   if (targetId === localId) {
     logger.info(`Local player killed by ${shooterId}`);
     const player = deps.lazyPlayer();
@@ -41,7 +44,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
       ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
       : shooterId === targetId
         ? `YOU DIED\nfragged yourself`
-        : `YOU DIED\nfragged by ${shooterId}`);
+        : `YOU DIED\nfragged by ${botDisplayName(shooterId)}`);
     return;
   }
 
@@ -51,7 +54,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
     // Announce only on the crossing kill — `>=` repeated the title on
     // every frag past the threshold, so a 4-kill life yelled SPREE twice.
     const streakName = STREAK_NAMES.find(([n]) => ++deps.world.killStreak === n)?.[1];
-    const name = targetId.replace(/^bot:/, '');
+    const name = botDisplayName(targetId);
     deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();
   }

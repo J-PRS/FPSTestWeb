@@ -11,6 +11,7 @@
 
 import { vgsGate } from './vgs.ts';
 import { speakVgs, speakChat, chatTtsEnabled } from '../core/tts.js';
+import { botDisplayName, feedNames } from '../../../shared/botNames.js';
 
 export interface ChatDeps {
   send(text: string, team: boolean): void;
@@ -141,22 +142,22 @@ export class Chat {
       if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) return;
       if (vgs) {
         // Own VGS spoke at send time — the echo back is feed-only.
-        if (!isSelf) void speakVgs(text, from);
+        if (!isSelf) void speakVgs(feedNames(text), from);
       } else if (chatTtsEnabled()) {
-        speakChat(text, from); // own lines too — audible send confirmation
+        speakChat(feedNames(text), from); // own lines too — audible send confirmation
       }
     }
     const line = document.createElement('div');
     line.style.cssText = 'text-shadow:1px 1px 0 #000;margin-top:1px;';
     if (from === null) {
       line.style.color = '#9cf';
-      line.textContent = text;
+      line.textContent = feedNames(text);
     } else {
       const who = document.createElement('span');
       who.style.color = team ? '#7d7' : '#fd8';
-      who.textContent = `${team ? '[T] ' : ''}${from}: `;
+      who.textContent = `${team ? '[T] ' : ''}${botDisplayName(from)}: `;
       const body = document.createElement('span');
-      body.textContent = vgs ? `[${vgs}] ${text}` : text;
+      body.textContent = vgs ? `[${vgs}] ${feedNames(text)}` : feedNames(text);
       // Whole line tinted for team — name-color alone was easy to miss
       // mid-fight. A left tick marks the channel too.
       if (team) {

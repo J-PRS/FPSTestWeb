@@ -10,6 +10,7 @@ import * as ch from './hud/hudChrome.js';
 
 import { Player } from '../entities/Player.js';
 import type { TeamId } from '../../../shared/teams.js';
+import { feedNames } from '../../../shared/botNames.js';
 
 const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
 
@@ -130,8 +131,15 @@ export class HUD {
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
    *  fade, capped at 6 rows; textContent only (names are server strings). */
-  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number): void {
-    ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, weapon);
+  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number,
+    teams?: { shooter?: string; target?: string }, air?: number): void {
+    ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, weapon, teams, air);
+  }
+
+  /** Run clock is only meaningful while the wave director ticks (offline
+   *  sandbox) — online/matches it's a frozen 00:00, so hide it. */
+  setTimerVisible(v: boolean): void {
+    this.timerEl.style.display = v ? '' : 'none';
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
@@ -214,6 +222,9 @@ export class HUD {
   get scoreboardVisible(): boolean { return this.sb.isVisible; }
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
+
+  /** Intermission footer on the board — "NEXT MATCH IN N". */
+  setScoreboardCountdown(secLeft: number | null): void { this.sb.setCountdown(secLeft); }
 
   /** Header over the roster — "CAPTURE THE FLAG · Dangerous Crossing". */
   setScoreboardTitle(t: string): void { this.sb.setTitle(t); }
@@ -402,9 +413,9 @@ export class HUD {
   logEvent(text: string, cls?: string): void {
     const row = document.createElement('div');
     row.className = 'log-row' + (cls ? ` ${cls}` : '');
-    row.textContent = text;
+    row.textContent = feedNames(text);
     this.playerList.appendChild(row);
     while (this.playerList.childElementCount > 9) this.playerList.firstElementChild!.remove();
-    setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 9000);
+    setTimeout(() => row.remove(), 9000); // hard cut — see feedKill
   }
 }

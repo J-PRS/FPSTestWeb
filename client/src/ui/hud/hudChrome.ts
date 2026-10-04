@@ -1,4 +1,5 @@
 import { WeaponType } from '../../../../shared/weapons.js';
+import { botDisplayName } from '../../../../shared/botNames.js';
 import type { HUD } from '../hud.js';
 
 // HUD chrome family — kill feed, match clock + flag chips, death
@@ -12,7 +13,7 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
   el.classList.toggle('taken', st !== 'home');
 };
 
-export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number): void {
+export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number, teams?: { shooter?: string; target?: string }, air?: number): void {
     const row = document.createElement('div');
     row.className = 'kf-row';
     if (localIsShooter) row.classList.add('me');
@@ -20,21 +21,29 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     // normal frag in the feed.
     const suicide = shooter === target;
     const s = document.createElement('span');
-    s.className = 'kf-s';
-    s.textContent = shooter === 'environment' ? '☠' : shooter;
+    // Team tint like the TAB board — alpha/bravo first letter keys the class.
+    s.className = 'kf-s' + (teams?.shooter ? ` tm-${teams.shooter[0]}` : '');
+    s.textContent = shooter === 'environment' ? '☠' : botDisplayName(shooter);
     const w = document.createElement('span');
     w.className = 'kf-w';
     // Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
-    w.textContent = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}] ` : '';
+    // Projectile airtime rides after the weapon: `[PlasmaCannon] [1.3s]` —
+    // long-lob kills earn the visible flight time. Sub-100ms hits are
+    // effectively point-blank; the bracket would just be noise.
+    const wName = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}]` : '';
+    const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
+    w.textContent = wName || airTag ? `${wName}${airTag} ` : '';
     const t = document.createElement('span');
-    t.className = 'kf-t' + (localIsTarget ? ' dead' : '');
-    t.textContent = suicide ? 'self' : target;
+    t.className = 'kf-t' + (localIsTarget ? ' dead' : teams?.target ? ` tm-${teams.target[0]}` : '');
+    t.textContent = suicide ? 'self' : botDisplayName(target);
     row.append(s, w, t);
     h.killFeed.append(row);
     while (h.killFeed.childElementCount > 6) h.killFeed.firstElementChild!.remove();
-    setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
-    const wname = weapon !== undefined && WeaponType[weapon] ? ` [${WeaponType[weapon]}]` : '';
-    h.logEvent(suicide ? `${target}${wname} cratered` : `${shooter}${wname} ▸ ${target}`, localIsShooter ? 'me' : localIsTarget ? 'dead' : undefined);
+    // Hard expiry — a fading ghost row reads as a smear while the stack
+    // snaps up through it; classic feeds just cut the row in one frame.
+    setTimeout(() => row.remove(), 5200);
+    // Kills render ONCE, here — the #player-list log (logEvent) keeps the
+    // non-frag timeline (flags, match text) or every kill doubles up.
   }
 
 export function setMatchStatus(h: HUD, msLeft: number | null, flags: { alpha?: string; bravo?: string }): void {

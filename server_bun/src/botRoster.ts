@@ -53,7 +53,10 @@ export class BotRoster {
   populate(n: number): void {
     for (let i = 0; i < n; i++) {
       // Callsign from the shared pool, not the room name — 'BOT-escalade-11'
-      // read as a map tag, not a pilot. Index suffix keeps ids unique.
+      // read as a map tag, not a pilot. The index suffix stays IN THE ID:
+      // per-id seeds (routePref, jitteredTtl) hash the string, and display
+      // strips it via botDisplayName — pilots on screen, unique seeds on
+      // the wire.
       const idx = this.nextIdx++;
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const loadout = process.env.FPS_SOAK_RANDLO === '1'
