@@ -518,6 +518,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
     // differ only in .name (the exporter's per-file .NNN suffixes already
     // stripped) render identically and can share one draw call.
     std.map ? std.map.name || 'tex' : '-',
+    std.emissiveMap ? std.emissiveMap.name || 'em' : '-',
     String(std.roughness ?? ''), String(std.metalness ?? ''),
     std.emissive ? std.emissive.getHexString() : '-',
     String(std.emissiveIntensity ?? ''),
@@ -532,12 +533,15 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
   // maps/emissive/AO for a fraction of the fragment cost.
   let useMat: THREE.Material = mat;
   if (std.isMeshStandardMaterial) {
+    // DIF interiors ship TWO textures: baseColor (the wall albedo) and a
+    // zero-strength emissive on channel 1 — the interior's baked T2
+    // lightmap. Lambert can consume it as lightMap, so the hulls carry
+    // their authored shading instead of flat sun-lighting.
     const lam = new THREE.MeshLambertMaterial({
       color: std.color,
-      map: std.map,
-      emissive: std.emissive,
-      emissiveMap: std.emissiveMap,
-      emissiveIntensity: std.emissiveIntensity,
+      map: std.map ?? std.emissiveMap,
+      lightMap: std.emissiveMap,
+      lightMapIntensity: 1.0,
       normalMap: std.normalMap,
       aoMap: std.aoMap,
       aoMapIntensity: std.aoMapIntensity,
