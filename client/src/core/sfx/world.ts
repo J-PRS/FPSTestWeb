@@ -67,8 +67,10 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
   // a desert has a base breeze even standing still.
   l.wind?.set(Math.min(0.28, 0.04 + speed / 160 * 0.24));
   // Ski scrape only when flagged — ground contact + speed gating lives
-  // on the Player side so this just follows the flag.
-  l.ski?.set(player.skiing ? Math.min(0.2, speed / 90 * 0.2) : 0);
+  // on the Player side so this just follows the flag. The floor keeps a
+  // slow carve audible — the old pure-speed curve stayed inaudible until
+  // ~60 m/s where it only matters at cap anyway.
+  l.ski?.set(player.skiing ? Math.min(0.28, 0.04 + speed / 50 * 0.24) : 0);
   l.jet?.set(player.jetting ? 0.55 : 0);
 }
 
@@ -146,7 +148,7 @@ export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, j
   if (!l) return;
   l.busy = jetting || skiing;
   l.jet?.setPos(pos, vel); l.jet?.set(jetting ? 0.45 : 0);
-  l.ski?.setPos(pos, vel); l.ski?.set(skiing ? Math.min(0.18, speed / 90 * 0.18) : 0);
+  l.ski?.setPos(pos, vel); l.ski?.set(skiing ? Math.min(0.24, 0.035 + speed / 50 * 0.2) : 0);
 }
 
 type CueKind = 'pounce' | 'skitter' | 'splat' | 'dart' | 'zap' | 'launch' | 'die' | 'hit' | 'rustle' | 'squawk';
