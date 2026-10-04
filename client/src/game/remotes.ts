@@ -328,6 +328,12 @@ export function createRemotes(deps: RemotesDeps) {
   let wasConnected = true;
 
   deps.world.remotePlayers.hooks = makeRemoteHooks(deps);
+  // Tint memory keys on ids — same leaver-leak class as aliveSince.
+  const prevOnRemove = deps.world.remotePlayers.hooks.onRemove;
+  deps.world.remotePlayers.hooks.onRemove = (id, ent, reason) => {
+    lastTintOf.delete(id);
+    prevOnRemove?.(id, ent, reason);
+  };
 
   function getLastSentPos() { return lastSentPos; }
   function setLastSentPos(pos: { x: number; y: number; z: number }) {
