@@ -589,11 +589,14 @@ export class NetworkManager {
   private upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
     if (!playerId || playerId === this.localPlayerId) return;
     const existing = this.players.get(playerId);
-    const next = { ...existing, id: playerId } as RemotePlayerState;
+    // Mutate in place: a fresh object per player per tick was the
+    // biggest steady-state allocation on the 20Hz wire path. Merge
+    // order is unchanged — patch → existing → default.
+    const next = existing ?? ({ id: playerId } as RemotePlayerState);
     for (const k of ROSTER_FIELDS) {
       (next as unknown as Record<string, unknown>)[k] = patch[k] ?? existing?.[k] ?? ROSTER_DEFAULTS[k];
     }
-    this.players.set(playerId, next);
+    if (!existing) this.players.set(playerId, next);
   }
 
   private handlePlayerJoined(data: Extract<ServerMessage, { type: 'playerJoined' }>): void {
