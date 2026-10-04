@@ -106,29 +106,8 @@ export class PlayerModel {
       [new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']), _d2r(0, 0, 0)],
     ];
   }
-  // Solved hand-local mount quats (x,y,z,w) per class-body variant —
-  // barrel on facing, rail up. Quats, not eulers: euler extraction was
-  // lossy under these bone spaces. Mannequin keeps its own path above.
-  private static GUN_MOUNT_QUAT: Record<string, [number, number, number, number]> = {
-    cybersoldier: [0.1926, -0.5309, 0.2594, -0.3372],
-    vexa: [0.1926, -0.5309, 0.2594, -0.3372],
-    scifisoldier: [-0.471, 0.1186, 0.0367, 0.5126],
-    polyart: [-0.0171, -0.0844, -0.7012, -0.0297],
-  };
-  // Which hand carries the gun (normBone key) when a rig's aim pose puts
-  // the gun grip on the left — polyart's forward arm is the left one.
-  private static GUN_MOUNT_BONE: Record<string, string> = {
-    polyart: 'handleft',
-  };
-  // Per-variant gun size (meters) + bone-space seat when the generic
-  // near-origin seat hides the receiver inside the fist.
-  private static GUN_SIZE: Record<string, number> = { polyart: 2.5 };
-  // Cross-section fatten (gun-local x/y) for rigs whose silhouette would
-  // otherwise shrink the prop to a rod.
-  private static GUN_FAT: Record<string, number> = { polyart: 4 };
-  private static GUN_MOUNT_POS: Record<string, [number, number, number]> = {
-    polyart: [0, 0, -15],
-  };
+  // Hand-mount data (quat/bone/size/fat/pos per variant) lives in
+  // RIG_MANIFEST.mount — one record per rig, read below.
   private wantHoldPose = false;
   private holdW = 0;
 
@@ -306,7 +285,7 @@ export class PlayerModel {
     // Procedural gun: bone-mounted on rigs whose bones match the
     // rendered body (mannequin/robot), socket-mounted on class bodies
     // whose armature frames don't (cyber's bones sit ~98 units off).
-    if (this.handBone || classBody?.gunLocal) this.attachGun(mann);
+    if (this.handBone || classBody?.gunLocal) this.attachGun();
     else logger.warn('GUN NOT ATTACHED — no hand bone or gun socket');
 
     // No Y offset needed — model origin is already at feet
@@ -582,7 +561,7 @@ export class PlayerModel {
       || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
-    const mbn = PlayerModel.GUN_MOUNT_BONE[this.variant];
+    const mbn = RIG_MANIFEST[this.variant]?.mount?.bone;
     if (mbn && nb === mbn) this.mountBone = child as THREE.Bone;
     // Socket-gun rig arm chain — norms collapse the per-pack naming
     // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
@@ -616,7 +595,7 @@ export class PlayerModel {
   // used to cost a draw call apiece (~17 remotes = ~34 draws).
   private static _gunGeo: THREE.BufferGeometry | null = null;
   private static _gunMat: THREE.MeshStandardMaterial | null = null;
-  private attachGun(mann: boolean): void {
+  private attachGun(): void {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
     const handBone = this.mountBone ?? this.handBone;
     if (!handBone && !classGun) return;
@@ -668,42 +647,36 @@ export class PlayerModel {
       return;
     }
     const ws = handBone!.getWorldScale(new THREE.Vector3());
+    const mount = RIG_MANIFEST[this.variant]?.mount;
     logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.aimBones.length });
     // Per-axis: some rigs (polyart) carry non-uniform bone scale that
     // squeezes the prop into a needle when only ws.x is compensated.
-    const gunSize = PlayerModel.GUN_SIZE[this.variant] ?? 0.7;
+    const gunSize = mount?.size ?? 0.7;
     this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
-    const fat = PlayerModel.GUN_FAT[this.variant];
-    if (fat) this.gunMesh!.scale.set(fat, fat, 1);
+    if (mount?.fat) this.gunMesh!.scale.set(mount.fat, mount.fat, 1);
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
     this.gunUnit = 1 / ws.x;
     this.gunBaseY = 0.05 * this.gunUnit;
-    const mp = PlayerModel.GUN_MOUNT_POS[this.variant];
-    if (mp) {
-      this.gunRestX = mp[0];
-      this.gunBaseY = mp[1];
-      this.gunBaseZ = mp[2];
+    if (mount?.pos) {
+      this.gunRestX = mount.pos[0];
+      this.gunBaseY = mount.pos[1];
+      this.gunBaseZ = mount.pos[2];
     }
     this.gun.position.set(this.gunRestX, this.gunBaseY, this.gunBaseZ);
-    // Robot palm bones: barrel forward = local -Z flipped by π yaw.
-    // UAL hand bones (measured via gun-math probe under the live aim
-    // pose): barrel -X on plain yaw is the sideways look. X-90 sends the
-    // barrel forward along the aim axis; Z180 rolls the top rail back up.
-    // Class-body hand bones (cyber/vexa): measured on the posedump loop —
-    // the palm's axes differ per rig family, tune via debugSetGunRot.
-    if (mann) { this.gun.rotation.set(Math.PI / 2, 0, 0); this.gunBaseX = Math.PI / 2; }
-    else {
-      // Hand-local mount eulers solved per rig on the posedump loop —
-      // palm axes differ per family. Written to gunBaseQuat so fx
-      // envelopes compose on top instead of stomping rotation.x/z.
-      const mount = PlayerModel.GUN_MOUNT_QUAT[this.variant];
-      if (mount) {
-        this.gunBaseQuat = new THREE.Quaternion(mount[0], mount[1], mount[2], mount[3]);
-        this.gun.quaternion.copy(this.gunBaseQuat);
-      } else {
-        this.gun.rotation.y = Math.PI;
-      }
+    // Orientation comes from the manifest: euler rigs (mannequin) roll
+    // recoil through gunBaseX; quat rigs write gunBaseQuat so fx
+    // envelopes compose on top instead of stomping rotation.x/z.
+    // Palm axes differ per rig family — quats were solved per rig on the
+    // posedump loop, tune via debugSetGunRot.
+    if (mount?.euler) {
+      this.gun.rotation.set(mount.euler[0], mount.euler[1], mount.euler[2]);
+      this.gunBaseX = mount.euler[0];
+    } else if (mount?.quat) {
+      this.gunBaseQuat = new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]);
+      this.gun.quaternion.copy(this.gunBaseQuat);
+    } else {
+      this.gun.rotation.y = Math.PI;
     }
 
     // Muzzle flash: additive sprite at the barrel tip, flashed on

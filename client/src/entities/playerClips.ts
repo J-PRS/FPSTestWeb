@@ -83,6 +83,30 @@ export interface RigManifest {
    *  Trade-off: the gun stays at chest-forward instead of tracking
    *  the hand, which reads as 'carried' rather than 'swung'. */
   gunLocal?: [number, number, number];
+  /** Hand-bone mount (preferred over gunLocal when the rig exposes a
+   *  usable palm bone — the gun rides the hand through any pose).
+   *  bone: normalized palm key when the grip sits on a non-right hand.
+   *  quat: hand-local orientation (xyzw) solved on the posedump loop —
+   *    raw quats, not eulers: euler extraction is lossy under these
+   *    bone spaces.
+   *  euler: plain-euler rigs (mannequin/robot) where recoil composes
+   *    through gunBaseX instead of a base quat.
+   *  size: real-world gun meters (default 0.7). fat: cross-section
+   *    multiplier for rigs whose silhouette shrinks the prop to a rod.
+   *  pos: bone-space seat when the near-origin seat hides the receiver
+   *    inside the fist. */
+  mount?: {
+    bone?: string;
+    quat?: [number, number, number, number];
+    euler?: [number, number, number];
+    size?: number;
+    fat?: number;
+    pos?: [number, number, number];
+  };
+  /** Post-bake facing fix: when a rig's retarget sources agree on a hip
+   *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
+   *  target so the whole set unwinds onto the authored forward. */
+  clipYawFix?: number;
   /** Native clips also register under their UAL_ alias (mannequin's set
    *  IS the UAL library). */
   ualAlias?: boolean;
@@ -94,19 +118,27 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   robot:        { url: '/assets/models/RobotExpressive.glb', yaw: Math.PI, fixedScale: 0.5,
                   sources: ['ual1', 'ual2', 'kevdev'] },
   mannequin:    { url: '/assets/models/mannequin_opt.glb', lodUrl: '/assets/models/mannequin_lod1.glb',
-                  yaw: Math.PI, fitH: 2.0, ualAlias: true, sources: ['kevdev'] },
+                  yaw: Math.PI, fitH: 2.0, ualAlias: true, sources: ['kevdev'],
+                  mount: { euler: [Math.PI / 2, 0, 0] } },
   knight:       { url: '/assets/models/knight.glb', yaw: Math.PI, fitH: 2.0, sources: [] },
   // All class rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — no yaw needed.
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
   // native UAL states via CYBER_MANNEQUIN_BONE_MAP + kevdev 8-way
   // locomotion via CYBER_KEVDEV_BONE_MAP.
-  'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35], sources: [] },
-  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'] },
+  'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35], sources: [],
+                    mount: { quat: [-0.471, 0.1186, 0.0367, 0.5126] } },
+  // Cyber+vexa are 100% retarget bakes — their source hip convention
+  // lands facing +Z (toward the third-person camera), so the whole set
+  // gets a π unwind onto the rig's -Z forward.
+  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: Math.PI,
+                    mount: { quat: [0.1926, -0.5309, 0.2594, -0.3372] } },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
-  'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'] },
-  'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [] },
+  'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'], clipYawFix: Math.PI,
+                    mount: { quat: [0.1926, -0.5309, 0.2594, -0.3372] } },
+  'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
+                    mount: { bone: 'handleft', quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 2.5, fat: 4, pos: [0, 0, -15] } },
 };
 
 // armorClass → dedicated body GLB, derived from the manifest — table
@@ -119,10 +151,11 @@ export const CLASS_BODY_SPEC: Record<string, {
   url: string; yaw: number; fitH: number;
   anims?: Partial<Record<AnimationState, string>>;
   gunLocal?: [number, number, number];
+  mount?: RigManifest['mount'];
 }> = Object.fromEntries(
   Object.entries(RIG_MANIFEST)
     .filter(([, r]) => r.fitH !== undefined && r.fixedScale === undefined && r.url.includes('/class_'))
-    .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal }]),
+    .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal, mount: r.mount }]),
 );
 
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
