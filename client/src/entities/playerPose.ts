@@ -1,0 +1,254 @@
+import * as THREE from 'three';
+
+import { ONESHOT_CLIPS, normBone } from './playerClips.js';
+import { AIM_BONE_MASK } from './playerClipSurgery.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('playerPose');
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const _pitchQuat = new THREE.Quaternion();
+const _footW = new THREE.Vector3();
+const _footQ = new THREE.Quaternion();
+const _footPQ = new THREE.Quaternion();
+const _d2r = (x: number, y: number, z: number): [number, number, number] =>
+  [x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180];
+
+/** True while a full-body oneshot (shoot/hit/death) actually OWNS the
+ *  arms: during fadeOut the clip is still isRunning but its weight is
+ *  decaying — suppressing on isRunning alone left the arm chain un-driven
+ *  for ~200ms after every shot (arms drifted toward bind pose = the
+ *  "opens hands, almost T-pose" on each trigger pull). Death clamps at
+ *  full weight so its suppression still holds forever. */
+export function oneshotOwnsArms(action: THREE.AnimationAction | null, clipName: string | null): boolean {
+  return !!action?.isRunning() && action.getEffectiveWeight() > 0.5 &&
+    (!!clipName && (ONESHOT_CLIPS.has(clipName) || clipName === 'UAL_Death01'));
+}
+
+/** Post-mixer pose corrections: procedural aim pitch, hip-fire hold on
+ *  socket-gun rigs, spine lock while firing, IK foot snap. Each layer
+ *  un-applies its last write before the mixer runs so nothing
+ *  accumulates on a stale posed value. */
+export class PoseControl {
+  // Aim-pitch bones: quaternion pitch stacked on top of the animated pose.
+  private aimBones: { bone: THREE.Object3D; factor: number; last: THREE.Quaternion }[] = [];
+  aimPitch = 0;
+  // Socket-gun rigs: canned right-arm grip pose stacked post-mixer — their
+  // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
+  // is posed procedurally to meet the fixed gun socket.
+  private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion; bind: THREE.Quaternion }[] = [];
+  // Right-arm grip pose per bone role — norm-name set + euler offset in
+  // bone-local space. Tuned on the posedump screenshot loop per rig.
+  private static HOLD_CHAINS: [Set<string>, [number, number, number]][] | null = null;
+  private static buildHoldChains(): void {
+    if (PoseControl.HOLD_CHAINS) return;
+    PoseControl.HOLD_CHAINS = [
+      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-45, -30, -15)],
+      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-50, 0, 0)],
+      [new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']), _d2r(0, 0, 0)],
+      // Left arm comes across to the foregrip — without it the retargeted
+      // clip tracks flail the free arm every frame.
+      [new Set(['upperarml', 'basehumanlupperarm']), _d2r(-60, 25, 15)],
+      [new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm']), _d2r(-70, 0, 0)],
+      [new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']), _d2r(0, 0, 0)],
+    ];
+  }
+  wantHoldPose = false;
+  private holdW = 0;
+
+  // Masked aim layer (mannequin): Pistol_Aim_* clips filtered to the
+  // spine/arms/head tracks, layered over whatever locomotion clip the legs
+  // are running — remotes always hold the weapon up, even mid-sprint. The
+  // aim clips cover ~±55° of pitch; the procedural aimBones pitch applies
+  // only the residual beyond that so extreme aim still lands.
+  private aimUp: THREE.AnimationAction | null = null;
+  private aimNeutral: THREE.AnimationAction | null = null;
+  private aimDown: THREE.AnimationAction | null = null;
+  private static readonly AIM_CLIP_RAD = 0.95; // pitch where Up/Down reaches full weight
+  // Hips-and-up rotation chain locked toward bind pose while the model
+  // is firing — hip POSITION tracks still animate (stride bob survives,
+  // and leg swing lives on the thigh bones, not hip rotation). DampenSway
+  // leaves half the stride roll, which still waves the muzzle through
+  // the arm chain's parent; this kills it outright while shots go out.
+  private static readonly STEADY_BONES = new Set([
+    'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+    'hips', 'spine', 'chest', 'neck', 'head',
+    'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
+  ]);
+  private steadyBones: { bone: THREE.Object3D; bind: THREE.Quaternion }[] = [];
+  // 0→1 ramp while recently fired — drives the spine lock.
+  private armedT = 0;
+  private armed = 0;
+  // Foot bones are IK targets detached from the leg chain — retargeted
+  // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
+  // to its shin tip (the *_end leaf node follows the skinned leg).
+  private footSnaps: { foot: THREE.Object3D; shin: THREE.Object3D; tip: THREE.Object3D }[] = [];
+
+  constructor() {
+    PoseControl.buildHoldChains();
+  }
+
+  /** Bones the far-LOD swap must keep real (freeze-proof) — pose control
+   *  writes into them every frame. */
+  keyBones(): THREE.Object3D[] {
+    return [
+      ...this.aimBones.map(b => b.bone),
+      ...this.steadyBones.map(b => b.bone),
+      ...this.footSnaps.flatMap(f => [f.foot, f.shin, f.tip]),
+    ];
+  }
+
+  get aimBoneCount(): number { return this.aimBones.length; }
+
+  aimBoneNames(): string {
+    return this.aimBones.map(b => b.bone.name).join(', ') || 'NONE';
+  }
+
+  /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
+  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
+    const rads = [upper, lower, hand, lUpper, lLower, lHand].map(e =>
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
+    for (const hb of this.holdBones) hb.off.copy(rads[hb.role]!);
+  }
+
+  // Collects the bones this controller drives. nb = normBone(child.name).
+  captureBone(child: THREE.Object3D, nb: string): void {
+    if (child.name === 'Head' || nb === 'defhead' || nb === 'head' || nb === 'righead') {
+      this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
+    } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine' || nb === 'rigspine2') {
+      this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
+    }
+    // Socket-gun rig arm chain — norms collapse the per-pack naming
+    // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
+    if (PoseControl.HOLD_CHAINS) {
+      for (let role = 0; role < PoseControl.HOLD_CHAINS.length; role++) {
+        const [norms, euler] = PoseControl.HOLD_CHAINS[role]!;
+        if (norms.has(nb)) {
+          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
+          break;
+        }
+      }
+    }
+    if (PoseControl.STEADY_BONES.has(nb)) {
+      this.steadyBones.push({ bone: child, bind: child.quaternion.clone() });
+    }
+  }
+
+  // Foot-snap rig for retargeted clips on the robot rig (UAL doesn't
+  // drive its IK foot bones). The mannequin's feet are real in-chain
+  // bones — nothing to snap.
+  captureFootBone(child: THREE.Object3D, model: THREE.Group): void {
+    const side = child.name === 'FootL' ? 'L' : 'R';
+    const shin = model.getObjectByName(`LowerLeg${side}`);
+    const tip = model.getObjectByName(`LowerLeg${side}_end`);
+    if (shin && tip) this.footSnaps.push({ foot: child, shin, tip });
+  }
+
+  /** Build the masked aim layer: Pistol_Aim_* clips filtered down to
+   *  the arm chain so they pose the weapon hold over any locomotion clip. LoopOnce+clamp — they are static poses, so they
+   *  play once and hold at full weight set per frame from aimPitch. */
+  buildAimLayer(mixer: THREE.AnimationMixer, animations: Map<string, THREE.AnimationAction>): void {
+    const mk = (name: string): THREE.AnimationAction | null => {
+      const src = animations.get(name)?.getClip();
+      if (!src) return null;
+      const tracks = src.tracks.filter(t =>
+        AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      if (!tracks.length) return null;
+      const clip = new THREE.AnimationClip(name + '.aim', src.duration, tracks);
+      const a = mixer.clipAction(clip);
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      a.setEffectiveWeight(0);
+      a.play();
+      return a;
+    };
+    this.aimUp = mk('Pistol_Aim_Up') ?? mk('UAL_Pistol_Aim_Up');
+    this.aimNeutral = mk('Pistol_Aim_Neutral') ?? mk('UAL_Pistol_Aim_Neutral');
+    this.aimDown = mk('Pistol_Aim_Down') ?? mk('UAL_Pistol_Aim_Down');
+    if (!this.aimNeutral) logger.debug('Aim layer unavailable — no Pistol_Aim clips');
+  }
+
+  /** Reveal that a shot went out — ramps the spine lock. */
+  fire(): void { this.armedT = 0.45; }
+
+  update(dt: number, mixer: THREE.AnimationMixer | null,
+       currentAction: THREE.AnimationAction | null,
+       currentClipName: string | null, playingUAL: boolean): void {
+    // Remove last frame's pitch BEFORE the mixer writes. The mixer skips
+    // bones whose track value didn't change, so without this the multiply
+    // would accumulate on a stale pitched value and the bone spins.
+    for (const ab of this.aimBones) {
+      ab.bone.quaternion.multiply(_pitchQuat.copy(ab.last).invert());
+    }
+    for (const hb of this.holdBones) {
+      hb.bone.quaternion.multiply(_pitchQuat.copy(hb.last).invert());
+    }
+    // Masked aim layer — weights must land BEFORE mixer.update samples the
+    // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
+    // arms so it doesn't fight the reaction pose.
+    const oneshot = oneshotOwnsArms(currentAction, currentClipName);
+    let procPitch = this.aimPitch;
+    if (this.aimNeutral) {
+      const t = Math.max(-1, Math.min(1, this.aimPitch / PoseControl.AIM_CLIP_RAD));
+      const w = oneshot ? 0 : 1;
+      this.aimNeutral.setEffectiveWeight((1 - Math.abs(t)) * w);
+      this.aimUp?.setEffectiveWeight(Math.max(0, t) * w);
+      this.aimDown?.setEffectiveWeight(Math.max(0, -t) * w);
+      // The clips cover ±AIM_CLIP_RAD; procedural pitch tops up the rest.
+      procPitch = this.aimPitch - t * PoseControl.AIM_CLIP_RAD;
+    }
+    if (mixer) {
+      mixer.update(dt);
+    }
+    this.applySpineLock(dt);
+    if (this.wantHoldPose) {
+      // Full-body oneshots own the arms while weighted in. Everything
+      // else keeps the hold: cyber's retargeted clips pose the arm chain
+      // wrong on their own (mannequin axis bake lands splayed), so the
+      // fixed hip-fire grip IS the correction — blend only so oneshot
+      // transitions don't pop.
+      this.holdW += (oneshot ? -6 : 6) * dt;
+      this.holdW = Math.min(1, Math.max(0, this.holdW));
+      if (this.holdW > 0) for (const hb of this.holdBones) {
+        // Slerp toward BIND pose first — composing the fixed raise on top
+        // of the animated track means the arm flails with every clip
+        // frame (the retargeted tracks are garbage on this rig anyway).
+        hb.bone.quaternion.slerp(hb.bind, this.holdW);
+        hb.last.identity().slerp(hb.off, this.holdW);
+        hb.bone.quaternion.multiply(hb.last);
+      }
+    }
+    for (const ab of this.aimBones) {
+      // Negative X tilts up for positive pitch (looking up)
+      ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
+      ab.bone.quaternion.multiply(ab.last);
+    }
+    this.snapFeetToShins(playingUAL);
+  }
+
+  // Spine lock while firing: slerp the torso chain back to bind pose.
+  // Post-mixer so the clip's residual (post-dampenSway) stride roll
+  // can't drag the aimed arm chain side to side; ~0.45s per shot so
+  // continuous fire holds the lock.
+  private applySpineLock(dt: number): void {
+    this.armedT = Math.max(0, this.armedT - dt);
+    this.armed += ((this.armedT > 0 ? 1 : 0) - this.armed) * Math.min(dt * 12, 1);
+    if (this.armed > 0.01) {
+      for (const sb of this.steadyBones) sb.bone.quaternion.slerp(sb.bind, this.armed);
+    }
+  }
+
+  // Retargeted clips don't drive the robot's IK foot bones — pin each
+  // foot to its shin tip and give it the shin's orientation.
+  private snapFeetToShins(playingUAL: boolean): void {
+    if (!playingUAL || !this.footSnaps.length) return;
+    for (const fs of this.footSnaps) {
+      fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
+      const parent = fs.foot.parent!;
+      fs.foot.position.copy(parent.worldToLocal(_footW));
+      fs.shin.getWorldQuaternion(_footQ);
+      parent.getWorldQuaternion(_footPQ).invert();
+      fs.foot.quaternion.copy(_footPQ.multiply(_footQ));
+    }
+  }
+}
