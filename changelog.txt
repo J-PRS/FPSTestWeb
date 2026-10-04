@@ -1,3 +1,4 @@
+2026-10-01 - Bot senses share one roster build per sim step (was per think)
 2026-10-01 - Spectator fanout reuses shared scratch, zero-alloc tick broadcast
 2026-10-01 - Pooled tick-frame decode + deep-merged roster vecs on the 20Hz wire path
 2026-10-01 - In-place remote roster upsert kills 20Hz allocation churn
