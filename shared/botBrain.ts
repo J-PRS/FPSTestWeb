@@ -35,6 +35,15 @@ import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition
 export type { BotVec } from './botVec.ts';
 import { dist3, type BotVec } from './botVec.ts';
 
+/** Brawl range — the "a live enemy is right here" evidence the sheep
+ *  meter's ignore debit and every foeNear check measure by. One radius
+ *  for wire humans, wire bots, offline bots, and the self readout. */
+export const BRAWL_RANGE = 45;
+/** View-cone gate for that evidence: the foe must be inside the ~113°
+ *  frontal cone (dot(facing, toFoe) > -0.4) — charging a body for
+ *  "ignoring" an enemy directly behind it is a false positive. */
+export const FOE_CONE_MIN_DOT = -0.4;
+
 export interface BotEnemy {
   id: string;
   pos: BotVec;

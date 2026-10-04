@@ -1,4 +1,5 @@
 import { ENERGY, cloakDrainPerSec } from '../../../../shared/movement.js';
+import { MEND_HP_PER_SEC } from '../../../../shared/status.js';
 import type { SkillsCtx } from './skills.js';
 
 // Energy-channel toggles — cloak, shield, mend. Same economy shape:
@@ -9,7 +10,6 @@ const SHIELD_COST = ENERGY.shieldCost;
 const SHIELD_DRAIN = ENERGY.shieldDrain;
 const MEND_COST = ENERGY.mendCost;
 const MEND_DRAIN = ENERGY.mendDrain;
-const MEND_HP_PER_SEC = 12; // server applies this while the flag is up
 
 export class SkillChannels {
   cloaked = false;

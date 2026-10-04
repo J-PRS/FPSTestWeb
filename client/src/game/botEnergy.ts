@@ -1,5 +1,5 @@
 import { cloakDrainPerSec, ENERGY } from '../../../shared/movement.js';
-import { STATUS } from '../../../shared/status.js';
+import { STATUS, MEND_HP_PER_SEC } from '../../../shared/status.js';
 import type { GameBot } from './botBrain.js';
 
 // The bot's honest energy tank: rising-edge activation costs, held
@@ -29,9 +29,8 @@ export function applyStatus(b: GameBot, claim: number, dt: number): void {
     drain(STATUS.MEND, ENERGY.mendDrain);
     drain(STATUS.SHIELD, ENERGY.shieldDrain);
     drain(STATUS.CLOAK, cloakDrainPerSec(Math.hypot(b.velocity.x, b.velocity.z)));
-    // Mend channel heals — 12 hp/s while the flag rides (same rate the
-    // server applies to a mending player).
-    if (b.status & STATUS.MEND) b.botHp = Math.min(b.botMaxHp, b.botHp + 12 * dt);
+    // Mend channel heals — the wire rate (shared/status.ts).
+    if (b.status & STATUS.MEND) b.botHp = Math.min(b.botMaxHp, b.botHp + MEND_HP_PER_SEC * dt);
     // Regenerator — the server's per-player trickle, same rate.
     if (b.mods.regen > 0 && !b.isDead) b.heal(b.mods.regen * dt);
     b.setMending(!!(b.status & STATUS.MEND));

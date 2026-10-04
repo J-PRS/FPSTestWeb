@@ -28,6 +28,10 @@ export const STATUS = {
   CHARGED: 128,
 } as const;
 
+/** Medkit channel rate — every side that heals while STATUS.MEND is up
+ *  (server tick heal, offline bots, local skill channel) reads this. */
+export const MEND_HP_PER_SEC = 12;
+
 /** Mask of every bit the status channel owns (bits ≥4). */
 export const STATUS_MASK = 0xFC;
 

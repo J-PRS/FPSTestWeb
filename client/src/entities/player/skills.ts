@@ -24,7 +24,7 @@ const SLAM_COOLDOWN = 1.0;   // s
 // Energy economy constants live in shared/movement.ts (ENERGY) — the
 // server shadow sims the same tank to judge jet/skill claims.
 export const SHIELD_DMG_PER_ENERGY = ENERGY.shieldDmgPerEnergy;
-export const MEND_HP_PER_SEC = 12; // server applies this while the flag is up
+export { MEND_HP_PER_SEC } from '../../../../shared/status.js';
 
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
 // plumbing callbacks (aim, movement sync, the per-frame blink visuals).

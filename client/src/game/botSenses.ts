@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { losClear, type BrainCtx } from '../../../shared/botBrain.js';
+import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../shared/botBrain.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import type { GameBot } from './botBrain.js';
 import type { Terrain } from '../world/terrain.js';
@@ -161,9 +161,15 @@ export class BotSenses {
     const hit = this.foeSeenCache.get(bot.playerId);
     if (hit && now - hit.t < 200) return hit.v;
     let v = false;
+    const fx = Math.sin(bot.rotation.yaw), fz = Math.cos(bot.rotation.yaw);
     for (const e of foes) {
       if (!e.alive || e.id.startsWith('creature:')) continue;
-      if (e.pos.distanceTo(bot.position) >= 45) continue; // brawl range — server mirror
+      if (e.pos.distanceTo(bot.position) >= BRAWL_RANGE) continue; // brawl range — server mirror
+      // The wire senses only count a foe inside the ~113° view cone —
+      // charging a bot for "ignoring" an enemy behind it was the drift.
+      const dx = e.pos.x - bot.position.x, dz = e.pos.z - bot.position.z;
+      const gd = Math.hypot(dx, dz) || 1;
+      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
       _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
       _losCtx.now = now;
       if (losClear(_losCtx, bot.position, e.pos)) { v = true; break; }

@@ -16,7 +16,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { BotBrain, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
+import { BotBrain, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { losClear } from '../../shared/botLos.ts';
 import type { BotSkill } from '../../shared/botSkill.ts';
 import { endTaunt, startTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
@@ -637,7 +637,7 @@ export class ServerBots {
     }
   }
 
-  /** 45m brawl-range enemy in eye-line — same evidence the bot senses
+  /** Brawl-range enemy in eye-line — same evidence the bot senses
    *  give the meter (bots count a foe only inside their ~113° view
    *  cone; a human backing into a duel they can't see isn't ignoring
    *  it either), so facing gets the same cone gate. */
@@ -648,9 +648,9 @@ export class ServerBots {
       if (q.team && p.team && q.team === p.team) continue;
       const dx = q.position.x - p.position.x, dz = q.position.z - p.position.z;
       const d = Math.hypot(dx, q.position.y - p.position.y, dz);
-      if (d >= 45) continue;
+      if (d >= BRAWL_RANGE) continue;
       const gd = Math.hypot(dx, dz) || 1;
-      if ((dx * fx + dz * fz) / gd < -0.4) continue;
+      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
       return true;
     }
     return false;

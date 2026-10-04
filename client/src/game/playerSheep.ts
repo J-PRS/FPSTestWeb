@@ -5,6 +5,7 @@ import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { RemotePlayerState } from '../networking/NetworkManager.js';
 import type { RemoteSet } from './net/RemoteSet.js';
 import type { TeamId } from '../../../shared/teams.js';
+import { BRAWL_RANGE } from '../../../shared/botBrain.js';
 
 /**
  * The same meter that reads bots, run on the local player — feeds the
@@ -47,7 +48,7 @@ export class PlayerSheep {
   get shown(): number { return Math.round(this.body.sheepShown); }
   get energy(): { ke: number; pe: number; mech: number } | undefined { return this.meter.energyOf(this.playerIdOf()); }
 
-  /** 45m enemy brawl range — same evidence the meter gives bots and
+  /** Brawl-range enemy nearby — same evidence the meter gives bots and
    *  wire humans; LOS stays out of it since a human owns the sneak. */
   private foeNear(player: Player, remotes: RemoteSet<RemotePlayer, RemotePlayerState>, localTeam: TeamId | undefined): boolean {
     for (const [, rp] of remotes) {
@@ -56,7 +57,7 @@ export class PlayerSheep {
       if (localTeam && team === localTeam) continue;
       const p = rp.position;
       const d = (p.x - player.pos.x) ** 2 + (p.y - player.pos.y) ** 2 + (p.z - player.pos.z) ** 2;
-      if (d < 45 * 45) return true;
+      if (d < BRAWL_RANGE * BRAWL_RANGE) return true;
     }
     return false;
   }

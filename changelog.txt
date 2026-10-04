@@ -1,3 +1,19 @@
+2026-10-01 - Bot-stack drift cleanup: BRAWL_RANGE (45m) + FOE_CONE_MIN_DOT
+(-0.4, ~113deg) now live in shared/botBrain — client foeSeen was missing
+the view-cone gate entirely, so offline bots were charged for ignoring
+enemies behind their backs that wire bots were not. MEND_HP_PER_SEC (12)
+moved into shared/status.ts from four hardcoded copies (tickHelpers,
+skillChannels, skills re-export, botEnergy).
+
+2026-10-04 - FPS meter counted loop ticks, not renders: the cap skips
+renderFrame while sim/input tick at full rAF, so CAP 30 still read 60.
+HUD readout now runs off markFrame(renderElapsed) — real time between
+presents — and the stats.js debug panels moved inside the render branch
+(same per-tick counting bug). Viewmodel rides the composer buffer via
+VmRenderPass so SMOOTH/DITHERED pixel modes grade/dither the gun like
+scene content (ATKINSON already did via the readback overlay) — no more
+full-res gun pasted over a chunky frame. Analysis: _docs/2026-10-04_FPS_CAP.md.
+
 2026-10-01 - pickups get diegetic identity: each kind is still a real
 tumbling solid that falls and settles like the nugget, but reads by
 silhouette instead of body tint — heal = pale med capsule with band,

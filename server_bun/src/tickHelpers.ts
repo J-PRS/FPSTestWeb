@@ -2,14 +2,14 @@
 // heal math, record suppression, the TickRecord shape. Pulled out so
 // tickRecords doesn't import TickLoop — an arsenal-style runtime cycle.
 import { CONFIG } from './config.ts';
-import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
+import { STATUS, CLIENT_STATUS_MASK, MEND_HP_PER_SEC } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 
-// Medkit: hp restored per broadcast tick while the mending flag is up.
-// 12 hp/s at the room's tick rate — a field patch, not a fountain.
-const MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
+// Medkit: hp restored per broadcast tick while the mending flag is up —
+// a field patch, not a fountain. Rate is shared (status.ts).
+const MEND_HP_PER_TICK = MEND_HP_PER_SEC / CONFIG.tickRate;
 
 /** Server-owned heal channels for one broadcast tick: medkit channel,
  *  regenerator perk, regen powerup — all cap at the perk max (the caller

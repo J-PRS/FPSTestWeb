@@ -8,7 +8,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { losClear, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
+import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { STATUS } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
@@ -293,13 +293,13 @@ export class ServerBotSenses {
       const d = Math.hypot(dx, e.pos.y - pos.y, dz);
       // Brawl range, not spotting range — a foe it can't reach yet is a
       // marching target, not an ignored duel.
-      if (d < 45 && losClear(ctx, pos, e.pos)) {
+      if (d < BRAWL_RANGE && losClear(ctx, pos, e.pos)) {
         // Only counts when the bot is actually LOOKING at the foe —
-        // an enemy outside the ~130° view cone is invisible to it, so
+        // an enemy outside the ~113° view cone is invisible to it, so
         // "ignoring" it is a false positive that maxes out honest bots.
         const fx = Math.sin(yaw), fz = Math.cos(yaw);
         const gd = Math.hypot(dx, dz) || 1;
-        if ((dx * fx + dz * fz) / gd < -0.4) continue;
+        if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
         this.foeNear.set(id, now + 500);
         return;
       }
