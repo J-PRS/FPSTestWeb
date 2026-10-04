@@ -76,7 +76,7 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
   // on the Player side so this just follows the flag. The floor keeps a
   // slow carve audible — the old pure-speed curve stayed inaudible until
   // ~60 m/s where it only matters at cap anyway.
-  const skiGain = player.skiing ? Math.min(0.42, 0.06 + speed / 50 * 0.36) : 0;
+  const skiGain = player.skiing ? Math.min(0.3, 0.04 + speed / 50 * 0.26) : 0;
   l.ski?.set(skiGain);
   l.skiTex?.set(skiGain * 0.6);
   l.jet?.set(player.jetting ? 0.55 : 0);

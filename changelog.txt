@@ -1,3 +1,4 @@
+2026-10-04 - ski scrape quieter: gain cap 0.42 -> 0.30, floor 0.06 -> 0.04
 2026-10-04 - ski sound audible for real: scrape loop is bandpass noise (continuous) with the 0.47s footstep sample layered at 2.6x as granular crunch — the old swap replaced the scrape body with a lone footstep that just ticked
 2026-10-04 - fall terminal clamp now airborne-only: it silently capped glued downhill ski at terminal/sin(slope) — downhill ski now accelerates linearly with tangential gravity, no artificial cap
 2026-10-04 - gravity now applies every tick, grounded or not (true T1 model): contact kills only the into-slope component so tangential slide is free — replaces the grounded-ski special case
