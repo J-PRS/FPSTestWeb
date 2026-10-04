@@ -14,7 +14,7 @@ import { scoreboardTitle } from '../ui/hud/scoreboard.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
-import { isBotId, botDisplayName } from '../../../shared/botNames.js';
+import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 // Hostiles always read red — team colors are for your own side only.
@@ -297,7 +297,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       const ps = nm.getPlayers().get(id);
-      return { name: botDisplayName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now) };
+      return { name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now) };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
@@ -306,7 +306,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: botDisplayName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now) });
+    remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now) });
   }
   remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   hud.setScoreboardRows([...rows, ...remoteRows]);

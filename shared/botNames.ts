@@ -27,6 +27,12 @@ const SUFFIXED = /^BOT-([A-Z]+)-\d+$/;
 export function botDisplayName(id: string): string {
   return id.replace(/^bot:/, '').replace(SUFFIXED, '$1');
 }
+/** Roster/boards show the bot badge — no pretense an entry is human.
+ *  Chat lines use the plain callsign (bots naming each other don't
+ *  speak 'bot'); listings want honesty over flavor. */
+export function botRosterName(id: string): string {
+  return isBotId(id) ? `[BOT] ${botDisplayName(id)}` : id;
+}
 /** Same strip inside free text — server notices compose raw ids into the
  *  sentence ('BOT-VEKTOR-04 ended the streak'), so feed lines rewrite
  *  them at render instead of making every composer id-aware. */
