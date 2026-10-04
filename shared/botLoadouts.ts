@@ -1,4 +1,5 @@
 import { WeaponType, getWeaponStats } from './weapons.ts';
+import { SELF_SPLASH_MAX } from './combat.ts';
 import type { PerkId } from './perks.ts';
 import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, type ArmorClass } from './botClasses.ts';
 
@@ -99,4 +100,26 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     if (s > best.s) best = { w, s };
   }
   return nonAoeOnly && getWeaponStats(best.w).aoeRadius > 0 ? safeW : best.w;
+}
+
+/** Weapon pick with self-preservation, shared by wire and offline bots.
+ *  A blast inside its own radius can cost up to SELF_SPLASH_MAX health,
+ *  and a stray shell popped early (terrain lip, wandering ball, body
+ *  block) lands inside the blast edge regardless of target range — so
+ *  below roughly one self-blast's price, ANY aoe primary is a loaded
+ *  gun pointed at the holster and the bot redraws inside the non-
+ *  explosive shelf by the same band fit. Nerve scales the floor:
+ *  heroes fly launchers into the grave. The swap only matters where a
+ *  blast can still reach back: a shell landing 60m+ away can't splash
+ *  the shooter, so holstering at standoff just spams the sidearm at
+ *  enemies it can't touch. */
+export function pickBotWeaponSafe(lo: BotLoadout, distXZ: number, dist: number, hp: number, skill?: (w: number) => number, courage = 0.5): number {
+  const wt = pickBotWeapon(lo, distXZ, dist, skill, courage);
+  const wstats = getWeaponStats(wt);
+  const woundedGate = wstats.aoeRadius > 0 && (
+    (dist < wstats.aoeRadius && hp <= (1 - courage) * (SELF_SPLASH_MAX * 2 + 15)) ||
+    (dist < 60 && hp <= SELF_SPLASH_MAX * (1.5 - courage)));
+  if (!woundedGate) return wt;
+  const alt = pickBotWeapon(lo, distXZ, dist, skill, courage, true);
+  return alt !== wt ? alt : wt;
 }

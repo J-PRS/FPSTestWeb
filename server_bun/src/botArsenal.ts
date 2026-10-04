@@ -12,7 +12,7 @@ import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } f
 import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
-import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, pickBotWeapon, pickBotWeaponSafe, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
@@ -305,38 +305,12 @@ export class BotArsenal implements BeamHost {
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
     const s = botId ? this.skillOfCb(botId) : undefined;
-    const wt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined, s?.courage);
-    // Self-preservation with nerve: a blast inside its own radius can
-    // cost up to SELF_SPLASH_MAX health — cautious bots (low courage
-    // draw) swap to a non-explosive slot early, heroes ride the
-    // explosive down to the last hit and eat the occasional self-frag.
-    if (botId) {
-      const hp = this.room.players.getAllPlayers().get(botId)?.health ?? 100;
-      const wstats = getWeaponStats(wt);
-      const nerve = (s?.courage ?? 0.5);
-      // Two self-splashes frag anyone under ~2×SELF_SPLASH_MAX — trading
-      // a point-blank disc is only a win while it can't kill you twice.
-      // A stray shell popped early — terrain lip, wandering ball, body
-      // block — lands inside the blast edge regardless of target range.
-      // Below roughly one self-blast's price, ANY aoe primary is a
-      // loaded gun pointed at the holster: swap to a non-explosive.
-      // Nerve scales the floor: heroes fly launchers into the grave.
-      // The low-hp swap only matters where a blast can still reach back:
-      // a shell landing 60m+ away can't splash the shooter, so holstering
-      // the launcher at standoff range just spams the sidearm at enemies
-      // it can't touch (the Pistol 120m+ shot pile).
-      const woundedGate = wstats?.aoeRadius && (
-        (dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) ||
-        (dist < 60 && hp <= SELF_SPLASH_MAX * (1.5 - nerve)));
-      if (woundedGate) {
-        // Redraw inside the non-explosive shelf by the same band fit —
-        // grabbing slot-order's first clean gun made wounded bots spam
-        // the hold-out pistol at 80m (the Pistol 1%-accuracy column).
-        const alt = pickBotWeapon(lo, distXZ, dist, s ? (t) => aimSkillFor(s, t, 0) : undefined, s?.courage, true);
-        if (alt !== wt) return alt;
-      }
-    }
-    return wt;
+    const skill = s ? (t: number) => aimSkillFor(s, t, 0) : undefined;
+    // The wounded-explosive gate lives in shared pickBotWeaponSafe so
+    // offline bots get the same self-preservation.
+    if (!botId) return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);
+    const hp = this.room.players.getAllPlayers().get(botId)?.health ?? 100;
+    return pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same

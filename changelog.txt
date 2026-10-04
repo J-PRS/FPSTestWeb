@@ -1,3 +1,4 @@
+2026-10-01 - bot loadout: wounded-explosive gate shared via pickBotWeaponSafe (offline bots now swap off aoe at low hp like wire bots)
 2026-10-01 - GLB payload cut ~3x across the board (85 files): public
 models 62->27MB, T2 interior difs 56->39MB, anims 3->2MB. gltf-transform
 weld+quantize+webp+keyframe-resample, decoder-free (KHR_mesh_quantization
