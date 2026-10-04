@@ -1,3 +1,4 @@
+2026-10-01 - sizeWatch: pin serverSenses.ts grandfathered at 903 (was 945 before the senses consolidation, over the 900 ceiling since JP's flagGoal growth)
 2026-10-01 - gunlab probe fix: __gunlab double-assign clobbered state with {scene} at boot; probes reading pick/wt got nothing. Now one object, scene merged in
 2026-10-01 - clipRootMotion test reader: accessors without bufferView parse as zeros (spec-valid; gltf-transform emits them for degenerate constant tracks)
 2026-10-01 - 3p weapon mount unified: all per-rig mount data (bone/quat/euler/size/fat/pos) now lives in RIG_MANIFEST.mount; PlayerModel's five GUN_MOUNT_* tables deleted, attachGun reads the manifest record

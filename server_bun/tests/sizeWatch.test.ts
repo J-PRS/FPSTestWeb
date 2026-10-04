@@ -15,6 +15,7 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/gunlab.ts': 1015,
   'client/src/lab/scenarios.ts': 999,
   'server_bun/src/Room.ts': 909,
+  'server_bun/src/serverSenses.ts': 903,
   'client/src/effects/vertexAO.ts': 901,
 };
 
