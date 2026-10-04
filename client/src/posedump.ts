@@ -46,6 +46,12 @@ if (pvariant) {
   const { PlayerModel } = await import('./entities/PlayerModel.js');
   const pm = new PlayerModel(scene, pvariant as 'robot' | 'mannequin' | 'knight');
   await pm.load();
+  // &weapon=<WeaponType int> drives the real hand-prop swap; &pitch=<rad>
+  // feeds setRotation so the aim bones/aim layer pose mid-frame.
+  const wantWeapon = q.get('weapon');
+  if (wantWeapon !== null) pm.setWeapon(parseInt(wantWeapon));
+  const wantPitch = parseFloat(q.get('pitch') ?? '0');
+  if (wantPitch) pm.setRotation(0, wantPitch, 0);
   const wantState = q.get('state') ?? 'ski';
   // dir=B|BL|L|FL|FR|R|BR feeds setLocomotionVector before the state
   // resolves — exercises the KevDev directional clip table.

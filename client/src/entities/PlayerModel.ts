@@ -15,6 +15,11 @@ const _pitchQuat = new THREE.Quaternion();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
+const _handW = new THREE.Vector3();
+const _mq = new THREE.Quaternion();
+const _hq = new THREE.Quaternion();
+const _d2r = (x: number, y: number, z: number): [number, number, number] =>
+  [x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180];
 
 // Several body GLBs ship flat normals (per-face corners) — the robot
 // reads faceted because it IS faceted. toCreasedNormals re-averages
@@ -83,6 +88,36 @@ export class PlayerModel {
   // (the mixer skips bones whose track value didn't change).
   private aimBones: { bone: THREE.Object3D; factor: number; last: THREE.Quaternion }[] = [];
   private aimPitch = 0;
+  // Socket-gun rigs: canned right-arm grip pose stacked post-mixer — their
+  // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
+  // is posed procedurally to meet the fixed gun socket. Same un-apply
+  // trick as aimBones so the multiply never accumulates.
+  private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion }[] = [];
+  // Right-arm grip pose per bone role — norm-name set + euler offset in
+  // bone-local space. Tuned on the posedump screenshot loop per rig.
+  private static HOLD_CHAINS: [Set<string>, [number, number, number]][] | null = null;
+  private static buildHoldChains(): void {
+    if (PlayerModel.HOLD_CHAINS) return;
+    PlayerModel.HOLD_CHAINS = [
+      [new Set(['upperarmr', 'basehumanrupperarm']), _d2r(-48, 25, 42)],
+      [new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']), _d2r(-47, 6, 37)],
+      [new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']), _d2r(0, 0, 0)],
+    ];
+  }
+  private wantHoldPose = false;
+
+  /** Live-tune the palm→gun mount rotation (posedump loop) — deg euler. */
+  debugSetGunRot(x: number, y: number, z: number): void {
+    PlayerModel.HAND_GUN_ROT.setFromEuler(new THREE.Euler(
+      x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180));
+  }
+
+  /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
+  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number]): void {
+    const rads = [upper, lower, hand].map(e =>
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
+    for (const hb of this.holdBones) hb.off.copy(rads[hb.role]!);
+  }
   // Weapon-swap dip — mirrors the first-person viewmodel's lower→raise:
   // the held gun drops toward the hip and the muzzle tips down, then the
   // "new" weapon comes back up. Purely cosmetic on the body model (the
@@ -100,6 +135,12 @@ export class PlayerModel {
   gunRestX = 0; // socket-mounted guns park at a lateral offset
   gunBaseX = 0; // mannequin attach pitch — recoil adds on top
   gunKickZ = 0;
+  gunBaseQuat: THREE.Quaternion | null = null;
+  private socketGun = false;
+  // Hand world→gun grip: palm-mount orientation constant, tuned per rig
+  // family on posedump shots (UE-style rigs share the convention).
+  private static readonly HAND_GUN_ROT = new THREE.Quaternion()
+    .setFromEuler(new THREE.Euler(-100 * Math.PI / 180, 19 * Math.PI / 180, -46 * Math.PI / 180));
   muzzleFlash: THREE.Sprite | null = null;
   // Damage flash — same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
@@ -165,6 +206,7 @@ export class PlayerModel {
   constructor(scene: THREE.Scene, variant?: PlayerModelVariant) {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
+    PlayerModel.buildHoldChains();
   }
 
   async load(): Promise<void> {
@@ -518,6 +560,17 @@ export class PlayerModel {
       || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
+    // Socket-gun rig arm chain — norms collapse the per-pack naming
+    // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
+    if (PlayerModel.HOLD_CHAINS) {
+      for (let role = 0; role < PlayerModel.HOLD_CHAINS.length; role++) {
+        const [norms, euler] = PlayerModel.HOLD_CHAINS[role]!;
+        if (norms.has(nb)) {
+          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)), last: new THREE.Quaternion() });
+          break;
+        }
+      }
+    }
     // Foot-snap rig for retargeted clips on the robot rig (UAL
     // doesn't drive its IK foot bones). The mannequin's feet are
     // real in-chain bones — nothing to snap.
@@ -543,6 +596,10 @@ export class PlayerModel {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
     const handBone = this.handBone;
     if (!handBone && !classGun) return;
+    // Socket rigs without native armed anims get the canned grip pose —
+    // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
+    // need arms posed on top of them.
+    this.wantHoldPose = !!classGun && !CLASS_BODY_SPEC[this.variant]?.anims;
     if (!PlayerModel._gunMat) {
       PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
     }
@@ -583,6 +640,7 @@ export class PlayerModel {
       this.muzzleFlash = ModelFx.buildMuzzleFlash();
       this.gun.add(this.muzzleFlash);
       this.model!.add(this.gun);
+      this.socketGun = true;
       if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
       return;
     }
@@ -921,6 +979,9 @@ export class PlayerModel {
     for (const ab of this.aimBones) {
       ab.bone.quaternion.multiply(_pitchQuat.copy(ab.last).invert());
     }
+    for (const hb of this.holdBones) {
+      hb.bone.quaternion.multiply(_pitchQuat.copy(hb.last).invert());
+    }
     // Masked aim layer — weights must land BEFORE mixer.update samples the
     // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
     // arms so it doesn't fight the reaction pose.
@@ -947,12 +1008,37 @@ export class PlayerModel {
       this.mixer.update(dt);
     }
     this.applySpineLock(dt);
+    if (this.wantHoldPose) {
+      // Same suppression rule as the aim layer — a full-body oneshot
+      // (shoot/hit/death) owns the arms while it's actually weighted in.
+      const a = this.currentAction;
+      const oneshot = !!a?.isRunning() && a.getEffectiveWeight() > 0.5 &&
+        (!!this.currentClipName && (ONESHOT_CLIPS.has(this.currentClipName) || this.currentClipName === 'UAL_Death01'));
+      if (!oneshot) for (const hb of this.holdBones) {
+        hb.last.copy(hb.off);
+        hb.bone.quaternion.multiply(hb.last);
+      }
+    }
     for (const ab of this.aimBones) {
       // Negative X tilts up for positive pitch (looking up)
       ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
       ab.bone.quaternion.multiply(ab.last);
     }
     this.snapFeetToShins();
+    if (this.socketGun && this.handBone && this.gun) {
+      // Anchor the socket gun to the palm's world transform — the fixed
+      // gunLocal socket never tracked the arm, so it floated while clips
+      // moved the hands. Must run after the hold/aim bone writes so the
+      // anchor reads the rendered pose, not the pre-pose matrices.
+      // grip quat = model-relative palm rot × mount rot.
+      this.handBone.getWorldPosition(_handW);
+      this.gun.parent!.worldToLocal(_handW);
+      this.gunRestX = _handW.x; this.gunBaseY = _handW.y; this.gunBaseZ = _handW.z;
+      this.gun.parent!.getWorldQuaternion(_mq).invert();
+      this.handBone.getWorldQuaternion(_hq);
+      if (!this.gunBaseQuat) this.gunBaseQuat = new THREE.Quaternion();
+      this.gunBaseQuat.copy(_mq.multiply(_hq)).multiply(PlayerModel.HAND_GUN_ROT);
+    }
     this.fx.tick(dt);
   }
 

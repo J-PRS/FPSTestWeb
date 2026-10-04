@@ -30,6 +30,9 @@ export interface ModelFxHost {
   gunRestX: number;
   gunBaseX: number;
   gunKickZ: number;
+  /** Hand-mounted guns: palm orientation in gun-parent space, rewritten
+   *  each frame — fx envelopes compose on top of it. Null = fixed mount. */
+  gunBaseQuat: THREE.Quaternion | null;
   /** setRotation's applied roll — lean rebuilds rotation.z from it, so
    *  reading the euler back would double-apply. */
   lastRoll: number;
@@ -143,6 +146,8 @@ export class ModelFx {
     return e;
   }
 
+  private static _dq = new THREE.Quaternion();
+  private static _de = new THREE.Euler();
   private tickGunFx(dt: number): void {
     const swapDip = this.env('swapT', dt, 0.12, 0, 0.16);
     const throwE = this.env('throwT', dt, 0.14, 0.12, 0.26);
@@ -158,8 +163,17 @@ export class ModelFx {
       gun.position.x = this.h.gunRestX + punchE * 0.18 * this.h.gunUnit;
       gun.position.y = this.h.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.h.gunUnit;
       gun.position.z = this.h.gunBaseZ - k * this.h.gunKickZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.h.gunUnit;
-      gun.rotation.x = this.h.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
-      gun.rotation.z = throwE * 0.45 + punchE * 0.5;
+      const rx = this.h.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
+      const rz = throwE * 0.45 + punchE * 0.5;
+      if (this.h.gunBaseQuat) {
+        // Hand-mounted guns own their orientation from the palm quat —
+        // the fx deltas ride on top as a small euler instead of absolute x/z.
+        ModelFx._dq.setFromEuler(ModelFx._de.set(rx, 0, rz));
+        gun.quaternion.copy(this.h.gunBaseQuat).multiply(ModelFx._dq);
+      } else {
+        gun.rotation.x = rx;
+        gun.rotation.z = rz;
+      }
     }
     const flash = this.h.muzzleFlash;
     if (flash && this.flashTTL > 0) {
