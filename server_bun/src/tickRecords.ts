@@ -220,10 +220,15 @@ export class TickFanout {
     // Spectators have no viewpoint for interest tiers — they get the
     // full record set every tick.
     if (room.spectators.size > 0) {
+      // Shared scratch like the player path — a fresh map() per spectator
+      // per tick was the only allocation left in fanout.
+      const all = this.scratchOthers;
+      all.length = 0;
+      for (const r of records) all.push(r.data);
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), records.map(r => r.data));
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all);
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }
