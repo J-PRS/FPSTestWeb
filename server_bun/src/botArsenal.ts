@@ -175,6 +175,28 @@ export class BotArsenal implements BeamHost {
     }
   }
 
+  /** Suppression shots at a world point — a runner pre-softens the
+   *  stand while closing (disc/GL/bolt, whatever the loadout bands
+   *  pick). A few degrees of scatter: chip fire, not a snipe. Same
+   *  legal spawn + self-blast checks a player shot goes through. */
+  firePoint(p: BotBody, point: Vec3): void {
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const dx = point.x - muzzle.x, dy = point.y - muzzle.y, dz = point.z - muzzle.z;
+    const dist = Math.hypot(dx, dy, dz) || 1;
+    const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
+    const wt = this.pickWeapon(lo, Math.hypot(dx, dz), dist, p.id);
+    if (!this.rateOk(p.id, wt)) return;
+    weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
+    const j = () => (botRand() - 0.5) * 0.07;
+    const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
+    const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+    dir.x /= l; dir.y /= l; dir.z /= l;
+    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) return;
+    if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
+      fireSpeedless(this, p.id, muzzle, dir, wt);
+    }
+  }
+
   /** Self-radius clearance: an AOE shell that detonates on terrain or a
    *  structure inside its own blast radius of the muzzle is a guaranteed
    *  self-splash — humans see the hump between them and the target and

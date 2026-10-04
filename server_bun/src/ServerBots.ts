@@ -16,7 +16,8 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
+import { BotBrain, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
+import { losClear } from '../../shared/botLos.ts';
 import type { BotSkill } from '../../shared/botSkill.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
@@ -55,6 +56,9 @@ export class ServerBots {
   /** Next allowed sentry-clearing lob per bot — keeps gear suppression
    *  on a human cadence instead of a per-tick mortar stream. */
   private gearLobT = new Map<string, number>();
+  /** Next allowed stand-suppression volley per bot — a few shots on the
+   *  approach, not a constant stream while he flies. */
+  private suppressT = new Map<string, number>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
   seq = 1; // public — botDrive commits inputs under this counter
   /** Sheep meter lives in botSheep.ts — pedestrian play fills it and
@@ -145,6 +149,7 @@ export class ServerBots {
     this.arsenal.untrack(playerId);
     this.foeNear.delete(playerId);
     this.gearLobT.delete(playerId);
+    this.suppressT.delete(playerId);
     this.deadSet.delete(playerId);
     this.quiet.delete(playerId);
     this.watchdog.remove(playerId);
@@ -248,9 +253,21 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec } | null; now: number; sh: MoveState | null; nuggetNear: boolean }): void {
-    const { goal, now, sh, nuggetNear } = s;
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
+    const { goal, now, sh, nuggetNear, ctx } = s;
     if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
+    // Stand suppression: a committed runner with clear LOS takes a few
+    // potshots at the stand while closing — humans pre-soften the ring
+    // (disc/GL/bolt, not a mortar barrage) so the pass doesn't fly
+    // through untouched defenders. Never interrupts a live hunt shot.
+    else if (goal?.runner && (this.suppressT.get(id) ?? 0) <= now) {
+      const sd = Math.hypot(goal.pos.x - p.position.x, goal.pos.z - p.position.z);
+      const eye = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+      if (sd > 60 && sd < 280 && losClear(ctx, eye, goal.pos)) {
+        this.arsenal.firePoint(p, goal.pos);
+        this.suppressT.set(id, now + 2500);
+      }
+    }
     // The generic hunt lob is the definition of a low-value toss.
     if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) this.arsenal.throwBelt(p);
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
@@ -525,7 +542,7 @@ export class ServerBots {
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
-        this.firePhase(id, p, out, { goal, now, sh: sh0, nuggetNear });
+        this.firePhase(id, p, out, { goal, now, sh: sh0, nuggetNear, ctx });
         if (prof) { prof[3]! += performance.now() - tm; tm = performance.now(); }
         this.supportNade(id, p, brain, now, nuggetNear);
         this.healAlly(id, p, brain, now);
