@@ -188,14 +188,21 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
   return u8;
 }
 
-export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
+/** Reusable decode pool — pass the SAME object every call and slot
+ *  entries are mutated in place instead of allocating ~4 objects per
+ *  player per frame. The returned `updates` view aliases the pool and
+ *  is only valid until the next decode: consumers must copy any field
+ *  they retain. */
+export interface TickDecodePool { slots: WireTickPlayer[] }
+
+export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
   if (u8.length < 15 || u8[0] !== MAGIC || u8[1] !== WIRE_TICK) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const ackSeq = d.getUint32(2, true);
   const tickSeq = d.getUint32(6, true);
   const inputAck = d.getUint32(10, true);
   const count = u8[14]!;
-  const updates: WireTickPlayer[] = [];
+  const slots = pool ? pool.slots : [];
   let o = 15;
   for (let i = 0; i < count; i++) {
     if (o >= u8.length) return null;
@@ -205,27 +212,26 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
     const px = d.getFloat32(o, true); o += 4;
     const py = d.getFloat32(o, true); o += 4;
     const pz = d.getFloat32(o, true); o += 4;
-    const vel: WireVec3 = { x: 0, y: 0, z: 0 };
-    o = unpackVel(d, o, vel);
-    const rot: WireRot = { yaw: 0, pitch: 0 };
-    o = unpackRot(d, o, rot);
-    const health = d.getUint16(o, true); o += 2;
+    let u = slots[i] as WireTickPlayer | undefined;
+    if (!u) {
+      u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
+      slots[i] = u;
+    }
+    u.playerId = playerId;
+    u.position.x = px; u.position.y = py; u.position.z = pz;
+    o = unpackVel(d, o, u.velocity);
+    o = unpackRot(d, o, u.rotation);
+    u.health = d.getUint16(o, true); o += 2;
     const pingRaw = u8[o++]!;
     const flags = u8[o++]!;
     const sheep = u8[o++]!;
-    updates.push({
-      playerId,
-      position: { x: px, y: py, z: pz },
-      rotation: rot,
-      velocity: vel,
-      health,
-      isDead: (flags & 1) !== 0,
-      ping: pingRaw > 0 ? pingRaw : undefined,
-      ski: (flags & 2) !== 0 ? 1 : 0,
-      status: flags & STATUS_MASK,
-      sheep: sheep > 0 ? sheep : undefined,
-    });
+    u.isDead = (flags & 1) !== 0;
+    u.ping = pingRaw > 0 ? pingRaw : undefined;
+    u.ski = (flags & 2) !== 0 ? 1 : 0;
+    u.status = flags & STATUS_MASK;
+    u.sheep = sheep > 0 ? sheep : undefined;
   }
+  const updates = pool ? slots.slice(0, count) : slots;
   return { ackSeq, tickSeq, inputAck, updates };
 }
 

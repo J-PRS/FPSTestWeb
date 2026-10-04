@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG, SERVER_TICK_MS } from '../../../shared/wire.js';
+import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG, SERVER_TICK_MS, type TickDecodePool } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -132,6 +132,9 @@ export class NetworkManager {
   // --- Client-side prediction: sequence tracking + state history ---
   private sequenceCounter: number = 0;
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
+  /** Decode slots reused every tick — upsert deep-fills roster vecs so
+   *  rostered values never alias a slot (see decodeTickFrame pool docs). */
+  private tickPool: TickDecodePool = { slots: [] };
   private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
   private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
 
@@ -593,9 +596,23 @@ export class NetworkManager {
     // biggest steady-state allocation on the 20Hz wire path. Merge
     // order is unchanged — patch → existing → default.
     const next = existing ?? ({ id: playerId } as RemotePlayerState);
-    for (const k of ROSTER_FIELDS) {
-      (next as unknown as Record<string, unknown>)[k] = patch[k] ?? existing?.[k] ?? ROSTER_DEFAULTS[k];
+    if (!existing) {
+      // Vec defaults are shared literals — clone or the first in-place
+      // update corrupts every roster entry built after this one.
+      next.position = { ...ROSTER_DEFAULTS.position! };
+      next.rotation = { ...ROSTER_DEFAULTS.rotation! };
+      next.velocity = { ...ROSTER_DEFAULTS.velocity! };
     }
+    for (const k of ROSTER_FIELDS) {
+      // Vec fields are handled below — storing the patch ref would alias
+      // the decode pool (a pooled slot tracks whichever player decoded
+      // LAST), so they fill the entry's own sub-objects instead.
+      if (k === 'position' || k === 'rotation' || k === 'velocity') continue;
+      (next as unknown as Record<string, unknown>)[k] = patch[k] ?? next[k] ?? ROSTER_DEFAULTS[k];
+    }
+    if (patch.position) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; }
+    if (patch.rotation) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
+    if (patch.velocity) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
     if (!existing) this.players.set(playerId, next);
   }
 
@@ -697,7 +714,7 @@ export class NetworkManager {
       });
       return;
     }
-    const tick = decodeTickFrame(data);
+    const tick = decodeTickFrame(data, this.tickPool);
     if (!tick) return;
     // Stale-drop: under an unordered transport a late frame carries an older
     // tickSeq — interpolating it would rewind remotes. On TCP this never
