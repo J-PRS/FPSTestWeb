@@ -253,6 +253,10 @@ export class Room {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
     };
+    // Reclaim desync accounting — journal wraps and reclaim gaps are the
+    // only ways a reconnected client silently loses event history.
+    this.connections.onJournalWrap = (n) => this.healthBump('journalWrap', n);
+    this.connections.onReclaimGap = (_pid, n) => this.healthBump('reclaimGap', n);
     this.moveSim.attachStructures(this.effStructures());
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.

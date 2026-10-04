@@ -35,6 +35,17 @@ export class ConnectionManager {
   private outSeq = 0;
   private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
   private static readonly JOURNAL_MAX = 1024;
+  /** Frames evicted from the journal before any in-flight reclaim could
+   *  replay them — a gap the reclaiming client can never see again, so a
+   *  nonzero count means a silent desync happened. The room folds this
+   *  into its health counters; the owner can bump a tag on each wrap. */
+  journalDropped = 0;
+  onJournalWrap?: (dropped: number) => void;
+  /** Frames a reclaim asked for that were already evicted — the client
+   *  gets gameState truth but loses event history (kills, flag edges,
+   *  chat). Counted so an undersized journal is visible, not silent. */
+  reclaimGap = 0;
+  onReclaimGap?: (playerId: string, missed: number) => void;
 
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
     const seq = ++this.outSeq;
@@ -42,7 +53,10 @@ export class ConnectionManager {
     const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
     this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
     if (this.journal.length > ConnectionManager.JOURNAL_MAX) {
-      this.journal.splice(0, this.journal.length - ConnectionManager.JOURNAL_MAX);
+      const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
+      this.journal.splice(0, n);
+      this.journalDropped += n;
+      this.onJournalWrap?.(n);
     }
     return data;
   }
@@ -53,6 +67,12 @@ export class ConnectionManager {
   replayTo(playerId: string, ws: ServerWebSocket<WebSocketData>, fromSeq: number): number {
     const now = wallNow();
     let n = 0, skippedStale = 0;
+    const oldest = this.journal.length ? this.journal[0]!.seq : this.outSeq + 1;
+    const missed = oldest - fromSeq - 1;
+    if (missed > 0) {
+      this.reclaimGap += missed;
+      this.onReclaimGap?.(playerId, missed);
+    }
     for (const e of this.journal) {
       if (e.seq <= fromSeq) continue;
       if (e.volatile && now - e.at > VOLATILE_TTL_MS) { skippedStale++; continue; }
