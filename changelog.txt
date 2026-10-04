@@ -1,3 +1,4 @@
+2026-10-04 - fall terminal clamp now airborne-only: it silently capped glued downhill ski at terminal/sin(slope) — downhill ski now accelerates linearly with tangential gravity, no artificial cap
 2026-10-04 - gravity now applies every tick, grounded or not (true T1 model): contact kills only the into-slope component so tangential slide is free — replaces the grounded-ski special case
 2026-10-04 - grounded skier gets tangential gravity: parked on a slope you now slide downhill (T1 constant-gravity feel) and ski skips ground friction entirely; flat stays parked
 2026-10-04 - ski contact now frictionless: inward velocity killed 100% on terrain contact (tangential preserved perfectly); snap band owns surface tracking

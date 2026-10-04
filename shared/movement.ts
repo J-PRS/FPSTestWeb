@@ -272,9 +272,12 @@ export class MoveSim {
     }
     // Gravity applies always — grounded contact kills the into-slope
     // component every tick and only the tangential slide survives
-    // (T1 model: no grounded/airborne gravity distinction).
+    // (T1 model: no grounded/airborne gravity distinction). The fall
+    // clamp stays airborne-only: a skier glued to a downslope feeds
+    // tangential speed through the contact, so clamping vel.y while
+    // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
-    if (s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
+    if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
 
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
