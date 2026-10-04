@@ -89,8 +89,23 @@ export class RibbonTrail {
   private baseColor: THREE.Color;
   private width: number;
   private life: number;
+  // Emitter ramp — spawn-scale for streaks: the trail starts at `from`
+  // of its life AND width, growing to full over `dur`. Lives on the
+  // emitter: fade windows and write widths evaluate against the CURRENT
+  // scale each update, so samples aren't re-tuned after spawn.
+  private rampDur = 0;
+  private rampFrom = 1;
+  emitScale = 1; // public — census/diag reads it
   private vOffset: number; // offset along the ribbon's in-plane "up" (⊥ side)
   private billboard: boolean; // width axis faces the camera each frame
+  // Live emitter anchor: the head sample is one tick old by the time it
+  // renders (drivers push from updateVfx AFTER the host's own update), so
+  // the tip vertex trails a fast shell by a full frame of travel. When a
+  // host binds `follow`, update() re-pins the head sample to the live
+  // position before verts are written — the strip stays welded to the
+  // body instead of floating one frame behind.
+  follow: THREE.Vector3 | null = null;
+  private _ox = 0; private _oy = 0; private _oz = 0; // last lane offset — re-applied on follow re-pin
   // Owning subsystem ('proj:disc', 'ball', 'sentry') — every census/probe
   // row names the owner so a frozen streak is identified, not hunted.
   private tag!: string;
@@ -263,6 +278,10 @@ export class RibbonTrail {
     this.starvedPushes = 0;
     this._lf.fill(-1);
     this.ws.fill(1);
+    this.rampDur = 0;
+    this.rampFrom = 1;
+    this.emitScale = 1;
+    this.follow = null;
     this.claimSlot(scene);
   }
 
@@ -324,6 +343,7 @@ export class RibbonTrail {
       if (jx * jx + jy * jy + jz * jz > jump * jump) this.clear();
     }
 
+    this._ox = ox; this._oy = oy; this._oz = oz;
     this.head = (this.head + 1) % MAX_SAMPLES;
     this.px[this.head] = pos.x + ox; this.py[this.head] = pos.y + oy; this.pz[this.head] = pos.z + oz;
     this.sx[this.head] = _side.x; this.sy[this.head] = _side.y; this.sz[this.head] = _side.z;
@@ -333,6 +353,10 @@ export class RibbonTrail {
     if (this.count < MAX_SAMPLES) this.count++;
     this.pushed++;
   }
+
+  /** Ramp the emitter in over `dur` seconds starting at `from` scale —
+   *  the projectile mesh's spawn-grow, applied to the streak. */
+  rampIn(dur: number, from = 0): void { this.rampDur = dur; this.rampFrom = from; }
 
   /** Stop emitting — ribbon fades out where it is. */
   stop(): void { this.stopped = true; }
@@ -370,6 +394,12 @@ export class RibbonTrail {
     this.lastUpdateAt = performance.now();
     camPos = camPos ?? sharedCamPos ?? undefined;
     this.time += dt;
+    this.emitScale = this.rampDur > 0 ? Math.min(1, this.rampFrom + (1 - this.rampFrom) * (this.time / this.rampDur)) : 1;
+    if (this.follow && this.count > 0) {
+      this.px[this.head] = this.follow.x + this._ox;
+      this.py[this.head] = this.follow.y + this._oy;
+      this.pz[this.head] = this.follow.z + this._oz;
+    }
     if (!this.slotAlive() || this.count < 2) return;
     const { camMoved, rebillboard } = this.cameraState(camPos);
     const pos = this.batch.pos;
@@ -406,12 +436,16 @@ export class RibbonTrail {
 
   private rewriteSamples(base: number, pos: Float32Array, freshFrom: number, rebillboard?: THREE.Vector3): boolean {
     let dirty = false;
+    const effLife = this.life * Math.max(this.emitScale, 0.02);
     for (let i = this.liveFrom; i < this.count; i++) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
-      const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
+      const fade = Math.max(0, 1 - (this.time - this.st[s]) / effLife);
       const o = base + i * 6;
-      if (i >= freshFrom) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
+      // The followed head re-pins every frame — it must be rewritten even
+      // when no new sample pushed this tick, else the tip vertex sits at
+      // last frame's pin while the body moved on.
+      if (i >= freshFrom || (this.follow && i === this.count - 1)) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
       if (this.applyFadeBucket(i, o, fade)) dirty = true;
     }
     return dirty;
@@ -462,7 +496,7 @@ export class RibbonTrail {
       const s3 = this.sideFor(s, rebillboard);
       if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
     }
-    const w = this.width * 0.5 * fade * this.ws[s];
+    const w = this.width * this.emitScale * 0.5 * fade * this.ws[s];
     pos[o] = this.px[s] - sx * w;
     pos[o + 1] = this.py[s] - sy * w;
     pos[o + 2] = this.pz[s] - sz * w;
@@ -496,6 +530,7 @@ export class RibbonTrail {
     // "slot=-1 but 17 samples" rows that hid who lost their trail.
     this.head = -1;
     this.count = 0;
+    this.follow = null;
     this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);
