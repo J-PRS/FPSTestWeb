@@ -87,7 +87,9 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   // per frame for pixels that never move.
   const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-  for (const s of list) {
+  // 'stand' specs are collision-only — the flag dais mesh is their
+  // visual; drawing the generic box would double-render over it.
+  for (const s of list.filter((s) => s.kind !== 'stand' && s.kind !== 'hull')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
     let g: THREE.BufferGeometry;
     if (s.kind === 'root') {

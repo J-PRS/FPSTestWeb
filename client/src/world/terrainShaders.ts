@@ -202,6 +202,13 @@ export const terrainFrag = /* glsl */`
 
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
   uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
+  // Deployable field rings (recharge pad envelope): same projected-decal
+  // trick as scorch — drawn INTO the terrain fragment, so it conforms to
+  // the displaced surface exactly. A draped mesh can't: the clipmap is a
+  // 5m chord approximation and any denser decal drowns under its bumps.
+  uniform vec4 fieldRing[8];  // x, z, ±radius, intensity (w<=0 = unused)
+  uniform vec3 fieldTint[8];  // per-slot color
+  uniform float fieldY[8];    // dome-center Y for shell-contact slots
 
   // Projected explosion-scorch decals: darken albedo inside each scorch
   // circle with a noise-jittered edge. Applied in the fragment shader so it
@@ -234,6 +241,35 @@ export const terrainFrag = /* glsl */`
       g += eb * max(ring, 0.0);
     }
     return vec3(1.0, 0.45, 0.1) * min(g, 1.2);
+  }
+
+  // Field-ring decals — tinted, additive like the ember rim. Two modes
+  // packed in the radius sign:
+  //   r > 0: flat annulus near radius + faint interior fill (station pad)
+  //   r < 0: dome CONTACT CONTOUR — |r| is a sphere radius, fieldY[i] its
+  //          center height. The contact line of a half-buried sphere is
+  //          where terrain height equals the lower shell's height, which
+  //          is NOT a circle on slopes (uphill bites in, downhill runs
+  //          wide). Comparing this fragment's own displaced height to the
+  //          shell height traces the true contour — cheap, no marching.
+  vec3 fieldGlow(vec3 wp) {
+    vec3 g = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+      vec4 s = fieldRing[i];
+      if (s.w <= 0.0) continue;
+      float rho = distance(wp.xz, s.xy);
+      if (s.z > 0.0) {
+        float band = 1.0 - smoothstep(0.0, s.z * 0.14, abs(rho - s.z * 0.9));
+        float fill = (1.0 - smoothstep(s.z * 0.1, s.z, rho)) * 0.10;
+        g += fieldTint[i] * s.w * (band + fill);
+      } else if (rho < -s.z) {
+        float R = -s.z;
+        float shellY = fieldY[i] - sqrt(max(R * R - rho * rho, 0.0));
+        float line = 1.0 - smoothstep(0.0, 0.7, abs(wp.y - shellY));
+        g += fieldTint[i] * s.w * line * line;
+      }
+    }
+    return g;
   }
 
   // --- Worley / cell noise for rocky variation ---
@@ -366,11 +402,14 @@ export const terrainFrag = /* glsl */`
       float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;
       col *= 1.0 - scorchMask(vWorldPos.xz);
+      // T2's terrain was baked/vertex-lit for a bright arcade read —
+      // the procedural path's diff² curve night-falls a ported albedo,
+      // so ported maps take a linear diffuse + lifted ambient instead.
       float diff = max(dot(vNormal, sunDir), 0.0);
-      float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
-      col *= ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col *= ambientColor * 1.35 + sunColor * diff * shadowMask + vec3(rim);
       col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
@@ -420,6 +459,7 @@ export const terrainFrag = /* glsl */`
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
       col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
       // Fog distance: dampen the DOWNWARD vertical component so terrain
       // below an airborne camera isn't over-fogged (looking down a valley,
       // ground 200m below shouldn't haze like it's 200m across the map).
@@ -503,6 +543,7 @@ export const terrainFrag = /* glsl */`
     vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
     col *= lit;
     col += scorchEmberGlow(vWorldPos.xz);
+    col += fieldGlow(vWorldPos);
     // Same dampened-downward-distance fog as the desert branch — see above
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));

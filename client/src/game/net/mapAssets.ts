@@ -10,11 +10,12 @@ import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js'
 import { Ball } from '../../entities/balls.js';
 import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
-import { loadHeightfieldBin } from '../../world/heightmap.js';
+import { loadHeightfieldBin, setHeightScale } from '../../world/heightmap.js';
+import { TERRAIN_HEIGHT_SCALE } from '../../core/config.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
  *  Serializes concurrent loads — a mapUpdate racing a re-join can't
@@ -34,16 +35,23 @@ export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; 
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
-export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string): Promise<void> {
-  const key = `${file}|${texPath}|${skyDir}`;
+export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number): Promise<void> {
+  const mult = heightScale ?? 1;
+  const key = `${file}@${mult}|${texPath}|${skyDir}`;
   if (terrainActive === key) return;
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
     if (terrainActive === key) return;
     Ball.terrainSwapping = true;
     try {
+      // Scale applies to whichever field is resident — a scale-only map
+      // change still needs CPU samples + shader uniforms re-keyed.
+      setHeightScale(mult);
+      deps.lazyTerrain().setHeightScale(TERRAIN_HEIGHT_SCALE * mult);
+      interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
       const { httpUrl } = await resolveServerEndpoints();
-      if (file !== fieldLoaded) {
+      const fieldKey = `${file}@${mult}`;
+      if (fieldKey !== fieldLoaded) {
         if (file) {
           await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
         } else {
@@ -54,7 +62,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
         // swapped, not mutated, so the sim would keep predicting bounces on
         // the old terrain. Re-read it now that the new field is resident.
         Ball.initNetMode(true);
-        fieldLoaded = file;
+        fieldLoaded = fieldKey;
       }
 
       // Baked albedo (T2 ports) replaces the procedural palette entirely.
@@ -481,6 +489,27 @@ const glbLoader = new GLTFLoader();
 // Canonical interior materials — dedup by stripped name (per-GLB `.NNN`
 // suffixes removed) + the shading params that actually differ.
 const _canonMats = new Map<string, { key: string; mat: THREE.Material }>();
+
+// Interiors ride the same fog model as the terrain shader — THREE.Fog
+// alone leaves mesh hulls crisp inside dissolved lowlands, so the
+// valley-mist term is injected into their Lambert's fog chunk. hscale
+// tracks the active field's heightScale so the mist layer pools right.
+const interiorHscale = { value: 125 };
+const INTERIOR_FOG_GLSL = `
+  const float IHF_FLOOR = 18.0;
+  const float IHF_K = 0.024;
+  const float IHF_D0 = 0.0024;
+  const float IHF_CAP = 0.80;
+  float interiorMist(vec3 ro, vec3 delta, float dist) {
+    if (dist < 1.0) return 0.0;
+    float rdy = delta.y / dist;
+    float a = IHF_D0 * exp(-IHF_K * max(ro.y - IHF_FLOOR, 0.0));
+    float od = abs(rdy) < 1e-3
+      ? a * dist
+      : a * (1.0 - exp(-IHF_K * rdy * dist)) / (IHF_K * rdy);
+    return min(1.0 - exp(-max(od, 0.0)), IHF_CAP);
+  }`;
+
 function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Material } {
   const std = mat as THREE.MeshStandardMaterial;
   const key = [
@@ -522,6 +551,27 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
       fog: std.fog,
     });
     lam.name = std.name;
+    lam.onBeforeCompile = (sh) => {
+      sh.uniforms.uIntHscale = interiorHscale;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vIntWorld;\nvarying vec3 vIntDelta;')
+        .replace('#include <fog_vertex>',
+          '#include <fog_vertex>\n#ifdef USE_FOG\n  vIntWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vIntDelta = cameraPosition - vIntWorld;\n#endif');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vIntWorld;\nvarying vec3 vIntDelta;\nuniform float uIntHscale;\n' + INTERIOR_FOG_GLSL)
+        .replace('#include <fog_fragment>', `#ifdef USE_FOG
+  // Same curve as the terrain shader: linear haze + the exponential
+  // valley mist, so interiors dissolve into the same air the ground does.
+  float ifDist = length(vIntDelta);
+  float ifog = smoothstep(fogNear, fogFar, ifDist);
+  float ihf = smoothstep(fogNear * 0.6, fogFar * 0.7, ifDist)
+            * smoothstep(0.3, 0.8, clamp(vIntWorld.y / uIntHscale, 0.0, 1.0));
+  vec3 ifro = vec3(0.0, vIntWorld.y + vIntDelta.y, 0.0);
+  float imist = interiorMist(ifro, -vIntDelta, ifDist);
+  ifog = clamp(ifog + ihf + imist * (1.0 - ifog), 0.0, 1.0);
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, ifog);
+#endif`);
+    };
     useMat = lam;
   }
   const entry = { key, mat: useMat };
@@ -599,7 +649,10 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     if (spec.rot) {
       _axis.set(spec.rot[0], spec.rot[1], spec.rot[2]);
       if (_axis.lengthSq() > 1e-8) {
-        _q.setFromAxisAngle(_axis.normalize(), spec.rot[3] * Math.PI / 180);
+        // The SwapYZ reflection conjugates every mission rotation into its
+        // negative — negating the angle here re-applies the intended yaw.
+        // Chained pieces (Dangerous Crossing bridge) expose the flip.
+        _q.setFromAxisAngle(_axis.normalize(), -spec.rot[3] * Math.PI / 180);
         m.multiply(new THREE.Matrix4().makeRotationFromQuaternion(_q));
       }
     }
@@ -698,7 +751,8 @@ export async function probeBootMap(): Promise<{ map: MapSnapshot; httpUrl: strin
  *  default PNG) and mark it resident so applyTerrain dedupes the swap. */
 export async function bootPrimeTerrain(httpUrl: string, map: MapSnapshot): Promise<boolean> {
   if (!map.terrain) return false;
+  setHeightScale(map.heightScale ?? 1);
   await loadHeightfieldBin(`${httpUrl}/maps/${map.terrain}`);
-  fieldLoaded = map.terrain;
+  fieldLoaded = `${map.terrain}@${map.heightScale ?? 1}`;
   return true;
 }

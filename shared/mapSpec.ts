@@ -61,6 +61,10 @@ export interface MapSpec {
    *  "t2/escalade/terrain.bin" — one subdir deep) — a different terrain
    *  for this room's BallSim. Absent = the server's default field. */
   terrain?: string;
+  /** Vertical gain on the room's field — multiplies the base 125m scale
+   *  (0.1–8). Applies to spec.terrain AND the default field alike; the
+   *  value rides the wire so client prediction and render agree. */
+  heightScale?: number;
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
@@ -93,7 +97,11 @@ export interface MapSpec {
 }
 
 export interface StructureSpec {
-  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root';
+  /** 'stand' collides like a box but the client's generic box renderer
+   *  skips it — the visual is the real dais mesh; the spec is the hull. */
+  /** 'hull' is collision-only like 'stand' — T2 interior convex-hull
+   *  boxes emitted by the porter; the real mesh is the visual. */
+  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull';
   pos: Vec3like;
   size: Vec3like;
   /** Y-rotation in radians (ramps/boxes), default 0. */
@@ -157,6 +165,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     // filename-only — the value is resolved under maps/ server-side, so
     // anything with a slash or dot-traversal is dropped on the floor
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
+    heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
@@ -218,6 +227,14 @@ export function specModes(spec: MapSpec | undefined): string[] {
 
 function parseTerrain(raw: unknown): string | undefined {
   return parsePathField(raw, /\.bin$/); // t2/<map>/terrain.bin is 2 deep
+}
+
+/** Vertical gain — 0.1× (flats) to 8× (spikes). u8 quantization steps grow
+ *  with it: past ~4× the 0.49m texel step is readable under skis. */
+function parseHeightScale(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  const v = Math.max(0.1, Math.min(8, raw));
+  return v === 1 ? undefined : v;
 }
 
 /** maps/-relative path — word-char dirs, filename must carry the
@@ -285,7 +302,20 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   return { x: a.x as number, z: a.z as number, radius };
 }
 
-const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root']);
+const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull']);
+
+/** Flag-stand collision hull — a two-box trapezoid approximating the
+ *  dais mesh (client/src/structures mkFlagStand): wide low skirt tier +
+ *  narrower deck tier. pos.y is the piece BASE (collider centers itself
+ *  at +size.y/2). The server injects these at flag homes so the echo to
+ *  clients carries identical collision — keep dims in step with the
+ *  mesh: skirt ≈12w×2.2h, deck ≈9w×0.85h, top ≈3.05m. */
+export function flagStandSpecs(home: Vec3like, team?: TeamId): StructureSpec[] {
+  return [
+    { kind: 'stand', pos: { ...home }, size: { x: 12, y: 2.2, z: 12 }, team },
+    { kind: 'stand', pos: { x: home.x, y: home.y + 2.2, z: home.z }, size: { x: 9, y: 0.85, z: 9 }, team },
+  ];
+}
 const isVec = (s: unknown): s is Vec3like =>
   !!s && typeof s === 'object' &&
   Number.isFinite((s as Vec3like).x) &&
@@ -317,7 +347,9 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
       rotY: typeof o.rotY === 'number' && Number.isFinite(o.rotY) ? o.rotY : undefined,
       team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
     });
-    if (out.length >= 256) break;
+    // Cap is a sanity bound, not a budget: T2 interior hull batches run
+    // in the hundreds (each .dif decomposes into dozens of convex boxes).
+    if (out.length >= 2048) break;
   }
   return out.length ? out : undefined;
 }

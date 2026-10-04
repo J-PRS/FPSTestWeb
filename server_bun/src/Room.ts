@@ -272,7 +272,7 @@ export class Room {
     this.events.on((e) => {
       switch (e.type) {
         case 'kill': this.scoring.onKill(e.targetId, e.shooterId); break;
-        case 'hit': this.bots.flinch(e.targetId, e.shooterId); break;
+        case 'hit': this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
         case 'fire': this.bots.noteHumanFire(e.playerId); break;
         case 'botSpoke': this.bots.notice('reply', e.id, this.players.getPlayer(e.id)?.team); break;
         case 'chat': {
@@ -585,6 +585,7 @@ export class Room {
       // fallback — set post-ctor by the factory, refreshed by rotation.
       mapName: () => this.spec.name ?? (this.mapSrc || undefined),
       terrain: this.spec.terrain,
+      heightScale: this.spec.heightScale,
       terrainTex: this.spec.terrainTex,
       sky: this.spec.sky,
       interiors: this.spec.interiors,
@@ -831,7 +832,7 @@ export class Room {
    *  structures, arena, ball mix/population, bot fill. Clients get a
    *  mapUpdate broadcast to rebuild their geometry. */
   applySpec(spec: MapSpec): void {
-    const terrainChanged = spec.terrain !== this.spec.terrain;
+    const terrainChanged = spec.terrain !== this.spec.terrain || spec.heightScale !== this.spec.heightScale;
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.players.teamSpawns = spec.teamSpawns ?? null;
@@ -854,6 +855,7 @@ export class Room {
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       terrain: spec.terrain,
+      heightScale: spec.heightScale,
       terrainTex: spec.terrainTex,
       sky: spec.sky,
       interiors: spec.interiors,
