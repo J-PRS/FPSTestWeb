@@ -179,6 +179,7 @@ export class PoseControl {
    *  the arm chain so they pose the weapon hold over any locomotion clip. LoopOnce+clamp — they are static poses, so they
    *  play once and hold at full weight set per frame from aimPitch. */
   buildAimLayer(mixer: THREE.AnimationMixer, animations: Map<string, THREE.AnimationAction>): void {
+    if (this.aimNeutral && this.aimUp && this.aimDown) return;
     const mk = (name: string): THREE.AnimationAction | null => {
       const src = animations.get(name)?.getClip();
       if (!src) return null;

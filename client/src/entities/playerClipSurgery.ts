@@ -67,6 +67,11 @@ export const AIM_BONE_MASK = new Set([
   'defshoulderl', 'defshoulderr',
   'defupperarml', 'defupperarmr', 'defforearml', 'defforearmr',
   'defhandl', 'defhandr',
+  // UAL2 robot chain — without these the masked layer filtered every arm
+  // track out and robot aimed by spine pitch alone.
+  'shoulderl', 'shoulderr', 'upperarml', 'upperarmr',
+  'lowerarml', 'lowerarmr', 'palm1l', 'palm1r', 'palm2l', 'palm2r', 'palm3l', 'palm3r',
+  'handl', 'handr',
 ]);
 
 // Torso chain whose locomotion sway gets halved — spine roll is what

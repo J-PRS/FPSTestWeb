@@ -236,7 +236,9 @@ export class PlayerModel {
     // prefers so ANIM_NAMES resolves without a retarget pass.
     for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
     if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
-    if (mann) this.pose.buildAimLayer(this.mixer!, this.animations);
+    // Any variant whose clips carry Pistol_Aim_* gets the masked layer —
+    // mk() no-ops when the rig ships none (polyart, vexa).
+    this.pose.buildAimLayer(this.mixer!, this.animations);
 
     logger.debug('Loaded animations:', Array.from(this.animations.keys()));
 
@@ -872,6 +874,10 @@ export class PlayerModel {
       // retarget-only rigs that pass saw an empty table and did nothing.
       // Re-run so the bake's own hip convention gets canonicalized.
       if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
+      // Aim clips ride inside the retarget pack for rigs like robot —
+      // the load-time aim-layer build saw an empty table for them.
+      if ([...baked.keys()].some(n => n.includes('Aim_')))
+        this.pose.buildAimLayer(this.mixer, this.animations);
       // Re-resolve the current state onto the better clip if one landed —
       // the baked names now sit in the same candidate table the state
       // resolver reads, so let it pick (a bare 'Idle' name doesn't exist

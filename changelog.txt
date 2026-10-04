@@ -1,3 +1,4 @@
+2026-10-04 - robot aim layer actually builds: AIM_BONE_MASK gains UAL2 arm norms, buildAimLayer runs for all variants and re-runs when baked clips land
 2026-10-04 - animbake: attach meshopt decoder (quantized model GLBs made parse hang, bake died silently); skip marker-only clip packs; re-emit robot pack so Aim_ arm tracks survive the hold-bake
 2026-10-01 - enraged ball legs resync at 6m divergence budget (was flat 15m)
 2026-10-01 - hip-fire hold baked into retargeted arm tracks (cyber/vexa/robot); runtime compose gated by __holdbake1 marker
