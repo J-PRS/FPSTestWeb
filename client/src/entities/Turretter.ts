@@ -88,7 +88,9 @@ function eyeMat(): THREE.MeshBasicMaterial {
 }
 const PART_BASE = 0, PART_DOME = 1, PART_BARREL = 2, PART_EYE = 3;
 const DOME_R = 0x4a / 255, DOME_G = 0x5f / 255, DOME_B = 0x73 / 255;
-const HULL_R = 0x3a / 255, HULL_G = 0x4a / 255, HULL_B = 0x5a / 255;
+// Match the sentry's steel (0x4a5560) — the grunge shader modulates a few
+// percent of albedo, so the bake reads flat below ~30% luminance.
+const HULL_R = 0x4a / 255, HULL_G = 0x55 / 255, HULL_B = 0x60 / 255;
 
 export function turretterParts(): SwarmPart[] {
   return [
