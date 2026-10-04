@@ -1,189 +1,104 @@
-// Server-owned pickup bodies — the four powerups get real silhouettes +
-// glow so a heal/armor/regen/dd is readable at distance without a color
-// legend. Idle motion rides onBeforeRender (per rendered frame, zero
-// plumbing); collect feedback is a kind-tinted spark burst.
+// Server-owned pickup identity — pickups are diegetic now: every kind is
+// the same tumbling physics gem (Nugget), and the kind reads purely by
+// color. This table is the one place those colors live so the body tint
+// and the collect burst can't drift apart.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import { blastBurst } from '../effects/vfx.js';
 
-export interface PickupModel {
-  root: THREE.Group;
-  dispose(): void;
-}
-
-interface PickupSpec {
-  accent: number;   // emissive/glow color
-  base: number;     // body material color
-  bob: number;      // bob amplitude m
-  spin: number;     // rad/s yaw
-}
-
-const SPECS: Record<PickupKind, PickupSpec> = {
-  gem:   { accent: 0xffcc44, base: 0x664422, bob: 0.14, spin: 1.6 },
-  tag:   { accent: 0xff3355, base: 0x442222, bob: 0.10, spin: 0.9 },
-  heal:  { accent: 0x44ff66, base: 0xe8e8e8, bob: 0.16, spin: 0.8 },
-  armor: { accent: 0xffaa22, base: 0x334455, bob: 0.12, spin: 0.7 },
-  regen: { accent: 0x66ffee, base: 0x113a3a, bob: 0.18, spin: 1.2 },
-  dd:    { accent: 0xff4422, base: 0x2a0a08, bob: 0.15, spin: 2.0 },
+export const PICKUP_ACCENT: Record<PickupKind, number> = {
+  gem:   0xffd54a, // warm gold
+  tag:   0xff3355, // dog-tag red
+  heal:  0x44ff66, // medkit green
+  armor: 0xffaa22, // plating orange
+  regen: 0x66ffee, // regen teal
+  dd:    0xff4422, // overcharge red-orange
 };
 
-// One shared radial-gradient sprite for every pickup halo.
-let glowTex: THREE.Texture | null = null;
-function glowTexture(): THREE.Texture {
-  if (glowTex) return glowTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-  grad.addColorStop(0.4, 'rgba(255,255,255,0.25)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  glowTex = new THREE.CanvasTexture(c);
-  return glowTex;
+// Per-kind diegetic shapes — real objects that tumble and settle like the
+// gem does, identity carried by silhouette: a med capsule, an armor plate,
+// an energy cell, a dog tag, a caged power core. Each returns a dark
+// gunmetal BODY plus a thin ACCENT part that takes the kind's emissive
+// color, so the tint becomes trim lighting rather than a full-body dye.
+export interface PickupParts { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number }
+
+const _parts = new Map<PickupKind, PickupParts | null>();
+
+export function pickupParts(kind: PickupKind): PickupParts | null {
+  const hit = _parts.get(kind);
+  if (hit !== undefined) return hit;
+  const built = buildParts(kind);
+  _parts.set(kind, built);
+  return built;
 }
 
-const geoCache = new Map<string, THREE.BufferGeometry>();
-function geo(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
-  let g = geoCache.get(key);
-  if (!g) { g = make(); geoCache.set(key, g); }
-  return g;
-}
-
-function mat(color: number, emissive = 0, rough = 0.6): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: emissive ? 0.55 : 0, roughness: rough, metalness: 0.25 });
-}
-
-function addMesh(root: THREE.Group, g: THREE.BufferGeometry, m: THREE.Material,
-    opts: { pos?: [number, number, number]; rot?: [number, number, number]; s?: number } = {}): THREE.Mesh {
-  const mesh = new THREE.Mesh(g, m);
-  if (opts.pos) mesh.position.set(...opts.pos);
-  if (opts.rot) mesh.rotation.set(...opts.rot);
-  if (opts.s !== undefined) mesh.scale.setScalar(opts.s);
-  root.add(mesh);
-  return mesh;
-}
-
-/** The recognizable body per kind — primitives only, no asset fetch. */
-function buildBody(kind: PickupKind, spec: PickupSpec): THREE.Group {
-  const body = new THREE.Group();
-  const base = mat(spec.base);
-  const accent = mat(0x0a0a0a, spec.accent);
-  const accentMat = mat(spec.accent, spec.accent, 0.4);
+function buildParts(kind: PickupKind): PickupParts | null {
   switch (kind) {
     case 'heal': {
-      // Medkit — white case + green cross (red-cross-on-white is a
-      // protected ICRC emblem, games get told off for using it).
-      addMesh(body, geo('healBox', () => new THREE.BoxGeometry(0.6, 0.45, 0.4)), mat(0xe8e8e8));
-      const cross = mat(0x22aa44, 0x22aa44);
-      addMesh(body, geo('crossV', () => new THREE.BoxGeometry(0.12, 0.34, 0.06)), cross, { pos: [0, 0, 0.2] });
-      addMesh(body, geo('crossH', () => new THREE.BoxGeometry(0.34, 0.12, 0.06)), cross, { pos: [0, 0, 0.2] });
-      addMesh(body, geo('healCap', () => new THREE.BoxGeometry(0.64, 0.1, 0.44)), mat(0x22aa44), { pos: [0, 0.24, 0] });
-      break;
+      // Medical capsule — fat pill with a pale band around the waist.
+      const body = mergeGeometries([
+        new THREE.CapsuleGeometry(0.16, 0.34, 4, 10),
+      ], false)!;
+      const band = new THREE.TorusGeometry(0.17, 0.035, 6, 14);
+      band.rotateX(Math.PI / 2);
+      return { body, accent: band, bodyColor: 0xcfcfc4 };
     }
     case 'armor': {
-      // Shield plate — hex disc on edge with a glowing core boss.
-      addMesh(body, geo('shield', () => new THREE.CylinderGeometry(0.42, 0.5, 0.1, 6)), base, { rot: [Math.PI / 2, 0, 0] });
-      addMesh(body, geo('boss', () => new THREE.SphereGeometry(0.14, 10, 8)), accentMat, { pos: [0, 0, 0.08] });
-      addMesh(body, geo('shieldRim', () => new THREE.TorusGeometry(0.46, 0.05, 8, 6)), mat(0x556677, 0x223344));
-      break;
+      // Hexagonal armor plate standing on an edge — a chunk of plating.
+      const plate = new THREE.CylinderGeometry(0.3, 0.3, 0.12, 6);
+      plate.rotateX(Math.PI / 2);
+      const rim = new THREE.TorusGeometry(0.26, 0.04, 4, 6);
+      rim.rotateZ(Math.PI / 6); // flat side up like the hex
+      return { body: plate, accent: rim };
     }
     case 'regen': {
-      // Halo cell — luminous orb inside a tilted ring.
-      addMesh(body, geo('cell', () => new THREE.IcosahedronGeometry(0.26, 1)), accentMat);
-      addMesh(body, geo('cellRing', () => new THREE.TorusGeometry(0.42, 0.05, 8, 24)), mat(0x224444, 0x33aaaa), { rot: [1.2, 0, 0] });
-      addMesh(body, geo('cellRing2', () => new THREE.TorusGeometry(0.36, 0.04, 8, 24)), mat(0x224444, 0x33aaaa), { rot: [-0.7, 0.8, 0] });
-      break;
-    }
-    case 'dd': {
-      // Overcharge core — stretched octahedron + spike crown.
-      addMesh(body, geo('ddCore', () => new THREE.OctahedronGeometry(0.34)), accentMat);
-      body.children[0]!.scale.set(0.8, 1.35, 0.8);
-      const spike = geo('ddSpike', () => new THREE.ConeGeometry(0.07, 0.3, 5));
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        addMesh(body, spike, accent, { pos: [Math.cos(a) * 0.42, 0, Math.sin(a) * 0.42], rot: [0, 0, -a - Math.PI / 2] });
-      }
-      break;
-    }
-    case 'gem': {
-      addMesh(body, geo('gemO', () => new THREE.OctahedronGeometry(0.5)), accentMat);
-      break;
+      // Energy cell — short canister with glowing end-caps.
+      const can = mergeGeometries([
+        new THREE.CylinderGeometry(0.14, 0.14, 0.42, 10),
+      ], false)!;
+      const capA = new THREE.TorusGeometry(0.15, 0.03, 6, 12);
+      capA.rotateX(Math.PI / 2);
+      capA.translate(0, 0.17, 0);
+      const capB = capA.clone();
+      capB.translate(0, -0.34, 0);
+      return { body: can, accent: mergeGeometries([capA, capB], false)! };
     }
     case 'tag': {
-      addMesh(body, geo('tagP', () => new THREE.BoxGeometry(0.7, 0.14, 0.45)), accentMat);
-      addMesh(body, geo('tagHole', () => new THREE.CylinderGeometry(0.06, 0.06, 0.16, 8)), base, { pos: [-0.26, 0, 0] });
-      break;
+      // Dog-tag plate — flattened rounded box with a chain hole ring.
+      const plate = mergeGeometries([
+        new THREE.BoxGeometry(0.36, 0.05, 0.22),
+      ], false)!;
+      const ring = new THREE.TorusGeometry(0.05, 0.02, 6, 10);
+      ring.rotateX(Math.PI / 2);
+      ring.translate(0, 0.02, -0.07);
+      const stripe = new THREE.BoxGeometry(0.3, 0.056, 0.03);
+      stripe.translate(0, 0, 0.05);
+      return { body: plate, accent: mergeGeometries([ring, stripe], false)! };
     }
+    case 'dd': {
+      // Power core — emissive nucleus held in an open cubic frame.
+      // 12 thin box rods, one per cube edge, oriented along that edge's
+      // axis so the cage merges as a solid mesh.
+      const rods: THREE.BufferGeometry[] = [];
+      const L = 0.36, T = 0.04, H = L / 2;
+      for (const a of [-H, H]) for (const b of [-H, H]) {
+        const rx = new THREE.BoxGeometry(L, T, T); rx.translate(0, a, b); rods.push(rx);
+        const ry = new THREE.BoxGeometry(T, L, T); ry.translate(a, 0, b); rods.push(ry);
+        const rz = new THREE.BoxGeometry(T, T, L); rz.translate(a, b, 0); rods.push(rz);
+      }
+      const core = new THREE.IcosahedronGeometry(0.14, 1);
+      return { body: mergeGeometries(rods, false)!, accent: core };
+    }
+    default:
+      return null; // gem/tag-less kinds keep the plain nugget gem
   }
-  return body;
-}
-
-/** Ground ring — a soft pool of light marking the pickup's footprint. */
-function groundRing(accent: number): THREE.Mesh {
-  const m = new THREE.Mesh(
-    geo('ring', () => new THREE.RingGeometry(0.45, 0.75, 28)),
-    new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
-  );
-  m.rotation.x = -Math.PI / 2;
-  return m;
-}
-
-// Hover height — pickup bodies float just over their ground ring; at
-// 0.75 the models read as ballooning well above the terrain.
-const HOVER_Y = 0.45;
-
-export function buildPickupModel(kind: PickupKind, y0: number): PickupModel {
-  const spec = SPECS[kind];
-  const root = new THREE.Group();
-  const body = buildBody(kind, spec);
-  const born = performance.now() / 1000 + Math.random(); // phase-spread spins
-  body.position.y = HOVER_Y;
-  root.add(body);
-
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTexture(), color: spec.accent, transparent: true, opacity: 0.4,
-    depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  halo.scale.setScalar(1.8);
-  halo.position.y = HOVER_Y;
-  root.add(halo);
-
-  const ring = groundRing(spec.accent);
-  ring.position.y = 0.06 - y0; // ring sits on the pickup's own floor level
-  root.add(ring);
-
-  root.position.y = y0;
-  root.onBeforeRender = () => {
-    const t = performance.now() / 1000 - born;
-    body.rotation.y = t * spec.spin;
-    body.position.y = HOVER_Y + Math.sin(t * 2.1) * spec.bob;
-    const pulse = 1 + Math.sin(t * 3.2) * 0.12;
-    halo.scale.setScalar(1.8 * pulse);
-    (halo.material as THREE.SpriteMaterial).opacity = 0.3 + Math.sin(t * 3.2) * 0.1;
-    ring.scale.setScalar(pulse);
-  };
-
-  return {
-    root,
-    dispose() {
-      root.traverse((o) => {
-        if (o instanceof THREE.Mesh && !geoCache.has(o.geometry.uuid)) {
-          const m = o.material as THREE.Material;
-          m?.dispose?.();
-        }
-      });
-      (halo.material as THREE.SpriteMaterial).dispose();
-      (ring.material as THREE.Material).dispose();
-    },
-  };
 }
 
 /** Kind-tinted collect burst — rising sparks in the pickup's accent. */
 export function pickupBurst(pos: THREE.Vector3, kind: PickupKind): void {
-  const c = new THREE.Color(SPECS[kind].accent);
+  const c = new THREE.Color(PICKUP_ACCENT[kind]);
   blastBurst(pos, {
     count: 22, elvBase: 0.15, elvSpan: Math.PI / 2,
     spdMin: 3, spdMax: 8, vy: 2.5,

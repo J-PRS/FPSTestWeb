@@ -10,7 +10,7 @@
 </style>
 </head>
 <body>
-<div id="title">server pickups &mdash; kind silhouettes + idle glow</div>
+<div id="title">server pickups &mdash; one diegetic gem, kind sold by tint</div>
 <div id="labels">
   <div>HEAL<br>medkit +50hp</div>
   <div>ARMOR<br>plate +100</div>
@@ -27,7 +27,8 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { buildPickupModel } from '/src/entities/PickupModel.ts';
+import { Nugget } from '/src/entities/Nugget.ts';
+import { PICKUP_ACCENT, pickupParts } from '/src/entities/PickupModel.ts';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x161a22);
@@ -38,21 +39,29 @@ document.body.appendChild(renderer.domElement);
 
 const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
 cam.position.set(0, 1.5, 8.4);
-cam.lookAt(0, 0.9, 0);
+cam.lookAt(0, 0.7, 0);
 
 scene.add(new THREE.AmbientLight(0xffffff, 1.1));
 const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(2, 4, 5); scene.add(key);
 const rim = new THREE.DirectionalLight(0x8899ff, 0.8); rim.position.set(-3, 2, -4); scene.add(rim);
 scene.add(new THREE.GridHelper(12, 24, 0x445066, 0x2a3242));
 
+// Flat stub field — the nuggets settle on the grid plane like terrain.
+const stub = { getHeight: () => 0, sampleHeight: () => 0 };
+const far = new THREE.Vector3(0, -9999, 0); // no magnet in the lineup
+
 const kinds = ['heal', 'armor', 'regen', 'dd', 'gem', 'tag'];
-kinds.forEach((k, i) => {
-  const m = buildPickupModel(k, 0);
-  m.root.position.x = (i - 2.5) * 1.55;
-  scene.add(m.root);
+const nugs = kinds.map((k, i) => {
+  const n = new Nugget(scene, new THREE.Vector3((i - 2.5) * 1.55, 0.3, 0), new THREE.Vector3(), PICKUP_ACCENT[k], pickupParts(k));
+  n.serverOwned = true;
+  return n;
 });
 
-renderer.setAnimationLoop(() => renderer.render(scene, cam));
+renderer.setAnimationLoop(() => {
+  const dt = 1 / 60;
+  for (const n of nugs) n.update(dt, stub, far);
+  renderer.render(scene, cam);
+});
 </script>
 </body>
 </html>

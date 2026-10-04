@@ -1,3 +1,11 @@
+2026-10-01 - pickups get diegetic identity: each kind is still a real
+tumbling solid that falls and settles like the nugget, but reads by
+silhouette instead of body tint — heal = pale med capsule with band,
+armor = hex armor plate with rim, regen = energy cell with glowing
+end-caps, tag = dog-tag plate with chain ring, dd = emissive core in
+an open cube cage. Dark gunmetal body + kind-colored accent trim;
+gem stays the plain nugget. One shared merged geometry per kind.
+
 2026-10-01 - heavy gun reads as a weapon: 2.5m bore with a 4x cross-section
 fatten on gun-local xy (was a rod lost inside the gauntlet).
 

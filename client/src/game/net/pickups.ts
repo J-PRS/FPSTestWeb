@@ -5,30 +5,45 @@
 import type { NetCtx } from './ctx.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 import { BELT_MAX } from '../../../../shared/weapons.js';
-import { buildPickupModel, pickupBurst, type PickupModel } from '../../entities/PickupModel.js';
+import { pickupBurst, PICKUP_ACCENT, pickupParts } from '../../entities/PickupModel.js';
+import { Nugget } from '../../entities/Nugget.js';
+import * as THREE from 'three';
 import * as sfxPlayer from '../../core/sfx/player.js';
+
+const _zeroVel = new THREE.Vector3();
 
 export function wirePickups(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
 
-  const pickupMeshes = new Map<number, { model: PickupModel; kind: PickupKind }>();
+  // Every pickup renders as the same Nugget class offline drops use —
+  // physically tumbling, blast-scatterable; the kind reads purely by
+  // tint (heal green, armor orange, tag red...). They live in the shared
+  // `nuggets` array so blastForce scatters them identically and
+  // updateNuggets ticks/disposes them; the server only owns spawn,
+  // collect edges, and rest-spot truth.
+  const pickupMeshes = new Map<number, { nugget: Nugget; kind: PickupKind }>();
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
     // A re-spawn for a live id is a blast-knock rest spot — the server's
-    // truth lands where the tumble ended; snap the model there.
+    // truth lands where the tumble ended; converge the replica there.
     const live = pickupMeshes.get(id);
-    if (live) { live.model.root.position.set(pos.x, pos.y, pos.z); return; }
-    const model = buildPickupModel(kind, pos.y);
-    model.root.position.set(pos.x, pos.y, pos.z);
-    deps.lazyScene().add(model.root);
-    pickupMeshes.set(id, { model, kind });
+    if (live) { live.nugget.serverRest(pos); return; }
+    const nugget = new Nugget(
+      deps.lazyScene(),
+      new THREE.Vector3(pos.x, pos.y, pos.z),
+      _zeroVel,
+      PICKUP_ACCENT[kind],
+      pickupParts(kind),
+    );
+    nugget.serverOwned = true;
+    deps.entities().nuggets.push(nugget);
+    pickupMeshes.set(id, { nugget, kind });
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
   ctx.reconcilePickups = (liveIds) => {
     for (const [id, e] of pickupMeshes) {
       if (liveIds.has(id)) continue;
-      deps.lazyScene().remove(e.model.root);
-      e.model.dispose();
+      e.nugget.serverCollect(); // fade; updateNuggets reaps
       pickupMeshes.delete(id);
     }
   };
@@ -41,9 +56,8 @@ export function wirePickups(ctx: NetCtx): void {
     if (deps.world.playbackMode) return;
     const e = pickupMeshes.get(id);
     if (e) {
-      pickupBurst(e.model.root.position.clone(), e.kind);
-      deps.lazyScene().remove(e.model.root);
-      e.model.dispose();
+      pickupBurst(e.nugget.pos.clone(), e.kind);
+      e.nugget.serverCollect();
       pickupMeshes.delete(id);
     }
     if (by === nm().getLocalPlayerId()) {

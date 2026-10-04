@@ -34,10 +34,14 @@ export class Nugget {
   collected = false; // pickup radius reached
   collectNotified = false; // set by caller once pickup effects/score are applied
   dead = false;      // fully finished — safe to remove + dispose
+  /** Server-owned gem (MP): no magnet, no local collect, no local TTL —
+   *  the wire decides when it's picked up; we just run the same physics. */
+  serverOwned = false;
 
   private scene: THREE.Scene;
   private mesh: THREE.Mesh;
-  private mat: THREE.MeshBasicMaterial;
+  private mat: THREE.MeshBasicMaterial | THREE.MeshStandardMaterial;
+  private accentMat: THREE.MeshBasicMaterial | null = null;
   private glow: THREE.Sprite;
   private glowMat: THREE.SpriteMaterial;
   private trailFx: BallTrailDots;
@@ -46,10 +50,17 @@ export class Nugget {
   private settled = false;
   private collectFade = 0;
   private scatterTimer = 0; // blast knockback suppresses the magnet briefly
-  private baseColor = new THREE.Color(0xffd54a); // warm gold
+  private baseColor: THREE.Color;
+  private emitColor: THREE.Color;
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3) {
+  /** tint: pickup kind sells itself by color — gold gems, green heals,
+   *  red tags — no marquee iconography needed. `parts` swaps the plain
+   *  gem for a diegetic shape: dark body + accent part in the tint. */
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xffd54a, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
     this.scene = scene;
+    this.baseColor = new THREE.Color(tint);
+    // Emit slightly desaturated so bloom reads hot without clipping to white
+    this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.33);
     this.pos = pos.clone();
     this.vel = inheritVel.clone().multiplyScalar(INHERIT_VEL);
     // Small random spread so multi-nugget drops scatter naturally
@@ -57,8 +68,17 @@ export class Nugget {
     this.vel.y += Math.random() * 3 + 1;
     this.vel.z += (Math.random() - 0.5) * 4;
 
-    this.mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffee88).multiplyScalar(EMIT_GAIN) });
-    this.mesh = new THREE.Mesh(NUGGET_GEO, this.mat);
+    if (parts) {
+      this.mat = new THREE.MeshStandardMaterial({ color: parts.bodyColor ?? 0x3a4048, roughness: 0.45, metalness: 0.75 });
+      this.accentMat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
+      this.mesh = new THREE.Mesh(parts.body, this.mat);
+      const am = new THREE.Mesh(parts.accent, this.accentMat);
+      am.layers.enable(BLOOM_LAYER);
+      this.mesh.add(am);
+    } else {
+      this.mat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
+      this.mesh = new THREE.Mesh(NUGGET_GEO, this.mat);
+    }
     this.mesh.position.copy(this.pos);
     this.mesh.layers.enable(BLOOM_LAYER);
     scene.add(this.mesh);
@@ -93,7 +113,7 @@ export class Nugget {
   /** playerPos is the player's eye/camera position (player.pos). */
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, pickupScale = 1): void {
     this.age += dt;
-    if (this.age > LIFETIME) this.collected = true; // fade out if ignored
+    if (!this.serverOwned && this.age > LIFETIME) this.collected = true; // fade out if ignored
 
     if (this.collected) {
       this.updateCollectFade(dt);
@@ -108,7 +128,7 @@ export class Nugget {
     _target.copy(playerPos).setY(playerPos.y - 0.6);
     const dist = this.pos.distanceTo(_target);
 
-    if (dist < MAGNET_RADIUS && this.scatterTimer <= 0) {
+    if (!this.serverOwned && dist < MAGNET_RADIUS && this.scatterTimer <= 0) {
       this.magnetStep(dt, dist, pickupScale);
     } else if (!this.settled) {
       this.ballisticStep(dt, terrain);
@@ -171,6 +191,25 @@ export class Nugget {
     this.scatterTimer = 0.4;
   }
 
+  /** Server truth for a knocked-around gem's rest spot — a correction,
+   *  not a teleport: only snap when the local tumble diverged for real. */
+  serverRest(p: { x: number; y: number; z: number }): void {
+    if (this.collected || this.dead) return;
+    const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
+    if (dx * dx + dy * dy + dz * dz < 0.5 * 0.5) return;
+    this.pos.set(p.x, p.y, p.z);
+    this.vel.set(0, 0, 0);
+    this.settled = true;
+  }
+
+  /** Server said someone banked it — fade out where it lies; the wire
+   *  burst + rewards are the caller's job. */
+  serverCollect(): void {
+    if (this.collected || this.dead) return;
+    this.collected = true;
+    this.collectNotified = true;
+  }
+
   applyPull(to: THREE.Vector3, force: number): void {
     if (this.collected || this.dead) return;
     _dir.copy(to).sub(this.pos).normalize();
@@ -186,7 +225,7 @@ export class Nugget {
     if (this.settled) {
       this.mesh.position.y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
       const pulse = 1 + Math.sin(this.age * 5) * 0.12;
-      this.mat.color.setHex(0xffee88).multiplyScalar(pulse * EMIT_GAIN);
+      (this.accentMat ?? this.mat as THREE.MeshBasicMaterial).color.copy(this.emitColor).multiplyScalar(pulse * EMIT_GAIN);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
     }
     // Halo stays welded to the nugget — the polygonOffset bias handles the
@@ -211,6 +250,7 @@ export class Nugget {
     this.scene.remove(this.mesh);
     this.scene.remove(this.glow);
     this.mat.dispose();
+    this.accentMat?.dispose();
     this.glowMat.dispose();
     this.trailFx.dispose();
   }
