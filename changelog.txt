@@ -1,3 +1,4 @@
+2026-10-01 - heal grenade: self now admitted to healAll (friendly() excluded the thrower — feet-heals did nothing, FFA healed nobody); armor nade verified plates all incl. foes by design
 2026-10-01 - scoreboard: dropped diamond/dot glyph before names (redundant next to [BOT] badge)
 2026-10-01 - bot names: scoreboard shows [BOT] NAME badge (no pretense); chat stays plain callsigns
 2026-10-01 - vgs canon: botTaunts resolves line text from shared vgsTree (chord-only tables); props beat (VGCS Great shot / VGCY You Rock) on long-range+midair deaths; VGH-weighted opener

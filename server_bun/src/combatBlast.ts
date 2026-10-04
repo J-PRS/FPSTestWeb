@@ -1,7 +1,7 @@
 import type { ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN } from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
@@ -32,6 +32,7 @@ interface BlastCtx {
   label: string;
   weapon?: number;
   shotId?: string;
+  air?: number; // projectile airtime — rides to the kill feed
 }
 
 /** The CombatHandler surface the blast sweep reads. */
@@ -45,6 +46,8 @@ export interface BlastHost {
     preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
     moveImpulse?: (playerId: string, dv: Vec3) => void;
     dropFlagCarrier?: (playerId: string) => void;
+    /** Jet-tank access — the concussion payload saps victim energy. */
+    drainEnergy?: (playerId: string, amount: number) => void;
     health?: Map<string, number>;
   };
   sendToPlayer: (playerId: string, msg: ServerMessage) => void;
@@ -55,7 +58,7 @@ export interface BlastHost {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   applyHit(shooterId: string, targetId: string, damage: number,
            result: { killed: boolean; newHealth: number; newArmor: number },
-           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string }): void;
+           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void;
   ddMult(shooter: PlayerState): number;
 }
 
@@ -66,8 +69,8 @@ export interface BlastHost {
 export class BlastRunner {
   constructor(private h: BlastHost) {}
 
-  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string; bound?: boolean } = {}): void {
-    const { weapon, trusted = false, shotId, bound = false } = opts;
+  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string; bound?: boolean; air?: number } = {}): void {
+    const { weapon, trusted = false, shotId, bound = false, air } = opts;
     const player = this.h.playerManager.getPlayer(playerId);
     // Trusted server blasts still run from dead owners — a corpse's
     // in-flight ordnance and its charge-pop both outlive the kill.
@@ -90,7 +93,7 @@ export class BlastRunner {
       // (melee arc, injected LG pop charge) that have no directDamage.
       radius, baseDamage: (stats.directDamage || stats.aoeDamage) * this.h.ddMult(player), scales: stats.aoeScales,
       impulse: stats.knockbackForce, pull,
-      label: pull ? 'disc AOE' : 'AOE', weapon, shotId,
+      label: pull ? 'disc AOE' : 'AOE', weapon, shotId, air,
     };
 
     this.splashTargets(ctx, playerId, excludeTargetId);
@@ -154,12 +157,15 @@ export class BlastRunner {
     this.h.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
   }
 
-  /** Heal-grenade sweep: allies only — a heal that tops off the enemy
-   *  squad is strictly worse than a mortar. Heal fades with distance
-   *  like damage does, same lag-comp + occlusion rules. */
+  /** Heal-grenade sweep: self + allies only — a heal that tops off the
+   *  enemy squad is strictly worse than a mortar. friendly() returns
+   *  false for self (self-splash law) and for everyone in FFA, so the
+   *  thrower is admitted explicitly or a feet-heal — the kit's most
+   *  common use — lands nothing. Heal fades with distance like damage
+   *  does, same lag-comp + occlusion rules. */
   private healAll(playerId: string, position: Vec3, radius: number, ping: number): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
-      if (target.isDead || !this.h.friendly(playerId, targetId)) continue;
+      if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) continue;
       const tpos = rewindPos(target, clampPing(ping));
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
@@ -221,7 +227,7 @@ export class BlastRunner {
       const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
-        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId });
+        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
       }
       return;
     }
@@ -230,10 +236,14 @@ export class BlastRunner {
     // never deals damage to them in team rooms.
     if (this.h.friendly(ctx.shooterId, targetId)) return;
     const result = this.h.playerManager.applyDamage(targetId, damage);
-    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon, shotId: ctx.shotId });
-    // Concussion payload: the impact nade's whole job is stripping the
-    // flag — a carrier clipped by the blast fumbles it like in T2.
-    if (ctx.weapon === WeaponType.ImpactGrenade) this.h.deps.dropFlagCarrier?.(targetId);
+    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
+    // Concussion payload: the conc's whole job is stripping the flag —
+    // a carrier clipped by the blast fumbles it like in T2, and the
+    // victim's jet tank takes a bite so the escape is hobbled too.
+    if (ctx.weapon === WeaponType.Concussion) {
+      this.h.deps.dropFlagCarrier?.(targetId);
+      this.h.deps.drainEnergy?.(targetId, CONC_JET_DRAIN);
+    }
   }
 
   /** One blast shove: velocity impulse + knockback wire notify + the
