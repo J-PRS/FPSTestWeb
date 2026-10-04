@@ -45,8 +45,8 @@ export class PlayerInput {
   // so without this the same click re-fires the gun on kill. Require a
   // mouse release before the next shot.
   needsRelease = false;
-  /** Middle mouse held: mouse-look orbits the camera around the body instead
-   *  of steering aim — lets you inspect your own 3P model. */
+  /** Middle mouse toggles free-look orbit: mouse-look swings the camera
+   *  around the body instead of steering aim — model inspection cam. */
   midHeld = false;
   jetPending = false;
   jumpHeld = false;
@@ -128,7 +128,7 @@ export class PlayerInput {
       if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
       this.keys[`Mouse${e.button}`] = true;
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
-      if (e.button === 1) { this.midHeld = true; e.preventDefault(); }
+      if (e.button === 1) { this.midHeld = !this.midHeld; e.preventDefault(); }
       if (e.button === 2) { this.jetPending = true; }
       // Buttons bound to key actions (keybinds allow Mouse0-4) need the
       // same press/release semantics as keyboard codes
@@ -143,7 +143,6 @@ export class PlayerInput {
       if (this.frozen) return;
       this.keys[`Mouse${e.button}`] = false;
       if (e.button === 0) this.mouseHeld = false;
-      if (e.button === 1) this.midHeld = false;
       if (e.button === 2) { this.jetPending = false; }
       if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
       if (matchCode('skill', `Mouse${e.button}`)) h.skillRelease();
