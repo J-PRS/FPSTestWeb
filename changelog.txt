@@ -1,3 +1,4 @@
+2026-10-01 - clipRootMotion test reader: accessors without bufferView parse as zeros (spec-valid; gltf-transform emits them for degenerate constant tracks)
 2026-10-01 - 3p weapon mount unified: all per-rig mount data (bone/quat/euler/size/fat/pos) now lives in RIG_MANIFEST.mount; PlayerModel's five GUN_MOUNT_* tables deleted, attachGun reads the manifest record
 2026-10-01 - gunlab split: previews.ts (creature/pickup/item builders) + scans.ts (z/hole/gap/vol lints); 1355 -> 963 lines
 2026-10-01 - vite config: dropped stale colyseus.js optimizeDeps entry (package uninstalled, was 504-ing every dev page)

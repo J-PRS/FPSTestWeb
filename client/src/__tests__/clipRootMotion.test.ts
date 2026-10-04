@@ -35,9 +35,12 @@ const N_OF = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 } as Record<string
 
 function accessor(g: Glb, i: number): Float32Array {
   const a = g.json.accessors[i];
-  const bv = g.json.bufferViews[a.bufferView];
   if (a.componentType !== 5126) throw new Error('accessor ' + i + ': componentType ' + a.componentType);
   const n = N_OF[a.type] || 1;
+  // Spec: an accessor without bufferView is all-zero (gltf-transform emits
+  // this for degenerate single-keyframe constant tracks).
+  if (a.bufferView === undefined) return new Float32Array(a.count * n);
+  const bv = g.json.bufferViews[a.bufferView];
   const byteOff = (bv.byteOffset || 0) + (a.byteOffset || 0);
   const src = g.bin.buffer.slice(g.bin.byteOffset + byteOff, g.bin.byteOffset + byteOff + a.count * n * 4);
   return new Float32Array(src);
