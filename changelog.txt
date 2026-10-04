@@ -1,3 +1,4 @@
+2026-10-01 - hip-fire hold baked into retargeted arm tracks (cyber/vexa/robot); runtime compose gated by __holdbake1 marker
 2026-10-01 - Turretter creature block commented as distinct from sentry DEPLOY_ITEMS (TURRET_RANGE name collision)
 
 2026-10-01 - rubberband watch: endpoint-matched truth replay + parked-leg gate
