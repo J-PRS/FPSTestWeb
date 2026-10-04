@@ -8,7 +8,7 @@ import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 
 
-let loops: { wind: LoopHandle | null; ski: LoopHandle | null; jet: LoopHandle | null } | null = null;
+let loops: { wind: LoopHandle | null; ski: LoopHandle | null; skiTex: LoopHandle | null; jet: LoopHandle | null } | null = null;
 let samplesSwapped = false;
 const _right = new THREE.Vector3();
 
@@ -25,7 +25,11 @@ function ensureLoops(): NonNullable<typeof loops> {
       // snow_amb is a real blizzard loop — the Tribes wind bed.
       // jet_loop is the actual Legions jetpack sample.
       wind: audio.sampleLoop('snow_amb') ?? audio.noiseLoop('bandpass', 900),
-      ski: audio.noiseLoop('bandpass', 2400),
+      // Scrape = continuous bandpass noise body; the footstep sample
+      // layers underneath as granular crunch (a single 0.47s step
+      // looped on its own just ticks — never reads as sliding).
+      ski: audio.noiseLoop('bandpass', 900),
+      skiTex: audio.sampleLoop('ski_scrape', 2.6),
       jet: audio.sampleLoop('jet_loop') ?? audio.oscLoop('sawtooth', 90),
     };
   }
@@ -39,12 +43,14 @@ function swapToRealSamples(): void {
   samplesSwapped = true;
   const jetBuf = audio.sample('jet_loop') && audio.sampleLoop('jet_loop');
   const windBuf = audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
-  // ski_scrape is a snow-footstep sample — looped slightly fast it reads
-  // as crunching granular scrape, better than filtered noise.
-  const skiBuf = audio.sample('ski_scrape') && audio.sampleLoop('ski_scrape', 1.3);
+  // ski_scrape is a snow-footstep sample — looped ~2.6x it reads as
+  // crunching granular texture under the noise scrape, better than
+  // filtered noise alone. Its rate is fixed at acquire time, so the
+  // swap below just rebuilds the same handle once the buffer lands.
+  const skiBuf = audio.sample('ski_scrape') && audio.sampleLoop('ski_scrape', 2.6);
   if (jetBuf) { loops!.jet?.stop(); loops!.jet = jetBuf; }
   if (windBuf) { loops!.wind?.stop(); loops!.wind = windBuf; }
-  if (skiBuf) { loops!.ski?.stop(); loops!.ski = skiBuf; }
+  if (skiBuf) { loops!.skiTex?.stop(); loops!.skiTex = skiBuf; }
 }
 
 /**
@@ -70,7 +76,9 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
   // on the Player side so this just follows the flag. The floor keeps a
   // slow carve audible — the old pure-speed curve stayed inaudible until
   // ~60 m/s where it only matters at cap anyway.
-  l.ski?.set(player.skiing ? Math.min(0.28, 0.04 + speed / 50 * 0.24) : 0);
+  const skiGain = player.skiing ? Math.min(0.42, 0.06 + speed / 50 * 0.36) : 0;
+  l.ski?.set(skiGain);
+  l.skiTex?.set(skiGain * 0.6);
   l.jet?.set(player.jetting ? 0.55 : 0);
 }
 
