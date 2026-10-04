@@ -63,6 +63,9 @@ function makeRemoteHooks(deps: RemotesDeps) {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().removeBar(id);
       sfxWorld.remoteMoveAudioGone(id);
+      // aliveSince keys on live ids — a leaver who was alive drops here
+      // or the module map grows one entry per departed player forever.
+      aliveSince.delete(id);
     },
   };
 }
