@@ -1,3 +1,4 @@
+2026-10-01 - Pooled tick-frame decode + deep-merged roster vecs on the 20Hz wire path
 2026-10-01 - In-place remote roster upsert kills 20Hz allocation churn
 2026-10-01 - HealthBarSystem forgets departed players fully
 2026-10-01 - Drop lastTintOf entry when a remote player leaves
