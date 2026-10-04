@@ -8,6 +8,9 @@ const logger = new ChildLogger('playerPose');
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const _pitchQuat = new THREE.Quaternion();
+const _boneWorld = new THREE.Quaternion();
+const _rootWorld = new THREE.Quaternion();
+const _right = new THREE.Vector3();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
@@ -206,7 +209,8 @@ export class PoseControl {
 
   update(dt: number, mixer: THREE.AnimationMixer | null,
        currentAction: THREE.AnimationAction | null,
-       currentClipName: string | null, playingUAL: boolean): void {
+       currentClipName: string | null, playingUAL: boolean,
+       root?: THREE.Object3D): void {
     // Remove last frame's pitch BEFORE the mixer writes. The mixer skips
     // bones whose track value didn't change, so without this the multiply
     // would accumulate on a stale pitched value and the bone spins.
@@ -251,9 +255,20 @@ export class PoseControl {
         hb.bone.quaternion.multiply(hb.last);
       }
     }
-    for (const ab of this.aimBones) {
-      // Negative X tilts up for positive pitch (looking up)
-      ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
+    if (procPitch) for (const ab of this.aimBones) {
+      if (root) {
+        // Pitch around the model's world-space right axis — bone local X
+        // is a yaw axis on some rigs (polyart), where a naive local-X
+        // multiply turned aim pitch into a left/right gun sweep. `last`
+        // stores the local-frame equivalent so the pre-mixer un-pitch
+        // restores exactly.
+        ab.bone.getWorldQuaternion(_boneWorld);
+        _pitchQuat.setFromAxisAngle(_right.set(1, 0, 0).applyQuaternion(root.getWorldQuaternion(_rootWorld)), -procPitch * ab.factor);
+        ab.last.copy(_boneWorld).invert().multiply(_pitchQuat).multiply(_boneWorld);
+      } else {
+        // Negative X tilts up for positive pitch (looking up)
+        ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
+      }
       ab.bone.quaternion.multiply(ab.last);
     }
     this.snapFeetToShins(playingUAL);

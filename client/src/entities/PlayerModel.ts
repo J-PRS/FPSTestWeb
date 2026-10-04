@@ -899,7 +899,7 @@ export class PlayerModel {
   }
 
   update(dt: number): void {
-    this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL);
+    this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined);
     this.fx.tick(dt);
   }
 

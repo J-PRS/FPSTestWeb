@@ -1,3 +1,5 @@
+2026-10-04 - aim pitch applied in world space around the model right axis — polyart spine bone local X is a yaw axis, so the old local-X multiply swept the gun left/right instead of up/down (up=right, down=left)
+2026-10-04 - WT silent-death fix: every lane-death detector (wt.closed, reliable/datagram pumps ending or resetting, line overflow) routes through declareDead() -> onDisconnect so TieredTransport reprobes; the 64KB carry guard (which fired on legit full-map gameState bursts and silently disconnected) raised to 4MB; veil label 'RESTORING SESSION' -> 'RECONNECTING'
 2026-10-04 - robot aim pitch fixed: aim clips drive via spine tracks, so his mask adds the torso chain (arm-only residual swept the gun horizontally)
 2026-10-04 - robot aim layer actually builds: AIM_BONE_MASK gains UAL2 arm norms, buildAimLayer runs for all variants and re-runs when baked clips land
 2026-10-04 - animbake: attach meshopt decoder (quantized model GLBs made parse hang, bake died silently); skip marker-only clip packs; re-emit robot pack so Aim_ arm tracks survive the hold-bake
