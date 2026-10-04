@@ -46,6 +46,9 @@ export const ENERGY = {
   max: 60,
   jetDrain: 15,      // per second while thrusting
   jetCharge: 8,      // per second while grounded-and-idle
+  // T2 sputter lock: bottoming the tank refuses jets for this long even
+  // after regen trickles fuel back — kills tap-hopping on fumes.
+  jetLockout: 0.5,
   cloakCost: 10,
   // Cloak upkeep is priced by motion: static ~1/s, draining to 10/s at
   // 100 m/s — the infiltrator pays for speed, not for existing.

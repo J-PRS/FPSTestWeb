@@ -21,6 +21,7 @@ import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
+import { ENERGY } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { ChildLogger } from '../core/Logger.js';
 
@@ -38,7 +39,7 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal'] as const;
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal'] as const;
 
 /** Per-item throw-anim stretch — the satchel plant is a deliberate
  *  two-beat reach, not a flick; multiplies THROW_RELEASE/THROW_TOTAL. */
@@ -55,6 +56,8 @@ export class Player {
 
   onGround = false;
   energy = MAX_ENERGY;
+  /** Sputter lock — set when the tank bottoms, refuses jets briefly. */
+  jetLockT = 0;
   /** Nugget pickup: free jetting for a few seconds (refresh, not stack). */
   fireTimer = 0.0;
   beltTimer = 0.0;
@@ -103,6 +106,8 @@ export class Player {
     this.applyPendingClass(); // banked tier swap lands on the new life
     this.health = this.maxHealth;
     this.armor = 0;
+    this.energy = this.energyCap;
+    this.jetLockT = 0;
     this.buffUntil.regen = 0;
     this.buffUntil.dd = 0;
     this.lastDamageSource = '';
@@ -238,6 +243,9 @@ export class Player {
   refundWeaponCooldown(): void { this.armory.refundWeaponCooldown(); }
 
   setLoadoutSlot(slot: number, weaponId: number): void { this.armory.setLoadoutSlot(slot, weaponId); }
+  /** The kit the menu edits — the banked respawn kit while a class swap
+   *  is pending, the live kit otherwise. Never use for fire logic. */
+  get menuKit(): readonly number[] { return this.armory.menuKit(); }
   setBeltItem(item: BeltItem): void { this.armory.setBeltItem(item); }
   setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair'): void { this.armory.setSidearm(s); }
   setPackItem(p: DeployKind): void { this.armory.setPackItem(p); }
@@ -334,6 +342,9 @@ export class Player {
       this.model.setScale(CLASS_MODEL_SCALE[this.appliedClass]);
       // Hide model for first-person view
       this.model.setVisible(false);
+      // A cloak running before the GLB arrived never got its ghost —
+      // capture it now or the TP body renders opaque while invisible.
+      if (this.status.cloaked) this.model.setGhost(true);
       // Hide collider gizmo for local player (only show for remote players)
       this.model.setColliderVisible(false);
     }
@@ -391,7 +402,7 @@ export class Player {
     this.checkCameraSpinout(dt);
     // Model visibility follows the toggle AND death (observer cam is ghost
     // flight â€” your corpse shouldn't fly with you)
-    this.model?.setVisible(this.thirdPerson && !this.isDead && !this.status.cloaked);
+    this.model?.setVisible(this.thirdPerson && !this.isDead);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
@@ -429,7 +440,7 @@ export class Player {
       skiHeld: input.skiHeld,
       // Jet thrust lives inside the sim so the server's shadow replay
       // produces the same trajectory the client renders.
-      jetHeld: this.input.jetPending && this.energy > 0,
+      jetHeld: this.input.jetPending && this.energy > 0 && this.jetLockT <= 0,
     });
 
     // Fall speed entering this frame â€” grounding inside movement.update
@@ -442,7 +453,7 @@ export class Player {
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {
       this.onNetworkInput(
-        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, jet: this.input.jetPending && this.energy > 0 ? 1 : 0, status: this.status.bits() },
+        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, jet: this.input.jetPending && this.energy > 0 && this.jetLockT <= 0 ? 1 : 0, status: this.status.bits() },
         { yaw: this.yaw, pitch: this.pitch }
       );
     }
@@ -459,7 +470,8 @@ export class Player {
   // Tribes-style tank: drains while burning, recharges only when off the
   // jet; cloak/shield/mend compete for the same tank, never fill it.
   private tickEnergy(dt: number): boolean {
-    const isJetting = this.input.jetPending && this.energy > 0;
+    if (this.jetLockT > 0) this.jetLockT -= dt;
+    const isJetting = this.input.jetPending && this.energy > 0 && this.jetLockT <= 0;
     this.jetting = isJetting;
     if (isJetting) {
       this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
@@ -468,6 +480,8 @@ export class Player {
     if (!isJetting && !this.status.cloaked && !this.status.shielded && !this.status.mending) {
       this.energy = Math.min(this.energyCap, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
+
+    if (this.energy <= 0) this.jetLockT = ENERGY.jetLockout;
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
     // tick it here so the perk works without a connection.

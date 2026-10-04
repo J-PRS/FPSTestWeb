@@ -133,7 +133,7 @@ export class RoomMoveSim {
       seeded: false,
       energy: ENERGY.max * mods.energyMax, energyMax: mods.energyMax,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
-      jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
+      jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
       gapStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
     });
@@ -328,7 +328,7 @@ export class RoomMoveSim {
     // Respawn refills the client's tank; a drained shadow would refuse
     // jets the client legitimately flies → guaranteed divergence streak.
     // Teleport keeps the tank as-modeled (beacons don't recharge).
-    if (fullEnergy) sh.energy = ENERGY.max * sh.energyMax;
+    if (fullEnergy) { sh.energy = ENERGY.max * sh.energyMax; sh.jetLockT = 0; }
     // Journal anchors pre-teleport positions — the discarded trajectory
     // would swallow fresh reports' divergence checks.
     sh.seqStates.clear();
@@ -353,13 +353,15 @@ export class RoomMoveSim {
       // Jet economy: thrust only while the modeled tank has fuel, drain
       // while burning, recharge only when off jet AND no toggle skill is
       // running (client-side rule — all three pause recharge).
-      const jetting = sh.jetWanted && sh.energy > 0;
+      if (sh.jetLockT > 0) sh.jetLockT -= dt;
+      const jetting = sh.jetWanted && sh.energy > 0 && sh.jetLockT <= 0;
       if (jetting) sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;
       if (sh.skillDrainPerSec > 0) sh.energy -= sh.skillDrainPerSec * dt;
       if (!jetting && !sh.skillSuppressRegen) {
         sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
       }
       sh.energy = Math.max(0, sh.energy);
+      if (sh.energy <= 0) sh.jetLockT = ENERGY.jetLockout;
       sh.sim.setInput({ jetHeld: jetting });
       // MoveSim.update() sub-steps internally at its own 1/60 quantum —
       // feed it the raw tick delta. Count consumed steps ourselves for

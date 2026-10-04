@@ -48,6 +48,9 @@ export interface Shadow {
   energyMax: number;
   /** Raw claimed jet bit — the sim sees it gated by modeled energy. */
   jetWanted: boolean;
+  /** Sputter lock — tanks that hit zero refuse jets briefly (T2 rule,
+   *  modeled client-side too so replayed trajectories line up). */
+  jetLockT: number;
   /** Sum of active per-second skill drains from claimed status bits. */
   skillDrainPerSec: number;
   /** Cloak/shield/mend all suppress the tank recharge client-side too. */
@@ -315,17 +318,20 @@ export class MoveJudge {
     // energy drains — replaying raw input keeps the probe jetting where
     // the real sim ran dry (~18m false divergence at spawn jet windows).
     let e = anchor.e;
+    let lockT = 0;
     for (const seg of segs) {
       const steps = Math.min(seg.tick - tick, budget);
       if (steps > 0) {
         Object.assign(probe.input, inp);
         for (let i = 0; i < steps; i++) {
-          const jetting = inp.jetHeld === true && e > 0;
+          if (lockT > 0) lockT -= MoveSim.STEP;
+          const jetting = inp.jetHeld === true && e > 0 && lockT <= 0;
           probe.input.jetHeld = jetting;
           if (jetting) e -= ENERGY.jetDrain * sh.jetDrain * MoveSim.STEP;
           else if (!sh.skillSuppressRegen) e = Math.min(ENERGY.max * sh.energyMax, e + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * MoveSim.STEP);
           if (sh.skillDrainPerSec > 0) e -= sh.skillDrainPerSec * MoveSim.STEP;
           e = Math.max(0, e);
+          if (e <= 0) lockT = ENERGY.jetLockout;
           probe.update(MoveSim.STEP);
         }
         tick += steps;
