@@ -45,7 +45,7 @@ for (const p of parts) {
   if (p.geometry.index) p.geometry = p.geometry.toNonIndexed();
   const host = new THREE.Group();
   host.add(new THREE.Mesh(p.geometry, p.material));
-  bakeVertexAO(host, { grime: true });
+  bakeVertexAO(host, { grime: true, wearBoost: 0.7 });
 }
 
 // Assemble a planted turret: base at origin, dome on top, barrel out.

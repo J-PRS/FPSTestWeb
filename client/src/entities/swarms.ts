@@ -58,7 +58,7 @@ export function getSwarm(species: string): SpeciesSwarm | null {
       if (p.geometry.index) p.geometry = p.geometry.toNonIndexed();
       const host = new THREE.Group();
       host.add(new THREE.Mesh(p.geometry, p.material));
-      bakeVertexAO(host, { grime: true }); // crevice darkening — the mottle the gun pipeline gets
+      bakeVertexAO(host, { grime: true, wearBoost: 0.7 }); // same grime+wear as the chaingun bake
     }
   }
   const swarm = new SpeciesSwarm(registryScene, parts, spec.capacity);
