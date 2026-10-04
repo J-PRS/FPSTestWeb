@@ -4,6 +4,22 @@
 
 import { botRand } from './botRand.ts';
 import { sharedNow } from './env.ts';
+import { TREE, type VgsNode } from './vgsTree.ts';
+
+/** chord → canon line, walked out of the shared VGS tree — the same
+ *  table the menu and TTS use. Bots store CHORDS, not chord/text pairs,
+ *  so a mismatched pairing can't be written here; the wrong-chord pick
+ *  is the only remaining error. */
+const VGS_LOOKUP = new Map<string, { text: string; team: boolean }>();
+(function walk(node: Record<string, VgsNode>, path: string): void {
+  for (const [k, n] of Object.entries(node)) {
+    const chord = path + k;
+    if ('line' in n) VGS_LOOKUP.set('V' + chord, { text: n.line, team: n.team !== false });
+    else walk(n.children, chord);
+  }
+})(TREE, '');
+const vgsText = (chord: string): string => VGS_LOOKUP.get(chord)?.text ?? chord;
+const vgsTeam = (chord: string): boolean => VGS_LOOKUP.get(chord)?.team ?? true;
 
 const KILL_LINES = [
   'wp',
@@ -378,12 +394,12 @@ const END_POOLS: Record<EndOutcome, string[]> = {
   winclose: END_WINCLOSE_LINES,
   draw: END_DRAW_LINES,
 };
-const END_VGS: Record<EndOutcome, [vgs: string, text: string][]> = {
-  win:   [['VGCG', 'Good game!'], ['VWOO', 'Woohoo!'], ['VGCA', 'Awesome!']],
-  loss:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
-  close: [['VGCG', 'Good game!'], ['VGCA', 'Awesome!']],
-  winclose: [['VGCG', 'Good game!'], ['VGCA', 'Awesome!']],
-  draw:  [['VGCG', 'Good game!'], ['VGS', 'SHAZBOT!']],
+const END_VGS: Record<EndOutcome, string[]> = {
+  win:   ['VGCG', 'VGW', 'VGCA'],
+  loss:  ['VGCG', 'VGS'],
+  close: ['VGCG', 'VGCA'],
+  winclose: ['VGCG', 'VGCA'],
+  draw:  ['VGCG', 'VGS'],
 };
 
 /** One match-start line — same once-per-match shape as endTaunt: high
@@ -391,9 +407,9 @@ const END_VGS: Record<EndOutcome, [vgs: string, text: string][]> = {
 export function startTaunt(botId: string): TauntLine | null {
   if (botRand() > 0.7) return null;
   lastSpoke.set(botId, tauntNow());
-  if (botRand() < 0.25) {
-    const [chord, text] = pick([['VGH', 'Hi.'], ['VWOO', 'Woohoo!']] as [string, string][]);
-    return { text, vgs: chord };
+  if (botRand() < 0.35) {
+    const chord = pick(['VGH', 'VGH', 'VGW']);
+    return { text: vgsText(chord), vgs: chord };
   }
   return { text: pickLine(START_LINES) };
 }
@@ -408,8 +424,8 @@ export function endTaunt(botId: string, outcome: EndOutcome): TauntLine | null {
   lastSpoke.set(botId, tauntNow());
   const chords = END_VGS[outcome];
   if (botRand() < TAUNT_VGS_CHANCE) {
-    const [chord, text] = pick(chords);
-    return { text, vgs: chord };
+    const chord = pick(chords);
+    return { text: vgsText(chord), vgs: chord };
   }
   return { text: pickLine(END_POOLS[outcome]) };
 }
@@ -432,6 +448,19 @@ const QUIET_LINES = [
   'shut it {t}',
   'my ears {t}',
   'we get it {t}',
+];
+
+/** You died to a genuinely hard shot — the sportsmanship half of the
+ *  personality. `{t}` is the shooter who earned it. */
+const PROPS_LINES = [
+  'nice shot {t}',
+  'sick shot',
+  'what a shot',
+  'wp {t}',
+  'respect',
+  'filthy shot {t}',
+  'clean',
+  'okay that was sick',
 ];
 
 /** A bot watched someone crater or frag themselves nearby — the
@@ -511,7 +540,7 @@ export type ChatterKind =
   | 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop'
   | 'cheer' | 'groan' | 'alert' | 'reply'
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
-  | 'revenge' | 'streakend' | 'quiet' | 'witness';
+  | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -540,36 +569,39 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   revenge: REVENGE_LINES,
   streakend: STREAK_END_LINES,
   witness: WITNESS_LINES,
+  props: PROPS_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and
- *  bots speak it ~40% of the time instead of text. The line is the
- *  chord's canonical text (clients print `[VFF] I have the flag!`);
- *  untemplated on purpose — VGS lines don't name names. */
-const VGS_FOR: Partial<Record<ChatterKind, [vgs: string, text: string][]>> = {
-  contact:    [['VTA', 'Target acquired!'], ['VSE', 'Enemy spotted!']],
-  thief:      [['VAC', 'Chase the enemy flag carrier!'], ['VTF', 'Target the flag carrier!']],
-  fear:       [['VVH', 'Help!'], ['VWF', 'Fall back!']],
-  hero:       [['VGTG', 'I am the greatest!']],
-  underfire:  [['VWI', 'Incoming!'], ['VWW', 'Watch it!']],
-  belt:       [['VWI', 'Incoming!']],
-  deploy:     [['VSTT', "I'm deploying turrets."], ['VSTS', "I'll set up defenses."]],
-  flaggrab:   [['VFF', 'I have the flag!']],
-  flagcap:    [['VFS', 'Our flag is secure!']],
-  flagreturn: [['VFS', 'Our flag is secure!']],
-  flagdrop:   [['VGO', 'Ooops!']],
-  cheer:      [['VGCA', 'Awesome!'], ['VGCN', 'Nice move!']],
-  groan:      [['VGS', 'SHAZBOT!'], ['VGTW', 'When will you learn?']],
-  alert:      [['VAC', 'Chase the enemy flag carrier!'], ['VDF', 'Defend our flag!']],
-  reply:      [['VGY', 'Yes.'], ['VGH', 'Hi.']],
-  fist:       [['VGTT', 'THAT was graceful!']],
-  gg:         [['VGCG', 'Good game!']],
-  salty:      [['VGTB', 'Is that the best you can do?']],
-  quiet:      [['VGQ', 'Quiet!'], ['VGQ', 'Quiet!']],
-  mention:    [['VGY', 'Yes.'], ['VGRD', "I don't know."]],
-  revenge:    [['VGTA', "Awww, that's too bad!"]],
-  witness:    [['VGCN', 'Nice move!'], ['VGTB', 'Is that the best you can do?']],
-  streakend:  [['VGTB', 'Is that the best you can do?'], ['VGTT', 'THAT was graceful!']],
+ *  bots speak it ~40% of the time instead of text. Chords only: the
+ *  line text resolves out of the shared tree (vgsText), never written
+ *  here — so a pair like VGCS→wrong text can't exist. Chord validity
+ *  is on the author; text correctness is the tree's. */
+const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
+  contact:    ['VTA', 'VSE'],
+  thief:      ['VAC', 'VTF'],
+  fear:       ['VVH', 'VWF'],
+  hero:       ['VGTG'],
+  underfire:  ['VWI', 'VWW'],
+  belt:       ['VWI'],
+  deploy:     ['VSTT', 'VSTS'],
+  flaggrab:   ['VFF'],
+  flagcap:    ['VFS'],
+  flagreturn: ['VFS'],
+  flagdrop:   ['VGO'],
+  cheer:      ['VGCA', 'VGCN'],
+  groan:      ['VGS', 'VGTW'],
+  alert:      ['VAC', 'VDF'],
+  reply:      ['VGY', 'VGH'],
+  fist:       ['VGTT'],
+  gg:         ['VGCG'],
+  salty:      ['VGTB'],
+  quiet:      ['VGQ', 'VGQ'],
+  mention:    ['VGY', 'VGRD'],
+  revenge:    ['VGTA'],
+  witness:    ['VGCN', 'VGTB'],
+  props:      ['VGCS', 'VGCY', 'VGCA', 'VGCN'],
+  streakend:  ['VGTB', 'VGTT'],
 };
 const VGS_CHANCE = 0.4;
 
@@ -584,8 +616,8 @@ export function chatter(kind: ChatterKind, botId: string, other?: string): { tex
   return maybe(botId, () => {
     const vgs = VGS_FOR[kind];
     if (vgs && botRand() < VGS_CHANCE) {
-      const [chord, text] = pick(vgs);
-      return { text, vgs: chord, team: !chord.startsWith('VG') };
+      const chord = pick(vgs);
+      return { text: vgsText(chord), vgs: chord, team: vgsTeam(chord) };
     }
     const line = pickLine(CHATTER_POOLS[kind]);
     return { text: other ? line.replace('{t}', other).replace('{v}', other) : line };
@@ -594,29 +626,11 @@ export function chatter(kind: ChatterKind, botId: string, other?: string): { tex
 
 /** Chords the personal taunts (kill/death/spree) speak ~45% of the
  *  time — the loudest moments were the ones missing VGS entirely, which
- *  is why bot chat read as Quake, not Tribes. All VG* (global scope);
- *  lines are each chord's canonical text. */
-const KILL_VGS: [vgs: string, text: string][] = [
-  ['VGTB', 'Is that the best you can do?'],
-  ['VGTA', "Awww, that's too bad!"],
-  ['VGTT', 'THAT was graceful!'],
-  ['VGCN', 'Nice move!'],
-];
-const DEATH_VGS: [vgs: string, text: string][] = [
-  ['VGS', 'SHAZBOT!'],
-  ['VGCN', 'Nice move!'],
-  ['VGTB', 'Is that the best you can do?'],
-];
-const ENV_DEATH_VGS: [vgs: string, text: string][] = [
-  ['VGO', 'Ooops!'],
-  ['VGS', 'SHAZBOT!'],
-  ['VWOO', 'Woohoo!'],
-];
-const SPREE_VGS: [vgs: string, text: string][] = [
-  ['VGTG', 'I am the greatest!'],
-  ['VGCA', 'Awesome!'],
-  ['VWOO', 'Woohoo!'],
-];
+ *  is why bot chat read as Quake, not Tribes. All VG* (global scope). */
+const KILL_VGS = ['VGTB', 'VGTA', 'VGTT', 'VGCN'];
+const DEATH_VGS = ['VGS', 'VGCN', 'VGTB'];
+const ENV_DEATH_VGS = ['VGO', 'VGS', 'VGW'];
+const SPREE_VGS = ['VGTG', 'VGCA', 'VGW'];
 /** Killing the SAME victim again while the last one still stings — the
  *  dominance beat. VGTW is double-listed: it IS the canon line here. */
 const REPEAT_KILL_LINES = [
@@ -628,11 +642,7 @@ const REPEAT_KILL_LINES = [
   'stop feeding {v}',
   'groundhog day {v}',
 ];
-const REPEAT_KILL_VGS: [vgs: string, text: string][] = [
-  ['VGTW', 'When will you learn?'],
-  ['VGTW', 'When will you learn?'],
-  ['VGTB', 'Is that the best you can do?'],
-];
+const REPEAT_KILL_VGS = ['VGTW', 'VGTW', 'VGTB'];
 const TAUNT_VGS_CHANCE = 0.45;
 
 const SPEAK_CHANCE = 0.55;
@@ -665,10 +675,10 @@ export interface TauntLine { text: string; vgs?: string }
 /** Roll text-vs-chord for a personal taunt — returns the feed-ready
  *  {text, vgs} pair. Chord lines are canon text; the feed prints the
  *  [VGS] prefix itself. */
-function tauntPick(pool: string[], chords: [vgs: string, text: string][], fill: (line: string) => string): TauntLine {
+function tauntPick(pool: string[], chords: string[], fill: (line: string) => string): TauntLine {
   if (botRand() < TAUNT_VGS_CHANCE) {
-    const [chord, text] = pick(chords);
-    return { text, vgs: chord };
+    const chord = pick(chords);
+    return { text: vgsText(chord), vgs: chord };
   }
   return { text: fill(pickLine(pool)) };
 }

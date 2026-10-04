@@ -91,6 +91,7 @@ export class KillFeed {
     this.deathStreak.set(targetId, streak);
     if (this.deathStreak.size > 256) this.deathStreak.clear();
     if (streak >= 3) this.say(targetId, 'tilt', shooterId);
+    else if (this.hardShot(targetId, shooterId)) this.say(targetId, 'props', shooterId);
     else {
       const t = shooterId === 'environment'
         ? envDeathTaunt(targetId)
@@ -130,6 +131,21 @@ export class KillFeed {
     // trick; letting 'reply' chain would ping-pong the room forever.
     const c = chatter(kind, id, other);
     this.botSay(id, c?.text ?? null, kind !== 'reply', c?.vgs, c?.team);
+  }
+
+  /** Did the victim die to a hard shot? Long range or midair both count
+   *  — the 'nice shot' compliment is earned, so it's a roll (~45%) on a
+   *  qualifying kill, never a routine death response. */
+  private hardShot(targetId: string, shooterId: string): boolean {
+    if (Math.random() > 0.45) return false;
+    const victim = this.playerManager.getPlayer(targetId);
+    const shooter = this.playerManager.getPlayer(shooterId);
+    if (!victim?.position || !shooter?.position) return false;
+    if (Math.abs(victim.velocity.y) > 10) return true; // died midair
+    const dx = shooter.position.x - victim.position.x;
+    const dy = shooter.position.y - victim.position.y;
+    const dz = shooter.position.z - victim.position.z;
+    return dx * dx + dy * dy + dz * dz > 70 * 70;
   }
 
   /** A bot died to terrain or its own blast — one nearby spectator gets

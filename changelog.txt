@@ -1,3 +1,4 @@
+2026-10-01 - vgs canon: botTaunts resolves line text from shared vgsTree (chord-only tables); props beat (VGCS Great shot / VGCY You Rock) on long-range+midair deaths; VGH-weighted opener
 2026-10-01 - chatter personality: gl-hf opener beat at matchStart, ironic close-win lines (easiest game of my life), witness VGCN mockery on nearby suicide/env-death
 2026-10-01 - bot names: 64-name pool; -NN serial stays on the wire but display/TTS strip it (botDisplayName/feedNames at every render choke point)
 2026-10-01 - bots: match-mute past the horn (setMatchMuted in MatchClock.end/startNext) so gameplay chatter stops on the scoreboard; endTaunt drops the shared 20s cooldown for its own 80% participation roll
