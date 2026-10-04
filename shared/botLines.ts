@@ -169,7 +169,13 @@ export class BotLines {
       return this.wp;
     }
 
-    this.wp = this.roll(ctx, pos, dest, gd);
+    // Long legs consult the flow field first: the fan's reach can't
+    // see a saddle a few hundred meters off the beeline, but the shared
+    // flood already priced the whole map. Short legs keep the fan —
+    // its energy scoring reads what a coarse grid can't.
+    this.wp = (ctx.route && gd > T.graph.minGd)
+      ? ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead) ?? this.roll(ctx, pos, dest, gd)
+      : this.roll(ctx, pos, dest, gd);
     this.wpGoal = { ...dest };
     this.lineT = T.lines.commitS;
     return this.wp ?? dest;

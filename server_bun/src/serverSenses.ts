@@ -23,6 +23,7 @@ import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
 import { botRand } from '../../shared/botRand.ts';
+import { TerrainFlow } from '../../shared/botGraph.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -79,6 +80,16 @@ export class ServerBotSenses {
   /** Per-team commander — names responders for contested jobs so one
    *  thief doesn't empty the home defense (botCommand.ts). */
   private commands = new Map<TeamId, TeamCommand>();
+  /** Shared leg-scale router — one flow field serves the whole squad;
+   *  built on first route query so botless rooms never pay the grid. */
+  private flow: TerrainFlow | null = null;
+  private routeOf() {
+    if (!this.field) return undefined;
+    this.flow ??= new TerrainFlow((x, z) => hmHeight(this.field!, x, z));
+    const flow = this.flow;
+    return (fx: number, fz: number, tx: number, tz: number, ahead: number) =>
+      flow.route(fx, fz, tx, tz, ahead);
+  }
 
   /** Neutron shell around home for a flag carrier waiting out a stolen
    *  flag: ~50% of rolls land inside 50m of the stand, ~10% reach the
@@ -717,6 +728,7 @@ export class ServerBotSenses {
         this.field ? hmHeight(this.field, x, z) : p.position.y,
         this.room.moveSim.structureTop(x, z),
       ),
+      route: this.routeOf(),
       others: parties.others,
       allies: parties.allies,
       // Mortar heavies acquire siege-range targets; everyone else holds

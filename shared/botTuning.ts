@@ -85,6 +85,18 @@ export const BOT_TUNING = {
     progressW: 0.9,      // goal-progress weight
     eScoreW: 0.2,        // banked-energy weight (runners)
   },
+  // botGraph — leg-scale flow-field routing (flood per goal, shared)
+  graph: {
+    extent: 1500,        // m — grid span (heightfield world scale)
+    cell: 15,            // m — grid resolution
+    minGd: 140,          // m — legs shorter than this stay on the local fan
+    ahead: 80,           // m — waypoint lookahead along the flow
+    climbTax: 0.09,      // cost k per meter of rise — a 30m climb ~3x flat
+    diveCredit: 0.04,    // cost k per meter of drop — downhill is cheap
+    wallSlope: 0.9,      // rise/run steeper than this needs jets to cross
+    wallTax: 6,          // extra cost k per slope past wallSlope
+    fieldCache: 8,       // live goal floods kept at once
+  },
   // botBrain — think cadence + disposition rolls
   brain: {
     thinkS: 0.3,       // s — think tick period

@@ -93,6 +93,11 @@ export interface BrainCtx {
   pickup?: BotVec | null;
   /** Terrain height at x,z — wander waypoints clamp to ground. */
   groundY: (x: number, z: number) => number;
+  /** Leg-scale route probe (flow field): the next waypoint toward a
+   *  far goal, ~`ahead` meters along the cheapest-cost terrain route.
+   *  Hosts without a coarse grid omit it and lines fall back to the
+   *  local fan. */
+  route?: (fx: number, fz: number, tx: number, tz: number, ahead: number) => BotVec | null;
   /** Nearby bodies (allies, the local player, self ok — skipped by
    *  distance) for the separation sense. Optional; steering works
    *  without it. */

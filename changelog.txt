@@ -1,3 +1,4 @@
+2026-10-01 - Bots: leg-scale flow-field routing (shared/botGraph.ts) — one Dijkstra flood per goal over a 15m terrain grid shared across the squad; long legs (>140m) take flow waypoints instead of re-rolling a myopic fan. Katabatic carry 113→33s, surreal grab 63→38s
 2026-10-01 - capperSweep: tapEnergyMin/diveAglMin added to the genome dims — sweep evidence says plateau-transit variance is dominated by line/steer genes, not jet policy
 2026-10-01 - Capper featherjet: runners tap jets while AIRBORNE on flat transits below the comfy tank (all regen becomes forward speed); dive-run veto now requires convertible altitude (falling route or >8m AGL) — the plateau "dive" over flat deck was suppressing every burn
 2026-10-01 - Bots: idle input is a full zero-input packet — a stale jet:true commit left jetWanted pinned forever, so the shadow burned every regen tick and the tank sat at ~0 all match (the en=0 plateau crawl). capMeasure verbose now logs tank+shadow state
