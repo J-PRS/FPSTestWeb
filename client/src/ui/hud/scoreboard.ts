@@ -35,8 +35,6 @@ export type SbRow = {
 
 // textContent, not innerHTML — display names will be player-chosen
 // strings; interpolating them raw is a stored-XSS hole in waiting.
-// The ◆/● glyph mirrors the HUD marker shapes (diamond = human,
-// round = bot) so the roster doubles as the legend for the icon split.
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
@@ -45,12 +43,8 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   numTd.textContent = num;
   tr.appendChild(numTd);
   const nameTd = document.createElement('td');
-  // ◆ renders nearly twice ●'s size in most fonts — the span class sizes
-  // the glyph back to text cap-height instead of trusting the font.
-  const glyph = document.createElement('span');
-  glyph.className = `sb-glyph ${r.bot ? 'bot' : 'human'}`;
-  glyph.textContent = r.bot ? '●' : '◆';
-  nameTd.appendChild(glyph);
+  // Bots carry a literal [BOT] badge in the name — a diamond/dot glyph
+  // in front would be a second legend saying the same thing.
   nameTd.appendChild(document.createTextNode(` ${r.name}`));
   tr.appendChild(nameTd);
   for (const cell of cells) {
@@ -68,12 +62,28 @@ export class Scoreboard {
 
   private title: HTMLElement | null;
   private lastTitle = '';
+  private countdownEl: HTMLElement | null;
+  /** Wall-clock deadline for "NEXT MATCH IN N" — 0 hides the footer.
+   *  Client-side estimate: matchStart releases the board anyway, so a
+   *  tick of skew against the server's intermission never shows. */
+  private countdownAt = 0;
+  private lastCountdownTxt = '';
 
   constructor(
     private root: HTMLDivElement,
     private tbody: HTMLElement,
   ) {
     this.title = root.querySelector('#sb-title');
+    this.countdownEl = root.querySelector('#sb-countdown');
+  }
+
+  /** Arm the intermission footer — seconds until the next matchStart. */
+  setCountdown(secLeft: number | null): void {
+    this.countdownAt = secLeft === null ? 0 : performance.now() + secLeft * 1000;
+    if (!this.countdownAt) {
+      this.lastCountdownTxt = '';
+      if (this.countdownEl) this.countdownEl.style.display = 'none';
+    }
   }
 
   /** Header line — "CAPTURE THE FLAG · Dangerous Crossing". Change-guarded:
@@ -105,6 +115,15 @@ export class Scoreboard {
    *  isn't worth the bookkeeping. */
   tick(dt: number): void {
     if (!this.visible) return;
+    if (this.countdownAt && this.countdownEl) {
+      const left = Math.max(0, Math.ceil((this.countdownAt - performance.now()) / 1000));
+      const txt = left > 0 ? `NEXT MATCH IN ${left}` : 'NEXT MATCH…';
+      if (txt !== this.lastCountdownTxt) {
+        this.lastCountdownTxt = txt;
+        this.countdownEl.textContent = txt;
+        this.countdownEl.style.display = 'block';
+      }
+    }
     this.refresh -= dt;
     if (this.refresh > 0) return;
     this.refresh = 0.25;

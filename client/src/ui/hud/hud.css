@@ -19,14 +19,14 @@
   --z-tc-3: 78px;   /* status hint row 1 · spectate hint */
   --z-tc-4: 94px;   /* status hint row 2 */
   --z-tc-5: 110px;  /* status hint row 3 */
-  /* Top-right: net strip, FPS, timer, minimap dish (160px), killfeed */
+  /* Top-right: net strip, FPS, timer, minimap dish (160px) */
   --z-tr-1: 14px;
   --z-tr-2: 44px;
   --z-tr-3: 84px;
   --z-tr-4: 110px;
-  --z-tr-5: 276px;
-  /* Top-left: player roster */
+  /* Top-left: killfeed (classic CS spot), battle log sits below it */
   --z-tl-1: 14px;
+  --z-tl-2: 180px;  /* feed is 6 rows ≈ 150px tall at most */
   /* Bottom-left: chat feed, VGS menu */
   --z-bl-1: 12px;
   --z-bl-2: 140px;
@@ -383,6 +383,11 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 .sb-open .player-indicator {
   opacity: 0;
 }
+/* Healthbars have the same problem one level up: #healthbar-container is
+   appended to body AFTER #hud, so it paints over the board. */
+body:has(#hud.sb-open) #healthbar-container {
+  opacity: 0;
+}
 /* Flag markers — diamond silhouette, team color, always legible. */
 .player-indicator.flag {
   width: 14px;
@@ -476,7 +481,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   border-radius: 0;
 }
 #player-list {
-  position: absolute; top: var(--z-tl-1); left: 20px;
+  position: absolute; top: var(--z-tl-2); left: 20px;
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
   text-align: left;
 }
@@ -484,14 +489,12 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   display: block;
   margin-bottom: 2px;
   color: #b8c8d8;
-  transition: opacity 0.6s;
   text-shadow: 0 1px 3px #000;
 }
 #player-list .log-row.me { color: #ffd54a; }
 #player-list .log-row.dead { color: #ff6b6b; }
 #player-list .log-row.mine { color: #9fd0ff; }
 #player-list .log-row.foe { color: #ffb08a; }
-#player-list .log-row.fade { opacity: 0; }
 #scoreboard {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
@@ -507,6 +510,12 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   font-size: 0.68rem; letter-spacing: 0.22em; font-weight: 600;
   color: rgba(200,220,240,0.65); text-align: center;
   padding-bottom: 9px; white-space: nowrap;
+}
+#sb-countdown {
+  font-size: 0.68rem; letter-spacing: 0.22em; font-weight: 600;
+  color: #ffd166; text-align: center;
+  padding-top: 9px; white-space: nowrap;
+  display: none;
 }
 #scoreboard table {
   width: 100%; border-collapse: collapse;
@@ -540,16 +549,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Name cell tinted by team — readable at a glance even flat-sorted. */
 #scoreboard tr.sb-alpha td:nth-child(2) { color: #7db8ff; }
 #scoreboard tr.sb-bravo td:nth-child(2) { color: #ff9a6a; }
-/* ◆ (human) vs ● (bot) — the diamond glyph runs ~1.5× cap height in UI
-   fonts, so scale it down; the bot dot sits slightly bigger instead.
-   inline-block keeps transform + size stable across fonts. */
-#scoreboard .sb-glyph {
-  display: inline-block;
-  width: 1em;
-  color: rgba(200,220,240,0.55);
-}
-#scoreboard .sb-glyph.human { font-size: 0.72em; transform: translateY(-0.04em); }
-#scoreboard .sb-glyph.bot   { font-size: 0.85em; }
 #team-score {
   position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
@@ -635,20 +634,21 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   font: 600 13px/1 monospace; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000;
 }
 
-/* Kill feed — top-right, newest at bottom, timed fade */
+/* Kill feed — top-left (classic CS spot), newest at bottom, timed fade */
 #killfeed {
-  position: fixed; top: var(--z-tr-5); right: 14px; display: flex; flex-direction: column;
-  align-items: flex-end; gap: 4px; pointer-events: none; z-index: 6;
+  position: fixed; top: var(--z-tl-1); left: 20px; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 4px; pointer-events: none; z-index: 6;
   font: 600 12px/1.2 monospace; letter-spacing: 0.06em;
 }
 .kf-row {
   padding: 3px 9px; border-radius: 3px; background: rgba(8,14,22,0.55);
   color: #cdd9e5; text-shadow: 0 1px 2px #000;
   animation: kfIn 0.18s ease-out;
-  transition: opacity 0.6s;
 }
 .kf-row.me { border-left: 2px solid #ffd54a; }
+/* Same team tint the scoreboard rows use */
+.kf-s.tm-a, .kf-t.tm-a { color: #7db8ff; }
+.kf-s.tm-b, .kf-t.tm-b { color: #ff9a6a; }
 .kf-row .kf-w { color: #8899aa; font-size: 10px; }
 .kf-row .kf-t.dead { color: #ff6b6b; }
-.kf-row.fade { opacity: 0; }
-@keyframes kfIn { from { transform: translateX(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes kfIn { from { transform: translateX(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
