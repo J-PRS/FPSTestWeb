@@ -644,10 +644,24 @@ export class ServerBotSenses {
         // own approach side — a fixed world bearing sent runners
         // around the massif to a far-side entry they could never reach
         // (the bravo capper's 750m contour orbit).
+        // The flood's own near-stand route point joins the ring as a
+        // scored candidate — the saddle the cheapest path funnels
+        // through. It goes through the same reachability/foe/graveyard
+        // scoring as the ring points, so it wins only where the ring's
+        // fixed radii are blind to it; on maps where the ring already
+        // sees the saddle, nothing changes.
+        const flowEntry = this.flow
+          ? this.flow.routeNearGoal(p.position.x, p.position.z, enemyStand.x, enemyStand.z, 90)
+          : null;
         const pref = Math.atan2(p.position.z - enemyStand.z, p.position.x - enemyStand.x)
           + this.routePref(p.id);
         const prefW = process.env.FPS_NOPREF ? 0 : 18;
         let best = enemyStand, bestScore = -Infinity;
+        if (flowEntry) {
+          const score = scoreEntry(flowEntry.x, flowEntry.y, flowEntry.z)
+            + Math.cos(Math.atan2(flowEntry.z - enemyStand.z, flowEntry.x - enemyStand.x) - pref) * prefW;
+          if (score > bestScore) { bestScore = score; best = flowEntry; }
+        }
         for (let a = 0; a < 24; a++) {
           // Three radii: close entries are cheap, a closed rim wall
           // only breaks further out — a plateau stand needs the far
@@ -661,11 +675,6 @@ export class ServerBotSenses {
           const score = scoreEntry(ex, ey, ez) + Math.cos(ang - pref) * prefW;
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
-        // Hysteresis verdict: the incumbent keeps the route unless the
-        // fresh best beats it by a margin that actually matters at this
-        // distance. The flip threshold scales with the leg remaining —
-        // a re-route 400m out costs little, one 60m from the stand is
-        // the difference between arriving and orbit death.
         // No incumbent here — incumbents are chased to arrival, so this
         // branch only runs on a fresh pick or after a stale record died.
         this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });

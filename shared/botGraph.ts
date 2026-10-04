@@ -165,4 +165,32 @@ export class TerrainFlow {
     const tz2 = target === goal ? tz : this.w((target / this.n) | 0);
     return { x: tx2, y: this.h[target]!, z: tz2 };
   }
+
+  /** The point on the flood route `backM` meters BEFORE the goal — the
+   *  flow-sourced stand entry: the saddle the cheapest path funnels
+   *  through instead of a myopic ring candidate. Null when unrouted. */
+  routeNearGoal(fx: number, fz: number, tx: number, tz: number, backM: number): BotVec | null {
+    const goal = this.cellOf(tx, tz);
+    const parent = this.fieldFor(goal);
+    const start = this.cellOf(fx, fz);
+    if (parent[start] === -1 && start !== goal) return null;
+    // Measure the whole chain once, then re-walk to total-backM.
+    let total = 0;
+    for (let c = start; c !== goal;) {
+      const p = parent[c]!;
+      if (p === -1) return null;
+      const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
+      total += Math.hypot(dx, dz) * this.cell;
+      c = p;
+    }
+    let walked = 0, c = start;
+    while (c !== goal && total - walked > backM) {
+      const p = parent[c]!;
+      if (p === -1) return null;
+      const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
+      walked += Math.hypot(dx, dz) * this.cell;
+      c = p;
+    }
+    return { x: this.w(c % this.n), y: this.h[c]!, z: this.w((c / this.n) | 0) };
+  }
 }
