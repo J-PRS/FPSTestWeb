@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
+import { aoeImpulseT1At, t1Minbox, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
@@ -49,6 +49,8 @@ export interface BlastArgs {
   weaponType?: number;
   /** Offline bot shells carry their bot id so splash kills credit right. */
   shooterId?: string;
+  /** Shell's flight time at detonation — offline kill-feed `[1.3s]` tag. */
+  air?: number;
 }
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
@@ -106,7 +108,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   }
 
   // Remote players: damage preview + predicted knockback. Prediction mirrors
-  // the server's impulse math (force * (1-dist/radius)) and only bridges the
+  // the server's impulse math (T1 surface-distance ramp) and only bridges the
   // ~1 RTT before the victim's real trajectory streams back — RemotePlayer
   // runs it as dead reckoning and clears stale pre-hit snapshots so there's
   // no snap-back when interpolation resumes.
@@ -116,10 +118,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
-      // knockback uses the same envelope (aoeImpulse), so nothing predicts
+      // knockback uses the same envelope (aoeImpulseT1), so nothing predicts
       // damage or shove the server never applies.
       const dist = rp.position.distanceTo(pos);
-      const impulse = Math.min(aoeImpulse(force, dist, radius) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
+      const impulse = Math.min(aoeImpulseT1At(force, pos, rp.position, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
       if (impulse <= 0) continue;
       if (occluded(pos, rp.position)) continue;
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
@@ -134,7 +136,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (!a.shooterId && aoeDmg >= 1) {
         deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
       }
-      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType)) continue; // local authority resolved it
+      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) continue; // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }
@@ -152,8 +154,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // bound the server applies and the ?debug gizmo draws. The old
     // falloffMultiplier stretched the zero-crossing 2.5-3× — a
     // local-player-only shove nobody else felt.
-    if (dpx < radius && !occluded(pos, player.pos)) {
-      applyTo(player, aoeImpulse(force, dpx, radius) * KNOCKBACK_SCALE * player.mods.knockbackTaken);
+    if (dpx - t1Minbox(player.appliedClass) < radius && !occluded(pos, player.pos)) {
+      applyTo(player, aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken);
       // Stamp the prediction — the server echoes this same shove back as a
       // `knockback` message ~RTT later; net/players.ts consumes the stamp
       // so the blast can't land twice.

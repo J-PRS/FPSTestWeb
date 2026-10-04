@@ -18,7 +18,10 @@ function blastFlight(room: ReturnType<typeof mkRoom>, shooterId: string, victimI
   const before = { ...room.moveSim.simPos(victimId)! };
   // Feet blast: point-blank under the victim, slight +x so the push has a
   // readable direction — this is the geometry rocket jumps optimize for.
-  room.messages.serverBlast(shooterId, { x: before.x + 0.5, y: before.y - 0.5, z: before.z }, weapon, null);
+  // simPos is the EYE position (feet = eye - eyeHeight), so a feet blast
+  // sits ~2m below it — under T1's hitbox-center curve that's the ramp's
+  // peak, while eye-0.5 is inside the torso's point-blank dead zone.
+  room.messages.serverBlast(shooterId, { x: before.x + 1.5, y: before.y - 2.5, z: before.z }, weapon, null);
   let drift = 0, height = 0;
   for (let i = 0; i < SETTLE_TICKS; i += 10) {
     step(room, 10);

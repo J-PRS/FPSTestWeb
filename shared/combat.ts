@@ -66,6 +66,48 @@ export function aoeImpulse(force: number, dist: number, radius: number): number 
   return force * aoeFalloff(dist, radius);
 }
 
+/** T1's odd-but-canonical knockback curve (floodyberry part 4): the
+ *  impulse envelope is `dist/d - dist/radius` where `d` is the surface
+ *  distance clamped to 1m. Power RAMPS UP over the smallest hitbox
+ *  dimension before falling off — a feet blast from a standstill is
+ *  weaker than the same blast caught a meter out mid-air, which is the
+ *  quirk disc-jumping lives on. `minbox` is the victim's smallest hitbox
+ *  dimension (2·capsule radius: light 1.0 = T1's own). Reach extends to
+ *  surface distance = radius — i.e. ~minbox past the center-distance rim. */
+export function aoeImpulseT1(force: number, dist: number, radius: number, minbox: number): number {
+  if (radius <= 0) return 0;
+  const d = Math.max(dist - minbox, 1);
+  if (d > radius) return 0;
+  // The raw curve overshoots ~2× at the hitbox rim (its quirk is a
+  // position-dependent *shape*, not a global boost) — normalize by the
+  // peak power so `force` still means "max impulse", then return raw
+  // shape × force. Peak sits at dist = minbox+1 where d is still 1:
+  // power = (minbox+1)·(1 − 1/radius).
+  const peak = (minbox + 1) * (1 - 1 / radius);
+  return force * ((dist / d - dist / radius) / peak);
+}
+
+/** Victim hitbox min-dimension for aoeImpulseT1 — capsule width and depth
+ *  are both 2·radius and always smaller than the height. */
+export function t1Minbox(cls?: string): number {
+  return 2 * classCapsule(cls).radius;
+}
+
+/** aoeImpulseT1 from positions — T1 measures blast→hitbox-center, not
+ *  blast→feet, and the center distance is what puts a feet blast near
+ *  the ramp's peak instead of in the point-blank dead zone. `targetPos`
+ *  is the entity's networked (eye) position, same frame
+ *  pointToCapsuleDistance uses. */
+export function aoeImpulseT1At(
+  force: number, blastPos: Vec3Like, targetPos: Vec3Like, radius: number, cls?: string,
+): number {
+  const cap = classCapsule(cls);
+  const dx = targetPos.x - blastPos.x;
+  const dy = (targetPos.y + cap.centerOff) - blastPos.y;
+  const dz = targetPos.z - blastPos.z;
+  return aoeImpulseT1(force, Math.hypot(dx, dy, dz), radius, 2 * cap.radius);
+}
+
 export function aoeDamageAt(dist: number, weaponType: number | undefined): number {
   const s = getWeaponStats(weaponType);
   return aoeDamage(s.directDamage || s.aoeDamage, dist, s.aoeRadius, s.aoeScales);

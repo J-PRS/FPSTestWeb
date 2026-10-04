@@ -42,8 +42,13 @@ describe('scenario: class bodies', () => {
     const dvH = Math.hypot(heavy.velocity.x, heavy.velocity.y, heavy.velocity.z);
     expect(dvL).toBeGreaterThan(0);
     expect(dvH).toBeGreaterThan(0);
-    // 0.75 vs 1.25 → the light takes ~1.67x the heavy's impulse.
-    expect(dvL / dvH).toBeCloseTo(CLASS_STATS.heavy.mass / CLASS_STATS.light.mass, 5);
+    // 0.75 vs 1.25 mass: under the T1 curve the heavy's bigger hitbox also
+    // absorbs more impulse (equal blast distance ≠ equal surface distance),
+    // so the ratio lands under the pure mass ratio but must still show the
+    // light sailing further.
+    const ratio = dvL / dvH;
+    expect(ratio).toBeGreaterThan(1);
+    expect(ratio).toBeLessThanOrEqual(CLASS_STATS.heavy.mass / CLASS_STATS.light.mass);
   });
 
   it("a shot over the medium's head still catches the heavy — per-class capsule", () => {

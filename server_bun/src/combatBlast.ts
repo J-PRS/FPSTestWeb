@@ -5,7 +5,7 @@ import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DR
 import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX, SELF_SPLASH_MAX } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulseT1At, t1Minbox, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX, SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
@@ -187,7 +187,9 @@ export class BlastRunner {
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;
     const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
-    if (!Number.isFinite(dist) || dist > ctx.radius) return;
+    // T1 impulse reaches to surface distance = radius (~minbox past the
+    // center rim) — the early cut has to use the same envelope.
+    if (!Number.isFinite(dist) || dist - t1Minbox(target.armorClass) > ctx.radius) return;
 
     // Wall occlusion — a blast outside a structure doesn't splash
     // targets inside it (and vice versa). Blasts can legitimately
@@ -201,7 +203,7 @@ export class BlastRunner {
     if (damage <= 0) return;
 
     const impulseMag = Math.min(
-      aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
+      aoeImpulseT1At(ctx.impulse, ctx.pos, tpos, ctx.radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
       BLAST_IMPULSE_MAX);
     // Humans self-predict their own displacement — server only shoves
     // the self-target when it's a bot (server velocity truth).
@@ -318,10 +320,10 @@ export class BlastRunner {
       const dy = target.position.y - pos.y;
       const dz = target.position.z - pos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > radius) continue;
+      if (dist - t1Minbox(target.armorClass) > radius) continue;
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
-      const impulseMag = aoeImpulse(knockback, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
+      const impulseMag = aoeImpulseT1At(knockback, pos, target.position, radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
       this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);
       // Owner eats the blast too — mines don't pick friends.
       if (!this.h.friendly(ownerId, targetId) && damage > 0) {
