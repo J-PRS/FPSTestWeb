@@ -67,11 +67,13 @@ export class ServerBotSenses {
   // The call has to outlive the flood's transit: wave members tasked
   // from midfield start ~180m out — an 8s window dies ~5s before they
   // land, which reads as a call that summons nobody.
-  // Wave transit is ~180m at ~12m/s ≈ 15s minimum — a 30s window only
-  // armed once the capper was already inside ~360m at speed, and the
-  // soak reads him dead ~150m out first (calls 1-3/team, sup@1). At 45s
-  // the flood launches when the approach does, not when it's already dying.
-  private static readonly PUSH_ETA_S = 45;
+  // The call must lead the flood's transit, not the capper's: members
+  // spawn ~500m+ from the enemy stand and transit at ~15-20m/s — a 45s
+  // ETA window has them landing ~25s after the capper is already dead
+  // at the ring (soak: 6 calls, 0 grabs, wave near0%). 75s posts the
+  // moment a committed runner could plausibly arrive, which is when the
+  // escorts need to leave.
+  private static readonly PUSH_ETA_S = 75;
   private static readonly PUSH_HOLD_MS = 14000;
   /** Once a ring entry is reached the press is committed, not re-probed:
    *  at the lip the straight-line wall check reads the crest the entry
@@ -365,7 +367,10 @@ export class ServerBotSenses {
     // The task names WHICH job, not WHERE: re-resolve its slot live so
     // a named chaser tracks the carrier's beacon between the commander's
     // 2s reassigns instead of running at the position it was posted.
-    const taskGoal = task && { chase: sit.thief, return: sit.dropped, escort: sit.escort, push: sit.push }[task.kind];
+    const taskGoal = task && ({ chase: sit.thief, return: sit.dropped, escort: sit.escort, push: sit.push }[task.kind]
+      // The push call ages out mid-transit while the task persists —
+      // its stored stand goal keeps the flood running.
+      ?? (task.kind === 'push' ? task.goal : null));
     // One role table for both runtimes — shared/flagGoals.ts.
     const pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
     const role = this.roles.get(p.id);
@@ -382,11 +387,13 @@ export class ServerBotSenses {
       (pick === enemyStand || dist3(pick, enemyStand) < 8);
     // The call also posts off the approach leg: standBound only arms
     // inside ~80m where the pick snaps to the raw stand — by then the
-    // wave's ~15s transit is already late. A capper whose committed
-    // route targets the stand (entry probes still resolve toward it)
-    // announces early, so the flood launches with the approach.
-    const approachBound = !standBound && enemyStand !== null && pick !== null
-      && Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) < 260;
+    // wave's transit is already late. Any stand-committed route posts:
+    // members' full-map transit is ~60-70s against a ~14s call TTL and
+    // the 45s ETA gate, so waiting for a nearer radius guarantees the
+    // flood arrives after the capper dies (soak: wave near0%, every
+    // push dying alone at the ring). The ETA check below is the honest
+    // constraint — distance isn't.
+    const approachBound = !standBound && enemyStand !== null && pick !== null;
     if (role === 'capper' && (standBound || approachBound) && enemyStand) {
       const qp = this.room.players.getPlayer(p.id);
       const spd = qp ? Math.hypot(qp.velocity.x, qp.velocity.z) : 0;

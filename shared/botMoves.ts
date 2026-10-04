@@ -161,8 +161,11 @@ export class BotMoves {
       // around outside the ring. Dropping the hop at 60m read as a
       // decelerated 10m/s walk-in that fed every defender (soak:
       // pushes arrived @10-18m/s, died inside the ring in ~6s).
+      // Gate on `od` (distance to the objective), not `gd` — gd is the
+      // ~8m steer step, so a gd gate is dead code and the hop chain
+      // never fires (the 10-18m/s walk-in every soak autopsy blames).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (gd > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : (ctx.runner && gd > T.moves.runnerHopGd))),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : ((ctx.runner || ctx.wave) && od > T.moves.runnerHopGd))),
     };
   }
 
@@ -243,13 +246,16 @@ export class BotMoves {
     // staging never trips it: the 110m orbit sits past the gd window.
     const runIn = (ctx.runner === true || ctx.wave === true) && gd > T.moves.runInGdMin && gd < T.moves.runInGdMax &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && comfy;
-    // The featherjet: a route-committed runner on a near-level transit
-    // whose tank sits below `comfy` still taps the burn — AIRBORNE ONLY,
-    // so no ground friction eats the thrust and every regen point lands
-    // as forward speed. This is the human technique on a dead flat:
-    // without it the plateau walk is ~10-20m/s of pure regen-bound walk
-    // (surreal autopsy: ~30s from the landing to the grab ring).
-    const tap = ctx.runner === true && !comfy && airborne && od > T.moves.boostGdMin &&
+    // The featherjet: a route-committed runner or wave member on a
+    // near-level transit whose tank sits below `comfy` still taps the
+    // burn — AIRBORNE ONLY, so no ground friction eats the thrust and
+    // every regen point lands as forward speed. This is the human
+    // technique on a dead flat: without it the plateau walk is ~10-20m/s
+    // of pure regen-bound walk (surreal autopsy: ~30s from the landing
+    // to the grab ring). Wave members get the same wing — the flood's
+    // whole point is arriving with the capper, and ~11m/s med transit
+    // was the soak's near0% defect.
+    const tap = (ctx.runner === true || ctx.wave === true) && !comfy && airborne && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
     this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';

@@ -62,7 +62,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // staging at ~110m IS converging — count the ring as gathered.
         const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 115);
         const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
-        if (!wave && !wingman && b.stageT < 10) {
+        // 25s patience: the call now posts at route start (~75s ETA),
+        // so the first to land can be ~30s early — 10s had him pressing
+        // the ring alone, which is feeding, not flooding. The orbit is
+        // outside the posted defense leash, so holding is cheap.
+        if (!wave && !wingman && b.stageT < 25) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
           const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;

@@ -22,7 +22,17 @@ export type CommandKind = 'chase' | 'return' | 'escort' | 'push';
 export interface CommandTask {
   kind: CommandKind;
   goal: BotVec;
+  /** Assignment stamp — bounds the flood window for push tasks. */
+  born: number;
 }
+
+/** How long a push task outlives its call: the call's PUSH_HOLD_MS (~14s)
+ *  is half a transit leg on a 1km map, so deleting the task the moment
+ *  the slot goes quiet un-calls the flood mid-run — the soak's whole
+ *  "wave transits ~500m and never arrives" defect. The flood's job ends
+ *  on arrival, on this window, or when the slot re-opens (a fresh call
+ *  or a carried flag re-contests it). */
+const FLOOD_MS = 45_000;
 
 export interface CommandMember {
   id: string;
@@ -79,8 +89,21 @@ export class TeamCommand {
     const alive = new Set(members.map((m) => m.id));
     for (const [id, t] of [...this.tasks]) {
       const slot = slots[t.kind];
-      if (!alive.has(id) || !slot) this.tasks.delete(id);
-      else t.goal = { x: slot.x, y: slot.y, z: slot.z };
+      if (!alive.has(id)) { this.tasks.delete(id); continue; }
+      if (!slot) {
+        // Dead slot: chase/return/escort goals are moving targets — no
+        // live slot means no job. Push is different: the stand doesn't
+        // move, so the task keeps its goal until the member arrives or
+        // the flood window lapses.
+        if (t.kind === 'push' && now - t.born < FLOOD_MS) {
+          const m = members.find((mm) => mm.id === id);
+          const arrived = m && (m.pos.x - t.goal.x) ** 2 + (m.pos.z - t.goal.z) ** 2 < 40 * 40;
+          if (!arrived) continue;
+        }
+        this.tasks.delete(id);
+        continue;
+      }
+      t.goal = { x: slot.x, y: slot.y, z: slot.z };
     }
     const free = members.filter((m) => !m.carrier);
     const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
@@ -96,7 +119,7 @@ export class TeamCommand {
         // carrier will be when the escort's own run lands (est ~12m/s).
         const eta = kind === 'escort' ? Math.min(12, Math.sqrt(
           (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) / 12) : 0;
-        this.tasks.set(m.id, { kind, goal: {
+        this.tasks.set(m.id, { kind, born: now, goal: {
           x: at.x + (at.vx ?? 0) * eta,
           y: at.y,
           z: at.z + (at.vz ?? 0) * eta,
