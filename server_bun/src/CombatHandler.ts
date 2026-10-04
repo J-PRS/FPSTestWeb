@@ -262,6 +262,9 @@ export class CombatHandler {
     }
     this.lastHeal.delete(playerId);
     this.chargeBank.delete(playerId);
+    for (const key of this.healTicks.keys()) {
+      if (key.startsWith(`${playerId}|`) || key.endsWith(`|${playerId}`)) this.healTicks.delete(key);
+    }
     for (const key of this.lastDropNotify.keys()) {
       if (key.startsWith(`${playerId}:`)) this.lastDropNotify.delete(key);
     }
