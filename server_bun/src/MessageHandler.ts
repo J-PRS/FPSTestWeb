@@ -348,7 +348,7 @@ export class MessageHandler {
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog
         ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
-          logger.warn(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
+          logger.debug(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
