@@ -1,3 +1,4 @@
+2026-10-01 - ball rubberband watch replays truth via stepBall to pred cursor
 2026-10-01 - CombatHandler drops healTicks entries on player removal
 2026-10-01 - botArsenal untrack clears propels telemetry map
 2026-10-01 - Shared body-contact list, MoveSim skips own capsule by selfId
