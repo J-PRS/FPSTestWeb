@@ -1,3 +1,5 @@
+2026-10-01 - chatter personality: gl-hf opener beat at matchStart, ironic close-win lines (easiest game of my life), witness VGCN mockery on nearby suicide/env-death
+2026-10-01 - bot names: 64-name pool; -NN serial stays on the wire but display/TTS strip it (botDisplayName/feedNames at every render choke point)
 2026-10-01 - bots: match-mute past the horn (setMatchMuted in MatchClock.end/startNext) so gameplay chatter stops on the scoreboard; endTaunt drops the shared 20s cooldown for its own 80% participation roll
 2026-10-01 - fx: ribbon head re-pinned to live emitter pos each frame (follow anchor) - driver pushes run in updateVfx after the host update so the tip vertex trailed one full frame of travel behind the shell at high speed
 2026-10-01 - bots: match-end chatter - onEnded(winner) -> ServerBots.matchEnd rolls one outcome line per bot (win/loss/close<=1pt/draw pools + VGS chords), staggered across the intermission via killFeed; shared cooldown prevents double-speak with the gg notice
