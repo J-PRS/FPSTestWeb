@@ -1,3 +1,4 @@
+import './core/polyfills.js'; // toSorted etc. — older engines
 import * as THREE from 'three';
 
 import {
@@ -46,6 +47,7 @@ import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
 import { MODES } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
+import { pingServer } from './game/net/lastRoom.js';
 import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { weaponDef } from './weapons.js';
@@ -314,9 +316,12 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // F5 with a stored session token = the server may hand back our old
-  // body — veil the default spawn state until gameState lands instead of
-  // flashing a fresh spawn for a few hundred ms.
-  if (!classicMode && !soloMode && localStorage.getItem('fps-session-token')) armSessionVeil();
+  // body — but only a LIVE host earns the restore veil. Dead server
+  // means the offline world owns the first frames outright; a "restoring"
+  // curtain over a connect that can never land is the wrong order.
+  if (!classicMode && !soloMode && localStorage.getItem('fps-session-token')) {
+    if (await pingServer((await serverEndpoints).httpUrl)) armSessionVeil();
+  }
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
@@ -382,7 +387,7 @@ function setupOfflineMode(mode: string): void {
       localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
       remoteKillFeed: (text) => { fragMessages.show(text); hud.logEvent(text); },
       fragBanner: (text) => { fragMessages.showKill(text); hud.logEvent(text); },
-      killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
+      killFeed: (s, t, ls, lt, meta) => hud.feedKill(s, t, ls, lt, meta),
       nearestNugget: (pos, maxDist) => {
         let best: typeof entities.nuggets[0] | null = null;
         let bd = maxDist * maxDist;
@@ -468,7 +473,7 @@ function makeCombat(): ReturnType<typeof createCombat> {
     consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
     cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
     reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
-    botHit: (id, dmg, fromPos, attackerId) => teamBots?.hit(id, dmg, fromPos, attackerId) ?? false,
+    botHit: (id, dmg, fromPos, attackerId, weaponType, air) => teamBots?.hit(id, dmg, fromPos, attackerId, { weapon: weaponType, air }) ?? false,
     onCreatureKilled: (shooterId) => teamBots?.creatureKilled(shooterId ?? 'local'),
     balls: entities.balls,
     targets: entities.targets,
@@ -497,6 +502,7 @@ function wirePlayerStatusHooks(): void {
   // re-arms on every respawn, but the FIRST life would otherwise open on
   // the default bolt model while the HUD reads the recalled loadout.
   viewModel?.switchWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
+  player.model?.setWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
   // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
   player.onSpectate = (on) => {
     if (on) { hud.hide(); hud.setSpectatorHint(true); }

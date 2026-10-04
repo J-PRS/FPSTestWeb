@@ -1,3 +1,4 @@
+2026-10-05 - First life arms the 3P hand prop too (boot armed viewmodel only, so the body held the generic placeholder until first switch).
 2026-10-05 - Throw anim wiring (belt/deploy oneshot, remote + deploySpawn), playerUal multi-skin dedupe/fanOut + hip-yaw sibling fix; polyart bake reverted (native-only), rig yaw now applied in setRotation.
 2026-10-04 - ski scrape quieter: gain cap 0.42 -> 0.30, floor 0.06 -> 0.04
 2026-10-04 - ski sound audible for real: scrape loop is bandpass noise (continuous) with the 0.47s footstep sample layered at 2.6x as granular crunch — the old swap replaced the scrape body with a lone footstep that just ticked
