@@ -30,7 +30,7 @@ import { ONESHOT_CLIPS, clipCandidates,
   CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
-  isLayeredClip, AIM_BONE_MASK, SWAY_BONES, type LocoDir } from './playerClipSurgery.js';
+  isLayeredClip, AIM_BONE_MASK, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { PoseControl } from './playerPose.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
@@ -623,6 +623,7 @@ export class PlayerModel {
   private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
     if (mann || knight || CLASS_BODY_SPEC[this.variant]) {
       stripHipXZ(clip, this.rootMotionNodes());
+      clampHipY(clip, 0.25, this.rootMotionNodes());
       if (mann && isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
           !AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));

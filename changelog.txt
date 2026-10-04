@@ -1,3 +1,4 @@
+2026-10-04 - hip Y root motion clamped to +/-0.25m of each clip's first key: polyart Jump baked +0.8m into the hips and floated the mesh out of the collider
 2026-10-04 - debug mode (?debug / menu DEBUG) renders the local player's 3P body as wireframe + collider capsule so the mesh can be checked against the hitbox in first person
 2026-10-04 - fire spine-lock gated to UAL-retargeted rigs: locking a native shoot clip's torso to bind swung the mounted gun ~50deg sideways on polyart
 2026-10-04 - aim pitch applied in world space around the model right axis — polyart spine bone local X is a yaw axis, so the old local-X multiply swept the gun left/right instead of up/down (up=right, down=left)

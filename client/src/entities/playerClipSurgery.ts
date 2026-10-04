@@ -31,6 +31,25 @@ export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<s
   }
 }
 
+/** Clamp hip/root Y excursion — same "entity owns position" rule as
+ *  stripHipXZ, but Y needs a band not a pin: crouch/bob dips are legit
+ *  pose, while authored jump arcs (polyart 'Jump' bakes +0.8m into the
+ *  hips) float the mesh clear out of the collider while the capsule
+ *  does the actual moving. Deviation is measured from the first key so
+ *  each clip keeps its own stance height. */
+export function clampHipY(clip: THREE.AnimationClip, maxDev = 0.25, extraRoots?: ReadonlySet<string>): void {
+  for (const tr of clip.tracks) {
+    if (!tr.name.endsWith('.position')) continue;
+    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
+    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) continue;
+    const v = tr.values, base = v[1]!;
+    for (let i = 1; i < v.length; i += 3) {
+      const d = v[i]! - base;
+      if (Math.abs(d) > maxDev) v[i] = base + Math.sign(d) * maxDev;
+    }
+  }
+}
+
 // Nodes above the hips that authored rigs animate as root motion — the
 // ancestor chain of the skeleton's shallowest joint (Vexa animates
 // 'Armature', Yurowm 'Rig'). No name table covers these; computed from
