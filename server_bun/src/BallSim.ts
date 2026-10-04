@@ -36,7 +36,7 @@ import { BallCombat } from './ballCombat.ts';
 import {
   DEFAULT_MIX, rollVariant, alivePlayers, nearestPlayer,
   spawnBall as spawnBallInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
-  RETARGET_INTERVAL, RESYNC_INTERVAL, DIVERGENCE_BUDGET_M,
+  RETARGET_INTERVAL, RESYNC_INTERVAL, DIVERGENCE_BUDGET_M, ENRAGED_DIVERGENCE_BUDGET_M,
 } from './ballSpawn.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
@@ -306,7 +306,8 @@ export class BallSim {
         // in edge noise.
         const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
         const spd = Math.hypot(b.vx, b.vy, b.vz);
-        const interval = Math.min(RESYNC_INTERVAL, DIVERGENCE_BUDGET_M / Math.max(spd, 1));
+        const budget = b.enraged ? ENRAGED_DIVERGENCE_BUDGET_M : DIVERGENCE_BUDGET_M;
+        const interval = Math.min(RESYNC_INTERVAL, budget / Math.max(spd, 1));
         if (rs >= interval) this.segment(b, 'segment');
         else this.resyncAcc.set(b.id, rs);
       }

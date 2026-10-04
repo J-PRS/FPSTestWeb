@@ -64,6 +64,10 @@ export const RESYNC_INTERVAL = 1.2;
 /** Worst-case replay drift tolerated before a resync heartbeat — the
  *  per-ball interval is min(RESYNC_INTERVAL, budget/speed). */
 export const DIVERGENCE_BUDGET_M = 15;
+/** Enraged legs replay off a stale aim snapshot while pulling hard at a
+ *  moving target — divergence compounds faster than speed alone says,
+ *  so they get a tighter budget. Inert legs stay on the flat one. */
+export const ENRAGED_DIVERGENCE_BUDGET_M = 6;
 export const BRAIN_BUCKETS = 8;
 
 /** Create + broadcast a ball. near = spawn near a player (drip-feed);
