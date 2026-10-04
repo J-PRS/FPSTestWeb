@@ -319,11 +319,13 @@ export class MoveSim {
     const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
     const dirLen = Math.hypot(dir.x, dir.z);
 
-    // Horizontal speed before input accel — the cap below measures
+    // Tangential speed before input accel — the cap below measures
     // overspeed against this, not the post-accel value, so holding a
     // direction can never grow speed past the cap (that input-pushed
     // equilibrium is what let walking reach absurd speeds).
-    const hSpeedIn = Math.hypot(s.vel.x, s.vel.z);
+    const vdn0 = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+    const keep0 = Math.max(vdn0, 0);
+    const tSpeedIn = Math.hypot(s.vel.x - n.x * keep0, s.vel.y - n.y * keep0, s.vel.z - n.z * keep0);
     if (dirLen > 0) {
       // Project input onto the slope surface.
       const dotN = dir.x * n.x + dir.z * n.z;
@@ -351,18 +353,22 @@ export class MoveSim {
       s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
     }
 
-    // Horizontal-only cap: vertical velocity is ballistic and must never
-    // bleed into this path. Impulse overspeed (a blast shove, a landing)
-    // bleeds toward the cap rather than snapping to it — but the bleed
-    // measures against pre-input speed, so walk accel clamps at the cap
-    // exactly like the old hard truncate did.
-    const hSpeed = Math.hypot(s.vel.x, s.vel.z);
+    // Tangential-only cap: ground speed limits apply along the surface,
+    // so a walker climbing a steep face gets the same cap as on flat —
+    // a horizontal-only cap let uphill accel pump vel.y unbounded until
+    // the launch gate flicked him airborne in cycles. Velocity leaving
+    // the surface (positive normal) is ballistic and untouched — blast
+    // shoves and landings bleed toward the cap rather than snapping.
+    const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+    const keep = Math.max(vdn, 0);
+    const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
+    const tSpeed = Math.hypot(tx, ty, tz);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
-    if (hSpeed > maxGround) {
-      const base = Math.max(hSpeedIn, maxGround);
+    if (tSpeed > maxGround) {
+      const base = Math.max(tSpeedIn, maxGround);
       const want = maxGround + (base - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
-      const k = Math.min(1, want / hSpeed);
-      s.vel.x *= k; s.vel.z *= k;
+      const k = Math.min(1, want / tSpeed);
+      s.vel.x = tx * k + n.x * keep; s.vel.y = ty * k + n.y * keep; s.vel.z = tz * k + n.z * keep;
     }
   }
 
@@ -389,25 +395,31 @@ export class MoveSim {
       }
 
       s.pos.y = groundY;
-      // Rising explosion impulses still clipping the surface must not re-ground.
-      const rising = s.vel.y > 0.1;
+      // Rising impulses still clipping the surface must not re-ground —
+      // but "rising" means away from the surface: vel.y reads walking
+      // up an 80° face as a launch every step.
+      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel;
       s.onGround = !rising;
       this.allowNextJump = !rising;
-    } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)
-        && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel) {
+    } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)) {
       // Stick to the surface: bumps and crest lips inside the snap
       // distance keep ground contact instead of flipping airborne for a
-      // frame or two. The vel gate is what separates a walker's bump
-      // from a real launch — jump/jet/blast all rise faster than it.
+      // frame or two. The launch gate is surface-normal velocity —
+      // slope-following speed stays parallel to the face even on an
+      // 80° wall, so only a real launch (jump/jet/blast) reads away.
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
-      this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-      if (velDotN < 0) {
-        s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
+      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel) {
+        this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
+        if (velDotN < 0) {
+          s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
+        }
+        s.pos.y = groundY;
+        s.onGround = true;
+        this.allowNextJump = true;
+      } else {
+        s.onGround = false;
       }
-      s.pos.y = groundY;
-      s.onGround = true;
-      this.allowNextJump = true;
     } else {
       s.onGround = false;
     }
