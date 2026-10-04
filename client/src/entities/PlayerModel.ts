@@ -92,7 +92,7 @@ export class PlayerModel {
   // retargeted clips flatten the arm raise (rig axis mismatch), so the arm
   // is posed procedurally to meet the fixed gun socket. Same un-apply
   // trick as aimBones so the multiply never accumulates.
-  private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion }[] = [];
+  private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion; bind: THREE.Quaternion }[] = [];
   // Right-arm grip pose per bone role — norm-name set + euler offset in
   // bone-local space. Tuned on the posedump screenshot loop per rig.
   private static HOLD_CHAINS: [Set<string>, [number, number, number]][] | null = null;
@@ -105,6 +105,7 @@ export class PlayerModel {
     ];
   }
   private wantHoldPose = false;
+  private holdW = 0;
 
   /** Live-tune the palm→gun mount rotation (posedump loop) — deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
@@ -566,7 +567,7 @@ export class PlayerModel {
       for (let role = 0; role < PlayerModel.HOLD_CHAINS.length; role++) {
         const [norms, euler] = PlayerModel.HOLD_CHAINS[role]!;
         if (norms.has(nb)) {
-          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)), last: new THREE.Quaternion() });
+          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
           break;
         }
       }
@@ -1009,13 +1010,22 @@ export class PlayerModel {
     }
     this.applySpineLock(dt);
     if (this.wantHoldPose) {
-      // Same suppression rule as the aim layer — a full-body oneshot
-      // (shoot/hit/death) owns the arms while it's actually weighted in.
+      // Full-body oneshots own the arms while weighted in. Everything
+      // else keeps the hold: cyber's retargeted clips pose the arm chain
+      // wrong on their own (mannequin axis bake lands splayed), so the
+      // fixed hip-fire grip IS the correction — blend only so oneshot
+      // transitions don't pop.
       const a = this.currentAction;
       const oneshot = !!a?.isRunning() && a.getEffectiveWeight() > 0.5 &&
         (!!this.currentClipName && (ONESHOT_CLIPS.has(this.currentClipName) || this.currentClipName === 'UAL_Death01'));
-      if (!oneshot) for (const hb of this.holdBones) {
-        hb.last.copy(hb.off);
+      this.holdW += (oneshot ? -6 : 6) * dt;
+      this.holdW = Math.min(1, Math.max(0, this.holdW));
+      if (this.holdW > 0) for (const hb of this.holdBones) {
+        // Slerp toward BIND pose first — composing the fixed raise on top
+        // of the animated track means the arm flails with every clip
+        // frame (the retargeted tracks are garbage on this rig anyway).
+        hb.bone.quaternion.slerp(hb.bind, this.holdW);
+        hb.last.identity().slerp(hb.off, this.holdW);
         hb.bone.quaternion.multiply(hb.last);
       }
     }
