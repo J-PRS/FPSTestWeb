@@ -236,18 +236,33 @@ def extract_sky(mis_text, dest: Path):
         except Exception:
             return []
     side = max(im.width for im in (i[1] for i in imgs))
-    faces = {}
+    out = []
     for (face, im), cube in zip(imgs, ("nz", "px", "pz", "nx", "py", "ny")):
         if im.width != side:
             im = im.resize((side, side), Image.NEAREST)
-        # T2's right face is stored upside-down vs the GL cubemap
-        # convention — unflipped, its dark below-horizon half renders as
-        # a wedge across the upper sky.
-        if cube == "px":
-            im = im.transpose(Image.FLIP_TOP_BOTTOM)
+        out.append((cube, im))
+    # Some dml sets store the right face upside-down vs the GL cubemap
+    # convention (an unflipped one renders its dark below-horizon half as
+    # a wedge across the upper sky) — but packs are inconsistent, so pick
+    # the orientation whose seams match the front/back neighbors.
+    if len(out) >= 3:
+        nz_i, px_i, pz_i = out[0][1], out[1][1], out[2][1]
+        import numpy as _np
+        def seam_err(px):
+            a = _np.asarray(px, dtype=_np.int16)
+            fr = _np.asarray(nz_i, dtype=_np.int16)
+            bk = _np.asarray(pz_i, dtype=_np.int16)
+            # px left edge meets nz right edge; px right edge meets pz
+            # left edge — vertical edges run the same top-down order.
+            return (abs(a[:, 0] - fr[:, -1]).mean()
+                  + abs(a[:, -1] - bk[:, 0]).mean())
+        px_i = out[1][1]
+        flipped = px_i.transpose(Image.FLIP_TOP_BOTTOM)
+        if seam_err(flipped) < seam_err(px_i):
+            out[1] = ("px", flipped)
+    for cube, im in out:
         im.save(dest / f"{cube}.png")
-        faces[cube] = face
-    return faces
+    return {cube: name for (cube, _), (name, _) in zip(out, imgs)}
 
 
 def extract_fog(mis_text):
