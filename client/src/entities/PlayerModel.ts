@@ -583,6 +583,7 @@ export class PlayerModel {
       this.muzzleFlash = ModelFx.buildMuzzleFlash();
       this.gun.add(this.muzzleFlash);
       this.model!.add(this.gun);
+      if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
       return;
     }
     const ws = handBone!.getWorldScale(new THREE.Vector3());
@@ -608,6 +609,7 @@ export class PlayerModel {
     this.gun.add(this.muzzleFlash);
 
     handBone!.add(this.gun);
+    if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
   }
 
   // Nodes above the hips that authored rigs animate as root motion —
@@ -1001,10 +1003,14 @@ export class PlayerModel {
    *  so types without a baked model — or not yet seen firing — keep the
    *  generic prop rather than guess wrong. */
   setWeapon(wt: number | undefined): void {
-    if (wt === undefined || !this.gunMesh) return;
-    const geo = handWeaponGeo(wt) ?? PlayerModel._gunGeo!;
-    if (wt === this.heldWeapon && this.gunMesh.geometry === geo) return;
+    if (wt === undefined) return;
+    // Weapon switches fire before the GLB loads (spawn loadout races the
+    // async mesh) — stash the pick on heldWeapon so attachGun's tail can
+    // re-apply it the moment a gun mount exists instead of dropping it.
     this.heldWeapon = wt;
+    if (!this.gunMesh) return;
+    const geo = handWeaponGeo(wt) ?? PlayerModel._gunGeo!;
+    if (this.gunMesh.geometry === geo) return;
     this.gunMesh.geometry = geo;
     // Flash rides the baked model's real muzzle, not a fixed offset —
     // each baked geo already carries its bounding box from the baker.

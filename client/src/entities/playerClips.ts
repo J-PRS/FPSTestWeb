@@ -186,7 +186,12 @@ export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hi
 // (armed idle, crouch-tuck ski) — overrides and specials were the same
 // concept on two code paths.
 export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationState, string | string[]>>> = {
-  cybersoldier: { ski: 'UAL_Crouch_Fwd_Loop' },
+  cybersoldier: {
+    ski: 'UAL_Crouch_Fwd_Loop',
+    // Same armed stance as the mannequin — his mannequin-source bake
+    // ships Pistol_Idle; Idle_Loop dangles the socket-mounted gun.
+    idle: 'UAL_Pistol_Idle_Loop',
+  },
   mannequin: {
     // No native slide clip — the UAL2 retarget bakes limb-axis artifacts
     // on this rig, so ski rides the tucked Crouch_Fwd.
