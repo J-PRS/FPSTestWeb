@@ -13,11 +13,13 @@ export const BOT_TUNING = {
     breathHold: 38,      // energy needed to step off the perch
     breathRise: 3,       // m rise ahead that qualifies as "on the face"
     tankedMin: 15,       // energy reserve jets won't dip below
+    tapEnergyMin: 4,     // runner airborne-tap floor (featherjet on flats)
     runwayBase: 45,      // m — dive-runway base before arrival
     runwayDropK: 2,      // runway growth per m of altitude to shed
     runwaySpeedK: 0.5,   // runway growth per m/s of approach speed
     flatRunDrop: 6,      // m — below this drop a runner keeps burning
     diveArriveMargin: 4, // m — target must sit this far below to dive
+    diveAglMin: 8,       // m AGL — below this over flat ground there is no dive to give
     parkRingFast: 12,    // m — brake ring cap at speed
     parkRingSlow: 2,     // m — brake ring cap when slow
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch

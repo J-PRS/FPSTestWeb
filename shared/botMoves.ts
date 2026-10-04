@@ -88,8 +88,11 @@ export class BotMoves {
       if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
     } else this.breath = false;
     // Jet respects the tank — below the reserve the bot saves energy for
-    // skills rather than hovering dry at the wall.
-    const tanked = ctx.energy === undefined || ctx.energy > T.moves.tankedMin;
+    // skills rather than hovering dry at the wall. A runner's airborne
+    // tap burns deeper: speed on a flat transit IS his skill reserve —
+    // arrive fast and dry beats arrive slow and tanked.
+    const tapFloor = this.jetWhy === 'tap' ? T.moves.tapEnergyMin : T.moves.tankedMin;
+    const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
     this.jetHold = Math.max(0, this.jetHold - dt);
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
@@ -119,7 +122,14 @@ export class BotMoves {
     // ~10-14m/s and dying in the ring. A runner keeps the burn on a
     // flat approach: thrust is the only accelerator left out there.
     const flatRun = ctx.runner === true && drop < T.moves.flatRunDrop;
-    const diveRun = gd < runway && tgtY < pos.y + T.moves.diveArriveMargin && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
+    // Dive only pays when altitude converts to speed: a falling route
+    // (terrain ahead drops) or real overhead clearance. Over a flat
+    // apron it was vetoing every burn while the bot hop-crawled at
+    // 10-20m/s — the stand being 20m below isn't a dive, it's just
+    // headroom (surreal plateau walk).
+    const agl = pos.y - g0;
+    const canDive = rise < -T.moves.boostRise || agl > T.moves.diveAglMin;
+    const diveRun = gd < runway && tgtY < pos.y + T.moves.diveArriveMargin && canDive && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;
@@ -233,7 +243,15 @@ export class BotMoves {
     // staging never trips it: the 110m orbit sits past the gd window.
     const runIn = (ctx.runner === true || ctx.wave === true) && gd > T.moves.runInGdMin && gd < T.moves.runInGdMax &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && comfy;
-    this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : boost ? 'boost' : '-';
+    // The featherjet: a route-committed runner on a near-level transit
+    // whose tank sits below `comfy` still taps the burn — AIRBORNE ONLY,
+    // so no ground friction eats the thrust and every regen point lands
+    // as forward speed. This is the human technique on a dead flat:
+    // without it the plateau walk is ~10-20m/s of pure regen-bound walk
+    // (surreal autopsy: ~30s from the landing to the grab ring).
+    const tap = ctx.runner === true && !comfy && airborne && od > T.moves.boostGdMin &&
+      (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
+    this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
   }
 }
