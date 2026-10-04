@@ -1,3 +1,4 @@
+2026-10-01 - Anim: smooth procedural aim pitch so head/torso chase aim instead of snapping per input frame
 2026-10-01 - Anim: clamp all oneshot clips and re-enter stalled states so a finished sole action can no longer flash bind pose
 2026-10-05 - T1 knockback curve: aoeImpulseT1 surface-distance ramp over the hitbox min-dimension (point-blank dead zone, rim peak, reach past the old rim); blast impulse measured to capsule center via aoeImpulseT1At, wired client+server; scenario tests re-pointed at real feet-blast geometry
 2026-10-05 - First life arms the 3P hand prop too (boot armed viewmodel only, so the body held the generic placeholder until first switch).
