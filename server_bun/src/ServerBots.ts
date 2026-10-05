@@ -94,6 +94,11 @@ export class ServerBots {
   roleOf(id: string): BotRole | undefined {
     return this.roster.roleInfo.get(id);
   }
+  /** A bot's named squad task, if the commander gave it one — spawn
+   *  scoring pulls tasked members toward their job. */
+  taskGoalFor(id: string) {
+    return this.sense.taskGoalFor(id);
+  }
   /** A bot's rolled skill matrix — telemetry reads it for per-bot
    *  skill↔outcome lines without touching the brain internals. */
   skillOf(id: string): BotSkill | undefined {

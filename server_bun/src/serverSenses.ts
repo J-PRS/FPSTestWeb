@@ -18,7 +18,7 @@ import { classCapsule } from '../../shared/botClasses.ts';
 import { dist3 } from '../../shared/botVec.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
-import { TeamCommand, type CommandMember } from './botCommand.ts';
+import { TeamCommand, type CommandMember, type CommandTask } from './botCommand.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
 import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
@@ -772,6 +772,17 @@ export class ServerBotSenses {
       // actually converging. Escorts share wave's committed feet but
       // must never hold off a moving carrier — that's just losing him.
       marshal: task?.kind === 'push', posted };
+  }
+
+  /** The named responder's task, whichever team owns him — spawn
+   *  scoring reads this so a tasked member materializes toward his
+   *  job instead of hiking 500m back through the kill zone. */
+  taskGoalFor(id: string): CommandTask | undefined {
+    for (const cmd of this.commands.values()) {
+      const t = cmd.taskFor(id);
+      if (t) return t;
+    }
+    return undefined;
   }
 
   /** Test hook — live command task list for a team (soak wave probe). */

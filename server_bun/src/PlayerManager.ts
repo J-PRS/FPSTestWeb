@@ -49,6 +49,10 @@ export class PlayerManager {
    *  toward the home sphere so they respawn at the stand they're meant
    *  to hold; everyone else scores on foe clearance alone. */
   spawnHomeBias?: (playerId: string) => number;
+  /** A tasked member's job position — when set, spawn scoring pulls
+   *  toward the task instead of the home sphere (a wave member who
+   *  respawns at base just re-runs the lethal transit). */
+  spawnObjective?: (playerId: string) => { pos: Vec3; w: number } | null;
 
   private readonly spawnPicker = new SpawnPicker({
     players: () => this.players,
@@ -56,6 +60,7 @@ export class PlayerManager {
     teamSpawns: () => this.teamSpawns,
     teamBases: () => this.teamBases,
     homeBias: (id) => this.spawnHomeBias?.(id) ?? 0,
+    objective: (id) => this.spawnObjective?.(id) ?? null,
     groundAt: () => this.groundAt,
     rng: () => this.spawnRng(),
   });

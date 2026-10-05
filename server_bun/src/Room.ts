@@ -323,6 +323,15 @@ export class Room {
       const role = this.bots?.roleOf(id);
       return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : 0;
     };
+    // A tasked member materializes toward his JOB, not home — the wave
+    // member who respawned at base re-ran the lethal transit and died
+    // again (katabatic soak: wave d518m median, near1%, dead~850). The
+    // pull is softer than the defenders' — foe clearance still scores,
+    // so a spawn directly on the enemy blob loses on safety.
+    this.players.spawnObjective = (id) => {
+      const t = this.bots?.taskGoalFor(id);
+      return t ? { pos: t.goal, w: 1.6 } : null;
+    };
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
     if (this.spec.bots) this.bots.populate(this.spec.bots);

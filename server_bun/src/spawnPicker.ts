@@ -22,6 +22,9 @@ export interface SpawnPickerHost {
    *  respawning 400m forward spends a minute hiking instead of holding
    *  the stand; runners keep 0 so front-line spheres stay theirs. */
   homeBias?(playerId: string): number;
+  /** A tasked member's job position + pull — overrides home scoring: the
+   *  flood that respawns at base re-runs the transit that killed it. */
+  objective?(playerId: string): { pos: Vec3; w: number } | null;
   /** Ground height at (x,z) — live heightfield. */
   groundAt(): ((x: number, z: number) => number) | undefined;
   /** Jitter source — Room wires its rng so tests can seed it. */
@@ -72,14 +75,16 @@ export class SpawnPicker {
     // prefer their base through the fallback below (same effect, since
     // baseDist breaks the tie there too — but a flat pick is fairer
     // than the first authored sphere for everyone else).
-    const bias = this.host.homeBias?.(playerId) ?? (teamPool ? 0 : 2);
-    if (bias === 0) {
+    const obj = this.host.objective?.(playerId) ?? null;
+    const bias = obj ? obj.w : (this.host.homeBias?.(playerId) ?? (teamPool ? 0 : 2));
+    if (!obj && bias === 0) {
       const anyFoe = [...this.host.players().entries()].some(
         ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
       if (!anyFoe) return { ...points[Math.floor(this.host.rng() * points.length)]! };
     }
-    const base = bias > 0 && (team === 'alpha' || team === 'bravo')
-      ? this.host.teamBases()?.[team] : undefined;
+    const base = obj ? obj.pos
+      : bias > 0 && (team === 'alpha' || team === 'bravo')
+        ? this.host.teamBases()?.[team] : undefined;
     let best: SpawnPoint = { ...points[0]! };
     let bestScore = -Infinity;
     for (const spawn of points) {
