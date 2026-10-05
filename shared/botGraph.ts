@@ -146,12 +146,13 @@ export class TerrainFlow {
    *  the goal (only when the caller's height fn differs from the
    *  grid's). The steerer stays authoritative under ~9m. */
   route(fx: number, fz: number, tx: number, tz: number, ahead: number, danger?: (x: number, z: number) => number): BotVec | null {
-    // Bucket the goal to 4 cells: a flood is n² work, and live targets
-    // (a carrier at 30m/s) cross a 15m cell every half second — without
-    // bucketing every think re-floods the whole grid and evicts the
-    // 8-deep cache into a storm. The waypoint only needs the flow's
-    // direction; the exact goal still lands the final leg below.
-    const qb = this.cell * 8;
+    // Bucket the goal to a coarse cell: a flood is n² work, and live
+    // targets (a carrier at 30m/s) cross a 15m cell every half second —
+    // without bucketing every think re-floods the whole grid and churns
+    // the cache into a storm. The waypoint only needs the flow's
+    // direction; the exact goal still lands the final leg below, and a
+    // ~90m-shifted flood goal shares the same mid-field basin anyway.
+    const qb = this.cell * 12;
     const goal = this.cellOf(Math.round(tx / qb) * qb, Math.round(tz / qb) * qb);
     const field = this.fieldFor(goal);
     const parent = field.parent;
