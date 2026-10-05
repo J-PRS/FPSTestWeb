@@ -39,9 +39,20 @@ export class TickLoop {
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
   private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, windowStart: 0 };
+  /** Per-phase EMA ms inside tickRoom — tick lag says the tick ran
+   *  late, this says WHAT was slow (sims vs record build vs fanout)
+   *  without a profiler attached. */
+  private phases = new Map<string, number>();
+  private lastPhaseAt = 0;
+  private mark(name: string): void {
+    const now = wallNow();
+    const d = now - this.lastPhaseAt;
+    this.lastPhaseAt = now;
+    this.phases.set(name, (this.phases.get(name) ?? d) * 0.9 + d * 0.1);
+  }
   /** Last completed 10s rollup — surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; phaseMs: Record<string, number> } | null = null;
   bandwidthWindow() { return this.lastBw; }
 
   private readonly fanout: TickFanout;
@@ -126,7 +137,9 @@ export class TickLoop {
   private tickRoom(room: Room, players: Players, now0: number): void {
     // Phase 0: drain the command buffer — all client input lands before
     // any sim runs, in wire-arrival order.
+    this.lastPhaseAt = wallNow();
     room.drainCommands();
+    this.mark('cmd');
 
     // Server sims move first — bot/flag writes land in this tick's
     // records. They get MEASURED elapsed, not the nominal step: setInterval
@@ -138,6 +151,7 @@ export class TickLoop {
     const dt = Math.min(Math.max(elapsed, TICK_DT), 1);
     room.lastStepAt = now0;
     for (const sim of room.sims) sim.tick(dt);
+    this.mark('sims');
 
     // Authority mode: the shadow sim's output is the broadcast truth.
     // Reports only fed it aim/liveness hints — what every other player
@@ -151,8 +165,10 @@ export class TickLoop {
         p.velocity = { x: s.vel.x, y: s.vel.y, z: s.vel.z };
       }
     }
+    this.mark('auth');
 
     const records = this.fanout.buildRecords(room, players, now0);
+    this.mark('records');
 
     room.tickSeq++;
     this.metrics.ticks++;
@@ -163,6 +179,7 @@ export class TickLoop {
     // quiet ticks both lies about link health and starves stateHistory
     // pruning.
     this.fanout.fanoutRecords(room, players, records);
+    this.mark('fanout');
 
     this.rollupMetrics(now0, players.size);
   }
@@ -177,12 +194,15 @@ export class TickLoop {
     if (m.windowStart === 0) m.windowStart = now0;
     if (now0 - m.windowStart > 10000) {
       const secs = (now0 - m.windowStart) / 1000;
+      const phaseMs: Record<string, number> = {};
+      for (const [k, v] of this.phases) phaseMs[k] = +v.toFixed(2);
       this.lastBw = {
         kbpsDownTotal: +(m.bytesSent * 8 / 1000 / secs).toFixed(1),
         recordsPerSec: +(m.recordsSent / secs).toFixed(0),
         suppressedPerSec: +(m.recordsSuppressed / secs).toFixed(0),
         tierSkippedPerSec: +(m.recordsTierSkipped / secs).toFixed(0),
         tickFramesDroppedPerSec: +(m.tickFramesDropped / secs).toFixed(0),
+        phaseMs,
       };
       logger.info('Tick bandwidth', { ...this.lastBw, players: playerCount });
       m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
