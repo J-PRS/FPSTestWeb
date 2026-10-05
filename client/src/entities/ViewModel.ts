@@ -50,7 +50,7 @@ export class ViewModel {
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
     [WeaponType.Chaingun]: -0.80, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.30,
+    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.38, // group ×1.4 — collar tip moved to ≈-0.39 [WeaponType.Sprinkler]: -0.30,
     [WeaponType.Railgun]: -0.64, // clear of the prong cluster — at -0.57 the hex tips frame-swallow the flash
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
@@ -67,7 +67,7 @@ export class ViewModel {
   // a blind rotation.z cartwheels the triad. Computed at adoption.
   spinAxis = new THREE.Vector3(0, 0, -1); // public — VmBaked recomputes bore axes
   spinVel = 0;
-  private static readonly SPIN_MAX = 40; // rad/s at full spin
+  // spinVel cap lives in vmKick.ts (SPIN_MAX) — it owns the spool.
   activeWeapon = 0; // public — the switch envelope rewrites it at the dip
   private timer = 0;
   private aimBlend = 0;
@@ -193,7 +193,33 @@ export class ViewModel {
       if (!this.discAmmo) this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;
       if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
     }
+    if (this.activeWeapon === WeaponType.BoltLauncher) {
+      // Crossbow fake: the chambered bolt is the projectile — gone the
+      // instant the shot breaks; the drum indexes one station and the
+      // next bolt feeds up into the channel during the refire gap.
+      if (!this.bowParts) {
+        const w = this.weapons.get(WeaponType.BoltLauncher);
+        this.bowParts = w ? {
+          bolt: w.getObjectByName('bowBolt') ?? null,
+          drum: w.getObjectByName('bowDrum') ?? null,
+          string: w.getObjectByName('bowString') ?? null,
+          armL: w.getObjectByName('armL') ?? null,
+          armR: w.getObjectByName('armR') ?? null,
+        } : null;
+      }
+      const p = this.bowParts;
+      if (p?.bolt) { p.bolt.visible = false; this.bowT = 0; }
+      if (p?.drum) p.drum.rotation.x += Math.PI / 4; // 8 stations
+    }
   }
+
+  private bowParts: {
+    bolt: THREE.Object3D | null; drum: THREE.Object3D | null;
+    string: THREE.Object3D | null; armL: THREE.Object3D | null; armR: THREE.Object3D | null;
+  } | null = null;
+  private bowT = -1; // <0 idle; >=0 s since the shot ejected the chambered bolt
+  private static readonly BOW_HIDE = 0.05;
+  private static readonly BOW_SLIDE = 0.4;  // drum→channel feed travel
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -384,6 +410,7 @@ export class ViewModel {
 
     this.tickChainBarrels(dt);
     this.tickDiscAmmo(dt);
+    this.tickBow(dt);
 
     // Flash decay — sqrt curve: bright spike, fast falloff. The two quads
     // grow/shrink in opposite directions (Effekseer's recipe — mirrored
@@ -446,5 +473,28 @@ export class ViewModel {
       this.discAmmo.scale.setScalar(1);
       this.discT = -1;
     }
+  }
+
+  /** Crossbow flex + feed. Limbs ride the whole-gun kick spring for free:
+   *  releasing tension closes them ~25% of their sweep then the spring
+   *  settles them back — a bow's limbs snap forward on release, not back.
+   *  The string group slides toward the cams with the same envelope.
+   *  Separately the feed envelope re-chambers the next bolt like
+   *  tickDiscAmmo's breech slide. */
+  private tickBow(dt: number): void {
+    const p = this.bowParts;
+    if (!p) return;
+    const flex = this.kickAmount;
+    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 0.42) * (1 - flex * 0.25);
+    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -0.42) * (1 - flex * 0.25);
+    if (p.string) p.string.position.z = -flex * 0.10;
+    if (this.bowT < 0 || !p.bolt) return;
+    this.bowT += dt;
+    if (this.bowT < ViewModel.BOW_HIDE) return;
+    p.bolt.visible = true;
+    const k = Math.min((this.bowT - ViewModel.BOW_HIDE) / ViewModel.BOW_SLIDE, 1);
+    const e = 1 - (1 - k) * (1 - k) * (1 - k);
+    p.bolt.position.z = 0.18 * (1 - e); // slides forward out of the drum feed
+    if (k >= 1) { p.bolt.position.z = 0; this.bowT = -1; }
   }
 }

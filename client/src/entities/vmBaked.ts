@@ -35,7 +35,9 @@ const WEAR_BOOST = new Map<number, number>([[WeaponType.Chaingun, 0.7]]);
 // Weapons whose baked GLB is the DEFAULT look — no ?bake flag needed.
 // The procedural builder stays as the fallback when the file is missing
 // and under ?export (the dump pipeline must serialize procedural geo).
-const ALWAYS_BAKE = new Set<number>([WeaponType.BoltLauncher]);
+// w0's slab bake is parked (w0_baked.glb.old) — the procedural crossbow
+// is the shipping look; re-add the id here if a new bake ships.
+const ALWAYS_BAKE = new Set<number>([]);
 
 export class VmBaked {
   constructor(private h: BakedHost) {}

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, notchRing } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -8,40 +8,154 @@ import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, 
 // children are positioned in viewmodel space; a child named 'barrels'
 // is the chaingun spin group.
 
-// Weapon 0 — bolt/rocket launcher: chunky faceted slab-sided body like
-// JP's Unity ref — straight octagonal block, stepped muzzle shroud, top
-// rail split by a notch, boxy rear receiver. Not tapered; the wedge in
-// the ref is perspective.
+// Weapon 0 — bolt launcher, T:A-style military crossbow: a skeletal
+// receiver split top/bottom like the disc's slit trick, the chambered
+// bolt glowing inside the channel. Twin mechanical arms sweep forward
+// off a hex hub, cam wheels at the tips, string drawn back to the bolt
+// tail. Under-slung bolt drum feeds the channel — the "auto" read.
 export function mkBolt(): THREE.Group {
-const rocket = new THREE.Group();
-// Equal-width slab all the way to the face — the ref has NO stepped
-// shroud; the front is flush with the body. End plate is a thin flush
-// ring so the muzzle reads as a bore in a flat face, not a fattened tip.
-rocket.add(mkTube(0.125, 0.125, 0.52, -0.06, bodyMat)); // main slab barrel
-const rFace = new THREE.Mesh(new THREE.CylinderGeometry(0.126, 0.126, 0.03, 8), darkMat);
-rFace.rotation.x = Math.PI / 2;
-rFace.position.z = -0.335;
-rocket.add(rFace);
-rocket.add(mkBore(0.11, -0.351));
-const rRecv = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.21, 0.2), darkMat);
-rRecv.position.set(0, 0.01, 0.22);
-rocket.add(rRecv);
-// Deep top channel — the ref's rail reads as a TRENCH cut into the
-// slab: tall side walls, not a thin strip. Long front run, notch gap,
-// then a taller rear block where the channel ends in a step.
+const bow = new THREE.Group();
+// Lower receiver — tapered skeletal body, fat at the breech, narrow at
+// the arm hub. The slit trick: this carries the channel's FLOOR while
+// the top rail floats above, bolt living in the gap.
+bow.add(mkLoft([
+  { z: 0.26, ring: profOct(0.17, 0.15, 0.02) },
+  { z: 0.10, ring: profOct(0.16, 0.13, 0.02) },
+  { z: -0.06, ring: profOct(0.12, 0.10, 0.02) },
+], bodyMat));
+// Channel floor — the bolt's runway, recessed so the glowing bolt in
+// the slit shadows its sides correctly under the AO bake.
+const chanFloor = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.015, 0.44), darkMat);
+chanFloor.position.set(0, 0.02, -0.06);
+bow.add(chanFloor);
+// Top rail — floats over the channel on two cheek pylons; the gap
+// between rail and floor IS the slit the bolt shows through.
+bow.add(mkLoft([
+  { z: 0.18, ring: profOct(0.10, 0.05, 0.012), dy: 0.095 },
+  { z: -0.14, ring: profOct(0.08, 0.045, 0.012), dy: 0.095 },
+], bodyMat));
 for (const side of [-1, 1]) {
-  const wallF = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.075, 0.28), darkMat);
-  wallF.position.set(side * 0.045, 0.13, -0.14);
-  rocket.add(wallF);
-  const wallR = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.1), darkMat);
-  wallR.position.set(side * 0.045, 0.145, 0.09);
-  rocket.add(wallR);
+  const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), darkMat);
+  cheek.position.set(side * 0.05, 0.07, -0.16);
+  bow.add(cheek);
 }
-// Channel floor — recessed, keeps the trench readable from behind
-const channelFloor = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.015, 0.42), darkMat);
-channelFloor.position.set(0, 0.095, -0.05);
-rocket.add(channelFloor);
-return rocket;
+// Scope block on the rail tail — T:A's stubby electronic sight
+const scope = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.12), darkMat);
+scope.position.set(0, 0.14, 0.08);
+bow.add(scope);
+const scopeLens = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 10),
+  new THREE.MeshBasicMaterial({ color: 0x66d9ff }));
+scopeLens.rotation.x = Math.PI / 2;
+scopeLens.position.set(0, 0.14, 0.018);
+bow.add(scopeLens);
+// Hex arm hub — the boss the limbs rotate on, split across the nose.
+const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.15, 6), darkMat);
+hub.rotation.z = Math.PI / 2;
+hub.position.set(0, 0, -0.14);
+bow.add(hub);
+// Bow arms — one group per side, pivoted at the hub so firing can flex
+// them: inner strut angles out+forward, tip limb kicks back the elbow.
+// Cam wheel at the tip carries the string.
+const ARM_SWEEP = 0.42;
+for (const side of [-1, 1]) {
+  const arm = new THREE.Group();
+  arm.name = side < 0 ? 'armL' : 'armR';
+  arm.userData.baseRot = side * ARM_SWEEP;
+  arm.rotation.y = side * ARM_SWEEP;
+  arm.position.set(side * 0.07, 0, -0.14);
+  // Limb — tapered flat bar out to the cam
+  const limb = mkLoft([
+    { z: 0.0, ring: profOct(0.05, 0.045, 0.01) },
+    { z: -0.22, ring: profOct(0.035, 0.05, 0.01) },
+    { z: -0.30, ring: profOct(0.05, 0.055, 0.01) },
+  ], bodyMat);
+  arm.add(limb);
+  // Cam wheel at the tip — the compound-bow read
+  const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.025, 10), darkMat);
+  cam.rotation.x = Math.PI / 2;
+  cam.position.set(0, 0, -0.30);
+  arm.add(cam);
+  const camHub = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8), brassMat);
+  camHub.rotation.x = Math.PI / 2;
+  camHub.position.set(0, 0, -0.30);
+  arm.add(camHub);
+  bow.add(arm);
+}
+// String latch where the bolt tail sits — the drawn string's vertex.
+// Two tubePath legs run cam-tip → latch in the bowString group; the
+// group slides in z on fire so the string snaps forward with the shot.
+const stringG = new THREE.Group();
+stringG.name = 'bowString';
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
+const tipX = Math.sin(ARM_SWEEP) * 0.30, tipZ = -0.14 - Math.cos(ARM_SWEEP) * 0.30;
+for (const side of [-1, 1]) {
+  stringG.add(tubePath([
+    [side * (0.07 + tipX), 0, tipZ, 0.006],
+    [side * 0.05, 0.03, -0.10, 0.006],
+    [0, 0.03, 0.16, 0.006], // string latch at the bolt tail
+  ], 0.006, strutMat, 4));
+}
+bow.add(stringG);
+// Chambered bolt inside the channel — the loaded read. Glowing warhead
+// tip (amber like the muzzle flash), thin shaft back to the latch.
+// Named group: the fire envelope ejects it forward and re-chambers.
+const boltG = new THREE.Group();
+boltG.name = 'bowBolt';
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.26, 6), darkMat);
+shaft.rotation.x = Math.PI / 2;
+shaft.position.set(0, 0.035, -0.04);
+boltG.add(shaft);
+const tip = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6),
+  new THREE.MeshBasicMaterial({ color: 0xffc866 }));
+tip.rotation.x = -Math.PI / 2;
+tip.position.set(0, 0.035, -0.19);
+boltG.add(tip);
+// Fletching fins at the tail — thin plates spread radially around the
+// shaft axis so the silhouette reads arrowed from the side too.
+for (let i = 0; i < 3; i++) {
+  const a = (i / 3) * Math.PI * 2;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.03, 0.05), bodyMat);
+  fin.position.set(Math.cos(a) * 0.028, 0.035 + Math.sin(a) * 0.028, 0.08);
+  fin.rotation.z = a;
+  boltG.add(fin);
+}
+bow.add(boltG);
+// Bolt drum under the receiver — axis across the gun, bolt shafts
+// visible ringed on the face like the GL's chambers. 'bowDrum' indexes
+// one station per shot.
+const drumG = new THREE.Group();
+drumG.name = 'bowDrum';
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.11, 8), darkMat);
+drum.rotation.z = Math.PI / 2;
+drumG.add(drum);
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.018, 6), boreMat);
+  mouth.position.set(0.056, Math.sin(a) * 0.058, Math.cos(a) * 0.058);
+  mouth.rotation.y = Math.PI / 2;
+  drumG.add(mouth);
+}
+const drumHub = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.13, 8), brassMat);
+drumHub.rotation.z = Math.PI / 2;
+drumG.add(drumHub);
+drumG.position.set(0, -0.1, -0.02);
+bow.add(drumG);
+// Skeletal stock + grip — the crossbow's gun reads
+const stockL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.2), darkMat);
+stockL.position.set(0, 0.02, 0.36);
+bow.add(stockL);
+const stockB = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.05), darkMat);
+stockB.position.set(0, -0.02, 0.44);
+bow.add(stockB);
+const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.11, 0.05), darkMat);
+grip.position.set(0, -0.14, 0.08);
+grip.rotation.x = 0.3;
+bow.add(grip);
+const guard = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.016, 0.08), darkMat);
+guard.position.set(0, -0.11, 0.02);
+bow.add(guard);
+bow.visible = false;
+return bow;
 }
 
 // Weapon 1 — disc launcher (T1/T2/Ascend spinfusor DNA, not a copy): a
@@ -193,9 +307,9 @@ for (let i = 0; i < CHAIN_BARRELS * 2; i++) {
   stud.position.set(Math.cos(a) * 0.15, Math.sin(a) * 0.15, -0.14);
   chainBarrels.add(stud);
 }
-// Brass center axle inside the cluster — static while the barrels spin
-// around it, the railgun nose-connector read through the barrel gaps.
-chain.add(mkTube(0.07, 0.07, 0.55, -0.4, brassMat));
+// Brass center axle — the rotor shaft; spins WITH the cluster (it's
+// in chainBarrels), visible between the barrels through the gaps.
+chainBarrels.add(mkTube(0.07, 0.07, 0.55, -0.4, brassMat));
 // Dark mouth behind the cluster between the barrels.
 chain.add(mkBore(CLUSTER_R + 0.075, -0.155));
 // No muzzle clamp — a ring mid-run read as clutter against the three
