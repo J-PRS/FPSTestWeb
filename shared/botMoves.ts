@@ -139,6 +139,9 @@ export class BotMoves {
     // Runners don't perch — the breath gate exists to stage a climb,
     // and a runner arriving on an apron rise isn't climbing, he's
     // arriving. Parking him 25m out is a free pick for the ring.
+    // Wave members skipping the breath tried and reverted: same-seed
+    // soak 9g/2c->8g/1c with hold collapsing — a perched member banks a
+    // full tank and arrives strong; a burning one arrives dry and dies.
     if (!ctx.posted && !ctx.runner && ctx.energy !== undefined && !airborne && rise > T.moves.breathRise) {
       if (this.breath) this.breath = ctx.energy < T.moves.breathHold;
       else this.breath = ctx.energy < T.moves.breathArm;
