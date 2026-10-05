@@ -1,3 +1,4 @@
+2026-10-05 - test: pin botGraph TerrainFlow + botTuning table — 10 tests covering flat progress, wall circumvention, danger deflection, routeNearGoal, goal bucketing, bounded flood cache, twin replay
 2026-10-05 - audit: edge-vs-snapshot ordering classified clean — every wire edge self-contained (crawlEvt tp/t, ball segments full leg, flagUpdate full snapshot); ordering can never replay against a stale base
 2026-10-05 - test: pin creatureTotem — 17 tests covering charge/fire/blink/land edges, all three relocation triggers, committed beam geometry, mid-blink intangibility, stagger pin, 400-step twin replay (creature families fully covered)
 2026-10-05 - audit: floating promises verified — every fire-and-forget async site ends in a catch or relies on the error-level unhandledRejection backstop (server.ts:155); a rejected promise is loud, never silent

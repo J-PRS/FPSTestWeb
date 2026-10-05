@@ -411,6 +411,13 @@ telemetry lines it greps.
   committed beam geometry (unit dir, terrain clip, structure clip),
   live-position sweep, 400-step twin replay. Creature families now
   fully covered.
+- **`botGraph` + `botTuning` pinned** (2026-10-05):
+  `botGraph.test.ts` (10 tests) — origin wrap, flat-ground progress,
+  wall circumvention (priced not forbidden), danger deflection off a
+  hot blob, `routeNearGoal` back-off, 120m goal bucketing, bounded
+  flood cache, connected grids never null, twin-instance replay, and
+  shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
+  comment-pinned — 0.5 broke beast-awareness + replay).
 - **Edge-vs-snapshot ordering** (2026-10-05): every wire edge is
   self-contained — `crawlEvt` carries pos/vel/committed `tp`/`t`
   (blink carries the committed DESTINATION), `WireBallSegment` packs
