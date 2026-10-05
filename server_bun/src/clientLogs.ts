@@ -7,6 +7,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'fs';
 import { basename, extname, join } from 'path';
 import { logger } from './logger.js';
+import { wallNow } from './wallClock.js';
 
 export const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 
@@ -32,9 +33,28 @@ export function rotateLogs(): void {
   } catch { /* same */ }
 }
 
+/** Per-IP append throttle — bodies cap at 512KB each, but nothing else
+ *  stopped one caller from filling logs/ at line speed. 20 posts/min is
+ *  generous for a browser that ships a handful of warns per session. */
+const postIps = new Map<string, { count: number; start: number }>();
+const POST_IP_LIMIT = 20;
+const POST_IP_WINDOW_MS = 60_000;
+function postThrottleAllow(ip: string): boolean {
+  if (ip === '' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  const now = wallNow();
+  let w = postIps.get(ip);
+  if (!w || now - w.start >= POST_IP_WINDOW_MS) {
+    w = { count: 0, start: now };
+    postIps.set(ip, w);
+    if (postIps.size > 1024) postIps.clear();
+  }
+  return ++w.count <= POST_IP_LIMIT;
+}
+
 // Bodies are plain text lines (WARN/ERROR only by client convention).
-export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response): Promise<Response> {
+export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response, ip = ''): Promise<Response> {
   try {
+    if (!postThrottleAllow(ip)) return cors('Too many posts', { status: 429 });
     const body = await req.text();
     if (body.length > 512 * 1024) {
       return cors('Too large', { status: 413 });

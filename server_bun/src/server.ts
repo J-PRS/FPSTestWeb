@@ -102,7 +102,9 @@ const server = Bun.serve<WebSocketData>({
     if (url.pathname.startsWith('/admin/')) return adminRoute(httpCtx, req, url);
     if (url.pathname.startsWith('/demos/')) return demoRoute(httpCtx, req, url);
     if (url.pathname.startsWith('/maps/')) return mapBinRoute(url);
-    if (url.pathname === '/client-log' && req.method === 'POST') return clientLogRoute(req, corsResponse);
+    if (url.pathname === '/client-log' && req.method === 'POST') {
+      return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
+    }
 
     return corsResponse('Not found', { status: 404 });
   },
