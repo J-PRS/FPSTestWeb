@@ -131,6 +131,9 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
   for (const e of ctx.enemies) {
     if (!e.alive) continue;
     const d = dist3(pos, e.pos);
+    // Cheapest gate first: an out-of-range enemy never earns the LOS
+    // march — it was paying a ~dist/6-probe walk for a guaranteed discard.
+    if (d >= (e.id.startsWith('b:') ? beastRange : range)) continue;
     if (!losClear(ctx, pos, e.pos)) continue;
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
@@ -435,6 +438,10 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   s -= Math.abs(dt - mid) * 0.08;
   for (const e of ctx.enemies) {
     if (!e.alive || e === t) continue;
+    // A shooter past engagement range can't hold this spot down — skip
+    // the march; the whole roster times a ring of candidates made this
+    // the hunt stage's hot loop.
+    if (dist3(cand, e.pos) >= BOT_FIRE_RANGE) continue;
     if (losClear(ctx, cand, e.pos)) s -= 0.6; // a second gun covers this spot
   }
   s -= Math.abs(candGround - ctx.groundY(self.x, self.z)) * 0.05;
