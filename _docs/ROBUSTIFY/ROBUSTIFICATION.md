@@ -411,6 +411,14 @@ telemetry lines it greps.
   committed beam geometry (unit dir, terrain clip, structure clip),
   live-position sweep, 400-step twin replay. Creature families now
   fully covered.
+- **Edge-vs-snapshot ordering** (2026-10-05): every wire edge is
+  self-contained — `crawlEvt` carries pos/vel/committed `tp`/`t`
+  (blink carries the committed DESTINATION), `WireBallSegment` packs
+  the whole leg (pos/vel/tp/et/slowT/damp/t), `flagUpdate` broadcasts
+  the full flag snapshot, kill/drops resolve server-side. No message
+  references a snapshot that could arrive later, so intra-tick and
+  cross-packet ordering can never replay an edge against a stale base.
+  The "state edges + committed snapshot" rule kills the class.
 - **Floating promises** (2026-10-05): every unawaited `.then(`/`void `
   async call in `server_bun/src` audited — the fire-and-forget sites
   (DemoStorage index-reconcile chain, RtcServer `loadNd`/`answerOffer`,
