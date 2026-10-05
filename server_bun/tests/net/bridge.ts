@@ -83,6 +83,12 @@ export type BridgeProfile = {
    *  a window then let it resume (a GC pause / event-loop block — the
    *  queued inputs must drain, not pile up or reset). */
   tick?: { hz?: number; stalls?: { atMs: number; ms: number }[] };
+  /** Client clock dishonesty: multiplier on the client's frame dt —
+   *  a skewed rAF/performance.now makes the prediction integrate the
+   *  wrong elapsed time (0.8 = clock runs 20% slow). Nothing else on
+   *  the wire stamps the client's clock, so this is the only channel
+   *  skew can leak through — corrections must eat the drift. */
+  clockSkew?: number;
 };
 
 export type BridgeResult = {
@@ -180,7 +186,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
     const { input, yaw } = script(tMs);
 
     // ---- client frame (step at real elapsed dt, like rAF) ----
-    const cdt = Math.min(0.25, Math.max(0, (now - lastClient) / 1000));
+    const cdt = Math.min(0.25, Math.max(0, (now - lastClient) / 1000)) * (profile.clockSkew ?? 1);
     if (cdt > 0) {
       lastClient = now;
       const burning = clientEnergy(input, cdt, client.state.onGround);

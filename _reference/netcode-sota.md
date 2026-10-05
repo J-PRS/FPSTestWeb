@@ -46,8 +46,11 @@ journaled event stream with offset-cursor reclaim.
    staged authority simState lands after a 1.5s dark outage + 200ms
    delivery lag; 2.6m pre-seed residual re-centers to tail p95 3.7m.
    Proved the drift was real before the seed (residual gate >0.5m).
-5. **Clock-skew tolerance** — client clockHint drift vs server wall;
-   reconcile grace windows under skewed reporters.
+5. ~~Clock-skew tolerance~~ — DONE (clockSkew.test): wire carries no
+   client timestamps by design; only leak channel is the client's own
+   prediction dt. Skewed rAF 0.8x/1.25x drifts stay correction-bounded
+   (tail p95 2.2m / 3.5m vs unbounded walk-off). clockHint itself was
+   never needed — the trust boundary already excludes client time.
 6. **Datagram ev-gap heal** — if a datagram transport (WT/RTC) ever
    carries reliable frames, an out-of-order durable ev is silently
    dropped by the max() cursor; needs a reorder window or NACK-gap
