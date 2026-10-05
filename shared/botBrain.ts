@@ -174,6 +174,12 @@ export interface BrainCtx {
    *  length; hosing air past reach is a whiff the stats count). Omit
    *  → no limit (projectiles reach past any sane engagement). */
   weaponRange?(dist: number): number | undefined;
+  /** Host hook: fuse seconds of the weapon the bot would pick at `dist`
+   *  when it's a fuseOnly carrier (MRV — the airburst IS the attack).
+   *  Intercept time caps at the fuse: the aim solves "carrier at fuse =
+   *  target at fuse", not a body crossing it phases through. Omit → no
+   *  fuse, plain intercept timing. */
+  weaponFuse?(dist: number): number | undefined;
   /** Host hook: preferred duel distance for the weapon the bot would
    *  draw at `dist`, against a target at `targetHpFrac` health — a Flak
    *  brawler hugs a full-hp foe but won't chase a straggler it can chip

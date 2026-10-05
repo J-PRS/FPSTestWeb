@@ -65,6 +65,7 @@ export const HEALBEAM_PER_TICK = 4;       // hp per fire tick → ~40 hp/s at 0.
 export const HEALBEAM_MIN_TICK_S = 0.07;  // min seconds between claims per shooter+target
 export const HEALBEAM_ENERGY = 6;         // jet energy per heal tick — a full tank is ~16s of beam
 export const HEALNADE_HEAL = 60;          // flat heal on allies caught in the nade blast
+export const CONC_JET_DRAIN = 40;         // jet energy the concussion blast saps — the escape debuff, not just the fumble
 
 // Belt economy — one charge pool feeds every belt throw AND every pack
 // deploy: the nuggets you pick up ARE the ordnance you carry.
@@ -78,7 +79,7 @@ export const BELT_THROW_WEAPONS = new Set<number>([
   WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
-  WeaponType.ProxyGrenade, WeaponType.SatchelCharge,
+  WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion,
 ]);
 
 /** Nuggets charged per belt toss — heavy ordnance costs more than a

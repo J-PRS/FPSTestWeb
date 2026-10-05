@@ -8,7 +8,7 @@
  * a player capsule in ~6ms, well inside one 20Hz tick. Every collision
  * query takes the whole prev→new segment so nothing tunnels.
  */
-import { hmHeight, type Heightfield } from './heightfield.ts';
+import { hmHeight, hmNormal, type Heightfield } from './heightfield.ts';
 import type { Vec3 } from './protocol.ts';
 
 export interface SimProjectile {
@@ -68,4 +68,26 @@ export function segFieldHit(a: Vec3, b: Vec3, field: Heightfield): Vec3 | null {
     if (y <= hmHeight(field, x, z)) return { x, y, z };
   }
   return null;
+}
+
+const _bN: Vec3 = { x: 0, y: 1, z: 0 };
+/** Terrain bounce for fuse bombs (grenade): reflect the shell on the
+ *  heightfield normal and keep it live — the fuse is the only trigger.
+ *  Hard impacts reflect with restitution; weak grazes (<2 m/s into the
+ *  ground) just bleed the normal component and slide, matching the
+ *  client's slide-vs-pop rule so the replica arc stays honest. */
+export function bounceOffField(p: SimProjectile, field: Heightfield, radius: number, restitution = 0.45, friction = 0.75): void {
+  hmNormal(field, p.pos.x, p.pos.z, _bN);
+  const vn = p.vel.x * _bN.x + p.vel.y * _bN.y + p.vel.z * _bN.z;
+  if (vn < -2) {
+    const k = -(1 + restitution) * vn;
+    p.vel.x = (p.vel.x + _bN.x * k) * friction;
+    p.vel.y += _bN.y * k;
+    p.vel.z = (p.vel.z + _bN.z * k) * friction;
+  } else if (vn < 0) {
+    p.vel.x -= _bN.x * vn; p.vel.y -= _bN.y * vn; p.vel.z -= _bN.z * vn;
+  }
+  // Sit the shell's center one radius above the surface so the next
+  // swept step doesn't instantly re-detect the same contact.
+  p.pos.y = hmHeight(field, p.pos.x, p.pos.z) + radius + 0.05;
 }

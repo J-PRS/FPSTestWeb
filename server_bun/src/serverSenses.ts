@@ -903,45 +903,45 @@ export class ServerBotSenses {
       route: this.routeOf(p),
       others: parties.others,
       allies: parties.allies,
-      // Mortar heavies acquire siege-range targets; everyone else holds
-      // the duel band. The shared brain takes max(FIRE_RANGE, this).
+      // Mortar heavies acquire siege-range targets; others hold the
+      // duel band. The shared brain takes max(FIRE_RANGE, this).
       engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,
       thief: this.thiefOf(p.team ?? ''),
-      // Aim lead uses the muzzle speed of the weapon this bot would
-      // pick at that range — same band select fireAt runs.
+      // Aim lead uses the muzzle speed of the pick fireAt makes at
+      // that range. 0 is meaningful (hitscan beam): faking a speed
+      // made beams lead like shells (2.5% FFA accuracy).
       weaponSpeed: (d) => {
         const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
-        // 0 is meaningful — hitscan (the beam) — pickFire reads it as
-        // zero flight time; collapsing it to a fake muzzle speed made
-        // beams lead their targets like shells (2.5% FFA accuracy).
         return getWeaponStats(w).speed ?? 60;
       },
-      // Effective reach of the same pick: beams die at their ray length
-      // (beamContact sweeps 60m), so a beam-wielder closing a midfield
-      // duel holds fire until the range is real. Projectile picks
-      // return no limit — gravity, not the ray, is their ceiling.
+      // Reach of the same pick: beams die at their ray length; fuse
+      // carriers reach carry + rain radius (a 200m lob bursts 80m
+      // short); other projectiles' ceiling is gravity, not a ray.
+      // weaponFuse is the same pick's airburst clock.
       weaponRange: (d) => {
-        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
-        return getWeaponStats(w).speed === 0 ? 55 : undefined;
+        const ws = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
+        if (ws.speed === 0) return 55;
+        if (ws.fuseOnly && ws.maxLifetime) return ws.speed * ws.maxLifetime + 20;
+        return undefined;
       },
-      // Where the fight positioner should orbit, derived from the
-      // table itself: a burst weapon's expected hit fraction is the
-      // capsule footprint vs the cone it has grown to at range, so the
-      // preferred distance is where the fan still lands the damage the
-      // target still has. A wounded straggler needs a few shards — no
-      // closing to hug range; a full-hp foe wants the whole fan in the
-      // chest. Single-shot guns keep the loadout's slot band.
+      weaponFuse: (d) => {
+        const ws = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
+        return ws.fuseOnly ? ws.maxLifetime : undefined;
+      },
+      // Where the fight positioner should orbit, from the table: a
+      // burst weapon's expected hit fraction is the capsule footprint
+      // vs the cone at range, so the distance is where the fan lands
+      // the damage still needed — no hugging a straggler. Single-shot
+      // guns keep the loadout's slot band.
       preferredRange: (d, hpFrac) => {
         const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
         const w = pickBotWeapon(lo, d, d, bias, skill?.courage);
         const st = getWeaponStats(w);
         if ((st.burst ?? 0) > 1 && st.pelletSpread) {
-          const CAPSULE_R = 0.5;
           const need = Math.max(15, (hpFrac ?? 1) * 150 * 0.9);
           const maxDmg = (st.burst ?? 1) * st.directDamage;
           if (need >= maxDmg) return 8;
-          const dStar = (CAPSULE_R / st.pelletSpread) * Math.sqrt(maxDmg / need);
-          return Math.min(45, Math.max(6, dStar));
+          return Math.min(45, Math.max(6, (0.5 / st.pelletSpread) * Math.sqrt(maxDmg / need)));
         }
         if (w === lo.near || w === lo.side) return 10;
         if (w === lo.far) return 30;

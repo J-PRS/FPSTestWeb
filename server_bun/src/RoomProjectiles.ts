@@ -23,7 +23,7 @@ import { projStep, type SimProjectile } from '../../shared/projSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
-import { HM_DIVISOR, HM_HEIGHT_SCALE, type Heightfield } from '../../shared/heightfield.ts';
+import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3 } from './types.ts';
@@ -280,12 +280,20 @@ export class RoomProjectiles {
       for (let i = 0; i < proj.stats.cluster.count; i++) {
         const ang = this.room.rng() * Math.PI * 2;
         const r = this.room.rng() * proj.stats.cluster.radius;
+        const bx = at.x + Math.cos(ang) * r;
+        const bz = at.z + Math.sin(ang) * r;
+        // Bomblets are contact bombs — the blast lands where the rain
+        // lands (ground under the scatter point), not on the carrier's
+        // mid-air burst plane where it out-ranges nothing above it.
         const bAt = {
-          x: at.x + Math.cos(ang) * r,
-          y: at.y, // bomblets scatter on the blast plane, same as aoeCluster
-          z: at.z + Math.sin(ang) * r,
+          x: bx,
+          y: Math.max(this.field ? hmHeight(this.field, bx, bz) : at.y,
+            this.room.moveSim.structureTop(bx, bz)),
+          z: bz,
         };
-        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, proj.id);
+        // Credit the carrier — bomblet stats drive the envelope, but
+        // the launcher's weapon row is where the rain's damage belongs.
+        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, proj.id, proj.weaponType);
         // serverBlast sweeps players only — the rain must pay creatures
         // and balls the same way the carrier's own pop does below.
         if (bStats.aoeRadius > 0) {

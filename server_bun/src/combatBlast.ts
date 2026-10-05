@@ -295,10 +295,10 @@ export class BlastRunner {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string): void {
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string, attribWeaponType?: number): void {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.aoeRadius <= 0) return;
-    this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: weaponType, trusted: true, shotId });
+    this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // (flagsKnock is inside processAOE above — every blast reaches it.)
     this.h.deps.emit?.({ type: 'knock', pos: position, radius: stats.aoeRadius, force: stats.knockbackForce, kind: 'pickup' });

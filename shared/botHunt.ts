@@ -308,7 +308,13 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // 2.5% FFA accuracy where Quake pros hold ~35% and Tribes-speed
   // tracking should run higher. The 60m/s fallback only exists for
   // hosts that can't report which gun is drawn.
-  const flight = ws === 0 ? 0 : d / (ws && ws > 0 ? ws : 60);
+  // Fuse-carriers (MRV) detonate at their clock, not on the body — the
+  // waypoint IS the fuse pop, so lead and loft solve for where both the
+  // shell and the target are at fuse time, not the crossing. A plain
+  // intercept aim sends the carrier 40m past a close target and the
+  // rain lands on empty ground.
+  const fuse = ctx.weaponFuse?.(d);
+  const flight = ws === 0 ? 0 : (fuse ?? d / (ws && ws > 0 ? ws : 60));
   // Scatter grows with how far ahead the bot must predict — the lead
   // distance itself (target speed × shell flight), not speed alone:
   // a 30m/s skier crosses 54m during a disc's 1.8s flight, and human
@@ -394,10 +400,22 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.
-  const drop = ctx.weaponGravity?.(d) ? -0.5 * GRAVITY * flight * flight : 0;
+  const drop = ctx.weaponGravity?.(d) && fuse === undefined ? -0.5 * GRAVITY * flight * flight : 0;
+  // Fuse-carriers solve a fixed-time arc instead: muzzle speed is
+  // constant, so only the carrier's HORIZONTAL waypoint at fuse is
+  // placeable — loft vy so its xz at the pop is over the led target
+  // (the rain then lands at ground under the burst).
+  let ay = py + drop;
+  if (fuse !== undefined) {
+    const dxz = Math.hypot(px - pos.x, pz - pos.z);
+    const w = ws && ws > 0 ? ws : 60;
+    const vh = dxz / fuse;
+    const vy = vh < w ? Math.sqrt(w * w - vh * vh) : 0;
+    ay = pos.y + vy * fuse;
+  }
   const aim = {
     x: px + (botRand() - 0.5) * err,
-    y: py + drop + (botRand() - 0.5) * err * 0.5,
+    y: ay + (botRand() - 0.5) * err * 0.5,
     z: pz + (botRand() - 0.5) * err,
   };
   // Muzzle clearance: LOS proves the EYE line is open, but the shell

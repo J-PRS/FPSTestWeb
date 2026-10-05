@@ -295,8 +295,8 @@ export class MessageHandler {
 
   /** Server-simulated projectile blast (bot rockets etc.) — combat's
    *  trusted AOE path; the sim placed the pop, no cheat check needed. */
-  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, shotId?: string): void {
-    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, shotId);
+  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, shotId?: string, attribWeaponType?: number): void {
+    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, shotId, attribWeaponType);
   }
 
   /** Server-simulated direct hit — the room's projectile sim resolved the

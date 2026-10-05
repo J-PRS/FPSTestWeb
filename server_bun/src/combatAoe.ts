@@ -113,7 +113,7 @@ export class AoeClaims {
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
     const projId = msg.projectileId ?? (msg.shotId ? this.h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId, bound: true });
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId, bound: true, air: msg.airtime });
 
     if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster, projId);
   }
@@ -220,10 +220,16 @@ export class AoeClaims {
     for (let i = 0; i < cluster.count; i++) {
       const ang = this.h.rng() * Math.PI * 2;
       const r = this.h.rng() * cluster.radius;
+      const bx = msg.position.x + Math.cos(ang) * r;
+      const bz = msg.position.z + Math.sin(ang) * r;
+      // Bomblets are contact bombs — the blast lands where the rain
+      // lands, not on the carrier's mid-air burst plane.
       this.h.blast.processAOE(playerId, {
-        x: msg.position.x + Math.cos(ang) * r,
-        y: msg.position.y, // bomblets scatter on the blast plane
-        z: msg.position.z + Math.sin(ang) * r,
+        x: bx,
+        // Bomblets are contact bombs — the blast lands where the rain
+        // lands, not on the carrier's mid-air burst plane.
+        y: this.h.playerManager.groundAt?.(bx, bz) ?? msg.position.y,
+        z: bz,
       }, msg.excludeTargetId, bomblet, { weapon: msg.weaponType, shotId, bound: true });
     }
   }

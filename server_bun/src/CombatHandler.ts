@@ -352,8 +352,8 @@ export class CombatHandler {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string): void {
-    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, shotId);
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string, attribWeaponType?: number): void {
+    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, shotId, attribWeaponType);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,

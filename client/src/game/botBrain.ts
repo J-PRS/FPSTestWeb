@@ -253,6 +253,12 @@ export class GameBot extends RemotePlayer {
         const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0));
         return getWeaponStats(wt).speed || 60;
       },
+      // Fuse-carrier picks detonate at their clock, not the body — aim
+      // intercept caps at the fuse the same way the server's hook does.
+      weaponFuse: (d) => {
+        const ws = getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)));
+        return ws.fuseOnly ? ws.maxLifetime : undefined;
+      },
       weaponGravity: (d) =>
         getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0))).gravity,
       aimSkill: (d, targetSpeed) =>

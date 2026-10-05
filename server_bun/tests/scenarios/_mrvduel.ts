@@ -39,6 +39,11 @@ function duel(loA: BotLoadout, loB: BotLoadout, distM: number, seed: number, idl
   while (ticks - lastDmg < idleTicks && ticks < hardTicks && Date.now() < deadline) {
     pin(room, a!.id, { x: -distM / 2, y: 32, z: 0 });
     pin(room, b!.id, { x: distM / 2, y: 32, z: 0 });
+    // Pure weapon-vs-weapon: wounded bots holster AoE primaries for the
+    // sidearm (self-preservation), which silently turns the duel into
+    // Pistol-vs-Mortar once a splash lands. Top both off so the bench
+    // measures the guns, not the gate.
+    a!.health = a!.maxHealth; b!.health = b!.maxHealth;
     step(room, 1);
     ticks++;
     const n = w.msgs.length;
