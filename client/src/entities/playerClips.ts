@@ -61,6 +61,9 @@ export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
   'idle': 'Idle_gunMiddle_ar', 'walk': 'WalkFront_Shoot_ar', 'run': 'Run_gunMiddle_AR',
   'jump': 'Jump', 'death': 'Die', 'ski': 'Idle_Ducking_ar',
   'jet': 'Jump', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
+  // No overhand in the GLB — Reload's two-handed body cycle reads as
+  // the belt-throw/deploy windup; the Punch fallback doesn't exist here.
+  'throw': 'Reload',
 };
 
 /** RIG_MANIFEST — one row per body variant: where it loads from, how it

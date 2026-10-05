@@ -67,16 +67,21 @@ for (const side of [-1, 1]) {
   arm.userData.baseRot = -side * ARM_SWEEP;
   arm.rotation.y = -side * ARM_SWEEP;
   arm.position.set(side * 0.07, 0, -0.14);
-  // Limb — the crossbow's silhouette piece: a CHUNKY flat bar that
-  // thickens toward the cam, not a stick. Two-section sweep: mid joint
-  // keeps the recurve read, tip knob carries the cam wheel.
+  // Limb — leaf-spring plates, not bars: thin vertically, wide
+  // laterally, bowed outward mid-span for the recurve read, tip knob
+  // carries the cam wheel. T:A's silhouette is the flat blade.
   const limb = mkLoft([
-    { z: 0.0, ring: profOct(0.075, 0.06, 0.015) },
-    { z: -0.20, ring: profOct(0.055, 0.05, 0.012) },
-    { z: -0.38, ring: profOct(0.045, 0.045, 0.01) },
-    { z: -ARM_LEN, ring: profOct(0.07, 0.05, 0.012) },
+    { z: 0.0, ring: profOct(0.075, 0.018, 0.008) },
+    { z: -0.20, ring: profOct(0.060, 0.014, 0.006), dx: side * 0.03 },
+    { z: -0.38, ring: profOct(0.048, 0.013, 0.006) },
+    { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);
   arm.add(limb);
+  // Red tip accent — the painted limb-end mark on the reference bow
+  const tipStripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.07),
+    new THREE.MeshBasicMaterial({ color: 0xb03a28 }));
+  tipStripe.position.set(0, 0, -ARM_LEN + 0.05);
+  arm.add(tipStripe);
   // Tension cable along the limb's inner face — machine bow, not wood
   const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.34), darkMat);
   cable.position.set(side * -0.028, 0, -0.19);
@@ -100,7 +105,7 @@ for (const side of [-1, 1]) {
 // group slides in z on fire so the string snaps forward with the shot.
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x8f3a2e }); // cable red — reads taut at viewmodel scale
 const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = -0.14 - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02;
 for (const side of [-1, 1]) {
   stringG.add(tubePath([
