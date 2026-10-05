@@ -1,3 +1,4 @@
+2026-10-01 - bots: weapon-aware fight range (preferredRange from burst cone vs target hp) + sidearm finisher pull on wounded targets
 2026-10-01 - balance: Railgun 80/30 -> 60/20 (two-shot medium -> three-shot); FFA wins 7/12 -> 0/4 batch, dmg -17%, still competitive mid-pack.
 2026-10-01 - netcode: clockSkew lane — client rAF dishonesty (0.8x/1.25x frame dt) stays correction-bounded; wire carries no client timestamps so prediction dt is the only skew channel. reseed fires once per profile (bridge fix).
 2026-10-01 - netcode: reseedChaos lane — staged authority simState applied after outage+delivery lag re-centers prediction on an adverse link (2.6m pre-seed residual, tail p95 3.7m); bridge reseed fires once per profile.
