@@ -44,6 +44,10 @@ export class BotLines {
    *  exactly the treadmill (kata: 180s circling ~160m short of the
    *  stand). Escape needs a real net gain, not a lap dividend. */
   private orbitGd = Infinity;
+  /** Escape picks rolled while the orbit latch is armed — enough of them
+   *  without the 30m release means the terrain itself owns the trap
+   *  (basin treadmill) and the answer stops being terrain-aware. */
+  private orbitFails = 0;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
@@ -57,7 +61,14 @@ export class BotLines {
       if (this.passes.length > 8) this.passes.shift();
     }
     this.lastY = pos.y;
-    if (gd < T.lines.minGd) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitGd = Infinity; return dest; }
+    // Runner close-out reaches further than minGd: inside the stand's
+    // apron a pocket waypoint is just another lap of the ring — aim the
+    // pole itself and let the moves layer own the touch.
+    if (gd < (ctx.runner ? T.lines.runnerDirectGd : T.lines.minGd)) {
+      this.wp = null; this.lastGd = Infinity; this.stale = 0;
+      this.traverseDir = null; this.orbitGd = Infinity; this.orbitFails = 0;
+      return dest;
+    }
 
     // Ballistic descent aims at the objective itself: a runner high
     // over the approach doesn't need a terrain pocket — steering at the
@@ -91,10 +102,11 @@ export class BotLines {
     this.lastGd = gd;
     // Release the orbit latch only on net progress from where it armed.
     if (this.orbitGd !== Infinity && gd < this.orbitGd - 30) {
-      this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null;
+      this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitFails = 0;
     }
     if (this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
-      if (this.orbitGd === Infinity) this.orbitGd = gd;
+      if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; }
+      else this.orbitFails++;
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
         const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
@@ -104,7 +116,13 @@ export class BotLines {
       }
       const reach = Math.min(40, gd);
       let wp = bestPass;
-      if (!wp) {
+      if (this.orbitFails >= 2) {
+        // Two escape picks without release = the trap isn't a wall the
+        // traverse can walk, it's a basin. Stop scoring terrain — beeline
+        // the goal and let the moves layer jet-hop whatever's in the way
+        // (humans grind the climb when carving stops paying).
+        wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+      } else if (!wp) {
         // Contour traverse: when the goal sits across an unclimbable
         // face, the way out is sideways — walk perpendicular to the
         // steepest uphill until a gentler grade appears in the fan.
