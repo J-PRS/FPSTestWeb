@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { chatKindFor } from '../../shared/botTaunts.ts';
+import { chatKindFor, vgsCommandFor } from '../../shared/botTaunts.ts';
 
 // The emotion-spectrum classifier: a wrong bucket means a bot answers
 // warmth with mockery (or vice versa), which is worse than silence.
@@ -34,5 +34,14 @@ describe('chatKindFor human-chat spectrum', () => {
     expect(chatKindFor('holding midfield')).toBeNull();
     expect(chatKindFor('lets push left')).toBeNull();
     expect(chatKindFor('luck')).toBeNull();
+  });
+  it('vgsCommandFor acks command chords only', () => {
+    expect(vgsCommandFor('VNC')).toBe('ack');   // need covering fire
+    expect(vgsCommandFor('VDF')).toBe('ack');   // defend our flag
+    expect(vgsCommandFor('VAF')).toBe('ack');   // get the enemy flag
+    expect(vgsCommandFor('VTT')).toBe('ack');   // target turret
+    expect(vgsCommandFor('VGS')).toBeNull();    // shazbot — text path handles
+    expect(vgsCommandFor('VVY')).toBeNull();    // quick "yes" — an answer, not a request
+    expect(vgsCommandFor('VSTC')).toBeNull();   // self "I'll cover you" — not a request
   });
 });

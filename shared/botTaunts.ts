@@ -575,6 +575,18 @@ const BYE_LINES = [
   'safe travels',
 ];
 
+/** A teammate called a command over VGS — the squad acknowledgment.
+ *  Short radio voice; the canon task-report chords carry it too. */
+const ACK_LINES = [
+  'on it',
+  'roger',
+  'copy',
+  'got you',
+  'covering',
+  'wilco',
+  'yes sir',
+];
+
 /** Someone said the bot's name — acknowledgment, nothing more. */
 const MENTION_LINES = [
   'yo',
@@ -641,7 +653,7 @@ export type ChatterKind =
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
   | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props'
   | 'hello' | 'thanks' | 'sorry' | 'wholesome' | 'mald'
-  | 'question' | 'lag' | 'bye';
+  | 'question' | 'lag' | 'bye' | 'ack';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -679,6 +691,7 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   question: QUESTION_LINES,
   lag: LAG_LINES,
   bye: BYE_LINES,
+  ack: ACK_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and
@@ -719,6 +732,7 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   question:   ['VGRD'],
   lag:        ['VGO'],
   bye:        ['VGB'],
+  ack:        ['VSTC', 'VSTO'],
 };
 const VGS_CHANCE = 0.4;
 
@@ -862,6 +876,15 @@ export function chatKindFor(text: string): ChatterKind | null {
   if (/^(how (do|to|can|does)|what is|what are|where is|why (do|does|is|can't)|can (i|you|someone)|is there|anyone know|whats)\b/.test(t) || /\?\s*$/.test(t)) return 'question';
   if (/\b(bye|goodbye|gtg|got to go|im out|i'?m out|i'?m off|im done|cya|see ya|later all|gn|good night|gotta run|heading out|last game)\b/.test(t)) return 'bye';
   return null;
+}
+
+/** A human's VGS chord → the chatter kind it might trigger, or null.
+ *  Command families (attack/defend/flag/need/repair/target/warn) earn a
+ *  radio ack; VG* lines carry text already (the string path classifies
+ *  them), VV* are one-key answers and VS* are self-reports — none of
+ *  those are requests, so they stay silent here. */
+export function vgsCommandFor(chord: string): ChatterKind | null {
+  return /^V[ADFNRTUW]/.test(chord) ? 'ack' : null;
 }
 
 /** Chatter cooldown is wall-clock by nature (a pause between lines, not a

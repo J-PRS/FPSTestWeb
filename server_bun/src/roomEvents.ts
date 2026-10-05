@@ -17,7 +17,7 @@ export type RoomEvent =
   | { type: 'hit'; targetId: string; shooterId: string; damage: number }
   | { type: 'fire'; playerId: string }
   | { type: 'botSpoke'; id: string }
-  | { type: 'chat'; id: string; text: string }
+  | { type: 'chat'; id: string; text: string; vgs?: string }
   // Blast aftermath notifications — what a resolved explosion did to the
   // non-player world. Producers emit once per blast; the Room fans out to
   // whichever subsystems care (deployables eat splash, dropped flags punt,

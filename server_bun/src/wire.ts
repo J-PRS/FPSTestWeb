@@ -451,7 +451,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // Bots can read: the relay above ships the line, this lets the
       // room turn high-confidence phrases (gg, ez, a bot's name) into
       // a squad notice — whether anyone answers is still dice+cooldown.
-      h.roomInfo.emit?.({ type: 'chat', id, text });
+      h.roomInfo.emit?.({ type: 'chat', id, text, vgs });
     },
   },
 
