@@ -184,6 +184,12 @@ export class TickLoop {
       this.tickQuarantined.delete(room.name);
       this.tickErrStreak.delete(room.name);
       this.faultedRooms.add(room.name);
+      // Bounded — a fault loop recreating doomed rooms under fresh names
+      // would otherwise grow the set one name per ~10 ticks forever.
+      if (this.faultedRooms.size > 512) {
+        const oldest = this.faultedRooms.values().next().value;
+        if (oldest !== undefined) this.faultedRooms.delete(oldest);
+      }
       logger.info('Quarantined room drained + disposed', { room: room.name });
     } catch (e) {
       logger.error('Quarantine drain failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });
