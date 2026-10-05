@@ -147,6 +147,30 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
 
 ## 3. Verified Clean (no action needed)
 
+> **Scope of this list — read before trusting it.** "Clean" means
+> *classified against the six threat classes* by pattern-level audit
+> (map/cap/evict shapes, ambient-draw greps, funnel traces). It does NOT
+> mean bug-free:
+>
+> 1. **Method limit** — sweeps match structural failure shapes; they do
+>    not re-derive every file's logic. A wrong-but-consistent
+>    implementation passes this lens.
+> 2. **JP's WIP is out of scope** — ~125 dirty client files plus
+>    `shared/mapSpec.ts` and `server_bun/src/Room.ts` are excluded by
+>    rule (no commit of files I didn't touch). Live-but-uncommitted
+>    hunks (`killFeed.forget`, the Room.ts VGS hookup) are outside every
+>    commit and every green-suite claim.
+> 3. **No measurement** — leaks were found by static pattern, not heap
+>    profiling. A growth bug with an unusual shape (array strings, DOM
+>    nodes, GPU-side buffers) wouldn't show up.
+> 4. **Coverage gaps** — the suite proves what's asserted; untested
+>    paths are unverified, not clean.
+> 5. **Known leftovers** — sizeWatch `Room.ts` pin (JP's WIP), lobber
+>    trio numbers (JP ruling), the gradual-deslop oxlint warn backlog.
+>
+> Honest weakest links beyond this list: test coverage gaps and
+> unmeasured runtime growth — not the six classes themselves.
+
 - **`shared/` purity**: zero `Date.now`, zero `performance.now` misuse, zero
   ambient `Math.random` outside the tagged AMBIENT seam.
 - **Empty catches** (~100 sites): nearly all legit teardown guards —
