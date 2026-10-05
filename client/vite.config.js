@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 // GET /gunsheet?wt=12 → image/png of gunlab's 4-up reference sheet.
@@ -78,13 +79,36 @@ const shotSaver = {
   },
 };
 
+// public/ doubles as the .old graveyard — every corpse file gets copied
+// into dist and shipped (~27MB dead weight). Strip .old from the OUTPUT
+// only: sources stay for the scheduled cleanup pass, dev server still
+// serves them if anything old needs checking live.
+const stripOldAssets = {
+  name: 'strip-old-assets',
+  apply: 'build',
+  closeBundle() {
+    const dist = fileURLToPath(new URL('dist', import.meta.url));
+    const walk = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name.endsWith('.old')) rmSync(p, { recursive: true, force: true });
+          else walk(p);
+        }
+        else if (e.name.endsWith('.old')) rmSync(p);
+      }
+    };
+    if (existsSync(dist)) walk(dist);
+  },
+};
+
 export default defineConfig(({ mode }) => ({
   // `vite --mode noreload` (npm run dev:noreload): agentic edit batches were
   // nuking in-world state on every file save. HMR socket stays alive but the
   // stale-notify plugin SWALLOWS every update and instead pushes a custom
   // event — the client counts changed files in a corner badge.
   // Manual Ctrl+R when you want the new code.
-  plugins: [shotSaver, gunSheet, ...(mode === 'noreload' ? [{
+  plugins: [shotSaver, gunSheet, stripOldAssets, ...(mode === 'noreload' ? [{
     name: 'stale-notify',
     configureServer(server) {
       // Vite hard-codes a full-reload for ANY .html change (client env,
@@ -111,6 +135,12 @@ export default defineConfig(({ mode }) => ({
   }] : [])],
   optimizeDeps: {
     include: [], // colyseus.js is .old-retired + uninstalled; leaving it here 504s the server
+    // Prebundling three.quarks embeds a SECOND three copy inside the dep
+    // bundle; registerShaderChunks() then patches that copy's ShaderChunk
+    // while the game renders with the other — "Can not resolve #include
+    // <tile_pars_vertex>" on the first particle draw. Keep it unbundled so
+    // it shares the app's three instance.
+    exclude: ['three.quarks'],
   },
   build: {
     outDir: 'dist',
