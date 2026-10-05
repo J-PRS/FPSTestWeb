@@ -51,6 +51,13 @@ export class SessionRegistry {
   private edgeTotals = new Map<string, number>();
   private anomalies = { illegal: 0, rebegin: 0, seatWithoutBegin: 0, reclaimNonLive: 0 };
 
+  /** The map is sparse — a room at zero ghosts gets its key back so the
+   *  table can't accumulate one dead entry per room ever created. */
+  private bumpGrace(room: string, d: number): void {
+    const v = (this.roomGrace.get(room) ?? 0) + d;
+    if (v <= 0) { this.roomGrace.delete(room); } else { this.roomGrace.set(room, v); }
+  }
+
   private clearGrace(s: Session): void {
     if (s.graceTimer) { clearTimeout(s.graceTimer); s.graceTimer = undefined; }
   }
@@ -65,8 +72,8 @@ export class SessionRegistry {
     }
     const wallAge = wallNow() - s.at;
     const from = s.state;
-    if (from === 'grace') this.roomGrace.set(s.room, (this.roomGrace.get(s.room) ?? 1) - 1);
-    if (to === 'grace') this.roomGrace.set(s.room, (this.roomGrace.get(s.room) ?? 0) + 1);
+    if (from === 'grace') this.bumpGrace(s.room, -1);
+    if (to === 'grace') this.bumpGrace(s.room, +1);
     s.state = to;
     s.at = wallNow();
     const edge = `${from}->${to}`;
@@ -91,7 +98,7 @@ export class SessionRegistry {
       // Overwriting drops the prior record — its grace seat must come off
       // the room's count or the replacement's room inherits a phantom ghost.
       if (prior.state === 'grace') {
-        this.roomGrace.set(prior.room, (this.roomGrace.get(prior.room) ?? 1) - 1);
+        this.bumpGrace(prior.room, -1);
       }
     }
     this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });

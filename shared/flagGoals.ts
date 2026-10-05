@@ -147,6 +147,15 @@ export function assignRole(
  *  `result === s.enemyStand` ⇒ the bot is pressing the stand, which the
  *  server reads as its infiltrate/cloak intent). */
 export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: number; y: number; z: number } {
+  // Mutual-carry lock: both flags are out, so nobody can cap and the match
+  // is decided by which carrier dies first. If every role kept its routine
+  // job, chasers would trickle in one at a time against a stand-camped
+  // carrier plus its whole defense — the 8v8 zero-cap deadlock. Folding
+  // every non-anchor role onto the enemy carrier turns the trickle into a
+  // mass push. HoF holds (the parked carrier is still a stand to guard)
+  // and the capper stays escort (our carrier needs a screen, not a crowd
+  // of identical chasers — the escort keeps moving while the mob hunts).
+  if (s.thief && s.escort && role !== 'hof' && role !== 'capper') return s.thief;
   switch (role) {
     case 'hof': return hofGoal(s, commit);
     case 'ldefense': case 'technician': case 'defense': return defenseGoal(s);

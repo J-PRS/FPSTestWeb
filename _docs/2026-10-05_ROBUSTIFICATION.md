@@ -224,8 +224,10 @@ entries evicted on roster.
 
 ### 4.4 Smaller gaps
 
-- **8v8 carrier deadlock**: mutual carriers wait indefinitely, zero caps in
-  10-min matchSim. Needs a defense mission-lock or pressure/escort policy.
+- ~~**8v8 carrier deadlock**~~ — *closed*: mutual carry now trips a
+  mission lock in `roleObjective` — every non-anchor role folds onto the
+  enemy carrier (mass push instead of one-at-a-time chasers), HoF holds,
+  capper keeps escorting. First carrier to die breaks the deadlock.
 - ~~**`FLAG_STAND_LIFT` parity**~~ — *closed*: `ctfFlags.ts` enemyStand
   now lifts the goal point by the same constant `serverSenses` uses.
 - ~~**Human sheep scoring**~~ — *closed*: metering humans is intentional
@@ -237,9 +239,12 @@ entries evicted on roster.
   race (default health record vs already-mutated server state), not
   desync. Roster-level mismatches still report — missing replica has no
   grace story.
-- **`roomGrace` zero-key residue**: trivially small; one-line prune.
-- **`killFeed` ambient `Math.random` ×4**: chatter-only, not a sim path —
-  cosmetic consistency.
+- ~~**`roomGrace` zero-key residue**~~ — *closed*: `bumpGrace` deletes the
+  key at zero instead of parking `0` forever.
+- ~~**`killFeed` ambient `Math.random`**~~ — *verified-clean (§3)*: the
+  draws are client-only cosmetics (chatter delay, offline spawn scatter);
+  the ambient-draws invariant covers shared sim paths, and these never
+  reach one.
 
 ### 4.5 Video export resolution *(optional enhancement)*
 
