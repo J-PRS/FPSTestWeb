@@ -9,6 +9,12 @@
  *   bun _tools/sweeps/creatureGauntlet.ts [--species crawler] [--runs 8]
  *     [--map raindance|--field] [--start 2] [--mult 1.4] [--lvl 60]
  *     [--maxlvl 12] [--seed 7] [--quiet 1] [--record out.rec]
+ *     [--script "crawler:5|rakk:3+snake:2|crawler:20"]
+ *
+ * --script replaces the geometric cap ramp with an authored wave list: each
+ * level is a `species:n+species:n` group separated by `|`; the last group
+ * repeats if the script runs shorter than --maxlvl. Mix authored encounters
+ * with the random ramp to cover both coverage and regression.
  *
  * --record taps the LAST level's run into a .rec wire capture (spectator
  * view): creatures, shots, kills and tick frames all land, so the file
@@ -34,6 +40,18 @@ const MAXLVL = Number(arg('maxlvl', 12));
 const SEED = Number(arg('seed', 7));
 const QUIET = arg('quiet', '') === '1';
 const REC = arg('record', '');            // .rec out path — last level only
+const SCRIPT = arg('script', '');
+/** Authored wave list: level i (1-based) -> species->count map. */
+const WAVES: Record<string, number>[] = SCRIPT
+  ? SCRIPT.split('|').map((w) => {
+      const pop: Record<string, number> = {};
+      for (const part of w.split('+')) {
+        const [s, n] = part.split(':');
+        if (s && n) pop[s.trim()] = Number(n);
+      }
+      return pop;
+    }).filter((p) => Object.keys(p).length > 0)
+  : [];
 
 const MAP = arg('map', 'raindance');
 let f: ReturnType<typeof hmParseBin> | undefined;
@@ -53,8 +71,9 @@ interface LevelRow { caps: number; alive: number; kills: number; secs: number; h
 
 function runLevel(seed: number, lvl: number, capsPerSpecies: number): LevelRow {
   const species = ONLY ? [ONLY] : SPECIES;
-  const pop: Record<string, number> = {};
-  for (const s of species) pop[s] = Math.round(capsPerSpecies);
+  const pop: Record<string, number> = WAVES.length
+    ? { ...WAVES[Math.min(lvl - 1, WAVES.length - 1)]! }
+    : Object.fromEntries(species.map((s) => [s, Math.round(capsPerSpecies)]));
   const room = mkRoom(
     { mode: 'nuggets', bots: 0, botSkill: 'impossible',
       bases: { alpha: at(200, 0), bravo: at(-900, 800) },
@@ -74,7 +93,7 @@ function runLevel(seed: number, lvl: number, capsPerSpecies: number): LevelRow {
   for (; t < ticks && !bot.isDead; t++) { step(room, 1, 0.05); rec?.tick(); }
   rec?.close();
   return {
-    caps: Math.round(capsPerSpecies) * species.length,
+    caps: Object.values(pop).reduce((a, b) => a + b, 0),
     alive: room.creatureSim.roster().length,
     kills,
     secs: +(t * 0.05).toFixed(1),
@@ -86,7 +105,9 @@ const agg = new Map<number, { caps: number; kills: number[]; secs: number[]; hp:
 let lvl = 0, capsN = START;
 while (lvl++ < MAXLVL) {
   const a = agg.get(lvl) ?? { caps: 0, kills: [], secs: [], hp: [] };
-  a.caps = Math.round(capsN) * (ONLY ? 1 : SPECIES.length);
+  a.caps = WAVES.length
+    ? Object.values(WAVES[Math.min(lvl - 1, WAVES.length - 1)]!).reduce((x, y) => x + y, 0)
+    : Math.round(capsN) * (ONLY ? 1 : SPECIES.length);
   for (let r = 0; r < RUNS; r++) {
     const row = runLevel(SEED + r, lvl, capsN);
     a.kills.push(row.kills); a.secs.push(row.secs); a.hp.push(row.hpEnd);
@@ -96,7 +117,7 @@ while (lvl++ < MAXLVL) {
 }
 const med = (xs: number[]) => xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0;
 const mn = (xs: number[]) => xs.length ? Math.min(...xs) : 0;
-console.log(`creatureGauntlet  species=${ONLY || 'mix'}  bot=impossible  lvlTimer=${LVL_S}s  runs=${RUNS}`);
+console.log(`creatureGauntlet  species=${ONLY || 'mix'}  bot=impossible  lvlTimer=${LVL_S}s  runs=${RUNS}${WAVES.length ? '  script=' + SCRIPT : ''}`);
 console.log('lvl caps  medSec minSec medKills medHpEnd');
 for (const [l, a] of [...agg.entries()].sort((x, y) => x[0] - y[0])) {
   console.log(`${String(l).padStart(3)} ${String(a.caps).padStart(4)} ${String(med(a.secs)).padStart(6)} ${String(mn(a.secs)).padStart(6)} ${String(med(a.kills)).padStart(8)} ${String(med(a.hp)).padStart(7)}`);
