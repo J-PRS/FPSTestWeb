@@ -31,11 +31,16 @@ export class MoveClaims {
    *  while a teleport-spam client eats plausibility corrections instead
    *  of free relocation. */
   private lastTeleport = new Map<string, number>();
+  /** Throttles the offender-facing warn — a spamming client would otherwise
+   *  receive a serverWarn per claim, the same log-IO flood shape the
+   *  invalid-message throttle covers. */
+  private lastTeleportWarn = new Map<string, number>();
 
   constructor(private h: MoveHost) {}
 
   dropPlayer(playerId: string): void {
     this.lastTeleport.delete(playerId);
+    this.lastTeleportWarn.delete(playerId);
   }
 
   handlePosition(playerId: string, msg: Extract<ClientMessage, { type: 'position' }>): void {
@@ -184,6 +189,10 @@ export class MoveClaims {
     if ((this.lastTeleport.get(playerId) ?? 0) > now) {
       this.h.hb('teleportSpam');
       logger.warn('teleport spam: inside cadence window — honored, counted', { playerId });
+      if ((this.lastTeleportWarn.get(playerId) ?? 0) <= now) {
+        this.lastTeleportWarn.set(playerId, now + 5000);
+        this.h.sendToPlayer(playerId, { type: 'serverWarn', text: 'teleport spam detected' });
+      }
     }
     this.lastTeleport.set(playerId, now + 3000);
     player.lastPosCheckPos = { ...msg.position };
