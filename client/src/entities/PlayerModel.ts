@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { mkGltfLoader } from '../gltfLoad';
+import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
@@ -171,19 +172,20 @@ export class PlayerModel {
     const loader = mkGltfLoader();
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
+    const url = RIG_MANIFEST[this.variant]?.url ?? '/assets/models/RobotExpressive.glb';
 
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const attempt = () => {
-      loader.load(
-        RIG_MANIFEST[this.variant]?.url ?? '/assets/models/RobotExpressive.glb',
+      // One parse per rig URL for the whole session — SkeletonUtils.clone
+      // hands each remote its own skeleton bound to shared geometry and
+      // textures. A roomful of same-class bots used to pay a full GLB
+      // decode + GPU upload apiece.
+      loadGltfCached(loader, url).then(
         (gltf) => {
           if (this._disposed) { resolve(); return; }
-          this.onModelLoaded(gltf, mann, knight);
+          this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c) => c.clone()) }, mann, knight);
           resolve();
-        },
-        (xhr) => {
-          logger.debug(`Loading: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
         },
         (error) => {
           // A dev-server restart (or any transient fetch failure) must not
@@ -475,10 +477,24 @@ export class PlayerModel {
     });
   }
 
+  // Cloned rigs share material refs with every sibling clone — a damage
+  // flash mutating emissive on a shared material would light up the whole
+  // fleet. Clone each material once per model; the map preserves the
+  // GLB's own mesh->mat sharing inside this instance.
+  private matClones = new Map<THREE.Material, THREE.Material>();
+  private ownMaterial(m: THREE.Material): THREE.Material {
+    let c = this.matClones.get(m);
+    if (!c) { c = m.clone(); this.matClones.set(m, c); }
+    return c;
+  }
+
   private prepareMesh(child: THREE.Mesh): void {
       child.castShadow = true;
       child.receiveShadow = true;
       child.geometry = smoothShade(child.geometry);
+      child.material = Array.isArray(child.material)
+        ? child.material.map((m) => this.ownMaterial(m))
+        : this.ownMaterial(child.material);
       // SkinnedMesh bind-pose bounds don't track bone-driven verts —
       // wrong bounds get it frustum-culled when it shouldn't be. Compute
       // the skinned bounds at load (three walks verts through the
@@ -1206,6 +1222,10 @@ export class PlayerModel {
       this.mixer = null;
       this.currentAction = null;
       this.gibParts = null; // just (mesh, indices) — nothing GPU-owned here
+      // Per-model material clones — frees their GPU program refs; shared
+      // geometry/textures belong to the cached gltf and stay alive.
+      this.matClones.forEach((m) => m.dispose());
+      this.matClones.clear();
     }
     if (this.colliderGizmo) {
       // Collider gizmo is a child of the model, so it's already removed when model is removed
