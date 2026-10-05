@@ -42,6 +42,11 @@ import { WeaponType } from '../../../shared/weapons.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
 
+// A missing clip is authored into the GLB — the variant's whole fleet
+// misses the same set, so the dedupe is (variant, clip) per session,
+// not per model instance. 20 bots of one rig warn once, not 20 times.
+const warnedAnimMisses = new Set<string>();
+
 export class PlayerModel {
   private scene: THREE.Scene;
   model: THREE.Group | null = null; // public — ModelFx writes lean/pivot
@@ -53,9 +58,7 @@ export class PlayerModel {
   // by the roster cleanup): the async onLoad must not re-add the mesh or
   // repopulate animations — that zombie re-add was the invisible-model bug.
   private _disposed = false;
-  // Warn-once per clip name — a bad clip set used to flood the log at
-  // frame rate (11730 'Animation not found' lines in one session).
-  private _warnedAnims = new Set<string>();
+  private _warnedAnims = warnedAnimMisses;
 
   // Read-only access to the loaded object3D (debug tooling)
   get object3D(): THREE.Group | null { return this.model; }
@@ -774,9 +777,10 @@ export class PlayerModel {
     if (!this._loaded) { this._queuedAnim = name; return; }
     const base = this.animations.get(name);
     if (!base) {
-      if (!this._warnedAnims.has(name)) {
-        this._warnedAnims.add(name);
-        logger.warn(`Animation not found: ${name}`);
+      const missKey = `${this.variant}:${name}`;
+      if (!this._warnedAnims.has(missKey)) {
+        this._warnedAnims.add(missKey);
+        logger.warn(`Animation not found: ${name}`, { variant: this.variant });
       }
       // Zero-native-clip variants (cybersoldier) resolve every state to a
       // missing fallback until the async retarget bake lands — returning
