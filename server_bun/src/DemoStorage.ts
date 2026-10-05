@@ -69,8 +69,13 @@ export class DemoStorage {
   }
 
   private async ensureDir(): Promise<void> {
-    if (!existsSync(this.demosDir)) {
-      await mkdir(this.demosDir, { recursive: true });
+    try {
+      if (!existsSync(this.demosDir)) {
+        await mkdir(this.demosDir, { recursive: true });
+      }
+    } catch (e: unknown) {
+      // Storage keeps running — every later write reports its own failure.
+      logger.warn('Failed to create demos directory', { dir: this.demosDir, error: errMsg(e) });
     }
   }
 
