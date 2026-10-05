@@ -401,6 +401,18 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Disconnect lifecycle — two-phase teardown** (2026-10-05): audited
+  every per-player store against socket-close vs full-removal. Disconnect
+  reaps per-connection state only (respawn timer, flag carriage,
+  fire/heal throttle maps, pending claims, rate-limit warn keys) so a
+  grace rejoin keeps projectiles. `removePlayerCompletely` is the single
+  funnel for kick/reap/hop/retire: bots.untrack, flagCarrierDied,
+  deployables.clearOwner, projectiles.clearOwner, players.removePlayer,
+  scoring.dropPlayer, ledger.removePlayer (live + spent + clientIds),
+  killFeed.forget, sessionTokens, rateLimiter, sessions.terminate (kills
+  zombie grace timers), wireId retire. Lag-comp `history` rides the
+  player object itself — dies with removal, cleared on respawn.
+  No orphan path found.
 - **`creatureRoller` pinned** (2026-10-05): `creatureRoller.test.ts`
   (12 tests) — registry rows, uber ×3.4 health, no-target coast,
   TOPSPEED cap while pursuing, 20% idle-drift throttle past aggro,
