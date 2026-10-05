@@ -1,3 +1,4 @@
+2026-10-05 - ballCollide tests: pinned the shared sphere-vs-yaw-OBB solver (box center offset, root two-feet arch, face push-out + BALL_BOUNCE reflect, tangential no-reflect, inside-exit nearer-face both directions, yaw frame map, index query parity) — 9 new bun tests covering a previously zero-coverage shared module
 2026-10-05 - audit: console bypasser lane swept clean — all console.* sites are logger internals, boot/fault paths, debug-flagged or .old inert
 2026-10-05 - audit: server ambient-draw lane swept clean — rng injectable-seeded, perf.now metrics-only, Date.now confined to wallClock/simClock
 2026-10-05 - FIX T2 baked albedo dropped: mapSpec terrainTex regex rejected .webp — all 24 T2 ports parsed warnings and silently fell back to procedural terrain. Added webp to the allowlist + mapsValid.test.ts tripwire (zero-warnings + terrain file existence across all 41 shipped specs)
