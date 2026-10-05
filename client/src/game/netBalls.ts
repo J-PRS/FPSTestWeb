@@ -5,6 +5,7 @@ import { hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { stepBall, makeSimBall, type SimBall, type SimVec } from '../../../shared/ballSim.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
+import { predictAt } from '../entities/ballNet.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
 import type { ChildLogger } from '../core/Logger.js';
@@ -139,6 +140,14 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // number, not a scroll.
 function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger) {
   const _truthPos = new THREE.Vector3();
+  const _msgPos = new THREE.Vector3();
+  // predictAt's world view — same field/colliders/clock the live replay reads.
+  const NET_PROBE_S = {
+    field: () => Ball.netField,
+    simNow: () => estSimNow(),
+    colliders: () => Ball.colliders,
+    colliderIndex: () => Ball.colliderIndex,
+  };
   const _rbSim: SimBall = makeSimBall(0, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
   const _rbTgt: SimVec = { x: 0, y: 0, z: 0 };
   const rbLastWarn = new Map<number, number>();
@@ -214,6 +223,17 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
       if (err > 2) {logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);}
       return true;
     }
+    // A sim that never replayed through this stamp can't have diverged
+    // from it: when two segments for one ball drain in the same frame
+    // (a stall's backlog, hidden-tab catch-up), applySeg just re-anchored
+    // the cursor — pred sits one event-spacing behind truth and err
+    // measures segment spacing (~17m at ball speed), not prediction drift.
+    // One cell of slack covers the sim resting mid-grid, not unreplayed.
+    const simT = b.netDiag?.simT;
+    if (m.t !== undefined && simT !== undefined && simT < m.t - 0.05) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on unreplayed stamp (simT ${simT.toFixed(2)} < t ${m.t.toFixed(2)})`);
+      return true;
+    }
     // A terrain swap leaves prediction on the previous field until the new
     // bin loads and rebinds — every bounce in that window diverges by
     // design, so the warn is noise, not a desync signal.
@@ -244,9 +264,18 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
   function check(b: Ball, m: RbMsg): void {
     const age = ballEventAge(m.t);
     const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
-    truthAt(b, m, age);
-    const err = b.pos.distanceTo(_truthPos);
     const kind = m.kind ?? 'segment';
+    // Segment heartbeats measure divergence, not spacing: step the LIVE
+    // replay sim to the stamp's sim-time and compare endpoints. The old
+    // metric (host.pos vs the new anchor replayed to estSimNow) found the
+    // sim still parked on the anchor applied in the same drain batch —
+    // every heartbeat warned at ~speed×legAge (~17m) forever.
+    const stamped = kind === 'segment' && m.t !== undefined
+      && predictAt(NET_PROBE_S, b.netS, m.t, _truthPos);
+    if (!stamped) {truthAt(b, m, age);} // fleet metric keeps the old endpoint
+    const err = stamped
+      ? _truthPos.distanceTo(_msgPos.set(m.position.x, m.position.y, m.position.z))
+      : b.pos.distanceTo(_truthPos);
     if (gated(b, m, kind, err, speed)) {return;}
     // Edge kinds (bounce/stall/enrage/lunge/teleport/spawn) aren't desync
     // probes — they ARE the correction. A burst of stale legs lands each

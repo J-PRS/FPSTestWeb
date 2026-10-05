@@ -396,6 +396,16 @@ failed (`dead` at birth) stayed in netCrawlerById forever and every later
 roster skipped its respawn; born-dead spawns are refused and dead-registered
 entries evicted on roster.
 
+Follow-up (warn-metric false positive, 2026-10-05): the residual ~17m
+heartbeat warns were not sim divergence — `check` runs BEFORE
+`applyNetSegment` per event, so when two segments for one ball drain in
+the same frame (stall backlog, hidden-tab catch-up) the second event
+measures a sim JUST re-anchored (`simT == legT0`, zero steps between)
+against truth one spacing ahead — err reads segment spacing (~17m at
+ball speed), not prediction drift. `gated` now suppresses events whose
+stamp the sim hasn't replayed through (`simT < m.t − 0.05`); real
+desyncs — sim replayed past the stamp and still off — still warn.
+
 ### 4.4 Smaller gaps
 
 - ~~**8v8 carrier deadlock**~~ — *closed*: mutual carry now trips a
