@@ -59,8 +59,6 @@ export class ServerBots {
   /** Next allowed stand-suppression volley per bot — a few shots on the
    *  approach, not a constant stream while he flies. */
   private suppressT = new Map<string, number>();
-  /** inputMove ordering key — the shadow drops non-increasing seqs. */
-  seq = 1; // public — botDrive commits inputs under this counter
   /** Sheep meter lives in botSheep.ts — pedestrian play fills it and
    *  the value is broadcast as a readout. Kept off this file like the
    *  watchdog so ServerBots stays about driving bots.

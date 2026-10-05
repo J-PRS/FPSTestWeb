@@ -21,8 +21,7 @@ import type { Room } from './Room.ts';
 const SPEED = 14;          // m/s ground move (legacy path)
 
 /** Flat-field bag the drive functions read/write — ServerBots publishes
- *  itself; seq is the inputMove ordering key the shadow drops non-
- *  increasing values on. */
+ *  itself. */
 export interface DriveHost {
   room: Room;
   sheep: BotSheepMeter;
@@ -30,7 +29,6 @@ export interface DriveHost {
   watchdog: MobilityWatchdog;
   readonly foeNear: Map<string, number>;
   readonly field: Heightfield | null;
-  seq: number;
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void;
 }
 
@@ -87,7 +85,10 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
     // every regen tick and sat at ~0 for the rest of the match.
     forward: 0, right: 0,
     jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false,
-  }, p.status, h.seq++);
+    // No seq: bots never reconcile, so the per-call journal entry (a
+    // state+input+energy snapshot plus a Map evict) would be pure churn
+    // every tick for every bot — the journal exists for wire replay.
+  }, p.status);
 }
 
 /** No heightfield → no shadow → legacy direct-write fallback.
