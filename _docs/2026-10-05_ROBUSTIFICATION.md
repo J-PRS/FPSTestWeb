@@ -169,6 +169,23 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
   `botKill`/`bots` ambient draws are client-only cosmetics (never reach
   shared sim paths), spectator lifecycle has id-claim eviction +
   onClose delete + registry terminate. Nothing new to classify.
+- **Per-id lifecycle maps**: `aliveSince` was the one offender (fixed —
+  pruned vs roster). `ServerBots.untrack` already funnels brains/
+  loadouts/thinkPhase/roster/sheep/arsenal/foeNear/gearLobT/suppressT/
+  deadSet/quiet/skillOffAt/supportT/healBeamT/healNadeT/watchdog/
+  `sense.forget` (noticed, routeHold, routeFailed, routePrefs,
+  waitSpot) + `moveSim.untrack`. Client `lastTintOf` evicts via the
+  `onRemove` hook; `sharedGroundYCache` is a terrain memo bounded by
+  visited cells.
+- **Wire encode coercions** (`shared/wire.ts`): sheep uint8 clamp,
+  status mask, segKind fallback — encoder-side saturation, values
+  can't exceed field width; not silent input-hiding.
+- **Chat/VGS reaction path**: player chat → `chat` event →
+  `chatKindFor` (16-way spectrum) + `vgsCommandFor` (command chords)
+  + `nameIn` → `bots.notice` → squad reply via `chatter()`
+  cooldown — same channel as botSpoke replies. netBalls maps clean:
+  `netBallById` reconciles on roster; `rbLastWarn`/`rbSuppressed`
+  bounded by warn frequency.
 
 ---
 
