@@ -269,21 +269,33 @@ function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, ai
   return speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
 }
 
-/** March the ballistic arc in 16 segments — returns the flight time where
- *  a structure face stops the shell, or null when the arc is clean. */
+/** March the ballistic arc with the SAME semi-implicit Euler the live
+ *  sims step (projSim.ts: vel.y += g·dt then pos += vel·dt), not the
+ *  analytic v·t+½g·t² — the analytic path diverges from the sim by
+ *  ½·g·T·dt·(steps), up to a metre on a long lob, which rejected honest
+ *  wall-grazing detonations as "flight blocked". 1/120s steps bound the
+ *  divergence below any wall thickness. */
+const ARC_STEP_S = 1 / 120;
 function arcBlockedAt(
   projectile: TrackedProjectile, g: number, airtime: number,
   solids: readonly StructureCollider[],
 ): number | null {
-  const STEPS = 16;
+  const steps = Math.max(4, Math.min(240, Math.ceil(airtime / ARC_STEP_S)));
+  const dt = airtime / steps;
+  const v = { ...projectile.velocity };
   let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
-  for (let i = 1; i <= STEPS; i++) {
-    const t = (airtime * i) / STEPS;
-    const nx = projectile.origin.x + projectile.velocity.x * t;
-    const ny = projectile.origin.y + projectile.velocity.y * t + 0.5 * g * t * t;
-    const nz = projectile.origin.z + projectile.velocity.z * t;
+  for (let i = 1; i <= steps; i++) {
+    v.y += g * dt;
+    const nx = px + v.x * dt;
+    const ny = py + v.y * dt;
+    const nz = pz + v.z * dt;
+    const t = i * dt;
     if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
-      if (segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids)) return t;
+      // Terminal-step grace: a shell that honestly detonates ON a face
+      // lands its final segment on that face — that is the impact the
+      // claim describes, not a wall flown through. Only a face hit
+      // BEFORE the last step means the arc can't honestly reach the end.
+      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids)) return t;
     }
     px = nx; py = ny; pz = nz;
   }
