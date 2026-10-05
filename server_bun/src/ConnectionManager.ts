@@ -68,6 +68,9 @@ export class ConnectionManager {
    *  buffered byte count doesn't balloon while the clock runs. */
   private drownCheck(playerId: string, ws: ServerWebSocket<WebSocketData>): 'ok' | 'drowned' {
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    // Sockets without a data slot (test mocks) can't carry the mark —
+    // buffered is also 0 there, so there's nothing to track anyway.
+    if (!ws.data) return 'ok';
     if (buffered < DROWN_BYTES) {
       ws.data.slowSince = undefined;
       return 'ok';
