@@ -15,6 +15,7 @@ import { resolve } from 'node:path';
 import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
 import { BOT_TUNING } from '../../shared/botTuning.ts';
 import { measureCap, type RunStat } from '../../server_bun/tests/scenarios/capMeasure.ts';
+import { measureLap } from '../../server_bun/tests/scenarios/lapMeasure.ts';
 
 const OUT_DIR = resolve(import.meta.dir, 'out');
 // Real T2 routes only (porter-imported .mis flags + .ter heightfields;
@@ -104,7 +105,12 @@ const GENS = arg('gens', 0);   // >0 = evolution mode (no flat random phase)
 const POP = arg('pop', 4);     // children per generation
 const ELITES = Math.max(1, Math.floor(POP / 4));
 const USE_KAT = process.argv.includes('--kat'); // --kat restricts to katabatic only
-const MAP_LIST = USE_KAT ? MAPS.filter(m => m.name === 'katabatic') : MAPS;
+// --lap: checkpoint-circuit mode — the capper laps an 800m square chasing a
+// teleporting flag on raindance at 1.0x and 1.5x vertical gain. Fitness is
+// lap pace: approach AND departure economy in one number.
+const LAP = process.argv.includes('--lap');
+const MAP_LIST = LAP ? MAPS.filter(m => m.name === 'raindance_nef') : (USE_KAT ? MAPS.filter(m => m.name === 'katabatic') : MAPS);
+const LAP_SCALES = [1.0, 1.5];
 
 /** Fitness: a cap is mandatory, then shorter is better — total latency
  *  is grab+transit; banked E is the tiebreak (fast AND efficient). */
@@ -129,6 +135,19 @@ function evaluate(genes: number[], tag: string): void {
   genes.forEach((v, i) => set(DIMS[i]![0], v));
   for (const m of MAP_LIST) {
     for (let t = 0; t < TRIALS; t++) {
+      if (LAP) {
+        for (const hs of LAP_SCALES) {
+          const st = measureLap(m.f, m as unknown as Record<string, unknown>, { simBudgetS: BUDGET, heightScale: hs, tag: `${tag}:${m.name}@${hs}` });
+          // One cap-chase circuit ~3.2km; lap pace is the honest number —
+          // banked E the tiebreak. No laps = the genome never corners.
+          const fit = st.laps * 1e4 + st.avgSpeed * 40 - (st.avgLap || st.legTimes.reduce((a, b) => a + b, 0)) - st.avgE * 0.3;
+          results.push({ genes: genes.slice(), stat: { grabT: st.legTimes[0] ?? 0, carryT: st.avgLap, pathM: st.avgSpeed * BUDGET, avgSpeed: st.avgSpeed, avgE: st.avgE, caps: st.laps }, fit });
+          appendFileSync(csvPath,
+            `${gid},${m.name}@x${hs},${genes.map(v => v.toFixed(3)).join(',')},${st.laps},${(st.legTimes[0] ?? 0).toFixed(1)},${st.avgLap.toFixed(1)},${(st.avgSpeed * BUDGET).toFixed(0)},${st.avgSpeed.toFixed(1)},${st.avgE.toFixed(0)},${fit.toFixed(1)}\n`);
+          console.log(`g${gid} ${m.name}@x${hs} t${t}: laps=${st.laps} best=${st.bestLap.toFixed(0)}s avg=${st.avgLap.toFixed(0)}s spd=${st.avgSpeed.toFixed(1)} E=${st.avgE.toFixed(0)} fit=${fit.toFixed(0)}`);
+        }
+        continue;
+      }
       const stat = measureCap(m.f, m.bases, { simBudgetS: Math.round(BUDGET * Math.min(3, Math.max(1, m.flagM / 300))), tag: `${tag}:${m.name}` });
       const fit = fitness(stat);
       results.push({ genes: genes.slice(), stat, fit });

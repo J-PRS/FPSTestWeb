@@ -108,12 +108,15 @@ export const BOT_TUNING = {
   // flagGoals hofGoal + serverSenses posted leash — the heavy-on-flag's
   // anchor law. Swept by hofSweep: what actually stops a capper.
   hof: {
-    threatR: 45,     // m — an enemy this close to home arms the interpose lean
-    dropR: 25,       // m — a dropped flag inside this ring is worth leaving the post
-    leanK: 0.05,     // lean growth per m of threat distance
-    leanMax: 1,      // m — hard cap on the interpose (1 = he barely shifts off the pole; was the pre-tuning literal)
-    postHome: 3,     // m — posted leash while the flag is home (duty-scaled)
-    postCarried: 20, // m — leash once our flag is gone: roam the counter-attack
+    // Evolved defaults (hofSweep: 60+ evals, 2 maps, holdout check on a 3rd):
+    // staying planted beat every lean amount — leanK≈0 won; tight home leash
+    // + a real carried roam beat the old 3/20 pair.
+    threatR: 60,     // m — an enemy this close to home arms the interpose lean
+    dropR: 28,       // m — a dropped flag inside this ring is worth leaving the post
+    leanK: 0.03,     // lean growth per m of threat distance
+    leanMax: 2,      // m — hard cap on the interpose (evolution slid ≤2m)
+    postHome: 2,     // m — posted leash while the flag is home (duty-scaled)
+    postCarried: 25, // m — leash once our flag is gone: roam the counter-attack
   },
   // botGraph — leg-scale flow-field routing (flood per goal, shared)
   graph: {
