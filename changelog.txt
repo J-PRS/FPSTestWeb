@@ -1,3 +1,4 @@
+2026-10-01 - Soak metrics: wave `mis` counts push tasks only — escort goals re-lead the carrier live every pass, so a >60m gap to the stored task goal was the intercept working, not churn (was reading ~5500 phantom mismatches a run)
 2026-10-01 - Soak metrics: wave speed median now splits by the 45m foe bubble (fSpd free / xSpd fight) — the pooled median conflated fighting ticks with transit and read ~16 on runs where free transit was 25+
 2026-10-01 - Bots: orbit-escape escalates to beeline after 2 dead rolls, not 3 — a basin trap that defeats two escape picks won't yield to a third; the moves layer grinds it instead. Katabatic seed 7: 14 grabs/8 caps (was 8-10g/2c); seed 11: 6g/3c
 2026-10-01 - Bots: marshal members release on the capper's live push call, not their own patience clocks — the flood now converges with his run instead of trickling in one at a time; seed 11: 9 grabs/2 caps, hold 162s (was ~7g/2c)

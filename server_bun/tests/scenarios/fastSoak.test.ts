@@ -434,8 +434,11 @@ describe('scenario: warp soak throughput', () => {
             if (lp !== undefined && simNow() - lp < 4000) waveProp++;
             const g = room.bots.flagGoal({ id: mp.id, team: mp.team, position: mp.position });
             if (g) {
+              // Push only: escort goals re-lead the carrier live, so a
+              // >60m gap to the stored task goal is the intercept
+              // working, not churn.
               const gd = Math.hypot(g.pos.x - t.goal.x, g.pos.z - t.goal.z);
-              waveMis += gd > 60 ? 1 : 0;
+              waveMis += t.kind === 'push' && gd > 60 ? 1 : 0;
               if (!g.wave) waveNoFlag++;
             }
           }
