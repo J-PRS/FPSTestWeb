@@ -962,8 +962,11 @@ export class PlayerModel {
   update(dt: number): void {
     // Stalled-cover guard: a disabled sole action restores bind pose the
     // next mixer tick. If the current action ever stops running outside
-    // death, re-enter the state rather than let the body T-pose.
-    if (this.currentAction && !this.currentAction.isRunning() && this.currentState !== 'death') {
+    // death, re-enter the state rather than let the body T-pose. A
+    // finished oneshot parked on clampWhenFinished reads paused — its
+    // tail pose IS the cover, not a stall; re-entering replays the
+    // clip forever (perf run: 'shoot' state looping every clip-length).
+    if (this.currentAction && !this.currentAction.isRunning() && !this.currentAction.paused && this.currentState !== 'death') {
       if (!this._warnedAnims.has('__stall')) {
         this._warnedAnims.add('__stall');
         logger.warn(`Anim action stalled in state '${this.currentState}' (${this.currentClipName}) — re-entering`);
