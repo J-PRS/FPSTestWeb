@@ -3,7 +3,7 @@
 //   /posedump.html?model=robot|mannequin&clip=<name>&t=<seconds>
 // window.__clips lists clip names once loaded; window.__ready when posed.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mkGltfLoader } from './gltfLoad';
 
 const q = new URLSearchParams(location.search);
 const mann = q.get('model') === 'mannequin';
@@ -110,7 +110,7 @@ const url = knight ? '/assets/models/knight.glb'
   : q.get('glb') ? `/assets/models/${q.get('glb')}.glb`
   : ual2 ? '/assets/models/mannequin2.glb'
   : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
-new GLTFLoader().load(url, (gltf) => {
+mkGltfLoader().load(url, (gltf) => {
   const model = gltf.scene;
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).
   const box0 = new THREE.Box3().setFromObject(model);
@@ -154,7 +154,7 @@ new GLTFLoader().load(url, (gltf) => {
   // UAL2's mannequin ships bone-identical but clip-less — its clips live in
   // robot-anims2.glb, same UE-style rig, so they bind natively.
   if (ual2) {
-    new GLTFLoader().load('/assets/models/robot-anims2.glb', (g) => boot(g.animations));
+    mkGltfLoader().load('/assets/models/robot-anims2.glb', (g) => boot(g.animations));
   } else {
     boot(gltf.animations);
   }

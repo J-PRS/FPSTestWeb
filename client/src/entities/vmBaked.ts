@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mkGltfLoader } from '../gltfLoad';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
@@ -59,7 +60,7 @@ export class VmBaked {
     // whose GLB IS the shipping model. The nobake flag still reads as
     // off for anyone with it bookmarked.
     const bakeAll = urlParams.has('bake') && !urlParams.has('nobake');
-    const loader = new GLTFLoader();
+    const loader = mkGltfLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
     for (const [wt, g] of this.h.weapons) {
@@ -141,7 +142,7 @@ export class VmBaked {
       if (m.isMesh && (dropAll || (m.material as THREE.Material).type !== 'MeshBasicMaterial')) swap.add(o);
     });
     for (const o of swap) { o.parent?.remove(o); }
-    gltf.scene.traverse((o) => {
+    gltf.scene.traverse((o: THREE.Object3D) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const inBarrels = spin && (o === spin.node || spin.node.children.includes(o) || o.parent === spin.node);
@@ -153,7 +154,7 @@ export class VmBaked {
     const edgeTex = await this.loadEdgeTex(wt, texLoader);
     const grimeTex = await this.loadWeaponTex(wt, 'grime', texLoader);
     if (edgeTex || grimeTex) {
-      gltf.scene.traverse((o) => {
+      gltf.scene.traverse((o: THREE.Object3D) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
         m.geometry.userData.__keepUv = true;
@@ -173,7 +174,7 @@ export class VmBaked {
     if (this.h.ghostMats.length) {
       const seen = new Set<THREE.Material>();
       const toShell: THREE.Mesh[] = [];
-      gltf.scene.traverse((o) => {
+      gltf.scene.traverse((o: THREE.Object3D) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];

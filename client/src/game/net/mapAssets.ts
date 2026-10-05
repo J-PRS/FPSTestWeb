@@ -4,7 +4,7 @@
 // this one owns "fetch and build the world it describes".
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mkGltfLoader } from '../../gltfLoad';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js';
 import { Ball } from '../../entities/balls.js';
@@ -566,7 +566,7 @@ let interiorGeos: THREE.BufferGeometry[] = []; // merged geos — owned, must di
 let interiorsEpoch = 0;
 export function getInteriorsEpoch(): number { return interiorsEpoch; }
 const glbCache = new Map<string, Promise<THREE.Group | null>>();
-const glbLoader = new GLTFLoader();
+const glbLoader = mkGltfLoader();
 
 // Canonical interior materials — dedup by stripped name (per-GLB `.NNN`
 // suffixes removed) + the shading params that actually differ.

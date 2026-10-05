@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mkGltfLoader } from '../gltfLoad';
 import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
@@ -168,7 +168,7 @@ export class PlayerModel {
   }
 
   async load(): Promise<void> {
-    const loader = new GLTFLoader();
+    const loader = mkGltfLoader();
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
 
@@ -448,7 +448,7 @@ export class PlayerModel {
     this.lod = level;
     if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
     if (!this.lodLoadP) {
-      this.lodLoadP = new GLTFLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
+      this.lodLoadP = mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
         const geos: THREE.BufferGeometry[] = [];
         g.scene.traverse((o) => {
           if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));
