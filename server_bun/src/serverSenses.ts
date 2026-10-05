@@ -10,7 +10,6 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
-import { STATUS, shootRevealed } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
@@ -23,10 +22,10 @@ import { DEPLOY_HP } from '../../shared/deployables.ts';
 import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
-import type { PickupKind } from '../../shared/pickups.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
 import { SpotBoard } from './spotBoard.ts';
+import { ServerParties } from './serverParties.ts';
 import { sharedEnv } from '../../shared/env.ts';
 
 export class ServerBotSenses {
@@ -42,10 +41,14 @@ export class ServerBotSenses {
     // Field initializers run before parameter properties land — the board
     // needs the room's roster, so it builds here not at declaration.
     this.spotBoard = new SpotBoard(this.room.players);
+    this.parties = new ServerParties(this.room);
   }
 
   /** Squad spotting board — the team's shared eyes (see spotBoard.ts). */
   private readonly spotBoard: SpotBoard;
+
+  /** Shared per-tick roster + spatial domain index (see serverParties.ts). */
+  private readonly parties: ServerParties;
 
   /** groundY memo — see the ctx closure for the cell scheme. */
   private readonly groundMemo = new Map<number, number>(); private groundEpoch = -1;
@@ -200,57 +203,11 @@ export class ServerBotSenses {
     }
   }
 
-  /** One pass producing every per-think roster view — flagGoal and
-   *  build() each scanned the player map for their own channel (foes,
-   *  stand threats, enemies/allies/others); callers share one pass per
-   *  think so the bot tick stays O(players), not O(players × channels). */
-  partiesOf(p: { id: string; team?: string }): { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[]; roster: { id: string; pos: Vec3; team?: string }[] } {
-    const shared = this.tickParties();
-    const enemies: BotEnemy[] = [], allies: Vec3[] = [], others: Vec3[] = [];
-    const teams = !!this.room.modeSpec?.teams;
-    for (const q of shared.players) {
-      if (q.id === p.id || q.dead) continue;
-      others.push(q.pos);
-      // Same rule as enemiesOf: teamless modes are open season on every
-      // other live body — bot or human makes no difference to the gun.
-      if (teams ? q.team !== p.team : true) {
-        if (!q.cloaked) enemies.push(q.en);
-      } else if (p.team && q.team === p.team) allies.push(q.pos);
-    }
-    for (const b of shared.bodies) enemies.push(b);
-    return { enemies, allies, others, roster: shared.roster };
-  }
-
-  /** Roster + non-player bodies, cached per tickSeq — several bots think
-   *  in the same tick (staggered buckets) and each used to rebuild the
-   *  identical roster plus call ballSim/creatureSim roster() (both
-   *  allocate). Positions are live refs, so the cached list stays
-   *  correct within the tick. */
-  private tickPartiesCache: { seq: number; players: { id: string; pos: Vec3; vel: Vec3; team?: string; dead: boolean; cloaked: boolean; aimY: number; en: BotEnemy }[]; bodies: BotEnemy[]; roster: { id: string; pos: Vec3; team?: string }[]; pickups: { id: number; pos: Vec3; kind: PickupKind }[] } = { seq: -1, players: [], bodies: [], roster: [], pickups: [] };
-  private tickParties(): typeof this.tickPartiesCache {
-    const c = this.tickPartiesCache;
-    // Keyed on the sim clock, not room.tickSeq: bots think at their own
-    // cadence and scenario steps advance simNow without bumping tickSeq
-    // — a tickSeq key left cloak/death/beast edges stale between thinks.
-    const seq = simNow();
-    if (c.seq === seq) return c;
-    c.seq = seq;
-    c.players.length = 0; c.bodies.length = 0; c.roster.length = 0; c.pickups.length = 0;
-    for (const q of this.room.players.getAllPlayers().values()) {
-      c.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, seq), aimY: classCapsule(q.armorClass).centerOff,
-        en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff } });
-      if (!q.isDead) c.roster.push({ id: q.id, pos: q.position, team: q.team });
-    }
-    for (const b of this.room.ballSim.roster())
-      c.bodies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
-    for (const cr of this.room.creatureSim.roster())
-      c.bodies.push({ id: `c:${cr.id}`, pos: cr.position, vel: cr.velocity, alive: true, aimY: 0 });
-    // Pickups ride the same cache — pickupFor used to clone the whole
-    // list per think; gems only move on rare blast edges, so per-step
-    // freshness matches every other channel here.
-    const snaps = this.room.pickups?.snapshot();
-    if (snaps) for (const g of snaps) c.pickups.push(g);
-    return c;
+  /** One pass producing every per-think roster view — the shared tick
+   *  cache + spatial domain live in serverParties so each think scans
+   *  bodies inside the legal sight domain, not the whole roster. */
+  partiesOf(p: { id: string; team?: string; position: Vec3 }): ReturnType<ServerParties['of']> {
+    return this.parties.of(p);
   }
 
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
@@ -1007,7 +964,7 @@ export class ServerBotSenses {
    *  hurt the contested walk is suicide. Enemies near the GEM camp the
    *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
   private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
-    const snaps = this.tickParties().pickups;
+    const snaps = this.parties.tick().pickups;
     if (!snaps.length) return null;
     // Greedy like the capper's roam shell, not a wall: close gems always
     // pull, far ones only sometimes — acceptance odds fall with distance
