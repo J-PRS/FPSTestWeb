@@ -140,19 +140,19 @@ const boltG = new THREE.Group();
 boltG.name = 'bowBolt';
 const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.26, 6), darkMat);
 shaft.rotation.x = Math.PI / 2;
-shaft.position.set(0, 0.035, -0.04);
+shaft.position.set(0, 0.035, 0.04);
 boltG.add(shaft);
 const tip = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6),
   new THREE.MeshBasicMaterial({ color: 0xffc866 }));
 tip.rotation.x = -Math.PI / 2;
-tip.position.set(0, 0.035, -0.19);
+tip.position.set(0, 0.035, -0.11);
 boltG.add(tip);
 // Fletching fins at the tail — thin plates spread radially around the
 // shaft axis so the silhouette reads arrowed from the side too.
 for (let i = 0; i < 3; i++) {
   const a = (i / 3) * Math.PI * 2;
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.03, 0.05), bodyMat);
-  fin.position.set(Math.cos(a) * 0.028, 0.035 + Math.sin(a) * 0.028, 0.08);
+  fin.position.set(Math.cos(a) * 0.028, 0.035 + Math.sin(a) * 0.028, 0.16);
   fin.rotation.z = a;
   boltG.add(fin);
 }
