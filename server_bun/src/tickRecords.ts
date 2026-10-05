@@ -192,7 +192,10 @@ export class TickFanout {
         // interpolation buffer — a skiing bot covers ~8m between records.
         // 150ms is the worst a body ever gets; hits/kills ride reliable
         // events either way.
-        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 3; // 150m / 400m
+        // Egress is quadratic in roster — the far-field past 600m is a
+        // speck on screen, so it earns a record only every 8th tick while
+        // the 400-600m band keeps the 150ms worst-case cadence.
+        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : dSq < 360000 ? 3 : 8; // 150m / 400m / 600m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
         if (r.force || seq % tier === 0) others.push(r.data);

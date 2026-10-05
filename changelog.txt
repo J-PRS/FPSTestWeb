@@ -1,3 +1,8 @@
+2026-10-01 - snake: leap-through strike replaces the flat dash bite - windup telegraph kept, ballistic arc solved from distance (crawler formula), pass-through bite once mid-flight, lands and resumes circling on strike cooldown; client pose lifts the spine head-weighted over leap clearance so the body follows the airborne head
+2026-10-01 - snake pose: lobes aim along the real 3D chain between placed neighbors (two-pass: place, then orient) - fixed coil stand-up splitting the body, also covers slopes/leap arcs
+2026-10-01 - net: wireProbe sweep measures tick egress per roster size - quadratic: 200 bots = ~28MB/s total / 143KB/s per client, the dominant running-cost wall; far-field (>600m) records drop to 1/8 cadence (~2% first cut)
+2026-10-01 - botFill: lift hidden 16-bot ceiling to 128; capSoak disables fill so ramp is not culled
+2026-10-01 - perf: standThreat uses parties grid (nearHostiles) instead of per-think roster scan
 2026-10-01 - RoomProjectiles.incomingNear: per-tick XZ shell grid (16m cells, tickSeq-keyed) replaces per-think full scan - results identical in content + insertion order (index cells + sort); sense:threats 1.1ms -> 0.02ms, ctxBuild 1.5 -> 0.4ms at n=300
 2026-10-01 - botStageProbe gains a per-sim split (wraps each room.sims tick) - names the non-bot share at scale: proj=5.2ms, move=1.2ms at n=300
 2026-10-01 - BotSteer: gather separation-range bodies once per think instead of scanning ctx.others per slot (O(n) not O(n x slots); identical scores) - steer 2.9ms -> 0.92ms, think 8.4 -> 6.3ms at n=300
