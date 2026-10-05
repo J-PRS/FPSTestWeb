@@ -733,7 +733,12 @@ export class ServerBotSenses {
       // pack); he dies ~150m out every soak because the whole transit
       // runs visible. The intent still prices the tank — cloak only
       // when energy ≥ cloakCost+15, so a dry runner stays loud.
-      (role === 'infiltrator' || role === 'capper'), runner: role === 'capper',
+      // Push members share the covert approach — a loud flood dies in
+      // transit (soak: wave d480m, near0%, dead450+) and the ring never
+      // sees it. Escorts stay loud: pulling eyes off the carrier is
+      // the job. Cloak drops the moment they fight, which is exactly
+      // when the defense should hear them — at the stand, not on the way.
+      (role === 'infiltrator' || role === 'capper' || task?.kind === 'push'), runner: role === 'capper',
       // Named wave member (push/escort): his feet are committed to the
       // flood like a runner's — untasked attackers let every midfield
       // contact steal the stand run (soak: sup@0 — the called wave

@@ -448,8 +448,15 @@ export class BotArsenal implements BeamHost {
     // ~23m/s inside the defense's kill zone (ring autopsy: in@28mps,
     // 3.0s inside, 0 grabs).
     const strike = goal.runner === true && dist < T.moves.strikeGd;
-    const blastNow = strike && dist < 80 &&
-      Math.hypot(sh.vel.x, sh.vel.z) < 48 &&
+    // Wave members chain too: a tasked push/escort transiting at the
+    // hop-gait mean (~13m/s) is food for the midfield blob — the soak's
+    // whole "called wave never arrives" defect (d542m, near0%, spd@13).
+    // Refiring on the speed trigger holds a wave member near his own
+    // ceiling instead of decaying back to walking between cadence shots.
+    const waveChain = !strike && goal.wave === true;
+    const chainCap = strike ? 48 : 30;
+    const blastNow = (strike && dist < 80 || waveChain) &&
+      Math.hypot(sh.vel.x, sh.vel.z) < chainCap &&
       (this.propelT.get(id) ?? 0) < now + 1400; // still ~1s apart — each shove must land before the next
     if (!blastNow && (this.propelT.get(id) ?? 0) > now) return;
     // Hard floor only: a 50% grab-hp budget can't survive the route —
@@ -488,13 +495,16 @@ export class BotArsenal implements BeamHost {
       // remove; a runner still pays hp for speed as the fallback.
       if (carrying) return;
     }
-    if (!sh.onGround) {
+    // A blast doesn't need contact, it needs dirt close enough to pop
+    // inside the shove envelope — a hop-gait transit (wave members:
+    // soak spd@13, near0% arrival) is airborne half the time and was
+    // falling through to the crest path that almost never qualifies.
+    const floor = this.room.field ? hmHeight(this.room.field, p.position.x, p.position.z) : p.position.y;
+    if (!sh.onGround && p.position.y - floor > 6) {
       // Crest blast: jetting up a face, the hill drops away under the
       // bot — a straight-down shot at its own feet banks the blast as
       // pure height, the T2 "lose contact, shoot the floor" trick.
       if (!this.room.field || dist < 60) return;
-      const floor = hmHeight(this.room.field, p.position.x, p.position.z);
-      if (floor > p.position.y - 4) return;          // still on the slope — the grounded path owns this
       if (floor < p.position.y - 18) return;         // too high already — blast can't reach the dirt
       if (Math.hypot(sh.vel.x, sh.vel.z) < 8) return; // needs real run speed to mean anything
       if (sh.vel.y < -2) return;                      // falling — the moment passed

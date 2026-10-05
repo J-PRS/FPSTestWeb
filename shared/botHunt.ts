@@ -225,11 +225,15 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
   // position commitment shrinks to point-blank threats he can't
   // out-ski, and the objective goal keeps refreshing so the run
   // resumes the tick the fight ends.
-  const orbit = ctx.runner ? Math.min(st.orbitFar, 45) : st.orbitFar;
+  // Wave members get the same committed feet — a tasked push/escort
+  // dueling every midfield contact is the soak's "wave never arrives"
+  // defect (d530m, near0%): suppression travels WITH the flood, not
+  // instead of it.
+  const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
   if (best && !fearing && dist3(pos, best.pos) <= orbit) {
     st.fightPos = pickFightPos(st, ctx, pos, best);
   }
-  if (!best || ctx.runner) pickGoal(ctx, pos);
+  if (!best || ctx.runner || ctx.wave) pickGoal(ctx, pos);
 }
 
 /** The beacon-marked flag carrier, when it's in committing range —
