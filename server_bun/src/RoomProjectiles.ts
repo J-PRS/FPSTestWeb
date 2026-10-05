@@ -276,14 +276,22 @@ export class RoomProjectiles {
     if (proj.stats.cluster) {
       const bomblet = proj.weaponType === WeaponType.MRVLauncher
         ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet;
+      const bStats = getWeaponStats(bomblet);
       for (let i = 0; i < proj.stats.cluster.count; i++) {
         const ang = this.room.rng() * Math.PI * 2;
         const r = this.room.rng() * proj.stats.cluster.radius;
-        this.room.messages.serverBlast(proj.ownerId, {
+        const bAt = {
           x: at.x + Math.cos(ang) * r,
           y: at.y, // bomblets scatter on the blast plane, same as aoeCluster
           z: at.z + Math.sin(ang) * r,
-        }, bomblet, null, proj.id);
+        };
+        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, proj.id);
+        // serverBlast sweeps players only — the rain must pay creatures
+        // and balls the same way the carrier's own pop does below.
+        if (bStats.aoeRadius > 0) {
+          this.room.ballSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
+          this.room.creatureSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
+        }
       }
     }
     if (proj.stats.aoeRadius > 0) {
