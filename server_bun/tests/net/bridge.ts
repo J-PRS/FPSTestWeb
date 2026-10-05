@@ -68,6 +68,11 @@ export type BridgeProfile = {
    *  must restore every durable frame it missed. */
   dropMs?: number;
   outageMs?: number;
+  /** Authority-side degradation. `hz` lowers the tick loop below its
+   *  30Hz cadence (sustained overload); `stalls` freeze it outright for
+   *  a window then let it resume (a GC pause / event-loop block — the
+   *  queued inputs must drain, not pile up or reset). */
+  tick?: { hz?: number; stalls?: { atMs: number; ms: number }[] };
 };
 
 export type BridgeResult = {
@@ -275,12 +280,17 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       if (live) r.postErr.push(Math.hypot(s2.pos.x - live.pos.x, s2.pos.y - live.pos.y, s2.pos.z - live.pos.z));
     }
 
-    // ---- server tick at 30Hz ----
-    if (now - lastServer >= 1000 / 30) {
-      const sdt = (now - lastServer) / 1000;
+    // ---- server tick at its profile cadence (30Hz healthy) ----
+    const stalled = profile.tick?.stalls?.some((s) => tMs >= s.atMs && tMs < s.atMs + s.ms) ?? false;
+    if (!stalled && now - lastServer >= 1000 / (profile.tick?.hz ?? 30)) {
+      // A stall resumes with one big dt (production clamps inside the
+      // sim); clamping here keeps the catch-up honest instead of
+      // teleporting through a multi-second step.
+      const sdt = Math.min(0.25, (now - lastServer) / 1000);
       lastServer = now;
       server.tick(sdt);
     }
+    if (stalled) lastServer = now; // freeze the clock so resume isn't one giant step
 
     // steady-state error sample (skip the first second's join transient)
     if (tMs > 1000) {

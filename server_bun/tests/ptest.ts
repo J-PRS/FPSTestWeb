@@ -69,7 +69,7 @@ for (const f of files.sort((a, b) => weight(b) - weight(a))) {
 console.log(`ptest: ${files.length} files across ${shards.filter((s) => s.files.length).length} workers`);
 const t0 = Date.now();
 
-const procs = shards.filter((s) => s.files.length).map((s, i) =>
+const procs = shards.filter((s) => s.files.length).map((s) =>
   Bun.spawn(['bun', 'test', ...s.files.map((f) => join(TESTS, f))], {
     cwd: ROOT,
     stdout: 'pipe',

@@ -50,7 +50,7 @@ test('every wire type rejects garbage without throwing', () => {
   for (const c of cases) {
     const res = validateMessage(c.obj);
     if (res.success) accepted++; else rejected++;
-    if (res.success) expect(res.data.type as string).toBe(c.obj.type);
+    if (res.success) expect(res.data.type === c.obj.type).toBe(true);
   }
   // Fuzz should mostly reject — a >90% accept rate means a validator is
   // too permissive to matter.

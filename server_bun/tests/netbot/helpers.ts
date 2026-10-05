@@ -1,4 +1,4 @@
-import { expect, afterEach } from 'bun:test';
+import { afterEach } from 'bun:test';
 import { GameServer } from '../../src/GameServer.ts';
 import { RtcServer } from '../../src/RtcServer.ts';
 import type { WebSocketData } from '../../src/types.ts';
