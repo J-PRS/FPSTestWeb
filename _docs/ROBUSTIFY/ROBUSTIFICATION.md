@@ -203,6 +203,11 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **Iteration/splice hygiene**: every entity-list splice runs inside a
+  backwards `for (i--)` loop (balls, nuggets, beams, playback lists, fx
+  budget tails); one-off removals use indexOf. Id-keyed mirrors
+  (netBallById, playbackBallById) delete with the splice, and
+  netBallRoster reconciles orphans against the server roster.
 - **Empty-catch surface**: ~40 bare/commented `catch` bodies across all
   three trees are teardown guards — dead sockets, gone RTC peers,
   detached audio nodes, log-shipping, quota/private-mode storage. None
