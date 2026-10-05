@@ -187,7 +187,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     fog: parseFog((src as { fog?: unknown }).fog),
-    terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
+    terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/),
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
     deploys: parseDeploys((src as { deploys?: unknown }).deploys),
