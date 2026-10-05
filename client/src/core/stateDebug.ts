@@ -30,7 +30,11 @@ export interface StateDebugContext {
 }
 
 const SNAPSHOT_COOLDOWN_MS = 5000; // Don't request snapshots more often than every 5s
-const POSITION_TOLERANCE = 50.0;   // Warn if position delta exceeds this (higher for async snapshot comparison)
+// Per-channel audit tolerances (shared/stateHash.ts FIELD_CHANNELS):
+//   sim  — position is async-snapshot comparison, 50m = obvious parking
+//   echo — health lags by up to one ~2Hz echo interval during heals
+const POSITION_TOLERANCE = 50.0;
+const HEALTH_TOLERANCE = 2.0;
 
 let pendingServerSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
 
@@ -65,7 +69,12 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
 
   for (const [id, playerData] of ctx.networkManager.getPlayers()) {
     if (id === ctx.networkManager.getLocalPlayerId()) continue; // Skip local player
-    allPlayers.set(id, hashableEntry(ctx.remotePlayers.get(id), playerData));
+    const entry = hashableEntry(ctx.remotePlayers.get(id), playerData);
+    // No data = don't hash a FABRICATED player — a phantom (0,0,0)/100hp
+    // entry used to hide a genuinely missing replica behind a "server
+    // also has them" false match. Omitting the id makes the roster
+    // difference itself the signal; the audit reports it verbatim.
+    if (entry) allPlayers.set(id, entry);
   }
   return allPlayers;
 }
@@ -73,8 +82,9 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
 function hashableEntry(
   rp: RemotePlayer | undefined,
   playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
-): { x: number; y: number; z: number; health: number; isDead: boolean } {
-  const p = playerData?.position ?? rp?.position ?? { x: 0, y: 0, z: 0 };
+): { x: number; y: number; z: number; health: number; isDead: boolean } | null {
+  const p = playerData?.position ?? rp?.position;
+  if (!p) return null;
   return {
     x: p.x, y: p.y, z: p.z,
     health: playerData?.health ?? 100,
@@ -122,15 +132,15 @@ function diffPlayerFields(
     // Print BOTH positions, not just the delta — a frozen delta means one
     // end parked (spawn/teleport desync), and you can't tell which end is
     // stranded without the coordinates.
-    diffs.push(`Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
+    diffs.push(`[sim] Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
   }
-  // Sub-1hp deltas are float dust (fractional regen ticks, armor soak
-  // remainders) — a real desync is a whole hit or more.
-  if (Math.abs(cp.health - sp.health) > 0.5) {
-    diffs.push(`Player ${id} health: client=${cp.health} server=${sp.health}`);
+  // echo channel: a live heal window is stale-low by up to an echo
+  // interval (~2hp) when the snapshot lands — real desyncs are >=9hp.
+  if (Math.abs(cp.health - sp.health) > HEALTH_TOLERANCE) {
+    diffs.push(`[echo] Player ${id} health: client=${cp.health} server=${sp.health}`);
   }
   if (cp.isDead !== sp.isDead) {
-    diffs.push(`Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
+    diffs.push(`[edge] Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
   }
   return diffs;
 }

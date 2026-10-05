@@ -314,7 +314,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // structures/arena/interiors/sky now that the net ctx exists.
   if (!classicMode && !soloMode) bootApplySavedMap(netCtx, savedMap);
   const serverUrl = (await serverEndpoints).wsUrl;
-  logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
+  logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // F5 with a stored session token = the server may hand back our old
   // body — but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"

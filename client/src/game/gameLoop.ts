@@ -71,6 +71,10 @@ export function noteLocalSnap(): void {
   _posPrimed = false;
 }
 const JUMP_FRAME_M = 8;
+// Knocked/skied hard enough to teleport = real teleport class, but a jet
+// burst + downhill ski can legitimately clear 8m mid-frame — spam once/s
+// max, the jump itself still counts every time via _posPrev tracking.
+let _posJumpLastAt = 0;
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
 
@@ -263,7 +267,8 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   player.update(dt);
   if (_posPrimed) {
     const jump = player.pos.distanceTo(_posPrev);
-    if (jump > JUMP_FRAME_M) {
+    if (jump > JUMP_FRAME_M && performance.now() - _posJumpLastAt > 1000) {
+      _posJumpLastAt = performance.now();
       Logger.warn(`POS JUMP ${jump.toFixed(1)}m in one frame — (${_posPrev.x.toFixed(1)},${_posPrev.y.toFixed(1)},${_posPrev.z.toFixed(1)}) → (${player.pos.x.toFixed(1)},${player.pos.y.toFixed(1)},${player.pos.z.toFixed(1)}) dead=${player.isDead}`);
     }
   }

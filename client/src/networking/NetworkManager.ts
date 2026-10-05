@@ -592,7 +592,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
-    logger.warn(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
+    logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 

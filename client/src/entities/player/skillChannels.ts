@@ -97,7 +97,12 @@ export class SkillChannels {
     if (!this.mending) return;
     this.ctx.drainEnergy(MEND_DRAIN * dt);
     if (this.ctx.energy() <= 0) { this.setMend(false); return; } // tank dry — channel ends
-    if (!this.ctx.netHeals()) this.ctx.healSelf(MEND_HP_PER_SEC * dt);
+    // Predict the server-side heal rate locally even when net echoes own
+    // the truth: the yourHealth echo only runs at ~2Hz, so without a local
+    // mirror the hashed health lags real hp by a whole echo window and
+    // every StateHash check flags phantom desync. The echo stays the
+    // correction point; prediction just keeps the drift sub-frame.
+    this.ctx.healSelf(MEND_HP_PER_SEC * dt);
   }
 
 }
