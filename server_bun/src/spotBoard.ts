@@ -6,7 +6,7 @@
 import { STATUS } from '../../shared/status.ts';
 import { dist3 } from '../../shared/botVec.ts';
 import { losClear, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
-import type { Vec3 } from '../../shared/types.ts';
+import type { Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 
 export class SpotBoard {

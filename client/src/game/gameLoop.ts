@@ -660,6 +660,14 @@ export function createGameLoop(deps: GameLoopDeps) {
     const demoManager = deps.lazyDemoManager();
 
     const frame: TickFrame = { dt, player, networkManager, demoManager };
+    // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
+    // real present rate) but perf doesn't exist until the loop starts.
+    if (!networkManager.statsSource) {
+      networkManager.statsSource = () => {
+        const s = perf.snapshot();
+        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame };
+      };
+    }
     const demoPaused = simTick(deps, perf, frame, terrain);
     if (!demoPaused) fxTick(deps, st, budget, fxDt);
     perf.mark('fx');

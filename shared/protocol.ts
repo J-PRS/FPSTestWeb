@@ -51,6 +51,10 @@ export type ClientMessage =
   // its check anchor here instead of rejecting it as a speedhack.
   | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
+  // Client-side ops telemetry the server can't see itself — self-reported
+  // fps/frame cost and link quality, ~10s cadence, rolled into /metrics so
+  // a client's bad connection or melting renderer surfaces server-side.
+  | { type: 'clientStats'; fps: number; jsMs: number; ping: number; loss: number; jitter: number }
   | { type: 'chat'; text: string; team?: boolean; vgs?: string }
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not
@@ -256,6 +260,10 @@ export type ServerMessage =
   // Anti-cheat verdict surfaced to the flagged player instead of a kick —
   // renders on the conn-banner slot so it reads as a warning, not chat.
   | { type: 'serverWarn'; text: string }
+  // Close-code 1008 doesn't propagate over the WT/RTC tiers — identity
+  // rejections (claimed id, bad token) also send this so the client can
+  // drop its stored session instead of rejoin-looping on a stale token.
+  | { type: 'sessionRejected'; reason: string }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }

@@ -219,14 +219,7 @@ export class NetworkManager {
           onDisconnect: (code, reason) => {
             // 1008 = server rejected our session — drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
-            if (code === 1008) {
-              localStorage.removeItem('fps-player-id');
-              localStorage.removeItem('fps-session-token');
-              this.sessionToken = null;
-              this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
-              localStorage.setItem('fps-player-id', this.localPlayerId);
-              logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
-            }
+            if (code === 1008) this.resetIdentity(reason);
             logger.info('Disconnected', { code, reason });
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
@@ -260,6 +253,18 @@ export class NetworkManager {
         reject(error);
       }
     });
+  }
+
+  /** Server says our stored identity is no good — burn id+token so the
+   *  next connect joins fresh. Reached via close(1008) on WS and via the
+   *  `sessionRejected` message on WT/RTC, where the close code is lost. */
+  private resetIdentity(reason?: string): void {
+    localStorage.removeItem('fps-player-id');
+    localStorage.removeItem('fps-session-token');
+    this.sessionToken = null;
+    this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('fps-player-id', this.localPlayerId);
+    logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
   }
 
   disconnect(): void {
@@ -327,6 +332,14 @@ export class NetworkManager {
   }
 
   private noteDrop(type: string): void {
+    // Contract scream: a transport that flips connected()→false without
+    // first firing onDisconnect leaves the tier manager blind (the WT
+    // 64KB-carry bug). If we still believe we're online while the lane
+    // reports dead, the transport violated the contract — say so loudly.
+    if (this.connected && this.ws && !this.ws.connected()) {
+      logger.error(`lane went dead with NO disconnect event — transport contract violation`, { tier: this.ws.tier });
+      this.connected = false; // let the HUD stall-watchdog see the drop
+    }
     this.sendDrops++;
     // First drop is loud; repeats get sampled — a dead lane would
     // otherwise spam the buffer once per position frame.
@@ -457,6 +470,9 @@ export class NetworkManager {
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     matchNotice: (data) => this.onMatchNotice?.(data.text),
     serverWarn: (data) => this.onServerWarn?.(data.text),
+    // WT/RTC path of the 1008 identity reject — the close code is lost
+    // on those tiers, so the server sends this before closing.
+    sessionRejected: (data) => this.resetIdentity(data.reason),
     pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos, data.kind),
     pickupGone: (data) => this.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
@@ -766,7 +782,27 @@ export class NetworkManager {
       this.lastPingSendTime = now;
       this.send({ type: 'ping', timestamp: now });
     }
+
+    // Client ops uplink ~0.1Hz — rides the position cadence so it only
+    // ever fires while a game is actually streaming (no lobby noise).
+    if (now - this.lastStatsSendTime >= NetworkManager.STATS_INTERVAL) {
+      this.lastStatsSendTime = now;
+      const s = this.statsSource?.() ?? { fps: 0, jsMs: 0 };
+      this.send({
+        type: 'clientStats',
+        fps: s.fps, jsMs: s.jsMs,
+        ping: this.telemetry.ping,
+        loss: this.telemetry.packetLoss(now),
+        jitter: this.telemetry.jitter(),
+      });
+    }
   }
+
+  /** GameLoop feeds live perf numbers — the uplink above can't read
+   *  the perf HUD itself without an import cycle the other direction. */
+  statsSource: (() => { fps: number; jsMs: number }) | null = null;
+  private lastStatsSendTime = 0;
+  private static readonly STATS_INTERVAL = 10_000;
 
   /**
    * Send input move for client-side prediction.

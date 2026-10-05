@@ -429,6 +429,25 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
   },
 
+  clientStats: {
+    // Self-reported — no rate limit needed beyond the default bucket; the
+    // client sends ~0.1Hz and forged numbers only pollute metrics, not state.
+    validate: (obj) => {
+      const fields: Record<string, unknown> = {};
+      for (const k of ['fps', 'jsMs', 'ping', 'loss', 'jitter']) {
+        if (!isFiniteNumber(obj[k])) return { success: false, error: `clientStats.${k} must be a finite number` };
+        fields[k] = obj[k];
+      }
+      return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number } };
+    },
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      if (!p) return;
+      p.lastSeen = wallNow();
+      p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, at: wallNow() };
+    },
+  },
+
   ping: {
     validate: (obj) => {
       if (!isFiniteNumber(obj.timestamp)) {

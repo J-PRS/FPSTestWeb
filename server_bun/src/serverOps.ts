@@ -39,11 +39,24 @@ export function getHealthStatus(g: GameServer): { status: string; players: numbe
    *  with per-room occupancy/ball counts for match-level observability. */
 export function getMetrics(g: GameServer) {
     const o = g.ops;
-    const uptimeS = Math.floor((wallNow() - o.startedAt) / 1000);
-    const rooms = [...g.rooms.values()].map(r => ({
+    const now = wallNow();
+    const uptimeS = Math.floor((now - o.startedAt) / 1000);
+    const rooms = [...g.rooms.values()].map(r => {
+      // ClientStats uplink rollup — fresh reporters only (30s covers a
+      // couple of missed sends); bots never report so they can't dilute
+      // the human view. Min fps + max loss are the actionable tails.
+      let n = 0, fpsSum = 0, fpsMin = Infinity, lossMax = 0, pingMax = 0;
+      for (const p of r.players.getAllPlayers().values()) {
+        const s = p.clientStats;
+        if (!s || now - s.at > 30_000) continue;
+        n++; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
+        lossMax = Math.max(lossMax, s.loss); pingMax = Math.max(pingMax, s.ping);
+      }
+      return {
       name: r.name,
       players: r.playerCount(),
       balls: r.ballSim.ballCount,
+      clientStats: n ? { n, fpsAvg: Math.round(fpsSum / n), fpsMin, lossMax, pingMax } : undefined,
       scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
@@ -51,7 +64,8 @@ export function getMetrics(g: GameServer) {
       // Since-boot judge/claim counters — the room's 15s rollup clears
       // per flush, so scrapes need the cumulative mirror.
       health: Object.fromEntries(r.healthTotal),
-    }));
+      };
+    });
     const mem = process.memoryUsage();
     return {
       uptimeS,

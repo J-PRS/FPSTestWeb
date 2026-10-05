@@ -57,6 +57,9 @@ export interface PlayerState {
    *  otherwise read as impossible speed. */
   correctionGraceUntil: number;
   ping: number; // self-reported client RTT in ms
+  /** Latest clientStats uplink — self-reported fps/jsMs + link quality.
+   *  Stamped at receive so /metrics can drop stale reporters. */
+  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; at: number };
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: TransportKind;
   // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
