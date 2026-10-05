@@ -53,7 +53,7 @@ export class BotSheepMeter {
     // the warn channel is for the latter.
     if (!isBotId(id)) return;
     if (v.newlyMaxed) this.warnMaxed(id, v.why);
-    else if (v.crossedHigh) logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });
+    else if (v.crossedHigh) logger.debug('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });
   }
 
   /** Ledger sums are charge points, not seconds — each channel's share

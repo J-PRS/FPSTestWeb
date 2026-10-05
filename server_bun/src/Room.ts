@@ -100,7 +100,7 @@ export class Room {
     if (this.healthTimer < 15) return;
     this.healthTimer = 0;
     if (!this.health.size) return;
-    logger.info('Room health', { room: this.name, humans: this.players.getHumanCount(), ...Object.fromEntries(this.health) });
+    logger.debug('Room health', { room: this.name, humans: this.players.getHumanCount(), ...Object.fromEntries(this.health) });
     // Fold the window into since-boot totals. gapMax is a gauge (the
     // worst single sample), not a counter — merge by max, not sum.
     for (const [k, v] of this.health) {

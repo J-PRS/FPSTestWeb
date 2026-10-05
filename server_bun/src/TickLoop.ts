@@ -294,7 +294,7 @@ export class TickLoop {
         tickErrors: m.tickErrors,
         phaseMs,
       };
-      logger.info('Tick bandwidth', { ...this.lastBw, players: playerCount });
+      logger.debug('Tick bandwidth', { ...this.lastBw, players: playerCount });
       m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
         m.recordsSent = m.recordsTierSkipped = m.bytesSent = m.tickFramesDropped = m.tickErrors = 0;
       m.windowStart = now0;
@@ -344,10 +344,10 @@ export class TickLoop {
       this.statusRepeatCount++;
     } else {
       if (this.statusRepeatCount > 0) {
-        logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
+        logger.debug(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
         this.statusRepeatCount = 0;
       }
-      logger.info(statusLine);
+      logger.debug(statusLine);
       this.lastStatusLine = statusLine;
     }
 

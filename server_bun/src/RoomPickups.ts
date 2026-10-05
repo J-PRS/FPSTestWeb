@@ -168,7 +168,7 @@ export class RoomPickups {
         // Score touches are the money line — log them so a soak can prove
         // the kill→drop→touch→bank funnel end-to-end from the log alone.
         if (p.kind === 'gem' || p.kind === 'tag') {
-          logger.info('Pickup banked', { room: this.room.name, kind: p.kind, by: pl.id });
+          logger.debug('Pickup banked', { room: this.room.name, kind: p.kind, by: pl.id });
         }
         this.onCollect?.(pl.id, p.kind);
         break;

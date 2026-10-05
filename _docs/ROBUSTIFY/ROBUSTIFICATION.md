@@ -143,6 +143,20 @@ jump-to-top unchanged; tall walls block horizontally; floating decks are
 ceilings from below, floors from above. Pinned in `solidworld.test.ts`
 with real `FieldSurface` tests (prior stubs bypassed the bound).
 
+### 2.8 Observability tiers — `logger.ts`
+
+Server base output is warn+error only (JP's ruling: faults, desync,
+rubberbanding — nothing periodic). The periodic chatter moved from
+`info` to `debug`: Status rosters, Bot mobility, Tick bandwidth, Room
+health, Snapshot-requested hash dumps, Sheep-meter-high, Bot skill on,
+Pickup banked, Creature killed, and the per-hit ledger line. Kills and
+one-shot events (joins, caps, lifecycle) stay `info`; warns/errors
+unchanged. Default level is `warn`; `LOG_LEVEL` overrides outright and
+`FPS_VERBOSE=1` is the debug alias. The boot banner prints
+unconditionally (a silent boot looks dead; once-per-process can't spam).
+`soakreport.ts` runs `LOG_LEVEL=debug` so its log audit keeps the
+telemetry lines it greps.
+
 ---
 
 ## 3. Verified Clean (no action needed)

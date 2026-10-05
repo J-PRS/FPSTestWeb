@@ -118,7 +118,7 @@ export class MobilityWatchdog {
         avgSpeed: +avgSpeed.toFixed(1),
         covered: +s.dist.toFixed(1),
       };
-      logger.info('Bot mobility', stats);
+      logger.debug('Bot mobility', stats);
       // Coverage is the ground truth: a bot topping 100m/s over 700m
       // while holding no jet key is a fast skier, not a sheep — flagging
       // on jetPct/skiAir alone was the main false-positive source.

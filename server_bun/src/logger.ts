@@ -92,6 +92,10 @@ class Logger {
 
 // P2P hosts embed the server modules (PlayerManager/CombatHandler) inside
 // the browser — Bun.env doesn't exist there, so read it defensively.
-const envLevel = (globalThis as { Bun?: { env: Record<string, string | undefined> } })
-  .Bun?.env?.LOG_LEVEL as LogLevel | undefined;
-export const logger = new Logger(envLevel ?? 'info');
+// Base output is warn+error only: real faults (desync, rubberbanding,
+// anomalies) stay loud while periodic chatter (Status rosters, mobility,
+// bandwidth, hits, skills) lives at debug. LOG_LEVEL overrides outright;
+// FPS_VERBOSE=1 is the convenient alias for 'debug'.
+const bunEnv = (globalThis as { Bun?: { env: Record<string, string | undefined> } }).Bun?.env;
+const envLevel = bunEnv?.LOG_LEVEL as LogLevel | undefined;
+export const logger = new Logger(envLevel ?? (bunEnv?.FPS_VERBOSE === '1' ? 'debug' : 'warn'));

@@ -141,16 +141,12 @@ if (CONFIG.wtPort > 0) {
   }
 }
 
-logger.info('FPS Bun Server started', {
-  port: CONFIG.port,
-  tickRate: CONFIG.tickRate,
-  maxPlayers: CONFIG.maxPlayers,
-  respawnMs: CONFIG.respawnDelayMs,
-});
-
-logger.info(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
-logger.info(`Health:    http://localhost:${CONFIG.port}/health`);
-logger.info(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
+// Boot banner bypasses the log level — a server that prints nothing looks
+// dead. It's once-per-process, so it can never add to the chatter floor.
+console.log(`FPS Bun Server started port=${CONFIG.port} tick=${CONFIG.tickRate} maxPlayers=${CONFIG.maxPlayers} respawnMs=${CONFIG.respawnDelayMs}`);
+console.log(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
+console.log(`Health:    http://localhost:${CONFIG.port}/health`);
+console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 
 // Last-resort catches: a stray timer callback (killFeed taunts, grace
 // sweeps) or a rejected promise must not drop every player in every room.

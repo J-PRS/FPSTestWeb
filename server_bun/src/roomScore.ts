@@ -5,7 +5,7 @@ import type { RoomFlags } from './RoomFlags.ts';
 import type { RoomDeployables } from './RoomDeployables.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
-import { bank, winner, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
+import { bank, winner, CTF_PTS, CTF_DMG_PER_PTS, CTF_FLAG_ZONE_R, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
@@ -56,7 +56,7 @@ export class RoomScore {
    *  bank (kill-confirmed style scoring). */
   nonPlayerKill(by: string, pos: Vec3, variant = 0): void {
     // The economy runs on kills — soak validation needs these visible.
-    logger.info('Creature killed', { room: this.h.name, by, variant });
+    logger.debug('Creature killed', { room: this.h.name, by, variant });
     // Powerup drops roll in EVERY mode — the pickup does the granting.
     const powerup = rollCreatureDrop(this.h.rng(), this.h.rng());
     // Creatures die mid-flight — the drop must land on the ground or the
@@ -122,10 +122,20 @@ export class RoomScore {
     if (corpse) this.h.pushNoise(corpse.position);
     const spec = this.h.modeSpec;
     const shooter = this.h.players.getPlayer(shooterId);
-    if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
+    if (!spec || !shooter) return;
     // Self-splash is a death, not a frag — kills/deaths still record,
     // but a suicide must never pay a point toward winning.
     if (shooterId === targetId) return;
+    // CTF personal board: a frag pays 1, doubled when the victim was in
+    // a flag zone (defending your stand or clearing the enemy's). Runs
+    // BEFORE the ptsPlayerKill gate — ctf sets that to 0 because frags
+    // never moved the TEAM score, but personal points still pay.
+    if (spec.teams && spec.flags) {
+      const victim = this.h.players.getPlayer(targetId);
+      const inZone = victim ? this.h.flags?.nearStand(victim.position, CTF_FLAG_ZONE_R) : false;
+      this.awardPersonal(shooterId, inZone ? CTF_PTS.flagZoneKill : CTF_PTS.kill);
+    }
+    if (spec.ptsPlayerKill <= 0) return;
     if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
     else if (shooter.team) {
       this.score(shooter.team, spec.ptsPlayerKill);
@@ -137,6 +147,24 @@ export class RoomScore {
         this.h.influence.splat(t.position, 'opportunity', 0.5);
       }
     }
+  }
+
+  /** CTF damage economy — every 100 post-mitigation enemy damage pays 1
+   *  personal pt (T2's damage-points). Chained through the hit EVENT, not
+   *  applyHit, so environment/self/friendly damage never lands here:
+   *  friendly fire is gated upstream and self-hits fail the id check.
+   *  The pool keeps the remainder — chip damage across lives still pays. */
+  private dmgPool = new Map<string, number>();
+  onDamage(shooterId: string, targetId: string, damage: number): void {
+    const spec = this.h.modeSpec;
+    if (!spec?.teams || !spec.flags || shooterId === targetId) return;
+    const shooter = this.h.players.getPlayer(shooterId);
+    const victim = this.h.players.getPlayer(targetId);
+    if (!shooter?.team || !victim?.team || shooter.team === victim.team) return;
+    const acc = (this.dmgPool.get(shooterId) ?? 0) + damage;
+    const pts = Math.floor(acc / CTF_DMG_PER_PTS);
+    this.dmgPool.set(shooterId, acc - pts * CTF_DMG_PER_PTS);
+    if (pts > 0) this.awardPersonal(shooterId, pts * CTF_PTS.dmg);
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
@@ -176,9 +204,19 @@ export class RoomScore {
     if (pts >= spec.winAt) this.h.endMatch(id);
   }
 
+  /** Team-mode personal score — same ffaScores map + ffaScore echo, but
+   *  it can NEVER end a match: the PTS column is honor, not the win. */
+  awardPersonal(id: string, n: number): void {
+    const spec = this.h.modeSpec;
+    if (!spec) return;
+    this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + n);
+    this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
+  }
+
   /** Player removal — drop their FFA row and re-echo the board if it
    *  had one. */
   dropPlayer(playerId: string): void {
+    this.dmgPool.delete(playerId); // unbanked chip dies with the seat
     if (this.ffaScores.delete(playerId)) {
       this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.h.modeSpec!.winAt });
     }

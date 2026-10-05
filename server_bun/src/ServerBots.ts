@@ -162,6 +162,10 @@ export class ServerBots {
     this.suppressT.delete(playerId);
     this.deadSet.delete(playerId);
     this.quiet.delete(playerId);
+    this.skillOffAt.delete(playerId);
+    this.supportT.delete(playerId);
+    this.healBeamT.delete(playerId);
+    this.healNadeT.delete(playerId);
     this.watchdog.remove(playerId);
     this.sense.forget(playerId);
     this.room.moveSim.untrack(playerId);
@@ -279,7 +283,7 @@ export class ServerBots {
       const names = ([
         [STATUS.MEND, 'MEND'], [STATUS.SHIELD, 'SHIELD'], [STATUS.CLOAK, 'CLOAK'],
       ] as const).filter(([bit]) => rising & bit).map(([, n]) => n);
-      logger.info('Bot skill on', { id, skill: names.join('+') });
+      logger.debug('Bot skill on', { id, skill: names.join('+') });
     }
     p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
   }

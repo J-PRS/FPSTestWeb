@@ -34,7 +34,9 @@ for (let attempt = 0; attempt < 5; attempt++) {
   PORT = 8471 + Math.floor(Math.random() * 400);
   const s = Bun.spawn(['bun', 'src/server.ts'], {
     cwd: serverDir,
-    env: { ...process.env, FPS_PORT: String(PORT), FPS_MAP: MAP, FPS_SBOTS: SBOTS, LOG_LEVEL: 'info' },
+    // debug — the audit below greps the periodic telemetry lines (mobility,
+    // bandwidth, health), which live under the default warn floor.
+    env: { ...process.env, FPS_PORT: String(PORT), FPS_MAP: MAP, FPS_SBOTS: SBOTS, LOG_LEVEL: 'debug' },
     stdout: 'pipe', stderr: 'pipe',
   });
   const died = await Promise.race([

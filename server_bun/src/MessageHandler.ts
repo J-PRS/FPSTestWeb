@@ -568,7 +568,7 @@ export class MessageHandler {
     const hashInput = players.map(p =>
       `${p.id}:${Math.round(p.position.x)},${Math.round(p.position.y)},${Math.round(p.position.z)}:${p.health}:${p.isDead ? 1 : 0}`
     ).join('|');
-    logger.info(`Snapshot requested by ${playerId} | Server state: ${stateStr} | Hash input: ${hashInput}`);
+    logger.debug(`Snapshot requested by ${playerId} | Server state: ${stateStr} | Hash input: ${hashInput}`);
   }
 
   /** Room teardown — the combat funnel owns the pending timers. */

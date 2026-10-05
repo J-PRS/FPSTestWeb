@@ -1,3 +1,4 @@
+2026-10-05 - log tiers: server base output is warn+error only — periodic chatter (Status, mobility, bandwidth, health, hits, skills, pickups) demoted to debug; FPS_VERBOSE=1 (or LOG_LEVEL=debug) restores it, boot banner stays unconditional
 2026-10-05 - floating-promise sweep: ~40 .then chains both ends audited — every leg catches internally or ends in .catch; the one gap (DemoStorage.ensureDir's bare mkdir) now warns with dir + reason instead of an unhandled rejection
 2026-10-05 - BALL_* dedup: ball flight/enrage/teleport envelope was literal-copied into client config while server sims shared/ballSim — config now re-exports the shared constants (spawn-policy + VFX knobs stay local)
 2026-10-05 - gravity dedup: world -28 was a literal in 4 places kept equal by comments (client config, movement, ballSim, CRAWLER_SIM) — now one source in shared/movement.ts, everyone derives
