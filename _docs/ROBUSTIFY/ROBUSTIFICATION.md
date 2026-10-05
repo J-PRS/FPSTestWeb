@@ -401,6 +401,12 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`creatureRoller` pinned** (2026-10-05): `creatureRoller.test.ts`
+  (12 tests) — registry rows, uber ×3.4 health, no-target coast,
+  TOPSPEED cap while pursuing, 20% idle-drift throttle past aggro,
+  stun skips steer, contact invuln window (one edge per BITE_CD,
+  authority-only `pendingBite`), terrain ride, clipMotion parking,
+  300-step twin replay.
 - **Wire-ingest NaN/magnitude gates** (2026-10-05): all 25 client
   message types in `wire.ts` audited — every vec passes `validateVec3`/
   `optVec` (finite numbers), `validateBody` adds velocity+position
