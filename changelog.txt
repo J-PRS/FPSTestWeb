@@ -1,3 +1,4 @@
+2026-10-05 - audit: edge idempotency classified clean — wire edges are pure overwrites of committed state; WS ordering + snapshot restore make duplicates impossible, sole re-triggerable surface is the deliberate onSimFire funnel
 2026-10-05 - test: pin botGraph TerrainFlow + botTuning table — 10 tests covering flat progress, wall circumvention, danger deflection, routeNearGoal, goal bucketing, bounded flood cache, twin replay
 2026-10-05 - audit: edge-vs-snapshot ordering classified clean — every wire edge self-contained (crawlEvt tp/t, ball segments full leg, flagUpdate full snapshot); ordering can never replay against a stale base
 2026-10-05 - test: pin creatureTotem — 17 tests covering charge/fire/blink/land edges, all three relocation triggers, committed beam geometry, mid-blink intangibility, stagger pin, 400-step twin replay (creature families fully covered)

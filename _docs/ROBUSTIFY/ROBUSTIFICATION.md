@@ -418,6 +418,13 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **Edge idempotency** (2026-10-05): wire edges are pure overwrites of
+  committed state (`applyNetEdgeSim` writes pos/vel/target verbatim,
+  `applyNetEdgeTotem` commits the blink destination) — a duplicated
+  edge is a no-op. Transport can't duplicate (WS = ordered TCP);
+  reconnect restore is `gameState`/roster full snapshots. The one
+  re-triggerable surface (`onSimFire`/`detonate` flash) is the
+  deliberate single funnel for predictor + edge by design.
 - **Edge-vs-snapshot ordering** (2026-10-05): every wire edge is
   self-contained — `crawlEvt` carries pos/vel/committed `tp`/`t`
   (blink carries the committed DESTINATION), `WireBallSegment` packs
