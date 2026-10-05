@@ -397,6 +397,15 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`client/src/game/net/` handler tail** (2026-10-05): the
+  un-dirty files swept (mapAssets/projectiles/RemoteSet/pickups/
+  resync/deployables/lastRoom/ctx; flags/match/playerKill/players are
+  JP's WIP, excluded) — `remoteProjectiles` deletes on end events,
+  `RemoteSet.active` `Date.now` is the correct wall-clock domain for
+  feed staleness (not sim), `glbCache`/`_canonMats` bounded by the
+  finite asset set, `resync` `performance.now` measures real tab-hidden
+  time, every catch reports (sky warn) or names its fallback
+  (mats→baked look, localStorage→boot default).
 - **Event-listener lifecycle** (2026-10-05): all ~158
   `addEventListener` sites classified — global targets
   (`window`/`document`) live exclusively in boot-once builders
