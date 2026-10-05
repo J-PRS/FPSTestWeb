@@ -116,13 +116,15 @@ export class ServerBots {
   private lastOut = new Map<string, BrainOut>();
   /** Visible-enemy-present flag from the last think (epoch ms expiry). */
   readonly foeNear = new Map<string, number>();
-  /** Stage timers — flagGoal/build/think/fire/drive. Always on: five
-   *  timer pairs per think is noise, and the soak + /metrics both read
-   *  the same accumulators (stageMs = ms/sec over the last 10s window). */
-  readonly stageProf = new Array<number>(5).fill(0);
-  private stageBase = new Array<number>(5).fill(0);
+  /** Stage timers — flagGoal/build/think/fire/drive + [5] = the per-bot
+   *  loop tail (everything outside those stages: roster scan, dead/quiet
+   *  checks, stuck probe, rewind push). Always on: a few timer pairs per
+   *  think is noise, and the soak + /metrics both read the same
+   *  accumulators (stageMs = ms/sec over the last 10s window). */
+  readonly stageProf = new Array<number>(6).fill(0);
+  private stageBase = new Array<number>(6).fill(0);
   private stageWinAt = 0;
-  readonly stageMs = new Array<number>(5).fill(0);
+  readonly stageMs = new Array<number>(6).fill(0);
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {
@@ -536,10 +538,12 @@ export class ServerBots {
     // cumulative prof counters diff into a per-second rate /metrics can
     // show — bot CPU on a live server was only measurable in soaks.
     if (now - this.stageWinAt >= 10_000) {
-      for (let i = 0; i < 5; i++) this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;
+      for (let i = 0; i < 6; i++) this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;
       this.stageBase = [...this.stageProf];
       this.stageWinAt = now;
     }
+    const tailT0 = performance.now();
+    const tailS0 = this.stageProf[0]! + this.stageProf[1]! + this.stageProf[2]! + this.stageProf[3]! + this.stageProf[4]!;
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
       if (!p) continue;
@@ -629,6 +633,9 @@ export class ServerBots {
       // spawn seed and legit shots at moving bots get rejected.
       pushRewindSample(p, now);
     }
+    // The loop tail is the real number, not a guess: whole-loop wall
+    // minus whatever the five stages already billed this tick.
+    this.stageProf[5]! += (performance.now() - tailT0) - (this.stageProf[0]! + this.stageProf[1]! + this.stageProf[2]! + this.stageProf[3]! + this.stageProf[4]! - tailS0);
   }
 
   /** Humans get the same sheep meter as bots — the wire tick's `sheep`
