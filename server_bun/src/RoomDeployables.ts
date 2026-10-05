@@ -12,12 +12,13 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
-import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deployTicks.ts';
+import { tickDrone, tickMine, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
 export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { simNow } from './simClock.ts';
+import type { TeamId } from '../../shared/teams.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
 // Thrown nugget mints a pickup that can't be grabbed for a beat — the
@@ -37,7 +38,19 @@ export interface Deployed {
   /** Overcharge layer from repair beams — soaks damage before hp, caps
    *  at REPAIR_ARMOR_MULT × base hp. The technician's payoff. */
   armor: number;
+  /** Map-authored base asset — owner is the virtual `base:<team>` id,
+   *  it never decays, and destruction puts it on RESPAWN_S rather than
+   *  removing it. `team` is authoritative for targeting (no player row
+   *  exists for the owner id). */
+  base?: boolean;
+  team?: TeamId;
+  /** Seconds until a downed base asset re-arms. 0 while alive. */
+  respawnT: number;
 }
+
+// A downed base asset comes back on its own after this — a repair tech
+// can beat the clock by welding it back up early.
+const RESPAWN_S = 120;
 
 // Blast-only durability — splash damage clears a stand's defenses the
 // Tribes way (mortar/disc spam opens the approach). Hitscan has no
@@ -99,6 +112,8 @@ export class RoomDeployables {
     if (!player || player.isDead) return 'gone';
     if (!KINDS.has(kind as DeployKind)) return 'badkind';
     const k = kind as DeployKind;
+    // cap-0 kinds are map-authored only — a client can't plant a generator.
+    if (DEPLOY_ITEMS[k].cap === 0) return 'badkind';
     // Pack gear costs belt charges — the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
     if (player.beltCharges < DEPLOY_ITEMS[k].cost) {
@@ -126,11 +141,27 @@ export class RoomDeployables {
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0 });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0 });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team });
     return true;
+  }
+
+  /** Map-authored base assets — the mission's generator, base turrets,
+   *  sensor mast. Owner is a virtual `base:<team>` id so nothing in the
+   *  player lifecycle can orphan them; the respawn clock replaces ttl.
+   *  Idempotent per room open — call once after construction. */
+  seedBase(entries: readonly { kind: string; pos: Vec3; team?: TeamId }[]): void {
+    for (const e of entries) {
+      const k = e.kind as DeployKind;
+      if (!KINDS.has(k)) continue;
+      const id = this.nextId++;
+      const owner = e.team ? `base:${e.team}` : 'base';
+      this.items.set(id, { id, owner, kind: k, pos: { ...e.pos }, ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
+      this.room.broadcast({ type: 'deploySpawn', id, owner, kind: k, pos: { ...e.pos }, team: e.team });
+      logger.info('Base asset seeded', { id, kind: k, team: e.team, x: +e.pos.x.toFixed(1), z: +e.pos.z.toFixed(1) });
+    }
   }
 
   /** Owner death clears their field — no orphaned turrets farming kills
@@ -142,12 +173,35 @@ export class RoomDeployables {
     }
   }
 
-  clearAll(): void {
-    for (const id of this.items.keys()) this.remove(id);
+  /** The item's effective team — authored assets carry their own, field
+   *  plants inherit the owner's current side. */
+  teamOf(d: Deployed): TeamId | undefined {
+    return d.team ?? this.room.players.getPlayer(d.owner)?.team;
   }
 
-  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: string }[] {
-    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor, team: this.room.players.getPlayer(d.owner)?.team }));
+  /** Generator economy: while a team's generator is down, its OTHER base
+   *  assets go dormant — turrets stop scanning, pads stop healing. Field
+   *  plants and generator-less teams are always powered. */
+  powered(d: Deployed): boolean {
+    if (!d.base || !d.team || d.kind === 'generator') return true;
+    for (const g of this.items.values()) {
+      if (g.base && g.kind === 'generator' && g.team === d.team) return g.hp > 0;
+    }
+    return true;
+  }
+
+  clearAll(): void {
+    // Field plants die with the round; base assets survive a match reset
+    // and come back repaired — the compound outlives the scoreboard.
+    for (const id of this.items.keys()) {
+      const d = this.items.get(id)!;
+      if (!d.base) this.remove(id);
+      else if (d.hp <= 0) this.revive(d);
+    }
+  }
+
+  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId }[] {
+    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor, team: this.teamOf(d) }));
   }
 
   /** Creature-sim candidates — `dep:N` ids mirror the client species
@@ -196,12 +250,30 @@ export class RoomDeployables {
       d.armor -= soaked;
       dmg -= soaked;
     }
+    if (d.hp <= 0) return; // downed base hulk — hits are noise, not damage
     d.hp -= dmg;
     this.sendHp(d);
     if (d.hp <= 0) {
-      logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
-      this.remove(d.id);
+      if (d.base) {
+        d.respawnT = RESPAWN_S;
+        this.room.broadcast({ type: 'deployDown', id: d.id, kind: d.kind, team: d.team, respawnS: RESPAWN_S });
+        logger.info('Base asset down', { id: d.id, kind: d.kind, team: d.team, by });
+      } else {
+        logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
+        this.remove(d.id);
+      }
     }
+  }
+
+  /** A downed base asset stands back up — timer expiry or a repair tech
+   *  beating the clock. Fresh hp, no armor (armor is welded on after). */
+  private revive(d: Deployed): void {
+    d.hp = HP[d.kind];
+    d.armor = 0;
+    d.respawnT = 0;
+    this.room.broadcast({ type: 'deployUp', id: d.id });
+    this.sendHp(d);
+    logger.info('Base asset restored', { id: d.id, kind: d.kind, team: d.team });
   }
 
   private sendHp(d: Deployed, src?: string): void {
@@ -223,7 +295,12 @@ export class RoomDeployables {
     const p = this.room.players.getPlayer(playerId);
     if (!d || !p || p.isDead) return 'gone';
     // Friendly only: own gear always; teammates' gear when teams exist.
-    if (p.team && d.owner !== playerId) {
+    // Base assets belong to the team, not a body — same-side weld only.
+    if (d.base) {
+      if (d.team && p.team !== d.team) return 'enemy';
+      if (!d.team && p.team) { /* neutral gear — anyone on a side may weld */ }
+      else if (!d.team && !p.team) { /* ffa — anyone may weld */ }
+    } else if (p.team && d.owner !== playerId) {
       const owner = this.room.players.getPlayer(d.owner);
       if (owner?.team !== p.team) return 'enemy';
     } else if (!p.team && d.owner !== playerId) return 'enemy';
@@ -235,10 +312,15 @@ export class RoomDeployables {
     if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return 'cooldown';
     this.lastRepair.set(key, now);
     const hpCap = HP[d.kind];
+    // A hulk welds back from zero — blast overkill digs hp far negative,
+    // and making a tech excavate it would gate revival on the kill shot's
+    // size instead of the weld time.
+    if (d.base && d.hp < 0) d.hp = 0;
     const healed = Math.min(REPAIR_HEAL_PER_TICK, hpCap - d.hp);
     d.hp += healed;
     d.armor = Math.min(REPAIR_ARMOR_MULT * hpCap, d.armor + (REPAIR_HEAL_PER_TICK - healed));
-    this.sendHp(d, playerId);
+    if (d.base && d.hp > 0 && d.respawnT > 0) this.revive(d); // welded back early
+    else this.sendHp(d, playerId);
     return true;
   }
 
@@ -274,13 +356,37 @@ export class RoomDeployables {
   tick(dt: number): void {
     if (this.items.size === 0) return;
     for (const d of this.items.values()) {
-      d.ttl -= dt;
-      if (d.ttl <= 0) { this.remove(d.id); continue; }
+      if (d.base) {
+        if (d.respawnT > 0) {
+          d.respawnT -= dt;
+          if (d.respawnT <= 0) this.revive(d);
+          continue;
+        }
+        if (d.hp <= 0) continue;
+      } else {
+        d.ttl -= dt;
+        if (d.ttl <= 0) { this.remove(d.id); continue; }
+      }
+      if (!this.powered(d)) continue; // generator down — base goes dark
       if (d.kind === 'turret') tickTurret(this, d, dt);
       else if (d.kind === 'mine') tickMine(this, d, dt);
       else if (d.kind === 'station') tickStation(this, d, dt);
       else if (d.kind === 'drone') tickDrone(this, d, dt);
+      else if (d.kind === 'sensor') tickSensor(this, d, dt);
+      else if (d.kind === 'sentry') tickSentry(this, d, dt);
+    }
+    // Sentry bolts in flight — the blast lands where the bolt does, so a
+    // sidestepping capper genuinely outruns it (non-homing by design).
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const b = this.bolts[i]!;
+      b.ttl -= dt;
+      if (b.ttl > 0) continue;
+      this.bolts.splice(i, 1);
+      this.room.messages.mineBlast(b.owner, b.at, b.dmg, b.rad, b.kb);
     }
   }
+
+  /** Scheduled sentry-bolt impacts — see tickSentry. */
+  readonly bolts: { at: Vec3; ttl: number; owner: string; dmg: number; rad: number; kb: number }[] = [];
 
 }

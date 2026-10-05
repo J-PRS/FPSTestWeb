@@ -1,39 +1,540 @@
 {
   "mode": "ctf",
-  "modes": ["ctf"],
+  "modes": [
+    "ctf"
+  ],
   "bots": 8,
   "terrain": "raindance.bin",
   "bases": {
-    "alpha": { "x": -90, "y": 0, "z": 0 },
-    "bravo": { "x": 90, "y": 0, "z": 0 }
+    "alpha": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 90,
+      "y": 0,
+      "z": 0
+    }
   },
   "structures": [
-    { "kind": "wall",   "pos": { "x": -105, "y": 0, "z": -18 }, "size": { "x": 1.2, "y": 6, "z": 24 }, "team": "alpha" },
-    { "kind": "wall",   "pos": { "x": -105, "y": 0, "z": 18 },  "size": { "x": 1.2, "y": 6, "z": 24 }, "team": "alpha" },
-    { "kind": "wall",   "pos": { "x": -96, "y": 0, "z": -26 },  "size": { "x": 18, "y": 6, "z": 1.2 }, "team": "alpha" },
-    { "kind": "wall",   "pos": { "x": -96, "y": 0, "z": 26 },   "size": { "x": 18, "y": 6, "z": 1.2 }, "team": "alpha" },
-    { "kind": "box",    "pos": { "x": -90, "y": 0, "z": -14 },  "size": { "x": 6, "y": 4, "z": 6 }, "team": "alpha" },
-    { "kind": "box",    "pos": { "x": -90, "y": 0, "z": 14 },   "size": { "x": 6, "y": 4, "z": 6 }, "team": "alpha" },
-
-    { "kind": "wall",   "pos": { "x": 105, "y": 0, "z": -18 },  "size": { "x": 1.2, "y": 6, "z": 24 }, "team": "bravo" },
-    { "kind": "wall",   "pos": { "x": 105, "y": 0, "z": 18 },   "size": { "x": 1.2, "y": 6, "z": 24 }, "team": "bravo" },
-    { "kind": "wall",   "pos": { "x": 96, "y": 0, "z": -26 },   "size": { "x": 18, "y": 6, "z": 1.2 }, "team": "bravo" },
-    { "kind": "wall",   "pos": { "x": 96, "y": 0, "z": 26 },    "size": { "x": 18, "y": 6, "z": 1.2 }, "team": "bravo" },
-    { "kind": "box",    "pos": { "x": 90, "y": 0, "z": -14 },   "size": { "x": 6, "y": 4, "z": 6 }, "team": "bravo" },
-    { "kind": "box",    "pos": { "x": 90, "y": 0, "z": 14 },    "size": { "x": 6, "y": 4, "z": 6 }, "team": "bravo" },
-
-    { "kind": "pillar", "pos": { "x": -22, "y": 0, "z": 0 },    "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": -11, "y": 0, "z": 9.5 },  "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": 0,   "y": 0, "z": 12 },   "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": 11,  "y": 0, "z": 9.5 },  "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": 22,  "y": 0, "z": 0 },    "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": 11,  "y": 0, "z": -9.5 }, "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": 0,   "y": 0, "z": -12 },  "size": { "x": 3, "y": 12, "z": 3 } },
-    { "kind": "pillar", "pos": { "x": -11, "y": 0, "z": -9.5 }, "size": { "x": 3, "y": 12, "z": 3 } },
-
-    { "kind": "box",    "pos": { "x": -45, "y": 0, "z": 30 },   "size": { "x": 8, "y": 3, "z": 8 } },
-    { "kind": "box",    "pos": { "x": 45,  "y": 0, "z": -30 },  "size": { "x": 8, "y": 3, "z": 8 } },
-    { "kind": "box",    "pos": { "x": -45, "y": 0, "z": -30 },  "size": { "x": 8, "y": 3, "z": 8 } },
-    { "kind": "box",    "pos": { "x": 45,  "y": 0, "z": 30 },   "size": { "x": 8, "y": 3, "z": 8 } }
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -105,
+        "y": 0,
+        "z": -18
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 24
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -105,
+        "y": 0,
+        "z": 18
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 24
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -96,
+        "y": 0,
+        "z": -26
+      },
+      "size": {
+        "x": 18,
+        "y": 6,
+        "z": 1.2
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -96,
+        "y": 0,
+        "z": 26
+      },
+      "size": {
+        "x": 18,
+        "y": 6,
+        "z": 1.2
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -90,
+        "y": 0,
+        "z": -14
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -90,
+        "y": 0,
+        "z": 14
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 105,
+        "y": 0,
+        "z": -18
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 24
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 105,
+        "y": 0,
+        "z": 18
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 24
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 96,
+        "y": 0,
+        "z": -26
+      },
+      "size": {
+        "x": 18,
+        "y": 6,
+        "z": 1.2
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 96,
+        "y": 0,
+        "z": 26
+      },
+      "size": {
+        "x": 18,
+        "y": 6,
+        "z": 1.2
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 90,
+        "y": 0,
+        "z": -14
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 90,
+        "y": 0,
+        "z": 14
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -22,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -11,
+        "y": 0,
+        "z": 9.5
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 0,
+        "y": 0,
+        "z": 12
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 11,
+        "y": 0,
+        "z": 9.5
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 22,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 11,
+        "y": 0,
+        "z": -9.5
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 0,
+        "y": 0,
+        "z": -12
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -11,
+        "y": 0,
+        "z": -9.5
+      },
+      "size": {
+        "x": 3,
+        "y": 12,
+        "z": 3
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -45,
+        "y": 0,
+        "z": 30
+      },
+      "size": {
+        "x": 8,
+        "y": 3,
+        "z": 8
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 45,
+        "y": 0,
+        "z": -30
+      },
+      "size": {
+        "x": 8,
+        "y": 3,
+        "z": 8
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -45,
+        "y": 0,
+        "z": -30
+      },
+      "size": {
+        "x": 8,
+        "y": 3,
+        "z": 8
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 45,
+        "y": 0,
+        "z": 30
+      },
+      "size": {
+        "x": 8,
+        "y": 3,
+        "z": 8
+      }
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -117,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 1.2,
+        "y": 5,
+        "z": 12
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -112,
+        "y": 0,
+        "z": -6.5
+      },
+      "size": {
+        "x": 10,
+        "y": 5,
+        "z": 1.2
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -112,
+        "y": 0,
+        "z": 6.5
+      },
+      "size": {
+        "x": 10,
+        "y": 5,
+        "z": 1.2
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 117,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 1.2,
+        "y": 5,
+        "z": 12
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 112,
+        "y": 0,
+        "z": -6.5
+      },
+      "size": {
+        "x": 10,
+        "y": 5,
+        "z": 1.2
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 112,
+        "y": 0,
+        "z": 6.5
+      },
+      "size": {
+        "x": 10,
+        "y": 5,
+        "z": 1.2
+      },
+      "team": "bravo"
+    }
+  ],
+  "deploys": [
+    {
+      "kind": "generator",
+      "pos": {
+        "x": -113,
+        "y": 0,
+        "z": 0
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "sentry",
+      "pos": {
+        "x": -90,
+        "y": 2.2,
+        "z": -14
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "sentry",
+      "pos": {
+        "x": -90,
+        "y": 2.2,
+        "z": 14
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "sensor",
+      "pos": {
+        "x": -100,
+        "y": 0,
+        "z": 24
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "station",
+      "pos": {
+        "x": -92,
+        "y": 0,
+        "z": -5
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "station",
+      "pos": {
+        "x": -92,
+        "y": 0,
+        "z": 5
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "generator",
+      "pos": {
+        "x": 113,
+        "y": 0,
+        "z": 0
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "sentry",
+      "pos": {
+        "x": 90,
+        "y": 2.2,
+        "z": -14
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "sentry",
+      "pos": {
+        "x": 90,
+        "y": 2.2,
+        "z": 14
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "sensor",
+      "pos": {
+        "x": 100,
+        "y": 0,
+        "z": -24
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "station",
+      "pos": {
+        "x": 92,
+        "y": 0,
+        "z": -5
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "station",
+      "pos": {
+        "x": 92,
+        "y": 0,
+        "z": 5
+      },
+      "team": "bravo"
+    }
   ]
 }

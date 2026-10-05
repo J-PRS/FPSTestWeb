@@ -224,11 +224,21 @@ export type ServerMessage =
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
   | { type: 'deploySpawn'; id: number; owner: string; kind: DeployKind; pos: Vec3; team?: TeamId }
   | { type: 'deployGone'; id: number }
+  // Base-asset lifecycle — authored gear goes DOWN (not gone) on death
+  // and back UP on respawn/repair; clients paint wreck→live transitions.
+  | { type: 'deployDown'; id: number; kind: DeployKind; team?: string; respawnS: number }
+  | { type: 'deployUp'; id: number }
   // Durability sync — hp + overcharge armor riding whenever either moves.
   | { type: 'deployHp'; id: number; hp: number; armor: number; src?: string }
+  // Base sensor sweep — hostiles inside the mast's radius, relayed to
+  // the owning team as map pings. Not hit feedback — pure intel.
+  | { type: 'sensorPing'; id: number; team?: string; targets: { id: string; x: number; y: number; z: number }[] }
   // Server-owned sentry fired at a player — clients render the rocket
   // visual; damage itself arrives through playerHit like everything else.
   | { type: 'turretShot'; id: number; owner: string; targetId: string }
+  // Base sentry bolt — unlike turretShot the blast lands at the aim point,
+  // not on the target: the client paints a straight-line shell to x/y/z.
+  | { type: 'sentryShot'; id: number; owner: string; x: number; y: number; z: number }
   // Server-owned mine tripped — clients paint the blast FX; damage itself
   // arrives through playerHit/knockback like everything else.
   | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }

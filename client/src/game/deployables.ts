@@ -26,18 +26,19 @@ import { DeployRockets } from './deployRockets.js';
 import { DeployAdopter } from './deployAdopt.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
-import { GRAVITY } from '../core/config.js';
+import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 import { WeaponType, REPAIR_ARMOR_MULT, DEPLOY_COST } from '../../../shared/weapons.js';
 import { weaponDef } from '../weapons.js';
 import { getProjectileConfig } from '../projectiles/index.js';
-import { LightningBeam } from '../effects/lightningBeam.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
 import type { TargetCandidate } from './targeting.js';
 
 export type { DeployKind } from '../../../shared/deployables.js';
-import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
+import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 // Derived from the shared belt registry — caps/labels can no longer diverge
@@ -53,10 +54,11 @@ const POD_INHERIT = 0.6;   // fraction of player velocity carried into the toss
 const POD_RADIUS = 0.32;
 const POD_TTL = 8;         // airtime budget — a pod that never settles fizzles
 const NUGGET_LOB = 0.55;   // fraction of pod speed — a nugget lobs, not launches
-// Nugget pod visual — the same octahedron the server gem wears, so the
-// thing you threw and the thing you pick up read as one object.
-const NUG_POD_GEO = new THREE.OctahedronGeometry(0.45);
-const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
+// Nugget pod visual — identical to the Nugget pickup it lands as
+// (entities/Nugget.ts): faceted gold icosa + additive halo. What leaves
+// your hand must read as the thing you'll pick back up.
+const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
+const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffee88).multiplyScalar(EMIT_GAIN) });
 const _UP = new THREE.Vector3(0, 1, 0);
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
@@ -102,11 +104,13 @@ export interface Item {
   flash?: () => void;
   /** The live emitter — lets the aim solve tilt its sky shaft. */
   beacon?: DeployBeacon;
+  /** Base-asset lifecycle — deployDown deploys the wreck state (dims
+   *  glow, slumps silhouette) without removing the item: it can still
+   *  be welded back or respawn on the server clock. */
+  downed?: boolean;
+  setDown?: (down: boolean) => void;
 }
 
-// Base hp caps — mirrors the server's HP table + entity maxHealth, used
-// for remote-visual items and the armor cap before deployHp lands.
-const DEPLOY_V_CAP = DEPLOY_HP;
 
 /** A bot that plants — foe lists, anchors, and heals all read through
  *  this instead of the local player singleton. */
@@ -149,6 +153,7 @@ export class Deployables {
 
   constructor(private deps: DeployDeps) {
     this.rockets = new DeployRockets(deps);
+    this.remotes = new RemoteDeployables(deps, this.rockets, () => this._enemies);
     this.adopter = new DeployAdopter(deps, this.rockets, this.items, {
       foesFor: (o) => this.foesFor(o),
       killItem: (i) => this.killItem(i),
@@ -210,6 +215,14 @@ export class Deployables {
     else if (kind === 'nugget') {
       pod.nugget = new THREE.Mesh(NUG_POD_GEO, NUG_POD_MAT);
       pod.nugget.position.copy(pos);
+      pod.nugget.layers.enable(BLOOM_LAYER);
+      // Same additive halo the pickup wears — the pickup read at distance.
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: getGlowTexture(32), color: 0xffd54a, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      halo.scale.setScalar(2.2);
+      pod.nugget.add(halo);
       this.deps.scene.add(pod.nugget);
     }
     else if (kind === 'beacon') pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);
@@ -249,7 +262,8 @@ export class Deployables {
       pod.shield.group.position.copy(pod.pos);
     } else if (pod.nugget) {
       pod.nugget.position.copy(pod.pos);
-      pod.nugget.rotation.y += dt * 9; // tumble — same read as a spun gem
+      pod.nugget.rotation.y += dt * 9;  // tumble — the pickup's own two-axis spin, faster in flight
+      pod.nugget.rotation.x += dt * 3.6;
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.update(dt, _FAR); // airborne — nobody to trigger on
@@ -336,7 +350,7 @@ export class Deployables {
       if (!this.deps.lazyNetworkManager().isConnected()) {
         this.deps.dropNugget?.(pod.pos);
       }
-      this.deps.scene.remove(pod.nugget);
+      this.disposeNuggetPod(pod.nugget);
       pod.nugget = undefined;
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
@@ -408,110 +422,39 @@ export class Deployables {
   }
 
   // --- Remote deployables -------------------------------------------------
-  // Server-owned items other players planted. Pure visuals — targeting and
-  // damage run on the server (turretShot broadcasts paint the rockets).
-  private remote = new Map<number, Item>();
-  /** Server id → item for our OWN plants — deploySpawn echoes back to the
-   *  owner, letting server-driven events (turretShot) find the visual. */
-  private byId = new Map<number, Item>();
+  // Server-owned items other players planted + map-authored base assets.
+  // The whole layer lives in remoteDeployables.ts (split when the base
+  // visuals grew past the ~900-line file ceiling); these are thin routes.
+  private readonly remotes: RemoteDeployables;
 
   /** deploySpawn echo for a plant we already rendered locally. */
   ackLocal(id: number): void {
-    const live = this.items.filter(i => !i.dead);
-    const newest = live[live.length - 1];
-    if (newest) { newest.serverId = id; this.byId.set(id, newest); }
+    this.remotes.ackLocal(id, this.items);
   }
 
   remoteSpawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
-    const { owner, kind, pos, hp, armor, team } = spec;
-    if (kind === 'nugget' || this.remote.has(id)) return; // mints pickups, never a deploySpawn
-    const terrain = this.deps.lazyTerrain();
-    const at = new THREE.Vector3(pos.x, pos.y, pos.z);
-    let item: Item;
-    if (kind === 'shield') {
-      // The dome IS the deployable — no proxy sphere for this kind; the
-      // field must be visible or enemies can't read what ate their shell.
-      const s = new DeployShield(this.deps.scene, terrain, at);
-      s.unfoldDone();
-      if (hp !== undefined) { s.health = hp; s.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: s.pos, dead: false,
-        hurt: () => {},
-        update: (dt) => s.update(dt),
-        dispose: () => s.dispose(this.deps.scene),
-        v: s, owner, flash: () => s.flash(),
-      };
-    } else if (kind === 'turret') {
-      const t = new DeployTurret(this.deps.scene, terrain, at);
-      t.unfoldDone();
-      if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
-        hurt: () => {}, // server owns its lifetime — deployGone removes it
-        // Remote sentries still scan and aim — pure cosmetics, no firing.
-        update: (dt) => void t.update(dt, this._enemies),
-        dispose: () => t.dispose(this.deps.scene),
-        v: t,
-      };
-    } else if (kind === 'beacon') {
-      item = this.remoteBeaconItem(id, owner, at, hp, armor);
-    } else {
-      const group = new THREE.Group();
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
-        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8a5a2a : 0x4a5560 }));
-      group.add(m);
-      group.position.copy(at);
-      group.position.y = terrain.getHeight(at.x, at.z);
-      this.deps.scene.add(group);
-      // Drones chase their owner's shadow server-side — mirror that anchor
-      // here or the visual stays parked at the pod's landing spot.
-      const update = kind === 'drone'
-        ? () => {
-            const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
-            if (op) group.position.set(op.x, op.y + 2.5, op.z);
-          }
-        : () => {};
-      item = {
-        kind, candId: `rdep:${id}`, pos: group.position, dead: false,
-        hurt: () => {}, update, dispose: () => this.deps.scene.remove(group),
-        v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
-      };
-    }
-    item.serverId = id;
-    item.team = team;
-    this.remote.set(id, item);
-    this.byId.set(id, item);
-  }
-
-  /** Remote beacon — same DeployBeacon visual as a local plant; the item
-   *  is a server-lifetime proxy, so hurt is a no-op (deployGone kills it). */
-  private remoteBeaconItem(id: number, owner: string, at: THREE.Vector3, hp?: number, armor?: number): Item {
-    const b = new DeployBeacon(this.deps.scene, this.deps.lazyTerrain(), at);
-    b.unfoldDone();
-    if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
-    return {
-      kind: 'beacon', candId: `rdep:${id}`, pos: b.pos, dead: false,
-      hurt: () => {},
-      update: (dt) => b.update(dt),
-      dispose: () => b.dispose(this.deps.scene),
-      v: b, owner,
-    };
+    this.remotes.spawn(id, spec);
   }
 
   /** deployHp broadcast — server is the vitals authority; the local
    *  beam's predicted heal gets corrected by this same write. */
   applyDeployHp(id: number, hp: number, armor: number): void {
-    const it = this.byId.get(id);
-    if (it) { it.v.health = hp; it.v.armor = armor; }
+    this.remotes.applyDeployHp(id, hp, armor);
   }
 
+  remoteDown(id: number): void { this.remotes.down(id); }
+  remoteUp(id: number): void { this.remotes.up(id); }
+
   /** Repair-beam pick: nearest deployed item along the ray, padded —
-   *  beam thin but not needle-thin, aim at the body not the feet. */
+   *  beam thin but not needle-thin, aim at the body not the feet.
+   *  Scans remote items too — without it a welder could only ever reach
+   *  their OWN plants, so teammates' gear and base assets couldn't be
+   *  repaired by a human at all (server accepted the claims; the ray
+   *  just never found a target). */
   repairHit(origin: THREE.Vector3, dir: THREE.Vector3, range: number): { item: Item; t: number } | null {
     let best: Item | null = null;
     let bestT = range;
-    for (const i of this.items) {
+    for (const list of [this.items, this.remotes.values()]) for (const i of list) {
       if (i.dead) continue;
       _repTo.copy(i.pos).sub(origin);
       _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
@@ -561,7 +504,7 @@ export class Deployables {
       }
       return best;
     };
-    const best = scan(this.items) ?? scan(this.remote.values());
+    const best = scan(this.items) ?? scan(this.remotes.values());
     return best ? { key: this.keyOf(best), pos: best.pos, frac: best.v.health / best.v.maxHealth } : null;
   }
 
@@ -572,76 +515,41 @@ export class Deployables {
       for (const i of list) if (this.keyOf(i) === key && !i.dead) return i;
       return null;
     };
-    const item = find(this.items) ?? find(this.remote.values());
+    const item = find(this.items) ?? find(this.remotes.values());
     if (!item) return null;
     this.healItem(item, n);
     return item;
   }
 
-  // --- Remote welders' beams ------------------------------------------------
-  // Each accepted repair tick the server relays rides deployHp with a src
-  // id — without it, remote welds were invisible: hp climbed but nobody
-  // could see the beam (or who was doing the welding).
+  // --- Remote welders' beams, pings, shot/boom relays — all inside
+  // RemoteDeployables; these keep the public surface stable. -----------
 
-  private weldBeams = new Map<string, { beam: LightningBeam; last: number }>();
-  private readonly _weldFrom = new THREE.Vector3();
-
-  /** One weld tick from a remote player/bot — refreshes that welder's
-   *  beam from their eye (remote positions are eye height) to the item. */
   remoteWeld(srcId: string, serverId: number): void {
-    const item = this.byId.get(serverId);
-    const rp = this.deps.world.remotePlayers.get(srcId);
-    if (!item || item.dead || !rp) return;
-    let w = this.weldBeams.get(srcId);
-    if (!w) {
-      w = {
-        beam: new LightningBeam(this.deps.scene, {
-          glow: 0x1fbb66, core: 0xdcffe8, chain: 0x7dffb8, hit: 0xaaffcc, sparkTop: 0x66ffaa,
-        }),
-        last: 0,
-      };
-      this.weldBeams.set(srcId, w);
-    }
-    w.last = performance.now();
-    this._weldFrom.copy(rp.position);
-    w.beam.fire(this._weldFrom, item.pos, this.deps.lazyPlayer().pos, true, true);
+    this.remotes.remoteWeld(srcId, serverId);
   }
 
   remoteRemove(id: number): void {
-    this.byId.delete(id);
-    const item = this.remote.get(id);
-    if (!item) return;
-    this.remote.delete(id);
-    item.dispose();
+    this.remotes.remove(id);
   }
 
   remoteIds(): ReadonlySet<number> {
-    return new Set(this.remote.keys());
+    return this.remotes.ids();
   }
 
-  /** Server announced a sentry shot — paint the rocket it represents so
-   *  the defender sees the incoming, not just the health loss. */
+  sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
+    this.remotes.sensorPing(id, team, targets);
+  }
+
   remoteTurretShot(id: number, targetId: string): void {
-    const item = this.byId.get(id);
-    if (!item) return;
-    const t = this.deps.lazyNetworkManager().getPlayers().get(targetId);
-    const tp = targetId === this.deps.lazyNetworkManager().getLocalPlayerId()
-      ? this.deps.lazyPlayer().pos
-      : t?.position;
-    if (!tp) return;
-    // Positions are feet — home at capsule center or the rocket slams
-    // terrain at the target's toes (the damage lands regardless, so the
-    // visual was reading as "sentry shoots the ground").
-    const target = { pos: new THREE.Vector3(tp.x, tp.y + 1.0, tp.z), vel: new THREE.Vector3(), alive: true };
-    this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target, 1, item.owner);
-    sfx.shotAt(item.pos, WeaponType.RocketLauncher);
+    this.remotes.turretShot(id, targetId);
   }
 
-  /** Server tripped a mine — paint the blast at the reported position.
-   *  remoteRemove also arrives (deployGone); either order resolves since
-   *  the item may already be gone locally. */
-  remoteMineBoom(_id: number, pos: { x: number; y: number; z: number }): void {
-    sfx.explosionAt(new THREE.Vector3(pos.x, pos.y, pos.z), true);
+  remoteSentryShot(id: number, owner: string, x: number, y: number, z: number): void {
+    this.remotes.sentryShot(id, owner, x, y, z);
+  }
+
+  remoteMineBoom(id: number, pos: { x: number; y: number; z: number }): void {
+    this.remotes.mineBoom(id, pos);
   }
 
 
@@ -660,6 +568,15 @@ export class Deployables {
    *  health slowly. Aggro bait by design: it's a dep: candidate, so the
    *  wildlife gnaws it while it works. */
 
+
+  /** Pod teardown — the geo/mat are module-shared (don't dispose), but
+   *  the halo sprite's per-instance material must go. */
+  private disposeNuggetPod(mesh: THREE.Mesh): void {
+    this.deps.scene.remove(mesh);
+    for (const c of mesh.children) {
+      if (c instanceof THREE.Sprite) c.material.dispose();
+    }
+  }
 
   private killItem(item: Item): void {
     if (item.dead) return;
@@ -695,7 +612,7 @@ export class Deployables {
     for (const i of this.items) {
       if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, false));
     }
-    for (const i of this.remote.values()) {
+    for (const i of this.remotes.values()) {
       if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, true));
     }
     return out;
@@ -748,7 +665,7 @@ export class Deployables {
 
   update(dt: number): void {
     for (const i of this.items) if (!i.dead) i.update(dt);
-    for (const i of this.remote.values()) i.update(dt);
+
     for (let i = this.pods.length - 1; i >= 0; i--) {
       const pod = this.pods[i]!;
       this.updatePod(pod, dt);
@@ -759,19 +676,12 @@ export class Deployables {
         pod.shield?.dispose(this.deps.scene);
         pod.beacon?.dispose(this.deps.scene);
         pod.mine?.dispose();
-        if (pod.nugget) this.deps.scene.remove(pod.nugget);
+        if (pod.nugget) this.disposeNuggetPod(pod.nugget);
         this.pods.splice(i, 1);
       }
     }
     this.reapDeadItems();
-    // Weld beams expire a quarter-second after the last relayed tick —
-    // deployHp cadence is ~100ms, so a real weld never gaps long enough
-    // to flicker while a stopped one clears fast.
-    const nowMs = performance.now();
-    for (const [id, w] of this.weldBeams) {
-      w.beam.update(dt);
-      if (nowMs - w.last > 250) { w.beam.dispose(); this.weldBeams.delete(id); }
-    }
+    this.remotes.update(dt);
     this.rockets.update(dt);
     this.updateBeaconAim();
   }
@@ -845,17 +755,14 @@ export class Deployables {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const item = this.items[i]!;
       if (!item.dead) continue;
-      if (item.serverId !== undefined) this.byId.delete(item.serverId);
+      if (item.serverId !== undefined) this.remotes.dropById(item.serverId);
       item.dispose();
       this.items.splice(i, 1);
     }
   }
 
   dispose(): void {
-    for (const i of this.remote.values()) i.dispose();
-    this.remote.clear();
-    for (const w of this.weldBeams.values()) w.beam.dispose();
-    this.weldBeams.clear();
+    this.remotes.dispose();
     this.rockets.dispose();
   }
 }

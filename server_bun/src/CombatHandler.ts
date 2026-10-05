@@ -232,8 +232,12 @@ export class CombatHandler {
     // friendlyFire server option opens the gate entirely; self-splash
     // stays allowed regardless (rocket jumps).
     if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) return false;
-    const s = this.playerManager.getPlayer(shooterId);
     const t = this.playerManager.getPlayer(targetId);
+    // Map-authored assets shoot under the virtual `base:<team>` owner —
+    // no player row exists, so the team's own bodies must be exempted here
+    // or a base turret's splash would chew its defenders.
+    if (shooterId.startsWith('base:')) return t?.team === shooterId.slice(5);
+    const s = this.playerManager.getPlayer(shooterId);
     return !!(s?.team && t?.team && s.team === t.team);
   }
 

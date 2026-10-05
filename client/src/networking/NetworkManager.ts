@@ -103,8 +103,14 @@ export class NetworkManager {
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
   public onDeployGone: ((id: number) => void) | null = null;
+  /** Base asset shelled into a hulk / stood back up — wreck↔live visuals. */
+  public onDeployDown: ((id: number, kind: DeployKind, team: string | undefined, respawnS: number) => void) | null = null;
+  public onDeployUp: ((id: number) => void) | null = null;
+  /** Base sensor sweep — hostiles inside a mast's radius, relayed to its team. */
+  public onSensorPing: ((id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]) => void) | null = null;
   /** Server sim fired a remote sentry — paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
+  public onSentryShot: ((id: number, owner: string, x: number, y: number, z: number) => void) | null = null;
   /** Server-owned mine exploded — explosion FX only; damage flows via the
    *  normal playerHit/knockback channel. */
   public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
@@ -505,7 +511,11 @@ export class NetworkManager {
     mapUpdate: (data) => this.onMapUpdate?.(data),
     deploySpawn: (data) => this.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
     deployGone: (data) => this.onDeployGone?.(data.id),
+    deployDown: (data) => this.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
+    deployUp: (data) => this.onDeployUp?.(data.id),
+    sensorPing: (data) => this.onSensorPing?.(data.id, data.team, data.targets),
     turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
+    sentryShot: (data) => this.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
     mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
     deployHp: (data) => this.onDeployHp?.(data.id, data.hp, data.armor, data.src),
     // Server refused a hit claim — worth surfacing: a healthy client

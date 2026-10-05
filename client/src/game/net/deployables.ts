@@ -18,7 +18,11 @@ export function wireDeployables(ctx: NetCtx): void {
     deps.world.remotePlayers.get(owner)?.playThrow();
   };
   networkManager.onDeployGone = (id) => mgr().remoteRemove(id);
+  networkManager.onDeployDown = (id) => mgr().remoteDown(id);
+  networkManager.onDeployUp = (id) => mgr().remoteUp(id);
+  networkManager.onSensorPing = (id, team, targets) => mgr().sensorPing(id, team, targets);
   networkManager.onTurretShot = (id, _owner, targetId) => mgr().remoteTurretShot(id, targetId);
+  networkManager.onSentryShot = (id, owner, x, y, z) => mgr().remoteSentryShot(id, owner, x, y, z);
   networkManager.onMineBoom = (id, pos) => mgr().remoteMineBoom(id, pos);
   networkManager.onDeployHp = (id, hp, armor, src) => {
     mgr().applyDeployHp(id, hp, armor);

@@ -6,7 +6,10 @@
 // cap/label for the loadout menu and HUD. Per-kind behavior (throw visual,
 // plant entity class, SFX) still lives with the entity — visuals can't be
 // shared (three.js isn't importable here).
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon';
+export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon'
+  // Authored-only base assets — cap 0 means a player can never plant one;
+  // they exist only via the map spec `deploys` block.
+  | 'generator' | 'sensor' | 'sentry';
 
 export interface DeployItemDef {
   /** Menu + HUD name (title case; HUD uppercases where it wants caps). */
@@ -47,6 +50,8 @@ export interface DeployItemDef {
   shieldRadius?: number;
   /** Heal fraction of maxHealth per second (station). */
   healRate?: number;
+  /** Bolt speed m/s (sentry — real leadable projectile, not hitscan). */
+  projSpeed?: number;
 }
 
 export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
@@ -57,4 +62,13 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   shield:  { label: 'Barrier', cap: 1, hp: 120, ttlS: 120, cost: 2, shieldRadius: 6 },
   nugget:  { label: 'Nugget',  cap: 8, hp: 1,   ttlS: 0,   cost: 2 },
   beacon:  { label: 'Beacon',  cap: 1, hp: 10,  ttlS: 300, cost: 2 },
+  // Base assets are fat targets — a generator is the raid's main prize,
+  // so it soaks far more splash than a field plant. Authored ttl is
+  // ignored: base gear runs on the respawn clock, not the decay clock.
+  generator: { label: 'Generator', cap: 0, hp: 400, ttlS: 0, cost: 0 },
+  sensor:    { label: 'Sensor',    cap: 0, hp: 120, ttlS: 0, cost: 0, range: 120, fireInterval: 2.0 },
+  // Base sentry — heavier than a field turret: longer reach, and its
+  // shell is a real traveling bolt the victim can dodge (lead computed
+  // at fire time, blast lands where the aim point was). NOT homing.
+  sentry:    { label: 'Base Gun',  cap: 0, hp: 160, ttlS: 0, cost: 0, range: 55, fireInterval: 1.5, damage: 40, blastRadius: 3, knockback: 6, projSpeed: 80 },
 };

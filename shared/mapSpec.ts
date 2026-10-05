@@ -83,6 +83,11 @@ export interface MapSpec {
    *  gameState so every client builds the same base compounds/cover.
    *  `kind` selects the renderer; `pos` is the piece's center. */
   structures?: StructureSpec[];
+  /** Authored base assets — live deployables (generator, turret, sensor,
+   *  pad) the server seeds at room open instead of waiting for a plant.
+   *  Destructible, repairable, and they respawn on a long fuse — the
+   *  Tribes generator economy. `team` makes them faction-owned. */
+  deploys?: DeploySpec[];
   /** Placed interior meshes — converted .dif→.glb buildings. `file` is a
    *  bare basename resolved to maps/t2/dif/<name>.glb client-side; `pos` is
    *  already in our meters; `rot` is a raw T2 axis-angle [x,y,z,deg];
@@ -102,6 +107,12 @@ export interface MapSpec {
    *  CreatureSim (shared/creatureSim.ts). Distinct from `ambient` which
    *  is client-side dressing only. */
   creatures?: Record<string, number>;
+}
+
+export interface DeploySpec {
+  kind: import('./deployables.ts').DeployKind;
+  pos: Vec3like;
+  team?: import('./teams.ts').TeamId;
 }
 
 export interface StructureSpec {
@@ -179,6 +190,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
+    deploys: parseDeploys((src as { deploys?: unknown }).deploys),
     interiors: parseInteriors((src as { interiors?: unknown }).interiors),
     arena: parseArena((src as { arena?: unknown }).arena),
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
@@ -388,6 +400,32 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
     // Cap is a sanity bound, not a budget: T2 interior hull batches run
     // in the hundreds (each .dif decomposes into dozens of convex boxes).
     if (out.length >= 2048) break;
+  }
+  return out.length ? out : undefined;
+}
+
+/** Validated authored-deployable list — kinds restricted to things that
+ *  make sense unattended (no nuggets/drones chasing a phantom owner). */
+function parseDeploys(raw: unknown): DeploySpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const AUTHORED = new Set(['turret', 'mine', 'station', 'shield', 'beacon', 'generator', 'sensor', 'sentry']);
+  const out: DeploySpec[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    if (typeof o.kind !== 'string' || !AUTHORED.has(o.kind)) continue;
+    if (!isVec(o.pos)) continue;
+    const pos = {
+      x: Math.max(-2000, Math.min(2000, o.pos.x)),
+      y: Math.max(-100, Math.min(300, o.pos.y)),
+      z: Math.max(-2000, Math.min(2000, o.pos.z)),
+    };
+    out.push({
+      kind: o.kind as DeploySpec['kind'],
+      pos,
+      team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
+    });
+    if (out.length >= 64) break;
   }
   return out.length ? out : undefined;
 }
