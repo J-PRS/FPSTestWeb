@@ -281,6 +281,21 @@ function offenseGoal(s: FlagSituation) {
   if (s.push) return s.push;
   if (s.escort) return s.escort;
   if (s.dropped) return s.dropped;
-  if (s.enemyStand) return s.enemyStand;
+  // Staged perch, not the pole: offense pressing the stand ALONE feeds
+  // the ring one body at a time (soak: wave members die ~500m out and
+  // re-transit forever — the flood has to be standing a leg away when
+  // the call fires, not suiciding solo). Hold ~140m off the stand on
+  // the home side like the bombardier's perch — close enough that a
+  // push call lands bodies in seconds, far enough to live through the
+  // wait.
+  if (s.enemyStand) {
+    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      const standoff = Math.min(140, d * 0.4);
+      return { x: s.enemyStand.x + (dx / d) * standoff, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * standoff };
+    }
+    return s.enemyStand;
+  }
   return s.home; // flag's moving — defend home
 }
