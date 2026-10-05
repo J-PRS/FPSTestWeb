@@ -91,7 +91,21 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         }
       } else if (gd >= 160) b.stageT = 0;
     }
-    if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) return { ...ctx.objective };
+    if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) {
+      // Jink on the run: a committed runner crossing open ground on a
+      // laser line is the easiest disc read in the game — humans weave.
+      // The goal point oscillates ±8m perpendicular to the run so the
+      // path curves without giving up forward speed. The last leg stays
+      // pure — jinking inside the grab ring is a missed flag.
+      const gd0 = dist3(pos, ctx.objective);
+      if (gd0 > 60) {
+        b.orbitA += dt * 1.3;
+        const s = Math.sin(b.orbitA) * 8;
+        const px = -(ctx.objective.z - pos.z) / gd0, pz = (ctx.objective.x - pos.x) / gd0;
+        return { x: ctx.objective.x + px * s, y: ctx.objective.y, z: ctx.objective.z + pz * s };
+      }
+      return { ...ctx.objective };
+    }
     // Last-leg commitment beats self-preservation: inside ~40m of the
     // objective a wounded bot still crashes the point — dying with the
     // flag in hand beats surviving the approach. Only the feet commit;
