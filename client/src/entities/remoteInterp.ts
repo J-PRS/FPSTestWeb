@@ -30,6 +30,8 @@ export interface InterpHost {
 // Scratch — shared across instances, never retained past the call
 const _extrapolated = new THREE.Vector3();
 const _sampledRot = { yaw: 0, pitch: 0 };
+// Snapshot pool copies field-by-field, so a shared zero is a safe arg.
+const _ZERO_VEL = { x: 0, y: 0, z: 0 };
 
 export class RemoteInterp {
   // Snapshot buffer + adaptive interp delay — the pure netcode half lives
@@ -78,7 +80,8 @@ export class RemoteInterp {
 
     this.ping = ping;
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
-    this.targetRotation = { yaw: targetRotation.yaw, pitch: targetRotation.pitch };
+    this.targetRotation.yaw = targetRotation.yaw;
+    this.targetRotation.pitch = targetRotation.pitch;
 
     // Push onto the snapshot buffer — it also tracks arrival jitter and
     // adapts the render delay (see remoteSnapshots.ts)
@@ -86,7 +89,7 @@ export class RemoteInterp {
       stamp,
       targetPosition,
       targetRotation,
-      serverVelocity ?? { x: 0, y: 0, z: 0 },
+      serverVelocity ?? _ZERO_VEL,
       this.lastUpdateTime,
     );
 
