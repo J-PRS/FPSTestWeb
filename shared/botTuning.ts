@@ -33,6 +33,12 @@ export const BOT_TUNING = {
     boostRise: 1.5,      // m — boost only on flat/downhill ahead
     runInGdMin: 12,      // m — runner run-in burn inner window
     runInGdMax: 70,      // m — runner run-in burn outer window (sweep: past ~70m the hop chain owns the approach)
+    strikeGd: 140,       // m — strike-dive window: inside this a runner drops the comfy gate and
+                         // burns to the tap floor — 8v8 soaks showed cappers crossing the defended
+                         // 70-150m band at 15-25m/s on dry tanks and dying before the ring
+    strikeBankGd: 200,   // m — bank leg just outside the strike window: discretionary flat-burns
+                         // (boost/tap) veto so regen refills the dive; climb/hop still fire
+    strikeTapMin: 2,     // energy — tap floor inside the strike window (commit everything)
     runInRise: 4,        // m — run-in only when objective near-level
     runInSpeed: 40,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound

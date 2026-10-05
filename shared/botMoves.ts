@@ -148,7 +148,11 @@ export class BotMoves {
     // skills rather than hovering dry at the wall. A runner's airborne
     // tap burns deeper: speed on a flat transit IS his skill reserve —
     // arrive fast and dry beats arrive slow and tanked.
-    const tapFloor = this.jetWhy === 'tap' ? T.moves.tapEnergyMin : T.moves.tankedMin;
+    const odTap = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
+    const strikeTap = ctx.runner === true && odTap < T.moves.strikeGd;
+    const tapFloor = this.jetWhy === 'tap'
+      ? (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin)
+      : T.moves.tankedMin;
     const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
     // Step mount: a face below climbRise (dais skirt 2.2m, deck lip
     // 0.85m, any collider top — the probe reads structures through
@@ -280,6 +284,11 @@ export class BotMoves {
     // rise matters, and even that needs a deficit that grows with
     // remaining range so a far wall earns jets but a dip doesn't.
     const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
+    // Strike-dive zones for a route-committed runner: the bank leg just
+    // outside the defended band refills the tank for the dive, the
+    // strike leg itself burns everything — arrival speed is the armor.
+    const strike = ctx.runner === true && od < T.moves.strikeGd;
+    const bank = ctx.runner === true && !strike && od < T.moves.strikeBankGd;
     // A runner already overhead inside the grab ring burns to go UP —
     // every hop/tap balloons it another 10-35m past the grab window
     // (broadside 9002: 4 minutes of orbits at dy -5..-36). Cutting
@@ -315,7 +324,7 @@ export class BotMoves {
     // that drains to the reserve floor leaves the mid-route climbs
     // (which are not discretionary) with nothing.
     const boostTank = ctx.energy === undefined || ctx.energy > T.moves.boostEnergyMin;
-    const boost = speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
+    const boost = !bank && speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
     // Run-in burn: a committed runner closing on a near-level objective
     // keeps thrusting to ~26m/s — the human play is arriving through
     // the flag at speed, not floating in at hop-chain pace. Jets add
@@ -327,8 +336,9 @@ export class BotMoves {
     // while its capper now burns at ~20 — escorts and push bodies have
     // to arrive inside the same window or there is no wave. Marshal
     // staging never trips it: the 110m orbit sits past the gd window.
-    const runIn = (ctx.runner === true || ctx.wave === true) && od > T.moves.runInGdMin && od < T.moves.runInGdMax &&
-      (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && comfy;
+    const runIn = (ctx.runner === true || ctx.wave === true) && od > T.moves.runInGdMin &&
+      od < (strike ? T.moves.strikeGd : T.moves.runInGdMax) &&
+      (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && (comfy || strike);
     // The featherjet: a route-committed runner or wave member on a
     // near-level transit whose tank sits below `comfy` still taps the
     // burn — AIRBORNE ONLY, so no ground friction eats the thrust and
@@ -338,7 +348,7 @@ export class BotMoves {
     // to the grab ring). Wave members get the same wing — the flood's
     // whole point is arriving with the capper, and ~11m/s med transit
     // was the soak's near0% defect.
-    const tap = (ctx.runner === true || ctx.wave === true) && !comfy && airborne && od > T.moves.boostGdMin &&
+    const tap = (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
     this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
