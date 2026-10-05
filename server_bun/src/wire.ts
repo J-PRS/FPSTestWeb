@@ -285,10 +285,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!isFiniteNumber(obj.damage)) {
         return { success: false, error: 'damage must be a finite number' };
       }
-      const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
-      const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
-      const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
-      return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
+      // No kx/ky/kz here — the crawler channel is melee-PvE and walkers
+      // don't take impulses (SPECIES_FAMILY.damage has no impulse arg),
+      // so accepting them would be dead grammar clients could forge.
+      return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
     handle: (h, id, m) => {
       const v = h.creatureSim?.handleHit(id, m.id, m.damage);

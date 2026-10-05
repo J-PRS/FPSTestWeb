@@ -47,7 +47,6 @@ describe('validateMessage coverage', () => {
       ['aoeShot', { projectileId: 'proj_2', excludeTargetId: 'p2', power: 1, directHit: true }, ['projectileId', 'excludeTargetId', 'power', 'directHit']],
       ['inputMove', { seq: 9 }, ['seq']],
       ['creatureHit', { kx: 0, ky: 0.5, kz: 0.86 }, ['kx', 'ky', 'kz']],
-      ['crawlerHit', { kx: 0, ky: 0, kz: 1 }, ['kx', 'ky', 'kz']],
       ['switchRoom', { room: 'duel', mode: 'dm', map: 'arena', bots: 4 }, ['room', 'mode', 'map', 'bots']],
     ];
     for (const [type, opts, keys] of cases) {
