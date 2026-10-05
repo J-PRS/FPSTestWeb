@@ -109,8 +109,8 @@ for (const side of [-1, 1]) {
   arm.add(camHub);
   // Cable anchor bolt on the cam's outer face — the guard rail must
   // read as fastened to the wheel it tensions, not a floating line.
-  const anchorNut = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.025, 6), brassMat);
-  anchorNut.position.set(0, 0.028, -ARM_LEN - 0.02);
+  const anchorNut = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.012, 6), brassMat);
+  anchorNut.position.set(0, 0.021, -ARM_LEN - 0.02);
   arm.add(anchorNut);
   bow.add(arm);
 }
