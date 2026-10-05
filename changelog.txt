@@ -1,3 +1,4 @@
+2026-10-01 - matchSim soak: drop-distance-from-own-home histogram per carry death; carrier shield-reserve experiment tried and reverted
 2026-10-01 - Test suite cleanup: stale asserts updated to intended behavior (deferred identity-reject close, DM personal PTS board, client DOM stubs)
 2026-10-01 - SolidWorld: side contacts at grade-level box bottoms no longer teleport walkers onto the roof
 2026-10-01 - tap (featherjet) arms on descent only — rising-arc taps spent the same tank for less speed per the hop-jet sweep

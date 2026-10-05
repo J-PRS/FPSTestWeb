@@ -156,6 +156,10 @@ export class BotMoves {
     const tapFloor = (this.jetWhy === 'tap' || this.jetWhy === 'tail')
       ? (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin)
       : T.moves.tankedMin;
+    // REVERTED: pressured carriers banking shieldReserve — same-seed
+    // soak caps flat (13) but med hold fell 8.1->5.0s: slowing under
+    // pursuit lets the chaser close sooner; speed IS the carrier's
+    // defense, the banked shield rarely got to fire.
     const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
     // Step mount: a face below climbRise (dais skirt 2.2m, deck lip
     // 0.85m, any collider top — the probe reads structures through

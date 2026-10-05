@@ -43,6 +43,8 @@ export const BOT_TUNING = {
     runInSpeed: 40,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
     tailTapSpeed: 45,    // m/s — descent tap caps here (standalone sweep: hop+tail-tap plateaus ~43, held burn ~66 at ~10x the energy per meter)
     tailTapSkill: 1.1,   // skill.movement floor — JP's trick is timing: skilled bots ride the hop descent, low-skill ones pay the flat burn
+    pursuitR: 90,        // m — REVERTED carrier-shield experiment's ring, kept for reference
+    shieldReserve: 36,   // energy — REVERTED: pressured carriers banking for SHIELD slowed them into the kill (med hold 8.1->5.0s, caps flat)
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
