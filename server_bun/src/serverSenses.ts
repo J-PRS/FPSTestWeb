@@ -27,6 +27,7 @@ import type { PickupKind } from '../../shared/pickups.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
 import { SpotBoard } from './spotBoard.ts';
+import { sharedEnv } from '../../shared/env.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -37,10 +38,17 @@ export class ServerBotSenses {
     /** Visible-enemy-present flags (epoch ms expiry) — markFoeNear writes,
      *  ServerBots reads for the sheep charge. */
     private readonly foeNear: Map<string, number>,
-  ) {}
+  ) {
+    // Field initializers run before parameter properties land — the board
+    // needs the room's roster, so it builds here not at declaration.
+    this.spotBoard = new SpotBoard(this.room.players);
+  }
 
   /** Squad spotting board — the team's shared eyes (see spotBoard.ts). */
-  private readonly spotBoard = new SpotBoard(this.room.players);
+  private readonly spotBoard: SpotBoard;
+
+  /** groundY memo — see the ctx closure for the cell scheme. */
+  private readonly groundMemo = new Map<number, number>(); private groundEpoch = -1;
 
   /** A room event the squad may react to — delivered to each bot on its
    *  OWN think phase (phases are offset across the squad), so reactions
@@ -913,10 +921,23 @@ export class ServerBotSenses {
         || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
       // Structures read as raised ground — brains route around walls
       // and onto platforms instead of pushing into solid geometry.
-      groundY: (x, z) => Math.max(
-        this.field ? hmHeight(this.field, x, z) : p.position.y,
-        this.room.moveSim.structureTop(x, z),
-      ),
+      // The steer/roll/LOS fans probe clustered cells — answers memo
+      // per 4m cell, flushed when the structure epoch moves.
+      groundY: (x, z) => {
+        const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
+        const ep = this.room.moveSim.structureEpoch;
+        if (ep !== this.groundEpoch) { this.groundMemo.clear(); this.groundEpoch = ep; }
+        const cx = Math.round(x / 4) + 2048, cz = Math.round(z / 4) + 2048;
+        const k = cx >= 0 && cx < 4096 && cz >= 0 && cz < 4096 ? cx * 4096 + cz : -1;
+        let y = k >= 0 ? this.groundMemo.get(k) : undefined;
+        if (y === undefined) {
+          y = Math.max(this.field ? hmHeight(this.field, x, z) : p.position.y,
+            this.room.moveSim.structureTop(x, z));
+          if (k >= 0) { if (this.groundMemo.size > 32768) this.groundMemo.clear(); this.groundMemo.set(k, y); }
+        }
+        if (sharedEnv.thinkProf) sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);
+        return y;
+      },
       route: this.routeOf(p),
       others: parties.others,
       allies: parties.allies,

@@ -107,7 +107,12 @@ export class RoomMoveSim {
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
     if (this.surface) this.surface.solid = this.solid;
+    this.structEpoch++;
   }
+  /** Bumped on every attachStructures — structure-reading caches key on
+   *  it so a map swap or flag re-snap can't serve stale tops. */
+  get structureEpoch(): number { return this.structEpoch; }
+  private structEpoch = 0;
 
   /** Structure top face under (x,z), -Infinity when none — bot brains
    *  fold this into their ground model so walls read as raised terrain. */
