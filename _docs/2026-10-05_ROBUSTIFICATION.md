@@ -205,12 +205,22 @@ positions can never be client-predicted — a hit legal on the client's
 view can still fail the rewind view inside the tolerance slack. That
 slack, not code, is what absorbs interpolation.
 
-### 4.3 Ball segment replay — structural
+### 4.3 Ball segment replay — *closed*
 
-`netBalls.check` flags 10–20m divergences on fresh legs: client replays legs
-through a parallel path instead of the server's solver. Plan: client re-runs
-`shared/ballSim.ts`'s segment step on leg-start events with the wire'd
-anchor — divergence becomes a bug in one function, not drift between two.
+`netBalls.check` flags 10–20m divergences on fresh legs: client replayed
+inert legs through a parallel analytic path (`tickNetInert` + its own
+`firstStructureContact` march) instead of the solver the authority runs —
+two contact implementations, two opinions about when a leg ends. Now
+`tickNet` steps `shared/ballSim.ts stepBall` on the server's 50ms grid for
+EVERY leg (inert and enraged alike): the client predicts the same bounce/
+settle/stall the server resolves and the wire event confirms, not corrects.
+Render smoothness is kept by carrying the sub-cell accumulator remainder
+ballistically into host.pos — the sim rests on grid points, display stays
+fluid. ~100 lines of duplicated contact logic deleted (inert march +
+structure probe). Also: net crawler wedge fix — a creature whose ctor
+failed (`dead` at birth) stayed in netCrawlerById forever and every later
+roster skipped its respawn; born-dead spawns are refused and dead-registered
+entries evicted on roster.
 
 ### 4.4 Smaller gaps
 

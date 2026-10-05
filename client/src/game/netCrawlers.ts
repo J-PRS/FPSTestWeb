@@ -89,6 +89,11 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const sp = SPECIES[m.species ?? 'crawler'] ?? SPECIES.crawler!;
     const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
     const c = new sp.Klass(deps.scene, deps.lazyTerrain(), pos, m.uber) as NetBeing;
+    // A creature whose ctor already marked it dead (swarm slot alloc
+    // failed — species/pool not ready) must NOT be registered: staying in
+    // netCrawlerById makes every later roster skip the respawn and leaves
+    // the entity wedged invisible forever.
+    if (c.dead) {return;}
     c.bindNet({ id: m.id, seed: m.seed, pos, vel: ZERO_VEL, state: m.state ?? sp.state, uber: m.uber, species: m.species ?? speciesOf(c) });
     if (m.targetId && m.tp) {
       c.applyNetEdge({ position: m.position, velocity: ZERO_VEL, kind: 'retarget', targetId: m.targetId, tp: m.tp });
@@ -125,10 +130,14 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const live = new Set<number>();
     for (const r of m.crawlers) {
       live.add(r.id);
+      // A dead-but-registered entry is the ctor-fail wedge: evict it so
+      // this roster respawns the creature instead of skipping it forever.
+      if (netCrawlerById.get(r.id)?.dead) {netCrawlerById.delete(r.id);}
       if (!netCrawlerById.has(r.id)) {
         netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
       }
-      const c = netCrawlerById.get(r.id)!;
+      const c = netCrawlerById.get(r.id);
+      if (!c) {continue;} // ctor refused (pool not ready) — next roster retries
       c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
     }
     // Server-truth cull: a crawler we hold that's not on the roster died
