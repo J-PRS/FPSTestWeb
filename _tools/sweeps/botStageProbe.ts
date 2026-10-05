@@ -20,11 +20,24 @@ setSharedEnv({ wallPerf: () => performance.now(), thinkProf });
 step(room, 40, 0.05);
 room.bots.stageProf.fill(0);
 thinkProf.clear();
+// Per-sim split: bots' stages self-report; the rest of roomStep names
+// itself here so "other sims" isn't a black box.
+const simMs = new Map<string, number>();
+for (const s of room.sims) {
+  const orig = s.tick;
+  const name = s.name ?? 'anon';
+  s.tick = (dt: number) => {
+    const t = performance.now();
+    orig(dt);
+    simMs.set(name, (simMs.get(name) ?? 0) + performance.now() - t);
+  };
+}
 const t0 = performance.now();
 step(room, 200, 0.05);
 const wall = performance.now() - t0;
 setSharedEnv({ thinkProf: undefined });
 console.log(`n=${N} roomStep=${(wall / 200).toFixed(2)}ms/tick`);
+console.log('  sims  :', [...simMs.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${(v / 200).toFixed(3)}`).join(' '));
 
 // Records+fanout — the OTHER n²: every recipient distance-checks every
 // record every tick. capSoak only times room.sims, so this phase's real
