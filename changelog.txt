@@ -1,3 +1,4 @@
+2026-10-05 - audit: server ambient-draw lane swept clean — rng injectable-seeded, perf.now metrics-only, Date.now confined to wallClock/simClock
 2026-10-05 - FIX T2 baked albedo dropped: mapSpec terrainTex regex rejected .webp — all 24 T2 ports parsed warnings and silently fell back to procedural terrain. Added webp to the allowlist + mapsValid.test.ts tripwire (zero-warnings + terrain file existence across all 41 shipped specs)
 2026-10-05 - audit: server_bun/src unbounded-growth lane swept clean — all 13 Map/Set files verified lifecycle-evicted or domain-bounded
 2026-10-05 - botRng gate tests: strictRng throws on unmarked ambient draw, injected stream draws, blessed release draws, non-strict falls back, taunt stream is a separate channel — 5 new bun tests

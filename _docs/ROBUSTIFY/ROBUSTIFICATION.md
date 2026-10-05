@@ -365,6 +365,12 @@ telemetry lines it greps.
   files in `server_bun/src` swept — connection/player/ratelimit maps
   delete on disconnect, roster roles/classes delete on bot removal,
   everything else is a per-call working set or static constant.
+- **Server ambient draws** (2026-10-05): all 20 sites in
+  `server_bun/src` classified — rng sites injectable-seeded
+  (`CombatHandler`/`spawnRng`/`rollVariant` ambient default is
+  production-only, never wire-visible), `performance.now` is
+  stageProf metrics, `Date.now` confined to `wallClock`/`simClock`
+  choke points.
 - **Ball netcode — end-to-end pinned** (2026-10-05):
   `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
   re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
