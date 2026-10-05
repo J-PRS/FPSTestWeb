@@ -4,6 +4,7 @@
 // mesh/group chain holding the buffer (incl. userData.dbg probe tags),
 // then surfaces every hit in the Alt+Q census via registerDiag.
 import * as THREE from 'three';
+import Logger from './Logger.js';
 import { registerDiag } from './fxDiag.js';
 
 interface NanHit {
@@ -60,7 +61,7 @@ function reportNaN(geo: THREE.BufferGeometry): void {
     at: Math.round(performance.now() / 1000),
     n: 1,
   });
-  console.warn(`[geoNaN] ${owner}${tag ? ` tag=${tag}` : ''} uuid=${geo.uuid.slice(0, 8)} verts=${pos?.count ?? '?'} attrs=${Object.keys(geo.attributes).join('+')}`);
+  Logger.warn(`[geoNaN] ${owner}${tag ? ` tag=${tag}` : ''} uuid=${geo.uuid.slice(0, 8)} verts=${pos?.count ?? '?'} attrs=${Object.keys(geo.attributes).join('+')}`);
 }
 
 const STOP = new Error('geoNaN-stop');

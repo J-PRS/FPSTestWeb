@@ -1,3 +1,4 @@
+2026-10-05 - altq pipeline: stray console.warn/error routed into the Logger buffer ([console.*] tagged lines reach Alt+Q + ship queue); native errors already hooked via installErrorHooks; runtime strays converted to Logger (balls/vmBaked/playerSheep/geoNaN/nanScan/weaponKit/gameLoop); oxlint no-console on (warn) with Logger + dev/dump/test files exempted
 2026-10-05 - net: playerJoined announce carries health/isDead — wounded/dead grace rejoiners no longer fabricate 100/alive in client rosters (guaranteed tick-N StateHash desync); gameState room echo off WARN
 2026-10-05 - diag: compareState/takeClientSnapshot snapshot real remote health (was hardcoded 100 -> every manual state diff lied about remote hp)
 2026-10-05 - anim: scifisoldier throw state mapped to Fire_1Pistol (no overhand clip ships in class_light.glb; previously fell through to missing Punch -> warn + held pose)

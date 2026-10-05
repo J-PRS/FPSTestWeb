@@ -4,6 +4,7 @@ import { mkGltfLoader } from '../gltfLoad';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
+import Logger from '../core/Logger.js';
 
 // Baked-weapon swap — the GLB+AO adoption pipeline for the viewmodel.
 // When tools/vmdump has shipped w{id}_baked.glb/w{id}_ao.png, the baked
@@ -98,7 +99,7 @@ export class VmBaked {
         // neither is worth a log line. Only a real parse/decode failure is.
         const is404 = !(e instanceof Error) ||
           /404|not found|fetch/i.test(e.message);
-        if (!is404) console.log(`[vm] w${wt} bake load failed:`, e);
+        if (!is404) Logger.warn(`[vm] w${wt} bake load failed`, e);
       }
     }
   }
@@ -188,7 +189,7 @@ export class VmBaked {
       });
       for (const mesh of toShell) this.h.ghostifyMesh(mesh);
     }
-    console.log(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
+    Logger.debug(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
   }
 
   /** Optional per-weapon edge bake (exported from the weapon's .blend on

@@ -39,6 +39,31 @@ export namespace Logger {
   }
   let writingToConsole = false; // suppress console wrapper re-entry
 
+  /** Route stray console.warn/error through the buffer so Alt+Q sees
+   *  EVERYTHING — a raw console call outside the logger is invisible to
+   *  the dump otherwise. Native errors (throw, unhandledrejection) are
+   *  already covered by installErrorHooks; the writingToConsole flag
+   *  keeps our own console writes from recursing back in. */
+  let tapInstalled = false;
+  export function installConsoleTap(): void {
+    if (tapInstalled || typeof window === 'undefined') return;
+    tapInstalled = true;
+    const origWarn = console.warn.bind(console);
+    const origError = console.error.bind(console);
+    const fmtArg = (a: unknown): string =>
+      a instanceof Error ? (a.stack ?? a.message) :
+      typeof a === 'object' ? (() => { try { return JSON.stringify(a); } catch { return String(a); } })() :
+      String(a);
+    console.warn = (...args: unknown[]) => {
+      if (writingToConsole) { origWarn(...args); return; }
+      log(LogLevel.WARN, `[console.warn] ${args.map(fmtArg).join(' ')}`);
+    };
+    console.error = (...args: unknown[]) => {
+      if (writingToConsole) { origError(...args); return; }
+      log(LogLevel.ERROR, `[console.error] ${args.map(fmtArg).join(' ')}`);
+    };
+  }
+
   /**
    * Set the minimum log level (default: INFO)
    * Can be configured via environment variable LOG_LEVEL
@@ -387,5 +412,6 @@ if (typeof window !== 'undefined') {
 // Module-load install — importing Logger anywhere (main.ts imports it first)
 // arms the hooks before boot-time crashes can happen.
 Logger.installErrorHooks();
+Logger.installConsoleTap();
 
 export default Logger;

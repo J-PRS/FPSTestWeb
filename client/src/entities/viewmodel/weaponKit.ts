@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import Logger from '../../core/Logger.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Shared material palette + tube/bore helpers for the procedural weapon
@@ -93,17 +94,17 @@ export const validateRing = (r: Ring2, tag = 'ring'): void => {
   for (let i = 0; i < r.length; i++) {
     const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % r.length]!;
     area += x0 * y1 - x1 * y0;
-    if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) console.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);
+    if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) Logger.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);
   }
-  if (area < 0) console.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);
-  if (r.length < 3) console.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);
+  if (area < 0) Logger.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);
+  if (r.length < 3) Logger.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);
 };
 const validateLoft = (sections: LoftSection[]): void => {
   let n = -1;
   for (const s of sections) {
     if (!s.ring) continue;
     if (n < 0) n = s.ring.length;
-    else if (s.ring.length !== n) console.warn(`[weaponKit] loft: section count mismatch ${s.ring.length} vs ${n} — resampleRing first`);
+    else if (s.ring.length !== n) Logger.warn(`[weaponKit] loft: section count mismatch ${s.ring.length} vs ${n} — resampleRing first`);
     validateRing(s.ring, 'loft section');
   }
 };

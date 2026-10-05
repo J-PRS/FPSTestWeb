@@ -553,8 +553,8 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       if (e.shiftKey) { location.reload(); return; }
       const rows = [...lastWeaponByPlayer.entries()]
         .filter(([id]) => isBotId(id))
-        .map(([id, r]) => ({ bot: id, weapon: WeaponType[r.wt] ?? `w${r.wt}`, shots: r.n }));
-      console.table(rows.length ? rows : [{ note: 'no bot fire seen yet' }]);
+        .map(([id, r]) => `${id} ${WeaponType[r.wt] ?? `w${r.wt}`} shots=${r.n}`);
+      Logger.info(rows.length ? `[botweapons] ${rows.join(' | ')}` : '[botweapons] no bot fire seen yet');
       return;
     }
     if (e.code === 'Backquote') {

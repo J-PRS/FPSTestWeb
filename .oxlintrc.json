@@ -51,10 +51,26 @@
         "max": 6
       }
     ],
-    "no-console": "off",
+    "no-console": "warn",
     "no-underscore-dangle": "off",
     "no-await-in-loop": "off"
   },
+  "overrides": [
+    {
+      "files": [
+        "client/src/core/Logger.ts",
+        "client/src/aodump.ts",
+        "client/src/gunlab.ts",
+        "client/src/sfxdump.ts",
+        "client/src/utils/profiling.ts",
+        "client/src/effects/vertexAO.ts",
+        "client/src/__tests__/**"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "node_modules",
     "dist",

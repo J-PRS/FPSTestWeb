@@ -8,6 +8,7 @@ import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js'
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
+import Logger from '../core/Logger.js';
 import { RibbonTrail } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
@@ -223,7 +224,7 @@ export class Ball {
         const fp = hmFingerprint(Ball.field);
         if (fp !== Ball.lastBoundFp) {
           Ball.lastBoundFp = fp;
-          console.info(`[Ball] netmode field bound fp=${fp}`);
+          Logger.info(`[Ball] netmode field bound fp=${fp}`);
         }
       }
     }

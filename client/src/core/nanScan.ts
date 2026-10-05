@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import Logger from './Logger.js';
 import { aimProbe } from './aimProbe.js';
 
 // "Black frame" hunter: a single non-finite vertex position rasterizes as a
@@ -175,7 +176,7 @@ function report(h: Hit): void {
   const key = `${h.kind}:${h.attr}:${h.name}`;
   if (seen.has(key)) return; // spam guard — first sighting per buffer only
   seen.add(key);
-  console.warn(
+  Logger.warn(
     `[nanscan] BAD ${h.attr} @${h.index}=${h.value} (${h.count}+ non-finite) on ${h.name}`,
   );
 }
@@ -207,7 +208,7 @@ export function nanScanBindProbe(getCtx: () => { scene: THREE.Scene; camera: THR
     if (e.code !== 'KeyB') return;
     const { scene, camera } = getCtx();
     const rows = aimProbe(scene, camera);
-    console.warn('[nanprobe] ' + (rows.join(' | ') || 'no hits'));
+    Logger.warn('[nanprobe] ' + (rows.join(' | ') || 'no hits'));
   });
 }
 
