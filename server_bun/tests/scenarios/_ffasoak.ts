@@ -8,7 +8,7 @@
 //   bun tests/scenarios/_ffasoak.ts 2 Railgun Mortar  # subset, 2 seeds
 import { mkRoom, step, pin } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
-import type { BotLoadout } from '../../../shared/botLoadouts.ts';
+import { pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
 
 const TARGET = 50;      // kills to win the FFA
@@ -58,6 +58,15 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
     loadouts: Map<string, BotLoadout>;
     roster: { refitClass(id: string): void; applyClass(p: { id: string; maxHealth: number; health: number }, cls: string): void };
   };
+  // Bench isolation: the wounded-holster gate (pickBotWeaponSafe) swaps
+  // ANY aoe primary for the sidearm under ~60-75hp — which is exactly
+  // the AoE family this bench ranks, suppressed at the moment it
+  // matters. FFASOAK_BERSERK=1 keeps bots on their dealt gun so the
+  // table measures weapons, not the self-preservation instinct.
+  if (process.env.FFASOAK_BERSERK) {
+    (ctl as unknown as { arsenal: { pickWeapon(l: BotLoadout, dxz: number, d: number): number } })
+      .arsenal.pickWeapon = (l: BotLoadout, dxz: number, d: number) => pickBotWeapon(l, dxz, d);
+  }
   for (let i = 0; i < bots.length; i++) {
     const w = weapons[i]!;
     ctl.loadouts.set(bots[i]!.id, { perk: 'none', near: w, mid: w, far: w, belt: WeaponType.Grenade, side: WeaponType.Pistol });
