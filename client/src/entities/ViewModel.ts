@@ -220,6 +220,7 @@ export class ViewModel {
   private bowT = -1; // <0 idle; >=0 s since the shot ejected the chambered bolt
   private static readonly BOW_HIDE = 0.05;
   private static readonly BOW_SLIDE = 0.4;  // drum→channel feed travel
+  private static readonly BOW_DRAW = 1.0;   // slow re-cock after the snap
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -485,18 +486,21 @@ export class ViewModel {
     const p = this.bowParts;
     if (!p) return;
     const flex = this.kickAmount;
-    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * (1 - flex * 0.25);
-    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * (1 - flex * 0.25);
-    // String snap is its own fast envelope, decoupled from the gun-kick
-    // spring: a real release is near-instant, so the string jumps toward
-    // the cams in ~60ms then relaxes back on a slow spring — not the
-    // 200ms drift kickAmount gives it.
     if (this.bowT >= 0) {
-      const snap = Math.min(this.bowT / 0.06, 1);
-      const relax = Math.max(0, 1 - (this.bowT - 0.06) / 0.5);
-      if (p.string) p.string.position.z = -0.12 * snap * relax;
-    } else if (p.string) {
-      p.string.position.z = -flex * 0.10;
+      // Draw cycle: release snaps the limb tips forward (~80ms), then the
+      // reload window slowly re-cocks them to the drawn pose — reads like
+      // the string being pulled back, not a spring settling. String rides
+      // the same envelope toward the cams and back to the latch.
+      const snap = Math.min(this.bowT / 0.08, 1);
+      const draw = Math.min(Math.max((this.bowT - 0.08) / ViewModel.BOW_DRAW, 0), 1);
+      const f = 1 - 0.3 * snap * (1 - draw);
+      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * f;
+      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * f;
+      if (p.string) p.string.position.z = -0.12 * snap * (1 - draw);
+    } else {
+      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * (1 - flex * 0.25);
+      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * (1 - flex * 0.25);
+      if (p.string) p.string.position.z = -flex * 0.10;
     }
     if (this.bowT < 0 || !p.bolt) return;
     this.bowT += dt;
@@ -505,6 +509,9 @@ export class ViewModel {
     const k = Math.min((this.bowT - ViewModel.BOW_HIDE) / ViewModel.BOW_SLIDE, 1);
     const e = 1 - (1 - k) * (1 - k) * (1 - k);
     p.bolt.position.z = 0.18 * (1 - e); // slides forward out of the drum feed
-    if (k >= 1) { p.bolt.position.z = 0; this.bowT = -1; }
+    if (k >= 1) p.bolt.position.z = 0;
+    // bolt re-chambers before the draw cycle ends — keep bowT counting
+    // so the limb/string re-cock finishes instead of popping back.
+    if (this.bowT > 0.08 + ViewModel.BOW_DRAW) this.bowT = -1;
   }
 }

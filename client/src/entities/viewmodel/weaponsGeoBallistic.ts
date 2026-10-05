@@ -49,9 +49,13 @@ scopeLens.rotation.x = Math.PI / 2;
 scopeLens.position.set(0, 0.14, 0.018);
 bow.add(scopeLens);
 // Hex arm hub — the boss the limbs rotate on, split across the nose.
+// ARM_Z pushes the whole bow ahead of the rail nose: at ~100° cant the
+// crossbar sits level with the eye plane and vanishes edge-on; forward
+// placement gives it silhouette separation from the receiver.
+const ARM_Z = -0.24;
 const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.15, 6), darkMat);
 hub.rotation.z = Math.PI / 2;
-hub.position.set(0, 0, -0.14);
+hub.position.set(0, 0, ARM_Z);
 bow.add(hub);
 // Bow arms — one group per side, pivoted at the hub so firing can flex
 // them. A crossbow reads T, not Y: ~100° cant puts the limb tips level
@@ -67,7 +71,7 @@ for (const side of [-1, 1]) {
   // for outward-swept tips — the limbs crossed the gun's own body.
   arm.userData.baseRot = -side * ARM_SWEEP;
   arm.rotation.y = -side * ARM_SWEEP;
-  arm.position.set(side * 0.07, 0, -0.14);
+  arm.position.set(side * 0.07, 0, ARM_Z);
   // Limb — leaf-spring plates, not bars: thin vertically, wide
   // laterally, bowed outward mid-span for the recurve read, tip knob
   // carries the cam wheel. T:A's silhouette is the flat blade.
@@ -102,7 +106,7 @@ for (const side of [-1, 1]) {
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
-const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = -0.14 - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02;
+const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = ARM_Z - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02;
 for (const side of [-1, 1]) {
   stringG.add(tubePath([
     [side * (0.07 + tipX), 0, tipZ, 0.006],
