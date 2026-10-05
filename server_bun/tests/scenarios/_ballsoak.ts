@@ -11,6 +11,7 @@
 // timer, not the horn.
 //   bun tests/scenarios/_ballsoak.ts            # default matrix
 //   bun tests/scenarios/_ballsoak.ts 4 Chaingun Disc  # subset
+//   bun tests/scenarios/_ballsoak.ts creatures 1 3600  # creature swarm instead of balls
 import { mkRoom, step, pin, watch } from './harness.ts';
 import { WEAPONS, WeaponType } from '../../../shared/weapons.ts';
 import type { BotLoadout } from '../../../shared/botLoadouts.ts';
@@ -23,6 +24,11 @@ const TARGET_DMG = 10_000;
 const TARGET_SCORE = 10_000;
 let CAP_S = 3600; // sim-seconds before a weapon is declared unable; argv[2] overrides
 const BALLS = 40;   // live target density — balls spawn near the bot anyway
+let BEASTS: 'balls' | 'creatures' = 'balls'; // argv 'creatures' flips the swarm
+// Creature pack: the same light wildlife maps field — crawlers are the
+// fodder analogue (70hp hop-family), snakes/rakks are faster, totems the
+// heavy. Continuous respawn to cap keeps target density live.
+const POPS: Record<string, number> = { crawler: 20, snake: 8, rakk: 8, totem: 4 };
 
 const botOf = (room: Room): PlayerState => {
   const b = [...room.players.getAllPlayers().values()].find((p) => p.isBot);
@@ -40,7 +46,9 @@ function run(weapon: WeaponType, seed: number): { kills: number; dmg: number; sc
   const room = mkRoom({
     mode: 'nuggets', bots: 1, botSkill: 'impossible',
     bases: { alpha: { x: -200, y: 60, z: 0 }, bravo: { x: 200, y: 60, z: 0 } },
-    balls: { base: BALLS, perPlayer: 0, max: BALLS + 10 },
+    ...(BEASTS === 'balls'
+      ? { balls: { base: BALLS, perPlayer: 0, max: BALLS + 10 } }
+      : { creatures: POPS }),
   }, 'nuggets', seed);
   const bot = botOf(room);
   const lo: BotLoadout = { perk: 'none', near: weapon, mid: weapon, far: weapon, belt: WeaponType.Grenade, side: WeaponType.Pistol };
@@ -53,26 +61,41 @@ function run(weapon: WeaponType, seed: number): { kills: number; dmg: number; sc
   // Instrumented counters over the real damage/kill funnels.
   let kills = 0, dmg = 0, score = 0;
   const speed = WEAPONS[weapon]?.speed ?? 50;
-  const origKilled = room.ballSim.onKilled;
-  room.ballSim.onKilled = (by, pos, variant) => {
-    origKilled?.(by, pos, variant);
+  const credit = (by: string, pos: { x: number; y: number; z: number }) => {
     if (by !== bot.id) return;
     kills++;
     const d = Math.hypot(pos.x - bot.position.x, pos.y - bot.position.y, pos.z - bot.position.z);
     score += Math.round(8 * d * (d / speed)); // midair-style: acc×dist×airtime(est)
   };
-  // Wrap at the BallCombat funnel, not BallSim.handleHit — splash paths
-  // (preySplash → splashDamage) call combat.handleHit internally and
-  // would otherwise escape the damage counter.
-  const combat = (room.ballSim as unknown as {
-    combat: { handleHit(pid: string, id: number, d: number, kx?: number, ky?: number, kz?: number): { killed: boolean } };
-  }).combat;
-  const origHit = combat.handleHit.bind(combat);
-  combat.handleHit = (pid, id, d, kx, ky, kz) => {
-    const v = origHit(pid, id, d, kx, ky, kz);
-    if (pid === bot.id) dmg += Math.max(1, Math.min(d, 400));
-    return v;
-  };
+  if (BEASTS === 'balls') {
+    const origKilled = room.ballSim.onKilled;
+    room.ballSim.onKilled = (by, pos, variant) => { origKilled?.(by, pos, variant); credit(by, pos); };
+    // Wrap at the BallCombat funnel, not BallSim.handleHit — splash paths
+    // (preySplash → splashDamage) call combat.handleHit internally and
+    // would otherwise escape the damage counter.
+    const combat = (room.ballSim as unknown as {
+      combat: { handleHit(pid: string, id: number, d: number, kx?: number, ky?: number, kz?: number): { killed: boolean } };
+    }).combat;
+    const origHit = combat.handleHit.bind(combat);
+    combat.handleHit = (pid, id, d, kx, ky, kz) => {
+      const v = origHit(pid, id, d, kx, ky, kz);
+      if (pid === bot.id) dmg += Math.max(1, Math.min(d, 400));
+      return v;
+    };
+  } else {
+    const cs = room.creatureSim as unknown as {
+      onKilled: ((by: string, pos: { x: number; y: number; z: number }) => void) | null;
+      handleHit(pid: string, id: number, d: number): { killed: boolean };
+    };
+    const origKilled = cs.onKilled;
+    cs.onKilled = (by, pos) => { origKilled?.(by, pos); credit(by, pos); };
+    const origHit = cs.handleHit.bind(cs);
+    cs.handleHit = (pid, id, d) => {
+      const v = origHit(pid, id, d);
+      if (pid === bot.id) dmg += Math.max(1, Math.min(d, 400));
+      return v;
+    };
+  }
 
   const w = watch(room);
   let huntTicks = 0;
@@ -100,6 +123,7 @@ function run(weapon: WeaponType, seed: number): { kills: number; dmg: number; sc
 }
 
 const argv = process.argv.slice(2);
+if (argv[0] === 'creatures' || argv[0] === 'balls') { BEASTS = argv[0] as 'balls' | 'creatures'; argv.shift(); }
 const seeds = Number.isFinite(Number(argv[0])) && argv[0] !== undefined ? Number(argv[0]) : 6;
 if (argv[1] !== undefined && Number.isFinite(Number(argv[1]))) {
   CAP_S = Number(argv[1]);
@@ -114,7 +138,7 @@ const wanted = argv.slice(1).length
 const fmt = (t: number) => (t < 0 ? `>${CAP_S}` : t.toFixed(1));
 const med = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[(s.length / 2) | 0]!; };
 
-console.log(`ballsoak: ${seeds} seeds/weapon, ${BALLS} live balls, nuggets single-bot (impossible skill)\n`);
+console.log(`ballsoak[${BEASTS}]: ${seeds} seeds/weapon, ${BEASTS === 'balls' ? BALLS + ' live balls' : Object.values(POPS).reduce((a, b) => a + b) + ' creatures'}, nuggets single-bot (impossible skill)\n`);
 console.log('weapon           | t100kills med/best/avg | t10kDmg med/best/avg | t10kScore med/best/avg');
 for (const w of wanted) {
   const tKs: number[] = [], tDs: number[] = [], tSs: number[] = [];
