@@ -9,6 +9,7 @@
 import { mkRoom, step, pin } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
 import type { BotLoadout } from '../../../shared/botLoadouts.ts';
+import { weaponStats } from '../../src/weaponStats.ts';
 
 const TARGET = 50;      // kills to win the FFA
 let CAP_S = 2400;       // sim-seconds; argv[1] overrides
@@ -131,5 +132,15 @@ const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 console.log('\nweapon           | rounds | avgKills | avgDeaths | K/D   | wins');
 for (const [w, a] of [...agg.entries()].sort((x, y) => avg(y[1].kills) - avg(x[1].kills))) {
   console.log(`${w.padEnd(16)} | ${a.kills.length.toString().padStart(6)} | ${avg(a.kills).toFixed(1).padStart(8)} | ${avg(a.deaths).toFixed(1).padStart(9)} | ${(avg(a.kills) / Math.max(1, avg(a.deaths))).toFixed(2).padStart(5)} | ${a.wins}`);
+}
+// Accuracy half of the ledger: weaponStats funnels every pull/hit by
+// weapon id — the table a K/D row can't tell (a hose can post weak
+// kills on strong accuracy, a lucky mortar the reverse).
+const snap = weaponStats.snapshot().byMode['dm'] ?? {};
+console.log('\nweapon           | shots | hits  | acc%  | dmg');
+for (const [w] of [...agg.entries()].sort((x, y) => avg(y[1].kills) - avg(x[1].kills))) {
+  const wt = (WeaponType as unknown as Record<string, number>)[w];
+  const s = snap[`w${wt}`] ?? { shots: 0, hits: 0, damage: 0 };
+  console.log(`${w.padEnd(16)} | ${String(s.shots).padStart(5)} | ${String(s.hits).padStart(5)} | ${(s.shots ? (100 * s.hits / s.shots) : 0).toFixed(1).padStart(5)} | ${Math.round(s.damage)}`);
 }
 process.exit(0);

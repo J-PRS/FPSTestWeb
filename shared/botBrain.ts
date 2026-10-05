@@ -164,8 +164,13 @@ export interface BrainCtx {
   /** Host hook: muzzle speed of the weapon the bot would pick at `dist`
    *  — aim lead divides range by real flight speed instead of a fixed
    *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
-   *  Return 0 for hitscan speed rows; the brain falls back to 60. */
+   *  0 means hitscan — zero flight time, no lead. */
   weaponSpeed?(dist: number): number;
+  /** Host hook: effective reach of the weapon the bot would pick at
+   *  `dist` — the brain holds fire beyond it (a beam stops at its ray
+   *  length; hosing air past reach is a whiff the stats count). Omit
+   *  → no limit (projectiles reach past any sane engagement). */
+  weaponRange?(dist: number): number | undefined;
   /** Host hook: legal refire (s between shots) of the weapon the bot
    *  would pick at `dist` — the volley cadence scales with it so a
    *  chaingun streams while a mortar deliberates. Omit → 0.45s. */

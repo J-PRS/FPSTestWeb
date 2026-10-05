@@ -284,6 +284,11 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   const acq = st.acquiredAt.get(st.hunt.id);
   if (acq !== undefined && st.huntTick - acq < st.reactTicks) return undefined;
   const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
+  // Reach gate: a beam at 100m is a guaranteed whiff the ledger counts
+  // — humans close instead of hosing air (FFA: LG acc 6.6% was mostly
+  // shots past its 60m ray). Suppression-at-memory still fires.
+  const reach = ctx.weaponRange?.(d);
+  if (memS <= 0 && reach !== undefined && d > reach) { st.fireT = 0.5; return undefined; }
   st.fireT -= dt;
   if (st.fireT > 0) return undefined;
   // The trigger finger follows the gun: a chaingun streams long bursts,
@@ -298,7 +303,12 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // Suppressive fire is deliberately sloppy — noise, not hits. Hero
   // aim just stops being sloppy.
   const ws = ctx.weaponSpeed?.(d);
-  const flight = d / (ws && ws > 0 ? ws : 60);
+  // Hitscan (speed 0 — the lightning beam) has zero flight: no lead,
+  // no flight-time error. Leading a beam is pure miss — soak showed
+  // 2.5% FFA accuracy where Quake pros hold ~35% and Tribes-speed
+  // tracking should run higher. The 60m/s fallback only exists for
+  // hosts that can't report which gun is drawn.
+  const flight = ws === 0 ? 0 : d / (ws && ws > 0 ? ws : 60);
   // Scatter grows with how far ahead the bot must predict — the lead
   // distance itself (target speed × shell flight), not speed alone:
   // a 30m/s skier crosses 54m during a disc's 1.8s flight, and human
@@ -307,6 +317,10 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // kill envelope because AoE covered the whole miss budget).
   const leadDist = Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * flight;
   let err = 0.5 + leadDist * 0.28 + d * 0.015 + flight * 0.4;
+  // A held beam is a tracking task, not a snap: the error is a slow
+  // drift off the target, not a fresh scatter per pull — half the
+  // snap-aim budget (19% FFA acc at full scatter vs ~35% pro norms).
+  if (ws === 0) err *= 0.5;
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
   err *= st.jitter;
   // The skill matrix: hosts that know which weapon will actually fire

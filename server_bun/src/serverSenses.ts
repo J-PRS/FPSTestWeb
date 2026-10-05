@@ -911,7 +911,18 @@ export class ServerBotSenses {
       // pick at that range — same band select fireAt runs.
       weaponSpeed: (d) => {
         const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
-        return getWeaponStats(w).speed || 60;
+        // 0 is meaningful — hitscan (the beam) — pickFire reads it as
+        // zero flight time; collapsing it to a fake muzzle speed made
+        // beams lead their targets like shells (2.5% FFA accuracy).
+        return getWeaponStats(w).speed ?? 60;
+      },
+      // Effective reach of the same pick: beams die at their ray length
+      // (beamContact sweeps 60m), so a beam-wielder closing a midfield
+      // duel holds fire until the range is real. Projectile picks
+      // return no limit — gravity, not the ray, is their ceiling.
+      weaponRange: (d) => {
+        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
+        return getWeaponStats(w).speed === 0 ? 55 : undefined;
       },
       // Trigger rhythm follows the gun the bot would draw at that range —
       // same legal cadence the client trigger enforces, so a drawn

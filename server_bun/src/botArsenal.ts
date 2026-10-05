@@ -43,7 +43,15 @@ export class BotArsenal implements BeamHost {
    *  direction — a human holds M1 and tracks, the gun streams at its own
    *  legal rate between thinks. `aim` rides the target's movement so the
    *  brain's lead/error offset is preserved while it drags. */
-  private trigger = new Map<string, { targetId: string; aim: Vec3; lastPos: Vec3 | null; until: number }>();
+  private trigger = new Map<string, {
+    targetId: string; aim: Vec3; lastPos: Vec3 | null; until: number;
+    /** Tracking mode (speed-0 weapons): smooth pursuit, not frozen
+     *  offset — `lag` is the pursuit-smoothed target point, `err` an
+     *  Ornstein-Uhlenbeck wander whose magnitude scales with how far
+     *  off the pull's aim was. Humans hover near target, not on it. */
+    lag: Vec3 | null; err: Vec3; track: boolean | undefined; sig: number;
+    tv: Vec3 | null; diff: number;
+  }>();
   /** Sim clock — the rate gate compares in sim-ms, not wall time, so
    *  scenario tests and slow-tick servers measure the same cadence. */
   private clock = 0;
@@ -103,13 +111,59 @@ export class BotArsenal implements BeamHost {
       const p = this.room.players.getPlayer(id);
       if (!p || p.isDead) { this.trigger.delete(id); continue; }
       const live = this.targetPos(tr.targetId);
-      if (live && tr.lastPos) {
-        tr.aim.x += live.x - tr.lastPos.x;
-        tr.aim.y += live.y - tr.lastPos.y;
-        tr.aim.z += live.z - tr.lastPos.z;
+      // undefined until the first discharge stamps it — delta-ride
+      // for that one tick, pursuit the moment the weapon is known.
+      if (tr.track) {
+        // Smooth pursuit: the aim point chases the live target with a
+        // ~100ms lag (a jink pulls ahead honestly). The error is an
+        // OU wander weighted along the target's motion axis — real
+        // tracking overshoots ahead then lags behind — and its size
+        // scales with target unpredictability: a straight-line runner
+        // gets tracked clean even by modest aim, a jinking one doesn't.
+        if (live) {
+          if (!tr.lag) tr.lag = { ...live };
+          tr.lag.x += (live.x - tr.lag.x) * 0.85;
+          tr.lag.y += (live.y - tr.lag.y) * 0.85;
+          tr.lag.z += (live.z - tr.lag.z) * 0.85;
+          // Instantaneous velocity + its turn rate — the difficulty
+          // signal humans price in when they decide a shot is easy.
+          if (tr.lastPos && dt > 0) {
+            const vx = (live.x - tr.lastPos.x) / dt;
+            const vy = (live.y - tr.lastPos.y) / dt;
+            const vz = (live.z - tr.lastPos.z) / dt;
+            const turn = tr.tv ? Math.hypot(vx - tr.tv.x, vy - tr.tv.y, vz - tr.tv.z) : 0;
+            tr.tv = { x: vx, y: vy, z: vz };
+            const speed = Math.hypot(vx, vy, vz);
+            const goal = Math.min(1, speed * 0.02 + turn * 0.04);
+            tr.diff += (goal - tr.diff) * 0.3; // ease so one jink tick doesn't flip the grade
+          }
+        }
+        const e = tr.err, s = Math.sqrt(dt);
+        const sig = tr.sig * (0.35 + 1.3 * tr.diff);
+        // Unit motion axis for ahead/behind weighting (zero speed → isotropic).
+        const v = tr.tv, vl = v ? Math.hypot(v.x, v.y, v.z) : 0;
+        const ax = vl > 1 ? v!.x / vl : 1, ay = vl > 1 ? v!.y / vl : 0, az = vl > 1 ? v!.z / vl : 0;
+        // Noise: strong along the motion axis (lead/lag oscillation),
+        // light perpendicular (settled wobble).
+        const n1 = (botRand() - 0.5) * 2, n2 = (botRand() - 0.5) * 2, n3 = (botRand() - 0.5) * 2;
+        const dot = n1 * ax + n2 * ay + n3 * az;
+        const amp = 1.6 * sig * s;
+        e.x += -2.5 * e.x * dt + amp * (n1 * 0.7 + ax * dot * 0.8);
+        e.y += -2.5 * e.y * dt + amp * (n2 * 0.7 + ay * dot * 0.8);
+        e.z += -2.5 * e.z * dt + amp * (n3 * 0.7 + az * dot * 0.8);
+        const tp = tr.lag ?? tr.aim;
+        tr.aim.x = tp.x + e.x;
+        tr.aim.y = tp.y + 1.2 + e.y; // capsule midpoint off the feet pos
+        tr.aim.z = tp.z + e.z;
+      } else {
+        if (live && tr.lastPos) {
+          tr.aim.x += live.x - tr.lastPos.x;
+          tr.aim.y += live.y - tr.lastPos.y;
+          tr.aim.z += live.z - tr.lastPos.z;
+        }
       }
       if (live) tr.lastPos = live;
-      this.discharge(p, tr.targetId, tr.aim);
+      this.discharge(p, tr);
     }
   }
 
@@ -127,12 +181,16 @@ export class BotArsenal implements BeamHost {
   private static readonly TRIGGER_HOLD_MS = 500;
 
   fireAt(p: BotBody, targetId: string, aim: Vec3): void {
-    this.trigger.set(p.id, {
+    const tr = {
       targetId, aim: { ...aim },
       lastPos: this.targetPos(targetId),
       until: this.clock + BotArsenal.TRIGGER_HOLD_MS,
-    });
-    this.discharge(p, targetId, aim);
+      lag: null as Vec3 | null, err: { x: 0, y: 0, z: 0 },
+      track: undefined as boolean | undefined, sig: 1,
+      tv: null as Vec3 | null, diff: 0.5,
+    };
+    this.trigger.set(p.id, tr);
+    this.discharge(p, tr);
   }
 
   rateOk(id: string, wt: number): boolean {
@@ -153,7 +211,8 @@ export class BotArsenal implements BeamHost {
     this.clock += ms;
   }
 
-  private discharge(p: BotBody, targetId: string, aim: Vec3): void {
+  private discharge(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3 }): void {
+    const { targetId, aim } = tr;
     if (targetId.startsWith('b:')) {
       beamAtBall(this, p, Number(targetId.slice(2)), aim, BOT_LOADOUTS[0]!);
       return;
@@ -168,6 +227,7 @@ export class BotArsenal implements BeamHost {
       const cdist = Math.hypot(cdx, cdy, cdz) || 1;
       const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
       const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
+      if (tr.track === undefined) this.markTrack(tr, wt0, aim);
       if (!this.rateOk(p.id, wt0)) return;
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
@@ -202,6 +262,7 @@ export class BotArsenal implements BeamHost {
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, distXZ, dist, p.id);
+    if (tr.track === undefined) this.markTrack(tr, wt, aim);
     if (!this.rateOk(p.id, wt)) return;
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
@@ -225,6 +286,21 @@ export class BotArsenal implements BeamHost {
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
+  }
+
+  /** First discharge stamps the tracking mode from the drawn weapon:
+   *  speed-0 = beam (pursuit + OU wander), else projectile (delta-ride).
+   *  sig scales the wander with the pull's initial miss — a bot that
+   *  pulled 5m off target drifts wider than one that pulled 1m. */
+  private markTrack(tr: { targetId: string; track: boolean | undefined; sig: number; err: Vec3; aim: Vec3 }, wt: number, aim: Vec3): void {
+    tr.track = getWeaponStats(wt).speed === 0;
+    if (!tr.track) return;
+    const live = this.targetPos(tr.targetId);
+    const miss = live ? Math.hypot(aim.x - live.x, aim.y - live.y - 1.2, aim.z - live.z) : 1;
+    tr.sig = Math.max(0.3, Math.min(1.5, miss * 0.5));
+    tr.err.x = aim.x - (live?.x ?? aim.x);
+    tr.err.y = aim.y - (live ? live.y + 1.2 : aim.y);
+    tr.err.z = aim.z - (live?.z ?? aim.z);
   }
 
   /** Suppression shots at a world point — a runner pre-softens the
