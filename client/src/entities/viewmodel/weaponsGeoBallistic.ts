@@ -60,8 +60,12 @@ const ARM_SWEEP = 0.42, ARM_LEN = 0.45;
 for (const side of [-1, 1]) {
   const arm = new THREE.Group();
   arm.name = side < 0 ? 'armL' : 'armR';
-  arm.userData.baseRot = side * ARM_SWEEP;
-  arm.rotation.y = side * ARM_SWEEP;
+  // Sweep sign: -side angles the -z limb AWAY from the body axis
+  // (rotation.y maps -z -> (-sin,-cos)); +side pointed each arm
+  // inward across the receiver while the string legs were computed
+  // for outward-swept tips — the limbs crossed the gun's own body.
+  arm.userData.baseRot = -side * ARM_SWEEP;
+  arm.rotation.y = -side * ARM_SWEEP;
   arm.position.set(side * 0.07, 0, -0.14);
   // Limb — the crossbow's silhouette piece: a CHUNKY flat bar that
   // thickens toward the cam, not a stick. Two-section sweep: mid joint
