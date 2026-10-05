@@ -138,7 +138,7 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // Per-ball throttle folds repeats into ×N; the fleet aggregate folds
 // THROTTLED warns into one 10s summary — a desync storm reads as a
 // number, not a scroll.
-function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger) {
+export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger) {
   const _truthPos = new THREE.Vector3();
   const _msgPos = new THREE.Vector3();
   // predictAt's world view — same field/colliders/clock the live replay reads.
