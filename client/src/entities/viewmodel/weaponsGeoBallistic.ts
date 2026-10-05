@@ -56,28 +56,38 @@ bow.add(hub);
 // Bow arms — one group per side, pivoted at the hub so firing can flex
 // them: inner strut angles out+forward, tip limb kicks back the elbow.
 // Cam wheel at the tip carries the string.
-const ARM_SWEEP = 0.42;
+const ARM_SWEEP = 0.42, ARM_LEN = 0.45;
 for (const side of [-1, 1]) {
   const arm = new THREE.Group();
   arm.name = side < 0 ? 'armL' : 'armR';
   arm.userData.baseRot = side * ARM_SWEEP;
   arm.rotation.y = side * ARM_SWEEP;
   arm.position.set(side * 0.07, 0, -0.14);
-  // Limb — tapered flat bar out to the cam
+  // Limb — the crossbow's silhouette piece: a CHUNKY flat bar that
+  // thickens toward the cam, not a stick. Two-section sweep: mid joint
+  // keeps the recurve read, tip knob carries the cam wheel.
   const limb = mkLoft([
-    { z: 0.0, ring: profOct(0.05, 0.045, 0.01) },
-    { z: -0.22, ring: profOct(0.035, 0.05, 0.01) },
-    { z: -0.30, ring: profOct(0.05, 0.055, 0.01) },
+    { z: 0.0, ring: profOct(0.075, 0.06, 0.015) },
+    { z: -0.20, ring: profOct(0.055, 0.05, 0.012) },
+    { z: -0.38, ring: profOct(0.045, 0.045, 0.01) },
+    { z: -ARM_LEN, ring: profOct(0.07, 0.05, 0.012) },
   ], bodyMat);
   arm.add(limb);
-  // Cam wheel at the tip — the compound-bow read
-  const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.025, 10), darkMat);
+  // Tension cable along the limb's inner face — machine bow, not wood
+  const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.34), darkMat);
+  cable.position.set(side * -0.028, 0, -0.19);
+  arm.add(cable);
+  // Cam wheel at the tip — the compound-bow read, oversized like T:A's
+  const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.032, 10), darkMat);
   cam.rotation.x = Math.PI / 2;
-  cam.position.set(0, 0, -0.30);
+  cam.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(cam);
-  const camHub = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8), brassMat);
+  const camRing = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.01, 6, 12), brassMat);
+  camRing.position.set(0, 0, -ARM_LEN - 0.02);
+  arm.add(camRing);
+  const camHub = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.045, 8), brassMat);
   camHub.rotation.x = Math.PI / 2;
-  camHub.position.set(0, 0, -0.30);
+  camHub.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(camHub);
   bow.add(arm);
 }
@@ -87,7 +97,7 @@ for (const side of [-1, 1]) {
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
-const tipX = Math.sin(ARM_SWEEP) * 0.30, tipZ = -0.14 - Math.cos(ARM_SWEEP) * 0.30;
+const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = -0.14 - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02;
 for (const side of [-1, 1]) {
   stringG.add(tubePath([
     [side * (0.07 + tipX), 0, tipZ, 0.006],
