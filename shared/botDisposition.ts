@@ -82,6 +82,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // live — he's committed inside the ETA window, and a member
         // covering ~110m of stage orbit lands just behind him. Waiting
         // out the patience clock instead is what made the flood trickle.
+        // Longer lone patience for the capper (55s) tried and reverted:
+        // waits aged the call and the soak still showed lone entries —
+        // a flood that hasn't formed by 35s isn't forming by 55
+        // (seed 7 14g/8c->6g/5c, seed 11 9g/2c->5g/2c).
         if (!wave && !wingman && !(ctx.marshal && ctx.pushLive) && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
