@@ -60,13 +60,17 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // marshalled members hold the same 110m ring — both sides wait
         // on each other until stageT expires and he goes alone. A member
         // staging at ~110m IS converging — count the ring as gathered.
-        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 115);
+        // Converge radius follows the members' own ~110m stage orbit,
+        // plus slack for a member about to land on it — wider releases
+        // the capper while the "wave" is still a minute out (katabatic:
+        // wave hovers ~170m and the capper's 25s expired alone).
+        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 130);
         const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
-        // 25s patience: the call now posts at route start (~75s ETA),
-        // so the first to land can be ~30s early — 10s had him pressing
-        // the ring alone, which is feeding, not flooding. The orbit is
-        // outside the posted defense leash, so holding is cheap.
-        if (!wave && !wingman && b.stageT < 25) {
+        // 35s patience: the call posts at route start (~75s ETA), and
+        // big-map waves transit 40s+ — 25s still released the capper
+        // before his flood landed. The orbit is outside the posted
+        // defense leash, so holding is cheap.
+        if (!wave && !wingman && b.stageT < 35) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
           const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;
