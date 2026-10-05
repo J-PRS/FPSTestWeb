@@ -884,14 +884,14 @@ describe('scenario: warp soak throughput', () => {
     );
     if (simProf) {
       const total = [...simProf.values()].reduce((s, v) => s + v, 0) || 1;
-      console.log('  simProf ' + [...simProf.entries()]
+      console.log(`  simProf ${(total).toFixed(0)}ms ` + [...simProf.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([n, ms]) => `${n} ${(ms / total * 100).toFixed(0)}%`)
         .join(' · '));
     }
     if (sharedEnv.thinkProf?.size) {
       const tt = [...sharedEnv.thinkProf.values()].reduce((s, v) => s + v, 0) || 1;
-      console.log('  thinkProf ' + [...sharedEnv.thinkProf.entries()]
+      console.log(`  thinkProf ${tt.toFixed(1)}ms ` + [...sharedEnv.thinkProf.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([n, ms]) => `${n} ${(ms / tt * 100).toFixed(0)}%`)
         .join(' · '));
@@ -901,7 +901,7 @@ describe('scenario: warp soak throughput', () => {
     if (botProf) {
       const bt = botProf.reduce((s, v) => s + v, 0) || 1;
       const bn = ['flagGoal', 'build', 'think', 'fire', 'drive'];
-      console.log('  botProf ' + bn.map((n, i) => `${n} ${(botProf[i]! / bt * 100).toFixed(0)}%`).join(' · '));
+      console.log(`  botProf ${bt.toFixed(0)}ms ` + bn.map((n, i) => `${n} ${(botProf[i]! / bt * 100).toFixed(0)}%`).join(' · '));
     }
     // Per-role stat lines — tuning needs "do cappers cap" and "does the
     // bombardier kill the stand guards", not team totals. roleInfo is
