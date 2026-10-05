@@ -298,6 +298,10 @@ export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): numb
     const hurt = (ctx.healthFrac ?? 1) < 0.6;
     let status = 0;
     if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
+    // REVERTED: SHIELD for committed runners inside 200m of the objective —
+    // same-seed soak identical (5g/2c, eHp 44->42). The ring kill window is
+    // crossfire volume, not a tank problem; shields already fire once the
+    // hunt flags 'fighting' inside the ring anyway.
     else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
     // through it. A WOUNDED infiltrator slips the veil back on while
