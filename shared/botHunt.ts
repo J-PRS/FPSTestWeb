@@ -270,11 +270,14 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // aim just stops being sloppy.
   const ws = ctx.weaponSpeed?.(d);
   const flight = d / (ws && ws > 0 ? ws : 60);
-  // Scatter grows with how far ahead the bot must predict: target
-  // speed (a jinking enemy is hard to lead), raw distance, and the
-  // shell's time in flight — a 1.3s mortar lob is a much bigger
-  // prediction than a 0.6s disc at the same range.
-  let err = 0.5 + Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * 0.06 + d * 0.02 + flight * 1.2;
+  // Scatter grows with how far ahead the bot must predict — the lead
+  // distance itself (target speed × shell flight), not speed alone:
+  // a 30m/s skier crosses 54m during a disc's 1.8s flight, and human
+  // lead error scales as a fraction of that (soak: disc splash grazes
+  // counted 48% "accurate" at 120-200m — every transit lane was a
+  // kill envelope because AoE covered the whole miss budget).
+  const leadDist = Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * flight;
+  let err = 0.5 + leadDist * 0.28 + d * 0.015 + flight * 0.4;
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
   err *= st.jitter;
   // The skill matrix: hosts that know which weapon will actually fire
