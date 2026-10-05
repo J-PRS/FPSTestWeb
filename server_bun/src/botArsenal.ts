@@ -39,6 +39,11 @@ export class BotArsenal implements BeamHost {
   /** Last shot time per bot — the weapon-rate gate that keeps a fast
    *  brain cadence from out-shooting the drawn weapon's legal rate. */
   private lastShot = new Map<string, number>();
+  /** Held trigger per bot: brains decide press/release cadence and aim
+   *  direction — a human holds M1 and tracks, the gun streams at its own
+   *  legal rate between thinks. `aim` rides the target's movement so the
+   *  brain's lead/error offset is preserved while it drags. */
+  private trigger = new Map<string, { targetId: string; aim: Vec3; lastPos: Vec3 | null; until: number }>();
   /** Sim clock — the rate gate compares in sim-ms, not wall time, so
    *  scenario tests and slow-tick servers measure the same cadence. */
   private clock = 0;
@@ -77,6 +82,7 @@ export class BotArsenal implements BeamHost {
 
   /** Part of a bot's teardown — see ServerBots.untrack. */
   untrack(id: string): void {
+    this.trigger.delete(id);
     this.propelT.delete(id);
     this.propelJetUntil.delete(id);
     this.wasCarrying.delete(id);
@@ -86,9 +92,47 @@ export class BotArsenal implements BeamHost {
   }
 
   /** Players can't out-run a weapon's rate either — the drawn gun owns
-   *  the trigger interval, not the brain's cadence. */
+   *  the trigger interval, not the brain's cadence. Held triggers keep
+   *  streaming here: each tick re-aims along the target's delta and
+   *  discharges the moment the weapon's own interval allows — a 0.09s
+   *  chaingun hoses, a 0.45s disc still pops once per pull. */
   step(dt: number): void {
     this.clock += dt * 1000;
+    for (const [id, tr] of this.trigger) {
+      if (tr.until <= this.clock) { this.trigger.delete(id); continue; }
+      const p = this.room.players.getPlayer(id);
+      if (!p || p.isDead) { this.trigger.delete(id); continue; }
+      const live = this.targetPos(tr.targetId);
+      if (live && tr.lastPos) {
+        tr.aim.x += live.x - tr.lastPos.x;
+        tr.aim.y += live.y - tr.lastPos.y;
+        tr.aim.z += live.z - tr.lastPos.z;
+      }
+      if (live) tr.lastPos = live;
+      this.discharge(p, tr.targetId, tr.aim);
+    }
+  }
+
+  /** Where the held target is now — the aim rides its delta, so a
+   *  sweeping beam tracks the runner instead of painting where he was. */
+  private targetPos(targetId: string): Vec3 | null {
+    if (targetId.startsWith('b:')) return this.room.ballSim?.ballAt(Number(targetId.slice(2))) ?? null;
+    if (targetId.startsWith('c:')) return this.room.creatureSim?.crawlerAt(Number(targetId.slice(2))) ?? null;
+    const t = this.room.players.getPlayer(targetId);
+    return t && !t.isDead ? t.position : null;
+  }
+
+  /** Covers one think gap plus jitter — the brain re-arms every pull
+   *  while it wants the gun hot; silence for this long is a release. */
+  private static readonly TRIGGER_HOLD_MS = 500;
+
+  fireAt(p: BotBody, targetId: string, aim: Vec3): void {
+    this.trigger.set(p.id, {
+      targetId, aim: { ...aim },
+      lastPos: this.targetPos(targetId),
+      until: this.clock + BotArsenal.TRIGGER_HOLD_MS,
+    });
+    this.discharge(p, targetId, aim);
   }
 
   rateOk(id: string, wt: number): boolean {
@@ -109,7 +153,7 @@ export class BotArsenal implements BeamHost {
     this.clock += ms;
   }
 
-  fireAt(p: BotBody, targetId: string, aim: Vec3): void {
+  private discharge(p: BotBody, targetId: string, aim: Vec3): void {
     if (targetId.startsWith('b:')) {
       beamAtBall(this, p, Number(targetId.slice(2)), aim, BOT_LOADOUTS[0]!);
       return;
