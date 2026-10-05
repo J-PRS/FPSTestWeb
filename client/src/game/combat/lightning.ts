@@ -325,6 +325,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     // fires from the raw _lgHit so damage/explosions stay exact.
     const lgNow = performance.now();
     lg.lastFire = lgNow;
+    player.lastFireAt = lgNow; // decloak-on-fire: a held beam keeps the reveal window open
     sfx.beamLoop(); // continuous drone — keepalive per tick
     // Connect sizzle — beam frying SOMETHING sounds different than beaming
     // air: positional crackle at the contact, throttled so 22t/s doesn't smear

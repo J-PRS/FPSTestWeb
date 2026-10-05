@@ -10,7 +10,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, shootRevealed } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
@@ -237,7 +237,7 @@ export class ServerBotSenses {
     c.seq = seq;
     c.players.length = 0; c.bodies.length = 0; c.roster.length = 0; c.pickups.length = 0;
     for (const q of this.room.players.getAllPlayers().values()) {
-      c.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK), aimY: classCapsule(q.armorClass).centerOff,
+      c.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, seq), aimY: classCapsule(q.armorClass).centerOff,
         en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff } });
       if (!q.isDead) c.roster.push({ id: q.id, pos: q.position, team: q.team });
     }

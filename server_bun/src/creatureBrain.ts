@@ -14,7 +14,7 @@ import {
 } from '../../shared/creatureSim.ts';
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, shootRevealed } from '../../shared/status.ts';
 
 const TICK_DT = 0.05;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
@@ -55,7 +55,7 @@ export interface BrainHost {
   /** Authoritative kill — detonate consumes the being. */
   kill(c: SimBeing): void;
   /** Live check for the committed target id. */
-  playerState(id: string): { isDead: boolean; status: number; position: { x: number; y: number; z: number } } | null;
+  playerState(id: string): { isDead: boolean; status: number; lastFireSim: number; position: { x: number; y: number; z: number } } | null;
 }
 
 export class CreatureBrain {
@@ -124,7 +124,9 @@ export class CreatureBrain {
   private cloakGhost(c: SimBeing): void {
     const simTime = this.host.simTime();
     const prev = c.targetId ? this.host.playerState(c.targetId) : null;
-    if (prev && !prev.isDead && (prev.status & STATUS.CLOAK) && c.tgtValid) {
+    // Firing decloaks: a shooter mid-reveal is a live target again, not
+    // a ghost — mask the cloak bit by the same window senses use.
+    if (prev && !prev.isDead && (prev.status & STATUS.CLOAK) && !shootRevealed(prev.lastFireSim, simTime) && c.tgtValid) {
       const g = this.confuseGhosts.get(c.id);
       this.confuseGhosts.set(c.id, g
         ? { ...g, until: simTime + CONFUSE_TTL }

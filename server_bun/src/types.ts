@@ -76,6 +76,10 @@ export interface PlayerState {
   // damage, mend ticks health). Unknown bits pass through untouched, so
   // client-only effects need zero server changes.
   status: number;
+  /** Sim-clock stamp of the player's last real shot — senses mask CLOAK
+   *  for SHOOT_REVEAL_S after it (firing decloaks). -Infinity until the
+   *  first shot; reset on respawn like the status bits it feeds. */
+  lastFireSim: number;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
   armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
   /** Mid-match classUpdate pick — applied on the next respawn, never

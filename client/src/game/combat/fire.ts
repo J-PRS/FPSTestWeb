@@ -8,6 +8,7 @@ import {
   GRENADE_CONFIG, BELT_DISC_CONFIG, STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
+  CONC_CONFIG,
 } from '../../projectiles/index.js';
 import type { WeaponDef } from '../../weapons.js';
 import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
@@ -62,6 +63,9 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   if (deps.lazyDemoManager()?.isPlaying) return;
 
   if (!quiet) sfx.shoot(config.weaponType);
+  // Decloak-on-fire: bot senses mask this player's cloak for the reveal
+  // window, same rule the server applies to its own bots.
+  deps.lazyPlayer().lastFireAt = performance.now();
   _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
   if (deps.lazyPlayer().thirdPerson) _spawnOrigin.y -= SHOULDER_DROP;
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
@@ -139,6 +143,7 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   javelin: JAVELIN_CONFIG,
   sticky: STICKY_CONFIG,
   impact: IMPACT_CONFIG,
+  conc: CONC_CONFIG,
   remoterailgun: REMOTE_RAILGUN_CONFIG,
   armornade: ARMORNADE_CONFIG,
   proxy: PROXY_CONFIG,
@@ -269,6 +274,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   const player = deps.lazyPlayer();
   const stats = getWeaponStats(WeaponType.Melee);
   sfx.shoot(WeaponType.Melee);
+  player.lastFireAt = performance.now(); // decloak-on-fire — see spawnProjectile
   _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
 
   const groundHit = meleeGroundContact(player.pos, e.dir, deps.lazyTerrain());

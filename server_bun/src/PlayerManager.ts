@@ -102,6 +102,7 @@ export class PlayerManager {
       ping: 0,
       skiing: 0,
       status: 0,
+      lastFireSim: -Infinity,
       history: [],
       forceSendUntil: 0,
       protectedUntil: simNow() + PlayerManager.SPAWN_PROTECT_MS,
@@ -308,6 +309,7 @@ export class PlayerManager {
     player.health = player.maxHealth;
     player.isDead = false;
     player.status = 0; // a corpse carries no channels — toggles died with them
+    player.lastFireSim = -Infinity; // respawn is a fresh cloak, not the old one's reveal
     player.armor = 0;
     player.regenUntil = 0;
     player.ddUntil = 0;

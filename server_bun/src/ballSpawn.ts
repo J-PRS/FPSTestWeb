@@ -7,7 +7,8 @@
  */
 import { type SimBall, type SimVec, type BallVariant, makeSimBall } from '../../shared/ballSim.ts';
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, shootRevealed } from '../../shared/status.ts';
+import { simNow } from './simClock.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage } from './types.ts';
 
@@ -27,7 +28,9 @@ export function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => num
 export function alivePlayers(players: PlayerManager): { id: string; pos: SimVec }[] {
   const out: { id: string; pos: SimVec }[] = [];
   for (const [id, p] of players.getAllPlayers()) {
-    if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
+    // Firing decloaks: a shot stamps the reveal window, so a cloaked
+    // player who just shot is fodder again like everyone else.
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) out.push({ id, pos: p.position });
   }
   return out;
 }
@@ -114,7 +117,7 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
  *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
 export function snapTarget(players: PlayerManager, b: SimBall): void {
   const p = b.targetId ? players.getPlayer(b.targetId) : null;
-  if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
+  if (p && !p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {
     b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;
     b.tgtValid = true;
   } else {

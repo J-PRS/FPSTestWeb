@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../shared/botBrain.js';
 import { classCapsule } from '../../../shared/botClasses.js';
+import { shootRevealed } from '../../../shared/status.js';
 import type { GameBot } from './botBrain.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from '../entities/balls.js';
@@ -19,8 +20,8 @@ export interface SenseHost {
   readonly bots: GameBot[];
   /** 'local' + bot:names → team key. */
   readonly teamOf: Map<string, string>;
-  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; appliedClass?: string };
-  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; armorClass?: string }>;
+  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; appliedClass?: string };
+  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number; armorClass?: string }>;
              explosions: { pos: THREE.Vector3; age: number }[];
              projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
   /** Active mode id — farming modes extend the creature sense range. */
@@ -70,11 +71,11 @@ export class BotSenses {
     const out: BotEntry[] = [];
     const player = this.host.player();
     if (this.host.teamOf.get('local') !== team) {
-      out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
+      out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now())) });
     }
     for (const b of this.host.bots) {
       if (b.team === team) continue;
-      out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && !b.isCloakHidden });
+      out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && (!b.isCloakHidden || b.ghostT > 0) });
     }
     return out;
   }
@@ -121,7 +122,7 @@ export class BotSenses {
     const player = this.host.player();
     if (this.host.teamOf.get('local') !== bot.team) {
       const e = nextBot() as EnemyEntry & { playerId?: string };
-      e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && !player.isCloaked;
+      e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now()));
       e.aimY = classCapsule(player.appliedClass).centerOff;
       _enemies.push(e);
     }
@@ -130,9 +131,10 @@ export class BotSenses {
       const team = this.host.teamOf.get(id);
       if (team === bot.team) continue;
       // A held cloak removes the bot from enemy senses — same rule the
-      // local player's cloak enjoys in this list.
+      // local player's cloak enjoys in this list. A shimmer reveal
+      // (ghostT from his own shot) unmasks him for its remainder.
       const e = nextBot() as EnemyEntry & { playerId?: string };
-      e.id = id; e.pos = rp.pos; e.vel = rp.vel; e.alive = !rp.isDead && !rp.isCloakHidden;
+      e.id = id; e.pos = rp.pos; e.vel = rp.vel; e.alive = !rp.isDead && (!rp.isCloakHidden || rp.ghostT > 0);
       e.aimY = classCapsule(rp.armorClass).centerOff;
       _enemies.push(e);
     }

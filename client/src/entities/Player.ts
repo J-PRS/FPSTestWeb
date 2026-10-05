@@ -135,6 +135,10 @@ export class Player {
   status = new PlayerStatus(this);
   get isSpectating(): boolean { return this.status.spectating; }
   get isCloaked(): boolean { return this.status.cloaked; }
+  /** performance.now() stamp of the last real shot — offline bot senses
+   *  mask the cloak for SHOOT_REVEAL_S after it, matching the server's
+   *  lastFireSim rule. */
+  lastFireAt = -Infinity;
   get isShielded(): boolean { return this.status.shielded; }
   get isMending(): boolean { return this.status.mending; }
   onSpectate: ((on: boolean) => void) | null = null;

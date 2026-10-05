@@ -7,24 +7,24 @@ import type { Targetable } from '../entities/balls.js';
 const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const mkBot = (id: string, team: string, over: Record<string, unknown> = {}) =>
-  ({ playerId: id, team, isDead: false, isCloakHidden: false, pos: v(), vel: v(), position: v(), ...over }) as unknown as GameBot;
+  ({ playerId: id, team, isDead: false, isCloakHidden: false, ghostT: 0, pos: v(), vel: v(), position: v(), ...over }) as unknown as GameBot;
 
 interface Rig {
   senses: BotSenses;
   bots: GameBot[];
   teamOf: Map<string, string>;
-  worldState: { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean }>;
+  worldState: { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>;
                 explosions: { pos: THREE.Vector3; age: number }[];
                 projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
-  playerState: { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean };
+  playerState: { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number };
   state: { modeId: string; creature: Targetable | null; creatureDist: number };
 }
 
 const mkRig = (): Rig => {
   const bots: GameBot[] = [];
   const teamOf = new Map<string, string>();
-  const worldState = { remotePlayers: new Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean }>(), explosions: [] as { pos: THREE.Vector3; age: number }[], projectiles: [] as { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
-  const playerState = { pos: v(), vel: v(), isDead: false, isCloaked: false };
+  const worldState = { remotePlayers: new Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>(), explosions: [] as { pos: THREE.Vector3; age: number }[], projectiles: [] as { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
+  const playerState = { pos: v(), vel: v(), isDead: false, isCloaked: false, lastFireAt: -Infinity };
   const state = { modeId: 'ctf', creature: null as Targetable | null, creatureDist: 0 };
   const host = {
     bots, teamOf,
@@ -87,9 +87,9 @@ describe('enemyList', () => {
     r.teamOf.set('p1', 'alpha');  // hostile remote
     r.teamOf.set('p2', 'bravo');  // the bot's teammate
     const me = mkBot('me', 'bravo');
-    r.worldState.remotePlayers.set('me', { pos: v(), vel: v(), isDead: false, isCloakHidden: false });
-    r.worldState.remotePlayers.set('p1', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false });
-    r.worldState.remotePlayers.set('p2', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false });
+    r.worldState.remotePlayers.set('me', { pos: v(), vel: v(), isDead: false, isCloakHidden: false, ghostT: 0 });
+    r.worldState.remotePlayers.set('p1', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false, ghostT: 0 });
+    r.worldState.remotePlayers.set('p2', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false, ghostT: 0 });
     const out = r.senses.enemyList(me);
     const ids = out.map((e) => e.id);
     expect(ids).toContain('local');

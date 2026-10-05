@@ -1,3 +1,4 @@
+import { SHOOT_REVEAL_S } from '../../../shared/status.js';
 import type { RemotePlayer } from './RemotePlayer.js';
 
 // Visibility gate — who can currently see this remote. Two independent
@@ -30,7 +31,12 @@ export function setStaleVis(p: RemotePlayer, hidden: boolean): void {
 export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
   if (hidden === p.cloakHidden) return;
   p.cloakHidden = hidden;
-  if (hidden) hideRemote(p); else if (!p.staleHidden) showRemote(p);
+  if (hidden) {
+    // Recloaking mid-reveal doesn't wash the shot — the shimmer (and
+    // HUD marker, via ghostT) owes the window its remainder.
+    if (p.revealT > 0 && p._loaded) { p.ghostT = p.revealT; p._model.setGhost(true); p.model.setVisible(true); return; }
+    hideRemote(p);
+  } else if (!p.staleHidden) showRemote(p);
 }
 
 // Friendly cloak: a teammate's held cloak renders as the ghost shimmer,
@@ -55,16 +61,19 @@ export function setFrustumVis(p: RemotePlayer, hidden: boolean): void {
   else if (!p.staleHidden && !p.cloakHidden) { p.model.setVisible(true); p.auras.show(); }
 }
 
-// Firing decloaks: a cloaked shooter shimmers visible for a beat.
+// Firing decloaks: the window anchors to the shot itself, so a cloak
+// raised (or already up) owes the same 2s of ghost-shimmer visibility.
 export function shootReveal(p: RemotePlayer): void {
+  p.revealT = SHOOT_REVEAL_S;
   if (p.cloakHidden && p._loaded) {
-    p.ghostT = 1;
+    p.ghostT = p.revealT;
     p._model.setGhost(true);
     p.model.setVisible(true);
   }
 }
 
 export function tickGhostF(p: RemotePlayer, dt: number): void {
+  if (p.revealT > 0) p.revealT -= dt;
   if (p.ghostT <= 0) return;
   p.ghostT -= dt;
   if (p.ghostT > 0) return;

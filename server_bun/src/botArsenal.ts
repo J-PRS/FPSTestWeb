@@ -19,6 +19,7 @@ import { BOT_TUNING as T } from '../../shared/botTuning.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless, type BeamHost } from './botBeam.ts';
 import { isSuper } from './superBot.ts';
+import { simNow } from './simClock.ts';
 import { weaponStats } from './weaponStats.ts';
 
 const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
@@ -94,6 +95,11 @@ export class BotArsenal implements BeamHost {
     const interval = (WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 0.1) * 1000;
     if (this.clock - (this.lastShot.get(id) ?? -interval) < interval) return false;
     this.lastShot.set(id, this.clock);
+    // Decloak-on-fire: every legal shot stamps the reveal clock. Bots
+    // emit no 'fire' event, so the human path's Room-handler stamp
+    // can't cover them — rateOk is the one gate every shot clears.
+    const p = this.room.players.getPlayer(id);
+    if (p) p.lastFireSim = simNow();
     return true;
   }
 

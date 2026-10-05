@@ -15,7 +15,8 @@ import { type SimBeing, type CreatureBrain } from './creatureBrain.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, shootRevealed } from '../../shared/status.ts';
+import { simNow } from './simClock.ts';
 
 export interface SpawnHost {
   field: Heightfield | null;
@@ -35,7 +36,9 @@ export interface SpawnHost {
 export function alivePlayers(h: SpawnHost): { id: string; pos: SimVec }[] {
   const out: { id: string; pos: SimVec }[] = [];
   for (const [id, p] of h.players.getAllPlayers()) {
-    if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
+    // Firing decloaks — a cloaked shooter is fodder for the reveal
+    // window, same rule the ball sim and bot senses apply.
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) out.push({ id, pos: p.position });
   }
   if (h.extraTargets) out.push(...h.extraTargets());
   return out;
@@ -85,7 +88,7 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
  *  moving player. */
 export function snapTarget(h: SpawnHost, c: SimBeing): void {
   const p = c.targetId ? h.players.getPlayer(c.targetId) : null;
-  if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
+  if (p && !p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {
     commitTarget(c, c.targetId, p.position);
   } else if (c.targetId && h.targetPos) {
     const tp = h.targetPos(c.targetId);

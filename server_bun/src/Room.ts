@@ -291,7 +291,12 @@ export class Room {
       switch (e.type) {
         case 'kill': this.scoring.onKill(e.targetId, e.shooterId); break;
         case 'hit': this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
-        case 'fire': this.bots.noteHumanFire(e.playerId); break;
+        case 'fire': {
+          this.bots.noteHumanFire(e.playerId);
+          const shooter = this.players.getPlayer(e.playerId);
+          if (shooter) shooter.lastFireSim = simNow(); // decloak-on-fire: senses unmask CLOAK for the reveal window
+          break;
+        }
         case 'botSpoke': this.bots.notice('reply', e.id, this.players.getPlayer(e.id)?.team); break;
         case 'chat': {
           const kind = chatKindFor(e.text) ?? (this.bots.nameIn(e.text) ? 'mention' : null);

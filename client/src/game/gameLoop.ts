@@ -30,6 +30,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { updateDirectionalFog } from '../world/directionalFog.js';
 import { updateCubeSky } from './net/mapAssets.js';
+import { isSessionVeiled } from './net/world.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
@@ -207,7 +208,8 @@ function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEn
     targets: _aliveCount(entities.targets),
     projectiles: deps.world.projectiles.length,
     fx: deps.world.debrisList.length + deps.world.explosions.length
-      + deps.world.implosions.length + deps.world.scorches.length,
+      + deps.world.implosions.length + deps.world.scorches.length
+      + deps.world.splats.length,
   };
 }
 
@@ -336,8 +338,8 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
       const list = deps.world.playerDebrisList;
       const cam = deps.camera.position;
       // A nearby mass kill otherwise turns this one job into a 7ms+
-      // spike: past the cap, remaining debris fall back to tickAge —
-      // the same cheap path far debris already take.
+      // spike: past the cap, remaining debris take a ~zero deadline —
+      // the same resumable slice path far debris already use.
       const t0 = performance.now();
       let i = list.length - 1;
       for (; i >= 0; i--) {
@@ -347,18 +349,23 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
           // Resumable shard budget — one debris can't overdraw the cap.
           d.update(fxDt, 1.5 - (performance.now() - t0));
           if (performance.now() - t0 > 1.5) { i--; break; }
-        } else d.tickAge(fxDt);
+        } else d.update(fxDt, 0.15); // far: resumable ~1-shard slice —
+        // tickAge froze shards mid-air at spawn positions for their
+        // whole 6-8s life (same parked-ring bug as Explosion.tickAge)
         if (d.dead) { d.dispose(); list.splice(i, 1); }
       }
       for (; i >= 0; i--) {
         const d = list[i]!;
-        d.tickAge(fxDt);
+        d.update(fxDt, 0.05); // over-budget tail — one shard a frame still beats frozen chunks
         if (d.dead) { d.dispose(); list.splice(i, 1); }
       }
     }],
     ['gibs', () => updateGibs(fxDt)],
     ['swipes', () => updateSwings(fxDt, deps.camera)],
-    ['scorch', () => updateDeadList(deps.world.scorches, fxDt)],
+    ['scorch', () => {
+      updateDeadList(deps.world.scorches, fxDt);
+      updateDeadList(deps.world.splats, fxDt);
+    }],
     ['explosions', () => {
       const ex = deps.world.explosions;
       for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) ex[i]!.dead = true;
@@ -428,7 +435,9 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   _mapBlips.length = 0;
   const wirePlayers = networkManager.getPlayers();
   for (const [id, rp] of deps.world.remotePlayers) {
-    if (rp.isDead || rp.isCloakHidden) continue;
+    // A fire-revealed cloak (ghostT live) blips like any visible rider —
+    // the shimmer window already sold him out to eyes and HUD.
+    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) continue;
     const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
     _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam, bot: isBotId(id) });
   }
@@ -594,6 +603,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
 
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
+  let renderElapsed = 0;
   const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
@@ -638,14 +648,14 @@ export function createGameLoop(deps: GameLoopDeps) {
 
   function loop(time: number): void {
     requestAnimationFrame(loop);
-    // stats.js paints its canvas even when display:none — the panels were
-    // costing ~2% of a throttled frame with the debug HUD hidden.
-    if ((statsPanels[0]!.dom as HTMLElement).style.display !== 'none')
-      for (const s of statsPanels) s.update();
     const rawElapsed = (time - lastTime) / 1000;
     const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
+    // Veiled = waiting on gameState — the boot world under the curtain
+    // is discarded on restore, so don't sim it, render it, or let input
+    // fire into it. Socket events (not this loop) deliver the state.
+    if (isSessionVeiled()) return;
     perf.begin(deps.rendererSetup.renderer);
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
@@ -681,7 +691,17 @@ export function createGameLoop(deps: GameLoopDeps) {
     hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
 
-    if (fpsCapAllows(st, rawElapsed)) renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    renderElapsed += rawElapsed; // real time between presents for the FPS meter
+    if (fpsCapAllows(st, rawElapsed)) {
+      deps.lazyHud().markFrame(renderElapsed);
+      // stats.js panels count update() calls as frames — update only on
+      // real renders or the FPS panel reads the rAF rate under a cap.
+      // (Still gated on display — they paint even while hidden.)
+      if ((statsPanels[0]!.dom as HTMLElement).style.display !== 'none')
+        for (const s of statsPanels) s.update();
+      renderElapsed = 0;
+      renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    }
     perf.mark('render');
     perf.end(deps.rendererSetup.renderer, () => {
       const bw = deps.lazyNetworkManager().bandwidth();
@@ -736,9 +756,12 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
 
     // Viewmodel pass — clear depth only, draw gun on top with its own FOV.
-    // In FLOYD the GL canvas is hidden and this same draw is injected into
-    // fsRender via the overlay hook — skip it here or it draws post-readback.
-    if (viewModel.group.visible && !rendererSetup.isFloyd()) {
+    // Only needed on the direct-render path: FLOYD injects the same draw
+    // into fsRender pre-readback, and composer modes (xBR/dithered/bloom)
+    // now draw it inside the frame buffer via VmRenderPass — skipping
+    // here keeps the gun inside the pixel/dither pipeline, not pasted
+    // full-res over a chunky frame.
+    if (viewModel.group.visible && !rendererSetup.isFloyd() && !rendererSetup.needsComposer()) {
       vmCamera.aspect = camera.aspect;
       vmCamera.updateProjectionMatrix();
       vmCamera.quaternion.copy(camera.quaternion);

@@ -373,6 +373,7 @@ export class RemotePlayer {
   playThrow(): void {
     if (!this._isDead) this.anim.throwT = Math.max(this.anim.throwT, 1.3);
     if (this._loaded) this._model.weaponThrow();
+    shootReveal(this); // a throw is a shot — same decloak price
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT
@@ -381,7 +382,8 @@ export class RemotePlayer {
   // the exact server impulse math (dir*mag XZ, 0.5*mag up / 0.3 pull).
   // Snapshots are cleared so interpolation can't resample the pre-hit path
   // after the window — that stale-buffer resample was the old snap-back bug.
-  ghostT = 0; // fire-shimmer timer — remoteVis owns the decay
+  ghostT = 0; // fire-shimmer display timer — remoteVis owns the decay
+  revealT = 0; // shot-age window — stays live even before/without a cloak, so a late-rising cloak still owes its remainder
   tickGhost(dt: number): void { tickGhostF(this, dt); } // anim drive calls it post-locomotion
 
   applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {

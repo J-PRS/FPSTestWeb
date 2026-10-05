@@ -32,6 +32,18 @@ export const STATUS = {
  *  (server tick heal, offline bots, local skill channel) reads this. */
 export const MEND_HP_PER_SEC = 12;
 
+/** Firing decloaks: a shot out of stealth reveals the shooter for this
+ *  long — to remotes (ghost shimmer + HUD marker) AND to enemy senses
+ *  (bots/creatures read him visible again). The cloak bit stays set the
+ *  whole time; consumers mask it with this window. */
+export const SHOOT_REVEAL_S = 2;
+
+/** Is a CLOAK-carrying player currently revealed by his own gunfire?
+ *  Callers compare against their own clock (server simNow, client frame). */
+export function shootRevealed(lastFireSim: number, nowMs: number): boolean {
+  return nowMs - lastFireSim <= SHOOT_REVEAL_S * 1000;
+}
+
 /** Mask of every bit the status channel owns (bits ≥4). */
 export const STATUS_MASK = 0xFC;
 

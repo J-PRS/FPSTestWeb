@@ -92,6 +92,9 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   remotePlayer.setDdAura(!!(status & STATUS.DD));
   remotePlayer.setCharged(!!(status & STATUS.CHARGED));
   if (!cloaked || friendly) return true;
+  // Fire-reveal: his own shot left the shimmer window open — the marker
+  // and bar stay up like any visible enemy until ghostT closes it.
+  if (remotePlayer.ghostT > 0) return true;
   deps.lazyHud().removePlayerIndicator(playerId);
   deps.lazyHealthBarSystem().removeBar(playerId);
   return false;
@@ -119,7 +122,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   // that write wireJet (brain's real jet button) override the guess.
   const jetting = isJetting(remotePlayer, playerState.isDead);
   if (jetting) deps.lazyEffects().spawnJetpack(remotePlayer.position);
-  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel);
+  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel, remotePlayer.armorClass);
   if (!playerState.isDead) {
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
@@ -189,7 +192,10 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // silhouette must follow the sim's body, not the create-time class.
   if (remotePlayer.armorClass !== playerState.armorClass) remotePlayer.setClass(playerState.armorClass);
 
-  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team)) return;
+  // A decloak-revealed enemy (ghostT live from his own shot) reads like
+  // any visible foe: HUD marker, team tint, ski dust — the cloak only
+  // blanks him once the shimmer window closes.
+  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) return;
   applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
 }
