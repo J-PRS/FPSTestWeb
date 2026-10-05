@@ -401,6 +401,16 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Cross-engine float determinism** (2026-10-05): 162
+  `Math.sin/cos/atan2/hypot/exp/pow` calls across `shared/` audited.
+  ECMAScript leaves transcendental precision implementation-defined, so
+  Bun(JSC) vs Chrome(V8)/Firefox(SpiderMonkey) replays can differ in
+  ulps — the architecture already tolerates it: replicas re-anchor on
+  committed snapshots + edges (error never accumulates across an edge),
+  the state hash quantizes positions to ~1m and health to 4hp buckets,
+  so ulp drift can't cross a quantum. No bit-identity check exists that
+  could false-positive. Residual: creature/ball replicas have no hash
+  coverage at all — logged §4.7 as optional.
 - **`angles` pinned** (2026-10-05): `angles.test.ts` (5 tests) —
   `wrapAngleDelta` shortest-arc in (-π,π], exact-π convention,
   multi-turn collapse, pole discontinuity, `lerpAngle` short-arc
@@ -625,6 +635,16 @@ Full suite: 822 pass / 1 fail — the sizeWatch grandfather pin on
 `Room.ts` (grown to 1061 vs pin 909×1.15; JP's in-flight edits, not a
 suite regression). Scenario suite alone: 334/334. Net suite: 37/37,
 deterministic. Typechecks clean on both ends.
+
+### 4.7 Replica-coverage gap in the state hash — *optional*
+
+The checksum covers players only (positions at ~1m quantum). Creature,
+ball and projectile replays have NO cross-engine desync signal — a
+replay bug there is invisible to the hash. Acceptable today: replays
+re-anchor on committed snapshots + edges and drift is cosmetic-only,
+but a quantized-hash extension over replica state would catch real
+divergence early if we ever lean on replay correctness (e.g. demo
+forensics). Optional enhancement, not a bug.
 
 ---
 
