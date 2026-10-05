@@ -314,9 +314,7 @@ export class GameServer {
    *  host. Cheap to poll — one row per room, no per-player data. */
   getServerInfo() { return opsGetServerInfo(this); }
 
-  getHealthStatus(): { status: string; players: number; maxPlayers: number; tickRate: number } {
-    return opsGetHealthStatus(this);
-  }
+  getHealthStatus() { return opsGetHealthStatus(this); }
 
   /** Ops snapshot for /metrics. */
   getMetrics() { return opsGetMetrics(this); }

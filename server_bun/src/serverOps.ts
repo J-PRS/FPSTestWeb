@@ -26,12 +26,20 @@ export function getServerInfo(g: GameServer) {
     };
   }
 
-export function getHealthStatus(g: GameServer): { status: string; players: number; maxPlayers: number; tickRate: number } {
+export function getHealthStatus(g: GameServer) {
+    // 'degraded' when anything's already on fire: a quarantined room
+    // stopped simulating, or the tick loop is running meaningfully late.
+    // A monitor polling /health sees the failure instead of 'running'.
+    const quarantined = g.tickLoop.quarantinedRooms();
+    const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 5;
+    const degraded = quarantined.length > 0 || lagBad;
     return {
-      status: 'running',
+      status: degraded ? 'degraded' : 'running',
       players: totalPlayers(g),
       maxPlayers: CONFIG.maxPlayers,
       tickRate: CONFIG.tickRate,
+      ...(quarantined.length ? { quarantined } : {}),
+      ...(lagBad ? { tickLagMsAvg: +(g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1) } : {}),
     };
   }
 
