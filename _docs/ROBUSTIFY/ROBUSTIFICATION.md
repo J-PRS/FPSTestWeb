@@ -385,6 +385,16 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Room-hop residue** (2026-10-05): `world`/`remotePlayers` are
+  created once in `main.ts`, but a fresh `gameState` is authoritative —
+  `dropVolatileWorldFx` purges the volatile layer, `applyMatchMeta`
+  clears rather than leaves the old match, `reconcilePickups`/
+  `reconcileDeployables`/`onFlagUpdate` fire either-way on empty
+  rosters, and `cleanupRemotePlayers` prunes wire ids absent from the
+  new roster (`onRemove` → killCounts/aliveSince/lastWeaponByPlayer
+  deletes). Local `bot:`/`dummy` bodies are correctly exempt — they
+  own their own lifecycle. Remaining per-id maps key on live ids and
+  are reaped through the same onRemove funnel.
 
 ---
 

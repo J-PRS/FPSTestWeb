@@ -1,3 +1,4 @@
+2026-10-05 - audit: room-hop residue classified clean — singleton worldState survives room switches but gameState is authoritative (volatile-FX purge, match-meta clear, either-way pickup/deployable/flag reconciles, roster prune with onRemove map deletes); doc only
 2026-10-05 - ballCollide tests: pinned the shared sphere-vs-yaw-OBB solver (box center offset, root two-feet arch, face push-out + BALL_BOUNCE reflect, tangential no-reflect, inside-exit nearer-face both directions, yaw frame map, index query parity) — 9 new bun tests covering a previously zero-coverage shared module
 2026-10-05 - audit: console bypasser lane swept clean — all console.* sites are logger internals, boot/fault paths, debug-flagged or .old inert
 2026-10-05 - audit: server ambient-draw lane swept clean — rng injectable-seeded, perf.now metrics-only, Date.now confined to wallClock/simClock
