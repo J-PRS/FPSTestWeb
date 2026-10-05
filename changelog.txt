@@ -1,3 +1,4 @@
+2026-10-01 - capSoak sweep: ramps live bots/creatures until p95 sim-step blows budget, with per-phase breakdown; measured knee ~200 bots (sim:bots 9.3ms/tick, superlinear past 150), 200 creatures ~0.1ms
 2026-10-01 - decloak-on-fire: firing stamps lastFireSim (server fire events + botArsenal rateOk); bot senses, ball/creature targeting and ghost-drift treat a shooter as visible for 2s anchored to the shot (recloak inside the window owes the remainder); client remotes arm ghostT shimmer + HUD marker/blip on fire, throws and beam ticks count; new scenario test decloakFire
 2026-10-01 - matchSim soak: drop-distance-from-own-home histogram per carry death; carrier shield-reserve experiment tried and reverted
 2026-10-01 - Test suite cleanup: stale asserts updated to intended behavior (deferred identity-reject close, DM personal PTS board, client DOM stubs)
