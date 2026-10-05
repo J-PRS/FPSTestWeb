@@ -89,6 +89,11 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL) => Response 
       if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
         return corsResponse('Bad mode/map', { status: 400 });
       }
+      // A map that doesn't resolve must not spin up a room — bogus names
+      // otherwise each built (and a tick later tore down) a full Room.
+      if (map && !ctx.gameServer.hasMap(map)) {
+        return corsResponse('Unknown map', { status: 400 });
+      }
       const room = ctx.gameServer.quickRoom(mode, map, bots);
       return json({ room: room.name, mode: room.mode });
     },

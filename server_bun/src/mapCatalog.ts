@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { type MapSpec, resolveMapSpec, specModes } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 const MAPS_DIR = `${import.meta.dir}/../../maps`;
 
@@ -22,21 +23,36 @@ export class MapCatalog {
 
   /** maps/<name>.json — a missing or malformed file just means "default
    *  match rules", not an error. readFileSync keeps callers synchronous:
-   *  map files are tiny and loaded once per room lifetime. */
+   *  map files are tiny and loaded once per room lifetime. Misses are
+   *  negative-cached for 30s — a /join flood of bogus map names would
+   *  otherwise pay a disk read per request (and a newly-added map still
+   *  appears within half a minute). */
+  private specMisses = new Map<string, number>();
+  private static MISS_TTL_MS = 30_000;
+
   loadMapSpec(name: string): MapSpec | undefined {
     if (!name) return undefined;
+    const missAt = this.specMisses.get(name);
+    if (missAt !== undefined && wallNow() - missAt < MapCatalog.MISS_TTL_MS) return undefined;
     try {
       const path = `${MAPS_DIR}/${name}.json`;
       const raw = readFileSync(path, 'utf8');
       const parsed = JSON.parse(raw);
       if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
       const spec = resolveMapSpec(parsed);
+      this.specMisses.delete(name);
       logger.info('Map spec loaded', { room: name, path });
       return spec;
     } catch {
+      this.specMisses.set(name, wallNow());
+      if (this.specMisses.size > 512) this.specMisses.clear();
       return undefined;
     }
   }
+
+  /** True when maps/<name>.json resolves — route-level validation for
+   *  the map arg (a bogus name must not spin up a throwaway room). */
+  has(name: string): boolean { return this.loadMapSpec(name) !== undefined; }
 
   /** Join-time spec resolution: room name, then the numbered-room base
    *  (`ctf-2` inherits ctf.json), then the map arg, then the mode. */

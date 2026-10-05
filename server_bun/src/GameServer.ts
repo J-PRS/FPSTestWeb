@@ -135,6 +135,11 @@ export class GameServer {
     return this.factory.quickRoom(mode, map, bots);
   }
 
+  /** Route guard: does maps/<name>.json resolve? The catalog negative-
+   *  caches misses, so a bogus-name flood costs a Map get, not a disk
+   *  read + a throwaway Room per request. */
+  hasMap(name: string): boolean { return this.maps.has(name); }
+
   listMaps(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     return this.maps.list();
   }
