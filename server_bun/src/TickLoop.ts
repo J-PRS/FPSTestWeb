@@ -111,6 +111,11 @@ export class TickLoop {
         if (room.empty && room.name !== 'default') {
           room.dispose();
           this.rooms.delete(room.name);
+          // Streak entries are keyed by room name — a disposed room that
+          // ever threw would hold its count (and any quarantine flag)
+          // for the server's life, then re-arm on a same-named room.
+          this.tickErrStreak.delete(room.name);
+          this.tickQuarantined.delete(room.name);
           logger.info('Room disposed', { room: room.name });
           continue;
         }
