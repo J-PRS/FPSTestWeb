@@ -41,6 +41,8 @@ export const BOT_TUNING = {
     strikeTapMin: 2,     // energy — tap floor inside the strike window (commit everything)
     runInRise: 4,        // m — run-in only when objective near-level
     runInSpeed: 40,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
+    tailTapSpeed: 45,    // m/s — descent tap caps here (standalone sweep: hop+tail-tap plateaus ~43, held burn ~66 at ~10x the energy per meter)
+    tailTapSkill: 1.1,   // skill.movement floor — JP's trick is timing: skilled bots ride the hop descent, low-skill ones pay the flat burn
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)

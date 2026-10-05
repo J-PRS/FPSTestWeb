@@ -153,7 +153,7 @@ export class BotMoves {
     // arrive fast and dry beats arrive slow and tanked.
     const odTap = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
     const strikeTap = ctx.runner === true && odTap < T.moves.strikeGd;
-    const tapFloor = this.jetWhy === 'tap'
+    const tapFloor = (this.jetWhy === 'tap' || this.jetWhy === 'tail')
       ? (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin)
       : T.moves.tankedMin;
     const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
@@ -209,7 +209,22 @@ export class BotMoves {
     const canDive = rise < -T.moves.boostRise || agl > T.moves.diveAglMin;
     const diveRun = gd < runway && tgtY < pos.y + T.moves.diveArriveMargin && canDive && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
     if (diveRun) this.jetHold = 0;
-    const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
+    // Tail-of-hop tap — the timing the standalone sweep measured: jetting
+    // only the DESCENDING arc of each hop holds ~43m/s at ~1/10 the energy
+    // per meter of a held burn (66m/s): every thrust tick lands as forward
+    // speed with no ground friction, and the up-jet stretches the hop so
+    // the next descent arrives sooner. JP's timing trick — gated on
+    // moveSkill so skilled bots ride the hop while low-skill ones pay the
+    // flat burn. Deliberately bypasses jetHold: a 0.7s min-pulse would
+    // hold the burn through the landing it was meant to stop at.
+    const vy = ctx.vel?.y ?? 0;
+    const skilledHop = ctx.moveSkill === undefined || ctx.moveSkill >= T.moves.tailTapSkill;
+    const enTap = ctx.energy === undefined || ctx.energy > (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin);
+    const tail = (ctx.runner === true || ctx.wave === true) && skilledHop && airborne && vy < 0 &&
+      odTap > T.moves.boostGdMin && (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise &&
+      speed < T.moves.tailTapSpeed && rise <= T.moves.boostRise && agl <= T.moves.ceilingAgl && enTap;
+    if (tail) this.jetWhy = 'tail';
+    const jet = !diveRun && (((this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked) || tail);
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to

@@ -971,9 +971,9 @@ export class ServerBotSenses {
       // targets behind structures they'd never see through anyway.
       solids: this.room.ballSim.colliders,
       solidIndex: this.room.ballSim.colliderIndex,
-      // The shadow tank is the truth — brains read it to gate jets,
-      // shields, mends. Null field → undefined → full-tank behavior.
-      energy: this.room.moveSim.energyOf(id) ?? undefined,
+      // The shadow tank is the truth — brains read it to gate jets, shields,
+      // mends (moveSkill times botMoves' hop-descent tap; undefined = skilled).
+      energy: this.room.moveSim.energyOf(id) ?? undefined, moveSkill: skill?.movement,
       healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
       // Inbound shells feed the dodge sense — bots sidestep rockets
       // like a human reading the arc instead of eating every volley.

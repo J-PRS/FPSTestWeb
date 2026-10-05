@@ -63,6 +63,9 @@ export interface BrainCtx {
   pos: BotVec;
   /** The bot's own velocity — ski policy keys off speed, jet off climbs. */
   vel?: BotVec;
+  /** skill.movement — times the hop-descent tap: skilled bots jet only the
+   *  falling arc; undefined reads as skilled (hosts without a skill matrix). */
+  moveSkill?: number;
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
   objective?: BotVec | null;
