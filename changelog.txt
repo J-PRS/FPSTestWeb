@@ -1,3 +1,4 @@
+2026-10-05 - ball tickNet tests: pinned prediction-loop grid discipline (whole 0.05 cells only, simNow gate, 0.5s stall-breaker, 0.5s bank cap, ballistic remainder, parked settle) — 6 new vitests
 2026-10-05 - ball wire-ordering tests: pinned isStaleSeg boundary (equal-stamp segments apply, strictly-older drop, unstamped exempt) and applySeg same-tick re-anchor + simT rewind — 7 new vitests
 2026-10-05 - rubberband watch gate tests: pinned the unreplayed-stamp suppression (simT < t-0.05 silences, replayed-through still warns) plus parked/stale-leg gates — 4 new vitests driving makeRubberbandWatch.check directly (exported for testability)
 2026-10-05 - GPU disposal sweep: mapStructures room-hop rebuilds leaked 4 Lambert materials + 2 template geometries per map and the collider-gizmo material — teardown now disposes all locally-owned GPU resources (shared kit/pickup geometries stay shared by design)
