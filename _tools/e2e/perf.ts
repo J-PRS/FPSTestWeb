@@ -89,6 +89,18 @@ try {
 
   console.log(`PERF bots=${BOTS} frames=${n} | fps=${sample.fps} median=${sample.medianMs}ms p95=${sample.p95Ms}ms p99=${sample.p99Ms}ms | >25ms:${sample.over25} >50ms:${sample.over50} worst=${sample.longestMs}ms | jsBusy=${(sample.jsBusyFrac * 100).toFixed(1)}% heap=${sample.memMb}MB`);
 
+  // Phase attribution — __perf() is the gameLoop's own EMA table
+  // (sim/fx/hud/render + budget + draws). A median that grew is only
+  // half an answer; this says which subsystem grew it.
+  const ph = await client.test<Record<string, number>>(`window.__perf ? window.__perf() : null`).catch(() => null);
+  if (ph) {
+    const row = Object.entries(ph)
+      .filter(([k, v]) => k !== 'frame' && typeof v === 'number' && v >= 0.5)
+      .map(([k, v]) => `${k}=${v.toFixed(1)}`)
+      .join(' ');
+    console.log(`  phases frame=${(ph.frame ?? 0).toFixed(1)}ms | ${row}`);
+  }
+
   if (COMPARE && existsSync(COMPARE)) {
     const base = JSON.parse(readFileSync(COMPARE, 'utf8')) as PerfSample;
     const d = (k: keyof PerfSample) => `${k}: ${base[k]} → ${sample[k]} (${((sample[k] as number) - (base[k] as number)) >= 0 ? '+' : ''}${((sample[k] as number) - (base[k] as number)).toFixed(1)})`;
