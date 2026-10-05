@@ -135,6 +135,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   shotFired: {
+    // Cosmetic relay, but every claim fans out to the room — an uncapped
+    // flood is free egress amplification. One per trigger pull, so the
+    // legal ceiling is the shot cadence itself.
+    limit: { maxCount: 40, windowMs: 1000 },
     validate: (obj) => {
       const dir = optVec(obj.dir);
       if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
@@ -307,6 +311,8 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   repair: {
+    // Weld beam ticks per pull, same cadence as the Lightning claim lane.
+    limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
       if (!isFiniteNumber(obj.targetId) || !Number.isInteger(obj.targetId) || obj.targetId < 0) {
         return { success: false, error: 'targetId must be a non-negative integer' };
@@ -319,6 +325,9 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   // Mirror-only claim: the server re-derives the energy ante itself —
   // the message deliberately carries no amount or skill id.
   skillUse: {
+    // Deliberate presses; the ante re-derivation keeps floods harmless
+    // but each claim still echoes a claimAck, so bound the lane anyway.
+    limit: { maxCount: 8, windowMs: 1000 },
     validate: (obj) => {
       return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq) } };
     },
@@ -326,6 +335,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   snapshotRequest: {
+    // Each request reserializes + resends the whole world state — the
+    // most expensive message per byte a client can send. Legit uses are
+    // join-time and a rare manual resync.
+    limit: { maxCount: 3, windowMs: 5000 },
     validate: () => {
       return { success: true, data: { type: 'snapshotRequest' } };
     },
@@ -345,6 +358,9 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   resync: {
+    // Same cost shape as snapshotRequest (sendWorldState) plus a shadow
+    // reseat — a manual desync escape hatch, not a stream.
+    limit: { maxCount: 3, windowMs: 5000 },
     validate: () => {
       return { success: true, data: { type: 'resync' } };
     },
@@ -355,6 +371,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   classUpdate: {
+    limit: { maxCount: 10, windowMs: 1000 },
     validate: (obj) => {
       const c = obj.armorClass;
       if (c !== 'light' && c !== 'medium' && c !== 'heavy') {
@@ -374,6 +391,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   perkUpdate: {
+    limit: { maxCount: 10, windowMs: 1000 },
     validate: (obj) => {
       if (!isPerkId(obj.perk)) {
         return { success: false, error: 'perk must be a known PerkId' };
