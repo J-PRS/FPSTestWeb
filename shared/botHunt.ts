@@ -396,6 +396,10 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // legal radius even before its wake proxy grows.
   const py = Math.max(
     ctx.groundY(px, pz),
+    // Zone-aim at the lead point's ground measured worse on the only
+    // bench that shows it (FFA K/D 0.33 -> 0.20): a 3s fuse pops long
+    // after the runner leaves, so mines only pay vs spot-holders.
+    // Center-mass keeps the body-glue kill path live.
     aimPos.y + st.lastAimY + st.leadVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
