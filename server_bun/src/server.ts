@@ -29,7 +29,9 @@ function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): 
 rotateLogs();
 
 let wtCertHash: string | null = null;
-const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: () => wtCertHash };
+// requestIP binds lazily — `server` doesn't exist until Bun.serve below
+// returns, but no request can arrive before that.
+const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: () => wtCertHash, requestIP: (req: Request) => server.requestIP(req) };
 const ROUTES = makeRoutes(httpCtx);
 
 const server = Bun.serve<WebSocketData>({
@@ -94,7 +96,7 @@ const server = Bun.serve<WebSocketData>({
     }
 
     const route = ROUTES[url.pathname];
-    if (route) return route(url);
+    if (route) return route(url, req);
 
     // Prefix routes — path carries params (admin query args, demo filename).
     if (url.pathname.startsWith('/admin/')) return adminRoute(httpCtx, req, url);

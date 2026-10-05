@@ -14,6 +14,7 @@ import { weaponStats } from './weaponStats.ts';
 import { WEAPONSTATS_PAGE } from './weaponstatsPage.ts';
 import { STATUS_PAGE } from './statusPage.ts';
 import { logger } from './logger.ts';
+import { wallNow } from './wallClock.ts';
 
 export interface HttpCtx {
   gameServer: GameServer;
@@ -21,6 +22,8 @@ export interface HttpCtx {
   rtcRelay: RtcRelay;
   /** DER SHA-256 of the WebTransport cert, once the WT block has read it. */
   wtCertHash(): string | null;
+  /** Client IP for per-caller throttle tables — Bun's server.requestIP. */
+  requestIP?(req: Request): { address: string } | null;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -53,8 +56,28 @@ function wtInfo(ctx: HttpCtx): { enabled: true; port: number; sha256: string } |
   return { enabled: true, port: CONFIG.wtPort, sha256 };
 }
 
-// Plain GET endpoints — a new JSON route is one table entry.
-export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL) => Response | Promise<Response>> {
+/** /join per-IP throttle — the WS handshake has one (SessionManager),
+ *  but a GET flood here never reaches a handshake: each request can
+ *  build a fresh Room + bot populate (empties dispose per tick, so the
+ *  churn repeats every request). Mirrors the 5/min handshake budget. */
+const joinIps = new Map<string, { count: number; start: number }>();
+const JOIN_IP_LIMIT = 5;
+const JOIN_IP_WINDOW_MS = 60_000;
+function joinThrottleAllow(ip: string): boolean {
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  const now = wallNow();
+  let w = joinIps.get(ip);
+  if (!w || now - w.start >= JOIN_IP_WINDOW_MS) {
+    w = { count: 0, start: now };
+    joinIps.set(ip, w);
+    if (joinIps.size > 1024) joinIps.clear();
+  }
+  return ++w.count <= JOIN_IP_LIMIT;
+}
+
+// Plain GET endpoints — a new JSON route is one table entry. Handlers
+// get (url, req) — req is only needed by /join for the client IP.
+export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Request) => Response | Promise<Response>> {
   return {
     '/': () => json(ctx.gameServer.getHealthStatus()),
     '/health': () => json(ctx.gameServer.getHealthStatus()),
@@ -80,7 +103,9 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL) => Response 
     '/maps': () => json(ctx.gameServer.listMaps()),
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
     // match fitting the request (or a fresh room built from that spec).
-    '/join': (url) => {
+    '/join': (url, req) => {
+      const ip = req ? ctx.requestIP?.(req)?.address : undefined;
+      if (ip && !joinThrottleAllow(ip)) return corsResponse('Too many joins', { status: 429 });
       const mode = url.searchParams.get('mode') ?? '';
       const map = url.searchParams.get('map') ?? '';
       const botsRaw = url.searchParams.get('bots');
