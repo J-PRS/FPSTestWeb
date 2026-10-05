@@ -125,8 +125,37 @@ export class RoomProjectiles {
   }
 
   /** Fire a real projectile. `dir` is normalized; muzzle velocity = dir*speed
-   *  + 50% of the shooter's velocity (same inheritance the client applies). */
+   *  + 50% of the shooter's velocity (same inheritance the client applies).
+   *  Burst weapons (flak/shotgun) fire the whole pellet fan — a pull
+   *  registers `burst` shells fanned by golden-angle cone offsets, same
+   *  coverage the client spawnFan produces. */
   spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3): string | null {
+    const stats = getWeaponStats(weaponType);
+    const burst = stats?.burst ?? 1;
+    const spread = stats?.pelletSpread ?? 0;
+    if (burst <= 1 || spread <= 0) return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel);
+    // Fan basis: right = dir × up0, up = right × dir — deterministic
+    // Vogel-spiral coverage (no rng: every pellet's offset is fixed by
+    // index, so sim replicas fan identically).
+    let rx = -dir.z, ry = 0, rz = dir.x;
+    const rl = Math.hypot(rx, rz);
+    if (rl < 1e-8) { rx = 1; rz = 0; } else { rx /= rl; rz /= rl; }
+    const ux = ry * dir.z - rz * dir.y, uy = rz * dir.x - rx * dir.z, uz = rx * dir.y - ry * dir.x;
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    let first: string | null = null;
+    for (let i = 0; i < burst; i++) {
+      const r = Math.sqrt((i + 0.5) / burst) * spread;
+      const a = i * golden;
+      const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
+      const dx = dir.x + rx * ox + ux * oy, dy = dir.y + ry * ox + uy * oy, dz = dir.z + rz * ox + uz * oy;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel);
+      if (first === null) first = id;
+    }
+    return first;
+  }
+
+  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3): string | null {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.speed <= 0) return null; // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);

@@ -37,6 +37,7 @@ export enum WeaponType {
   HealGrenade = 31,   // belt throw: small blast, strong heal for allies caught; enemies eat the sting + shove
   ProxyGrenade = 32,  // belt throw: 1s fuse, proxy bubble inflating to 4m — toss-and-zone pop
   SatchelCharge = 33,    // belt throw: infiltrator satchel — glues to surface/player, 4s fuse, objective-killer blast
+  Concussion = 34,       // belt throw: T2 conc — fuse bomb, tiny sting, huge shove, strips the flag and drains jets
 }
 
 export interface WeaponStats {
@@ -71,6 +72,10 @@ export interface WeaponStats {
   /** Spawn claims allowed per WEAPON_FIRE_INTERVAL_S window (fan weapons:
    *  one pull registers every pellet at once). Default 1. */
   burst?: number;
+  /** Cone slope factor for a `burst` fan — the golden-angle offsets each
+   *  pellet's dir by up to this much (0.10 ≈ flak's wide shard cone,
+   *  0.035 ≈ the pump's tight spray). Only read when burst > 1. */
+  pelletSpread?: number;
   /** Per-shot TTL spread: each projectile's fuse scales by ±this fraction,
    *  seeded from its projectileId so server and client replicas pop at the
    *  same age. A burst of shards should raggedly fade, not pop in unison. */
@@ -96,6 +101,15 @@ export interface WeaponStats {
    *  rayRange to the legal flight distance once airtime passes rayDelay. */
   rayDelay?: number;
   rayRange?: number;
+  /** Terrain contact BOUNCES instead of detonating (thrown fuse bombs:
+   *  the 1.5s timer is the only trigger). The server reflects the shell
+   *  off the heightfield normal and keeps it live until the fuse pops —
+   *  clients replay the same bounce in their replica sim. */
+  terrainBounce?: boolean;
+  /** Shared bounce constants — server sim and client config read the
+   *  same numbers so the replica arc matches the authoritative one. */
+  bounceRestitution?: number; // normal velocity kept per bounce
+  bounceFriction?: number;    // tangential velocity kept per bounce
 }
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
@@ -137,8 +151,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     speed: 80.0,
     gravity: false,
     bodyRadius: 0.5,
-    hitMin: 0.3,
-    hitMax: 8.0,
+    hitMin: 0.0,
+    hitMax: 0.25, // belt rule: the throw is a physical shell, not a wake — the pull AOE is the payoff after contact
     hitGrow: 2.0,
   },
   [WeaponType.Grenade]: {
@@ -151,9 +165,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
-    hitMax: 8.0,
+    hitMax: 0.25, // belt rule — and it phases through bodies anyway
     hitGrow: 2.0,
-    maxLifetime: 2.0,
+    maxLifetime: 1.5, // THE fuse — the only trigger. Nothing else pops it.
+    // armTime == fuse ⇒ the shell NEVER arms: bodies phase through and
+    // dirt can't detonate it, for its whole flight. Same machinery the
+    // mortar uses pre-arm, held open until the timer ends the shell.
+    armTime: 1.5,
+    terrainBounce: true,
+    bounceRestitution: 0.45, // lobbed iron — thuds and rolls, doesn't skip
+    bounceFriction: 0.75,
   },
   [WeaponType.Chaingun]: {
     directDamage: 8, // ~89 dps at 11/s — below plasma (125) but hitscan-easy; 13 slugs to kill a player
@@ -207,6 +228,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Flak]: {
     directDamage: 9,
     burst: 9, // one pull registers all shards at once // per shard — 9 shards ≈ 81 max
+    pelletSpread: 0.10,
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 0,
@@ -302,6 +324,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Shotgun]: {
     burst: 10, // one pull registers all pellets at once
+    pelletSpread: 0.035,
     // Pump pellets: 10 × 7dmg ≈ 70 point-blank, ~3× tighter cone than flak.
     // Fast slugs (300 m/s) on a 0.4s fuse ≈ 120m of reach — usable at mid
     // range where flak's lobbed shards scatter into nothing.
@@ -418,10 +441,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
-    hitMax: 8.0,
+    hitMax: 0.25, // near-contact only — an 8m proxy popped the carrier on anything nearby
     hitGrow: 2.0,
     maxLifetime: 1.6, // fuse pop releases the bomblets
-    cluster: { count: 5, radius: 6.0 }, // bomblet scatter footprint around the pop
+    cluster: { count: 5, radius: 9.0 }, // bomblet scatter footprint around the pop
   },
   [WeaponType.ClusterBomblet]: {
     // Child charge — small pop, small radius; count is the weapon.
@@ -434,7 +457,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
-    hitMax: 4.0,
+    hitMax: 0.25, // bomblets must LAND — a fat proxy pops the rain mid-air
     hitGrow: 1.0,
     maxLifetime: 1.1,
   },
@@ -450,26 +473,48 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
-    hitMax: 0.6,
+    hitMax: 0.25, // belt rule — a thrown spear skewers on the shaft, not a wake
     hitGrow: 0.2,
     maxLifetime: 2.4, // ~285m of reach — same as before, just faster
   },
   [WeaponType.ImpactGrenade]: {
-    // Contact-fused knockback tool: flies flat and far, pops on ANY touch,
-    // throws targets (and the thrower) hard without hurting much — the
-    // dismount/boost grenade.
-    directDamage: 25,
-    aoeDamage: 10,
-    aoeRadius: 7.0,
+    // Contact-fused blast nade: flies flat and far, pops on ANY touch,
+    // medium-high damage in a tight envelope — a real kill tool whose
+    // shove is the bonus, not the payload (the CONC carries the strip).
+    directDamage: 60,
+    aoeDamage: 20,
+    aoeRadius: 5.0,
     knockbackForce: 45.0, // biggest shove in the belt
     forceMode: 'push',
     speed: 55.0,
     gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
-    hitMax: 6.0,
+    hitMax: 0.25, // belt rule: the contact pop needs real contact, not a 6m wake
     hitGrow: 1.5,
     maxLifetime: 4.0, // contact usually pops it first
+  },
+  [WeaponType.Concussion]: {
+    // T2 concussion grenade: the blast is a STRIP, not a kill — small
+    // sting inside a wide envelope, a heavy shove, the flag pops loose,
+    // and the victim's jet tank takes a bite (CONC_JET_DRAIN). Pure fuse
+    // bomb: never arms, so bodies phase through and dirt only bounces it.
+    directDamage: 15,
+    aoeDamage: 8,
+    aoeRadius: 9.0,
+    knockbackForce: 55.0,
+    forceMode: 'push',
+    speed: 40.0,
+    gravity: true,
+    bodyRadius: 0.25,
+    hitMin: 0.0,
+    hitMax: 0.25, // belt rule — and it phases through bodies anyway
+    hitGrow: 2.0,
+    maxLifetime: 1.5,
+    armTime: 1.5, // never arms — same never-pops-on-contact contract as Grenade
+    terrainBounce: true,
+    bounceRestitution: 0.5,
+    bounceFriction: 0.7,
   },
   [WeaponType.RemoteRailgun]: {
     // Belt capacitor slug: 0.4s of readable lob, then a railgun-class beam
@@ -484,7 +529,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: false, // flat flight: the ray tracks the throw line
     bodyRadius: 0.3,
     hitMin: 0.0,
-    hitMax: 0.6, // the slug is a small throw — its reach is the beam, not a wake
+    hitMax: 0.25, // belt rule — the reach is the beam, not a wake
     hitGrow: 0.3,
     maxLifetime: 4.0, // intercept before discharge → plain impact pop
     rayDelay: 0.4,
@@ -555,7 +600,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
-    hitMax: 8.0,
+    hitMax: 0.25, // belt rule — plating lands on contact, not a fat wake
     hitGrow: 2.0,
     maxLifetime: 2.0,
   },
@@ -587,7 +632,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
-    hitMax: 8.0,
+    hitMax: 0.25, // belt rule — the heal pops on real contact or the fuse
     hitGrow: 2.0,
     maxLifetime: 2.0,
   },
