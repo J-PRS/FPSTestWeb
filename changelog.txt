@@ -1,3 +1,4 @@
+2026-10-01 - RoomProjectiles.incomingNear: per-tick XZ shell grid (16m cells, tickSeq-keyed) replaces per-think full scan - results identical in content + insertion order (index cells + sort); sense:threats 1.1ms -> 0.02ms, ctxBuild 1.5 -> 0.4ms at n=300
 2026-10-01 - botStageProbe gains a per-sim split (wraps each room.sims tick) - names the non-bot share at scale: proj=5.2ms, move=1.2ms at n=300
 2026-10-01 - BotSteer: gather separation-range bodies once per think instead of scanning ctx.others per slot (O(n) not O(n x slots); identical scores) - steer 2.9ms -> 0.92ms, think 8.4 -> 6.3ms at n=300
 2026-10-01 - creatureGauntlet sweep: one impossible-tier bot, one life per level, ramping species caps (mix or --species) - measures median survival/kills/hp per level; mix knee ~40, rakk deadliest per-cap, snake essentially food

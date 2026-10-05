@@ -246,13 +246,45 @@ export class RoomProjectiles {
     }
   }
 
+  /** Per-tick XZ shell grid — incomingNear ran once per think was
+   *  O(projs × thinks); cells prune XZ, the 3D checks below stay exact.
+   *  Indices sort back to map order so results are identical to the
+   *  flat scan, insertion order included. */
+  private shellGrid: { seq: number; cells: Map<number, number[]>; list: LiveProj[] } | null = null;
+  private shellsNear(pos: Vec3, radius: number): LiveProj[] {
+    const seq = this.room.tickSeq;
+    if (this.shellGrid?.seq !== seq) {
+      const CELL = 16, BIAS = 2048;
+      const cells = new Map<number, number[]>();
+      const list = [...this.projs.values()];
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i]!.p.pos;
+        const k = ((Math.floor(p.x / CELL) + BIAS) << 16) | (Math.floor(p.z / CELL) + BIAS);
+        const cell = cells.get(k);
+        if (cell) cell.push(i); else cells.set(k, [i]);
+      }
+      this.shellGrid = { seq, cells, list };
+    }
+    const { cells, list } = this.shellGrid;
+    const CELL = 16, BIAS = 2048;
+    const idx: number[] = [];
+    const x0 = Math.floor((pos.x - radius) / CELL), x1 = Math.floor((pos.x + radius) / CELL);
+    const z0 = Math.floor((pos.z - radius) / CELL), z1 = Math.floor((pos.z + radius) / CELL);
+    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+      const cell = cells.get(((cx + BIAS) << 16) | (cz + BIAS));
+      if (cell) for (const i of cell) idx.push(i);
+    }
+    idx.sort((a, b) => a - b);
+    return idx.map((i) => list[i]!);
+  }
+
   /** Shells inside `radius` that are closing on `pos` — feeds bot threat
    *  sense so brains can sidestep incoming fire like a human reading a
    *  rocket's approach. A shell flying away is no threat regardless of
    *  distance. */
   incomingNear(pos: Vec3, radius: number): Vec3[] {
     const out: Vec3[] = [];
-    for (const proj of this.projs.values()) {
+    for (const proj of this.shellsNear(pos, radius)) {
       const dx = pos.x - proj.p.pos.x, dy = pos.y - proj.p.pos.y, dz = pos.z - proj.p.pos.z;
       const d = Math.hypot(dx, dy, dz);
       if (d > radius) continue;
