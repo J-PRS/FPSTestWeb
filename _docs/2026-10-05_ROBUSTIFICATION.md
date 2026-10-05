@@ -214,6 +214,58 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
 - **Determinism**: one `MoveSim` in shared/ — `moveJudge` shadows and
   client prediction both wrap it; same for ball sim (§4.3) and wire
   decode. `moveClaims`/`combatCharge` teardown covered.
+- **`remoteDeployables`**: `byId`/`remote` both evict on `remove()`,
+  roster reconcile drops snapshot-absent ids, weld beams expire at
+  250ms, sensor pings TTL at 3s, `dispose()` drains all lists.
+- **`TickLoop`**: `tickErrStreak`/`tickQuarantined`/`faultedRooms`/
+  `phases` are room-name keyed — bounded by live rooms, evicted on
+  room teardown, eldest evicted at cap.
+- **`stateDebug.firstSeenAt`**: reconciles against the live id set
+  every pass (stamps fresh, deletes absent) — join-grace bookkeeping
+  can't accumulate dead ids.
+- **Client FX layer**: `damageNumbers` 48-cap + oldest-drop + glyph
+  pool; `ballTrails` dot pool + slot freelist; `deployAdopt` dead
+  items → `killItem` dispose+remove; `deployRockets` dead rockets
+  splice-reaped per frame; `netTelemetry` ping history capped +
+  tick window time-bounded; `sfxWorld.remoteLoops` capped at 6 with
+  silent-slot eviction + `remoteMoveAudioGone` in the onRemove
+  funnel; `effects.ts` beams/particles reap into capped pools,
+  empty instanced buckets retire, `deadP`/`beamPool` trim to KEEP.
+- **Server module tail** (full 79-file `server_bun/src` sweep):
+  `respawn` timers+dueAt evict on cancel/fire/dispose; `influenceMap`
+  no per-id state; `deployTicks` dead-owner removal + bolt ttls;
+  `serverAttacks` stateless; `clientLogs.postIps` 1024-cap;
+  `matchJournal` call-local; `spotBoard` cloak-evict + SPOT_MS TTL;
+  `serverParties` rebuilt per call; `RtcRelay` room-keyed evict;
+  `roomSwitch` cooldowns 1024-cap; `DemoStorage` MAX_DEMOS=100
+  oldest-evict; `SessionManager` claimedIdentities 10k oldest-first,
+  joinWindows 1024 two-phase evict, specRooms delete on join;
+  `roomScore`/`roomFactory`/`roomArena`/`Room*`/`MessageHandler`/
+  `GameServer`/`mapCatalog`/`superBot`/`healPool`/`ballCombat`/
+  `projContact`/`spawnPicker`/`tickHelpers`/`validation`/`rewind`/
+  `roomMatch` — roster/room-keyed or call-local.
+- **`shared/` tree**: `botSheep` evicts all 9 per-id maps in one
+  `forget` path + rekeys on id change; `botLos` memo TTL + 4096-cap;
+  `botGraph` evicts oldest; `botHunt` caps at 6; `solidWorld.cells`
+  is spatial-hash geometry; `flagGoals`/`weapons`/`botClasses` are
+  static tables. Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
+  are the strictRng-gated seams themselves; remaining `Math.random`
+  defaults (`rollVariant`/`spawnRng`/`deps.rng`) are documented with
+  all callers passing seeded rng.
+- **Chatter stack determinism**: `tauntDelayMs` now draws from
+  seeded `tauntRand` — the last ambient `Math.random` in the stack;
+  `killFeed`'s own four draws converted earlier. Chatter fully
+  deterministic under strictRng.
+- **Test harness**: replica `held`/`roster` evict on wire `remove`;
+  the `tauntRng`/`strictRng` hooks are the deliberate seams the
+  tests exercise.
+- **Client ambient draws**: `NetworkManager` `Math.random` is
+  one-time identity mint (localStorage-persisted, never sim);
+  `remotes` `Date.now` feeds scoreboard alive-seconds display only.
+- **Leaver-map key domains**: `killCounts`/`lastWeaponByPlayer`/
+  `aliveSince` correctly stay sibling maps — their key domains span
+  `'local'` + client fill bots + self, not RemoteSet members; the
+  `onRemove` funnel is the right shape for mixed-domain keys.
 
 ---
 
