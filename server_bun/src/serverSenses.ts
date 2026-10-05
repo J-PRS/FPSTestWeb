@@ -103,12 +103,17 @@ export class ServerBotSenses {
   /** Shared leg-scale router — one flow field serves the whole squad;
    *  built on first route query so botless rooms never pay the grid. */
   private flow: TerrainFlow | null = null;
-  private routeOf() {
+  private routeOf(p: { team?: string }) {
     if (!this.field) return undefined;
     this.flow ??= new TerrainFlow((x, z) => hmHeight(this.field!, x, z));
     const flow = this.flow;
+    // Danger feed is per-team and live: the walk deflects around cells
+    // where THIS side keeps dying, so two rooms' routes diverge without
+    // a second flood.
+    const danger = (x: number, z: number) =>
+      this.room.influence.value({ x, y: 0, z }, this.room.influence.dangerLayer(p.team ?? 'alpha'));
     return (fx: number, fz: number, tx: number, tz: number, ahead: number) =>
-      flow.route(fx, fz, tx, tz, ahead);
+      flow.route(fx, fz, tx, tz, ahead, danger);
   }
 
   /** Neutron shell around home for a flag carrier waiting out a stolen
@@ -838,7 +843,7 @@ export class ServerBotSenses {
         this.field ? hmHeight(this.field, x, z) : p.position.y,
         this.room.moveSim.structureTop(x, z),
       ),
-      route: this.routeOf(),
+      route: this.routeOf(p),
       others: parties.others,
       allies: parties.allies,
       // Mortar heavies acquire siege-range targets; everyone else holds

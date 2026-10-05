@@ -15,6 +15,7 @@ import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, pickBotWeaponSafe, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
+import { BOT_TUNING as T } from '../../shared/botTuning.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless, type BeamHost } from './botBeam.ts';
 import { isSuper } from './superBot.ts';
@@ -438,9 +439,19 @@ export class BotArsenal implements BeamHost {
       // just a suicide with extra steps.
       if (!urgent || hp <= SELF_SPLASH_MAX + 5) return;
     }
-    if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
+    // The entry blast is a timed instrument, not a cadence: inside the
+    // strike window a runner refires the moment its speed dips under the
+    // ceiling so the LAST blast's shove is still live at ring entry —
+    // cadence-firing spends it mid-approach and the capper arrives at
+    // ~23m/s inside the defense's kill zone (ring autopsy: in@28mps,
+    // 3.0s inside, 0 grabs).
+    const strike = goal.runner === true && dist < T.moves.strikeGd;
+    const blastNow = strike && dist < 80 &&
+      Math.hypot(sh.vel.x, sh.vel.z) < 48 &&
+      (this.propelT.get(id) ?? 0) < now + 1400; // still ~1s apart — each shove must land before the next
+    if (!blastNow && (this.propelT.get(id) ?? 0) > now) return;
     // Hard floor only: a 50% grab-hp budget can't survive the route —
     // propels ARE the speed and starving them flatlines transit (capRun
     // regression: kata never grabbed at all). A quarter-hp floor keeps
@@ -508,7 +519,11 @@ export class BotArsenal implements BeamHost {
     // every flat stretch, so runners re-blast before the run dies.
     // Holding the 12m/s launch ceiling for everyone else capped route
     // arrivals at ~10-18m/s — inside ring defense's kill zone.
-    const movingCap = surge ? 30 : 12;
+    // The strike window escalates it: inside the defended ring a runner
+    // disc-jumps on a tighter cadence and keeps blasting past the usual
+    // ceiling — ring entries at ~27m/s die in ~3s where a 45m/s
+    // blow-through clears the ring before the defense re-acquires.
+    const movingCap = surge ? (strike ? 48 : 30) : 12;
     if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
     // No energy gate here by design: a heel blast costs ammo + hp, NOT
     // jet fuel — gating it on a charged tank stranded every trapped
@@ -568,7 +583,7 @@ export class BotArsenal implements BeamHost {
     // Runners chain on the human cadence (~3.5s between disc-jumps);
     // everyone else pays the full 8s — chaining is blood + ammo, and a
     // bot with somewhere to be trades it gladly while a roamer shouldn't.
-    this.propelT.set(id, now + (surge ? 3500 : 8000));
+    this.propelT.set(id, now + (surge ? (strike ? 2200 : 3500) : 8000));
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
     logger.info('Bot propel', { id });
   }

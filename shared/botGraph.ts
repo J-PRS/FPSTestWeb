@@ -22,7 +22,7 @@ import { BOT_TUNING as T } from './botTuning.ts';
 export class TerrainFlow {
   private readonly n: number;
   private readonly h: Float32Array;
-  private readonly fields = new Map<number, Int32Array>();
+  private readonly fields = new Map<number, { parent: Int32Array; dist: Float32Array }>();
 
   /** `height` must be terrain-only (structures move; routes shouldn't). */
   constructor(height: (x: number, z: number) => number, extent = T.graph.extent, cell = T.graph.cell) {
@@ -51,11 +51,11 @@ export class TerrainFlow {
   /** Dijkstra flood from a goal cell — parent[] points downhill along
    *  the cheapest-cost route, so walking parents from any start cell
    *  yields the path to the goal. Cached per goal cell. */
-  private fieldFor(goal: number): Int32Array {
-    let parent = this.fields.get(goal);
-    if (parent) return parent;
+  private fieldFor(goal: number): { parent: Int32Array; dist: Float32Array } {
+    const hit = this.fields.get(goal);
+    if (hit) return hit;
     const n2 = this.n * this.n;
-    parent = new Int32Array(n2).fill(-1);
+    const parent = new Int32Array(n2).fill(-1);
     const dist = new Float64Array(n2).fill(Infinity);
     dist[goal] = 0;
     // Binary heap of cell indices ordered by dist — no library needed
@@ -131,28 +131,48 @@ export class TerrainFlow {
         }
       }
     }
-    this.fields.set(goal, parent);
+    this.fields.set(goal, { parent, dist: Float32Array.from(dist) });
     if (this.fields.size > T.graph.fieldCache) {
       // Goals are stable (stands); bound the cache so a wander-bot's
       // random cells can't grow it without limit — evict oldest.
       const oldest = this.fields.keys().next().value!;
       this.fields.delete(oldest);
     }
-    return parent;
+    return this.fields.get(goal)!;
   }
 
   /** The next waypoint on the cheapest route `to`, about `ahead` meters
    *  along the flow from `from`. Null when the start cell can't reach
    *  the goal (only when the caller's height fn differs from the
    *  grid's). The steerer stays authoritative under ~9m. */
-  route(fx: number, fz: number, tx: number, tz: number, ahead: number): BotVec | null {
+  route(fx: number, fz: number, tx: number, tz: number, ahead: number, danger?: (x: number, z: number) => number): BotVec | null {
     const goal = this.cellOf(tx, tz);
-    const parent = this.fieldFor(goal);
+    const field = this.fieldFor(goal);
+    const parent = field.parent;
     let c = this.cellOf(fx, fz);
     if (parent[c] === -1 && c !== goal) return null;
     let walked = 0, prev = c;
     while (c !== goal) {
-      const p = parent[c]!;
+      // Danger deflection: among strictly-descending neighbors pick the
+      // least costly by dist + live danger. Descent-only keeps the walk
+      // convergent (a danger-only gradient could orbit a hot blob
+      // forever); the flood's parent stays the safe fallback.
+      let p = parent[c]!;
+      if (danger) {
+        const cx = c % this.n, cz = (c / this.n) | 0;
+        let best = Infinity;
+        for (let dz = -1; dz <= 1; dz++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dz) continue;
+            const nx = cx + dx, nz = cz + dz;
+            if (nx < 0 || nz < 0 || nx >= this.n || nz >= this.n) continue;
+            const v = nz * this.n + nx;
+            if (field.dist[v]! >= field.dist[c]!) continue;
+            const score = field.dist[v]! + danger(this.w(nx), this.w(nz)) * this.cell * T.graph.dangerTax;
+            if (score < best) { best = score; p = v; }
+          }
+        }
+      }
       if (p === -1) return null;
       const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
       walked += Math.hypot(dx, dz) * this.cell;
@@ -171,7 +191,7 @@ export class TerrainFlow {
    *  through instead of a myopic ring candidate. Null when unrouted. */
   routeNearGoal(fx: number, fz: number, tx: number, tz: number, backM: number): BotVec | null {
     const goal = this.cellOf(tx, tz);
-    const parent = this.fieldFor(goal);
+    const parent = this.fieldFor(goal).parent;
     const start = this.cellOf(fx, fz);
     if (parent[start] === -1 && start !== goal) return null;
     // Measure the whole chain once, then re-walk to total-backM.

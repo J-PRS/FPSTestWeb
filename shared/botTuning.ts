@@ -116,6 +116,9 @@ export const BOT_TUNING = {
                          // can walk, but not to a map-length detour it
                          // could jet over
     fieldCache: 8,       // live goal floods kept at once
+    dangerTax: 0.5,      // cost-m per influence-unit per cell — the walk deflects
+                         // around cells where this bot's team keeps dying; a hot
+                         // kill zone (~5-10 scent) prices like a ~40-75m detour
   },
   // botBrain — think cadence + disposition rolls
   brain: {
