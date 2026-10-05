@@ -274,7 +274,13 @@ function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */
 export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }): BrainOut['fire'] {
   const { hero, fearing } = mood;
-  if (!st.hunt || now - st.lastSeenAt > STALE_MS) return undefined;
+  // LOS memory: past STALE_MS the shot isn't blind amnesia — a human
+  // keeps suppressing where the runner was heading. Fire stays legal on
+  // the extrapolated ghost until the pursuit window itself expires,
+  // with aim decaying by how long the eye line has been broken.
+  const staleMs = now - st.lastSeenAt;
+  const memS = Math.max(0, (staleMs - STALE_MS) / 1000);
+  if (!st.hunt || staleMs > PURSUE_MS) return undefined;
   const acq = st.acquiredAt.get(st.hunt.id);
   if (acq !== undefined && st.huntTick - acq < st.reactTicks) return undefined;
   st.fireT -= dt;
@@ -283,7 +289,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   st.burstLeft--;
   st.fireT = (st.burstLeft > 0 ? 0.45 : 0.8 + botRand() * 0.5) / st.temper
     * (hero ? 0.65 : fearing ? 0.9 : 1);
-  const d = dist3(pos, st.lastSeen);
+  const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   // Suppressive fire is deliberately sloppy — noise, not hits. Hero
   // aim just stops being sloppy.
   const ws = ctx.weaponSpeed?.(d);
@@ -320,6 +326,11 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // Humans under- and over-lead differently — per-bot skew on the
   // intercept so tracers don't all converge on the same math.
   const leadFlight = flight * st.leadSkew;
+  // Memory shots aim at the drifting ghost (pickHunt keeps it walking
+  // the lead model), not the frozen sighting point — and the error
+  // budget grows with every second the target stays unseen.
+  const aimPos = memS > 0 ? st.hunt.pos : st.lastSeen;
+  err *= 1 + memS;
   // Ballistic intercept: the target keeps falling while the shell
   // travels — a skier mid-air arcs down, and a flat lead overshoots
   // high. Clamp at terrain so a grounded runner isn't predicted
@@ -327,8 +338,8 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // Lead off the opponent model, not the live velocity — a jinking
   // target's instant vel is already gone by the time the shell flies;
   // the lagged estimate is what a human's prediction actually tracks.
-  const px = st.lastSeen.x + st.leadVel.x * leadFlight;
-  const pz = st.lastSeen.z + st.leadVel.z * leadFlight;
+  const px = aimPos.x + st.leadVel.x * leadFlight;
+  const pz = aimPos.z + st.leadVel.z * leadFlight;
   // Self-splash read: when the predicted blast lands closer to the
   // shooter than the target, the shot costs more than it earns — a
   // human holds that disc. Courage draws the exception: heroic bots
@@ -336,7 +347,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   const aoe = ctx.weaponAoe?.(d);
   if (aoe && aoe.r > 0) {
     const selfD = Math.hypot(px - pos.x, pz - pos.z);
-    const foeD = Math.hypot(px - st.lastSeen.x, pz - st.lastSeen.z);
+    const foeD = Math.hypot(px - aimPos.x, pz - aimPos.z);
     // A blast landing nearer me than him costs more than it earns —
     // humans hold that disc. Courage draws the exception: heroic bots
     // sometimes take the mutual-splash shot anyway.
@@ -360,7 +371,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // legal radius even before its wake proxy grows.
   const py = Math.max(
     ctx.groundY(px, pz),
-    st.lastSeen.y + st.lastAimY + st.leadVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
+    aimPos.y + st.lastAimY + st.leadVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.

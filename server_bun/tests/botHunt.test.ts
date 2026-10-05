@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { newHuntState, pickHunt, pickFire, scanVisible, retreatDest, STALE_MS } from '../../shared/botHunt.ts';
+import { newHuntState, pickHunt, pickFire, scanVisible, retreatDest } from '../../shared/botHunt.ts';
 import { botRng } from '../../shared/botRand.ts';
 import type { BotEnemy, BrainCtx } from '../../shared/botBrain.ts';
 
@@ -108,12 +108,24 @@ describe('pickFire', () => {
     return st;
   };
 
-  it('no hunt or stale lastSeen → no volley', () => {
+  it('no hunt or expired pursuit window → no volley', () => {
     const st = newHuntState(P);
     expect(pickFire(st, 0.1, flat(), P, 0, mood)).toBeUndefined();
     st.hunt = foe(20, 0);
-    st.lastSeenAt = -STALE_MS - 1;
+    st.lastSeenAt = -4000; // past PURSUE_MS — the ghost is forgotten
     expect(pickFire(st, 0.1, flat(), P, 0, mood)).toBeUndefined();
+  });
+
+  it('LOS memory: past the sight window the ghost still eats suppression', () => {
+    const st = armed();
+    // Sighting 2s ago — inside the pursuit window but past STALE_MS:
+    // the shot goes at the drifting ghost, not nothing.
+    st.lastSeenAt = -2000;
+    st.hunt!.pos = { x: 24, y: 0, z: 0 }; // ghost walked +x with the model
+    botRng(() => 0.5);
+    const f = pickFire(st, 1, flat(), P, 0, mood);
+    expect(f?.targetId).toBe('p:1');
+    expect(f!.aim.x).toBeGreaterThan(22); // ghost pos, not the stale sighting
   });
 
   it('leads a moving target along its velocity', () => {
