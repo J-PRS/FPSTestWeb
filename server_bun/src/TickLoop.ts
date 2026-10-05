@@ -61,6 +61,9 @@ export class TickLoop {
    *  window closes (needs a connected player to accumulate). */
   private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickErrors: number; phaseMs: Record<string, number> } | null = null;
   bandwidthWindow() { return this.lastBw; }
+  /** Rooms stopped for repeated tick failures — /metrics surfaces this
+   *  so a dead room is visible on the status page, not just in logs. */
+  quarantinedRooms() { return [...this.tickQuarantined]; }
 
   private readonly fanout: TickFanout;
 

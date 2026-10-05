@@ -85,6 +85,7 @@ export function getMetrics(g: GameServer) {
       // Last 10s tick-fanout window — null until a player has been connected
       // long enough to close one.
       bandwidth: g.tickLoop.bandwidthWindow(),
+      quarantined: g.tickLoop.quarantinedRooms(),
       rooms,
       joins: o.joins,
       leaves: o.leaves,
