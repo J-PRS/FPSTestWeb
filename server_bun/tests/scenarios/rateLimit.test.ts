@@ -11,8 +11,12 @@ describe('scenario: per-type rate limits', () => {
       readyState: 1,
       send: (d: string | ArrayBuffer | Uint8Array) => { sent.push(JSON.parse(d as string) as ServerMessage); return 0; },
     } as never);
+    // Explicit arrival times: handleMessage defaults `at` to wallNow(),
+    // so under suite CPU contention a stalled loop could slide the 1s
+    // window mid-test and flake the 4-cap assertion.
+    const t0 = 1_000_000;
     for (let i = 0; i < 6; i++) {
-      room.messages.handleMessage(p.id, { type: 'chat', text: `msg ${i}` });
+      room.messages.handleMessage(p.id, { type: 'chat', text: `msg ${i}` }, t0 + i * 10);
     }
     // Cap is 4/window — the 5th and 6th never reach the room.
     expect(sent.filter((m) => m.type === 'chat').length).toBe(4);
