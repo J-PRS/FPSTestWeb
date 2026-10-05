@@ -12,6 +12,13 @@ export interface SharedEnv {
   traceId?: string;
   /** Skip the muzzle-clearance probe in botHunt (FPS_NOMUZZLE). */
   noMuzzle?: boolean;
+  /** Wall perf clock for opt-in profiling inside shared sims — NOT the
+   *  sim clock; seeded alongside setSharedNow where a real clock exists
+   *  (FPS_THINK_PROF). */
+  wallPerf?: () => number;
+  /** think-stage cost accumulator (FPS_THINK_PROF) — presence enables
+   *  the per-stage sampling in BotBrain.think. */
+  thinkProf?: Map<string, number>;
 }
 
 export const sharedEnv: SharedEnv = {};

@@ -486,12 +486,20 @@ export class BotBrain {
 
     const wasHunt = this.h.hunt?.id ?? null;
 
+    // Opt-in stage profiler — FPS_THINK_PROF seeds thinkProf + wallPerf;
+    // absent, the wrapper costs one undefined check per stage.
+    const prof = sharedEnv.thinkProf;
+    const pf = prof ? sharedEnv.wallPerf! : () => 0;
+    const P = (stage: string, t0: number) => { if (prof) prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0); };
+    let tp = pf();
+
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT = hero ? T.brain.thinkS * T.brain.heroThinkK : T.brain.thinkS;
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
     }
+    P('hunt', tp);
     let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);
     this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
@@ -501,21 +509,27 @@ export class BotBrain {
     this.escapeS.goal = this.goalS.goal;
     this.goalS.revengeT -= dt;
 
+    tp = pf();
     // --- choose the step destination ---
     const d0 = pickDest(this, dt, ctx, pos, fearing, hero);
     let dest = d0;
+    P('dest', tp);
 
     // --- line planning: commit to a terrain-sampled landing spot ---
     // Posted bots skip it — ski lines arc around the objective on
     // purpose (downhill bias, side-valley energy plays), which pulls a
     // defender off the stand he's meant to be planted on. Straight
     // home is the right route when the route is 50m.
+    tp = pf();
     const d1 = ctx.posted ? dest : this.lines.plan(dt, ctx, pos, dest);
     dest = d1;
+    P('lines', tp);
 
     // --- context steering: senses score every direction ---
+    tp = pf();
     const d2 = this.steerer.steer(dt, ctx, pos, dest);
     dest = d2;
+    P('steer', tp);
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
     const traceId = sharedEnv.traceId;
@@ -526,6 +540,7 @@ export class BotBrain {
       console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
     }
 
+    tp = pf();
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
     // A goal the escape senses can't reach after ~4 failures is a bad
     // roll, not a challenge — forfeit the wander waypoint so the next
@@ -538,7 +553,9 @@ export class BotBrain {
 
     // --- dodge: sidestep the nearest closing shell ---
     dest = dodge(ctx, pos, dest, hero);
+    P('escape', tp);
 
+    tp = pf();
     // --- fire ---
     const fire = pickFire(this.h, dt, ctx, pos, now, { hero, fearing });
 
@@ -557,8 +574,12 @@ export class BotBrain {
     // worth more words than scoreboard commentary.
     if (!say && ctx.notice) say = { kind: ctx.notice.kind, target: ctx.notice.actor };
 
+    P('fire+', tp);
     this.lastDest = dest;
-    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
+    tp = pf();
+    const move = this.moves.hints(dt, ctx, pos, dest);
+    P('moves', tp);
+    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
 
   

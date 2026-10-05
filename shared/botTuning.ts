@@ -115,7 +115,9 @@ export const BOT_TUNING = {
                          // bot can't climb should lose to a traverse it
                          // can walk, but not to a map-length detour it
                          // could jet over
-    fieldCache: 8,       // live goal floods kept at once
+    fieldCache: 24,      // live goal floods kept at once (~80KB each; goal
+                         // bucketing means squads converge on few buckets,
+                         // but wander rolls still scatter the space)
     dangerTax: 0.5,      // cost-m per influence-unit per cell — the walk deflects
                          // around cells where this bot's team keeps dying; a hot
                          // kill zone (~5-10 scent) prices like a ~40-75m detour

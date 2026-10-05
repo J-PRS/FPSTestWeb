@@ -6,6 +6,7 @@ import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
+import { sharedEnv } from '../../../shared/env.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
 import { selfKillImpactDist, selfKillImpactPos, selfKillPrey, selfKillFoeDist, selfKillTrades } from '../../src/hitLedger.ts';
 import { WeaponType } from '../../../shared/weaponTable.ts';
@@ -128,24 +129,24 @@ describe('scenario: warp soak throughput', () => {
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
     let simTicks = 0;
-    // FPS_SIM_PROF=1: per-sim wall-time rollup — room.sims entries are
-    // anonymous arrows, so labels ride the construction order in Room.ts
-    // (bots/flags/pickups/arena/deployables/projectiles/moveSim/health).
+    // FPS_SIM_PROF=1: per-sim wall-time rollup — names ride the registry
+    // (Room.registerSims), so a new sim names itself in the report.
     const simProf = process.env.FPS_SIM_PROF
       ? (() => {
-        const names = ['bots', 'flags', 'pickups', 'arena', 'deployables', 'projectiles', 'moveSim', 'health'];
-        const acc = new Array<number>(room.sims.length + 2).fill(0);
-        room.sims.forEach((s, i) => {
+        const acc = new Map<string, number>();
+        room.sims.forEach((s) => {
           const inner = s.tick.bind(s);
-          s.tick = (d: number) => { const t = performance.now(); inner(d); acc[i]! += performance.now() - t; };
+          s.tick = (d: number) => { const t = performance.now(); inner(d); acc.set(s.name ?? '?', (acc.get(s.name ?? '?') ?? 0) + (performance.now() - t)); };
         });
-        const cs = room.creatureSim.step.bind(room.creatureSim);
-        room.creatureSim.step = (d: number) => { const t = performance.now(); cs(d); acc[room.sims.length]! += performance.now() - t; };
-        const bs = room.ballSim.step.bind(room.ballSim);
-        room.ballSim.step = (d: number) => { const t = performance.now(); bs(d); acc[room.sims.length + 1]! += performance.now() - t; };
-        return { acc, names: [...names.slice(0, room.sims.length), 'creatureSim', 'ballSim'] };
+        return acc;
       })()
       : null;
+    // FPS_THINK_PROF=1: inside-think stage costs — the 'think' stage is
+    // ~77% of the bot tick; this names which decision chain owns it.
+    if (process.env.FPS_THINK_PROF) {
+      sharedEnv.thinkProf = new Map<string, number>();
+      sharedEnv.wallPerf = () => performance.now();
+    }
     const dt = 0.05;                      // 20Hz — matches the live tick
     const w = watch(room, () => simTicks * dt);
     if (mode === 'ctf') expect(room.flags).not.toBeNull();
@@ -882,10 +883,19 @@ describe('scenario: warp soak throughput', () => {
       `— ${ratio.toFixed(0)}x real-time; ${alive}/${respawned} alive`,
     );
     if (simProf) {
-      const total = simProf.acc.reduce((s, v) => s + v, 0) || 1;
-      console.log('  simProf ' + simProf.names
-        .map((n, i) => `${n} ${(simProf.acc[i]! / total * 100).toFixed(0)}%`)
+      const total = [...simProf.values()].reduce((s, v) => s + v, 0) || 1;
+      console.log('  simProf ' + [...simProf.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([n, ms]) => `${n} ${(ms / total * 100).toFixed(0)}%`)
         .join(' · '));
+    }
+    if (sharedEnv.thinkProf?.size) {
+      const tt = [...sharedEnv.thinkProf.values()].reduce((s, v) => s + v, 0) || 1;
+      console.log('  thinkProf ' + [...sharedEnv.thinkProf.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([n, ms]) => `${n} ${(ms / tt * 100).toFixed(0)}%`)
+        .join(' · '));
+      delete sharedEnv.thinkProf;
     }
     const botProf = room.bots?.stageProf;
     if (botProf) {

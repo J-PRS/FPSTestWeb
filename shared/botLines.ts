@@ -12,6 +12,7 @@
  */
 import type { BotVec, BrainCtx } from './botBrain.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
+import { sharedEnv } from './env.ts';
 
           // fan of candidate directions around the goal
         // rad — half-angle of the fan
@@ -87,7 +88,24 @@ export class BotLines {
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > T.lines.redest : true;
-    if (this.wp && this.lineT > 0 && wpD > T.lines.arrive && !drifted) return this.wp;
+    // A roll that found no line (all rays vetoed or floor-failed) still
+    // costs the whole fan — without a latch the same dead roll re-ran
+    // every think (~83% of the think stage on soak). Hold the empty
+    // result for the commit window like a real waypoint.
+    if (!this.wp && this.lineT > 0 && !drifted) return dest;
+    if (this.wp && this.lineT > 0 && wpD > T.lines.arrive) {
+      if (!drifted) return this.wp;
+      // Goal drifted: keep the committed line while it still runs inside
+      // the fan cone of the new goal. Live-lead destinations (escort
+      // intercept, carrier follow) slide every think — re-rolling the
+      // whole probe fan on each jitter was ~83% of the think stage.
+      const gx = (dest.x - pos.x) / gd, gz = (dest.z - pos.z) / gd;
+      const wx = (this.wp.x - pos.x) / wpD, wz = (this.wp.z - pos.z) / wpD;
+      if (wx * gx + wz * gz > Math.cos(T.lines.cone)) {
+        this.wpGoal = { ...dest };
+        return this.wp;
+      }
+    }
 
     // Stagnation meter: a route that re-plans without closing ground is
     // in an orbit trap — on a massif the energy-play exemption keeps
@@ -104,6 +122,8 @@ export class BotLines {
     if (this.orbitGd !== Infinity && gd < this.orbitGd - 30) {
       this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitFails = 0;
     }
+    const prof = sharedEnv.thinkProf;
+    let tp = prof ? sharedEnv.wallPerf!() : 0;
     if (this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
       if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; }
       else this.orbitFails++;
@@ -184,6 +204,7 @@ export class BotLines {
       this.wpGoal = { ...dest };
       this.lineT = T.lines.commitS;
       this.stale = 0;
+      if (prof) prof.set('lines:orbit', (prof.get('lines:orbit') ?? 0) + sharedEnv.wallPerf!() - tp);
       return this.wp;
     }
 
@@ -191,9 +212,18 @@ export class BotLines {
     // see a saddle a few hundred meters off the beeline, but the shared
     // flood already priced the whole map. Short legs keep the fan —
     // its energy scoring reads what a coarse grid can't.
-    this.wp = (ctx.route && gd > T.graph.minGd)
-      ? ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead) ?? this.roll(ctx, pos, dest, gd)
-      : this.roll(ctx, pos, dest, gd);
+    tp = prof ? sharedEnv.wallPerf!() : 0;
+    let routed: BotVec | null = null;
+    if (ctx.route && gd > T.graph.minGd) {
+      routed = ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead);
+      if (prof) { const t1 = sharedEnv.wallPerf!(); prof.set('lines:route', (prof.get('lines:route') ?? 0) + t1 - tp); tp = t1; }
+    }
+    this.wp = routed ?? this.roll(ctx, pos, dest, gd);
+    if (prof) prof.set('lines:roll', (prof.get('lines:roll') ?? 0) + sharedEnv.wallPerf!() - tp);
+    // A fresh roll that lands inside `arrive` is no waypoint at all —
+    // latching it would re-roll every think (the residual fan storm);
+    // commit the empty result like a null roll: walk at the goal.
+    if (this.wp && Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) <= T.lines.arrive) this.wp = null;
     this.wpGoal = { ...dest };
     this.lineT = T.lines.commitS;
     return this.wp ?? dest;

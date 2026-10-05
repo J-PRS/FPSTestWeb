@@ -15,10 +15,11 @@ import { segSolidHit } from './solidWorld.ts';
 // the memoized probe, never sees ground through its own head).
 export const BOT_EYE = 1.8;
 
-// 3m cells + 1s TTL: answers only change when an endpoint crosses a cell.
-// The snap (±1.5m) stays under the march's own 3m step — jets crossing
-// 2m cells in a fraction of a second were defeating the memo.
-const LOS_CELL = 3;
+// 6m cells + 1s TTL: answers only change when an endpoint crosses a cell.
+// Skiers at 30-45m/s crossed a 3m cell every ~80ms — the memo missed
+// constantly and every miss paid a ~dist/3-probe march. Bot senses are
+// noisy by design; ±3m of endpoint fuzz is well under aim jitter.
+const LOS_CELL = 6;
 const LOS_TTL_MS = 1000;
 const losMemo = new Map<number, { clear: boolean; until: number }>();
 
@@ -60,7 +61,7 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 4) return true; // point-blank: probes are coarser than the gap
-  const steps = Math.ceil(dist / 3);
+  const steps = Math.ceil(dist / 6);
   const y0 = Math.max(from.y + 0.4, ctx.groundY(from.x, from.z) + BOT_EYE);
   const y1 = Math.max(to.y + 0.4, ctx.groundY(to.x, to.z) + BOT_EYE);
   for (let i = 1; i < steps; i++) {

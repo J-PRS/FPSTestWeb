@@ -70,9 +70,17 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
 
 /** Step the whole room N sim-ticks — ball/creature sims ride room.sims
  *  like in production, so this drives the exact same ordering. */
-export function step(room: Room, ticks: number, dt = 0.05): void {
+export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string, number>): void {
   for (let i = 0; i < ticks; i++) {
-    for (const s of room.sims) s.tick(dt);
+    for (const s of room.sims) {
+      if (profile) {
+        const t0 = performance.now();
+        s.tick(dt);
+        profile.set(s.name ?? '?', (profile.get(s.name ?? '?') ?? 0) + (performance.now() - t0));
+      } else {
+        s.tick(dt);
+      }
+    }
     simNowAdvance(dt * 1000);
   }
 }
