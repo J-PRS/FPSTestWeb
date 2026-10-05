@@ -405,6 +405,10 @@ export class ServerBotSenses {
       if (!mp || mp.team !== me) continue;
       members.push({ id, role, pos: mp.position, carrier: enemy.carrier === id });
     }
+    // Sizing the flood against defenders posted at the ring tried and
+    // reverted: same-seed soak 14g/8c -> 4g/4c. A bigger call pulls
+    // members off the role table earlier and they trickle as feeders;
+    // the converged release wins by TIMING, not by body count.
     cmd.update(simNow(), sit, members);
     const task = cmd.taskFor(p.id);
     if (!task) {
