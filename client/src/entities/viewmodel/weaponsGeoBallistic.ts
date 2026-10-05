@@ -106,7 +106,10 @@ for (const side of [-1, 1]) {
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
-const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = ARM_Z - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02;
+// String meets the cam's BOTTOM (breech-side) edge — the leg wraps to
+// the near rim of the wheel, not the tip's front face.
+const CAM_R = 0.065;
+const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = ARM_Z - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02 + CAM_R;
 for (const side of [-1, 1]) {
   stringG.add(tubePath([
     [side * (0.07 + tipX), 0, tipZ, 0.006],
