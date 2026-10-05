@@ -192,7 +192,11 @@ export class BotMoves {
     // apron, which is exactly where soaks show pushes bleeding to
     // ~10-14m/s and dying in the ring. A runner keeps the burn on a
     // flat approach: thrust is the only accelerator left out there.
-    const flatRun = ctx.runner === true && drop < T.moves.flatRunDrop;
+    // A tasked wave member is on the same clock — the flood's transit
+    // IS the approach, and flat-map median speed was pinned at ~14m/s
+    // (katabatic: d~480m near0% every soak) because members hop-chained
+    // but never burned flat like the runner.
+    const flatRun = (ctx.runner === true || ctx.wave === true) && drop < T.moves.flatRunDrop;
     // Dive only pays when altitude converts to speed: a falling route
     // (terrain ahead drops) or real overhead clearance. Over a flat
     // apron it was vetoing every burn while the bot hop-crawled at
