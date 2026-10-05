@@ -81,6 +81,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         if (!wave && !wingman && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
+          // Quiet-side orbit center (imapQuietDir(objective)*40 offset)
+          // tried and reverted: same-seed soaks flat-to-down (seed 7
+          // 10g->7g, seed 11 7g2c->7g1c) — the fixed ring is not where
+          // the push leaks.
           const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;
           const oz = ctx.objective.z + Math.sin(b.orbitA) * 110;
           return { x: ox, y: ctx.groundY(ox, oz), z: oz };

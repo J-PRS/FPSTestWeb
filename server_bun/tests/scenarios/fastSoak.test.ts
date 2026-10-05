@@ -213,7 +213,7 @@ describe('scenario: warp soak throughput', () => {
     // ring) or transit fights (everywhere else)?
     const capKills = { near: 0, far: 0 };
     const capDeaths: { d: number; spd: number; by: string }[] = [];
-    const capStall = new Map<string, number>();
+    const capStall = new Map<string, { t0: number; dd0: number }>();
     const capStalls: { id: string; team: string; dd: number; spd: number; destD: number }[] = [];
     // Role-table feed: per-bot damage dealt (playerHit), carrier kills
     // (victim held a flag at the kill), plus grab/cap/return logs.
@@ -624,16 +624,24 @@ describe('scenario: warp soak throughput', () => {
           if (dd < 12) capRoute.on++;
           // Stall autopsy: a capper parked outside the ring for a whole
           // minute is either routed into a wall or hunting instead of
-          // running — one line per stall names which.
-          const stallT = capStall.get(p.id);
-          if (dd > 80) {
-            if (stallT === undefined) capStall.set(p.id, simTicks * dt);
-            else if (simTicks * dt - stallT > 60) {
-              capStalls.push({ id: p.id, team: p.team ?? '?', dd, spd: Math.hypot(p.velocity.x, p.velocity.z), destD: dest ? Math.hypot(dest.x - foeFlag.pos.x, dest.z - foeFlag.pos.z) : -1 });
-              const goal = room.bots.debugGoal(p.id);
-              const en = room.moveSim.energyOf(p.id);
-              console.log(`  cap-stall ${p.id} ${p.team} dd=${dd.toFixed(0)} spd=${Math.hypot(p.velocity.x, p.velocity.z).toFixed(0)} pos=${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)} en=${en?.toFixed(0) ?? '?'} dest=${dest ? `${dest.x.toFixed(0)},${dest.z.toFixed(0)}` : 'none'} goal=${goal ? `${goal.x.toFixed(0)},${goal.z.toFixed(0)}` : 'none'} stand=${foeFlag.pos.x.toFixed(0)},${foeFlag.pos.z.toFixed(0)} ${room.bots.debugBrain(p.id)}`);
-              capStall.set(p.id, simTicks * dt);
+          // running — one line per stall names which. The raw "dd>80
+          // for 60s" shape is transit noise on big maps (a healthy
+          // 253s katabatic run warns 3-4x), so the window tracks dd
+          // progress: closing <120m over the minute is the stall, not
+          // the time. A respawn's position jump also counts as
+          // progress — the corpse-to-spawn teleport shrinks dd by
+          // hundreds of meters in one tick.
+          const stall = capStall.get(p.id);
+          if (dd > 80 && p.health > 0) {
+            if (stall === undefined || Math.abs(dd - stall.dd0) > 400) capStall.set(p.id, { t0: simTicks * dt, dd0: dd });
+            else if (simTicks * dt - stall.t0 > 60) {
+              if (stall.dd0 - dd < 120) {
+                capStalls.push({ id: p.id, team: p.team ?? '?', dd, spd: Math.hypot(p.velocity.x, p.velocity.z), destD: dest ? Math.hypot(dest.x - foeFlag.pos.x, dest.z - foeFlag.pos.z) : -1 });
+                const goal = room.bots.debugGoal(p.id);
+                const en = room.moveSim.energyOf(p.id);
+                console.log(`  cap-stall ${p.id} ${p.team} dd=${dd.toFixed(0)} spd=${Math.hypot(p.velocity.x, p.velocity.z).toFixed(0)} pos=${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)} en=${en?.toFixed(0) ?? '?'} dest=${dest ? `${dest.x.toFixed(0)},${dest.z.toFixed(0)}` : 'none'} goal=${goal ? `${goal.x.toFixed(0)},${goal.z.toFixed(0)}` : 'none'} stand=${foeFlag.pos.x.toFixed(0)},${foeFlag.pos.z.toFixed(0)} ${room.bots.debugBrain(p.id)}`);
+              }
+              capStall.set(p.id, { t0: simTicks * dt, dd0: dd });
             }
           } else capStall.delete(p.id);
           const band = dd < 25 ? 0 : dd < 80 ? 1 : dd < 160 ? 2 : dd < 300 ? 3 : 4;
