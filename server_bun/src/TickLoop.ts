@@ -135,6 +135,10 @@ export class TickLoop {
           this.tickRoom(room, players, now0);
           this.tickErrStreak.delete(room.name);
         } catch (e) {
+          // A drain failure leaves the poisoned message queued — it would
+          // re-throw every tick until quarantine. Drop the backlog: the
+          // unprocessed commands were already lost when the drain aborted.
+          room.commands.length = 0;
           const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
           this.tickErrStreak.set(room.name, n);
           this.metrics.tickErrors++;

@@ -1,3 +1,4 @@
+2026-10-01 - Drain poison-pill fix: a message that throws inside drainCommands would stay queued and re-throw every tick until the room quarantined — the failed tick now also drops the unprocessed backlog so one bad message costs one tick error, not the room
 2026-10-01 - Command queue backstop: inbound message queue capped at 2000 per room — a flooding client now burns into msgsRejected instead of growing memory and stalling the tick's cmd phase for everyone
 2026-10-01 - Quarantined rooms surface on /metrics — a room stopped for repeated tick failures is now listed under quarantined[] on the status page, not only in error logs
 2026-10-01 - Message handler containment: a throw inside handleGameMessage/handshake/switchRoom now logs the playerId + message type and drops only that socket (1011), instead of propagating out of the WS handler — a malformed claim can no longer kill or corrupt the process for everyone
