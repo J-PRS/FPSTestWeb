@@ -48,7 +48,7 @@ const bases = FIELD === 'default'
       bravo: at((spec as never as { bases: { bravo: { x: number; z: number } } }).bases.bravo.x, (spec as never as { bases: { bravo: { z: number } } }).bases.bravo.z) };
 const flagM = Math.hypot(bases.alpha.x - bases.bravo.x, bases.alpha.z - bases.bravo.z).toFixed(0);
 
-const room = mkRoom({ ...spec, mode: 'ctf', bots: BOTS, bases }, 'ctf', SEED, false, f);
+const room = mkRoom({ ...spec, mode: 'ctf', bots: BOTS, botFill: BOTS, bases }, 'ctf', SEED, false, f);
 let clock = 0;
 const w = watch(room, () => clock);
 

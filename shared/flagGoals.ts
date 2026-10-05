@@ -9,6 +9,7 @@
  */
 
 import { botRand } from './botRand.ts';
+import { BOT_TUNING } from './botTuning.ts';
 
 export type BotRole =
   | 'capper'      // flag route is the job — press/escort
@@ -163,16 +164,17 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: 
  *  toward the incoming line so a capping run hits a heavy's hitbox
  *  before it hits the flag. */
 function hofGoal(s: FlagSituation, commit: number) {
-  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < 25) return s.dropped;
+  const T = BOT_TUNING.hof;
+  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) return s.dropped;
   if (s.threat) {
     const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
     const d = Math.hypot(dx, dz);
-    if (d > 1 && d < 45) {
+    if (d > 1 && d < T.threatR) {
       // The HoF body-block: slide onto the capper's run line so his
       // speed meets a heavy's hitbox before it meets the flag. A slack
       // HoF barely shifts off the pole, a locked-in one squares up
       // several meters into the lane.
-      const lean = Math.min(1, d * 0.05) * commit;
+      const lean = Math.min(T.leanMax, d * T.leanK) * commit;
       return { x: s.home.x + (dx / d) * lean, y: s.home.y, z: s.home.z + (dz / d) * lean };
     }
   }

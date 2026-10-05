@@ -37,7 +37,9 @@ export function measureCap(
 ): RunStat {
   const { simBudgetS = 240, verbose = false, tag = '' } = opts;
   const room = mkRoom({
-    mode: 'ctf', bots: 6,
+    // botFill pinned to bots — a higher spec floor would top the room up
+    // mid-measure and contaminate the baseline.
+    mode: 'ctf', bots: 6, botFill: 6,
     bases,
   }, 'ctf', opts.seed ?? 9001, false, fld);
   const w = watch(room);

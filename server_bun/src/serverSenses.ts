@@ -19,6 +19,7 @@ import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import { TeamCommand, type CommandMember, type CommandTask } from './botCommand.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
+import { BOT_TUNING } from '../../shared/botTuning.ts';
 import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
@@ -736,8 +737,8 @@ export class ServerBotSenses {
     let posted = 0;
     if (anchored && Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15) {
       const base = own.state === 'carried'
-        ? (role === 'hof' ? 20 : 200)
-        : (role === 'hof' ? 3 : 90);
+        ? (role === 'hof' ? BOT_TUNING.hof.postCarried : 200)
+        : (role === 'hof' ? BOT_TUNING.hof.postHome : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
     return { pos: goalPos, infiltrating: enemyStand !== null && pick !== null &&
