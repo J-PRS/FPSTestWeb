@@ -65,7 +65,7 @@ export class ColliderIndex {
  * prediction resolve the identical contact.
  */
 
-const STEP_UP = 0.55;   // ledges under this step onto floors like stairs
+const STEP_UP = MOVEMENT_CONFIG.stepUp;
 const SKIN = 0.02;      // push-out separation so contacts don't chatter
 
 const _segCands: StructureCollider[] = [];
@@ -126,8 +126,11 @@ export class SolidWorld {
   }
 
   /** Highest structure top face under (x,z) within the footprint —
-   *  -Infinity when no piece covers that point. */
-  topAt(x: number, z: number): number {
+   *  -Infinity when no piece covers that point. `maxTop` caps which
+   *  tops count as floor: a body clamping ground can only claim faces
+   *  within step reach of its feet, or walking under a tall box would
+   *  snap it straight up through the deck. */
+  topAt(x: number, z: number, maxTop = Infinity): number {
     const cands = this.cands;
     cands.length = 0;
     this.index.queryPoint(x, z, 2, cands);
@@ -139,7 +142,7 @@ export class SolidWorld {
       const lz = -dx * c.sin + dz * c.cos;
       if (lx < -c.hx || lx > c.hx || lz < -c.hz || lz > c.hz) continue;
       const t = c.cy + c.hy;
-      if (t > top) top = t;
+      if (t > top && t <= maxTop) top = t;
     }
     return top;
   }

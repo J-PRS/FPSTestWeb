@@ -34,6 +34,10 @@ export const MOVEMENT_CONFIG = {
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
   playerHeight: 1.8,
+  // Structure ledges within this of the feet claim as floors (stairs);
+  // anything taller is a wall. The body's floor query caps at
+  // feet + stepUp so an overhead deck can't teleport it up.
+  stepUp: 0.55,
   // Jetpack thrust. The kinematics live in the sim; the energy economy
   // is modelled by the server shadow (RoomMoveSim) so a client can't
   // claim more jet than the tank allows — numbers mirror the client's
@@ -93,10 +97,12 @@ export interface MoveInput {
   jetHeld: boolean;
 }
 
-/** What the sim needs from the world: terrain height + surface normal. */
+/** What the sim needs from the world: terrain height + surface normal.
+ *  `maxTop` bounds which raised floors count (a body's reach is its
+ *  feet + stepUp — overhead decks are ceilings, not ground). */
 export interface MoveSurface {
-  getHeight(x: number, z: number): number;
-  getNormal(x: number, z: number, out: Vec3Like): Vec3Like;
+  getHeight(x: number, z: number, maxTop?: number): number;
+  getNormal(x: number, z: number, out: Vec3Like, maxTop?: number): Vec3Like;
   /** Solid-layer push-out (map structures): surfaces that layer boxes
    *  over terrain resolve wall/ceiling contact here, before the floor
    *  clamp. `height` is the body's eye-above-feet so a heavy's head
@@ -214,7 +220,8 @@ export class MoveSim {
   }
 
   private checkGrounded(threshold = 0.2, offset = this.eyeHeight): boolean {
-    const groundY = this.surface.getHeight(this.state.pos.x, this.state.pos.z) + offset;
+    const reach = this.state.pos.y - offset + MOVEMENT_CONFIG.stepUp;
+    const groundY = this.surface.getHeight(this.state.pos.x, this.state.pos.z, reach) + offset;
     const dist = this.state.pos.y - groundY;
     return this.input.skiHeld
       ? dist < threshold + MOVEMENT_CONFIG.skiTargetDistance
@@ -386,11 +393,12 @@ export class MoveSim {
     // Solid layers push the capsule out of walls/ceilings first — the
     // floor clamp below only owns top faces.
     this.surface.resolveBody?.(s, this.eyeHeight);
-    const groundY = this.surface.getHeight(s.pos.x, s.pos.z) + this.eyeHeight;
+    const reach = s.pos.y - this.eyeHeight + MOVEMENT_CONFIG.stepUp;
+    const groundY = this.surface.getHeight(s.pos.x, s.pos.z, reach) + this.eyeHeight;
     const dist = s.pos.y - groundY;
 
     if (dist < 0) {
-      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
+      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n, reach);
       this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
 
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
@@ -422,7 +430,7 @@ export class MoveSim {
       // Fast bodies are exempt: snapping a 30 m/s hop into grounded
       // regime buys it the overspeed bleed + friction a pre-band hop
       // never paid — walkers get stability, movers keep their arc.
-      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
+      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n, reach);
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
       const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;

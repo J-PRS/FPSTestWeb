@@ -13,13 +13,13 @@ export class FieldSurface {
   solid: SolidWorld | null = null;
 
   constructor(private f: Heightfield) {}
-  getHeight(x: number, z: number): number {
+  getHeight(x: number, z: number, maxTop?: number): number {
     const g = hmHeight(this.f, x, z);
-    const t = this.solid?.topAt(x, z) ?? -Infinity;
+    const t = this.solid?.topAt(x, z, maxTop) ?? -Infinity;
     return t > g ? t : g;
   }
-  getNormal(x: number, z: number, out: Vec3Like): Vec3Like {
-    const t = this.solid?.topAt(x, z) ?? -Infinity;
+  getNormal(x: number, z: number, out: Vec3Like, maxTop?: number): Vec3Like {
+    const t = this.solid?.topAt(x, z, maxTop) ?? -Infinity;
     if (t > hmHeight(this.f, x, z)) { out.x = 0; out.y = 1; out.z = 0; return out; }
     hmNormal(this.f, x, z, out as { x: number; y: number; z: number });
     return out;

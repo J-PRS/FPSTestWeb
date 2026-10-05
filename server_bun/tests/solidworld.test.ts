@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { ColliderIndex, SolidWorld, blastOccluded, segSolidHit } from '../../shared/solidWorld.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
+import { FieldSurface } from '../../shared/fieldSurface.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
 import { MoveSim, MOVEMENT_CONFIG, type MoveState } from '../../shared/movement.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -10,6 +12,15 @@ const H = MOVEMENT_CONFIG.playerHeight; // pos.y is capsule top
 
 // Flat plain at y=0 — the solid layer alone decides contact outcomes.
 const flat = { getHeight: () => 0, getNormal: (_x: number, _z: number, out: Vec3Like) => { out.x = 0; out.y = 1; out.z = 0; return out; } };
+
+// Real FieldSurface over a flat heightfield — the compositor the game
+// actually runs, so reach-limited floors are exercised end to end.
+const flatField: Heightfield = { size: 4, data: new Uint8Array(64 * 64), stride: 64 };
+const fieldSurf = (specs: StructureSpec[]): FieldSurface => {
+  const s = new FieldSurface(flatField);
+  s.solid = SolidWorld.fromSpecs(specs);
+  return s;
+};
 
 const wall: StructureSpec[] = [
   { kind: 'wall', pos: { x: 10, y: 0, z: 0 }, size: { x: 1, y: 6, z: 10 } }, // 6m wall at x=10
@@ -96,6 +107,30 @@ describe('SolidWorld', () => {
     const s = simAt(10, 0.5 + H, 0); // feet at 0.5 — above top(0.4)-step(0.55)? 0.5 > -0.15 ✓ floor
     w.resolveBody(s);
     expect(s.pos.x).toBe(10); // no push-out
+  });
+
+  test('MoveSim: walking under a floating deck never snaps onto it', () => {
+    const deck: StructureSpec[] = [
+      { kind: 'box', pos: { x: 10, y: 2.5, z: 0 }, size: { x: 4, y: 5, z: 4 } }, // spans y 2.5–7.5
+    ];
+    const sim = new MoveSim(fieldSurf(deck), simAt(4, H, 0));
+    sim.setInput({ forward: 1 });
+    sim.state.yaw = Math.PI / 2;
+    for (let i = 0; i < 240; i++) sim.update(1 / 60);
+    expect(sim.state.pos.x).toBeGreaterThan(12); // walked through under the deck
+    expect(sim.state.pos.y).toBeCloseTo(H, 1);   // stayed on the terrain — no up-snap
+  });
+
+  test('MoveSim: a tall wall blocks horizontally through the real surface', () => {
+    const tall: StructureSpec[] = [
+      { kind: 'box', pos: { x: 10, y: 0, z: 0 }, size: { x: 4, y: 5, z: 4 } },
+    ];
+    const sim = new MoveSim(fieldSurf(tall), simAt(4, H, 0));
+    sim.setInput({ forward: 1 });
+    sim.state.yaw = Math.PI / 2;
+    for (let i = 0; i < 240; i++) sim.update(1 / 60);
+    expect(sim.state.pos.x).toBeLessThan(8);     // face at 8 minus capsule radius
+    expect(sim.state.pos.y).toBeCloseTo(H, 1);   // never teleported to the top
   });
 });
 

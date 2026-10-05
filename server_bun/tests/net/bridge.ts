@@ -8,11 +8,12 @@
  *   client: on correction, snap sim to server truth (yaw stays ours) and
  *           replay journaled inputs past inputSeq — the players.ts path.
  *
- * Wall-paced on purpose: reconcile's correction throttle and report
- * grace are wallNow()-windowed, so a fast-forwarded run would starve
- * corrections that production would have sent. Sim-clocked chaos is for
- * the pure lockstep suite (detTrace); this bridge measures what a real
- * link does to prediction.
+ * Sim-clock paced: the loop steps 1ms of sim time per iteration and
+ * setWallNow() binds wallNow() to that clock for the run, so the
+ * wall-windowed gates (correction throttle, report grace, journal TTL)
+ * elapse with production semantics while the run stays deterministic.
+ * Pure lockstep chaos is the detTrace suite; this bridge measures what
+ * a real link does to prediction.
  */
 
 import { MoveSim, ENERGY, type MoveState, type Vec3Like } from '../../../shared/movement.ts';
@@ -26,6 +27,7 @@ import type { Heightfield } from '../../../shared/heightfield.ts';
 import { RoomMoveSim } from '../../src/RoomMoveSim.ts';
 import { ConnectionManager } from '../../src/ConnectionManager.ts';
 import { ChaosLink, FakeWs, type ChaosSpec } from './chaos.ts';
+import { setWallNow } from '../../src/wallClock.ts';
 import type { ServerWebSocket } from 'bun';
 import type { ServerMessage, WebSocketData } from '../../src/types.ts';
 
@@ -133,7 +135,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const server = new RoomMoveSim(field, true);
   server.track(PID, spawn.pos, spawn.yaw);
   const cm = new ConnectionManager();
-  let sws = new FakeWs(PID, undefined, () => Date.now());
+  let sws = new FakeWs(PID, undefined, () => simNow);
   const asWs = (w: FakeWs) => w as unknown as ServerWebSocket<WebSocketData>;
   cm.register(PID, asWs(sws));
   // Production path: 3 reports stamped past the consumed watermark →
@@ -175,14 +177,24 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   let staged: MoveState | null = null;
   let stagedAt = 0;
 
-  const start = Date.now();
-  const endAt = start + seconds * 1000;
-  let lastClient = start, lastServer = start, lastReport = start, lastEventAt = 0;
+  // Sim clock, never wall time: a loaded CI runner stretched every timed
+  // threshold (cadence, outage windows, convergence bounds) and produced
+  // the probabilistic flakes this suite exists to catch. 1ms steps keep
+  // the ~1ms frame pacing the busy-spin used to fake. wallNow() binds to
+  // the same clock so reconcile's correction throttle, grace windows and
+  // the journal's volatile TTL elapse on sim time — a plain fast-forward
+  // would freeze those gates and starve corrections production sends.
+  let simNow = 0;
+  setWallNow(() => simNow);
+  const endAt = seconds * 1000;
+  let lastClient = simNow, lastServer = simNow, lastReport = simNow, lastEventAt = 0;
   let posSeq = 0;
 
-  while (Date.now() < endAt) {
-    const now = Date.now();
-    const tMs = now - start;
+  try {
+  while (simNow < endAt) {
+    simNow += 1;
+    const now = simNow;
+    const tMs = simNow;
     const { input, yaw } = script(tMs);
 
     // ---- client frame (step at real elapsed dt, like rAF) ----
@@ -253,7 +265,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
         cm.unregister(PID);
       } else if (dead && tMs >= deadSince + outageMs) {
         dead = false; dropped = false;
-        sws = new FakeWs(PID, undefined, () => Date.now());
+        sws = new FakeWs(PID, undefined, () => simNow);
         cm.register(PID, asWs(sws));
         // Frames aimed at the dead socket are still in the journal —
         // replay delivers exactly what the outage skipped.
@@ -362,9 +374,9 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       }
     }
 
-    // ~1ms sleep granularity is the tightest honest frame pacing on win32
-    const until = now + 1;
-    while (Date.now() < until) { /* spin — Atomics.sleep is coarser */ }
+  }
+  } finally {
+    setWallNow();
   }
   r.drops = dropCount;
   return r;

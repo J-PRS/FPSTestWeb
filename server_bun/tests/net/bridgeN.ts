@@ -2,7 +2,7 @@
  * Multi-client prediction bridge — N real client MoveSims against one
  * RoomMoveSim authority through per-client ChaosLinks, sharing ONE
  * ConnectionManager (production's fanout/journal/only-exclude machinery).
- * Same wall-paced predict/correct/replay loop as bridge.ts; the point is
+ * Same sim-clock predict/correct/replay loop as bridge.ts; the point is
  * contention: corrections, journals and gap heals for every client
  * multiplexed over its own link while the authority integrates them all.
  */
@@ -13,6 +13,7 @@ import type { Heightfield } from '../../../shared/heightfield.ts';
 import { RoomMoveSim } from '../../src/RoomMoveSim.ts';
 import { ConnectionManager } from '../../src/ConnectionManager.ts';
 import { ChaosLink, FakeWs } from './chaos.ts';
+import { setWallNow } from '../../src/wallClock.ts';
 import type { ServerWebSocket } from 'bun';
 import type { ServerMessage, WebSocketData } from '../../src/types.ts';
 import type { BridgeProfile, BridgeScript, WireInput } from './bridge.ts';
@@ -107,7 +108,7 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
       vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
     };
     server.track(spec.id, spawn.pos, spawn.yaw);
-    const sws = new FakeWs(spec.id, undefined, () => Date.now());
+    const sws = new FakeWs(spec.id, undefined, () => simNow);
     cm.register(spec.id, asWs(sws));
     server.onInputGap = (pid, lastSeq) => {
       cm.sendToPlayer(pid, { type: 'inputSync', lastSeq } as ServerMessage);
@@ -128,9 +129,12 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
   });
 
   let broadcasts = 0;
-  const start = Date.now();
-  const endAt = start + seconds * 1000;
-  let lastServer = start, lastEventAt = 0;
+  // Sim clock, never wall time (see runBridge): wall-paced loops made
+  // every timed bound probabilistic — the flakes this suite exists to kill.
+  let simNow = 0;
+  setWallNow(() => simNow); // wall-windowed gates elapse on sim time
+  const endAt = seconds * 1000;
+  let lastServer = simNow, lastEventAt = 0;
 
   const clientEnergy = (c: Client, inp: WireInput, dt: number, grounded: boolean) => {
     if (c.jetLock > 0) c.jetLock -= dt;
@@ -141,9 +145,11 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
     return burning;
   };
 
-  while (Date.now() < endAt) {
-    const now = Date.now();
-    const tMs = now - start;
+  try {
+  while (simNow < endAt) {
+    simNow += 1;
+    const now = simNow;
+    const tMs = simNow;
 
     for (const c of clients) {
       const { input, yaw } = c.spec.script(tMs);
@@ -204,7 +210,7 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
           cm.unregister(c.spec.id);
         } else if (c.dead && tMs >= profile.dropMs + (profile.outageMs ?? 1500)) {
           c.dead = false; c.reconnected = true;
-          c.sws = new FakeWs(c.spec.id, undefined, () => Date.now());
+          c.sws = new FakeWs(c.spec.id, undefined, () => simNow);
           cm.register(c.spec.id, asWs(c.sws));
           cm.replayTo(c.spec.id, asWs(c.sws), c.lastEv);
           for (const raw of c.sws.sentRaw.splice(0)) c.down.send(raw, now);
@@ -282,8 +288,9 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
       server.tick(sdt);
     }
 
-    const until = now + 1;
-    while (Date.now() < until) { /* spin */ }
+  }
+  } finally {
+    setWallNow();
   }
 
   const clientsOut = new Map<string, ClientResult>();

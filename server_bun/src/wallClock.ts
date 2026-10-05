@@ -10,4 +10,12 @@
  * timers, bot housekeeping) belong to simNow — a fast-forwarded soak
  * must not accelerate real-client windows.
  */
-export const wallNow = (): number => Date.now();
+let impl: () => number = Date.now;
+
+/** Test seam only — deterministic harnesses (net bridge, chaos) bind the
+ *  sim clock so wall-windowed gates (correction throttle, reclaim TTL,
+ *  rate limits) elapse on sim time exactly as production measures them
+ *  on wall time. Production never calls this; tests must restore with
+ *  setWallNow() when the run ends. */
+export const setWallNow = (fn?: () => number): void => { impl = fn ?? Date.now; };
+export const wallNow = (): number => impl();
