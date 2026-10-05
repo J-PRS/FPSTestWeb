@@ -40,6 +40,10 @@ interface Session {
 
 export class SessionRegistry {
   private sessions = new Map<string, Session>();
+  /** room → live grace count. `graceInRoom` feeds Room.empty's per-tick
+   *  ghost check — scanning the session table there would cost
+   *  O(rooms × sessions) every tick. */
+  private roomGrace = new Map<string, number>();
   private genCounter = 0;
   /** Since-boot per-edge totals + anomaly counts — the /metrics session
    *  rollup. Transitions log individually already; these answer "how
@@ -61,6 +65,8 @@ export class SessionRegistry {
     }
     const wallAge = wallNow() - s.at;
     const from = s.state;
+    if (from === 'grace') this.roomGrace.set(s.room, (this.roomGrace.get(s.room) ?? 1) - 1);
+    if (to === 'grace') this.roomGrace.set(s.room, (this.roomGrace.get(s.room) ?? 0) + 1);
     s.state = to;
     s.at = wallNow();
     const edge = `${from}->${to}`;
@@ -82,6 +88,11 @@ export class SessionRegistry {
     if (prior) {
       this.anomalies.rebegin++;
       logger.warn('session re-begin over live state', { playerId, from: prior.state, gen: prior.gen, room: prior.room });
+      // Overwriting drops the prior record — its grace seat must come off
+      // the room's count or the replacement's room inherits a phantom ghost.
+      if (prior.state === 'grace') {
+        this.roomGrace.set(prior.room, (this.roomGrace.get(prior.room) ?? 1) - 1);
+      }
     }
     this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });
   }
@@ -167,11 +178,11 @@ export class SessionRegistry {
     return c;
   }
 
-  /** Grace seats parked in a room — Room.empty's "no ghosts left" test. */
+  /** Grace seats parked in a room — Room.empty's "no ghosts left" test.
+   *  O(1): maintained per transition above, since Room.empty asks it of
+   *  every room every tick. */
   graceInRoom(room: string): number {
-    let n = 0;
-    for (const s of this.sessions.values()) if (s.state === 'grace' && s.room === room) n++;
-    return n;
+    return this.roomGrace.get(room) ?? 0;
   }
 
   /** /metrics session rollup — live census + since-boot edge totals +
