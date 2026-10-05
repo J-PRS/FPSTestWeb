@@ -373,8 +373,9 @@ export class ServerBotSenses {
     const enemyFlagY = enemy.pos.y;
     const sit: FlagSituation = {
       home: own.home,
-      // Own flag's carrier — chase the thief, not the base.
-      thief: this.thiefOf(me)?.pos ?? null,
+      // Own flag's carrier — chase the thief, not the base; velocity
+      // rides along so the pick can lead the run, not the wake.
+      thief: ((t) => t ? { ...t.pos, vx: t.vel.x, vz: t.vel.z } : null)(this.thiefOf(me)),
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
@@ -411,14 +412,16 @@ export class ServerBotSenses {
       ?? (task.kind === 'push' ? task.goal : null));
     // One role table for both runtimes — shared/flagGoals.ts.
     let pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
-    // An escort pick aims at where the carrier will BE: chasing the
-    // raw position means the escort follows the wake of a 30m/s+ run
-    // forever — the slot's velocity rides along for exactly this lead
-    // (the comment on FlagSituation.escort promised it, nobody read it).
-    if (pick !== null && sit.escort !== null && pick === sit.escort) {
-      const eta = Math.min(10, Math.hypot(sit.escort.x - p.position.x, sit.escort.z - p.position.z) / 24);
-      pick = { x: sit.escort.x + (sit.escort.vx ?? 0) * eta, y: sit.escort.y,
-        z: sit.escort.z + (sit.escort.vz ?? 0) * eta };
+    // A moving-target pick aims at where it will BE: chasing the raw
+    // position means following the wake of a 30m/s+ run forever — the
+    // slots' velocity rides along for exactly this lead (escort's slot
+    // documented the intent; nobody consumed it, and chases had the
+    // same wake-chase until now).
+    const lead = pick !== null && pick === sit.escort ? sit.escort
+      : pick !== null && pick === sit.thief ? sit.thief : null;
+    if (lead) {
+      const eta = Math.min(10, Math.hypot(lead.x - p.position.x, lead.z - p.position.z) / 24);
+      pick = { x: lead.x + (lead.vx ?? 0) * eta, y: lead.y, z: lead.z + (lead.vz ?? 0) * eta };
     }
     const role = this.roles.get(p.id);
     // Post the push-call when THIS bot is the capper closing in. ETA

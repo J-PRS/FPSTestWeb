@@ -27,7 +27,9 @@ export interface FlagSituation {
   home: { x: number; y: number; z: number };
   /** Enemy carrying OUR flag — position is legal (tickUpdate streams it,
    *  chasing the thief is not a wallhack). */
-  thief: { x: number; y: number; z: number } | null;
+  /** Own flag's carrier — velocity rides along like the escort slot so
+   *  chasers intercept the run, not the wake. */
+  thief: { x: number; y: number; z: number; vx?: number; vz?: number } | null;
   /** Our flag lying in the field — touch sends it home. */
   dropped: { x: number; y: number; z: number } | null;
   /** Enemy flag when it's grabbable (not already carried by a teammate). */
