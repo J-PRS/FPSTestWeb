@@ -56,6 +56,10 @@ export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
   'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
   'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
   'jet': 'Jump_Rifle', 'hit': 'Hit', 'shoot': 'Fire_SniperRifle',
+  // No overhand in the pack — the one-handed pistol arm swing is the
+  // closest release motion; without it 'throw' falls through to 'Punch',
+  // which this rig doesn't ship either (warn + holds last pose).
+  'throw': 'Fire_1Pistol',
 };
 export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
   'idle': 'Idle_gunMiddle_ar', 'walk': 'WalkFront_Shoot_ar', 'run': 'Run_gunMiddle_AR',
