@@ -64,18 +64,37 @@ function ensureNonIndexed(mesh: THREE.Mesh): void {
   if (mesh.geometry.index) mesh.geometry = mesh.geometry.toNonIndexed();
 }
 
-/** Build the barycentric edge-line attributes (the real crisp-edge signal):
- *  `abary` = canonical corner weights (1,0,0)/(0,1,0)/(0,0,1); `aedge` =
- *  per-corner flag "the triangle edge OPPOSITE me is sharp". In the
- *  fragment, the interpolated weight → 0 only near edges flagged sharp, so
- *  a smoothstep on fwidth gives a pixel-width wear line hugging actual
- *  geometry edges — the thing vertex-level wear can't do on a 24-vert box.
- *  Non-sharp corners contribute a large constant instead so flat seams and
- *  coplanar triangulation never draw. */
-function bakeEdgeLines(geo: THREE.BufferGeometry): void {
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  const count = pos.count;
-  const triCount = count / 3; // caller guarantees non-indexed
+/** One geometric edge's triangle refs. t = tri index, c = the corner slot
+ *  (0/1/2) opposite this edge — the barycentric channel the shader reads;
+ *  a/b = vertex indices of the edge endpoints. */
+interface EdgeRef { t: number; c: number; a: number; b: number }
+type EdgeMap = Map<string, EdgeRef[]>;
+
+interface EdgeCtx {
+  pos: THREE.BufferAttribute;
+  faceN: Float32Array;
+  edges: EdgeMap;
+  /** vec3 — flag lives in the corner's own component. */
+  aedge: Float32Array;
+  /** Debug: gunlab draws these edges as a red overlay. */
+  flagged: Set<string>;
+  /** 0.1mm weld tolerance — see collectEdges. */
+  pk(i: number): string;
+}
+
+const faceDot = (faceN: Float32Array, t1: number, t2: number) =>
+  faceN[t1 * 3]! * faceN[t2 * 3]! + faceN[t1 * 3 + 1]! * faceN[t2 * 3 + 1]! + faceN[t1 * 3 + 2]! * faceN[t2 * 3 + 2]!;
+
+const flagEdge = (ctx: EdgeCtx, list: EdgeRef[]) => {
+  // Flag in ALL THREE corners of channel c — storing it only at the
+  // opposite corner interpolates the flag to zero exactly at the edge
+  // it marks (vAedge.c ≈ bary.c → 0), so the line could never draw.
+  // Constant flags across the tri give a real distance-to-edge field.
+  for (const e of list) for (let v = 0; v < 3; v++) ctx.aedge[(e.t * 3 + v) * 3 + e.c] = 1;
+};
+
+/** Face normals + welded-vertex edge map. */
+function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Float32Array; edges: EdgeMap; pk: (i: number) => string } {
   const faceN = new Float32Array(triCount * 3);
   // 0.1mm weld tolerance — enough for GLB round-trip jitter and
   // toNonIndexed dupes, but at 1mm (toFixed(3)) verts in these small
@@ -83,7 +102,7 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
   // edges merge into one list and a sharp pair's flag lands on a
   // coplanar seam — the "slanted line on a flat face" bug.
   const pk = (i: number) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
-  const edges = new Map<string, { t: number; c: number; a: number; b: number }[]>();
+  const edges: EdgeMap = new Map();
   const _e = new THREE.Vector3();
   for (let t = 0; t < triCount; t++) {
     const v0 = t * 3, v1 = t * 3 + 1, v2 = t * 3 + 2;
@@ -93,10 +112,9 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
     _fb.sub(_fa); _fc.sub(_fa);
     _e.crossVectors(_fb, _fc).normalize();
     faceN[t * 3] = _e.x; faceN[t * 3 + 1] = _e.y; faceN[t * 3 + 2] = _e.z;
-    // c = the corner SLOT (0/1/2) opposite this edge — the barycentric
-    // channel the shader reads. Passing the vertex index (3t+2) instead
-    // was the phantom-line bug: only tri 0's slots coincided, every
-    // other tri scattered its flag into a DIFFERENT tri's channels.
+    // Passing the vertex index (3t+2) instead of the slot was the
+    // phantom-line bug: only tri 0's slots coincided, every other tri
+    // scattered its flag into a DIFFERENT tri's channels.
     const add = (a: number, b: number, c: number) => {
       const key = pk(a) < pk(b) ? `${pk(a)}|${pk(b)}` : `${pk(b)}|${pk(a)}`;
       let l = edges.get(key);
@@ -107,8 +125,12 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
     add(v1, v2, 0); // edge 1-2, opposite corner 0
     add(v2, v0, 1); // edge 2-0, opposite corner 1
   }
-  const aedge = new Float32Array(count * 3); // vec3 — flag lives in the corner's own component
-  const flaggedKeys = new Set<string>(); // debug: gunlab draws these as red overlay
+  return { faceN, edges, pk };
+}
+
+/** Flag edges whose incident faces meet past the sharp dihedral. */
+function flagSharpPairs(ctx: EdgeCtx): void {
+  const { edges, faceN } = ctx;
   for (const [key, list] of edges) {
     // Boundary edges (unmatched halves — T-junctions, triangulation
     // seams, cross-mesh contacts) are NOT auto-sharp: they sit ON flat
@@ -125,28 +147,27 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const x = list[i]!, y = list[j]!;
-        const dn = faceN[x.t * 3]! * faceN[y.t * 3]! + faceN[x.t * 3 + 1]! * faceN[y.t * 3 + 1]! + faceN[x.t * 3 + 2]! * faceN[y.t * 3 + 2]!;
-        if (!(1 - dn > SHARP_DIHEDRAL)) continue;
-        // Flag in ALL THREE corners of channel c — storing it only at the
-        // opposite corner interpolates the flag to zero exactly at the edge
-        // it marks (vAedge.c ≈ bary.c → 0), so the line could never draw.
-        // Constant flags across the tri give a real distance-to-edge field.
+        if (!(1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL)) continue;
         // Flag EVERY ref on this edge, not just the sharp pair: duplicated
         // verts / T-junctions put a coplanar third tri on the same key —
         // unflagged, its side of the seam has no distance field and the
         // wear line visibly cuts where triangles switch on a flat face.
-        for (const e of list) for (let v = 0; v < 3; v++) aedge[(e.t * 3 + v) * 3 + e.c] = 1;
-        flaggedKeys.add(key);
+        flagEdge(ctx, list);
+        ctx.flagged.add(key);
       }
     }
   }
-  // Continuation pass — a crease crossing a coplanar triangulation seam is
-  // ONE geometric edge, but the seam vertex splits it per-tri: X owns
-  // A→C, the sibling tri owns C→D. When the continuation fails its own
-  // pair test (boundary/T-junction there), the wear line dies exactly at
-  // the seam. Propagate flags to unflagged COLLINEAR edges that share an
-  // endpoint and live in a tri coplanar with the flagged face —
-  // transitively, so polylines heal end-to-end.
+}
+
+/** Continuation pass — a crease crossing a coplanar triangulation seam is
+ *  ONE geometric edge, but the seam vertex splits it per-tri: X owns
+ *  A→C, the sibling tri owns C→D. When the continuation fails its own
+ *  pair test (boundary/T-junction there), the wear line dies exactly at
+ *  the seam. Propagate flags to unflagged COLLINEAR edges that share an
+ *  endpoint and live in a tri coplanar with the flagged face —
+ *  transitively, so polylines heal end-to-end. */
+function propagateContinuations(ctx: EdgeCtx): void {
+  const { pos, edges, faceN, flagged, pk } = ctx;
   const vmap = new Map<string, string[]>(); // welded vert key → edge keys
   for (const [key, list] of edges) {
     const e = list[0]!;
@@ -158,44 +179,42 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
     }
   }
   const _d = new THREE.Vector3(), _d2 = new THREE.Vector3();
-  const dirOf = (e: { a: number; b: number }, out: THREE.Vector3) =>
+  const dirOf = (e: EdgeRef, out: THREE.Vector3) =>
     out.set(pos.getX(e.b) - pos.getX(e.a), pos.getY(e.b) - pos.getY(e.a), pos.getZ(e.b) - pos.getZ(e.a)).normalize();
-  const queue = [...flaggedKeys];
+  const queue = [...flagged];
   while (queue.length) {
     const key = queue.pop()!;
     const list = edges.get(key)!;
     dirOf(list[0]!, _d);
     for (const ep of [list[0]!.a, list[0]!.b]) {
       for (const k2 of vmap.get(pk(ep)) ?? []) {
-        if (k2 === key || flaggedKeys.has(k2)) continue;
+        if (k2 === key || flagged.has(k2)) continue;
         const l2 = edges.get(k2)!;
         dirOf(l2[0]!, _d2);
         if (Math.abs(_d.dot(_d2)) < 0.995) continue; // not a straight continuation
         // Continuation must sit in a tri coplanar with one of the
         // flagged edge's incident faces — else it's a different crease.
-        let coplanar = false;
-        for (const r2 of l2) {
-          for (const r of list) {
-            const dn = faceN[r2.t * 3]! * faceN[r.t * 3]! + faceN[r2.t * 3 + 1]! * faceN[r.t * 3 + 1]! + faceN[r2.t * 3 + 2]! * faceN[r.t * 3 + 2]!;
-            if (1 - dn < 0.02) { coplanar = true; break; }
-          }
-          if (coplanar) break;
-        }
+        const coplanar = l2.some(r2 => list.some(r => 1 - faceDot(faceN, r2.t, r.t) < 0.02));
         if (!coplanar) continue;
-        for (const r of l2) for (let v = 0; v < 3; v++) aedge[(r.t * 3 + v) * 3 + r.c] = 1;
-        flaggedKeys.add(k2);
+        flagEdge(ctx, l2);
+        flagged.add(k2);
         queue.push(k2);
       }
     }
   }
-  // T-junction heal — the split is one-sided: face A keeps edge A→D while
-  // face B cuts it at a mid vertex V, so B's halves land on DIFFERENT
-  // keys and never pair (skipped as boundary). The halves share no
-  // endpoint with A→D either, so vmap can't reach them. Match by
-  // geometry instead: a lone edge whose midpoint lies on a flagged
-  // segment is the same physical crease — flag it, transitively.
+}
+
+/** T-junction heal — the split is one-sided: face A keeps edge A→D while
+ *  face B cuts it at a mid vertex V, so B's halves land on DIFFERENT
+ *  keys and never pair (skipped as boundary). The halves share no
+ *  endpoint with A→D either, so the vert-key map can't reach them. Match
+ *  by geometry instead: a lone edge whose midpoint lies on a flagged
+ *  segment is the same physical crease — flag it, transitively. */
+function healTJunctions(ctx: EdgeCtx): void {
+  const { pos, edges, flagged } = ctx;
   const _m = new THREE.Vector3(), _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _cp = new THREE.Vector3();
-  const segOf = (e: { a: number; b: number }) => {
+  const _d = new THREE.Vector3(), _d2 = new THREE.Vector3();
+  const segOf = (e: EdgeRef) => {
     _pa.set(pos.getX(e.a), pos.getY(e.a), pos.getZ(e.a));
     _pb.set(pos.getX(e.b), pos.getY(e.b), pos.getZ(e.b));
   };
@@ -213,30 +232,34 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
   while (healed) {
     healed = false;
     for (const [key, list] of edges) {
-      if (flaggedKeys.has(key)) continue;
+      if (flagged.has(key)) continue;
       segOf(list[0]!);
       _m.addVectors(_pa, _pb).multiplyScalar(0.5);
       let onCrease = false;
-      for (const fk of flaggedKeys) {
+      for (const fk of flagged) {
         const fe = edges.get(fk)![0]!;
         _pa.set(pos.getX(fe.a), pos.getY(fe.a), pos.getZ(fe.a));
         _pb.set(pos.getX(fe.b), pos.getY(fe.b), pos.getZ(fe.b));
         if (pointOnSeg(_m, _pa, _pb)) { onCrease = true; break; }
       }
       if (!onCrease) continue;
-      for (const r of list) for (let v = 0; v < 3; v++) aedge[(r.t * 3 + v) * 3 + r.c] = 1;
-      flaggedKeys.add(key);
+      flagEdge(ctx, list);
+      flagged.add(key);
       healed = true;
     }
   }
-  // Debug breadcrumb for the gunlab wire view: the actual segment list the
-  // flagger produced — gaps here mean detection, gaps ONLY in the shader
-  // wear line mean interpolation.
-  if (flaggedKeys.size) {
-    const segs = new Float32Array(flaggedKeys.size * 6);
+}
+
+/** Debug breadcrumb for the gunlab wire view: the actual segment list the
+ *  flagger produced — gaps here mean detection, gaps ONLY in the shader
+ *  wear line mean interpolation. */
+function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number, count: number): void {
+  const { pos, edges, faceN, aedge, flagged } = ctx;
+  if (flagged.size) {
+    const segs = new Float32Array(flagged.size * 6);
     const refs: { t: number; a: number; b: number }[] = [];
     let w = 0;
-    for (const key of flaggedKeys) {
+    for (const key of flagged) {
       const list = edges.get(key)!;
       const e = list[0]!;
       segs[w++] = pos.getX(e.a); segs[w++] = pos.getY(e.a); segs[w++] = pos.getZ(e.a);
@@ -248,28 +271,31 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
   }
   if ((geo.userData.__dbgEdge as boolean | undefined) !== true) {
     geo.userData.__dbgEdge = true;
-    let shared = 0, bnd = 0, sharpN = 0, flagged = 0;
+    let shared = 0, bnd = 0, sharpN = 0, flaggedN = 0;
     for (const l of edges.values()) { if (l.length > 1) shared++; else bnd++; }
     for (const l of edges.values()) {
-      if (l.length === 1) { sharpN++; flagged += l.length; continue; }
+      if (l.length === 1) { sharpN++; flaggedN += l.length; continue; }
       const [x, y] = [l[0]!, l[1]!];
-      const dn = faceN[x.t * 3]! * faceN[y.t * 3]! + faceN[x.t * 3 + 1]! * faceN[y.t * 3 + 1]! + faceN[x.t * 3 + 2]! * faceN[y.t * 3 + 2]!;
-      if (1 - dn > SHARP_DIHEDRAL) { sharpN++; flagged += l.length; }
+      if (1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL) { sharpN++; flaggedN += l.length; }
     }
     let set = 0; for (let i = 0; i < count * 3; i++) if (aedge[i]! > 0) set++;
     if ((window as any).__edgebakeLog) console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);
   }
-  const abary = new Float32Array(count * 3);
-  const aalt = new Float32Array(count * 3);
+}
+
+/** abary = canonical corner weights; aalt = per-channel altitude
+ *  (corner → opposite edge, object units): bary.c × altitude = the
+ *  fragment's TRUE distance to that edge, so the shader can size wear
+ *  lines in world units instead of constant screen pixels — wear is a
+ *  physical feature, it should zoom. */
+function bakeBaryAttrs(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, triCount: number): { abary: Float32Array; aalt: Float32Array } {
+  const abary = new Float32Array(triCount * 9);
+  const aalt = new Float32Array(triCount * 9);
   const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vector3(), _ab = new THREE.Vector3(), _ac = new THREE.Vector3();
   for (let t = 0; t < triCount; t++) {
     abary[(t * 3) * 3] = 1;
     abary[(t * 3 + 1) * 3 + 1] = 1;
     abary[(t * 3 + 2) * 3 + 2] = 1;
-    // Per-channel altitude (corner → opposite edge, object units):
-    // bary.c × altitude = the fragment's TRUE distance to that edge, so
-    // the shader can size wear lines in world units instead of constant
-    // screen pixels — wear is a physical feature, it should zoom.
     const v = [t * 3, t * 3 + 1, t * 3 + 2];
     _va.fromBufferAttribute(pos, v[0]!);
     _vb.fromBufferAttribute(pos, v[1]!);
@@ -284,7 +310,29 @@ function bakeEdgeLines(geo: THREE.BufferGeometry): void {
       for (let k = 0; k < 3; k++) aalt[(t * 3 + k) * 3 + c] = alt;
     }
   }
-  geo.setAttribute('aedge', new THREE.BufferAttribute(aedge, 3));
+  return { abary, aalt };
+}
+
+/** Build the barycentric edge-line attributes (the real crisp-edge signal):
+ *  `abary` = canonical corner weights (1,0,0)/(0,1,0)/(0,0,1); `aedge` =
+ *  per-corner flag "the triangle edge OPPOSITE me is sharp". In the
+ *  fragment, the interpolated weight → 0 only near edges flagged sharp, so
+ *  a smoothstep on fwidth gives a pixel-width wear line hugging actual
+ *  geometry edges — the thing vertex-level wear can't do on a 24-vert box.
+ *  Non-sharp corners contribute a large constant instead so flat seams and
+ *  coplanar triangulation never draw. */
+function bakeEdgeLines(geo: THREE.BufferGeometry): void {
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const count = pos.count;
+  const triCount = count / 3; // caller guarantees non-indexed
+  const { faceN, edges, pk } = collectEdges(pos, triCount);
+  const ctx: EdgeCtx = { pos, faceN, edges, aedge: new Float32Array(count * 3), flagged: new Set<string>(), pk };
+  flagSharpPairs(ctx);
+  propagateContinuations(ctx);
+  healTJunctions(ctx);
+  emitEdgeDebug(geo, ctx, triCount, count);
+  const { abary, aalt } = bakeBaryAttrs(geo, pos, triCount);
+  geo.setAttribute('aedge', new THREE.BufferAttribute(ctx.aedge, 3));
   geo.setAttribute('abary', new THREE.BufferAttribute(abary, 3));
   geo.setAttribute('aalt', new THREE.BufferAttribute(aalt, 3));
 }
@@ -429,7 +477,6 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
     const lwCore = Math.max(1, WEAR_LINE * 2 * triScale[r.t]);
     for (let k = 0; k < pieces; k++) {
       const t0 = k / pieces, t1 = (k + 1) / pieces;
-      const mx = ax + (bx - ax) * (t0 + t1) / 2, my = ay + (by - ay) * (t0 + t1) / 2;
       // Object-space midpoint for the noise — same coords the surface
       // wear samples, so chips land where the face wear does.
       _wA.fromBufferAttribute(pos, r.a); _wB.fromBufferAttribute(pos, r.b);
@@ -523,11 +570,10 @@ function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void
  *  collar roots and lip junctions all collect dirt. */
 function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count: number, triCount: number, idx: THREE.BufferAttribute | null): void {
   const pk = (i: number) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
-  interface EdgeRef { t: number; c: number; a: number; b: number }
   const edges = new Map<string, EdgeRef[]>();
   const faceN = new Float32Array(triCount * 3);
   const faceC = new Float32Array(triCount * 3);
-  const _n = new THREE.Vector3(), _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
+  const _gn = new THREE.Vector3(), _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
   for (let t = 0; t < triCount; t++) {
     const v = [idx ? idx.getX(t * 3) : t * 3, idx ? idx.getX(t * 3 + 1) : t * 3 + 1, idx ? idx.getX(t * 3 + 2) : t * 3 + 2];
     _fa.fromBufferAttribute(pos, v[0]!);
@@ -536,8 +582,8 @@ function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count:
     _ca.copy(_fa).add(_fb).add(_fc).multiplyScalar(1 / 3);
     faceC[t * 3] = _ca.x; faceC[t * 3 + 1] = _ca.y; faceC[t * 3 + 2] = _ca.z;
     _fb.sub(_fa); _fc.sub(_fa);
-    _n.crossVectors(_fb, _fc).normalize();
-    faceN[t * 3] = _n.x; faceN[t * 3 + 1] = _n.y; faceN[t * 3 + 2] = _n.z;
+    _gn.crossVectors(_fb, _fc).normalize();
+    faceN[t * 3] = _gn.x; faceN[t * 3 + 1] = _gn.y; faceN[t * 3 + 2] = _gn.z;
     for (const [a, b, c] of [[0, 1, 2], [1, 2, 0], [2, 0, 1]] as const) {
       const ka = pk(v[a]!), kb = pk(v[b]!);
       const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
