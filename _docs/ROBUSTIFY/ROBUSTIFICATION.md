@@ -356,12 +356,14 @@ telemetry lines it greps.
   `aliveSince` correctly stay sibling maps — their key domains span
   `'local'` + client fill bots + self, not RemoteSet members; the
   `onRemove` funnel is the right shape for mixed-domain keys.
-- **Ball wire-ordering contract** (2026-10-05): `ballStaleSeg.test.ts`
-  pins `isStaleSeg` — equal-stamp segments are fresher same-tick truth
-  (apply, not drop), strictly-older drop, unstamped exempt — plus
-  `applySeg` same-tick re-anchor + simT rewind. `ballRubberband.test.ts`
-  pins the watch gates: unreplayed-stamp suppression (`a3a77034`),
-  replayed-divergent still warns, parked/stale-leg suppressed.
+- **Ball netcode — every exported primitive pinned** (2026-10-05):
+  `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
+  re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
+  simNow gate, 0.5s stall-breaker + bank cap, ballistic remainder,
+  parked settle), `ballPredictAt.test.ts` (probe bounds: simNow clamp,
+  simT+8 cap, live-sim isolation), `ballRubberband.test.ts` (watch
+  gates: unreplayed-stamp suppression `a3a77034`, replayed-divergent
+  warns, parked/stale-leg suppressed).
 
 ---
 
