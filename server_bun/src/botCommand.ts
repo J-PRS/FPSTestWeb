@@ -51,8 +51,20 @@ const WANT: Record<CommandKind, number> = {
   escort: 2,
   // A called push wants a real flood — three bodies reads as a patrol,
   // not a wave; four is most of the eligible pool arriving together.
+  // Long transit legs bleed members before arrival (katabatic's 500m
+  // haul kills ~3 of 4 mid-field), so a far call floods deeper.
   push: 4,
 };
+/** Extra bodies a push earns per ~350m the wave must transit — the
+ *  transit is a death lottery, so a far call floods deeper to land
+ *  the same suppression on the ring. */
+const PUSH_FAR_M = 350;
+
+function median(xs: number[]): number {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[s.length >> 1]!;
+}
 
 /** Which roles volunteer for which job — defenders chase and return,
  *  attackers escort and flood. */
@@ -109,11 +121,15 @@ export class TeamCommand {
     const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
       if (!at) return;
       const have = [...this.tasks.values()].filter((t) => t.kind === kind).length;
+      const want = kind === 'push'
+        ? WANT.push + Math.min(3, Math.floor(median(free.map((m) =>
+            Math.hypot(m.pos.x - at.x, m.pos.z - at.z))) / PUSH_FAR_M))
+        : WANT[kind];
       const pool = free
         .filter((m) => !this.tasks.has(m.id) && WHO[kind].has(m.role))
         .map((m) => ({ m, d: (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2 }))
         .sort((a, b) => a.d - b.d);
-      for (const { m } of pool.slice(0, Math.max(0, WANT[kind] - have))) {
+      for (const { m } of pool.slice(0, Math.max(0, want - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the
         // carrier will be when the escort's own run lands (est ~12m/s).
