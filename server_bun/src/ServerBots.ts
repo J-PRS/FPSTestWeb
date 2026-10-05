@@ -118,9 +118,13 @@ export class ServerBots {
   private lastOut = new Map<string, BrainOut>();
   /** Visible-enemy-present flag from the last think (epoch ms expiry). */
   readonly foeNear = new Map<string, number>();
-  /** FPS_BOT_PROF=1 stage timers — flagGoal/build/think/fire/drive.
-   *  Read-only accumulate; the soak prints the rollup. */
-  readonly stageProf = process.env.FPS_BOT_PROF ? new Array<number>(5).fill(0) : null;
+  /** Stage timers — flagGoal/build/think/fire/drive. Always on: five
+   *  timer pairs per think is noise, and the soak + /metrics both read
+   *  the same accumulators (stageMs = ms/sec over the last 10s window). */
+  readonly stageProf = new Array<number>(5).fill(0);
+  private stageBase = new Array<number>(5).fill(0);
+  private stageWinAt = 0;
+  readonly stageMs = new Array<number>(5).fill(0);
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {
@@ -530,6 +534,14 @@ export class ServerBots {
     if (this.brains.size === 0) return;
     this.thinkPhaseNow = (this.thinkPhaseNow + 1) % ServerBots.THINK_DIV;
     const now = simNow();
+    // 10s window roll (same pattern as the TickLoop phase rollup): the
+    // cumulative prof counters diff into a per-second rate /metrics can
+    // show — bot CPU on a live server was only measurable in soaks.
+    if (now - this.stageWinAt >= 10_000) {
+      for (let i = 0; i < 5; i++) this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;
+      this.stageBase = [...this.stageProf];
+      this.stageWinAt = now;
+    }
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
       if (!p) continue;
@@ -572,20 +584,20 @@ export class ServerBots {
       let out = this.lastOut.get(id);
       if (phaseNow === (this.thinkPhase.get(id) ?? 0) || !out) {
         const prof = this.stageProf;
-        let tm = prof ? performance.now() : 0;
+        let tm = performance.now();
         // One roster pass feeds the whole think — flagGoal/build each
         // re-scanned the player map per channel before sharing it.
         const parties = this.sense.partiesOf(p);
         const goal = this.sense.flagGoal(p, brain.dutyLevel, parties);
-        if (prof) { prof[0]! += performance.now() - tm; tm = performance.now(); }
+        prof[0]! += performance.now() - tm; tm = performance.now();
         const ctx = this.sense.build(id, p, goal, now, brain.skill, parties);
-        if (prof) { prof[1]! += performance.now() - tm; tm = performance.now(); }
+        prof[1]! += performance.now() - tm; tm = performance.now();
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
         const pk = ctx.pickup;
         const nuggetNear = !!pk && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
-        if (prof) { prof[2]! += performance.now() - tm; tm = performance.now(); }
+        prof[2]! += performance.now() - tm; tm = performance.now();
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
         // as a remark rather than spam.
@@ -595,16 +607,16 @@ export class ServerBots {
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, { goal, now, sh: sh0, nuggetNear, ctx });
-        if (prof) { prof[3]! += performance.now() - tm; tm = performance.now(); }
+        prof[3]! += performance.now() - tm; tm = performance.now();
         this.supportNade(id, p, brain, now, nuggetNear);
         this.healAlly(id, p, brain, now);
         this.lastOut.set(id, out);
       }
-      const tm2 = this.stageProf ? performance.now() : 0;
+      const tm2 = performance.now();
       const sh = this.room.moveSim.simState(id);
       if (sh) this.driveMove(id, p, out, sh, dt, now);
       else if (this.legacyMove(id, p, out.dest, dt)) continue;
-      if (this.stageProf) this.stageProf[4]! += performance.now() - tm2;
+      this.stageProf[4]! += performance.now() - tm2;
 
       this.checkStuck(id, p, brain, now);
 

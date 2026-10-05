@@ -58,6 +58,13 @@ export function getMetrics(g: GameServer) {
       balls: r.ballSim.ballCount,
       clientStats: n ? { n, fpsAvg: Math.round(fpsSum / n), fpsMin, lossMax, pingMax } : undefined,
       scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
+      // Bot CPU per stage as ms/sec over the last 10s window — a room
+      // melting on think/drive shows it here instead of needing a soak.
+      botMs: r.bots ? {
+        flagGoal: +r.bots.stageMs[0]!.toFixed(1), build: +r.bots.stageMs[1]!.toFixed(1),
+        think: +r.bots.stageMs[2]!.toFixed(1), fire: +r.bots.stageMs[3]!.toFixed(1),
+        drive: +r.bots.stageMs[4]!.toFixed(1),
+      } : undefined,
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
       ballSimNow: r.ballSim.simNow,
