@@ -89,6 +89,7 @@ export type BridgeResult = {
   inputsResent: number;
   maxSteadyErr: number;   // largest |client - server| sampled mid-run
   errSeries: number[];    // per-client-frame error samples (post-warmup)
+  errT: number[];         // tMs stamps parallel to errSeries (convergence timing)
   /** ev seqs of durable (chat) frames the client actually processed —
    *  contiguous coverage after a reconnect means reclaim lost nothing. */
   durableEvs: number[];
@@ -136,7 +137,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
 
   const r: BridgeResult = {
     preErr: [], postErr: [], corrections: 0, snaps: 0,
-    reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [],
+    reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [], errT: [],
     durableEvs: [],
   };
   let lastEv = 0;
@@ -299,6 +300,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       if (ss) {
         const e = Math.hypot(cs.pos.x - ss.pos.x, cs.pos.y - ss.pos.y, cs.pos.z - ss.pos.z);
         r.errSeries.push(e);
+        r.errT.push(tMs);
         if (e > r.maxSteadyErr) r.maxSteadyErr = e;
       }
     }

@@ -27,14 +27,13 @@ journaled event stream with offset-cursor reclaim.
 | Determinism | 600-tick lockstep zero divergence (detTrace per-tick per-sim hash diff) | scenarios/detTrace.ts |
 
 | Tick-rate degradation | authority at 15Hz, 2s mid-run stall, back-to-back stalls, degraded+lossy combined: inputs queue, gap-counter resends heal, post-stall corrections converge (tail <15m, postErr p95 <4-5m) | tests/net/tickDegradation.test.ts |
+| Convergence metrics report | measured numbers not just bounds: corr/min, time-to-converge (<5m steady), err p50/p95/p99, pre/postErr p95, resend% per profile. clean: 0 corr/min (sims don't diverge), lossy: 15/min, adverse: 84/min, p99 err <5m | tests/net/netMetrics.test.ts |
 
 ## Open lanes (priority order)
 
 1. ~~Tick-rate degradation~~ — DONE, all 4 green first pass.
-2. **Convergence metrics as regressible report** — emit correction rate,
-   time-to-converge, residual-error p50/p95/p99 per profile as a measured
-   report (like the perf baseline), not just pass/fail bounds. Regressions
-   surface as numbers.
+2. ~~Convergence metrics as regressible report~~ — DONE, netMetrics emits
+   the numbers and gates them.
 3. **Long-session soak** — reconnects cycling for minutes, journal
    eviction under sustained traffic, watermark wrap-around, memory
    growth in the ledger/journal over time.
@@ -50,7 +49,8 @@ journaled event stream with offset-cursor reclaim.
   diff is the bug report (Factorio CRC technique).
 - ChaosLink is seeded + deterministic — every chaos test reproducible.
 - Ledger/journal eviction and reclaim gaps are COUNTED, never silent.
-- Next: netcode metrics report (lane 2) — the dashboard, not just gates.
+- netMetrics: correction rate, converge time, err percentiles per profile
+  — the dashboard, not just gates.
 
 ## Suite speed
 
