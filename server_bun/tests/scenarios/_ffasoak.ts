@@ -44,11 +44,21 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
   // back in, which is what a real FFA lobby does to itself.
   const room = mkRoom({ mode: 'dm', bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: 80 } }, 'dm', seed);
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
-  const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
+  const ctl = room.bots as unknown as {
+    loadouts: Map<string, BotLoadout>;
+    roster: { refitClass(id: string): void; applyClass(p: { id: string; maxHealth: number; health: number }, cls: string): void };
+  };
   for (let i = 0; i < bots.length; i++) {
     const w = weapons[i]!;
     ctl.loadouts.set(bots[i]!.id, { perk: 'none', near: w, mid: w, far: w, belt: WeaponType.Grenade, side: WeaponType.Pistol });
     ctl.roster.refitClass(bots[i]!.id);
+    // Weapon-vs-weapon, not body-vs-body: every fighter runs the medium
+    // frame so light/heavy silhouettes don't confound the gun ranking.
+    // FFASOAK_CLASSES=1 restores the loadout-driven tier for kit-faithful runs.
+    if (!process.env.FFASOAK_CLASSES) {
+      bots[i]!.armorClass = 'medium';
+      ctl.roster.applyClass(bots[i]!, 'medium');
+    }
     // Tight ring: the 2km map lets bots disperse past hunt range and
     // the "match" starves — a real FFA keeps contact pressure.
     const a = (i / bots.length) * Math.PI * 2;
