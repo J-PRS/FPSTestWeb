@@ -340,11 +340,22 @@ export class GameServer {
     this.sessions.handle(ws, raw);
   }
 
+  // Garbage-flood bound: every bad message is counted, but warning about
+  // each one trades a wire flood for a log-IO flood — one warn per
+  // player per window keeps the abuse visible without the write cost.
+  private readonly invalidWarnAt = new Map<string, number>();
+  private static readonly INVALID_WARN_GAP_MS = 5000;
+
   private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
       this.ops.msgsRejected++;
-      logger.warn('Invalid message rejected', { playerId, room: room.name, error: result.error });
+      const now = wallNow();
+      if (now - (this.invalidWarnAt.get(playerId) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
+        this.invalidWarnAt.set(playerId, now);
+        if (this.invalidWarnAt.size > 4096) this.invalidWarnAt.clear();
+        logger.warn('Invalid message rejected', { playerId, room: room.name, error: result.error });
+      }
       return;
     }
 
