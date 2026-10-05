@@ -1,3 +1,4 @@
+2026-10-05 - CombatHandler: tauntDelayMs draws from seeded tauntRand — last ambient Math.random in the chatter stack
 2026-10-05 - projectileRegistry: prune dead shells from byId too — a lost projectileDestroyed echo leaked one entry per shell forever
 2026-10-05 - CreatureSim: evict edgeSeq on kill — same dead-id accumulator class as BallSim
 2026-10-05 - BallSim: evict retargetAcc/resyncAcc on ball death — spawn seeds an entry per ball, kill only dropped the body so dead ids accumulated forever

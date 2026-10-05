@@ -22,6 +22,7 @@ import { simNow } from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
 import { wallNow } from './wallClock.ts';
+import { tauntRand } from '../../shared/botRand.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -483,7 +484,7 @@ export class CombatHandler {
 
   /** Typing-beat delay — a scenario test steps sim-time only, so it
    *  stubs this to 0 to see taunts inside the frag loop. */
-  static tauntDelayMs: () => number = () => 1200 + Math.random() * 1800;
+  static tauntDelayMs: () => number = () => 1200 + tauntRand() * 1800;
 
   ensureRespawn(playerId: string): void {
     this.respawner.ensure(playerId);
