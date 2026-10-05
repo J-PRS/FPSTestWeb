@@ -401,6 +401,13 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Client-inbound coercion defaults** (2026-10-05): every `??`/`||`
+  fallback in `client/src/game/net/*.ts` audited — all are either
+  display-side (scoreboard `?? 0`, beam glow color, HUD readouts) or
+  trusted-absent handling of optional wire fields (`roster ?? []`,
+  `pickups ?? []`, `p.kind ?? 'gem'` — `kind` is declared optional in
+  `protocol.ts` and the server fills it from its own registry). None
+  feed a sim write; absent ≠ malformed on a server-authoritative wire.
 - **`creatureFlyer` pinned** (2026-10-05): `creatureFlyer.test.ts`
   (14 tests) — registry rows + gnat overrides, seeded orbit state,
   committed-prey gate (raw target without tgtValid never folds),
