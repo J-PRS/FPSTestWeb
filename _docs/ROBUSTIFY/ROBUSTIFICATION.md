@@ -401,6 +401,16 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`creatureTotem` pinned** (2026-10-05): `creatureTotem.test.ts`
+  (17 tests) — registry row, uber twin constants, refire/range gates,
+  charge→fire edge with authority-only `pendingBite`, all three
+  relocation triggers (MIN_RANGE / shot budget / lost line — a
+  feet-level target on flat ground legitimately fails line-clear and
+  relocates), blinkOut snap + blinkIn 'land' with seeded cooldown,
+  mid-blink intangibility, stagger pin, chain-escape cooldown,
+  committed beam geometry (unit dir, terrain clip, structure clip),
+  live-position sweep, 400-step twin replay. Creature families now
+  fully covered.
 - **Floating promises** (2026-10-05): every unawaited `.then(`/`void `
   async call in `server_bun/src` audited — the fire-and-forget sites
   (DemoStorage index-reconcile chain, RtcServer `loadNd`/`answerOffer`,
