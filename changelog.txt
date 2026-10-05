@@ -1,3 +1,4 @@
+2026-10-01 - ballsoak: hitscan weapons (speed:0) no longer score Infinity — midair estimate treats beams as zero airtime
 2026-10-01 - ballsoak creatures mode: same bench vs a creature population (crawler/snake/rakk/totem) — per-weapon t100kills/t10kDmg/t10kScore, creature kill+hit funnels
 2026-10-01 - tests/scenarios: _ffasoak weapon-balance bench (10-bot FFA, one weapon per bot, arena-kept contact, bot respawns, K/D+wins per weapon over seeds)
 2026-10-01 - burst-weapon fan fix: RoomProjectiles.spawn fired ONE shell per pull regardless of `burst`, so bot/deployable Flak paid 1/9 shards and Shotgun 1/10 pellets while humans got the full fan. New pelletSpread stat in weaponTable (flak 0.10, shotgun 0.035 — same cone factors the client config used) + deterministic golden-angle (Vogel) fan at the spawn site — no rng, replicas fan identically, every spawn caller fixed at once. Ballsoak: Flak 5→19 kills/1800s, Shotgun 14→75.

@@ -65,7 +65,9 @@ function run(weapon: WeaponType, seed: number): { kills: number; dmg: number; sc
     if (by !== bot.id) return;
     kills++;
     const d = Math.hypot(pos.x - bot.position.x, pos.y - bot.position.y, pos.z - bot.position.z);
-    score += Math.round(8 * d * (d / speed)); // midair-style: acc×dist×airtime(est)
+    // speed:0 weapons are hitscan beams — airtime is ~0, so the midair
+    // term degenerates to accuracy×distance (d/0 would be Infinity).
+    score += Math.round(8 * d * (speed > 0 ? d / speed : 1));
   };
   if (BEASTS === 'balls') {
     const origKilled = room.ballSim.onKilled;
