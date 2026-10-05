@@ -1,3 +1,4 @@
+2026-10-05 - BALL_* dedup: ball flight/enrage/teleport envelope was literal-copied into client config while server sims shared/ballSim — config now re-exports the shared constants (spawn-policy + VFX knobs stay local)
 2026-10-05 - gravity dedup: world -28 was a literal in 4 places kept equal by comments (client config, movement, ballSim, CRAWLER_SIM) — now one source in shared/movement.ts, everyone derives
 2026-10-05 - coverage: scenario tests for influenceMap (splat ring, sim-clock decay, hottestNear, quietestDir, resize) and matchJournal (100-ring bound, leaderboard rows) — the two modules with zero direct coverage
 2026-10-05 - heap probe: 10-min 8v8 CTF soak sampling RSS + every reachable map/set per sim-minute — plateau not climb (rss 90-~270 settles, all per-id series fill to roster then flat); §3 caveat downgraded to limited measurement

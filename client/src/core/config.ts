@@ -95,10 +95,14 @@ export const MELEE_DAMAGE = 60;    // flat enemy damage — a punch doesn't fall
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
 
 // Ball constants
-export const BALL_MAX_DIST = 300; // Maximum distance before teleport
-export const BALL_TELE_MIN = 60; // Minimum teleport distance
-export const BALL_TELE_MAX = 120; // Maximum teleport distance
-export const BALL_TELE_HEIGHT = 25; // Teleport height
+// The flight/enrage/teleport envelope is authored in shared/ballSim.ts —
+// the server runs the same sim the client's solo/host path runs; derive,
+// never copy. Spawn-policy and VFX knobs stay local.
+export {
+  BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
+  BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST,
+  BALL_ENRAGE_DASH_SPEED, BALL_BASE_RADIUS,
+} from '../../../shared/ballSim.js';
 export const BALL_MAX = 10; // Maximum number of balls in play
 
 // Ball enrage mode: instead of teleporting when out of range, far balls get
@@ -108,12 +112,8 @@ export const BALL_MAX = 10; // Maximum number of balls in play
 export let BALL_ENRAGE_ENABLED = true;
 // ESM `let` exports can't be assigned by importers — flip via the setter
 export function setBallEnrage(on: boolean): void { BALL_ENRAGE_ENABLED = on; }
-export const BALL_ENRAGE_FORCE = 12; // Linear attraction accel toward player (m/s^2)
 // Balls stay enraged until they get a lunge off (or time out) — no distance
 // cooldown, otherwise they'd always calm before reaching dash range
-export const BALL_ENRAGE_TIMEOUT = 20; // Seconds enraged before teleport fallback
-export const BALL_ENRAGE_DASH_DIST = 100; // Ground hit within this XZ range becomes a lunge
-export const BALL_ENRAGE_DASH_SPEED = 45; // Lunge speed toward the player
 export const BALL_ENRAGE_TELEGRAPH_H = 8; // Glow ramps to white under this height in dash range
 
 export const EMERGE_DUR = 0.8; // Ground spawns burrow up out of the dirt over this many seconds
@@ -461,7 +461,6 @@ export const HEMI_INTENSITY = 0.5; // Hemisphere light intensity
 export const PENDING_ROCKET_TIMEOUT = 3000; // Milliseconds to wait for server projectile ID
 export const FRAG_MESSAGE_DURATION = 2000; // Milliseconds to show frag message
 export const FRAG_MESSAGE_FADE = 500; // Milliseconds for frag message fade transition
-export const BALL_BASE_RADIUS = 1.2; // Base ball radius
 
 
 
