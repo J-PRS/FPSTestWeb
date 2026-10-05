@@ -203,6 +203,10 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **localStorage/JSON surface**: settings reads go through the typed
+  schema (no JSON.parse); lastRoom is try-wrapped both ways; gunlab
+  falls back to `__gunlab`; every socket parse is guarded. recPlayer's
+  bare parse is a dev tool — fail-loud on a malformed .rec is correct.
 - **rAF loop**: `requestAnimationFrame(loop)` is scheduled *before* the frame
   body (`gameLoop.ts`) — a throw kills one frame, not the loop, and the
   window error hooks ship it to the Logger.
