@@ -401,6 +401,13 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`creatureSlither` pinned** (2026-10-05): `creatureSlither.test.ts`
+  (13 tests) — species registry derivation, uber ×4 health, live LCG
+  seed, out-of-aggro speed bleed, weave→coil→leap→bite state machine
+  edges (windup/pounce/bite), once-per-leap pass-through bite with
+  authority-only `pendingBite`, touchdown rearm, damage-breaks-strike,
+  300-step twin-replay, deterministic animT weave, clipMotion on the
+  weave leg.
 - **Id-space collisions** (2026-10-05): every replicated id mint
   audited — creature `nextId++` and projectile `sp-${nextId++}` are
   per-room monotonic, never reused; pickup/ball ids same shape. FIXED:
