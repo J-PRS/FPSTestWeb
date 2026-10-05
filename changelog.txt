@@ -1,3 +1,4 @@
+2026-10-05 - test: pin shared/angles — wrap convention is a wire contract (remote interp + demo playback); shortest-arc bounds, pole discontinuity, short-arc lerp across the +-pi seam
 2026-10-05 - audit: client-inbound coercion verified — every ?? fallback in net handlers is display-side or trusted-absent optional wire field; none reach a sim write
 2026-10-05 - test: pin creatureFlyer — 14 tests covering orbit/dive/climb cycle edges, committed-prey gate, abort clock, seeded cooldown re-roll, authority-only pendingBite, 400-step twin replay
 2026-10-05 - audit: disconnect lifecycle verified — two-phase teardown (socket-close vs removePlayerCompletely) reaps every per-player store; no orphan path found

@@ -401,6 +401,11 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`angles` pinned** (2026-10-05): `angles.test.ts` (5 tests) —
+  `wrapAngleDelta` shortest-arc in (-π,π], exact-π convention,
+  multi-turn collapse, pole discontinuity, `lerpAngle` short-arc
+  across the ±π seam (t=1 endpoint is angle-equivalent, not literal —
+  documented), exact endpoints.
 - **Client-inbound coercion defaults** (2026-10-05): every `??`/`||`
   fallback in `client/src/game/net/*.ts` audited — all are either
   display-side (scoreboard `?? 0`, beam glow color, HUD readouts) or
