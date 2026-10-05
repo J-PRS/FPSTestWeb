@@ -494,6 +494,9 @@ export class MessageHandler {
       if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
         this.rateLimitWarnings.set(warnKey, now);
         logger.warn(`Rate limit exceeded`, { playerId, messageType: msg.type });
+        // Silent drops look like lag to the offender — tell them. Same
+        // 5s throttle as the log line so the notice can't itself flood.
+        this.sendToPlayer(playerId, { type: 'serverWarn', text: `rate-limited: ${msg.type} dropped` });
       }
       return;
     }
