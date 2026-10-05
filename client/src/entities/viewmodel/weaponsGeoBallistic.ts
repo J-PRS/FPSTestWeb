@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -83,10 +83,13 @@ for (const side of [-1, 1]) {
   ], bodyMat);
   arm.add(limb);
   // Tension cable riding the limb's OUTER face, hub → cam — a guard
-  // rail in front of the plate, not a line buried inside it.
-  const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.44), darkMat);
-  cable.position.set(0, 0.02, -0.24);
-  arm.add(cable);
+  // rail with a mid joint at the limb's recurve kink (z=-0.20 bows
+  // -side*0.03), not a straight bar floating off the bent plate.
+  arm.add(tubePath([
+    [0, 0.02, 0, 0.008],
+    [-side * 0.03, 0.02, -0.20, 0.008],
+    [0, 0.02, -0.44, 0.008],
+  ], 0.008, darkMat, 4));
   // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
   // Flat (horizontal) wheels: the string wraps their edge in-plane.
   const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.032, 10), darkMat);
