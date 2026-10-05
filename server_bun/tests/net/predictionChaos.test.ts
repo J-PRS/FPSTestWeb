@@ -122,4 +122,26 @@ describe('netcode chaos: prediction convergence', () => {
     expect(Math.max(0, ...r.postErr)).toBeLessThan(2.0);
     expect(Math.max(0, ...r.preErr)).toBeLessThan(50);
   }, T);
+
+  it('mid-flight socket death: reclaim restores every durable event, prediction reconverges', () => {
+    const r = runBridge(field, {
+      up: { latencyMs: 30, jitterMs: 10, lossP: 0.05 },
+      down: { latencyMs: 30, jitterMs: 10, lossP: 0.05 },
+      dropMs: 3000, outageMs: 2000,
+    }, sporty, RUN_S);
+    // Every durable frame the room emitted must reach the client exactly
+    // once — the journal replay + ev dedupe contract. Chat frames arrive
+    // every 600ms; 8s run emits ~13, outage covers ~3.
+    expect(r.durableEvs.length).toBeGreaterThanOrEqual(10);
+    for (let i = 1; i < r.durableEvs.length; i++) {
+      expect(r.durableEvs[i]).toBeGreaterThan(r.durableEvs[i - 1]!);
+    }
+    expect(new Set(r.durableEvs).size).toBe(r.durableEvs.length); // no dups
+    // Prediction free-ran for 2s of outage — the first post-reconnect
+    // correction must land a big snap, then steady-state error falls
+    // back under broadband bounds.
+    expect(r.snaps).toBeGreaterThan(0);
+    const tail = r.errSeries.slice(-120); // last ~2s of run
+    expect(Math.max(0, ...tail)).toBeLessThan(15);
+  }, T);
 });

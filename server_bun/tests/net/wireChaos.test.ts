@@ -53,7 +53,7 @@ describe('netcode chaos: wire layer', () => {
 
   it('volatile cues replay while fresh — durable facts always replay', () => {
     const cm = new ConnectionManager();
-    cm.broadcast({ type: 'playerShot', playerId: 'x' } as ServerMessage); // volatile
+    cm.broadcast({ type: 'playerShot', id: 'shot-1' } as ServerMessage); // volatile
     cm.broadcast({ type: 'chat', playerId: 'x', text: 'fact' } as ServerMessage); // durable
     const ws = new FakeWs('a');
     cm.register('a', asWs(ws));

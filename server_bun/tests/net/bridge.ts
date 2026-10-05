@@ -24,7 +24,10 @@ export type WireInput = { forward: number; right: number; jump: number; ski: num
 import { FieldSurface } from '../../../shared/fieldSurface.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 import { RoomMoveSim } from '../../src/RoomMoveSim.ts';
-import { ChaosLink, type ChaosSpec } from './chaos.ts';
+import { ConnectionManager } from '../../src/ConnectionManager.ts';
+import { ChaosLink, FakeWs, type ChaosSpec } from './chaos.ts';
+import type { ServerWebSocket } from 'bun';
+import type { ServerMessage, WebSocketData } from '../../src/types.ts';
 
 /** Client-side input journal — InputStream semantics with an injectable
  *  clock (the real one stamps performance.now; identical rules: bounded
@@ -60,6 +63,11 @@ class Journal {
 export type BridgeProfile = {
   up?: ChaosSpec;   // client → server
   down?: ChaosSpec; // server → client
+  /** Mid-run socket death: at `dropMs` the client's socket dies; after
+   *  `outageMs` it reclaims with its last-processed ev — the journal
+   *  must restore every durable frame it missed. */
+  dropMs?: number;
+  outageMs?: number;
 };
 
 export type BridgeResult = {
@@ -76,6 +84,9 @@ export type BridgeResult = {
   inputsResent: number;
   maxSteadyErr: number;   // largest |client - server| sampled mid-run
   errSeries: number[];    // per-client-frame error samples (post-warmup)
+  /** ev seqs of durable (chat) frames the client actually processed —
+   *  contiguous coverage after a reconnect means reclaim lost nothing. */
+  durableEvs: number[];
 };
 
 export type BridgeScript = (tMs: number) => { input: WireInput; yaw: number };
@@ -90,10 +101,14 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   };
   const server = new RoomMoveSim(field, true);
   server.track(PID, spawn.pos, spawn.yaw);
+  const cm = new ConnectionManager();
+  let sws = new FakeWs(PID, undefined, () => Date.now());
+  const asWs = (w: FakeWs) => w as unknown as ServerWebSocket<WebSocketData>;
+  cm.register(PID, asWs(sws));
   // Production path: 3 reports stamped past the consumed watermark →
   // server asks the client to re-emit its current edge (inputSync).
   server.onInputGap = (_pid, lastSeq) => {
-    down.send(JSON.stringify({ type: 'inputSync', lastSeq }), Date.now());
+    cm.sendToPlayer(PID, { type: 'inputSync', lastSeq } as ServerMessage);
   };
   const client = new MoveSim(surface, { pos: { ...spawn.pos }, vel: { ...spawn.vel }, yaw: 0, pitch: 0, onGround: true });
 
@@ -117,11 +132,14 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const r: BridgeResult = {
     preErr: [], postErr: [], corrections: 0, snaps: 0,
     reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [],
+    durableEvs: [],
   };
+  let lastEv = 0;
+  let dead = false, dropped = false, reconnected = false;
 
   const start = Date.now();
   const endAt = start + seconds * 1000;
-  let lastClient = start, lastServer = start, lastReport = start;
+  let lastClient = start, lastServer = start, lastReport = start, lastEventAt = 0;
   let posSeq = 0;
 
   while (Date.now() < endAt) {
@@ -145,13 +163,13 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
 
     // input edge → journal + uplink
     const iseq = journal.push(input, now);
-    if (iseq !== null) {
+    if (iseq !== null && !dead) {
       r.inputsSent++;
       up.send(JSON.stringify({ type: 'inputMove', seq: iseq, input }), now);
     }
 
     // 20Hz position reports — the correction trigger, with our input watermark
-    if (now - lastReport >= 50) {
+    if (!dead && now - lastReport >= 50) {
       lastReport = now;
       r.reportsSent++;
       const s = client.state;
@@ -161,8 +179,8 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       }), now);
     }
 
-    // ---- uplink delivery → server ----
-    for (const raw of up.deliver(now)) {
+    // ---- uplink delivery → server (dead sockets can't) ----
+    if (!dead) for (const raw of up.deliver(now)) {
       const m = JSON.parse(raw as string) as {
         type: string; seq: number; input?: WireInput; inputSeq?: number;
         position?: Vec3Like; velocity?: Vec3Like; rotation?: { yaw: number };
@@ -172,20 +190,55 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       } else if (m.type === 'position') {
         const truth = server.reconcile(PID, m.position!, m.rotation!.yaw, m.velocity, m.inputSeq);
         if (truth) {
-          down.send(JSON.stringify({
+          cm.sendToPlayer(PID, {
             type: 'correction', seq: m.seq, inputSeq: truth.inputSeq,
             grounded: truth.onGround, position: truth.pos, velocity: truth.vel,
-          }), now);
+          } as ServerMessage);
         }
       }
     }
 
+    // Durable world event on the downlink every ~600ms — the thing a
+    // reclaim MUST NOT lose (kill feed / flag edges / chat in prod).
+    if (tMs - lastEventAt >= 600) {
+      lastEventAt = tMs;
+      cm.sendToPlayer(PID, { type: 'chat', playerId: 'world', text: `ev@${tMs | 0}` } as ServerMessage);
+    }
+
+    // Socket death + reclaim — the dead socket keeps accepting sends
+    // (they journal; the chaos queue just never drains), then a fresh
+    // socket replays from the client's last processed ev.
+    if (profile.dropMs !== undefined && !reconnected) {
+      if (!dropped && tMs >= profile.dropMs) {
+        dropped = true; dead = true;
+        cm.unregister(PID);
+      } else if (dead && tMs >= profile.dropMs + (profile.outageMs ?? 1500)) {
+        dead = false; reconnected = true;
+        sws = new FakeWs(PID, undefined, () => Date.now());
+        cm.register(PID, asWs(sws));
+        // Frames aimed at the dead socket are still in the journal —
+        // replay delivers exactly what the outage skipped.
+        cm.replayTo(PID, asWs(sws), lastEv);
+        for (const raw of sws.sentRaw.splice(0)) down.send(raw, now);
+      }
+    }
+
+    // Live socket traffic rides the downlink too.
+    for (const raw of sws.sentRaw.splice(0)) down.send(raw, now);
+
     // ---- downlink delivery → client correction handler (players.ts) ----
-    for (const raw of down.deliver(now)) {
+    if (!dead) for (const raw of down.deliver(now)) {
       const m = JSON.parse(raw as string) as {
         type: string; inputSeq?: number; grounded?: boolean; lastSeq?: number;
-        position: Vec3Like; velocity: Vec3Like;
+        position: Vec3Like; velocity: Vec3Like; ev?: number;
       };
+      if (m.ev !== undefined) {
+        // Reordered/duplicated lane — a replayed journal frame and its
+        // queued original can BOTH arrive; dedupe by the offset cursor.
+        if (m.ev <= lastEv) continue;
+        lastEv = m.ev;
+        if (m.type === 'chat') r.durableEvs.push(m.ev);
+      }
       if (m.type === 'inputSync') {
         // Server noticed a watermark gap — re-emit the current edge.
         const rs = journal.resend(now);
