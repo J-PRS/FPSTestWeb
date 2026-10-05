@@ -183,6 +183,10 @@ export class GameServer {
     if (existingPlayerId && this.specRooms.has(existingPlayerId)) return; // spectators are read-only
     const room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
 
+    // A bad message must only cost its own sender — anything downstream
+    // that throws (handler bug, malformed fields the shape checks missed)
+    // logs the player + message type and drops that socket, not the process.
+    try {
     if (!existingPlayerId || !room) {
       this.handleHandshake(ws, raw);
       return;
@@ -197,6 +201,11 @@ export class GameServer {
     }
 
     this.handleGameMessage(room, existingPlayerId, raw);
+    } catch (e) {
+      const t = (raw as { type?: string })?.type ?? '?';
+      logger.error('Message handler failed', { playerId: existingPlayerId, type: t, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+      try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+    }
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
