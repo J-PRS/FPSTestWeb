@@ -203,6 +203,10 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **Empty-catch surface**: ~40 bare/commented `catch` bodies across all
+  three trees are teardown guards — dead sockets, gone RTC peers,
+  detached audio nodes, log-shipping, quota/private-mode storage. None
+  hide a fault that should surface; all keep their WHY comment.
 - **localStorage/JSON surface**: settings reads go through the typed
   schema (no JSON.parse); lastRoom is try-wrapped both ways; gunlab
   falls back to `__gunlab`; every socket parse is guarded. recPlayer's
