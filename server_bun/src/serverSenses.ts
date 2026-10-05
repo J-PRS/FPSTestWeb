@@ -359,7 +359,7 @@ export class ServerBotSenses {
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
-      threat: this.standThreat(own.home, me, (parties ?? this.partiesOf(p)).roster),
+      threat: this.standThreat(own.home, me),
       push: this.pushFor(me),
       me: p.position,
     };
@@ -819,10 +819,9 @@ export class ServerBotSenses {
   /** Closest hostile pressing our stand — the HoF body-block anchor.
    *  Only counts enemies inside the ring so a fighter out in the field
    *  doesn't drag the anchor off the flag. */
-  private standThreat(home: Vec3, me: TeamId, roster: { pos: Vec3; team?: string }[]): Vec3 | null {
+  private standThreat(home: Vec3, me: TeamId): Vec3 | null {
     let best: Vec3 | null = null, bestD = 26;
-    for (const q of roster) {
-      if (q.team === me) continue;
+    for (const q of this.parties.nearHostiles(home.x, home.z, bestD, me)) {
       const d = Math.hypot(q.pos.x - home.x, q.pos.z - home.z);
       if (d < bestD) { bestD = d; best = q.pos; }
     }

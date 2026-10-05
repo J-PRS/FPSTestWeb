@@ -112,4 +112,27 @@ export class ServerParties {
     for (const b of c.bodies) enemies.push(b);
     return { enemies, allies: p.team ? (c.alliesByTeam.get(p.team) ?? []) : [], others: c.othersAll, roster: c.roster };
   }
+
+  /** Live non-teammates inside `r` of (x,z) — the stand-threat anchor
+   *  asks "who's pressing the stand", a question about a fixed point,
+   *  not the thinker's spot. Cells prune to the ring; caller re-checks
+   *  distance/team. Players returned in roster order. */
+  nearHostiles(x: number, z: number, r: number, me: string | undefined): { id: string; pos: Vec3; team?: string }[] {
+    const c = this.tick();
+    const out: { id: string; pos: Vec3; team?: string }[] = [];
+    const x0 = Math.floor((x - r) / CELL_M), x1 = Math.floor((x + r) / CELL_M);
+    const z0 = Math.floor((z - r) / CELL_M), z1 = Math.floor((z + r) / CELL_M);
+    const idx: number[] = [];
+    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+      const cell = c.grid.get(cellKey(cx, cz));
+      if (cell) for (const i of cell) idx.push(i);
+    }
+    idx.sort((a, b) => a - b);
+    for (const i of idx) {
+      const q = c.players[i]!;
+      if (q.dead || q.team === me) continue;
+      out.push({ id: q.id, pos: q.pos, team: q.team });
+    }
+    return out;
+  }
 }
