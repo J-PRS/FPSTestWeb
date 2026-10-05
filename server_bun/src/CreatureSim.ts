@@ -258,6 +258,9 @@ export class CreatureSim {
   private kill(c: SimBeing, by?: string): void {
     c.dead = true;
     this.crawlers.delete(c.id);
+    // Same key domain — the per-crawler state-sequence map would keep
+    // one dead entry per kill forever.
+    this.edgeSeq.delete(c.id);
     this.brain.forget(c.id);
     // A baneling dies by popping — shot or fuse, the blast is the point.
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
