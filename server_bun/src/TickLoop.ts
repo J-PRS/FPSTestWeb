@@ -150,7 +150,10 @@ export class TickLoop {
     const elapsed = room.lastStepAt > 0 ? (now0 - room.lastStepAt) / 1000 : TICK_DT;
     const dt = Math.min(Math.max(elapsed, TICK_DT), 1);
     room.lastStepAt = now0;
-    for (const sim of room.sims) sim.tick(dt);
+    // Per-sim marks name the hot one — 'sims' as a lump hid which of a
+    // dozen systems grew when a tick went slow (bots vs moveSim vs
+    // projectiles are different fix paths).
+    for (const sim of room.sims) { sim.tick(dt); this.mark(`sim:${sim.name ?? '?'}`); }
     this.mark('sims');
 
     // Authority mode: the shadow sim's output is the broadcast truth.

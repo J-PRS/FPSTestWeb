@@ -159,7 +159,7 @@ export class Room {
    *  with worldState() also emits its join/resync replay frames (roster
    *  snapshots), so sendWorldState iterates this registry instead of
    *  naming each sim. */
-  readonly sims: { tick(dt: number): void; worldState?(): ServerMessage[] }[] = [];
+  readonly sims: { name?: string; tick(dt: number): void; worldState?(): ServerMessage[] }[] = [];
 
   /** Wall ms of the last room tick — TickLoop turns the gap into the dt
    *  every sim sees, so interval lag can't drift sim clocks off wall time. */
@@ -562,21 +562,21 @@ export class Room {
   private registerSims(): void {
     // World sims step first — bots and downstream systems see post-step
     // wildlife positions inside the same tick.
-    this.sims.push({ tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
-    this.sims.push({ tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
-    this.sims.push({ tick: (dt) => this.bots.tick(dt) });
-    if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
-    if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
-    this.sims.push({ tick: (dt) => this.unburyTick(dt) });
+    this.sims.push({ name: 'balls', tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
+    this.sims.push({ name: 'crawl', tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
+    this.sims.push({ name: 'bots', tick: (dt) => this.bots.tick(dt) });
+    if (this.flags) this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt) });
+    if (this.pickups) this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt) });
+    this.sims.push({ name: 'unbury', tick: (dt) => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
-      this.sims.push({ tick: (dt) => arena.tick(dt) });
+      this.sims.push({ name: 'arena', tick: (dt) => arena.tick(dt) });
     }
-    this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
-    this.sims.push({ tick: (dt) => this.projectiles.tick(dt) });
-    this.sims.push({ tick: (dt) => this.moveSim.tick(dt) });
-    this.sims.push({ tick: (dt) => this.healthTick(dt) });
-    this.sims.push({ tick: (dt) => this.influence.tick(dt) });
+    this.sims.push({ name: 'deploy', tick: (dt) => this.deployables.tick(dt) });
+    this.sims.push({ name: 'proj', tick: (dt) => this.projectiles.tick(dt) });
+    this.sims.push({ name: 'move', tick: (dt) => this.moveSim.tick(dt) });
+    this.sims.push({ name: 'health', tick: (dt) => this.healthTick(dt) });
+    this.sims.push({ name: 'influence', tick: (dt) => this.influence.tick(dt) });
     this.moveSim.health = this.health;
   }
 
