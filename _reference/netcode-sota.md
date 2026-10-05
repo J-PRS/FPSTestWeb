@@ -34,14 +34,23 @@ journaled event stream with offset-cursor reclaim.
 1. ~~Tick-rate degradation~~ — DONE, all 4 green first pass.
 2. ~~Convergence metrics as regressible report~~ — DONE, netMetrics emits
    the numbers and gates them.
-3. **Long-session soak** — reconnects cycling for minutes, journal
-   eviction under sustained traffic, watermark wrap-around, memory
-   growth in the ledger/journal over time.
+3. ~~Long-session soak~~ — DONE (soakChaos): 30s wall, 5+ reconnect
+   cycles, 156 evs contiguous across every drop, tail-quarter
+   prediction p95 3.2m. Debug produced a replay forensics hook
+   (per-reclaim ev audit on the bridge). Found: ChaosLink per-frame
+   jitter reorders — UDP-faithful, not TCP; the WS downlink must be
+   order-preserving in profiles. The underlying reorder-drop IS a
+   real hole on datagram transports (client only max()s the ev
+   cursor — no gap heal) — see lane 6.
 4. **Snapshot reseed convergence under chaos** — joiner on a lossy link
    reseeding from gameState and converging to authority hash (partially
    covered by joinerBootstrap on clean link).
 5. **Clock-skew tolerance** — client clockHint drift vs server wall;
    reconcile grace windows under skewed reporters.
+6. **Datagram ev-gap heal** — if a datagram transport (WT/RTC) ever
+   carries reliable frames, an out-of-order durable ev is silently
+   dropped by the max() cursor; needs a reorder window or NACK-gap
+   reclaim. Dead code while production stays WS-only.
 
 ## Cross-cutting observability (on-demand, zero hot-path cost)
 
