@@ -65,9 +65,12 @@ export type BridgeProfile = {
   down?: ChaosSpec; // server → client
   /** Mid-run socket death: at `dropMs` the client's socket dies; after
    *  `outageMs` it reclaims with its last-processed ev — the journal
-   *  must restore every durable frame it missed. */
+   *  must restore every durable frame it missed. `dropEveryMs` repeats
+   *  the cycle for the whole run (long-session soak: journal eviction
+   *  under sustained reclaim traffic). */
   dropMs?: number;
   outageMs?: number;
+  dropEveryMs?: number;
   /** Authority-side degradation. `hz` lowers the tick loop below its
    *  30Hz cadence (sustained overload); `stalls` freeze it outright for
    *  a window then let it resume (a GC pause / event-loop block — the
@@ -93,6 +96,10 @@ export type BridgeResult = {
   /** ev seqs of durable (chat) frames the client actually processed —
    *  contiguous coverage after a reconnect means reclaim lost nothing. */
   durableEvs: number[];
+  /** Reconnect cycles the profile asked for (dropEveryMs soak). */
+  drops: number;
+  /** Per-reclaim audit: {fromSeq, seqs replayed} — soak gap forensics. */
+  replays: { fromSeq: number; seqs: number[] }[];
 };
 
 export type BridgeScript = (tMs: number) => { input: WireInput; yaw: number };
@@ -138,10 +145,15 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const r: BridgeResult = {
     preErr: [], postErr: [], corrections: 0, snaps: 0,
     reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [], errT: [],
-    durableEvs: [],
+    durableEvs: [], drops: 0, replays: [],
   };
   let lastEv = 0;
-  let dead = false, dropped = false, reconnected = false;
+  let dead = false, dropped = false;
+  let dropAt = profile.dropMs ?? profile.dropEveryMs ?? Infinity;
+  const dropCycle = profile.dropEveryMs ?? Infinity;
+  const outageMs = profile.outageMs ?? 1500;
+  let deadSince = 0;
+  let dropCount = 0;
 
   const start = Date.now();
   const endAt = start + seconds * 1000;
@@ -213,19 +225,22 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
 
     // Socket death + reclaim — the dead socket keeps accepting sends
     // (they journal; the chaos queue just never drains), then a fresh
-    // socket replays from the client's last processed ev.
-    if (profile.dropMs !== undefined && !reconnected) {
-      if (!dropped && tMs >= profile.dropMs) {
-        dropped = true; dead = true;
+    // socket replays from the client's last processed ev. With
+    // dropEveryMs the cycle repeats for the run's whole span.
+    if (dropped || dropAt !== Infinity) {
+      if (!dead && tMs >= dropAt) {
+        dropped = true; dead = true; deadSince = tMs; dropCount++;
         cm.unregister(PID);
-      } else if (dead && tMs >= profile.dropMs + (profile.outageMs ?? 1500)) {
-        dead = false; reconnected = true;
+      } else if (dead && tMs >= deadSince + outageMs) {
+        dead = false; dropped = false;
         sws = new FakeWs(PID, undefined, () => Date.now());
         cm.register(PID, asWs(sws));
         // Frames aimed at the dead socket are still in the journal —
         // replay delivers exactly what the outage skipped.
         cm.replayTo(PID, asWs(sws), lastEv);
+        r.replays.push({ fromSeq: lastEv, seqs: sws.sentRaw.map((f) => { try { return (JSON.parse(typeof f === 'string' ? f : new TextDecoder().decode(f)) as { ev?: number }).ev ?? -1; } catch { return -1; } }) });
         for (const raw of sws.sentRaw.splice(0)) down.send(raw, now);
+        dropAt = dropCycle !== Infinity ? tMs + dropCycle : Infinity;
       }
     }
 
@@ -243,7 +258,9 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
         // queued original can BOTH arrive; dedupe by the offset cursor.
         if (m.ev <= lastEv) continue;
         lastEv = m.ev;
-        if (m.type === 'chat') r.durableEvs.push(m.ev);
+        // Every reliable frame — corrections and chats share one ev
+        // sequence, so contiguity is over all of them, not chat alone.
+        r.durableEvs.push(m.ev);
       }
       if (m.type === 'inputSync') {
         // Server noticed a watermark gap — re-emit the current edge.
@@ -309,5 +326,6 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
     const until = now + 1;
     while (Date.now() < until) { /* spin — Atomics.sleep is coarser */ }
   }
+  r.drops = dropCount;
   return r;
 }
