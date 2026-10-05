@@ -201,6 +201,19 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
   `MAX_LIVE_EXPLOSIONS`; all dead lists reap dispose+splice per frame.
 - **Client bot maps** (`thinkAccum`/`ctxCache`/etc): session-owned —
   bots only rename or dispose wholesale, no dead-id accumulation.
+- **ConnectionManager**: journal capped at 1024 frames with
+  `journalDropped`/`reclaimGap` counters (eviction reports itself);
+  volatile cue types TTL'd at 3s so stale effects don't replay on
+  reclaim; tick backlog gated at 256KB; drowned sockets closed after a
+  5s hysteresis and counted via `onDrowned`; `unregister` evicts.
+- **Claim surface** (move/env/shot/heal): every clamp reports itself —
+  drops heartbeat distinct reasons, only true rejects count; out-of-
+  order claims defer rather than eat; `clampPing` is a documented
+  anti-forge bound; `seq ?? 0` only fills the correction echo's
+  match-tag.
+- **Determinism**: one `MoveSim` in shared/ — `moveJudge` shadows and
+  client prediction both wrap it; same for ball sim (§4.3) and wire
+  decode. `moveClaims`/`combatCharge` teardown covered.
 
 ---
 
