@@ -371,6 +371,10 @@ telemetry lines it greps.
   production-only, never wire-visible), `performance.now` is
   stageProf metrics, `Date.now` confined to `wallClock`/`simClock`
   choke points.
+- **Console bypassers** (2026-10-05): all `console.*` sites outside
+  `Logger.ts`/tests classified — server boot banner + fault paths,
+  client gunlab report surface, dump/profiling tools, `.old` files,
+  one debug-flagged bake log. Nothing bypasses the log tiers.
 - **Ball netcode — end-to-end pinned** (2026-10-05):
   `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
   re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
