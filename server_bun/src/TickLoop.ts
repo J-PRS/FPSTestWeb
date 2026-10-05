@@ -71,7 +71,7 @@ export class TickLoop {
   constructor(
     private readonly rooms: Map<string, Room>,
     private readonly ops: TickOps,
-    onRemove: (room: Room, playerId: string, reason: string) => void,
+    private readonly onRemove: (room: Room, playerId: string, reason: string) => void,
   ) {
     this.fanout = new TickFanout(this.metrics, onRemove);
   }
@@ -112,8 +112,8 @@ export class TickLoop {
         }
         // One bad room state must not kill the whole process for every
         // player — a thrown tick is logged, counted, and a room that
-        // throws on ~10 consecutive ticks gets quarantined (its players
-        // stay connected; it just stops simulating until restart).
+        // throws on ~10 consecutive ticks gets quarantined + drained:
+        // a frozen world with live players in it is worse than a kick.
         if (this.tickQuarantined.has(room.name)) continue;
         try {
         room.checkMatchClock(simNow());
@@ -146,10 +146,32 @@ export class TickLoop {
           if (n >= 10) {
             this.tickQuarantined.add(room.name);
             logger.error('Room quarantined after repeated tick failures', { room: room.name, phase: this.errPhase });
+            this.drainQuarantined(room);
           }
         }
       }
     }, tickMs);
+  }
+
+  /** A quarantined room stopped simulating — leaving its humans inside
+   *  would show them a frozen world forever. Eject everyone (the client's
+   *  reconnect flow lands them in a fresh room), then dispose + drop the
+   *  entry so the name can host a live instance again. */
+  private drainQuarantined(room: Room): void {
+    try {
+      for (const p of [...room.players.getAllPlayers().values()]) {
+        try { room.socketOf(p.id)?.close(1011, 'room faulted'); } catch { /* socket already dying */ }
+        if (!p.isBot) this.onRemove(room, p.id, 'quarantine');
+      }
+      for (const pid of room.spectators) {
+        try { room.socketOf(pid)?.close(1011, 'room faulted'); } catch { /* socket already dying */ }
+      }
+      room.dispose();
+      this.rooms.delete(room.name);
+      logger.info('Quarantined room drained + disposed', { room: room.name });
+    } catch (e) {
+      logger.error('Quarantine drain failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   private stopTickBroadcast(): void {
