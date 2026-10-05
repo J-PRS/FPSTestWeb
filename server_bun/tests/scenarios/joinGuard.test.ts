@@ -37,6 +37,10 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
 const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string) =>
   mgr.handle(ws as never, { type: 'join', playerId, room: 't', token });
 
+// Identity rejects send sessionRejected THEN close on a flush delay —
+// asserting closed[] must wait out that deferral.
+const flush = () => new Promise((r) => setTimeout(r, 40));
+
 describe('join guards', () => {
   it('throttles a join flood from one IP after 5/min', () => {
     const room = mkRoom({}, 'tdm');
@@ -54,7 +58,7 @@ describe('join guards', () => {
     expect(room.playerCount()).toBe(8);
   });
 
-  it('rejects a second claim of the same playerId without the token', () => {
+  it('rejects a second claim of the same playerId without the token', async () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     const ws1 = fakeWs('10.1.1.1');
@@ -63,16 +67,18 @@ describe('join guards', () => {
     room.players.removePlayer('victim');
     const thief = fakeWs('10.2.2.2');
     join(mgr, thief, 'victim'); // no token → claim denied
+    await flush();
     expect(thief.closed[0]?.reason).toBe('Player ID claimed');
   });
 
-  it('rejects malformed handshakes before any state change', () => {
+  it('rejects malformed handshakes before any state change', async () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     const bad = fakeWs();
     mgr.handle(bad as never, { type: 'notjoin' });
     expect(bad.closed[0]?.reason).toBe('Expected join handshake');
     mgr.handle(bad as never, { type: 'join', playerId: '!!bad id!!' });
+    await flush();
     expect(bad.closed[1]?.reason).toBe('Invalid playerId');
     expect(room.playerCount()).toBe(0);
   });

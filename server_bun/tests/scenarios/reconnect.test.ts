@@ -48,6 +48,10 @@ const dropToGrace = (reg: SessionRegistry, id: string, ms = 60_000) => reg.disco
 const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string, resumeSeq?: number) =>
   mgr.handle(ws as never, { type: 'join', playerId, room: 't', token, resumeSeq });
 
+// Identity rejects send sessionRejected THEN close on a flush delay —
+// asserting closed[] must wait out that deferral.
+const flush = () => new Promise((r) => setTimeout(r, 40));
+
 describe('grace reconnect', () => {
   it('reclaims the slot with the session token — state preserved', () => {
     const room = mkRoom({}, 'tdm');
@@ -71,23 +75,25 @@ describe('grace reconnect', () => {
     expect(playerRoom.get('p1')).toBe(room);
   });
 
-  it('rejects a reclaim with a wrong token', () => {
+  it('rejects a reclaim with a wrong token', async () => {
     const room = mkRoom({}, 'tdm');
     const { mgr, registry } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
     dropToGrace(registry, 'p1');
     const ws2 = fakeWs();
     join(mgr, ws2, 'p1', 'forged');
+    await flush();
     expect(ws2.closed[0]?.reason).toBe('Invalid session token');
     expect(registry.state('p1')).toBe('grace'); // slot still held for owner
   });
 
-  it('rejects a duplicate id while the original is connected', () => {
+  it('rejects a duplicate id while the original is connected', async () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
     const ws2 = fakeWs();
     join(mgr, ws2, 'p1'); // no token → fails auth, can't even probe the slot
+    await flush();
     expect(ws2.closed[0]?.reason).toBe('Invalid session token');
   });
 

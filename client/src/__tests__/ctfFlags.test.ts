@@ -5,7 +5,8 @@ import { FLAG_RESET_S } from '../../../shared/teams.js';
 import type { GameBot } from '../game/botBrain.js';
 
 const mkBot = (id: string, team: string) =>
-  ({ playerId: id, team, carryingFlag: false, isDead: false }) as unknown as GameBot;
+  ({ playerId: id, team, carryingFlag: false, isDead: false, setBotClass: () => {},
+    position: new THREE.Vector3(), dutyLevel: 1 }) as unknown as GameBot;
 
 // Terrain is flat-zero; flag homes are ±70 on X around the origin.
 interface Rig {

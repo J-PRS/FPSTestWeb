@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES } from '../../shared/teams.ts';
+import { simNow } from '../src/simClock.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 
 const DM_SPEC = resolveMapSpec({ mode: 'dm' });
@@ -40,7 +41,7 @@ describe('Room DM scoring', () => {
     expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
   });
 
-  it('team rooms ignore ffa scoring', () => {
+  it('team rooms echo a personal PTS board that can never end the match', () => {
     const sent: ServerMessage[] = [];
     const room = new Room('t', null, '', resolveMapSpec({ mode: 'ctf', bases: { alpha: { x: 0, y: 0, z: 0 }, bravo: { x: 10, y: 0, z: 0 } } }));
     room.connections.broadcast = (m) => { sent.push(m as ServerMessage); return 0; };
@@ -48,7 +49,13 @@ describe('Room DM scoring', () => {
     room.players.breakShield('b');
     const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
     for (let i = 0; i < 20 && !room.players.getPlayer('b')!.isDead; i++) combat.botAttack('a', 'b', 1);
-    expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
+    // CTF frags pay personal PTS via the ffaScore echo — the honor
+    // column, never a win condition and never a teamScore.
+    const fs = sent.filter((m) => m.type === 'ffaScore');
+    expect(fs.length).toBeGreaterThan(0);
+    expect(sent.some((m) => m.type === 'ffaMatchEnd')).toBe(false);
+    expect(sent.some((m) => m.type === 'teamScore')).toBe(false);
+    expect(room.ffaScores.get('a') ?? 0).toBeGreaterThan(0);
   });
 
   it('creature kills bank ptsCreatureKill', () => {
@@ -79,6 +86,9 @@ describe('Room DM scoring', () => {
       room.players.getPlayer(vid)!.isDead = false; // stand back up — respawn timer is async
     }
     expect(sent.some((m) => m.type === 'ffaMatchEnd' && m.winner === 'shooter')).toBe(true);
+    // Standings window: reset waits out the 10s intermission.
+    expect(sent.some((m) => m.type === 'matchStart')).toBe(false);
+    room.checkMatchClock(simNow() + 10_001);
     expect(room.ffaScores.size).toBe(0);
     expect(sent.some((m) => m.type === 'matchStart')).toBe(true);
   });

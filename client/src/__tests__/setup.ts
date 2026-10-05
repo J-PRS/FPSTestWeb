@@ -25,9 +25,18 @@ if (typeof globalThis.window === 'undefined') {
     location: { search: '', href: 'http://localhost/' },
     addEventListener: () => {},
     removeEventListener: () => {},
+    dispatchEvent: () => true,
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   };
+}
+if (typeof globalThis.CustomEvent === 'undefined') {
+  class CustomEventStub<T> {
+    type: string;
+    detail: T | undefined;
+    constructor(type: string, init?: { detail?: T }) { this.type = type; this.detail = init?.detail; }
+  }
+  (globalThis as Record<string, unknown>).CustomEvent = CustomEventStub;
 }
 if (typeof globalThis.document === 'undefined') {
   // Enough of the DOM for module-level listeners/setup in Logger/hud-adjacent
@@ -44,6 +53,16 @@ if (typeof globalThis.document === 'undefined') {
     createElement: () => {
       const el: Record<string, unknown> & { children: unknown[] } = {
         style: {},
+        // Canvas 2d is drawn into, never read back — a bare ctx suffices
+        // for procedural-texture builders under the node environment.
+        getContext: () => ({
+          createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+          getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+          putImageData: () => {},
+          fillRect: () => {},
+          clearRect: () => {},
+          drawImage: () => {},
+        }),
         children: [] as unknown[],
         firstChild: null,
         get lastElementChild() { return el.children.at(-1) ?? null; },
@@ -51,6 +70,8 @@ if (typeof globalThis.document === 'undefined') {
         id: '',
         maxLength: 0,
         placeholder: '',
+        width: 0,
+        height: 0,
         _parent: null as { children: unknown[] } | null,
         addEventListener: () => {},
         append(..._nodes: unknown[]) {},
