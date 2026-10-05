@@ -843,6 +843,10 @@ export class NetworkManager {
    * input bits themselves change.
    */
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
+    // Ungated sends during the connect window counted as drops — the
+    // journal keeps the entry regardless, so skipping the fast path
+    // loses nothing (inputSync re-requests on the server's word).
+    if (!this.isConnected()) return;
     this.inputs.sendMove(input, rotation, (m) => this.send(m));
   }
 
