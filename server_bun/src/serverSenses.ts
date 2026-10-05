@@ -889,8 +889,12 @@ export class ServerBotSenses {
         const k = cx >= 0 && cx < 4096 && cz >= 0 && cz < 4096 ? cx * 4096 + cz : -1;
         let y = k >= 0 ? this.groundMemo.get(k) : undefined;
         if (y === undefined) {
-          y = Math.max(this.field ? hmHeight(this.field, x, z) : p.position.y,
-            this.room.moveSim.structureTop(x, z));
+          // Sample at the cell center, not the queried point — the memo
+          // must be a pure function of the cell or a sub-cell ulp drift
+          // anywhere upstream freezes into a permanent height divergence.
+          const qx = Math.round(x / 4) * 4, qz = Math.round(z / 4) * 4;
+          y = Math.max(this.field ? hmHeight(this.field, qx, qz) : p.position.y,
+            this.room.moveSim.structureTop(qx, qz));
           if (k >= 0) { if (this.groundMemo.size > 32768) this.groundMemo.clear(); this.groundMemo.set(k, y); }
         }
         if (sharedEnv.thinkProf) sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);

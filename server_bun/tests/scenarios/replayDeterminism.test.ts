@@ -70,10 +70,28 @@ test('replay determinism > wildlife-heavy room stays deterministic', () => {
   expect(r.divergedAt).toBe(-1);
 });
 
-test('replay determinism > a different seed may diverge (sanity: the check actually fires)', () => {
+test('replay determinism > a different stream diverges (sanity: the check actually fires)', () => {
+  // Brain/room-construction draws are all spawn-hash seeded now, so two
+  // differently-seeded rooms on the same layout stay identical by design —
+  // divergence must come from the tick stream itself. Feed room B a
+  // different stream; any behavioral draw at all must split the hashes.
   simNowReset();
   const a = mkRoom({ bots: 8 }, 'tdm', 1337, false, flat);
-  const b = mkRoom({ bots: 8 }, 'tdm', 4242, false, flat);
-  const r = lockstep(a, b, 600);
-  expect(r.divergedAt).toBeGreaterThanOrEqual(0);
+  const b = mkRoom({ bots: 8 }, 'tdm', 1337, false, flat);
+  const streams = new Map<Room, () => number>();
+  const tstreams = new Map<Room, () => number>();
+  streams.set(a, mkStream(1340)); streams.set(b, mkStream(4242));
+  tstreams.set(a, mkStream(1344)); tstreams.set(b, mkStream(4248));
+  simNowReset();
+  let divergedAt = -1;
+  for (let i = 0; i < 600; i++) {
+    for (const room of [a, b]) {
+      botRng(streams.get(room)!);
+      tauntRng(tstreams.get(room)!);
+      try { for (const s of room.sims) s.tick(0.05); } finally { botRng(Math.random); tauntRng(Math.random); }
+    }
+    simNowAdvance(50);
+    if (divergedAt < 0 && hashOf(a) !== hashOf(b)) divergedAt = i;
+  }
+  expect(divergedAt).toBeGreaterThanOrEqual(0);
 });

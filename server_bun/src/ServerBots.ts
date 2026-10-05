@@ -34,6 +34,7 @@ import type { BotRole } from '../../shared/flagGoals.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
 import { simNow } from './simClock.ts';
+import { wallNow } from './wallClock.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { WeaponType, HEALBEAM_ENERGY, HEALBEAM_RANGE, BELT_MAX, BELT_THROW_COST } from '../../shared/weapons.ts';
 
@@ -554,7 +555,9 @@ export class ServerBots {
         this.deadSet.add(id);
         continue;
       }
-      p.lastSeen = now; // bots never send positions — heartbeat manually
+      p.lastSeen = wallNow(); // wall domain — skipRecord/idle reaper
+        // compare it against wallNow, so stamping simNow here makes a
+        // frozen-clock harness read every bot as permanently silent.
         // or the idle reaper would cull them on schedule
 
       // Respawn moved the body — reseat the shadow or the sim keeps
@@ -652,7 +655,7 @@ export class ServerBots {
       // A closed socket freezes the last position but the player is
       // gone — charging sheep to a corpse-of-a-session just spams
       // maxed warns through the grace window.
-      if (now - p.lastSeen > 2000) continue;
+      if (wallNow() - p.lastSeen > 2000) continue; // lastSeen is wall domain
       const sh = this.room.moveSim.simState(id);
       const ground = Math.max(
         this.room.moveSim.structureTop(p.position.x, p.position.z),

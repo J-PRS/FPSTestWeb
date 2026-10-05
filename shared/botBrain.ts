@@ -240,13 +240,29 @@ export class BotBrain {
   constructor(spawn: BotVec, spec: import('./botSkill.ts').BotSkillSpec = 'medium') {
     this.goalS.goal = { ...spawn };
     this.h = newHuntState(spawn, spec);
+    // Phase-stagger + personality by spawn hash, not RNG: constructor-time
+    // draws run before a harness can install a seeded stream, so botRand
+    // here made same-seed rooms diverge on which tick each brain first
+    // thought. Three independent hashes so the traits don't correlate.
+    const h01 = ((Math.sin(spawn.x * 12.9898 + spawn.z * 78.233 + spawn.y * 37.719) * 43758.5453) % 1 + 1) % 1;
+    const h02 = ((Math.sin(spawn.x * 39.3468 + spawn.z * 11.1357 + spawn.y * 83.1554) * 24634.6345) % 1 + 1) % 1;
+    const h03 = ((Math.sin(spawn.x * 73.1562 + spawn.z * 52.2354 + spawn.y * 9.1512) * 58342.2154) % 1 + 1) % 1;
+    this.thinkT = h01 * T.brain.thinkS;
+    this.beltT = 4 + h02 * 4;
+    this.deployT = 8 + h02 * 25;
+    this.builder = h03 < 0.45;
+    this.wanderlust = T.brain.wanderBase + h01 * T.brain.wanderRand;
+    this.duty = T.brain.dutyBase + h03 * T.brain.dutyRand;
+    this.orbitA = h02 * Math.PI * 2;
+    this.orbitDir = h01 < 0.5 ? 1 : -1;
+    this.orbitFlipT = 1 + h03 * 1.5;
   }
 
-  private thinkT = botRand() * T.brain.thinkS;
+  private thinkT = T.brain.thinkS;
   readonly h: HuntState;
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
-  private beltT = 4 + botRand() * 4; // stagger first throws across the squad
+  private beltT = 8; // staggered in the constructor along with thinkT
   // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
   private readonly escapeS: EscapeState = {
     stuckStreak: 0,
@@ -303,8 +319,11 @@ export class BotBrain {
   // (objective in reach, nobody shooting) is the whole trigger: the
   // emplacement emerges from "a defender with time on their hands",
   // not a scripted base layout.
-  deployT = 8 + botRand() * 25;
-  builder = botRand() < 0.45;
+  // Field-init draws can't use botRand — they run at construction, before a
+  // harness installs a seeded stream, so they made same-seed rooms diverge.
+  // Both get re-seeded from the spawn hash inside the constructor instead.
+  deployT = 8;
+  builder = false;
 
   /** Hosts can pin the builder trait — a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
@@ -331,19 +350,23 @@ export class BotBrain {
   }
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
-  private readonly wanderlust = T.brain.wanderBase + botRand() * T.brain.wanderRand;
+  // Spawn-hash seeded (see constructor) — a field-init botRand here would
+  // diverge same-seed rooms before any seeded stream is installed.
+  private readonly wanderlust = T.brain.wanderBase;
   /** How much this bot minds the objective vs the scenery — high duty
    *  chases heard fights and holds roles, low duty goes sightseeing.
    *  Independent of wanderlust: a hyper tourist and a lazy pro both
    *  exist in a real lobby. */
-  private readonly duty = T.brain.dutyBase + botRand() * T.brain.dutyRand;
+  private readonly duty = T.brain.dutyBase;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
    *  as a carousel. */
-  orbitA = botRand() * Math.PI * 2;
-  orbitDir = botRand() < 0.5 ? 1 : -1;
-  orbitFlipT = 1 + botRand() * 1.5;
+  // Field-init draws stay literal — the constructor re-seeds them from the
+  // spawn hash (botRand here would diverge same-seed rooms pre-stream).
+  orbitA = 0;
+  orbitDir = 1;
+  orbitFlipT = 1;
   orbitMul = 1;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */

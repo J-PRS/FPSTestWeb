@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, pin } from './harness.ts';
+import { simNow } from '../../src/simClock.ts';
 
 describe('scenario: death and respawn', () => {
   it('a dead player respawns at a base with full health and protection', () => {
@@ -21,7 +22,7 @@ describe('scenario: death and respawn', () => {
     expect(res).not.toBeNull();
     expect(bravo.isDead).toBe(false);
     expect(bravo.health).toBe(bravo.maxHealth);
-    expect(bravo.protectedUntil).toBeGreaterThan(Date.now());
+    expect(bravo.protectedUntil).toBeGreaterThan(simNow()); // sim domain, not wall
     // Bravo base sits at x=+70 — the respawn must land near it, not at the
     // corpse site (rewind buffer cleared too).
     expect(Math.abs(res!.position.x - 70)).toBeLessThan(30);

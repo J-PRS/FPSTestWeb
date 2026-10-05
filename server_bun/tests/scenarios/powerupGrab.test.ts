@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, step, freeze, watch, twoPlayers, firstPlayer } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
+import { simNow } from '../../src/simClock.ts';
 
 describe('scenario: powerup pickups', () => {
   it('grabbing a heal powerup restores health and buffs the collector privately', () => {
@@ -26,6 +27,6 @@ describe('scenario: powerup pickups', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     room.pickups!.spawn({ x: 1, y: 31, z: 0 }, 'regen');
     step(room, 3);
-    expect(room.players.getPlayer(a.id)!.regenUntil).toBeGreaterThan(Date.now());
+    expect(room.players.getPlayer(a.id)!.regenUntil).toBeGreaterThan(simNow()); // sim domain, not wall
   });
 });

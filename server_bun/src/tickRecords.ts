@@ -14,6 +14,7 @@ import type { PlayerState } from './types.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
+import { simNow } from './simClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
 
@@ -48,14 +49,19 @@ export class TickFanout {
 
   buildRecords(room: Room, players: Players, now: number): TickRecord[] {
     const records = this.scratchRecords;
+    // Two clocks, two domains: `now` is wallNow (socket silence,
+    // suppression windows, echo stamps); simT gates the sim-owned
+    // fields (regen/dd/forceSendUntil, chargeT) which are all written
+    // with simNow — mixing them desyncs the moment simNow ≠ wall.
+    const simT = simNow();
     let recN = 0;
     const roster: Record<number, string> = {};
     let rosterDirty = false;
     for (const [playerId, p] of players) {
       if (this.skipRecord(room, playerId, p, now)) continue;
-      this.tickServerHeals(room, playerId, p, now);
-      this.tickChargeEcho(room, playerId, p, now);
-      const forceSend = now < p.forceSendUntil;
+      this.tickServerHeals(room, playerId, p, now, simT);
+      this.tickChargeEcho(room, playerId, p, now, simT);
+      const forceSend = simT < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
       const sheep = room.bots.sheepOf(playerId);
       if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep)) {
@@ -76,9 +82,9 @@ export class TickFanout {
       // Buff bits are server-owned (stripped from client claims at
       // inputMove) so they must be OR-ed on here, not read off p.status.
       snap.status = p.status
-        | (now < p.regenUntil ? STATUS.REGEN : 0)
-        | (now < p.ddUntil ? STATUS.DD : 0)
-        | (lgChargeAt(p.charge, p.chargeT, now / 1000) > 0 ? STATUS.CHARGED : 0);
+        | (simT < p.regenUntil ? STATUS.REGEN : 0)
+        | (simT < p.ddUntil ? STATUS.DD : 0)
+        | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
       snap.sheep = sheep;
       snap.t = now;
 
@@ -163,8 +169,8 @@ export class TickFanout {
    *  Server-owned heals never reach the owner — self is excluded from
    *  tickUpdate — so a low-rate yourHealth echo keeps their hp from
    *  drifting until the next discrete event. */
-  private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number): void {
-    const heal = healPerTick(p, now);
+  private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
+    const heal = healPerTick(p, simT); // regenUntil is sim domain
     if (heal <= 0) return;
     healPool(p, heal);
     // Capping out always echoes — the channel ends here, so the final
@@ -179,8 +185,8 @@ export class TickFanout {
    *  (own records are excluded from fanout) — echo their decayed bank at
    *  0.5Hz so a walking bomb can hear itself crackle. A final 0 lands the
    *  moment the bank drains so the warning doesn't linger. */
-  private tickChargeEcho(room: Room, playerId: string, p: PlayerState, now: number): void {
-    const acc = lgChargeAt(p.charge, p.chargeT, now / 1000);
+  private tickChargeEcho(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
+    const acc = lgChargeAt(p.charge, p.chargeT, simT / 1000); // chargeT is sim domain
     const live = acc > 0.5;
     if (!live && p.chargeEchoed <= 0) return;
     if (live && now - p.chargeEchoAt < 500) return;

@@ -50,8 +50,11 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // Sim clock starts at wall now; step() advances it with sim ticks so
   // respawns/cooldowns/notice TTLs track sim time, not wall speed — two
   // runs of the same genome must differ only by seed, never by how fast
-  // the host happened to execute the loop.
-  simNowReset();
+  // the host happened to execute the loop. Fixed epoch, not Date.now():
+  // lockstep canaries build two rooms wall-milliseconds apart and the
+  // shared frozen clock must agree bit-for-bit (protectedUntil windows
+  // gate damage — a wall-offset base desyncs them).
+  simNowReset(1_700_000_000_000);
   // Staged arenas stay sterile unless the test asks for wildlife: a
   // stepping BallSim fills the field near every player, and lunging
   // balls pop on pinned bots — leaking damage into unrelated scenarios.

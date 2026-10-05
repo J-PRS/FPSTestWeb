@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, pin, twoPlayers } from './harness.ts';
 import { STATUS } from '../../../shared/status.ts';
+import { simNow } from '../../src/simClock.ts';
 
 describe('scenario: respawn is a clean life', () => {
   it('death strips channels; respawn restores health, protection, and a legal spot', () => {
@@ -22,7 +23,7 @@ describe('scenario: respawn is a clean life', () => {
     expect(b.health).toBeGreaterThan(0);
     // No armor handout on respawn — plating is earned via pickups/perks.
     expect(b.armor).toBe(0);
-    expect(b.protectedUntil).toBeGreaterThan(Date.now());
+    expect(b.protectedUntil).toBeGreaterThan(simNow()); // sim domain, not wall
     expect(b.pendingRespawn).toBe(false);
   });
 });

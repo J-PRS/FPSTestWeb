@@ -118,12 +118,15 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
     acquiredAt: new Map(),
     huntTick: 0,
     lastHitAt: -1e9,
-    reactTicks: Math.max(1, Math.round((1 + Math.round(botRand())) * m.react)),
-    leadSkew: 0.9 + botRand() * 0.2,
-    jitter: (0.7 + botRand() * 0.6) * m.jitter,
-    temper: (0.7 + botRand() * 0.6) * m.temper,
-    orbitFar: ORBIT_FAR * (0.85 + botRand() * 0.3),
-    orbitClose: ORBIT_TOO_CLOSE * (0.85 + botRand() * 0.3),
+    // Personality rolls ride the skill's spawn-seeded private stream, not
+    // botRand — construction-time botRand draws run before a harness can
+    // install a seeded stream, which made same-seed rooms diverge.
+    reactTicks: Math.max(1, Math.round((1 + Math.round(skill.rng())) * m.react)),
+    leadSkew: 0.9 + skill.rng() * 0.2,
+    jitter: (0.7 + skill.rng() * 0.6) * m.jitter,
+    temper: (0.7 + skill.rng() * 0.6) * m.temper,
+    orbitFar: ORBIT_FAR * (0.85 + skill.rng() * 0.3),
+    orbitClose: ORBIT_TOO_CLOSE * (0.85 + skill.rng() * 0.3),
   };
 }
 
