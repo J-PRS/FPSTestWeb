@@ -616,7 +616,9 @@ export class ServerBots {
       else if (this.legacyMove(id, p, out.dest, dt)) continue;
       this.stageProf[4]! += performance.now() - tm2;
 
-      this.checkStuck(id, p, brain, now);
+      // The stuck leash is 2.5-5s — sampling every 4 ticks keeps the
+      // alarm honest without paying a map probe per bot per tick.
+      if ((this.room.tickSeq & 3) === ((this.thinkPhase.get(id) ?? 0) & 3)) this.checkStuck(id, p, brain, now);
 
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };
