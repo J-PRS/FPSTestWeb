@@ -203,6 +203,10 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **Map/Set order determinism**: the replayed sims (ballSim, movement,
+  creatureCore) hold no insertion-ordered collections at all. Bounded
+  caches (losMemo 4096+TTL, taunt maps 256) are keyed lookups — order
+  can't reach sim output. botSheep deletes per-id on lifecycle.
 - **Iteration/splice hygiene**: every entity-list splice runs inside a
   backwards `for (i--)` loop (balls, nuggets, beams, playback lists, fx
   budget tails); one-off removals use indexOf. Id-keyed mirrors
