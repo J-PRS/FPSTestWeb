@@ -370,10 +370,28 @@ export class RoomMoveSim {
       sh.energy = Math.max(0, sh.energy);
       if (sh.energy <= 0) sh.jetLockT = ENERGY.jetLockout;
       sh.sim.setInput({ jetHeld: jetting });
-      // MoveSim.update() sub-steps internally at its own 1/60 quantum —
-      // feed it the raw tick delta. Count consumed steps ourselves for
-      // the seq-anchored journal (simTicks is in STEP quanta).
-      sh.sim.update(dt);
+      // Resting shadows skip the integrator: quiet input + ~zero
+      // velocity + grounded means two sub-steps of terrain/solid/body
+      // probes would land exactly where it started. Parked defenders
+      // and AFK humans sit here a third of their ticks.
+      const s = sh.sim.state, inp = sh.sim.input;
+      // onGround lies at seed/resync (setState writes it true even for
+      // a mid-air drop) — the gate measures rest against the real
+      // ground under it, or a dropped body never starts falling.
+      const groundY = Math.max(
+        this.surface ? this.surface.getHeight(s.pos.x, s.pos.z) : s.pos.y,
+        this.structureTop(s.pos.x, s.pos.z),
+      );
+      const resting = s.onGround && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
+        && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
+        && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
+        && (!bodies || !bodies.some(b => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
+      if (!resting) {
+        // MoveSim.update() sub-steps internally at its own 1/60 quantum —
+        // feed it the raw tick delta. Count consumed steps ourselves for
+        // the seq-anchored journal (simTicks is in STEP quanta).
+        sh.sim.update(dt);
+      }
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);
       sh.acc -= steps * MoveSim.STEP;
