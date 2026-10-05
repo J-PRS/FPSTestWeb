@@ -410,7 +410,16 @@ export class ServerBotSenses {
       // its stored stand goal keeps the flood running.
       ?? (task.kind === 'push' ? task.goal : null));
     // One role table for both runtimes — shared/flagGoals.ts.
-    const pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
+    let pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
+    // An escort pick aims at where the carrier will BE: chasing the
+    // raw position means the escort follows the wake of a 30m/s+ run
+    // forever — the slot's velocity rides along for exactly this lead
+    // (the comment on FlagSituation.escort promised it, nobody read it).
+    if (pick !== null && sit.escort !== null && pick === sit.escort) {
+      const eta = Math.min(10, Math.hypot(sit.escort.x - p.position.x, sit.escort.z - p.position.z) / 24);
+      pick = { x: sit.escort.x + (sit.escort.vx ?? 0) * eta, y: sit.escort.y,
+        z: sit.escort.z + (sit.escort.vz ?? 0) * eta };
+    }
     const role = this.roles.get(p.id);
     // Post the push-call when THIS bot is the capper closing in. ETA
     // prices actual ground speed (floor 12 m/s — a bot standing still
