@@ -17,7 +17,9 @@ import { STATUS_MASK } from './status.js';
 const MAGIC = 0x54; // 'T'
 
 export const WIRE_POSITION = 0x01;
-export const WIRE_TICK = 0x02;
+export const WIRE_TICK = 0x04; // v2: positions are i16-quantized (POS_Q)
+export const WIRE_TICK_V1 = 0x02; // legacy f32 positions — decode-only,
+                                // keeps recorded .rec captures playing
 export const WIRE_BALLSEG = 0x03;
 
 const ENC = new TextEncoder();
@@ -137,18 +139,28 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
 
 // ---- S→C tickUpdate ----
 
+// Position quantization for tick records: i16 × 0.04m covers ±1310m
+// (2048m fields have headroom) at 4cm steps — sub-pixel on screen and
+// self is never in the record set, so nothing reconciles against it.
+// 12B→6B per record, ~16% of the 38B body.
+const POS_Q = 0.04;
+const packPos = (d: DataView, o: number, x: number, y: number, z: number): number => {
+  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(x / POS_Q))), true); o += 2;
+  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(y / POS_Q))), true); o += 2;
+  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(z / POS_Q))), true); o += 2;
+  return o;
+};
+
 /** Pre-encode one player's record — done ONCE per tick, shared across recipients. */
 export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   const id = ENC.encode(p.playerId);
-  const buf = new ArrayBuffer(1 + id.length + 12 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
+  const buf = new ArrayBuffer(1 + id.length + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
   u8[o++] = id.length;
   u8.set(id, o); o += id.length;
-  d.setFloat32(o, p.position.x, true); o += 4;
-  d.setFloat32(o, p.position.y, true); o += 4;
-  d.setFloat32(o, p.position.z, true); o += 4;
+  o = packPos(d, o, p.position.x, p.position.y, p.position.z);
   o = packVel(d, o, p.velocity);
   o = packRot(d, o, p.rotation);
   // u8 clamped real hp at 255 — heavies/bots run 300+, which shipped as
@@ -196,22 +208,34 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
 export interface TickDecodePool { slots: WireTickPlayer[] }
 
 export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
-  if (u8.length < 15 || u8[0] !== MAGIC || u8[1] !== WIRE_TICK) return null;
+  if (u8.length < 15 || u8[0] !== MAGIC ||
+      (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1)) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const ackSeq = d.getUint32(2, true);
   const tickSeq = d.getUint32(6, true);
   const inputAck = d.getUint32(10, true);
   const count = u8[14]!;
+  const v1 = u8[1] === WIRE_TICK_V1;
+  // Minimum guaranteed bytes after the id string — v1's old check
+  // under-counted sheep, so it stays at its historic 26.
+  const tail = v1 ? 26 : 20;
   const slots = pool ? pool.slots : [];
   let o = 15;
   for (let i = 0; i < count; i++) {
     if (o >= u8.length) return null;
     const idLen = u8[o++]!;
-    if (o + idLen + 26 > u8.length) return null;
+    if (o + idLen + tail > u8.length) return null;
     const playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
-    const px = d.getFloat32(o, true); o += 4;
-    const py = d.getFloat32(o, true); o += 4;
-    const pz = d.getFloat32(o, true); o += 4;
+    let px: number, py: number, pz: number;
+    if (v1) {
+      px = d.getFloat32(o, true); o += 4;
+      py = d.getFloat32(o, true); o += 4;
+      pz = d.getFloat32(o, true); o += 4;
+    } else {
+      px = d.getInt16(o, true) * POS_Q; o += 2;
+      py = d.getInt16(o, true) * POS_Q; o += 2;
+      pz = d.getInt16(o, true) * POS_Q; o += 2;
+    }
     let u = slots[i] as WireTickPlayer | undefined;
     if (!u) {
       u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
@@ -224,7 +248,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.health = d.getUint16(o, true); o += 2;
     const pingRaw = u8[o++]!;
     const flags = u8[o++]!;
-    const sheep = u8[o++]!;
+    const sheep = o < u8.length ? u8[o++]! : 0;
     u.isDead = (flags & 1) !== 0;
     u.ping = pingRaw > 0 ? pingRaw : undefined;
     u.ski = (flags & 2) !== 0 ? 1 : 0;
