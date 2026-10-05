@@ -1,7 +1,4 @@
-import {
-  CANNON_BOUNCE_RESTITUTION, CANNON_BOUNCE_FRICTION,
-  KNOCKBACK_MULTIPLIER,
-} from '../core/config.js';
+import { KNOCKBACK_MULTIPLIER } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
@@ -56,8 +53,8 @@ export const CANNON_CONFIG: ProjectileConfig = {
   needsServerTracking: true,
   maxLifetime: WEAPONS[14].maxLifetime,
   trailMeshType: 'sphere',
-  bounces: true,
+  bounces: WEAPONS[14].terrainBounce === true,
   bounceSfx: 'hg_clang', // iron ball thunk on every skip
-  bounceRestitution: CANNON_BOUNCE_RESTITUTION,
-  bounceFriction: CANNON_BOUNCE_FRICTION,
+  bounceRestitution: WEAPONS[14].bounceRestitution,
+  bounceFriction: WEAPONS[14].bounceFriction,
 };

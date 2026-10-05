@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 
-import {
-  GL_BOUNCE_RESTITUTION, GL_BOUNCE_FRICTION,
-  KNOCKBACK_MULTIPLIER,
-} from '../core/config.js';
+import { KNOCKBACK_MULTIPLIER } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
@@ -60,10 +57,11 @@ export const GL_CONFIG: ProjectileConfig = {
   terrainOffset: WEAPONS[5].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[5].maxLifetime,
-  armTime: WEAPONS[5].armTime, // T2 arming fuse — bounce/phase until cooked, then contact pops
+  armTime: WEAPONS[5].armTime, // bounce window only — dirt skips until cooked
+  bodyArmTime: WEAPONS[5].bodyArmTime, // T2 GL: bodies pop at any age
   trailMeshType: 'sphere',
-  bounces: true,
+  bounces: WEAPONS[5].terrainBounce === true,
   bounceSfx: 'ricochet1',
-  bounceRestitution: GL_BOUNCE_RESTITUTION,
-  bounceFriction: GL_BOUNCE_FRICTION,
+  bounceRestitution: WEAPONS[5].bounceRestitution,
+  bounceFriction: WEAPONS[5].bounceFriction,
 };

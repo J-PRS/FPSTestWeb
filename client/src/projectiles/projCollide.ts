@@ -37,6 +37,7 @@ export interface CollideHost extends SweepHost {
   hitBolt: SweepObstacle | null;
   bouncesTaken: number;
   readonly armed: boolean;
+  readonly bodiesLive: boolean;
   readonly canBounce: boolean;
   sweepLocal: (() => THREE.Vector3 | null) | null;
   /** Local player's armor class — the sweep needs its capsule size. */
@@ -92,9 +93,10 @@ export class ProjCollide {
     if (h.config.passThroughTargets) return this.checkObstacles(obstacles);
     // Unarmed shells (mortar pre-armTime) phase through bodies — a
     // point-blank pop is exactly what the arming fuse exists to deny.
-    // Bolts and shield domes still intercept: shooting it down is
-    // counterplay, and a dome shouldn't let a dud inside.
-    if (!h.armed) return this.checkObstacles(obstacles);
+    // (GL excepted: bodiesLive=0 — it pops bodies while still bouncing
+    // off dirt.) Bolts and shield domes still intercept: shooting it
+    // down is counterplay, and a dome shouldn't let a dud inside.
+    if (!h.bodiesLive) return this.checkObstacles(obstacles);
     return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers, playerClasses);
   }
 

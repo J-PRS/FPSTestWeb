@@ -29,7 +29,13 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
       if (hit) {
         // Fuse bombs (grenade) bounce off dirt — the fuse is the only
         // trigger, so contact reflects the shell and stays live.
-        if (stats.terrainBounce) {
+        if (stats.terrainBounce && (stats.armTime === undefined || p.age < stats.armTime)) {
+          // Same contract the client's canBounce reads: an armed shell
+          // pops on dirt — only the pre-arm arc skips off the surface.
+          proj.bounces = (proj.bounces ?? 0) + 1;
+          if (stats.maxBounces !== undefined && proj.bounces > stats.maxBounces) {
+            r.detonate(proj, hit); return true;
+          }
           bounceOffField(p, r.field, stats.bodyRadius, stats.bounceRestitution, stats.bounceFriction);
           proj.terrainAt = 0; // still hugging the ground — keep sweeping
           return false;
@@ -65,9 +71,11 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // and domes above already stopped it; skip the body sweeps entirely.
     if (stats.fuseOnly) return false;
     // Arming fuse (T2 mortar): bodies phase through until the shell is
-    // armed — terrain, walls, and domes above already stopped it. Client
-    // prediction gates the same sweeps on config.armTime.
-    if (stats.armTime !== undefined && p.age < stats.armTime) return false;
+    // armed — terrain, walls, and domes above already stopped it. GL
+    // overrides with bodyArmTime=0: its shells bounce off dirt yet pop
+    // on a body at any age. Client gates the same sweeps on bodiesLive.
+    const bodyArm = stats.bodyArmTime ?? stats.armTime;
+    if (bodyArm !== undefined && p.age < bodyArm) return false;
     // Player sweep — same legal radius the hit-claim validator allows:
     // the target's class radius (in capsuleReach) + the larger of
     // body/wake radius at this airtime.

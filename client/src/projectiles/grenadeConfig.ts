@@ -57,5 +57,12 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   terrainOffset: WEAPONS[2].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[2].maxLifetime,
+  // Fuse bomb: armTime == fuse ⇒ never "arms" — bodies phase through,
+  // terrain can only bounce it, the 1.5s timer is the sole trigger.
+  armTime: WEAPONS[2].armTime,
+  bounces: WEAPONS[2].terrainBounce === true,
+  bounceSfx: 'hg_clang',
+  bounceRestitution: WEAPONS[2].bounceRestitution,
+  bounceFriction: WEAPONS[2].bounceFriction,
   trailMeshType: 'sphere',
 };

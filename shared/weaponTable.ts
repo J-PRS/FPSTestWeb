@@ -95,6 +95,10 @@ export interface WeaponStats {
    *  Terrain/wall/shield contact still applies (client bounces, server
    *  pops) — the arm time gates the KILL, not the landing. */
   armTime?: number;
+  /** Bodies phase through until this age (defaults to armTime). Set to 0
+   *  when a shell bounces off dirt yet pops on body contact at ANY age —
+   *  the T2 grenade launcher: no arming window on players, only on dirt. */
+  bodyArmTime?: number;
   /** Mid-flight hitscan discharge (remote railgun): at `rayDelay` seconds
    *  the projectile fires a beam along its velocity and dies at the hit
    *  point (or at rayRange on a miss). The server reach check adds
@@ -110,6 +114,7 @@ export interface WeaponStats {
    *  same numbers so the replica arc matches the authoritative one. */
   bounceRestitution?: number; // normal velocity kept per bounce
   bounceFriction?: number;    // tangential velocity kept per bounce
+  maxBounces?: number;        // die on the Nth terrain hit (flak shards); unset = bounce until fuse
   /** T2 glue bomb: contact STOPS the shell instead of detonating — it
    *  freezes on terrain/walls, glues onto a player it touches (riding
    *  them until the fuse pops), and only `maxLifetime` triggers the
@@ -214,7 +219,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5, // area-denial tier: 0.5m wake cap — the 18m splash is the reach, not the proxy
     hitGrow: 2.0,
     maxLifetime: 6.0,
-    armTime: 1.5, // T2 arming fuse — no point-blank body pops; terrain still stops it
+    armTime: 1.5, // T2 arming fuse — no point-blank body pops; bounces off
+                // dirt until it cooks (client mortarConfig's canBounce rule)
+    terrainBounce: true,
+    bounceRestitution: 0.25, // mortars thud, not skip
+    bounceFriction: 0.7,
   },
   [WeaponType.GrenadeLauncher]: {
     directDamage: 50,
@@ -229,8 +238,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 2.0, // tight proxy — bouncing shells shouldn't drag a huge wake
     hitGrow: 2.0,
     maxLifetime: 6.0, // fuse cap — a bouncing shell skitters a long way before the airburst
-    armTime: 1.0, // arming fuse — pre-arm shells phase through bodies and
-                // bounce off dirt; the pop only counts once it's cooked
+    armTime: 1.0, // bounce window only — dirt skips until cooked
+    bodyArmTime: 0, // T2 GL: a body contact pops at ANY age — the arming
+                    // fuse exists so shells skip, not so they pass through
+    terrainBounce: true, // T2 GL core: skips off dirt, pops on bodies
+    bounceRestitution: 0.55, // = client GL_BOUNCE_RESTITUTION
+    bounceFriction: 0.7,     // = client GL_BOUNCE_FRICTION
   },
   [WeaponType.Flak]: {
     directDamage: 9,
@@ -248,6 +261,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0.5,
     maxLifetime: 2.0,
     ttlJitter: 0.1, // shards scatter their airbursts — a synchronized pop reads as a single blob
+    terrainBounce: true,
+    bounceRestitution: 0.6, // = client FLAK_BOUNCE_RESTITUTION
+    bounceFriction: 0.8,
+    maxBounces: 3,          // shards die on the Nth terrain hit
   },
   [WeaponType.PlasmaCannon]: {
     directDamage: 35,
@@ -366,6 +383,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 2.0,    // proxy scaled to match the bigger ball
     hitGrow: 1.5,
     maxLifetime: 6.0, // skitters around until fuse or contact ends it
+    terrainBounce: true,
+    bounceRestitution: 0.75, // = client CANNON_BOUNCE_RESTITUTION
+    bounceFriction: 0.85,
   },
   [WeaponType.RocketLauncher]: {
     // RPG-style missile: flat trajectory, deliberately SLOW (readable in
@@ -701,6 +721,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5,     // fuse pop releases the bomblets mid-air — ~80m of carry before the split
     fuseOnly: true,       // bodies don't pop it — a 55 m/s contact shell that
                         // also rains bomblets is a strictly-better mortar
+    terrainBounce: true,  // skips along until the fuse — the airburst needs the carry
+    bounceRestitution: 0.35, // = client MRV_BOUNCE_RESTITUTION
+    bounceFriction: 0.7,
     cluster: { count: 6, radius: 5.0 }, // bomblet scatter footprint at the burst point
   },
   [WeaponType.MRVBomblet]: {

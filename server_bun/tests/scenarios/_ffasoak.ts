@@ -39,6 +39,11 @@ function deal(pool: WeaponType[], seed: number): WeaponType[] {
     const j = s % (i + 1);
     [deck[i], deck[j]] = [deck[j]!, deck[i]!];
   }
+  // A pool smaller than BOTS cycles — a 2-weapon arg means a 5v5 duel
+  // bench, not four bots drawing `undefined` (that used to crash the
+  // leaderboard print with row.w === undefined).
+  if (deck.length === 0) return deck;
+  while (deck.length < BOTS) deck.push(deck[deck.length % pool.length]!);
   return deck.slice(0, BOTS);
 }
 

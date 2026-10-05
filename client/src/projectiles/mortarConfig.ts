@@ -63,10 +63,10 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   terrainOffset: WEAPONS[4].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[4].maxLifetime,
-  bounces: true,
+  bounces: WEAPONS[4].terrainBounce === true,
   bounceSfx: 'hg_clang',
-  bounceRestitution: 0.25, // T2 BounceVelocityModifier — mortars thud, not skip
-  bounceFriction: 0.7,
+  bounceRestitution: WEAPONS[4].bounceRestitution, // T2 BounceVelocityModifier — mortars thud, not skip
+  bounceFriction: WEAPONS[4].bounceFriction,
   armTime: WEAPONS[4].armTime, // T2 FuseTimer: shared authority — bounce off dirt, phase through bodies before this
   trailMeshType: 'sphere',
   ribbonTrail: true,

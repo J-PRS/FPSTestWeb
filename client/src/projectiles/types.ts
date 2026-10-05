@@ -57,6 +57,7 @@ export interface ProjectileConfig {
   ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)
   ribbonWidth?: number;
   ribbonLife?: number;
+  ribbonRampIn?: number; // emitter ramp-in seconds: streak spawns at 10% life+width, grows to full — the mesh spawn-grow applied to the trail
   ribbonColor?: number;
   bounces?: boolean; // bounce off terrain instead of exploding (grenade launcher); fuse still applies
   bounceSfx?: string; // /sfx/<name>.ogg ping played positionally on each bounce
@@ -64,6 +65,7 @@ export interface ProjectileConfig {
   bounceFriction?: number; // tangential velocity kept per bounce
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
+  bodyArmTime?: number; // bodies pop on contact at/after this age (defaults to armTime); 0 = GL: pops bodies at any age while still bouncing off dirt
   sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius
   /** Cluster carrier — detonation spawns `count` VISUAL bomblets
    *  (BOMBLET_CONFIG) in a cone of half-angle `spread` (rad) around the

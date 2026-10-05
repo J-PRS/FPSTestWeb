@@ -111,13 +111,14 @@ describe('RoomProjectiles', () => {
     // Mortar-style lob: climbs far above the field ceiling (terrain sweep
     // skipped for most of the flight), then descends into the ground at
     // the target. If scheduling lied, the pop never happens.
-    // Spawn sits above the field ceiling (flat 60/255*125 ≈ 29.4m), so the
-    // parabola schedules terrainAt>0 and skips sweeps early in flight.
-    // ~7° lob at 55 m/s lands ~25m out — right on the target's feet.
+    // Mortars bounce off dirt while unarmed — a 25m first-touch would
+    // just skip. ~8.5° at 55 m/s lands ~62m out at t≈1.55s, just past
+    // the 1.5s arm, so the contact pop lands inside the 18m splash.
+    target.position = { x: 62, y: EYE, z: 0 };
     room.projectiles.spawn(shooter.id, WeaponType.Mortar,
-      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.993, y: 0.117, z: 0 }, { x: 0, y: 0, z: 0 });
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.989, y: 0.148, z: 0 }, { x: 0, y: 0, z: 0 });
     let flewTicks = 0;
-    for (let i = 0; i < 60 && target.health === target.maxHealth; i++) {
+    for (let i = 0; i < 80 && target.health === target.maxHealth; i++) {
       room.projectiles.tick(0.05);
       flewTicks++;
     }
@@ -162,6 +163,26 @@ describe('RoomProjectiles', () => {
       { x: 4, y: FLOOR + 1.4, z: 0 }, { x: 0, y: 0.6, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 160; i++) room.projectiles.tick(0.05);
     expect(pops).toBe(2);
+  });
+
+  it('a grenade-launcher shell skips off dirt pre-arm, pops after cooking', () => {
+    const { room, shooter } = arena();
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    let pops = 0, firstPopTick = -1, tick = 0;
+    const orig = room.broadcast.bind(room);
+    room.broadcast = ((m: { type: string }) => {
+      if (m.type === 'projectileDestroyed') { pops++; if (firstPopTick < 0) firstPopTick = tick; }
+      orig(m as Parameters<typeof room.broadcast>[0]);
+    }) as typeof room.broadcast;
+    // Steep down-lob: hits dirt ~0.1s in — inside the 1s arming window, so
+    // it must BOUNCE (still live past the landing tick), then die once
+    // armed on its next dirt contact. The pre-fix server popped it on
+    // the first touch — a weapon the client predicted bouncing.
+    room.projectiles.spawn(shooter.id, WeaponType.GrenadeLauncher,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.5, y: -0.5, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 120 && pops === 0; i++) { room.projectiles.tick(0.05); tick++; }
+    expect(firstPopTick).toBeGreaterThan(4); // survived past the first dirt touch
+    expect(pops).toBe(1);
   });
 
   it('hitscan weapons refuse a body — spawn returns null', () => {

@@ -376,6 +376,13 @@ export class Projectile {
     return this.config.armTime === undefined || this.age >= this.config.armTime;
   }
 
+  /** Body-contact gate — separate from the terrain/bounce arming: the GL
+   *  skips off dirt for a second yet pops on a body at any age. */
+  get bodiesLive(): boolean {
+    const ba = this.config.bodyArmTime ?? this.config.armTime;
+    return ba === undefined || this.age >= ba;
+  }
+
   /** Fuse clock — for sticky ordnance the fuse starts at ATTACH, not
    *  spawn: a lobbed bomb midair is inert (no fuse burn, no armed-light
    *  ramp). -1 = not armed yet; everything else just reads `age`. */

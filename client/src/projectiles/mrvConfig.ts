@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 
-import {
-  KNOCKBACK_MULTIPLIER,
-  MRV_BOUNCE_RESTITUTION, MRV_BOUNCE_FRICTION,
-} from '../core/config.js';
+import { KNOCKBACK_MULTIPLIER } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
@@ -127,10 +124,10 @@ export const MRV_CONFIG: ProjectileConfig = {
   terrainOffset: 0.12,
   needsServerTracking: true,
   maxLifetime: W.maxLifetime, // fuse pop = the airburst, ~1s in
-  bounces: true,
+  bounces: W.terrainBounce === true,
   bounceSfx: 'hg_clang',
-  bounceRestitution: MRV_BOUNCE_RESTITUTION,
-  bounceFriction: MRV_BOUNCE_FRICTION,
+  bounceRestitution: W.bounceRestitution,
+  bounceFriction: W.bounceFriction,
   // No fuse — bomblets are CONTACT bombs: they fall until they hit
   // something (terrain, wall, body), the carrier's own 10s safety TTL is
   // the only timer. A mid-air fuse pops the rain where nobody is.

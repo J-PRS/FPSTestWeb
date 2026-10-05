@@ -51,6 +51,8 @@ export interface LiveProj {
    *  glued to; undefined = frozen at its landing point. The fuse is
    *  the only trigger left. */
   stuck?: { playerId?: string; off: Vec3 };
+  /** Terrain hits taken — maxBounces ends the shell on the Nth. */
+  bounces?: number;
 }
 
 // Player aim height — matches where the client sweeps the capsule center.

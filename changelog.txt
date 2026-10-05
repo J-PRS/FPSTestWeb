@@ -1,3 +1,4 @@
+2026-10-01 - combat: terrain-bounce unified to shared weapon table - GL bounces off dirt + pops on bodies (bodyArmTime split), mortar/cannon/MRV/flak bounce server-side too (client-only before = desync); ffasoak under-BOTS pool crash fixed
 2026-10-01 - combat: Sticky gets real glue mechanic (stick-on-contact, rides players, fuse-only blast, sibling chain) - was contact-grenade; preferredRange + finisher pull already in
 2026-10-01 - bots: weapon-aware fight range (preferredRange from burst cone vs target hp) + sidearm finisher pull on wounded targets
 2026-10-01 - balance: Railgun 80/30 -> 60/20 (two-shot medium -> three-shot); FFA wins 7/12 -> 0/4 batch, dmg -17%, still competitive mid-pack.

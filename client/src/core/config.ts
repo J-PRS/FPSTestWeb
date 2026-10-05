@@ -56,8 +56,8 @@ export const MORTAR_RATE = 2.0; // Mortar fire rate — T2 is 0.5 rounds/sec
 
 // Grenade launcher — T2 style: bouncing timed shells, explode on player contact
 export const GL_RATE = 0.7; // Grenade launcher fire rate (seconds)
-export const GL_BOUNCE_RESTITUTION = 0.55; // Energy kept on the normal axis
-export const GL_BOUNCE_FRICTION = 0.7; // Tangential damping per bounce
+// GL/FLAK/MRV/CANNON bounce constants live in shared/weaponTable.ts —
+// server sim and client config read the same numbers.
 
 // Flak cannon — UT style: a spray of bouncing shards, direct-hit only
 export const FLAK_RATE = 1.1; // Flak fire rate (seconds)
@@ -65,9 +65,7 @@ export const FLAK_SHARDS = 9; // Shards per shell
 export const FLAK_SPREAD = 0.10; // Cone half-angle (radians-ish slope factor)
 export const SG_PELLETS = 10;   // pellets per pump
 export const SG_SPREAD = 0.035; // ~3× tighter than flak — mid-range viable
-export const FLAK_MAX_BOUNCES = 3; // Shards die on the Nth terrain hit
-export const FLAK_BOUNCE_RESTITUTION = 0.6;
-export const FLAK_BOUNCE_FRICTION = 0.8;
+// Flak maxBounces lives in shared/weaponTable.ts (WEAPONS[6].maxBounces).
 
 // Plasma cannon — T1/T2 fat energy bolt, sustained midrange fire
 export const PLASMA_RATE = 0.28; // ~3.5 rps
@@ -85,12 +83,6 @@ export const REVOLVER_RATE = 0.6; // hand-cannon cadence — deliberate thumps
 export const STICKY_RATE = 0.8; // sticky launcher — 0.8s vs 3s fuse ⇒ up to 3 live bombs per shooter
 export const REPAIR_RATE = 0.1; // repair-tool beam tick — matches REPAIR_HEAL_PER_TICK's ~50 hp/s
 export const MRV_RATE = 2.4; // MRV launcher — slower than mortar, one trigger = a volley
-export const MRV_BOUNCE_RESTITUTION = 0.35; // carrier shell skips along until the fuse pops
-export const MRV_BOUNCE_FRICTION = 0.7;
-// Cannonball skips: livelier than the GL shell (0.55/0.7) — keeps its speed
-// across hops, that's the whole joke
-export const CANNON_BOUNCE_RESTITUTION = 0.75;
-export const CANNON_BOUNCE_FRICTION = 0.85;
 export const MELEE_COOLDOWN = 0.9;
 export const MELEE_RANGE = 3.2;    // fist reach, meters
 export const MELEE_ARC_DOT = 0.55; // ~57° half-cone — generous, CoD-style

@@ -1,8 +1,5 @@
 import * as THREE from 'three';
 
-import {
-  FLAK_MAX_BOUNCES, FLAK_BOUNCE_RESTITUTION, FLAK_BOUNCE_FRICTION,
-} from '../core/config.js';
 import { WEAPONS } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
@@ -58,11 +55,11 @@ export const FLAK_CONFIG: ProjectileConfig = {
   ttlJitter: WEAPONS[6].ttlJitter,
   trailMeshType: 'sphere',
   noExplosion: true,
-  bounces: true,
+  bounces: WEAPONS[6].terrainBounce === true,
   bounceSfx: 'ricochet1',
-  bounceRestitution: FLAK_BOUNCE_RESTITUTION,
-  bounceFriction: FLAK_BOUNCE_FRICTION,
-  maxBounces: FLAK_MAX_BOUNCES,
+  bounceRestitution: WEAPONS[6].bounceRestitution,
+  bounceFriction: WEAPONS[6].bounceFriction,
+  maxBounces: WEAPONS[6].maxBounces,
   // Short single-lane streak like the chaingun tracer, but wider/longer —
   // a shard is slower and heavier than a bullet, it should read as a
   // tumbling chunk, not a laser flick.
