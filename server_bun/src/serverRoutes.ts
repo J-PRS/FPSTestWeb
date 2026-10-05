@@ -12,6 +12,7 @@ import type { DemoStorage } from './DemoStorage.ts';
 import type { RtcRelay } from './RtcRelay.ts';
 import { weaponStats } from './weaponStats.ts';
 import { WEAPONSTATS_PAGE } from './weaponstatsPage.ts';
+import { STATUS_PAGE } from './statusPage.ts';
 import { logger } from './logger.ts';
 
 export interface HttpCtx {
@@ -72,6 +73,9 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL) => Response 
     '/weaponstats': () => json(weaponStats.snapshot()),
     // Readable dashboard over the same ledger — tables, bars, funnel pcts.
     '/weaponstats.html': () => corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+    // Live ops dashboard over /metrics + /health — degraded banner,
+    // per-phase tick bars, per-room bot CPU + client tails.
+    '/status': () => corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
     // Map list for the menu's match setup — name + mode + default bots.
     '/maps': () => json(ctx.gameServer.listMaps()),
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
