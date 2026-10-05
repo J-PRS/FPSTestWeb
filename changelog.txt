@@ -1,3 +1,7 @@
+2026-10-05 - audit: join/reclaim atomicity classified — token-before-evict + register-before-close + seat generation double-cover; already pinned by reconnect/graceZombie/joinGuard scenarios
+2026-10-05 - audit: wsFight full-suite failure triaged to §4 infra flake — serial netbot tier green (7/7) with the orbitStreak change in-path; engagement window starved under suite load, precondition timeout not property failure
+2026-10-05 - audit: Map/Set iteration-order determinism classified clean — stateHash commutative sum, flagGoals sorted ids, memoized pure lookups, static-literal orders; insertion-order divergence cannot reach a sim output
+2026-10-05 - audit: observability noise classified clean — all warn/error sites throttled or deduped, zero warn on expected lag/reconnect paths, per-frame paths gated at debug
 2026-10-05 - test: pin botLines — 13 tests covering close-out rings, commit window, drift tolerance, sheer veto, downhill bias, orbit latch (pass pick then beeline), dive-glide, flow-field consult, twin replay
 2026-10-05 - audit: edge idempotency classified clean — wire edges are pure overwrites of committed state; WS ordering + snapshot restore make duplicates impossible, sole re-triggerable surface is the deliberate onSimFire funnel
 2026-10-05 - test: pin botGraph TerrainFlow + botTuning table — 10 tests covering flat progress, wall circumvention, danger deflection, routeNearGoal, goal bucketing, bounded flood cache, twin replay

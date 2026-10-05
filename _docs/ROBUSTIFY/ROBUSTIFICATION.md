@@ -418,6 +418,33 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **Join/reclaim atomicity audited** (2026-10-05): grace reclaim checks
+  the session token BEFORE the connected test (a zombie socket can't
+  lock out its owner), registers the new socket BEFORE evicting the old
+  (onClose sees the seat already owned — the generation check at
+  GameServer.ts:245-246 double-covers sockets seated pre-registry),
+  stamps lastSeen so a >60s grace seat isn't idle-reaped, and last-
+  writer-wins for racing reclaims is deterministic. Second 'join' on a
+  seated socket drops at the WIRE guard; spectator squat evicts via
+  specRooms before seating. Rejection paths send sessionRejected before
+  close so stale-token clients can't reprobe-loop. Pin coverage:
+  reconnect/graceZombie/joinGuard/flagGraceDrop/teleportGrace.
+- **Map/Set iteration-order determinism** (2026-10-05): every Map/Set
+  in `shared/` audited for order-dependent iteration on a sim path —
+  `stateHash` is a commutative per-player sum (roster order can't
+  alias), `flagGoals` sorts ids before role election, `losMemo` and
+  `botGraph.fields` are pure-function memos (eviction order can never
+  change an answer), `pickups.WEIGHTS` is static-literal order with
+  seeded rolls, the rest are keyed lookups with no order-dependent
+  writes. Insertion-order divergence can't reach a sim output.
+- **Observability noise** (2026-10-05): every `logger.warn`/`error`
+  across client + server audited — all fire on real anomalies with
+  throttling: camera spinout 0.5s cooldown, anim misses deduped per
+  variant:name, stall once per model, ball rubberband per-id +
+  suppressed-fleet rollup, model-load warn→error escalation; server
+  warns cover drowned sockets, out-of-range claims, missing addons,
+  parse faults, per-episode bot-stuck latch. Per-frame paths use
+  gated `debug`. Zero warn on expected lag/reconnect paths.
 - **`botLines` pinned** (2026-10-05): `botLines.test.ts` (13 tests) —
   steerer close-out rings (plain + runnerDirect), mid-range fan roll,
   commit-window hold, in-cone goal-drift tolerance, all-sheer veto →
@@ -664,6 +691,13 @@ desyncs — sim replayed past the stamp and still off — still warn.
   draws are client-only cosmetics (chatter delay, offline spawn scatter);
   the ambient-draws invariant covers shared sim paths, and these never
   reach one.
+- **netbot `wsFight` load-sensitivity (infra flake)** — under the full
+  `bun test` sweep the 25s engagement `until` starved once (0 shots,
+  25.8s) — a *precondition* timeout, not the claim-resolution property
+  under test. Serial `bun test tests/netbot/` passes in ~6.7s and the
+  file has documented engagement-window flake history. Optional: make
+  the engagement deadline starvation-aware or shard netbot out of the
+  monolithic suite; the property itself is timing-independent.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server
