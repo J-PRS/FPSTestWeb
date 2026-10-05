@@ -49,7 +49,7 @@ export class ServerBotSenses {
   // incumbent is re-elected by the very next probe (it scores best on
   // the same terms it died on), and the bot orbits it forever —
   // raindance's pit orbit was exactly this loop.
-  private routeFailed = new Map<string, { pos: BotVec; at: number }>();
+  private routeFailed = new Map<string, { pos: BotVec; at: number; stand?: BotVec; n?: number }>();
   /** Squad push-call: a capper within ETA of the enemy stand posts it
    *  here; teammates' goal ladders read it for a few seconds so the
    *  stand floods BEFORE the runner lands — the same "capper's 10 out"
@@ -150,10 +150,17 @@ export class ServerBotSenses {
   }
 
   /** Mark an entry position as failed-to-reach so the next probe can't
-   *  re-elect it — bounded memory (a few recent failures per bot). */
-  private failRoute(id: string, pos: BotVec): void {
+   *  re-elect it — bounded memory (a few recent failures per bot).
+   *  Failures also count per stand: a presser that burned two dead
+   *  entries on the same stand is probing a wall the ring can't see —
+   *  it stops detouring and beelines (the jet-escape stack forces the
+   *  face better than a third orbit that dies the same way). */
+  private failRoute(id: string, pos: BotVec, stand?: BotVec): void {
     const f = this.routeFailed.get(id) ?? { pos, at: 0 };
     f.pos = pos;
+    f.n = stand !== undefined && f.stand !== undefined && dist3(f.stand, stand) < 1
+      ? (f.n ?? 0) + 1 : 1;
+    if (stand !== undefined) f.stand = { ...stand };
     f.at = simNow();
     this.routeFailed.set(id, f);
   }
@@ -493,7 +500,7 @@ export class ServerBotSenses {
             goalPos = { ...incLive.pos };
           } else if (simNow() - incLive.at > 30_000) {
             this.routeHold.delete(p.id);
-            this.failRoute(p.id, incLive.pos);
+            this.failRoute(p.id, incLive.pos, enemyStand);
           } else {
             goalPos = { ...incLive.pos };
           }
@@ -669,6 +676,19 @@ export class ServerBotSenses {
         // own approach side — a fixed world bearing sent runners
         // around the massif to a far-side entry they could never reach
         // (the bravo capper's 750m contour orbit).
+        // Two dead entries on this stand = the ring is lying: every
+        // probe-elected detour dies on the same wall. Stop spending
+        // 30s bail windows proving it a third time — press the stand
+        // and let the jet-escape stack force the face. The failure
+        // memory decays (90s graveyard window), so the detour sense
+        // comes back once the terrain's verdict has room to change.
+        const frStale = this.routeFailed.get(p.id);
+        if (frStale && (frStale.n ?? 0) >= 2 && frStale.stand !== undefined
+          && simNow() - frStale.at < 90_000 && dist3(frStale.stand, enemyStand) < 1) {
+          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
+          goalPos = { ...enemyStand };
+          routed = goalPos !== pick;
+        } else {
         // The flood's own near-stand route point joins the ring as a
         // scored candidate — the saddle the cheapest path funnels
         // through. It goes through the same reachability/foe/graveyard
@@ -704,6 +724,7 @@ export class ServerBotSenses {
         // branch only runs on a fresh pick or after a stale record died.
         this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
         goalPos = best;
+        }
         }
         }
       }
