@@ -54,9 +54,10 @@ hub.rotation.z = Math.PI / 2;
 hub.position.set(0, 0, -0.14);
 bow.add(hub);
 // Bow arms — one group per side, pivoted at the hub so firing can flex
-// them: inner strut angles out+forward, tip limb kicks back the elbow.
-// Cam wheel at the tip carries the string.
-const ARM_SWEEP = 0.42, ARM_LEN = 0.45;
+// them. A crossbow reads T, not Y: limbs canted ~66° from the rail
+// (mostly lateral, slightly forward of the mount). Cam wheel at the
+// tip carries the string.
+const ARM_SWEEP = 1.15, ARM_LEN = 0.45;
 for (const side of [-1, 1]) {
   const arm = new THREE.Group();
   arm.name = side < 0 ? 'armL' : 'armR';
@@ -81,16 +82,16 @@ for (const side of [-1, 1]) {
   const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.34), darkMat);
   cable.position.set(side * -0.028, 0, -0.19);
   arm.add(cable);
-  // Cam wheel at the tip — the compound-bow read, oversized like T:A's
+  // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
+  // Flat (horizontal) wheels: the string wraps their edge in-plane.
   const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.032, 10), darkMat);
-  cam.rotation.x = Math.PI / 2;
   cam.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(cam);
   const camRing = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.01, 6, 12), brassMat);
+  camRing.rotation.x = Math.PI / 2;
   camRing.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(camRing);
   const camHub = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.045, 8), brassMat);
-  camHub.rotation.x = Math.PI / 2;
   camHub.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(camHub);
   bow.add(arm);
