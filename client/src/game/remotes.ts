@@ -16,6 +16,7 @@ import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
+import { lastWeaponByPlayer } from './net/projectiles.js';
 
 // Hostiles always read red — team colors are for your own side only.
 const ENEMY_RED = 0xFF3333;
@@ -63,10 +64,12 @@ function makeRemoteHooks(deps: RemotesDeps) {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().forgetPlayer(id);
       sfxWorld.remoteMoveAudioGone(id);
-      // aliveSince/killCounts key on live ids — a leaver drops here
-      // or the module maps grow one entry per departed player forever.
+      // aliveSince/killCounts/lastWeaponByPlayer key on live ids — a
+      // leaver drops here or the module maps grow one entry per
+      // departed player forever.
       aliveSince.delete(id);
       deps.world.killCounts.delete(id);
+      lastWeaponByPlayer.delete(id);
     },
   };
 }
