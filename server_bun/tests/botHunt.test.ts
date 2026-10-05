@@ -151,17 +151,20 @@ describe('pickFire', () => {
     expect(f).toBeDefined();
   });
 
-  it('burst cadence: five shots then a longer pause', () => {
+  it('burst cadence: a clip of shots then a longer pause', () => {
     const st = armed();
     botRng(() => 0.5);
     const times: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      const f = pickFire(st, 10, flat({ weaponSpeed: () => 60 }), P, 0, mood);
+    const ctx = flat({ weaponSpeed: () => 60, fireInterval: () => 0.5 });
+    let shots = 0;
+    while (st.burstLeft! > 0 || shots === 0) {
+      const f = pickFire(st, 10, ctx, P, 0, mood);
       expect(f).toBeDefined();
       times.push(st.fireT!);
+      shots++;
       st.fireT = 0; // pretend the cadence elapsed
     }
-    expect(times[4]!).toBeGreaterThan(times[0]!); // post-burst pause > in-burst
+    expect(times[shots - 1]!).toBeGreaterThan(times[0]!); // post-burst pause > in-burst
   });
 });
 

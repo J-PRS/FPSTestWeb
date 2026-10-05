@@ -283,13 +283,18 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   if (!st.hunt || staleMs > PURSUE_MS) return undefined;
   const acq = st.acquiredAt.get(st.hunt.id);
   if (acq !== undefined && st.huntTick - acq < st.reactTicks) return undefined;
+  const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   st.fireT -= dt;
   if (st.fireT > 0) return undefined;
-  if (st.burstLeft <= 0) st.burstLeft = 5;
+  // The trigger finger follows the gun: a chaingun streams long bursts,
+  // a mortar picks its moments — same cadence rules the client enforces.
+  const interval = ctx.fireInterval?.(d) ?? 0.45;
+  if (st.burstLeft <= 0) st.burstLeft = Math.max(2, Math.min(12, Math.round(3.0 / interval)));
   st.burstLeft--;
-  st.fireT = (st.burstLeft > 0 ? 0.45 : 0.8 + botRand() * 0.5) / st.temper
+  st.fireT = (st.burstLeft > 0
+    ? Math.max(interval, 0.25) + botRand() * 0.15
+    : 0.8 + botRand() * 0.5) / st.temper
     * (hero ? 0.65 : fearing ? 0.9 : 1);
-  const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   // Suppressive fire is deliberately sloppy — noise, not hits. Hero
   // aim just stops being sloppy.
   const ws = ctx.weaponSpeed?.(d);

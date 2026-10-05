@@ -166,6 +166,10 @@ export interface BrainCtx {
    *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
    *  Return 0 for hitscan speed rows; the brain falls back to 60. */
   weaponSpeed?(dist: number): number;
+  /** Host hook: legal refire (s between shots) of the weapon the bot
+   *  would pick at `dist` — the volley cadence scales with it so a
+   *  chaingun streams while a mortar deliberates. Omit → 0.45s. */
+  fireInterval?(dist: number): number;
   /** Host hook: whether the weapon the bot would pick at `dist` is
    *  gravity-bent — the aim point gets the drop added back so lobbed
    *  shells don't land short. Omit → flat trajectories. */

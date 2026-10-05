@@ -10,7 +10,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
-import { getWeaponStats } from '../../shared/weapons.ts';
+import { getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
@@ -913,6 +913,11 @@ export class ServerBotSenses {
         const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
         return getWeaponStats(w).speed || 60;
       },
+      // Trigger rhythm follows the gun the bot would draw at that range —
+      // same legal cadence the client trigger enforces, so a drawn
+      // chaingun streams and a drawn mortar deliberates.
+      fireInterval: (d) =>
+        WEAPON_FIRE_INTERVAL_S[pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType] ?? 0.45,
       // Lobbed shells need the arc's drop added back on the aim point.
       weaponGravity: (d) =>
         getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage)).gravity,
