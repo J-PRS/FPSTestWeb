@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
-import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import { roleObjective, ROLE_PRIORITY, STRICT_CLASS } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
+import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
+import { flagStandSpecs, FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
 
 export interface Flag {
   /** The movable piece — pole + banner + finial; rides carriers and drops. */
@@ -37,6 +39,12 @@ export interface FlagCtx {
   onFeed(text: string): void;
   /** Flag state edge for cues — same beats the network path plays. */
   onFlagEvent?(kind: 'taken' | 'dropped' | 'returned' | 'captured', team: TeamId, at: THREE.Vector3): void;
+  /** Personal-score payout — mirrors the server's CTF_PTS awards so the
+   *  offline board's PTS column credits objective work too. */
+  onPersonalPoints?(id: string, pts: number): void;
+  /** Offline collision: the dais hulls as structure specs — the bridge
+   *  pushes them into the local player's and bots' move sims. */
+  applyStandSpecs?(specs: import('../../../shared/mapSpec.js').StructureSpec[]): void;
 }
 
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
@@ -56,17 +64,19 @@ export class CtfFlags {
   constructor(private ctx: FlagCtx, around: THREE.Vector3) {
     // Bases sit on the X axis around the player spawn — readable landmarks.
     const terrain = ctx.lazyTerrain();
+    const standSpecs: import('../../../shared/mapSpec.js').StructureSpec[] = [];
     for (const team of ['alpha', 'bravo'] as TeamId[]) {
       const sign = team === 'alpha' ? -1 : 1;
       const home = new THREE.Vector3(around.x + sign * 70, 0, around.z);
       home.y = terrain.getHeight(home.x, home.z);
+      standSpecs.push(...flagStandSpecs(home, team));
       // Stand (bare gem socket) is planted once at home and never moves;
       // the flag (pole + banner + finial) is the ripped-out piece —
       // home reseats the pole in the socket so the pair reads as one flag.
-      const stand = new THREE.Group();
+      const stand = mkFlagStand(TEAM_COLORS[team]);
       const base = new THREE.Mesh(FLAG_BASE_GEO,
         new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
-      base.position.y = 0.4;
+      base.position.y = FLAG_STAND_TOP + 0.07; // gem in the socket well
       stand.add(base);
       stand.position.copy(home);
       const g = new THREE.Group();
@@ -79,17 +89,19 @@ export class CtfFlags {
       finial.position.y = 4.05;
       g.add(banner, finial);
       g.position.copy(home);
+      g.position.y += FLAG_STAND_TOP; // pole seats on the platform deck
       ctx.lazyScene().add(stand, g);
       this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3() });
     }
+    ctx.applyStandSpecs?.(standSpecs);
   }
 
   /** Flag + stand positions for the HUD markers — DOM overlay, reads
    *  every frame. `pos` is the flag (diamond); `home` is the stand
    *  (hollow socket). They coincide while the flag is home. */
-  markers(): { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3 }[] {
-    const out: { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3 }[] = [];
-    for (const [team, f] of this.flags) out.push({ team, pos: f.pos, home: f.home });
+  markers(): { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3; state: Flag['state'] }[] {
+    const out: { team: TeamId; pos: THREE.Vector3; home: THREE.Vector3; state: Flag['state'] }[] = [];
+    for (const [team, f] of this.flags) out.push({ team, pos: f.pos, home: f.home, state: f.state });
     return out;
   }
 
@@ -170,7 +182,12 @@ export class CtfFlags {
     const role = this.roles.get(bot.playerId) ?? 'offense';
     const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
     const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
-    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
+    // The goal point aims at the stand's flag height, not the pedestal's
+    // base — the wire bots sense the same lift (serverSenses) so offline/
+    // P2P bots press the same spot the networked ones do.
+    const enemyStand = enemy.state !== 'carried'
+      ? new THREE.Vector3(enemy.pos.x, enemy.pos.y + FLAG_STAND_LIFT, enemy.pos.z)
+      : null;
     const pick = roleObjective(role, {
       home: own.home,
       thief,
@@ -226,8 +243,15 @@ export class CtfFlags {
   /** Match reset — every flag home, nobody carrying. */
   reset(): void {
     for (const f of this.flags.values()) {
-      f.state = 'home'; f.carrier = null; f.pos.copy(f.home); f.mesh.position.copy(f.home);
+      f.state = 'home'; f.carrier = null; f.pos.copy(f.home); this.seatFlag(f);
     }
+  }
+
+  /** Pole seats ON the platform deck when home — pos stays the logical
+   *  stand anchor (HUD, grabs), the mesh rides the socket well. */
+  private seatFlag(f: Flag): void {
+    f.mesh.position.copy(f.pos);
+    if (f.state === 'home') f.mesh.position.y += FLAG_STAND_TOP;
   }
 
   update(dt: number): void {
@@ -237,16 +261,22 @@ export class CtfFlags {
       if (f.state === 'carried') this.tickCarried(team, f);
       else if (f.state === 'dropped') {
         f.dropT -= dt;
-        if (f.dropT <= 0) { f.state = 'home'; f.pos.copy(f.home); }
+        // Timeout walks itself home — the wire path announces this same
+        // transition (dropped→home), so the cue/VFX must fire here too
+        // or an offline return is a silent teleport.
+        if (f.dropT <= 0) {
+          f.state = 'home'; f.pos.copy(f.home);
+          this.ctx.onFlagEvent?.('returned', team, f.pos);
+        }
       }
       // Touch rules: enemy team grabs it, own team returns a dropped flag.
       if (f.state === 'carried') {
         if (dt > 0) f.vel.set((f.pos.x - px) / dt, (f.pos.y - py) / dt, (f.pos.z - pz) / dt);
-        f.mesh.position.copy(f.pos);
+        this.seatFlag(f);
         continue;
       }
       this.tickTouch(team, f);
-      f.mesh.position.copy(f.pos);
+      this.seatFlag(f);
     }
   }
 
@@ -255,7 +285,13 @@ export class CtfFlags {
   private tickCarried(team: TeamId, f: Flag): void {
     const ctx = this.ctx;
     const cp = f.carrier ? ctx.carrierPos(f.carrier) : null;
-    if (!cp) { f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S; return; }
+    // Carrier vanished without dying (bot prune/disconnect) — death
+    // drops funnel through dropCarried, this edge owns its own event.
+    if (!cp) {
+      f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S;
+      ctx.onFlagEvent?.('dropped', team, f.pos);
+      return;
+    }
     f.pos.set(cp.x, cp.y + 1.2, cp.z); // rides above the carrier's head
     const carrierTeam = ctx.teamOf(f.carrier!) as TeamId;
     if (carrierTeam === team) return;
@@ -263,12 +299,23 @@ export class CtfFlags {
     if (ownBase.state !== 'home' || cp.distanceTo(ownBase.home) >= FLAG_HOME_R) return;
     bank(ctx.scores, carrierTeam);
     ctx.onCapture(carrierTeam);
+    ctx.onPersonalPoints?.(f.carrier!, CTF_PTS.cap);
     ctx.onFlagEvent?.('captured', team, f.home);
     ctx.onFeed(`${f.carrier === 'local' ? 'YOU' : f.carrier!.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
     if (f.carrier === 'local') sfx.pickup();
     const bot = ctx.bots.find(b => b.playerId === f.carrier);
     if (bot) bot.carryingFlag = false;
     f.carrier = null; f.state = 'home'; f.pos.copy(f.home);
+  }
+
+  /** Flag-zone test for the personal-score kill bonus — `pos` inside
+   *  radius of EITHER stand (same rule the server applies). */
+  nearStand(pos: { x: number; y: number; z: number }, r: number): boolean {
+    for (const f of this.flags.values()) {
+      const dx = pos.x - f.home.x, dy = pos.y - f.home.y, dz = pos.z - f.home.z;
+      if (dx * dx + dy * dy + dz * dz <= r * r) return true;
+    }
+    return false;
   }
 
   private tickTouch(team: TeamId, f: Flag): void {
@@ -288,6 +335,7 @@ export class CtfFlags {
       if (dx * dx + dy * dy + dz * dz > this.ctx.pickupRadiusOf(id) ** 2) continue;
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
+        ctx.onPersonalPoints?.(id, CTF_PTS.flagReturn);
         ctx.onFlagEvent?.('returned', team, f.pos);
         return;
       }

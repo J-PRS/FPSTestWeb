@@ -226,10 +226,12 @@ entries evicted on roster.
 
 - **8v8 carrier deadlock**: mutual carriers wait indefinitely, zero caps in
   10-min matchSim. Needs a defense mission-lock or pressure/escort policy.
-- **`FLAG_STAND_LIFT` parity**: `ctfFlags.ts` (offline/P2P) builds
-  `enemyStand` without the lift server bots get. Mirror or drop the constant.
-- **Human sheep scoring**: `bot player_*` maxed sheep on a real player —
-  humans shouldn't accumulate sheep scores; check roster `isBot` gating.
+- ~~**`FLAG_STAND_LIFT` parity**~~ — *closed*: `ctfFlags.ts` enemyStand
+  now lifts the goal point by the same constant `serverSenses` uses.
+- ~~**Human sheep scoring**~~ — *closed*: metering humans is intentional
+  (scoreboard parity per `meterHumans`), the bug was the `maxed sheep`
+  WARN firing on `player_*` ids — parked humans aren't agent faults.
+  Warn now bot-id gated on both ends; score accumulation unchanged.
 - **Join/hash race**: `tick=31` desync — gameState join raced a mutated room.
   Skip hash checks for players younger than ~1s or add an init barrier.
 - **`roomGrace` zero-key residue**: trivially small; one-line prune.
