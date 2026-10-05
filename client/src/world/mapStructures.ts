@@ -69,7 +69,17 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
 export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void {
   if (built) {
     scene.remove(built);
-    built.traverse((o) => { if (o instanceof THREE.Mesh) {o.geometry.dispose();} });
+    // Every material in `built` comes from this file's per-build `mats`
+    // (shared kit mats live in structures.ts, not here) — disposing the
+    // handful per rebuild is safe; double-dispose is a no-op.
+    built.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        const m = o.material;
+        if (Array.isArray(m)) {m.forEach((x) => x.dispose());}
+        else {m.dispose();}
+      }
+    });
     built = null;
   }
   if (list.length === 0) {return;}
@@ -129,6 +139,10 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   }
   built.updateMatrixWorld(true);
   scene.add(built);
+  // Template geometries only exist to stamp clones — the merged result
+  // was already added; the templates themselves aren't in the scene.
+  unit.dispose();
+  cyl.dispose();
   buildColliderGizmos(list, scene);
 }
 
@@ -140,6 +154,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   if (colliderGizmos) {
     scene.remove(colliderGizmos);
     colliderGizmos.geometry.dispose();
+    (colliderGizmos.material as THREE.Material).dispose();
     colliderGizmos = null;
   }
   const colliders = structureColliders(list);
