@@ -49,7 +49,15 @@ export class RtcRelay {
     const members = this.rooms.get(ws.data.room ?? '');
     if (!members) return;
     for (const m of members) {
-      if (m !== ws && m.readyState === 1) m.send(message);
+      if (m === ws || m.readyState !== 1) continue;
+      // A peer that stopped reading still queues every relayed message —
+      // its buffer grows unboundedly, so drop it rather than drown.
+      if (m.getBufferedAmount() > 4 * 1024 * 1024) {
+        logger.warn('RTC peer drowned — closing', { room: ws.data.room });
+        m.close(1011, 'peer not reading');
+        continue;
+      }
+      m.send(message);
     }
   }
 
