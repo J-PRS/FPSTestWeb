@@ -1,3 +1,4 @@
+2026-10-05 - shared/ ambient-draw tripwire: structural test fails on any Math.random/Date.now/performance.now call in shared/ outside the botRand strictRng gate — the "no ambient draws in sim paths" invariant is now enforced, not just audited
 2026-10-05 - audit: client unbounded-growth lane swept clean — all 44 Map/Set files verified domain-bounded or evicting
 2026-10-05 - ball clock + roster tests: pinned makeBallClock (Infinity pre-stamp, rate-1 extrapolation, sim-wall EMA, no rewind, ballEventAge clamps + ping fallback) and pruneNetBalls ghost eviction — 8 new vitests; ball lane complete end-to-end
 2026-10-05 - ball predictAt tests: pinned probe bounds (false without sim, 0.05 grid + ballistic remainder, simNow clamp, simT+8 chase cap, live-sim isolation) — 5 new vitests; ball netcode lane now fully covered
