@@ -356,6 +356,28 @@ export class ServerBotSenses {
         const w = this.waitSpotFor(p.id, own.home, duty);
         return { pos: w, infiltrating: false, running: true, runner: true };
       }
+      // The home run is the map's most predictable line — every chase
+      // and defender reads it, which is why ~70% of raindance grabs
+      // die en route (avg hold 16s). Scent the approach: aim at a ring
+      // point off home whose corridor from the carrier's position is
+      // quietest on the danger layer, so the run bends around the
+      // intercept blob instead of plowing through it. Inside ~200m
+      // the stand is close — dive straight, a bend that late only
+      // buys the chasers more runway.
+      if (this.room.influence && dist3(p.position, own.home) > 200) {
+        const layer = this.room.influence.dangerLayer(me);
+        let best: BotVec = own.home, bestScore = Infinity;
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          const cand = { x: own.home.x + Math.cos(a) * 140, y: own.home.y, z: own.home.z + Math.sin(a) * 140 };
+          const mid = { x: (cand.x + p.position.x) / 2, y: 0, z: (cand.z + p.position.z) / 2 };
+          const score = this.room.influence.value(mid, layer)
+            + 0.5 * this.room.influence.value(cand, layer)
+            + Math.hypot(cand.x - p.position.x, cand.z - p.position.z) * 0.001;
+          if (score < bestScore) { bestScore = score; best = cand; }
+        }
+        return { pos: best, infiltrating: false, running: true, runner: true };
+      }
       return { pos: own.home, infiltrating: false, running: true, runner: true };
     }
 
