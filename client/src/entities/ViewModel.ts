@@ -485,8 +485,8 @@ export class ViewModel {
     const p = this.bowParts;
     if (!p) return;
     const flex = this.kickAmount;
-    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.15) * (1 - flex * 0.25);
-    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.15) * (1 - flex * 0.25);
+    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * (1 - flex * 0.25);
+    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * (1 - flex * 0.25);
     // String snap is its own fast envelope, decoupled from the gun-kick
     // spring: a real release is near-instant, so the string jumps toward
     // the cams in ~60ms then relaxes back on a slow spring — not the

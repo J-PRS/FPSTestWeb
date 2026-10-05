@@ -54,10 +54,10 @@ hub.rotation.z = Math.PI / 2;
 hub.position.set(0, 0, -0.14);
 bow.add(hub);
 // Bow arms — one group per side, pivoted at the hub so firing can flex
-// them. A crossbow reads T, not Y: limbs canted ~66° from the rail
-// (mostly lateral, slightly forward of the mount). Cam wheel at the
-// tip carries the string.
-const ARM_SWEEP = 1.15, ARM_LEN = 0.45;
+// them. A crossbow reads T, not Y: ~100° cant puts the limb tips level
+// with the breech (slightly back-swept like the T:A prod). Cam wheel
+// at the tip carries the string.
+const ARM_SWEEP = 1.75, ARM_LEN = 0.45;
 for (const side of [-1, 1]) {
   const arm = new THREE.Group();
   arm.name = side < 0 ? 'armL' : 'armR';
