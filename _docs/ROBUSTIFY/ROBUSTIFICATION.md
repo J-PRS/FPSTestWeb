@@ -203,6 +203,11 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **Wire-boundary coercion**: every client message passes
+  validateMessage (per-type finite-number/vec3 validators) →
+  reject+metric+throttled-warn before dispatch; NaN/malformed input
+  can't reach position/damage consumers. `?? -1` sentinels downstream
+  read already-validated fields.
 - **Clock drift**: server TickLoop feeds MEASURED elapsed dt (the 18%
   setInterval drift fix); client estSimNow = last wire stamp +
   EMA-corrected wall clock, lead age banked not stepped so replay stays
