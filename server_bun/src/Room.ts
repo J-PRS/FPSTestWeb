@@ -447,6 +447,10 @@ export class Room {
         this.flags = new RoomFlags(this, this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
       }
     }
+    // What the wire currently carries — the join echo and every structure
+    // push both emit effStructures, so boot-time stands are the baseline
+    // any later re-push compares against.
+    this.emittedStands = this.standsJson();
   }
 
   /** Rabbit's one stand: the midpoint of a two-base map (a team's own
@@ -524,15 +528,10 @@ export class Room {
    *  with the map). */
   refreshFlagHomes(broadcastUpdate = true): void {
     if (!this.flags) return;
-    // Clients hold the LAST emitted structure list — a home re-snap moves
-    // the injected stand hulls server-side, and without a re-push early
-    // joiners keep boot-snap colliders floating where the mesh no longer
-    // sits. The join echo stays fresh either way (effStructures is live).
-    const standsBefore = JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand'));
     if (this.mode === 'rabbit') {
       this.flags.retargetHomes({ alpha: this.rabbitFlagHome() });
       this.attachAllStructures();
-      if (broadcastUpdate) this.pushStructureUpdate(standsBefore);
+      if (broadcastUpdate) this.pushStructureUpdate();
       return;
     }
     const bases = this.spec.bases;
@@ -547,20 +546,29 @@ export class Room {
     // Stands may have moved with the re-snap — their collision hulls
     // are spec entries, so the sims must re-attach the merged list.
     this.attachAllStructures();
-    if (broadcastUpdate) this.pushStructureUpdate(standsBefore);
+    if (broadcastUpdate) this.pushStructureUpdate();
+  }
+
+  /** The stand hulls as emitted — the baseline "every client holds"
+   *  approximation: gameState echoes and pushes both serialize
+   *  effStructures, so the last push's snapshot is what a stayer has. */
+  private emittedStands: string | null = null;
+  private standsJson(): string {
+    return JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand'));
   }
 
   /** Re-push the merged structure list when the stand hulls moved — a
    *  skinny mapUpdate (no terrain/name keys) so clients rebuild colliders
    *  without a full map reload. */
-  private pushStructureUpdate(standsBefore: string): void {
-    const structures = this.effStructures();
-    if (JSON.stringify(structures.filter((s) => s.kind === 'stand')) === standsBefore) return;
+  private pushStructureUpdate(): void {
+    const stands = this.standsJson();
+    if (stands === this.emittedStands) return;
+    this.emittedStands = stands;
     const spec = this.spec;
     this.broadcast({
       type: 'mapUpdate',
       silent: true,
-      structures,
+      structures: this.effStructures(),
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       fog: spec.fog,
@@ -930,6 +938,7 @@ export class Room {
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
     this.messages.setMap({ ...spec, structures: this.effStructures() });
+    this.emittedStands = this.standsJson(); // the push below is what clients hold now
     this.broadcast({
       type: 'mapUpdate',
       mapName: spec.name ?? (this.mapSrc || undefined),
