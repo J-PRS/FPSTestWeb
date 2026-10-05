@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
+import { decodeTickFrame } from '../../../shared/wire.ts';
 import { mkRoom } from './harness.ts';
 
 // A connected human sitting in menu/lobby never sends position reports —
@@ -65,8 +66,17 @@ describe('ghost records', () => {
     p.hasReceivedPosition = true;
     p.lastSeen = Date.now();
     let mentions = 0;
+    // v3 frames carry u16 wire-ids — the playerId string lives in the
+    // 'wireIds' roster event, so decode through the real path.
+    const roster = new Map<number, string>();
+    room.connections.broadcast = (msg) => {
+      const m = msg as { type?: string; add?: Record<number, string> };
+      if (m.type === 'wireIds' && m.add) for (const [id, pid] of Object.entries(m.add)) roster.set(Number(id), pid);
+    };
+    const pool = { slots: [] as never[], resolveId: (id: number) => roster.get(id) };
     room.connections.sendBinaryToPlayer = (_id, data) => {
-      if (new TextDecoder().decode(data).includes('late')) mentions++;
+      const tick = decodeTickFrame(data, pool);
+      if (tick?.updates.some((u) => u.playerId === 'late')) mentions++;
       return 'sent' as const;
     };
     // A second live human receives the frame containing 'late'.

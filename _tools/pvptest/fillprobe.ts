@@ -1,6 +1,7 @@
 // botFill probe: join 2 humans into crossfire (botFill=10); expect total
 // bodies to stay at 10 — bots retire as humans join, respawn after leave.
-import { decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
+import { decodeTickFrame, isWireFrame, WIRE_TICK, WIRE_TICK_V3, WireIdRoster } from '../../shared/wire.ts';
+const wireRoster = new WireIdRoster();
 
 const S = 'ws://127.0.0.1:9105/ws';
 const players = new Map<string, number>(); // id -> last seen tick
@@ -11,14 +12,15 @@ function join(name: string) {
   ws.onmessage = (ev) => {
     if (typeof ev.data === 'string') {
       const m = JSON.parse(ev.data);
+      wireRoster.feed(m);
       if (m.type === 'playerJoined') players.set(m.playerId, Date.now());
       if (m.type === 'playerLeft') players.delete(m.playerId);
       if (m.type === 'gameState') for (const p of m.players) players.set(p.id, Date.now());
     } else {
       const u8 = new Uint8Array(ev.data as ArrayBuffer);
-      if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
-        const f = decodeTickFrame(u8);
-        if (f) for (const u of f.updates) players.set(u.playerId, Date.now());
+      if (isWireFrame(u8) && (u8[1] === WIRE_TICK || u8[1] === WIRE_TICK_V3)) {
+        const f = decodeTickFrame(u8, wireRoster.pool);
+        if (f) for (const u of f.updates) { if (u.playerId) players.set(u.playerId, Date.now()); }
       }
     }
   };

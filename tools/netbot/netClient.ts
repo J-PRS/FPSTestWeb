@@ -192,7 +192,7 @@ export class NetClient {
    *  names a maps/<file>.bin the server also serves over HTTP. A spec-less
    *  room falls back to the server's default field file read off disk,
    *  the same one GameServer itself boots with. */
-  private async loadField(terrain?: string): Promise<void> {
+  private async loadField(terrain?: string, heightScale = 1): Promise<void> {
     try {
       let buf: Uint8Array | null = null;
       if (terrain) {
@@ -206,7 +206,7 @@ export class NetClient {
         if (ab) buf = new Uint8Array(ab);
       }
       if (!buf || buf.byteLength < 9) return;
-      const field = hmParseBin(buf);
+      const field = hmParseBin(buf, heightScale);
       this.field = field;
       // Same FieldSurface the server shadow integrates on — terrain-only
       // sims diverge exactly where a wall one side can't see stands.
@@ -236,9 +236,13 @@ export class NetClient {
     this.ws?.close();
   }
 
+  /** v3 roster: u16 -> playerId — gameState snapshot + 'wireIds' deltas. */
+  private readonly wireIds = new Map<number, string>();
+  private readonly tickPool = { slots: [] as never[], resolveId: (id: number) => this.wireIds.get(id) };
+
   private onBinary(u8: Uint8Array): void {
     if (!isWireFrame(u8)) return;
-    const tick = decodeTickFrame(u8);
+    const tick = decodeTickFrame(u8, this.tickPool as never);
     if (!tick) return;
     if (tick.tickSeq <= this.lastTickSeq) return; // stale frame, same rule as the client
     this.lastTickSeq = tick.tickSeq;
@@ -247,7 +251,7 @@ export class NetClient {
 
   private applyTick(updates: TickUpdatePlayer[]): void {
     for (const u of updates) {
-      if (u.playerId === this.id) continue;
+      if (!u.playerId || u.playerId === this.id) continue;
       const e = this.roster.get(u.playerId) ?? { pos: { ...u.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false };
       e.pos = { ...u.position };
       e.vel = { ...u.velocity };
@@ -262,6 +266,8 @@ export class NetClient {
       case 'gameState': {
         this.tel.gameStates++;
         this.joined = true;
+        this.wireIds.clear();
+        if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds)) this.wireIds.set(Number(id), pid);
         this.pendingRoom = false;
         // Per-room seq spaces restart at 1 — the bug class this whole
         // harness exists to catch lived in forgetting this.
@@ -283,7 +289,7 @@ export class NetClient {
         for (const f of m.flags ?? []) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
         this.balls.clear();
         this.crawlers.clear();
-        if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain);
+        if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain, m.map?.heightScale);
         if (m.map?.structures) this.attachStructures(m.map.structures);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
@@ -292,7 +298,7 @@ export class NetClient {
       }
       case 'mapUpdate': {
         if (m.structures) this.attachStructures(m.structures);
-        if (m.terrain) this.fieldPromise = this.loadField(m.terrain);
+        if (m.terrain || m.heightScale) this.fieldPromise = this.loadField(m.terrain, m.heightScale);
         break;
       }
       case 'ballRoster':
@@ -326,6 +332,9 @@ export class NetClient {
         break;
       }
       case 'tickUpdate': this.applyTick(m.updates); break;
+      case 'wireIds':
+        for (const [id, pid] of Object.entries(m.add)) this.wireIds.set(Number(id), pid);
+        break;
       case 'playerHit': {
         if (m.seq !== undefined) {
           if (m.seq <= this.lastHitSeq) { this.tel.dedupDrops++; break; }

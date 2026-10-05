@@ -72,6 +72,9 @@ class WireBot {
   tier: 'ws' | 'rtc' = 'ws';
   sim: MoveSim | null = null;
   roster = new Map<string, Roster>();
+  /** v3 roster: u16 -> playerId — gameState snapshot + 'wireIds' deltas. */
+  private readonly wireIds = new Map<number, string>();
+  private readonly tickPool = { slots: [] as never[], resolveId: (id: number) => this.wireIds.get(id) };
   seq = 0; inputSeq = 0; pingMs = 10;
   waypoint = { x: rand(-120, 120), z: rand(-120, 120) };
   jetUntil = 0; input = { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 };
@@ -218,7 +221,7 @@ class WireBot {
   onMessage(data: string | ArrayBuffer): void {
     stats.recv++;
     if (data instanceof ArrayBuffer) {
-      const f = decodeTickFrame(new Uint8Array(data));
+      const f = decodeTickFrame(new Uint8Array(data), this.tickPool as never);
       if (f) {
         // Tick-seq gaps = dropped frames → remote players stutter/warp.
         if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) {
@@ -243,7 +246,7 @@ class WireBot {
         if (this.balls.size > 300) this.balls.clear();
       }
       if (f) for (const u of f.updates) {
-        if (u.playerId === this.id) continue;
+        if (!u.playerId || u.playerId === this.id) continue;
         // Merge — overwriting drops team/dead fields that only the
         // announce path carries, and would silently re-enable friendly
         // fire + corpse-shooting every tick.
@@ -255,12 +258,17 @@ class WireBot {
     }
     const m = JSON.parse(data);
     switch (m.type) {
+      case 'wireIds':
+        for (const [id, pid] of Object.entries(m.add as Record<string, string>)) this.wireIds.set(Number(id), pid);
+        break;
       case 'gameState': {
         // A re-seat (switchRoom hop) replaces the whole room: old-room
         // roster ids read as 'unknown target' on claims, entity anchors
         // read as 300m warps, and projectile ids minted over there read
         // as 'blast with no known projectile' here. Reset all of it.
         this.roster.clear();
+        this.wireIds.clear();
+        if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds as Record<string, string>)) this.wireIds.set(Number(id), pid);
         this.lastSeg.clear();
         this.balls.clear();
         this.crawls.clear();

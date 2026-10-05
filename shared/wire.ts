@@ -19,6 +19,11 @@ const MAGIC = 0x54; // 'T'
 export const WIRE_POSITION = 0x01;
 export const WIRE_TICK = 0x04; // v2: positions are i16-quantized (POS_Q)
 export const WIRE_TICK_V1 = 0x02; // legacy f32 positions — decode-only,
+// v3: record identity is a room-scoped u16 instead of an id string
+// (~9B saved per record at typical bot-name lengths). The id->playerId
+// roster arrives on the reliable JSON lane ('wireIds') before any frame
+// can reference it — same-socket ordering makes the dance free.
+export const WIRE_TICK_V3 = 0x06;
                                 // keeps recorded .rec captures playing
 export const WIRE_BALLSEG = 0x03;
 
@@ -43,6 +48,8 @@ export interface WirePosition {
 
 export interface WireTickPlayer {
   playerId: string;
+  /** v3 numeric id — set on decode, 0 on v1/v2 frames. */
+  wireId?: number;
   position: WireVec3;
   rotation: WireRot;
   velocity: WireVec3;
@@ -174,20 +181,37 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   return new Uint8Array(buf, 0, o);
 }
 
+/** v3 record: u16 wireId replaces the idLen+string prefix (23B total). */
+export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer): Uint8Array {
+  const buf = new ArrayBuffer(2 + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  let o = 0;
+  d.setUint16(o, wireId, true); o += 2;
+  o = packPos(d, o, p.position.x, p.position.y, p.position.z);
+  o = packVel(d, o, p.velocity);
+  o = packRot(d, o, p.rotation);
+  d.setUint16(o, Math.max(0, Math.min(65535, Math.round(p.health))), true); o += 2;
+  u8[o++] = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
+  u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
+  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0)));
+  return new Uint8Array(buf, 0, o);
+}
+
 /** Header + concatenated player records. ackSeq is per-recipient (echo of
  *  the client's last-received pos seq); tickSeq is the SERVER's frame seq —
  *  under an unordered transport receivers drop tickSeq <= lastTickSeq.
  *  inputAck is the tick-set confirm (Quantum-style): the highest inputMove
  *  seq the server has consumed for this recipient — the client prunes its
  *  input journal against it and detects a starving command stream. */
-export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[]): Uint8Array {
+export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[], type: number = WIRE_TICK): Uint8Array {
   let total = 15;
   for (const r of records) total += r.length;
   const buf = new ArrayBuffer(total);
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   u8[0] = MAGIC;
-  u8[1] = WIRE_TICK;
+  u8[1] = type;
   d.setUint32(2, ackSeq >>> 0, true);
   d.setUint32(6, tickSeq >>> 0, true);
   d.setUint32(10, inputAck >>> 0, true);
@@ -205,27 +229,42 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
  *  player per frame. The returned `updates` view aliases the pool and
  *  is only valid until the next decode: consumers must copy any field
  *  they retain. */
-export interface TickDecodePool { slots: WireTickPlayer[] }
+export interface TickDecodePool {
+  slots: WireTickPlayer[];
+  /** v3 frames resolve numeric ids through the room roster the 'wireIds'
+   *  JSON events maintain; unresolved ids decode with playerId ''. */
+  resolveId?: (wireId: number) => string | undefined;
+}
 
 export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
   if (u8.length < 15 || u8[0] !== MAGIC ||
-      (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1)) return null;
+      (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1 && u8[1] !== WIRE_TICK_V3)) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const ackSeq = d.getUint32(2, true);
   const tickSeq = d.getUint32(6, true);
   const inputAck = d.getUint32(10, true);
   const count = u8[14]!;
   const v1 = u8[1] === WIRE_TICK_V1;
-  // Minimum guaranteed bytes after the id string — v1's old check
-  // under-counted sheep, so it stays at its historic 26.
+  const v3 = u8[1] === WIRE_TICK_V3;
+  // Minimum guaranteed bytes after the id — v1's old check under-counted
+  // sheep, so it stays at its historic 26; v3 has no id string, the whole
+  // record is a fixed 23 bytes.
   const tail = v1 ? 26 : 20;
   const slots = pool ? pool.slots : [];
   let o = 15;
   for (let i = 0; i < count; i++) {
     if (o >= u8.length) return null;
-    const idLen = u8[o++]!;
-    if (o + idLen + tail > u8.length) return null;
-    const playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
+    let playerId: string;
+    let wireId = 0;
+    if (v3) {
+      if (o + 23 > u8.length) return null;
+      wireId = d.getUint16(o, true); o += 2;
+      playerId = pool?.resolveId?.(wireId) ?? '';
+    } else {
+      const idLen = u8[o++]!;
+      if (o + idLen + tail > u8.length) return null;
+      playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
+    }
     let px: number, py: number, pz: number;
     if (v1) {
       px = d.getFloat32(o, true); o += 4;
@@ -242,6 +281,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       slots[i] = u;
     }
     u.playerId = playerId;
+    u.wireId = wireId;
     u.position.x = px; u.position.y = py; u.position.z = pz;
     o = unpackVel(d, o, u.velocity);
     o = unpackRot(d, o, u.rotation);
@@ -257,6 +297,22 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   }
   const updates = pool ? slots.slice(0, count) : slots;
   return { ackSeq, tickSeq, inputAck, updates };
+}
+
+/** Receiver-side v3 roster: feed every JSON message through feed() and
+ *  pass `pool` to decodeTickFrame — handles the gameState snapshot and
+ *  'wireIds' deltas in one place (probes, netbot, replay tools). */
+export class WireIdRoster {
+  readonly ids = new Map<number, string>();
+  readonly pool: TickDecodePool = { slots: [], resolveId: (id) => this.ids.get(id) };
+  feed(m: { type?: string; add?: Record<number, string>; wireIds?: Record<number, string> }): void {
+    if (m.type === 'wireIds' && m.add) {
+      for (const [id, pid] of Object.entries(m.add)) this.ids.set(Number(id), pid);
+    } else if (m.type === 'gameState') {
+      this.ids.clear();
+      if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds)) this.ids.set(Number(id), pid);
+    }
+  }
 }
 
 /** tickSeq → server time: frames run at CONFIG.tickRate (20Hz = 50ms).

@@ -15,7 +15,7 @@ import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
 import type { StructureSpec } from './mapSpec.ts';
-export const PROTOCOL_VERSION = 12; // claimSeq + claimAck — uniform claim verdicts, no more fire-and-forget drops
+export const PROTOCOL_VERSION = 13; // v3 tick frames: u16 wire-ids + wireIds roster events
 
 export interface Vec3 {
   x: number;
@@ -143,9 +143,12 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string> }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
+  /** u16 wire-id roster for v3 tick frames — arrives on this reliable
+   *  lane before any binary frame can reference the ids it adds. */
+  | { type: 'wireIds'; add: Record<number, string> }
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
   | { type: 'teamUpdate'; playerId: string; team: TeamId }

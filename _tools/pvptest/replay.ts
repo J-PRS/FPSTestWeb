@@ -2,7 +2,8 @@
 // Regression check: every binary frame must decode; reports throughput.
 // Usage: bun replay.ts <capture.rec>
 import { readFileSync } from 'node:fs';
-import { isWireFrame, decodeTickFrame, WIRE_TICK } from '../../shared/wire.ts';
+import { isWireFrame, decodeTickFrame, WIRE_TICK, WireIdRoster } from '../../shared/wire.ts';
+const wireRoster = new WireIdRoster();
 
 const file = process.argv[2];
 if (!file) { console.error('usage: bun replay.ts <capture.rec>'); process.exit(1); }
@@ -16,13 +17,13 @@ for (const line of readFileSync(file, 'utf8').split('\n')) {
   const tab2 = line.indexOf('\t', tab1 + 1);
   const kind = line.slice(tab1 + 1, tab2);
   const payload = line.slice(tab2 + 1);
-  if (kind === 'json') { jsons++; continue; }
+  if (kind === 'json') { jsons++; try { wireRoster.feed(JSON.parse(payload)); } catch { /* unrelated json */ } continue; }
   const u8 = new Uint8Array(Buffer.from(payload, 'hex'));
   bytes += u8.byteLength;
   if (!isWireFrame(u8) || u8[1] !== WIRE_TICK) continue;
   frames++;
   const s = performance.now();
-  const f = decodeTickFrame(u8);
+  const f = decodeTickFrame(u8, wireRoster.pool);
   const us = (performance.now() - s) * 1000;
   decodeUs += us;
   if (us > maxFrameUs) maxFrameUs = us;

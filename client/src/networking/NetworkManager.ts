@@ -134,7 +134,10 @@ export class NetworkManager {
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
   /** Decode slots reused every tick — upsert deep-fills roster vecs so
    *  rostered values never alias a slot (see decodeTickFrame pool docs). */
-  private tickPool: TickDecodePool = { slots: [] };
+  private tickPool: TickDecodePool = { slots: [], resolveId: (id) => this.wireIds.get(id) };
+  /** v3 tick-frame roster: u16 -> playerId, fed by 'wireIds' events that
+   *  always precede the first frame referencing them (same socket). */
+  private readonly wireIds = new Map<number, string>();
   private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
   private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
 
@@ -446,6 +449,7 @@ export class NetworkManager {
     tickUpdate: (data) => this.handleTickUpdate(data),
     playerJoined: (data) => this.handlePlayerJoined(data),
     playerLeft: (data) => this.handlePlayerLeft(data),
+    wireIds: (data) => { for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid); },
     teamUpdate: (data) => this.upsertRemotePlayer(data.playerId, { team: data.team }),
     playerRespawn: (data) => this.handlePlayerRespawn(data),
     playerHit: (data) => this.handlePlayerHit(data),
@@ -558,6 +562,10 @@ export class NetworkManager {
     // for players who left during our disconnect, then add the current set.
     // (Local player is never stored here; state comes via localPlayerState.)
     this.players.clear();
+    // v3 id space is per-room — a stale mapping would bind records to
+    // the wrong body, so the roster snapshot replaces, not merges.
+    this.wireIds.clear();
+    if (data.wireIds) for (const [id, pid] of Object.entries(data.wireIds)) this.wireIds.set(Number(id), pid);
     if (data.players && Array.isArray(data.players)) {
       for (const player of data.players) {
         if (player.id === this.localPlayerId) continue;
@@ -588,7 +596,12 @@ export class NetworkManager {
     // path itself, which is the rubberband mechanism. The JSON path has
     // no tickSeq and keeps the arrival fallback (host/loopback: jitter≈0).
     const serverMs = data.tickSeq !== undefined ? data.tickSeq * SERVER_TICK_MS : now;
-    for (const u of data.updates) this.applyTickPlayerUpdate(u, serverMs);
+    for (const u of data.updates) {
+      // v3 record ahead of its roster — can't build a body without an
+      // identity, so it drops; the next record for that id resolves.
+      if (!u.playerId) continue;
+      this.applyTickPlayerUpdate(u, serverMs);
+    }
   }
 
   private applyTickPlayerUpdate(u: TickUpdatePlayer, serverMs: number): void {

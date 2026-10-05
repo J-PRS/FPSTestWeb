@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
+import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3 } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
@@ -44,6 +44,8 @@ export class TickFanout {
 
   buildRecords(room: Room, players: Players, now: number): TickRecord[] {
     const records: TickRecord[] = [];
+    const roster: Record<number, string> = {};
+    let rosterDirty = false;
     for (const [playerId, p] of players) {
       if (this.skipRecord(room, playerId, p, now)) continue;
       this.tickServerHeals(room, playerId, p, now);
@@ -75,9 +77,16 @@ export class TickFanout {
       snap.sheep = sheep;
       snap.t = now;
 
+      let wireId = room.wireIds.get(playerId);
+      if (wireId === undefined) {
+        wireId = room.nextWireId++;
+        room.wireIds.set(playerId, wireId);
+        roster[wireId] = playerId;
+        rosterDirty = true;
+      }
       records.push({
         playerId,
-        data: encodeTickPlayer({
+        data: encodeTickPlayerV3(wireId, {
           playerId,
           position: p.position,
           rotation: p.rotation,
@@ -97,6 +106,7 @@ export class TickFanout {
       });
       this.metrics.recordsBuilt++;
     }
+    if (rosterDirty) room.connections.broadcast({ type: 'wireIds', add: roster });
     return records;
   }
 
@@ -212,6 +222,7 @@ export class TickFanout {
         // the client prunes its input journal and sees a starving stream.
         room.moveSim.inputSeqOf(recipientId),
         others,
+        WIRE_TICK_V3,
       );
       this.metrics.recordsSent += others.length;
       this.metrics.bytesSent += frame.byteLength;
@@ -231,7 +242,7 @@ export class TickFanout {
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all);
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V3);
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }

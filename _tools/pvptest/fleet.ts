@@ -21,7 +21,7 @@ const TIER = (process.argv.find(a => a.startsWith('--tier='))?.slice(7) ?? 'ws')
 // what is ordinary internet weather.
 const DROP_PCT = parseFloat(process.argv.find(a => a.startsWith('--drop='))?.slice(7) ?? '0');
 
-import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
+import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK, WIRE_TICK_V3, WireIdRoster } from '../../shared/wire.ts';
 import { openSocket, type BotSocket, type Tier } from './net.ts';
 import { getWeaponStats } from '../../shared/weapons';
 import { MoveSim } from '../../shared/movement.ts';
@@ -97,6 +97,7 @@ interface Bot {
   prevObs: Map<string, { t: number; x: number; y: number; z: number; dead: boolean }>;
   lastTickAt: number;
   lastCorrAt: number;
+  wireRoster: WireIdRoster;
 }
 
 const bots: Bot[] = [];
@@ -122,6 +123,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
     corrections: 0, maxCorrectionGap: 0, journal: [],
     deployAt: Date.now() + 3000 + Math.random() * 4000, deployKind: 0, deploys: 0,
     prevObs: new Map(), lastTickAt: 0, lastCorrAt: 0,
+    wireRoster: new WireIdRoster(),
   };
   bots.push(bot);
   try {
@@ -130,6 +132,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
+        bot.wireRoster.feed(m);
         if (m.type === 'projectileCreated' && m.ownerId === name && bot.pending && !bot.pending.id) {
           bot.pending.id = m.projectileId;
         } else if (m.type === 'shotRejected') {
@@ -243,17 +246,17 @@ async function spawnBot(room: string, name: string): Promise<void> {
         }
       } else {
         const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
-        if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
+        if (isWireFrame(u8) && (u8[1] === WIRE_TICK || u8[1] === WIRE_TICK_V3)) {
           bot.tickFrames++;
           const now = Date.now();
           if (bot.lastTickAt && now - bot.lastTickAt > 150) tickGapEvents++;
           if (bot.lastTickAt) maxTickGapMs = Math.max(maxTickGapMs, now - bot.lastTickAt);
           bot.lastTickAt = now;
-          const f = decodeTickFrame(u8);
+          const f = decodeTickFrame(u8, bot.wireRoster.pool);
           if (f) {
             totalTickFrames++;
             for (const p of f.updates) {
-              if (p.playerId === name) continue;
+              if (!p.playerId || p.playerId === name) continue;
               // Chop vs teleport: a >15m step inside consecutive updates is
               // a respawn/warp (legit, event-driven); 4–15m is the pop a
               // player would actually notice through interpolation.

@@ -69,6 +69,12 @@ export class Room {
   sessions?: import('./sessionRegistry.ts').SessionRegistry;
   /** Watching sockets — no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
+  /** Room-scoped u16 record ids for v3 tick frames — minted lazily on a
+   *  player's first record (tickRecords) and never reused; joiners get
+   *  the snapshot inside gameState, everyone else via 'wireIds' deltas
+   *  broadcast before the frames that need them. */
+  readonly wireIds = new Map<string, number>();
+  nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
@@ -626,6 +632,13 @@ export class Room {
       friendlyFire: CONFIG.friendlyFire,
       winAt: this.modeSpec?.winAt,
       ffaScores: () => Object.fromEntries(this.scoring.ffaScores),
+      // Registry stores playerId->u16; the wire roster ships the
+      // inverse so receivers resolve a frame's u16 to an identity.
+      wireIds: () => {
+        const out: Record<number, string> = {};
+        for (const [pid, id] of this.wireIds) out[id] = pid;
+        return out;
+      },
       simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
       bases: this.spec.bases,
       structures: this.effStructures(),

@@ -2,7 +2,8 @@
 // A watcher counts how many tick records each stale id still emits.
 // Pre-fix (shared lastStaleHeartbeat): only the FIRST stale sender in map
 // order ever heartbeat — one of these counts would sit at ~0.
-import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
+import { decodeTickFrame, isWireFrame, WireIdRoster } from '../../shared/wire.ts';
+const wireRoster = new WireIdRoster();
 
 const SERVER = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
 const RUN = Math.floor(Math.random() * 900 + 100);
@@ -21,12 +22,13 @@ function client(name: string): WebSocket {
     if (typeof ev.data !== 'string') {
       const u8 = new Uint8Array(ev.data as ArrayBuffer);
       if (isWireFrame(u8)) {
-        const t = decodeTickFrame(u8);
+        const t = decodeTickFrame(u8, wireRoster.pool);
         if (t) for (const u of t.updates) { totalUpdates++; if (u.playerId in counts) counts[u.playerId]++; }
       }
       return;
     }
     const m = JSON.parse(ev.data);
+    wireRoster.feed(m);
     if (name.startsWith('WATCH') && m.type === 'gameState') console.log('WATCH joined, others:', m.players?.length ?? 0);
     if (m.type === 'gameState') ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
   };

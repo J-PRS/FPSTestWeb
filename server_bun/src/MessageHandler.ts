@@ -77,6 +77,9 @@ export interface RoomInfo {
   rng?: () => number;
   /** FFA scoreboard supplier for gameState joins — Room.ffaScores. */
   ffaScores?: () => Record<string, number>;
+  /** v3 record-id roster snapshot for gameState joins — Room.wireIds as
+   *  {wireId: playerId}; deltas only reach sockets already live. */
+  wireIds?: () => Record<number, string>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
@@ -413,6 +416,9 @@ export class MessageHandler {
       players: playersData,
       sessionToken,
       protocolVersion: PROTOCOL_VERSION,
+      // v3 record-id roster — everyone minted before this joiner needs
+      // their mapping shipped inline (deltas only reach live sockets).
+      wireIds: this.roomInfo.wireIds?.() ?? {},
       ...this.roomEcho(),
       team: player.team,
       localPlayerState: {

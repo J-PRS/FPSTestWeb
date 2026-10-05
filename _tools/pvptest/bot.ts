@@ -11,7 +11,8 @@
  *   --orbit    strafe-orbit the nearest player instead of standing still
  *   --test     scripted E2E: run assertions, print PASS/FAIL lines, exit
  */
-import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame, WIRE_TICK, WIRE_BALLSEG } from '../../shared/wire.ts';
+import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame, WIRE_TICK, WIRE_BALLSEG, WireIdRoster } from '../../shared/wire.ts';
+const wireRoster = new WireIdRoster();
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
 import { WeaponType } from '../../shared/weapons.ts';
@@ -342,8 +343,9 @@ function connect(): Promise<void> {
           }
           tickStats.lastAt = now;
           tickStats.frames++;
-          const f = decodeTickFrame(u8);
+          const f = decodeTickFrame(u8, wireRoster.pool);
           if (f) for (const u of f.updates) {
+            if (!u.playerId) continue;
             if (u.playerId === NAME) { selfEcho = { pos: u.position, at: now }; continue; }
             const o = others.get(u.playerId) ?? { pos: u.position, vel: u.velocity, health: u.health, dead: u.isDead, lastTick: 0 };
             o.pos = u.position; o.vel = u.velocity; o.health = u.health; o.dead = u.isDead;
@@ -370,6 +372,7 @@ function rxReport(): string {
 }
 function handleJson(m: any) {
   rxCounts.set(m.type, (rxCounts.get(m.type) ?? 0) + 1);
+  wireRoster.feed(m);
   switch (m.type) {
     case 'gameState':
       sessionToken = m.sessionToken ?? sessionToken;

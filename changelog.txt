@@ -1,3 +1,4 @@
+2026-10-01 - net: tick frame v3 - per-record id strings replaced by room-scoped u16 wireIds minted lazily in buildRecords; roster rides the reliable lane (gameState snapshot + 'wireIds' deltas broadcast before the frame). 38B -> 23B/record, 42% less egress at 200 bots (143 -> 82KB/s per socket on wireProbe). PROTOCOL_VERSION 12 -> 13: stale clients would freeze remotes silently. WireIdRoster helper in shared/wire.ts unifies receiver bookkeeping; netbot, pvptest probes, server netBot and the .rec replay all resolve through it
 2026-10-01 - creature hunt .rec capture: creatureGauntlet --record flag taps
 2026-10-01 - the room wire stream via a fake spectator socket (recSink.ts),
 2026-10-01 - and the client gains __playRec(url|File, speed) dev hook that
