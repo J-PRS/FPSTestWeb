@@ -19,7 +19,17 @@ export class MapCatalog {
   private t2Flags = new Set<string>();
 
   mapNameOf(room: string): string | undefined { return this.roomMapName.get(room); }
-  noteSource(room: string, src: string): void { if (src) this.roomMapName.set(room, src); }
+  /** Room → map name, never cleared on room dispose — a switchRoom
+   *  name-spammer grows it forever otherwise. Entries only feed the
+   *  scoreboard's map title, so evicting the oldest is harmless. */
+  noteSource(room: string, src: string): void {
+    if (!src) return;
+    if (this.roomMapName.size >= 256 && !this.roomMapName.has(room)) {
+      const oldest = this.roomMapName.keys().next().value;
+      if (oldest !== undefined) this.roomMapName.delete(oldest);
+    }
+    this.roomMapName.set(room, src);
+  }
 
   /** maps/<name>.json — a missing or malformed file just means "default
    *  match rules", not an error. readFileSync keeps callers synchronous:
