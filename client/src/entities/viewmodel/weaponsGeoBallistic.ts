@@ -142,6 +142,23 @@ bow.add(stringG);
 for (const side of [-1, 1]) {
   const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 5), strutMat);
   leg.name = side < 0 ? 'strLegL' : 'strLegR';
+  // Bake the DRAWN pose into the geometry — tickBow re-solves it per frame
+  // in first person, but third-person mounts and gunlab never tick, so an
+  // unposed leg stays a vertical placeholder cylinder forever.
+  // Cam center in bow space: arm at (±0.07, 0, ARM_Z) rotated baseRot
+  // about Y; the leg meets the cam's breech-side rim (JP's O_ ruling).
+  const theta = -side * ARM_SWEEP;
+  const camX = side * 0.07 - (ARM_LEN + 0.02) * Math.sin(theta);
+  const camZ = ARM_Z - (ARM_LEN + 0.02) * Math.cos(theta);
+  const latch = { x: 0, y: 0.03, z: 0.16 };
+  const dx = latch.x - camX, dy = latch.y - 0, dz = latch.z - camZ;
+  const len = Math.hypot(dx, dy, dz);
+  const rimT = 1 - CAM_R / len;
+  const end = { x: camX + dx * rimT, y: dy * rimT, z: camZ + dz * rimT };
+  leg.position.set((end.x + latch.x) / 2, (end.y + latch.y) / 2, (end.z + latch.z) / 2);
+  leg.scale.y = len * rimT;
+  leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(latch.x - end.x, latch.y - end.y, latch.z - end.z).normalize());
   bow.add(leg);
 }
 // Geometry constants the tick needs to re-solve the string pose without
