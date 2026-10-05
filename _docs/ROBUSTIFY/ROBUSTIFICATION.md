@@ -356,14 +356,16 @@ telemetry lines it greps.
   `aliveSince` correctly stay sibling maps — their key domains span
   `'local'` + client fill bots + self, not RemoteSet members; the
   `onRemove` funnel is the right shape for mixed-domain keys.
-- **Ball netcode — every exported primitive pinned** (2026-10-05):
+- **Ball netcode — end-to-end pinned** (2026-10-05):
   `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
   re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
   simNow gate, 0.5s stall-breaker + bank cap, ballistic remainder,
   parked settle), `ballPredictAt.test.ts` (probe bounds: simNow clamp,
   simT+8 cap, live-sim isolation), `ballRubberband.test.ts` (watch
   gates: unreplayed-stamp suppression `a3a77034`, replayed-divergent
-  warns, parked/stale-leg suppressed).
+  warns, parked/stale-leg suppressed), `ballClock.test.ts`
+  (`makeBallClock` EMA rate/no-rewind/age clamps,
+  `pruneNetBalls` ghost eviction).
 
 ---
 
