@@ -261,7 +261,12 @@ export class BotArsenal implements BeamHost {
     // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const wt = this.pickWeapon(lo, distXZ, dist, p.id);
+    let wt = this.pickWeapon(lo, distXZ, dist, p.id);
+    // Finisher pull: a wounded target (<25% hp) tempts the easy hold-out
+    // instead of another heroic lob — the sidearm is a chip on a thin
+    // target. ~40% of discharges take it; the rest stay on the primary,
+    // because going all easy-hit is the dishonorable version.
+    if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) wt = lo.side;
     if (tr.track === undefined) this.markTrack(tr, wt, aim);
     if (!this.rateOk(p.id, wt)) return;
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);

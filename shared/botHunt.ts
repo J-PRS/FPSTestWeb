@@ -453,7 +453,11 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
  *  0 with an inertia bonus, so a good spot is kept instead of orbiting
  *  for orbit's sake. Returns null to hold position. */
 export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec | null {
-  const mid = (st.orbitFar + st.orbitClose) * 0.5;
+  // Fight where the drawn gun is lethal — a Flak brawler's ring closes
+  // to ~10m, a rail holds its orbit. Weapon-blind hosts keep the
+  // generic midpoint (Flak's ~60% FFA acc was an orbit at 17m where
+  // the cone barely covers a capsule).
+  const mid = ctx.preferredRange?.(dist3(pos, t.pos), t.hpFrac) ?? (st.orbitFar + st.orbitClose) * 0.5;
   const g0 = ctx.groundY(pos.x, pos.z);
   let bx = pos.x, bz = pos.z;
   let bs = scorePos(ctx, pos, pos, t, mid, g0) + 0.4;

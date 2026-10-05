@@ -57,7 +57,8 @@ export class ServerParties {
     this.othersAll.length = 0; this.alliesByTeam.clear(); this.grid.clear();
     for (const q of this.room.players.getAllPlayers().values()) {
       this.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, this.seq), aimY: classCapsule(q.armorClass).centerOff,
-        en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff } });
+        en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff,
+              hpFrac: q.maxHealth > 0 ? q.health / q.maxHealth : undefined } });
       if (!q.isDead) {
         this.roster.push({ id: q.id, pos: q.position, team: q.team });
         this.othersAll.push(q.position);

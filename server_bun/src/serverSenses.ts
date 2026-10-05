@@ -924,6 +924,29 @@ export class ServerBotSenses {
         const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
         return getWeaponStats(w).speed === 0 ? 55 : undefined;
       },
+      // Where the fight positioner should orbit, derived from the
+      // table itself: a burst weapon's expected hit fraction is the
+      // capsule footprint vs the cone it has grown to at range, so the
+      // preferred distance is where the fan still lands the damage the
+      // target still has. A wounded straggler needs a few shards — no
+      // closing to hug range; a full-hp foe wants the whole fan in the
+      // chest. Single-shot guns keep the loadout's slot band.
+      preferredRange: (d, hpFrac) => {
+        const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
+        const w = pickBotWeapon(lo, d, d, bias, skill?.courage);
+        const st = getWeaponStats(w);
+        if ((st.burst ?? 0) > 1 && st.pelletSpread) {
+          const CAPSULE_R = 0.5;
+          const need = Math.max(15, (hpFrac ?? 1) * 150 * 0.9);
+          const maxDmg = (st.burst ?? 1) * st.directDamage;
+          if (need >= maxDmg) return 8;
+          const dStar = (CAPSULE_R / st.pelletSpread) * Math.sqrt(maxDmg / need);
+          return Math.min(45, Math.max(6, dStar));
+        }
+        if (w === lo.near || w === lo.side) return 10;
+        if (w === lo.far) return 30;
+        return undefined;
+      },
       // Trigger rhythm follows the gun the bot would draw at that range —
       // same legal cadence the client trigger enforces, so a drawn
       // chaingun streams and a drawn mortar deliberates.

@@ -54,6 +54,9 @@ export interface BotEnemy {
    *  midpoint. Negative for players (the chest sits below the eyes),
    *  ~0 for creatures. Omitted → the brain aims a medium's center. */
   aimY?: number;
+  /** Health as a 0..1 fraction — the finisher read: a wounded runner
+   *  is worth an easy chip weapon instead of another heroic lob. */
+  hpFrac?: number;
 }
 
 export interface BrainCtx {
@@ -171,6 +174,11 @@ export interface BrainCtx {
    *  length; hosing air past reach is a whiff the stats count). Omit
    *  → no limit (projectiles reach past any sane engagement). */
   weaponRange?(dist: number): number | undefined;
+  /** Host hook: preferred duel distance for the weapon the bot would
+   *  draw at `dist`, against a target at `targetHpFrac` health — a Flak
+   *  brawler hugs a full-hp foe but won't chase a straggler it can chip
+   *  from mid. Omit → the generic orbit midpoint. */
+  preferredRange?(dist: number, targetHpFrac?: number): number | undefined;
   /** Host hook: legal refire (s between shots) of the weapon the bot
    *  would pick at `dist` — the volley cadence scales with it so a
    *  chaingun streams while a mortar deliberates. Omit → 0.45s. */
