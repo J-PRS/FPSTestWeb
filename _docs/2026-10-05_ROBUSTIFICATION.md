@@ -391,6 +391,15 @@ entries evicted on roster.
   draws are client-only cosmetics (chatter delay, offline spawn scatter);
   the ambient-draws invariant covers shared sim paths, and these never
   reach one.
+- **Creature-constant unification (needs JP ruling)** — client
+  `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
+  absolutes across 10 species) feed the solo/host sim while the server
+  runs `shared/species.ts` + `creatureCore` family tunables. Shapes
+  differ (multipliers vs absolutes) and values ALREADY disagree
+  (scarab health 40 shared vs 20 client) — intentional solo-balance
+  divergence or drift? If intentional, this is verified-divergent-by-design
+  and should be commented as such; if drift, deriving client constants
+  from SPECIES×family is a mid-size refactor that kills the class.
 
 ### 4.5 Video export resolution — *closed*
 
