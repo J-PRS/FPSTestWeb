@@ -346,6 +346,16 @@ export class GameServer {
     }
 
     this.ops.msgsIn++;
+    // Backstop bound: legit traffic is ~20 reports + a few actions per
+    // player per tick (~500 for a full room) — a flooding client would
+    // otherwise grow this array unboundedly between drains and stall the
+    // cmd phase for everyone. Excess counts as rejected (the metric is
+    // the observability surface — a per-drop log would spam, since a
+    // flooded queue parks at the cap until the next drain).
+    if (room.commands.length >= 2000) {
+      this.ops.msgsRejected++;
+      return;
+    }
     // Command buffer: effects land at phase 0 of the next room tick, in
     // arrival order — sims never see a mid-frame mutation order. The
     // arrival stamp feeds the rate limiter: a stalled tick draining a

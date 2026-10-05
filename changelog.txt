@@ -1,3 +1,4 @@
+2026-10-01 - Command queue backstop: inbound message queue capped at 2000 per room — a flooding client now burns into msgsRejected instead of growing memory and stalling the tick's cmd phase for everyone
 2026-10-01 - Quarantined rooms surface on /metrics — a room stopped for repeated tick failures is now listed under quarantined[] on the status page, not only in error logs
 2026-10-01 - Message handler containment: a throw inside handleGameMessage/handshake/switchRoom now logs the playerId + message type and drops only that socket (1011), instead of propagating out of the WS handler — a malformed claim can no longer kill or corrupt the process for everyone
 2026-10-01 - Process last-resort handlers: uncaughtException/unhandledRejection now log loudly and keep the server alive — a stray setTimeout callback or rejected promise (taunts, grace sweeps, reclaim timers) used to drop every player in every room
