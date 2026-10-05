@@ -34,6 +34,10 @@ export class TickFanout {
    *  path — encodeTickFrame consumes it before the next recipient
    *  iterates. */
   private readonly scratchOthers: Uint8Array[] = [];
+  // Record pool: build→fanout is synchronous within one tick, so the
+  // array and its wrappers recycle — a fresh array + N wrapper objects
+  // per room per tick was the last steady-state alloc in the fanout path.
+  private readonly scratchRecords: TickRecord[] = [];
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
@@ -43,7 +47,8 @@ export class TickFanout {
   ) {}
 
   buildRecords(room: Room, players: Players, now: number): TickRecord[] {
-    const records: TickRecord[] = [];
+    const records = this.scratchRecords;
+    let recN = 0;
     const roster: Record<number, string> = {};
     let rosterDirty = false;
     for (const [playerId, p] of players) {
@@ -84,9 +89,15 @@ export class TickFanout {
         roster[wireId] = playerId;
         rosterDirty = true;
       }
-      records.push({
-        playerId,
-        data: encodeTickPlayerV3(wireId, {
+      let rec = records[recN];
+      if (!rec) {
+        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false };
+        records.push(rec);
+      }
+      rec.playerId = playerId;
+      rec.pos = p.position;
+      rec.force = forceSend;
+      rec.data = encodeTickPlayerV3(wireId, {
           playerId,
           position: p.position,
           rotation: p.rotation,
@@ -100,12 +111,11 @@ export class TickFanout {
           ski: p.skiing,
           status: snap.status,
           sheep,
-        }),
-        pos: p.position,
-        force: forceSend,
-      });
+        });
+      recN++;
       this.metrics.recordsBuilt++;
     }
+    records.length = recN;
     if (rosterDirty) room.connections.broadcast({ type: 'wireIds', add: roster });
     return records;
   }
