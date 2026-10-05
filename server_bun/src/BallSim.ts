@@ -225,6 +225,10 @@ export class BallSim {
   private kill(b: SimBall, by?: string): void {
     b.dead = true;
     this.balls.delete(b.id);
+    // Same key domain — the per-ball accumulators seeded at spawn
+    // would otherwise keep one dead entry per killed ball forever.
+    this.retargetAcc.delete(b.id);
+    this.resyncAcc.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
     this.broadcast({ type: 'ballDie', id: b.id, position: pos, by: by ?? null });
     if (by) this.onKilled?.(by, pos, b.variant);
