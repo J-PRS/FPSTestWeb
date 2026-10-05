@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   encodePosition, decodePosition,
-  encodeTickPlayer, encodeTickFrame, decodeTickFrame,
-  isWireFrame, WIRE_POSITION,
+  encodeTickPlayer, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame,
+  isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WireIdRoster,
 } from '../../../shared/wire';
 
 describe('position frame round-trip', () => {
@@ -146,5 +146,164 @@ describe('ballSegment binary codec', () => {
 
   it('rejects garbage', () => {
     expect(decodeBallSegment(new Uint8Array(10))).toBeNull();
+  });
+
+  it('decodes each flag bit independently', () => {
+    const base = { id: 1, kind: 'segment', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, et: 0, slowT: 0, t: 1 };
+    const d = (over: object) => decodeBallSegment(encodeBallSegment({ ...base, enraged: false, damp: false, tp: null, targetId: null, ...over }))!;
+    expect(d({ enraged: true }).enraged).toBe(true);
+    expect(d({ enraged: true }).damp).toBe(false);
+    expect(d({ damp: true }).enraged).toBe(false);
+    expect(d({ damp: true }).damp).toBe(true);
+    expect(d({ tp: { x: 5, y: 6, z: 7 } }).tp).toEqual({ x: 5, y: 6, z: 7 });
+    expect(d({ targetId: 'p9' }).targetId).toBe('p9');
+    expect(d({ tp: { x: 5, y: 6, z: 7 } }).targetId).toBeNull();
+  });
+
+  it('falls back to bounce on an unknown kind index', () => {
+    const bin = encodeBallSegment({ id: 1, kind: 'enrage', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, enraged: false, damp: false, tp: null, targetId: null, et: 0, slowT: 0, t: 0 });
+    bin[6] = 200; // kind index beyond SEG_KINDS
+    expect(decodeBallSegment(bin)!.kind).toBe('bounce');
+  });
+
+  it('rejects a targetId length that overruns the frame', () => {
+    const bin = encodeBallSegment({ id: 1, kind: 'segment', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, enraged: false, damp: false, tp: null, targetId: 'player_abc', et: 0, slowT: 0, t: 0 });
+    // Corrupt the trailing idLen so the declared id runs past the buffer.
+    bin[bin.length - 'player_abc'.length - 1] = 200;
+    expect(decodeBallSegment(bin)).toBeNull();
+  });
+
+  it('rejects truncation at every record boundary', () => {
+    const bin = encodeBallSegment({ id: 1, kind: 'segment', position: { x: 1, y: 2, z: 3 }, velocity: { x: 4, y: 5, z: 6 }, enraged: true, damp: true, tp: { x: 7, y: 8, z: 9 }, targetId: 'p', et: 1, slowT: 2, t: 3 });
+    // The decoder's floor is 44B; anything shorter must fail, and so must
+    // a frame whose optional tail is cut mid-field.
+    for (let len = 0; len < 44; len++) {
+      expect(decodeBallSegment(bin.slice(0, len))).toBeNull();
+    }
+  });
+});
+
+describe('position frame adversarial decode', () => {
+  const enc = (pos: { x: number; y: number; z: number }) =>
+    encodePosition(pos, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
+
+  it('rejects absurd and non-finite positions', () => {
+    // 8192m bound — the JSON validator's same radius.
+    expect(decodePosition(enc({ x: 9000, y: 0, z: 0 }))).toBeNull();
+    // Sphere, not per-axis: 6000 on two axes exceeds the bound together.
+    expect(decodePosition(enc({ x: 6000, y: 6000, z: 0 }))).toBeNull();
+    expect(decodePosition(enc({ x: 8191, y: 0, z: 0 }))).not.toBeNull();
+
+    const nan = enc({ x: 0, y: 0, z: 0 });
+    new DataView(nan.buffer).setFloat32(6, Number.NaN, true); // pos.x
+    expect(decodePosition(nan)).toBeNull();
+
+    const inf = enc({ x: 0, y: 0, z: 0 });
+    new DataView(inf.buffer).setFloat32(10, Number.POSITIVE_INFINITY, true); // pos.y
+    expect(decodePosition(inf)).toBeNull();
+  });
+});
+
+describe('tick frame adversarial decode', () => {
+  const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}) =>
+    encodeTickPlayer({
+      playerId: id, position: { x: 1, y: 2, z: 3 },
+      rotation: { yaw: 0.5, pitch: -0.5 }, velocity: { x: 4, y: 5, z: 6 },
+      health: 300, isDead: false, ping: 55, ski: 1, ...over,
+    });
+
+  it('decodes every record distinctly (offset drift)', () => {
+    const frame = encodeTickFrame(0, 0, 0, [
+      rec('p_one', { health: 111, velocity: { x: 1, y: 0, z: 0 } }),
+      rec('p_two', { health: 222, velocity: { x: 0, y: 2, z: 0 } }),
+      rec('p_three', { health: 333, velocity: { x: 0, y: 0, z: 3 } }),
+    ]);
+    const d = decodeTickFrame(frame)!;
+    expect(d.count).toBe(3);
+    expect(d.updates[0]!.playerId).toBe('p_one');
+    expect(d.updates[0]!.health).toBe(111);
+    expect(d.updates[0]!.velocity.x).toBeCloseTo(1);
+    expect(d.updates[1]!.playerId).toBe('p_two');
+    expect(d.updates[1]!.health).toBe(222);
+    expect(d.updates[1]!.velocity.y).toBeCloseTo(2);
+    expect(d.updates[2]!.playerId).toBe('p_three');
+    expect(d.updates[2]!.health).toBe(333);
+    expect(d.updates[2]!.velocity.z).toBeCloseTo(3);
+  });
+
+  it('rejects a declared count larger than the records present', () => {
+    const frame = encodeTickFrame(0, 0, 0, [rec('p1')]);
+    frame[14] = 9; // count claims 9 records; only one record follows
+    expect(decodeTickFrame(frame)).toBeNull();
+  });
+
+  it('decodes isDead/ski/status flag bits independently', () => {
+    const frame = encodeTickFrame(0, 0, 0, [
+      rec('alive', { isDead: false, ski: 0, status: 0 }),
+      rec('dead_ski', { isDead: true, ski: 1, status: 0 }),
+      rec('statused', { isDead: false, ski: 0, status: 0x30 }),
+    ]);
+    const d = decodeTickFrame(frame)!;
+    expect(d.updates[0]!.isDead).toBe(false);
+    expect(d.updates[0]!.ski).toBe(0);
+    expect(d.updates[1]!.isDead).toBe(true);
+    expect(d.updates[1]!.ski).toBe(1);
+    expect(d.updates[2]!.status).toBe(0x30);
+    expect(d.updates[2]!.isDead).toBe(false);
+  });
+
+  it('clamps positions to the i16 quantization range', () => {
+    const frame = encodeTickFrame(0, 0, 0, [rec('far', { position: { x: 5000, y: -5000, z: 0 } })]);
+    const d = decodeTickFrame(frame)!;
+    expect(d.updates[0]!.position.x).toBeCloseTo(32767 * 0.04, 1);
+    expect(d.updates[0]!.position.y).toBeCloseTo(-32768 * 0.04, 1);
+  });
+
+  it('surfaces sheep only when non-zero', () => {
+    const frame = encodeTickFrame(0, 0, 0, [
+      rec('sheepy', { sheep: 42 }),
+      rec('nosheep', { sheep: 0 }),
+    ]);
+    const d = decodeTickFrame(frame)!;
+    expect(d.updates[0]!.sheep).toBe(42);
+    expect(d.updates[1]!.sheep).toBeUndefined();
+  });
+});
+
+describe('v3 wireId frames', () => {
+  const roster = () => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
+    return r;
+  };
+
+  it('resolves wireIds through the roster', () => {
+    const recs = [
+      encodeTickPlayerV3(7, { playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, ski: 0 }),
+      encodeTickPlayerV3(9, { playerId: '', position: { x: 4, y: 5, z: 6 }, rotation: { yaw: 1, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 200, isDead: true, ski: 1 }),
+    ];
+    const r = roster();
+    const d = decodeTickFrame(encodeTickFrame(1, 2, 3, recs, WIRE_TICK_V3), r.pool)!;
+    expect(d.updates[0]!.wireId).toBe(7);
+    expect(d.updates[0]!.playerId).toBe('player_seven');
+    expect(d.updates[0]!.position.z).toBeCloseTo(3);
+    expect(d.updates[1]!.playerId).toBe('player_nine');
+    expect(d.updates[1]!.isDead).toBe(true);
+  });
+
+  it('decodes unresolved ids as empty playerId', () => {
+    const r = roster();
+    const d = decodeTickFrame(encodeTickFrame(0, 0, 0, [
+      encodeTickPlayerV3(55, { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ski: 0 }),
+    ], WIRE_TICK_V3), r.pool)!;
+    expect(d.updates[0]!.wireId).toBe(55);
+    expect(d.updates[0]!.playerId).toBe('');
+  });
+
+  it('gameState feed replaces the roster wholesale', () => {
+    const r = roster();
+    r.feed({ type: 'gameState', wireIds: { 1: 'fresh_one' } });
+    expect(r.ids.get(7)).toBeUndefined();
+    expect(r.ids.get(1)).toBe('fresh_one');
   });
 });
