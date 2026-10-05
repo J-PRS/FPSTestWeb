@@ -240,7 +240,7 @@ export const profGear = (teeth: number, rRoot: number, rTip: number, duty = 0.3)
   for (let i = 0; i < teeth; i++) {
     const a = i * step;
     // 4 points per tooth: root→tip→tip→root keeps flats planar.
-    const A = a + step * 0.0, B = a + step * duty, C = a + step * (1 - duty), D = a + step;
+    const A = a, B = a + step * duty, C = a + step * (1 - duty), D = a + step;
     pts.push([Math.cos(A) * rRoot, Math.sin(A) * rRoot]);
     pts.push([Math.cos(B) * rTip, Math.sin(B) * rTip]);
     pts.push([Math.cos(C) * rTip, Math.sin(C) * rTip]);
