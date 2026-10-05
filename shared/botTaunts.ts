@@ -476,6 +476,105 @@ const WITNESS_LINES = [
   'clip it {t}',
 ];
 
+/** A human opened with a greeting — the lobby acknowledgment, brief and
+ *  human. Nobody writes a paragraph back to a 'hi'. */
+const HELLO_LINES = [
+  'yo',
+  'o7',
+  'hey',
+  'sup',
+  'heya',
+  'yo {t}',
+  'evening',
+];
+
+/** A human thanked the room or someone in it — the social contract
+ *  answer. {t} is whoever spoke. */
+const THANKS_LINES = [
+  'np',
+  'anytime',
+  'got you {t}',
+  'np {t}',
+  'all good',
+  'you earned it',
+];
+
+/** A human apologized — shrug it off, everybody whiffs. */
+const SORRY_LINES = [
+  'all good',
+  'happens',
+  'np',
+  'we have all been there',
+  'shake it off',
+  'dont sweat it',
+];
+
+/** Earnest warmth about the game/map/lobby — the wholesome half of FPS
+ *  culture. Bots agree rather than stand there like furniture. */
+const WHOLESOME_LINES = [
+  'right?',
+  'its a good one',
+  'this map slaps',
+  'same honestly',
+  'been saying it all day',
+  'genuinely fun lobby',
+  'agreed',
+  'this is the good stuff',
+];
+
+/** A human is malding in public — the pile-on is the culture, but
+ *  sympathy sneaks in occasionally so it reads like a person, not a
+ *  heckler subroutine. */
+const MALD_LINES = [
+  'lol',
+  'drama',
+  'cope',
+  'tell us how you really feel',
+  'mald harder',
+  'take a breath {t}',
+  'deep breaths',
+  'we have all been there {t}',
+  'its just a game',
+  'someone clip this',
+  'rage',
+];
+
+/** A human asked the room a question — helpful where confident,
+ *  honest shrug where not. Generic tips only: answering with wrong
+ *  specifics is worse than a shrug. */
+const QUESTION_LINES = [
+  'ski downhill, jet uphill',
+  'fall with style',
+  'good question honestly',
+  'ask {t}, they know stuff',
+  'ski fast, shoot straight',
+  'try things till it works',
+  'disc sideways for the midair',
+];
+
+/** A human is complaining about lag/ping — commiseration is the
+ *  universal multiplayer bonding ritual. */
+const LAG_LINES = [
+  'same boat',
+  'the net giveth',
+  'server go brrr',
+  'its not you its the wires',
+  'packet loss is a personality',
+  'playing on a toaster too',
+  'relatable',
+];
+
+/** A human announced they are leaving — the valediction. Short, no
+ *  guilt trip, occasionally fond. */
+const BYE_LINES = [
+  'cya',
+  'o7',
+  'later {t}',
+  'gg, take care',
+  'well be here',
+  'safe travels',
+];
+
 /** Someone said the bot's name — acknowledgment, nothing more. */
 const MENTION_LINES = [
   'yo',
@@ -540,7 +639,9 @@ export type ChatterKind =
   | 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop'
   | 'cheer' | 'groan' | 'alert' | 'reply'
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
-  | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props';
+  | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props'
+  | 'hello' | 'thanks' | 'sorry' | 'wholesome' | 'mald'
+  | 'question' | 'lag' | 'bye';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -570,6 +671,14 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   streakend: STREAK_END_LINES,
   witness: WITNESS_LINES,
   props: PROPS_LINES,
+  hello: HELLO_LINES,
+  thanks: THANKS_LINES,
+  sorry: SORRY_LINES,
+  wholesome: WHOLESOME_LINES,
+  mald: MALD_LINES,
+  question: QUESTION_LINES,
+  lag: LAG_LINES,
+  bye: BYE_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and
@@ -602,6 +711,14 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   witness:    ['VGCN', 'VGTB'],
   props:      ['VGCS', 'VGCY', 'VGCA', 'VGCN'],
   streakend:  ['VGTB', 'VGTT'],
+  hello:      ['VGH'],
+  thanks:     ['VGRA'],
+  sorry:      ['VGRA'],
+  wholesome:  ['VGCA', 'VGCY', 'VGW'],
+  mald:       ['VGTA', 'VGTW'],
+  question:   ['VGRD'],
+  lag:        ['VGO'],
+  bye:        ['VGB'],
 };
 const VGS_CHANCE = 0.4;
 
@@ -726,6 +843,24 @@ export function chatKindFor(text: string): ChatterKind | null {
   // The canonical tribes greeting/curse — answering a shazbot is what
   // makes a lobby feel inhabited. 'reply' keeps it low-key.
   if (/shazbot/.test(t)) return 'reply';
+  // Earnest praise gets reciprocated ('props' lines name the speaker
+  // back); snark gets the dismissive 'quiet' answer — VGQ is the canon
+  // chord for exactly this. 'lol' alone stays unclassified on purpose:
+  // it attaches to half of all chat and would read as a reflex.
+  if (/\b(nice|good|sick|clean|great|sweet|filthy|insane|nasty) (shot|hit|snipe|kill|play|cap|grab|route|ski)\b/.test(t)
+    || /^(ns|wp|gj|nice one|well played|props)\b/.test(t)) return 'props';
+  if (/nice try|noob|camper|camping|tryhard|git gud|scrub|pwned|\bowned\b|lucky (shot|hit|snipe)|luck(ing|er)\b/.test(t)) return 'quiet';
+  // The rest of the human spectrum — greetings, gratitude, apologies,
+  // malding, earnest warmth, questions, lag commiseration, goodbyes.
+  // Ordered so specific beats generic (a "thanks gg" still reads gg).
+  if (/^(hi|hello|hey+|yo|sup|o7|greetings|heyo|howdy|gm|morning|evening)\b/.test(t)) return 'hello';
+  if (/\b(thanks|thank you|ty+|thx|appreciated|appreciate it)\b/.test(t)) return 'thanks';
+  if (/\b(sorry|sry|my bad|mb|oops|my fault|apologies)\b/.test(t)) return 'sorry';
+  if (/\b(rage|furious|hate this|this game (sucks|is trash|is broken)|uninstall|f this|ragequit|hacker|cheater|aimbot|reported|report him|so unfair|bullshit|\bbs\b|wtf|screw this)\b/.test(t)) return 'mald';
+  if (/\b(love this|this (game|map|mode|lobby) (is )?(great|fun|awesome|amazing|slaps|rocks|good)|fun game|good lobby|great lobby|enjoying this)\b/.test(t)) return 'wholesome';
+  if (/\b(lag|lagging|laggy|ping|latency|rubber ?band|packet loss|desync|stutter)\b/.test(t)) return 'lag';
+  if (/^(how (do|to|can|does)|what is|what are|where is|why (do|does|is|can't)|can (i|you|someone)|is there|anyone know|whats)\b/.test(t) || /\?\s*$/.test(t)) return 'question';
+  if (/\b(bye|goodbye|gtg|got to go|im out|i'?m out|i'?m off|im done|cya|see ya|later all|gn|good night|gotta run|heading out|last game)\b/.test(t)) return 'bye';
   return null;
 }
 
