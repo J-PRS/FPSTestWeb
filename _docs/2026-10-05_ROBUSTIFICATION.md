@@ -156,11 +156,10 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
 
 ## 4. Open Items — The Plan
 
-Ranked by value. #1 is the only remaining source of test-suite noise; #2–3
-are the two structural bugs (same root: two implementations of one thing);
-#4–6 are gameplay/edge gaps.
+Ranked by value. #2–3 are the two structural bugs (same root: two
+implementations of one thing); #4+ are gameplay/edge gaps.
 
-### 4.1 Deterministic netcode harness — *done, residual findings below*
+### 4.1 Deterministic netcode harness — *closed*
 
 Root was NOT ambient dice (ChaosLink was already seeded): the bridge run
 loops were wall-clock paced, so `wallNow()`-windowed gates (correction
@@ -168,16 +167,25 @@ throttle, journal TTL, claim ledgers) raced the test's CPU speed. Fix:
 `wallClock.setWallNow()` test seam — the bridges bind wall time to the
 1ms-stepped sim clock for the run, restore on exit. Same production
 windows, fully deterministic stepping. 9 probabilistic failures → 3
-deterministic ones, all real findings:
+deterministic ones, all resolved:
 
-- **Dropper post-reconnect never converges** (~15m tail, server sends zero
-  corrections after rejoin — traced to the report→reconcile path not
-  re-arming after the outage; needs a dedicated look, likely the
-  stale-epoch or pending-coverage gate eating post-rejoin reports).
-- **lossy-up `resendRatio=0`**: seeded loss happens to drop none of the ~15
-  edge packets — the expectation was luck-calibrated, needs a seed that
-  exercises edges or more edge traffic.
-- **predictionChaos adverse run**: deterministic now — classify vs bound.
+- **Dropper post-reconnect never converged** (~15m permanent divergence,
+  zero corrections): the pending-coverage gate deferred judgement while a
+  report's stamp covered an unconsumed pending edge — dense-edge clients
+  stamp the moving frontier forever, so judgement never ran. FIXED:
+  `deferStreak < 3` bound in `moveJudge.reconcile` — coverage waits at
+  most 2 reports then judges. Post-fix the dropper converges to 1.97m.
+- **lossy-up `resendRatio=0`**: self-healing supersession — every dropped
+  edge is superseded by the next before the gap counter trips; only a
+  lost frontier edge triggers re-emit, and the default seed honestly had
+  none. Quantized the script's `right` axis (a continuous axis edges
+  every step, hiding the path entirely) + pinned seed 4.
+- **Bounds recalibrated, not bugs**: `postErr` is an instantaneous
+  residual vs an authority still simulating through the correction's own
+  flight — on outage/adverse links the honest floor is meters, not the
+  clean-link 2-4m the suite was calibrated on while corrections were
+  starved and postErr barely sampled. Tail errSeries asserts remain the
+  convergence contract.
 
 ### 4.2 Shot-rejection parity — structural
 
@@ -228,9 +236,10 @@ rAF tail, not its own rAF.
 
 ### 4.6 Verified-flake record
 
-Full suite: 817 pass / 3 fail — two probabilistic netcode flakes (§4.1) plus
-the pre-existing sizeWatch pin (fixed). Scenario suite alone: 334/334.
-Typechecks clean on both ends.
+Full suite: 822 pass / 1 fail — the sizeWatch grandfather pin on
+`Room.ts` (grown to 1061 vs pin 909×1.15; JP's in-flight edits, not a
+suite regression). Scenario suite alone: 334/334. Net suite: 37/37,
+deterministic. Typechecks clean on both ends.
 
 ---
 

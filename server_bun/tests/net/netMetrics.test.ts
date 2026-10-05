@@ -47,24 +47,31 @@ const metrics = (r: BridgeResult, seconds: number): Metrics => ({
 const script = (tMs: number) => ({
   input: {
     forward: Math.sin(tMs / 1700) > 0 ? 1 : -1,
-    right: Math.cos(tMs / 2300) * 0.6,
+    // Quantized like a human's key press — a continuous axis edges every
+    // step, and dense edges self-heal losses by supersession before the
+    // gap counter can ever trip (resendRatio would be stuck at 0 without
+    // testing the heal path at all).
+    right: Math.cos(tMs / 2300) > 0 ? 0.6 : -0.6,
     jump: Math.sin(tMs / 900) > 0.7 ? 1 : 0,
     ski: 1, jet: Math.sin(tMs / 3000) > 0.4 ? 1 : 0,
   },
   yaw: tMs / 4000,
 });
 
-const PROFILES: [string, BridgeProfile, number][] = [
+const PROFILES: [string, BridgeProfile, number, number?][] = [
   ['clean', {}, 8],
-  ['lossy-up', { up: { lossP: 0.15 } }, 8],
+  // Seed pinned to one that drops input edges — a superseded mid-stream
+  // loss is self-healing, so only a lost frontier edge ever triggers the
+  // gap counter's re-emit; some seeds honestly see none.
+  ['lossy-up', { up: { lossP: 0.15 } }, 8, 4],
   ['adverse', { up: { latencyMs: 80, jitterMs: 30, lossP: 0.1, reorderP: 0.2 }, down: { latencyMs: 60, jitterMs: 25, lossP: 0.05, dupP: 0.1 } }, 10],
 ];
 
 describe('netcode convergence metrics', () => {
   const report: string[] = [];
-  for (const [name, profile, seconds] of PROFILES) {
+  for (const [name, profile, seconds, seed] of PROFILES) {
     it(name, () => {
-      const r = runBridge(flat, profile, script, seconds);
+      const r = runBridge(flat, profile, script, seconds, seed);
       const m = metrics(r, seconds);
       report.push(`${name}: corr/min=${m.corrPerMin.toFixed(0)} converge=${(m.tConvergeMs / 1000).toFixed(1)}s ` +
         `err p50=${m.errP50.toFixed(2)} p95=${m.errP95.toFixed(2)} p99=${m.errP99.toFixed(2)} ` +

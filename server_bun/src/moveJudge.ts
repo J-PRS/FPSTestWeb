@@ -89,6 +89,12 @@ export interface Shadow {
    *  a transient gap is just queue latency; a sustained one is a lost
    *  input edge (hard-tolerance trip). */
   gapStreak: number;
+  /** Consecutive reports deferred by the pending-coverage gate. Sparse
+   *  edges defer one report while the producing inputMove sits parked;
+   *  a client streaming edges faster than reports stamps every report
+   *  at the moving frontier, and an unbounded defer there starves
+   *  corrections entirely — the streak caps the wait, then we judge. */
+  deferStreak: number;
   /** Cooldown on the inputSync hint so one dead lane can't spam it. */
   lastHintAt: number;
   /** Wall time of the last position report — a throttled client reports
@@ -181,7 +187,11 @@ export class MoveJudge {
     // or forged to dodge the journal — judging it raw is the only
     // authority-preserving answer.
     if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq
-      && reportInputSeq <= (sh.pending?.seq ?? 0)) return null;
+      && reportInputSeq <= (sh.pending?.seq ?? 0)) {
+      if (++sh.deferStreak < 3) return null;
+    } else {
+      sh.deferStreak = 0;
+    }
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
     let dist = Math.hypot(dx0, dy0, dz0);
     if (reportInputSeq !== undefined) {
