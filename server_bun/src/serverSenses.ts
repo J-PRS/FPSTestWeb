@@ -743,7 +743,10 @@ export class ServerBotSenses {
       // flood like a runner's — untasked attackers let every midfield
       // contact steal the stand run (soak: sup@0 — the called wave
       // never once arrived). Staging/propel stay capper-only.
-      wave: task?.kind === 'push' || task?.kind === 'escort',
+      // Named chasers get the same committed feet: their job is the
+      // carrier intercept, and midfield contacts stole the run identically
+      // (soak: defense dies to the midfield war, nobody reaches the thief).
+      wave: task?.kind === 'push' || task?.kind === 'escort' || task?.kind === 'chase',
       // Push-only: the member mass-orbits ~110m out until the flood is
       // actually converging. Escorts share wave's committed feet but
       // must never hold off a moving carrier — that's just losing him.
