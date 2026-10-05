@@ -48,7 +48,7 @@ export interface FireHooks {
 // a half-meter push down the aim line clears the near plane. The CLAIMED
 // spawn moves too (same origin in the shot message), keeping server
 // tracking and remote replicas consistent with what the shooter sees.
-const MUZZLE_LEAD = 1.0;
+const MUZZLE_LEAD = 1;
 // Shoulder drop (third person only): the eye-point origin reads as
 // forehead-fired on the chase cam — a small parallel offset puts the
 // launch at chest/gun height. First person keeps the Quake rule:
@@ -243,7 +243,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
   deps.lazyViewModel()?.punch(landed); // landed = apex hold — the hit-pose dwell
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), fxPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
+    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAADDFF, 'punch',
   ));
   screenShake.blast(fxPos, stats.aoeRadius, player.pos);
   if (groundHit) {
@@ -259,7 +259,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
     sfx.at(groundHit, 'slam_thud', 0.9);
     screenShake.add(0.28);
   }
-  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xaaddff, 8);
+  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xAADDFF, 8);
   // The slash arc — the actual "swing" read. Hit or whiff, every punch
   // sweeps an X of billboarded streaks across the view (~0.16s); without
   // it a mid-air swing was just a faint puff. Pinned to the camera so it
@@ -304,8 +304,8 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     fxPuff(connected, {
       count: 10, pos: [0.3, 0.3, 0.3],
       velMin: [-5, 1, -5], velMax: [5, 6, 5],
-      lifeMin: 0.12, lifeMax: 0.35, sizeScale: 1.0,
-      colA: [0.6, 0.85, 1.0], colB: [0.3, 0.5, 0.9], additive: true,
+      lifeMin: 0.12, lifeMax: 0.35, sizeScale: 1,
+      colA: [0.6, 0.85, 1], colB: [0.3, 0.5, 0.9], additive: true,
     });
     screenShake.add(0.22);
   }

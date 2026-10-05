@@ -14,8 +14,8 @@ export interface ViewModelSetup {
 export function createViewModelScene(aspect: number): ViewModelSetup {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, aspect, 0.01, 10);
-  scene.add(new THREE.AmbientLight(0x8899aa, 0.9));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  scene.add(new THREE.AmbientLight(0x8899AA, 0.9));
+  const sun = new THREE.DirectionalLight(0xFFFFFF, 1.2);
   sun.position.set(0.5, 1, 0.4);
   scene.add(sun);
   scene.add(camera); // required so camera-attached viewmodel renders

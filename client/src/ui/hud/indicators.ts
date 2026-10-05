@@ -60,7 +60,7 @@ export class PlayerIndicators {
     indicator.classList.toggle('bot', Boolean(bot));
     const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
     for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
-    if (variant) {for (const c of variant.split(' ')) indicator.classList.add(c);}
+    if (variant) {for (const c of variant.split(' ')) {indicator.classList.add(c);}}
     this.updateSheepBadge(playerId, indicator, sheep);
 
     if (isDead) {
@@ -72,7 +72,7 @@ export class PlayerIndicators {
     this.refreshCamera(camera);
 
     // Position is at feet — point to center (feet + 1.0)
-    const targetPos = _targetPos.set(position.x, position.y + 1.0, position.z);
+    const targetPos = _targetPos.set(position.x, position.y + 1, position.z);
     const toTarget = _toTarget.subVectors(targetPos, _cameraPos);
 
     const behind = toTarget.angleTo(_cameraDir) > Math.PI / 2;
@@ -159,7 +159,7 @@ export class PlayerIndicators {
   // element on the compositor — layout isn't touched at 60Hz. The packed
   // 0.1px-quantized key skips the style write entirely on still frames.
   private setPos(playerId: string, el: HTMLElement, x: number, y: number): void {
-    const q = Math.round(x * 10) * 100000 + Math.round(y * 10);
+    const q = Math.round(x * 10) * 100_000 + Math.round(y * 10);
     if (this.lastPos.get(playerId) === q) {return;}
     this.lastPos.set(playerId, q);
     el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;

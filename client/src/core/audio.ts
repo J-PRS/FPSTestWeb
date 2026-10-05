@@ -35,7 +35,7 @@ const WORLD_MAX_DIST = 260;     // beyond this, don't spawn the node at all
 // made every shot sound adjacent). 30m→~8.5k, 100m→~1.9k, 200m→~500Hz.
 const AIR_ABSORB_M = 45;
 const airAbsorbHz = (d: number): number =>
-  Math.max(400, Math.min(20000, 18000 * Math.exp(-d / AIR_ABSORB_M)));
+  Math.max(400, Math.min(20_000, 18_000 * Math.exp(-d / AIR_ABSORB_M)));
 
 export class AudioEngine {
   ctx: BaseAudioContext | null = null;
@@ -69,7 +69,7 @@ export class AudioEngine {
   unlock(): void {
     if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
+    if (!AC) {return;}
     this.wire(new AC());
     this.loadSamples();
   }
@@ -80,7 +80,7 @@ export class AudioEngine {
   /** Fetch + decode the /sfx/*.ogg bank once. Failures stay silent —
    *  the synth fallbacks in sfx.ts cover every slot a sample misses. */
   private async loadSamples(): Promise<void> {
-    if (this.samplesRequested || !this.ctx) return;
+    if (this.samplesRequested || !this.ctx) {return;}
     this.samplesRequested = true;
     const names = [
       'explosion1', 'explosion2', 'explosion_small',
@@ -98,7 +98,7 @@ export class AudioEngine {
     await Promise.all(names.map(async n => {
       try {
         const res = await fetch(`/sfx/${n}.ogg`);
-        if (!res.ok) return;
+        if (!res.ok) {return;}
         const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
         this.buffers.set(n, buf);
       } catch { /* synth fallback covers it */ }
@@ -121,7 +121,7 @@ export class AudioEngine {
     this.master.connect(comp).connect(ctx.destination);
     this.master.gain.value = settings.get('fps-volume');
     this.duckLp = ctx.createBiquadFilter();
-    this.duckLp.type = 'lowpass'; this.duckLp.frequency.value = 20000;
+    this.duckLp.type = 'lowpass'; this.duckLp.frequency.value = 20_000;
     this.duckGain = ctx.createGain();
     this.duckLp.connect(this.duckGain).connect(this.master);
     this.sfx = ctx.createGain(); this.sfx.connect(this.duckLp);
@@ -131,7 +131,7 @@ export class AudioEngine {
     const len = ctx.sampleRate * 2;
     this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < len; i++) {d[i] = Math.random() * 2 - 1;}
   }
 
   get ready(): boolean { return this.ctx !== null && (this.ctx.state === 'running' || 'startRendering' in this.ctx); }
@@ -142,15 +142,15 @@ export class AudioEngine {
   /** ESC-menu duck: -10dB + a 900Hz blanket on game sounds. Fast attack,
    *  slower release so re-entering the game doesn't pop. */
   setDucked(on: boolean): void {
-    if (!this.ctx) return;
+    if (!this.ctx) {return;}
     const t = this.ctx.currentTime;
     this.duckGain.gain.setTargetAtTime(on ? 0.32 : 1, t, on ? 0.04 : 0.12);
-    this.duckLp.frequency.setTargetAtTime(on ? 900 : 20000, t, on ? 0.04 : 0.12);
+    this.duckLp.frequency.setTargetAtTime(on ? 900 : 20_000, t, on ? 0.04 : 0.12);
   }
 
   setVolume(v: number): void {
     settings.set('fps-volume', v);
-    if (this.ctx) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    if (this.ctx) {this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);}
   }
   getVolume(): number { return settings.get('fps-volume'); }
 
@@ -158,8 +158,8 @@ export class AudioEngine {
   updateListener(pos: THREE.Vector3, right: THREE.Vector3, vel?: THREE.Vector3): void {
     this.listenerPos.copy(pos);
     this.listenerRight.copy(right);
-    if (vel) this.listenerVel.copy(vel);
-    else this.listenerVel.set(0, 0, 0);
+    if (vel) {this.listenerVel.copy(vel);}
+    else {this.listenerVel.set(0, 0, 0);}
   }
 
   dopplerRate(pos: THREE.Vector3, emitVel?: THREE.Vector3): number {
@@ -183,19 +183,19 @@ export class AudioEngine {
       let victim = -1;
       for (let i = 0; i < this.voiceTab.length; i++) {
         const v = this.voiceTab[i]!;
-        if (v.prio < prio && (victim < 0 || v.at < this.voiceTab[victim]!.at)) victim = i;
+        if (v.prio < prio && (victim < 0 || v.at < this.voiceTab[victim]!.at)) {victim = i;}
       }
-      if (victim < 0) return false;
+      if (victim < 0) {return false;}
       const [v] = this.voiceTab.splice(victim, 1);
       try { v!.node.disconnect(); } catch { /* already detached */ }
-      if (v!.chain) this.freeInput(v!.chain);
+      if (v!.chain) {this.freeInput(v!.chain);}
     }
     this.voiceTab.push({ prio, at: Date.now(), node, chain });
     return true;
   }
   releaseVoice(node: AudioNode): void {
     const i = this.voiceTab.findIndex(v => v.node === node);
-    if (i >= 0) this.voiceTab.splice(i, 1);
+    if (i !== -1) {this.voiceTab.splice(i, 1);}
   }
 
   /** Shared white-noise buffer for SFX synth. */
@@ -206,7 +206,7 @@ export class AudioEngine {
    * wind. intensity 0 silences it; the node stays alive (cheap to idle).
    */
   noiseLoop(type: BiquadFilterType, freq: number): LoopHandle | null {
-    if (!this.ctx || !this.noiseBuf) return null;
+    if (!this.ctx || !this.noiseBuf) {return null;}
     const src = this.ctx.createBufferSource();
     src.buffer = this.noiseBuf;
     src.loop = true;
@@ -218,7 +218,7 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08); },
+      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08);} },
       stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); filt.disconnect(); g.disconnect(); } },
     };
   }
@@ -226,7 +226,7 @@ export class AudioEngine {
   /** Sample buffer loop (real jetpack/ski recordings) — same handle shape. */
   sampleLoop(name: string, rate = 1): LoopHandle | null {
     const buf = this.buffers.get(name);
-    if (!this.ctx || !buf) return null;
+    if (!this.ctx || !buf) {return null;}
     const src = this.ctx.createBufferSource();
     src.buffer = buf; src.loop = true;
     src.playbackRate.value = rate;
@@ -236,7 +236,7 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08); },
+      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08);} },
       stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); g.disconnect(); } },
     };
   }
@@ -245,12 +245,12 @@ export class AudioEngine {
    *  pan → world bus. `set` drives intensity, `setPos` re-aims the spatial
    *  chain per frame — same math as worldInput but updatable. */
   worldLoop(kind: 'noise' | 'osc' | 'sample', arg: BiquadFilterType | OscillatorType | string, opt?: number): PositionalLoop | null {
-    if (!this.ctx) return null;
+    if (!this.ctx) {return null;}
     const c = this.ctx;
     const inten = c.createGain(); inten.gain.value = 0;
     const dist = c.createGain(); dist.gain.value = 0;
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000;
-    const lp2 = c.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 20000;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20_000;
+    const lp2 = c.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 20_000;
     const pan = c.createStereoPanner();
     inten.connect(dist).connect(lp).connect(lp2).connect(pan).connect(this.world);
     let kill: () => void;
@@ -261,7 +261,7 @@ export class AudioEngine {
       if (!buf) { inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); return null; }
       const src = c.createBufferSource();
       src.buffer = buf; src.loop = true;
-      if (opt) src.playbackRate.value = opt;
+      if (opt) {src.playbackRate.value = opt;}
       src.connect(inten); src.start();
       kill = () => src.stop();
       pitch = src.playbackRate; pitchBase = opt ?? 1;
@@ -297,7 +297,7 @@ export class AudioEngine {
     };
     let alive = true;
     return {
-      set: (v) => { if (alive) inten.gain.setTargetAtTime(v, c.currentTime, 0.08); },
+      set: (v) => { if (alive) {inten.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
       setPos,
       stop: () => { if (alive) { alive = false; kill(); inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); } },
     };
@@ -305,7 +305,7 @@ export class AudioEngine {
 
   /** Oscillator loop (jetpack hum etc.) — set() drives gain + pitch bend. */
   oscLoop(type: OscillatorType, freq: number): LoopHandle | null {
-    if (!this.ctx) return null;
+    if (!this.ctx) {return null;}
     const o = this.ctx.createOscillator();
     o.type = type; o.frequency.value = freq;
     const g = this.ctx.createGain();
@@ -315,7 +315,7 @@ export class AudioEngine {
     let alive = true;
     return {
       set: (v) => {
-        if (!alive) return;
+        if (!alive) {return;}
         g.gain.setTargetAtTime(v * 0.3, this.ctx!.currentTime, 0.06);
         o.frequency.setTargetAtTime(freq * (1 + v * 0.8), this.ctx!.currentTime, 0.06);
       },

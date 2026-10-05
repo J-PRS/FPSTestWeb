@@ -130,7 +130,7 @@ export class VmEnvelopes {
       const next = this.h.weapons.get(this.h.activeWeapon);
       if (next) {next.visible = true;}
       // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
-      if (this.h.shieldShells.length) { this.h.setShield(false); this.h.setShield(true, this.h.shellColor); }
+      if (this.h.shieldShells.length > 0) { this.h.setShield(false); this.h.setShield(true, this.h.shellColor); }
       // Park the flash at the muzzle NODE — the old z-only park left the
       // quads on the group centerline, buried inside guns whose bore is
       // offset in x/y (plasma repeater's muzzle is off-center).

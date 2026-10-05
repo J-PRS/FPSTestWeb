@@ -328,7 +328,7 @@ export class InstancedBlobShadows {
     if (slot < 0 || slot >= this.live) {return;}
     const groundY = this.terrain.getHeight(pos.x, pos.z);
     const airHeight = pos.y - groundY;
-    const o = airHeight > 3.0 ? Math.max(0, baseOpacity * (1 - (airHeight - 3.0) / 7.0)) : baseOpacity;
+    const o = airHeight > 3 ? Math.max(0, baseOpacity * (1 - (airHeight - 3) / 7)) : baseOpacity;
     this._v.set(pos.x, groundY + 0.05, pos.z);
     this._s.setScalar(radius);
     _m.compose(this._v, this._q.identity(), this._s);

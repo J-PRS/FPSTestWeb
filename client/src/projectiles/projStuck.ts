@@ -61,7 +61,7 @@ export class ProjStuck {
    *  fuse doesn't. With a victim it tracks; without one it just hangs. */
   stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
           remotePlayers?: Map<string, THREE.Vector3>): void {
-    const h = this.h;
+    const {h} = this;
     h.stuck = true;
     h.pos.copy(p);
     h.prevPos.copy(p);
@@ -82,7 +82,7 @@ export class ProjStuck {
   // contact) — freezing in place while the victim jets away reads as a
   // miss, not a hit. Returns true while still glued (caller returns).
   tickStuck(): boolean {
-    const h = this.h;
+    const {h} = this;
     const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
       : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
       : null;
@@ -107,7 +107,7 @@ export class ProjStuck {
   /** Explode-time embed check: world-hit + embeds config + no victim —
    *  plants the shell as a planted corpse. Returns true when handled. */
   tryEmbed(): boolean {
-    const h = this.h;
+    const {h} = this;
     if (h.config.embeds === undefined || !h.hitPointValid
         || h.hitBall || h.hitPlayerId || h.hitBolt) {return false;}
     this.embedded = true;
@@ -134,7 +134,7 @@ export class ProjStuck {
 
   // Planted shell: hold full size for the embed window, then shrink away.
   tickEmbedded(dt: number): boolean { // true while the corpse is still planted
-    const h = this.h;
+    const {h} = this;
     this.embedAge += dt;
     const shrink = (this.embedAge - h.config.embeds!) / EMBED_SHRINK_TIME;
     if (shrink >= 1) {return false;} // caller removes the mesh

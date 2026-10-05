@@ -16,7 +16,7 @@ interface RecLine { ms: number; json?: ServerMessage; bin?: Uint8Array }
 
 const hexToBytes = (hex: string): Uint8Array => {
   const u8 = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < u8.length; i++) {u8[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);}
+  for (let i = 0; i < u8.length; i++) {u8[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);}
   return u8;
 };
 
@@ -25,7 +25,7 @@ export function parseRec(text: string): RecLine[] {
   for (const ln of text.split('\n')) {
     if (!ln) {continue;}
     const t1 = ln.indexOf('\t'), t2 = ln.indexOf('\t', t1 + 1);
-    if (t1 < 0 || t2 < 0) {continue;}
+    if (t1 === -1 || t2 === -1) {continue;}
     const ms = Number(ln.slice(0, t1));
     const kind = ln.slice(t1 + 1, t2);
     const payload = ln.slice(t2 + 1);

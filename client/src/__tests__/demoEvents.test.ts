@@ -22,8 +22,8 @@ describe('projectile event spool', () => {
     const b = host();
     expect(recordFired(b, V, V, 9)).toBe(1);
     expect(recordFired(b, V, V, 9)).toBe(2);
-    b.nextProjectileId = 65535;
-    expect(recordFired(b, V, V, 9)).toBe(65535);
+    b.nextProjectileId = 65_535;
+    expect(recordFired(b, V, V, 9)).toBe(65_535);
     expect(recordFired(b, V, V, 9)).toBe(1); // wrapped, never 0 (sentinel)
   });
 
@@ -64,7 +64,7 @@ describe('projectile event spool', () => {
     const b = host();
     b.elapsedTime = 0;
     let ok = 0;
-    for (let i = 0; i < 1100; i++) {if (recordFired(b, V, V, 1)) ok++;}
+    for (let i = 0; i < 1100; i++) {if (recordFired(b, V, V, 1)) {ok++;}}
     expect(ok).toBe(1000);
     b.elapsedTime = 1.5; // next window
     expect(recordFired(b, V, V, 1)).not.toBe(0);

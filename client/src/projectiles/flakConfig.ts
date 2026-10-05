@@ -25,7 +25,7 @@ export const FLAK_CONFIG: ProjectileConfig = {
   vfx: 'flak', // air-burst bloom — shell fragments, not a ground fireball
   damageColor: '#ffaa33',
   trailColors: [
-    new THREE.Color(1.0, 0.75, 0.3),
+    new THREE.Color(1, 0.75, 0.3),
     new THREE.Color(0.9, 0.5, 0.15),
     new THREE.Color(0.6, 0.3, 0.1),
   ],
@@ -41,10 +41,10 @@ export const FLAK_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.4,
   trailScaleMax: 1.2,
   trailRampIn: 0,
-  meshColor: 0xffcc66,
+  meshColor: 0xFFCC66,
   meshType: 'rocket',
   glowShell: false,
-  glowColor: 0xffaa33,
+  glowColor: 0xFFAA33,
   glowOpacity: 0,
   meshRampIn: false,
   meshRampInDuration: 0,
@@ -67,5 +67,5 @@ export const FLAK_CONFIG: ProjectileConfig = {
   ribbonLanes: 1,
   ribbonWidth: 0.35,
   ribbonLife: 0.15,
-  ribbonColor: 0xffaa33,
+  ribbonColor: 0xFFAA33,
 };

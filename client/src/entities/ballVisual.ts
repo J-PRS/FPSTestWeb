@@ -44,7 +44,7 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
       b.renderOffset.set(0, 0, 0);
     }
     b._rpos.copy(b.pos).add(b.renderOffset);
-    const sim = b.netS.sim;
+    const {sim} = b.netS;
     if (!(b.netDriven && sim && sim.enraged && sim.tgtValid)) {return;}
     const rem = b.netS.netAcc;
     if (rem <= 0) {return;}

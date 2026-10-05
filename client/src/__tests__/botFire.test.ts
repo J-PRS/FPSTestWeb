@@ -122,7 +122,7 @@ describe('bot real-weapon fire', () => {
 
   it('melee range never spawns a shell — it resolves as a legal melee swing', () => {
     const c = ctx();
-    c.fire.resolveShot(fakeBot(0), 'e1', aimAt(1.0, 0, 0));
+    c.fire.resolveShot(fakeBot(0), 'e1', aimAt(1, 0, 0));
     expect(c.projectiles.length).toBe(0);
   });
 
@@ -136,12 +136,12 @@ describe('bot real-weapon fire', () => {
     const c = ctx();
     // claimShot gates on `instanceof GameBot` — borrow its prototype.
     const victim = Object.setPrototypeOf({
-      pos: new THREE.Vector3(1.0, 0, 0),
+      pos: new THREE.Vector3(1, 0, 0),
       isDead: false,
       takeDamageLocal: () => true,
     }, GameBot.prototype) as GameBot;
     c.remotePlayers.set('victim', victim);
-    c.fire.resolveShot(fakeBot(0), 'victim', aimAt(1.0, 0, 0));
+    c.fire.resolveShot(fakeBot(0), 'victim', aimAt(1, 0, 0));
     expect(c.kills.length).toBe(1);
     expect(c.kills[0]!.weapon).toBe(WeaponType.Melee);
   });

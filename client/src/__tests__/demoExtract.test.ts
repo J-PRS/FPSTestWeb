@@ -45,7 +45,7 @@ describe('extractClip', () => {
   });
 
   it('frame numbers survive the 65536 wrap', () => {
-    const r = host([0, 1, 2, 3], 65534); // crosses the wrap mid-clip
+    const r = host([0, 1, 2, 3], 65_534); // crosses the wrap mid-clip
     const clip = extractClip(r, 1, 3, 'wrap')!;
     expect(clip.frames.map((f) => f.frameNumber)).toEqual([0, 1, 2]);
   });
@@ -69,7 +69,7 @@ describe('extractClip', () => {
     const r = host([0, 1, 2, 3, 4]);
     r.projectileEvents.push(
       { timestamp: 0.5, eventType: ProjectileEventType.Fired, projectileId: 1 } as ProjectileEvent,
-      { timestamp: 1.0, eventType: ProjectileEventType.Hit, projectileId: 1 } as ProjectileEvent,
+      { timestamp: 1, eventType: ProjectileEventType.Hit, projectileId: 1 } as ProjectileEvent,
     );
     const clip = extractClip(r, 2, 4, 'w')!;
     expect(clip.projectileEvents.length).toBe(0);

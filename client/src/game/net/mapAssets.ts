@@ -92,9 +92,9 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       // the old heightfield-resident-but-unbuilt state behind.
       try {
         await applyTerrainTex(deps, httpUrl, texPath);
-      } catch (e) {
-        const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
-        deps.logger.warn(`Albedo load failed for ${texPath}: ${src?.src ?? String(e)}`);
+      } catch (error) {
+        const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
+        deps.logger.warn(`Albedo load failed for ${texPath}: ${src?.src ?? String(error)}`);
       }
       // Cube skybox faces extracted as px/nx/py/ny/pz/nz.png; maps
       // without one fall back to the procedural atmosphere.
@@ -103,12 +103,12 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       terrainActive = key;
       deps.world.onTerrainApplied?.(file);
       deps.logger.info(`Terrain swapped to maps/${file}`);
-    } catch (e) {
+    } catch (error) {
       // THREE loaders reject with ProgressEvent (no .message) — log
       // whichever URL failed via the event target, plus Error message.
-      const ev = e as ProgressEvent & { target?: { src?: string } };
-      const detail = e instanceof Error ? e.message
-        : ev?.target?.src ?? String(e);
+      const ev = error as ProgressEvent & { target?: { src?: string } };
+      const detail = error instanceof Error ? error.message
+        : ev?.target?.src ?? String(error);
       deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
     } finally {
       Ball.terrainSwapping = false;
@@ -194,8 +194,8 @@ function skySeamErr(E: SkyEdge[][][], assign: number[], orient: number[]): numbe
   for (const [f, fe, g, ge, flip] of SKY_PAIRS) {
     const a = E[assign[f]!]![orient[f]!]![fe]!;
     const b = E[assign[g]!]![orient[g]!]![ge]!;
-    if (flip) {for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);}
-    else {for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[i]!);}
+    if (flip) {for (let i = 0; i < SKY_SOLVE_PX; i++) {tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);}}
+    else {for (let i = 0; i < SKY_SOLVE_PX; i++) {tot += Math.abs(a[i]! - b[i]!);}}
   }
   return tot;
 }
@@ -329,7 +329,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
   // a near-tie means authentic T2 edge discontinuity, not misassembly.
   if (cands[0]!.s > ident * 0.7) {
     const perm = skySolvePerm(E);
-    if (perm.length && perm[0]!.s < Math.min(ident, cands[0]!.s) * 0.75) {
+    if (perm.length > 0 && perm[0]!.s < Math.min(ident, cands[0]!.s) * 0.75) {
       cands.push(...perm);
       cands.sort((a, b) => a.s - b.s);
     }
@@ -361,7 +361,9 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
 let cubeDome: THREE.Mesh | null = null;
 
 function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
-  if (!cubeDome) {
+  if (cubeDome) {
+    (cubeDome.material as THREE.ShaderMaterial).uniforms.tCube.value = cube;
+  } else {
     cubeDome = new THREE.Mesh(
       new THREE.SphereGeometry(60, 48, 24),
       new THREE.ShaderMaterial({
@@ -393,8 +395,6 @@ function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
     cubeDome.name = '__cubeDome';
     cubeDome.frustumCulled = false;
     cubeDome.renderOrder = -100;
-  } else {
-    (cubeDome.material as THREE.ShaderMaterial).uniforms.tCube.value = cube;
   }
   cubeDome.visible = true;
   scene.add(cubeDome);
@@ -446,9 +446,9 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     applyCubeDome(deps.lazyScene(), cube);
     deps.lazyScene().background = null;
     if (skyMesh) {skyMesh.visible = false;}
-  } catch (e) {
-    const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
-    deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(e)}`);
+  } catch (error) {
+    const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
+    deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(error)}`);
   }
 }
 
@@ -496,7 +496,7 @@ async function loadMats(dirUrl: string): Promise<{
   if (!res.ok) {return null;}
   const man = await res.json() as { grid: number; count: number; tiles: string[]; alphas: string; tileMeters: number };
   const raw = new Uint8Array(await (await fetch(`${dirUrl}/${man.alphas}`)).arrayBuffer());
-  const grid = man.grid, count = man.count;
+  const {grid} = man, {count} = man;
   // alphas.bin is cell-major: weights packed [cell*count + layer], not
   // [layer*grid² + cell]. Reading planar spreads every layer at ~0.25
   // over the whole map — the tiled detail covered the entire terrain.
@@ -625,7 +625,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
       color: std.color,
       map: std.map ?? std.emissiveMap,
       lightMap: std.emissiveMap,
-      lightMapIntensity: 1.0,
+      lightMapIntensity: 1,
       normalMap: std.normalMap,
       aoMap: std.aoMap,
       aoMapIntensity: std.aoMapIntensity,
@@ -730,7 +730,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     if (!src) { missing.add(spec.file); return; }
     const inst = src.clone(true);
     const m = new THREE.Matrix4();
-    const pos = spec.pos;
+    const {pos} = spec;
     m.setPosition(pos.x, pos.y, pos.z);
     if (spec.scale) {m.multiply(new THREE.Matrix4().makeScale(spec.scale.x, spec.scale.y, spec.scale.z));}
     m.multiply(SWAP_YZ);
@@ -752,7 +752,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) {return;}
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const mat of mats) {if (mat) mat.side = THREE.DoubleSide;}
+      for (const mat of mats) {if (mat) {mat.side = THREE.DoubleSide;}}
       if (mats.length !== 1) {
         // Rare path: keep the multi-material mesh but pin the baked world
         // transform — re-parenting to `group` drops the instance matrix.
@@ -811,7 +811,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     mesh.castShadow = mesh.userData.castR > 0;
     group.add(mesh);
   }
-  if (missing.size) {deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);}
+  if (missing.size > 0) {deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);}
   // Bake every world matrix once, then freeze the whole subtree — the
   // per-frame updateMatrixWorld walk skips it entirely instead of
   // re-multiplying hundreds of static nodes.

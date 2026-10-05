@@ -14,7 +14,7 @@ const _zero = new THREE.Vector3(0, 0, 0);
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
-const _ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+const _ringMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
 
 interface GizmoPool {
   mesh: THREE.InstancedMesh;
@@ -48,8 +48,8 @@ export class RemoteGizmo {
   constructor(scene: THREE.Scene, startPos: { x: number; y: number; z: number }) {
     this.pool = acquireBatch(pools, scene, makePool,
       p => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
-    this.slot = this.pool.free.length ? this.pool.free.pop()! : this.pool.mesh.count++;
-    this.setColor(0x00ff00);
+    this.slot = this.pool.free.length > 0 ? this.pool.free.pop()! : this.pool.mesh.count++;
+    this.setColor(0x00FF00);
     this.follow(startPos);
     this.attach();
   }
@@ -88,7 +88,7 @@ export class RemoteGizmo {
     this.shown = false;
     this.write();
     this.pool.free.push(this.slot);
-    const scene = this.pool.scene;
+    const {scene} = this.pool;
     this.slot = -1;
     retireBatch(pools, scene, this.pool,
       p => p.free.length === p.mesh.count,

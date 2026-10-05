@@ -4,7 +4,8 @@
 // vfx.ts is "effects are built here". Import the runtime surface below,
 // never reach into the maps directly.
 import * as THREE from 'three';
-import { BatchedRenderer, ParticleSystem } from 'three.quarks';
+import type { ParticleSystem } from 'three.quarks';
+import { BatchedRenderer } from 'three.quarks';
 import type { IParticleSystem } from 'quarks.core';
 import { markProbe } from '../core/fxDiag.js';
 import { BLOOM_LAYER } from '../core/config.js';
@@ -48,7 +49,7 @@ export function setVfxQualityScale(q: number): void { _qualityScale = q; }
  *  and ~15ms of pure CPU sim. Full detail to 4k, linear to a third at 12k. */
 export function vfxPressure(): number {
   let p = 1;
-  if (_liveParticles > 12000) {p = 0.35;}
+  if (_liveParticles > 12_000) {p = 0.35;}
   else if (_liveParticles > 4000) {p = 1 - ((_liveParticles - 4000) / 8000) * 0.65;}
   return p * _qualityScale;
 }
@@ -327,12 +328,12 @@ function shrinkPools(now: number): void {
   for (const [kind, pool] of pools) {
     for (let i = pool.length - 1; i >= POOL_FLOOR; i--) {
       if (now - pool[i]!.idleAt <= POOL_IDLE_MS) {continue;}
-      const ps = pool[i]!.ps;
+      const {ps} = pool[i]!;
       pool[i] = pool[pool.length - 1]!;
       pool.pop();
       retirePooled(ps);
     }
-    if (!pool.length) {pools.delete(kind);}
+    if (pool.length === 0) {pools.delete(kind);}
     else {total += pool.length;}
   }
   // Global ceiling: evict the oldest idle entries when the pool census
@@ -342,15 +343,15 @@ function shrinkPools(now: number): void {
     type Entry = { ps: ParticleSystem; idleAt: number; pool: { ps: ParticleSystem; idleAt: number }[] };
     const all: Entry[] = [];
     for (const pool of pools.values())
-      {for (const e of pool) all.push({ ps: e.ps, idleAt: e.idleAt, pool });}
+      {for (const e of pool) {all.push({ ps: e.ps, idleAt: e.idleAt, pool });}}
     all.sort((a, b) => a.idleAt - b.idleAt);
     for (let i = 0; i < all.length - POOL_MAX_TOTAL; i++) {
       const e = all[i]!;
       const idx = e.pool.findIndex(x => x.ps === e.ps);
-      if (idx >= 0) {e.pool.splice(idx, 1);}
+      if (idx !== -1) {e.pool.splice(idx, 1);}
       retirePooled(e.ps);
     }
-    for (const [kind, pool] of pools) {if (!pool.length) pools.delete(kind);}
+    for (const [kind, pool] of pools) {if (pool.length === 0) {pools.delete(kind);}}
   }
 }
 
@@ -391,7 +392,7 @@ const drivers = new Set<TrailDriver>();
 export function trailDriverCount(): number { return drivers.size; }
 
 export class TrailDriver {
-  private readonly last = new THREE.Vector3(NaN, 0, 0);
+  private readonly last = new THREE.Vector3(Number.NaN, 0, 0);
   constructor(
     private readonly host: TrailDriverHost,
     private readonly emitters: DriveLayer[],
@@ -436,7 +437,7 @@ export class TrailDriver {
 
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   for (const d of drivers) {d.tick(dt);}
-  if (buildQueue.length) {buildQueue.shift()!();}
+  if (buildQueue.length > 0) {buildQueue.shift()!();}
   if (++prunePhase >= 4) {
     prunePhase = 0;
     runBookkeeping(camOverride ?? camPos);

@@ -143,10 +143,10 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
       sources.push({ spec, src, srcBones, srcByNorm, srcHip, clips: gltf.animations });
     }
     return sources;
-  })().catch(e => {
-    logger.warn('UAL anims failed to load — native clips only', e);
+  })().catch(error => {
+    logger.warn('UAL anims failed to load — native clips only', error);
     ualSource = null; // let a later model retry (e.g. transient 404)
-    return Promise.reject(e);
+    return Promise.reject(error);
   });
   return ualSource;
 }
@@ -246,7 +246,7 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
       if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
     }
   }
-  if (!roleOf.size) {return false;}
+  if (roleOf.size === 0) {return false;}
   const _hold = new THREE.Quaternion();
   const _off = new THREE.Quaternion();
   for (const [name, clip] of baked) {
@@ -277,7 +277,7 @@ export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.An
   let p = bakedFileByVariant.get(variant);
   if (!p) {
     p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
-      .then(gltf => gltf.animations.length ? new Map(gltf.animations.map(c => [c.name, c])) : null)
+      .then(gltf => gltf.animations.length > 0 ? new Map(gltf.animations.map(c => [c.name, c])) : null)
       .catch(() => null);
     bakedFileByVariant.set(variant, p);
   }

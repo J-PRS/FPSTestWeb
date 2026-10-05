@@ -2,9 +2,10 @@
 // Uses DataView for efficient binary read/write.
 // Format: magic(1) + version(4) + header fields + frames + events
 
-import {
+import type {
   DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame,
-  ProjectileEventType, TargetEventType,
+  ProjectileEventType, TargetEventType} from './types.js';
+import {
   DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile, type DemoRosterEntry,
 } from './types.js';
@@ -134,7 +135,7 @@ function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
   // v4 appended weaponType to the frame record; older files read at their
   // own record size and default to no held weapon shown.
   const recSize = hasWeaponType ? FRAME_SIZE : FRAME_SIZE - 1;
-  const count = readRecordCount(r, 'frame', recSize, 720000);
+  const count = readRecordCount(r, 'frame', recSize, 720_000);
   const frames: DemoFrame[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     frames[i] = {
@@ -155,7 +156,7 @@ function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
 }
 
 function readProjectileEvents(r: Reader): ProjectileEvent[] {
-  const count = readRecordCount(r, 'projectile event', PROJECTILE_EVENT_SIZE, 100000);
+  const count = readRecordCount(r, 'projectile event', PROJECTILE_EVENT_SIZE, 100_000);
   const events: ProjectileEvent[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     const eventTypeVal = r.u8();
@@ -179,7 +180,7 @@ function readProjectileEvents(r: Reader): ProjectileEvent[] {
 }
 
 function readTargetEvents(r: Reader): TargetEvent[] {
-  const count = readRecordCount(r, 'target event', TARGET_EVENT_SIZE, 100000);
+  const count = readRecordCount(r, 'target event', TARGET_EVENT_SIZE, 100_000);
   const events: TargetEvent[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     const eventTypeVal = r.u8();
@@ -213,7 +214,7 @@ function readRoster(r: Reader): DemoRosterEntry[] {
 }
 
 function readRemoteFrames(r: Reader, rosterSize: number): RemoteFrame[] {
-  const count = readRecordCount(r, 'remote frame', REMOTE_FRAME_SIZE, 4000000);
+  const count = readRecordCount(r, 'remote frame', REMOTE_FRAME_SIZE, 4_000_000);
   const frames: RemoteFrame[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     const timestamp = r.f32();

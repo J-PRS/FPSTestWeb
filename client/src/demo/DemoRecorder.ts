@@ -2,8 +2,9 @@
 // Zero overhead when disabled: all public methods early-out on `!recording`.
 
 import { CircularBuffer } from './CircularBuffer.js';
-import {
-  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, RemoteFrameFlags,
+import type {
+  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';
+import { RemoteFrameFlags,
   createFrame,
   type DemoFile, type DemoRosterEntry,
 } from './types.js';
@@ -88,7 +89,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.bufferSeconds = bufferSeconds;
     const capacity = Math.ceil(bufferSeconds * tickRate);
     this.frameBuffer = new CircularBuffer<DemoFrame>(capacity);
-    this.tickInterval = 1.0 / tickRate;
+    this.tickInterval = 1 / tickRate;
   }
 
   get isRecording(): boolean { return this.recording; }
@@ -228,7 +229,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     frame.weaponType = p.weaponType;
 
     this.frameBuffer.add(frame);
-    this.frameNumber = (this.frameNumber + 1) % 65536;
+    this.frameNumber = (this.frameNumber + 1) % 65_536;
 
     this.housekeep(now);
   }

@@ -38,7 +38,7 @@ describe('SnapshotBuffer', () => {
     // not frozen on an extrapolation clamp.
     const { pos } = sample(buf);
     expect(pos.x).toBeGreaterThan(0.4);
-    expect(pos.x).toBeLessThan(1.0);
+    expect(pos.x).toBeLessThan(1);
   });
 
   it('covers a tier-suppressed stream instead of freezing on the clamp', () => {
@@ -96,8 +96,8 @@ describe('SnapshotBuffer', () => {
     const now = Date.now();
     // Snap pair wrapping through PI: -3.0 → +3.0 should pass through ±PI,
     // not swing backward through 0
-    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:-3.0,pitch:0}, {x:0,y:0,z:0});
-    buf.push(now - 50, {x:0,y:0,z:0}, {yaw:3.0,pitch:0}, {x:0,y:0,z:0});
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:-3,pitch:0}, {x:0,y:0,z:0});
+    buf.push(now - 50, {x:0,y:0,z:0}, {yaw:3,pitch:0}, {x:0,y:0,z:0});
     const { rot } = sample(buf);
     expect(Math.abs(rot.yaw)).toBeGreaterThan(2.9);
   });

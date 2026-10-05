@@ -171,7 +171,7 @@ export class TrailBatch {
     if (this.slotsDirty) {
       this.slotsDirty = false;
       let hw = 0;
-      for (const s of this.used) {if (s + 1 > hw) hw = s + 1;}
+      for (const s of this.used) {if (s + 1 > hw) {hw = s + 1;}}
       this.hw = hw;
     }
     this.geo.setDrawRange(0, this.hw * IDX);
@@ -197,7 +197,7 @@ export function retireBatchIfOverflow(b: TrailBatch): void {
  *  used, so they're provably black. */
 export function slotLit(b: TrailBatch, s: number): boolean {
   const base = s * VERTS * 3;
-  for (let i = 0; i < VERTS * 3; i++) {if (b.col[base + i] !== 0) return true;}
+  for (let i = 0; i < VERTS * 3; i++) {if (b.col[base + i] !== 0) {return true;}}
   return false;
 }
 

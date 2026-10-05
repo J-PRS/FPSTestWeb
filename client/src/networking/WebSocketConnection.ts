@@ -139,7 +139,7 @@ export class WebSocketConnection {
 
       this.ws.addEventListener('message', (event) => {
         try {
-          const data = event.data;
+          const {data} = event;
           if (typeof data === 'string') {
             this.handleTextMessage(data);
           } else if (data instanceof ArrayBuffer) {

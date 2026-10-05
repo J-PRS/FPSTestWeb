@@ -43,8 +43,8 @@ const KINDS: Record<AmbientKind, KindConfig> = {
     vel: { x: 1.4, y: 0.15, z: 0.6 }, velSpread: 0.4,
     wobble: 0.6, blink: false, spawnY: 'shell',
     colors: () => Math.random() < 0.15
-      ? _c.setRGB(0.55, 0.85, 1.0)
-      : _c.setRGB(1.0, 0.9 + Math.random() * 0.1, 0.65 + Math.random() * 0.2),
+      ? _c.setRGB(0.55, 0.85, 1)
+      : _c.setRGB(1, 0.9 + Math.random() * 0.1, 0.65 + Math.random() * 0.2),
   },
   // Embers — sparse warm sparks that rise off the ground and blink.
   // Blink works by writing black into the color attribute: additive
@@ -52,8 +52,8 @@ const KINDS: Record<AmbientKind, KindConfig> = {
   embers: {
     count: 60, size: 0.1, opacity: 0.5,
     vel: { x: 0.4, y: 0.8, z: 0.2 }, velSpread: 0.6,
-    wobble: 1.0, blink: true, spawnY: 'ground',
-    colors: () => _c.setRGB(1.0, 0.45 + Math.random() * 0.2, 0.1),
+    wobble: 1, blink: true, spawnY: 'ground',
+    colors: () => _c.setRGB(1, 0.45 + Math.random() * 0.2, 0.1),
   },
   // Ash fall — gray-white flecks settling slowly, heavier sway
   ash: {
@@ -160,7 +160,7 @@ export class AmbientParticles {
   update(dt: number, camPos: THREE.Vector3, terrain: Terrain): void {
     if (!this.active) {return;}
     this.time += dt;
-    const cfg = this.cfg;
+    const {cfg} = this;
     const n = cfg.count;
     const p = this.posAttr.array as Float32Array;
 

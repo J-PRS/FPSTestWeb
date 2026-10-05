@@ -7,7 +7,7 @@ import {
   ROLLER_ACCEL, ROLLER_TOPSPEED,
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
@@ -37,7 +37,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x6b5a44); // dusty rock
+  color = new THREE.Color(0x6B5A44); // dusty rock
   scale = 1.6; // big debris on death
 
   swarmSlot = -1;
@@ -70,7 +70,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
   bindNet(b: NetBindArgs): void {
     this.netDriven = true;
     this.netId = b.id;
-    this.id = 0x50000000 + b.id;
+    this.id = 0x50_00_00_00 + b.id;
     bindNetSim(this, makeSimRoller, b);
   }
 
@@ -80,7 +80,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
 
   private updateNet(dt: number, terrain: Terrain): void {
     updateNetSim(this, dt, terrain, stepRoller);
-    if (this.flash > 0) this.flash -= dt;
+    if (this.flash > 0) {this.flash -= dt;}
     // Roll rotation is client dressing — the sim carries pos/vel only.
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);
     if (hSpeed > 0.1) {
@@ -104,23 +104,23 @@ export class Roller implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? ROLLER_HEALTH * 3 : ROLLER_HEALTH;
     this.radius = uber ? ROLLER_RADIUS * 2 : ROLLER_RADIUS;
-    if (uber) this.color.set(0x4a3a52); // dark basalt — reads heavy
+    if (uber) {this.color.set(0x4a3a52);} // dark basalt — reads heavy
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('roller', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven && this.sim) {
       this.updateNet(dt, terrain);
       this.writeInstances(terrain);
       return;
     }
-    if (this.flash > 0) this.flash -= dt;
-    if (this.hitCooldown > 0) this.hitCooldown -= dt;
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.hitCooldown > 0) {this.hitCooldown -= dt;}
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
 
@@ -188,14 +188,14 @@ export class Roller implements Targetable, SwarmSlotOwner {
       this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
     }
 
-    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + 1.0 * MELEE_FAVOR) {
+    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + 1 * MELEE_FAVOR) {
       this.hitCooldown = 0.6;
       this.onHit?.(this);
     }
   }
 
   takeDamage(damage: number): boolean {
-    if (this.netDriven) return claimDamageMelee(this, damage, Roller.hitClaim);
+    if (this.netDriven) {return claimDamageMelee(this, damage, Roller.hitClaim);}
     this.health -= damage;
     this.flash = 0.12;
     if (this.health <= 0) { this.dead = true; return true; }
@@ -203,17 +203,17 @@ export class Roller implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    if (this.uber) return; // avalanche — unstoppable mass, that's the whole point
+    if (this.uber) {return;} // avalanche — unstoppable mass, that's the whole point
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * 0.8); // heavy — blasts shove, not launch
-    if (this.vel.y > 3) this.airborne = true;    // ...unless it's a big one
+    if (this.vel.y > 3) {this.airborne = true;}    // ...unless it's a big one
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (this.uber) return;
+    if (this.uber) {return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 0.8);
-    if (this.vel.y > 3) this.airborne = true;
+    if (this.vel.y > 3) {this.airborne = true;}
   }
 
   dispose(): void {

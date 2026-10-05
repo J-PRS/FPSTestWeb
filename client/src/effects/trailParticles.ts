@@ -14,7 +14,7 @@ export interface TrailParticle {
 }
 
 const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
-const TRAIL_RING_GEO = new THREE.RingGeometry(0.5, 1.0, 24);
+const TRAIL_RING_GEO = new THREE.RingGeometry(0.5, 1, 24);
 const TRAIL_DISC_GEO = new THREE.CircleGeometry(1, 24);
 const getTrailSpriteTex = () => getGlowTexture(64);
 
@@ -95,7 +95,7 @@ export class ProjectileTrail {
     const right = _tRight.crossVectors(dir, arbitrary).normalize();
     const up = _tUp.crossVectors(right, dir).normalize();
 
-    const emitterRamp = config.trailRampIn > 0 ? Math.min(age / config.trailRampIn, 1.0) : 1.0;
+    const emitterRamp = config.trailRampIn > 0 ? Math.min(age / config.trailRampIn, 1) : 1;
 
     const u = (Math.random() - 0.5) * config.trailSpread * emitterRamp;
     const v = (Math.random() - 0.5) * config.trailSpread * emitterRamp;
@@ -265,7 +265,7 @@ export class ProjectileTrail {
   }
 
   dispose(): void {
-    const scene = this.host.scene;
+    const {scene} = this.host;
     const pool = ProjectileTrail.pools.get(this.meshKey())
       ?? ProjectileTrail.pools.set(this.meshKey(), []).get(this.meshKey())!;
     // Still-live particles go back to the shared pool — the pool now

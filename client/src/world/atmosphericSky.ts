@@ -182,12 +182,12 @@ export class AtmosphericSky {
       fragmentShader: atmosphereFragmentShader,
       uniforms: {
         sunPosition: { value: this.sunPosition },
-        sunIntensity: { value: params.sunIntensity ?? 22.0 },
-        rayleigh: { value: params.rayleigh ?? 1.0 },
+        sunIntensity: { value: params.sunIntensity ?? 22 },
+        rayleigh: { value: params.rayleigh ?? 1 },
         mieCoefficient: { value: params.mieCoefficient ?? 21e-6 },
         mieDirectionalG: { value: params.mieDirectionalG ?? 0.758 },
-        turbidity: { value: params.turbidity ?? 10.0 },
-        fogColor: { value: params.fogColor ?? new THREE.Color(0xbbd0e8) },
+        turbidity: { value: params.turbidity ?? 10 },
+        fogColor: { value: params.fogColor ?? new THREE.Color(0xBBD0E8) },
         starIntensity: { value: params.starIntensity ?? 0.9 },
       },
       side: THREE.BackSide,
@@ -219,11 +219,11 @@ export class AtmosphericSky {
     
     // Adjust sun intensity based on time (brighter at noon)
     const sunHeight = Math.max(0, Math.sin(angle));
-    this.material.uniforms.sunIntensity.value = 22.0 * sunHeight;
+    this.material.uniforms.sunIntensity.value = 22 * sunHeight;
     
     // If sun is below horizon, reduce intensity for moon
     if (sunHeight <= 0) {
-      this.material.uniforms.sunIntensity.value = 2.0; // Moon intensity
+      this.material.uniforms.sunIntensity.value = 2; // Moon intensity
     }
   }
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY, BOUNCE_Y, FRICTION_XZ } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 
 // Dead-body rigidbody: gravity + tumble + terrain bounce + shrink-to-nothing.
 // Runs every frame at real dt (kicked off by playDeath) so corpses fall
@@ -19,7 +19,7 @@ export interface CorpseState {
 export function resetCorpse(s: CorpseState): void {
   s.landed = false;
   s.landedAt = 0;
-  s.scale = 1.0;
+  s.scale = 1;
 }
 
 export function launchCorpse(s: CorpseState, explosionPos?: THREE.Vector3, explosionForce?: number): void {
@@ -33,7 +33,7 @@ export function launchCorpse(s: CorpseState, explosionPos?: THREE.Vector3, explo
 
     s.velocity.set(
       direction.x * speed,
-      direction.y * speed + 3.0, // Add upward kick
+      direction.y * speed + 3, // Add upward kick
       direction.z * speed
     );
 
@@ -45,16 +45,16 @@ export function launchCorpse(s: CorpseState, explosionPos?: THREE.Vector3, explo
     );
   } else {
     // Fallback: random velocity (for deaths without explosion)
-    const speed = 8.0 + Math.random() * 6.0;
+    const speed = 8 + Math.random() * 6;
     const angle = Math.random() * Math.PI * 2;
     const elevation = Math.random() * Math.PI * 0.5;
     s.velocity.set(
       Math.cos(elevation) * Math.cos(angle) * speed,
-      Math.sin(elevation) * speed + 3.0,
+      Math.sin(elevation) * speed + 3,
       Math.cos(elevation) * Math.sin(angle) * speed
     );
 
-    const tumble = 5.0 + Math.random() * 10.0;
+    const tumble = 5 + Math.random() * 10;
     s.angularVelocity.set(
       (Math.random() - 0.5) * 2 * tumble,
       (Math.random() - 0.5) * 2 * tumble,
@@ -92,6 +92,6 @@ export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null):
   // Shrink after landing
   if (s.landed) {
     s.landedAt += dt;
-    s.scale = Math.max(0, 1.0 - s.landedAt / SHRINK_DURATION);
+    s.scale = Math.max(0, 1 - s.landedAt / SHRINK_DURATION);
   }
 }

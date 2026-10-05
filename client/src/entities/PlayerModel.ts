@@ -79,7 +79,7 @@ export class PlayerModel {
   dirClipActive = false;
   private colliderGizmo: THREE.Mesh | null = null;
   private colliderMat: THREE.MeshBasicMaterial | null = null;
-  private colliderHex = 0x00ff00;
+  private colliderHex = 0x00FF00;
   // Post-mixer pose corrections (aim pitch, hip-fire hold, spine lock,
   // IK foot snap) live in playerPose.ts — PoseControl owns the bone
   // lists it writes into.
@@ -143,8 +143,8 @@ export class PlayerModel {
    *  chunk geometries + their world centroids. Null until loaded / if the
    *  model has no skinned meshes (caller falls back to generic debris). */
   deathParts(): { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | null {
-    if (!this.gibParts && this.model) this.gibParts = buildGibParts(this.model);
-    if (!this.gibParts || !this.model) return null;
+    if (!this.gibParts && this.model) {this.gibParts = buildGibParts(this.model);}
+    if (!this.gibParts || !this.model) {return null;}
     return bakeDeathParts(this.model, this.gibParts);
   }
 
@@ -218,8 +218,8 @@ export class PlayerModel {
     this.model.traverse((c) => (c as THREE.SkinnedMesh).skeleton?.update());
     const box = new THREE.Box3().setFromObject(this.model, true);
     const size = box.getSize(new THREE.Vector3());
-    const min = box.min;
-    const max = box.max;
+    const {min} = box;
+    const {max} = box;
     logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
 
     // Enable shadow casting + grab aim/attachment bones
@@ -227,7 +227,7 @@ export class PlayerModel {
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
-    if (this.lod === 1) this.applyLodGeos();
+    if (this.lod === 1) {this.applyLodGeos();}
     logger.debug(`Aim bones: ${this.pose.aimBoneNames()} | hand: ${this.handBone?.name ?? 'NONE'}`);
 
     // Scale and rotate to match our coordinate system
@@ -238,7 +238,7 @@ export class PlayerModel {
     // RobotExpressive.glb origin is at feet (y=0), not center
     const classBody = CLASS_BODY_SPEC[this.variant];
     const rig = RIG_MANIFEST[this.variant];
-    const scale = rig?.fitH !== undefined ? rig.fitH / size.y : (rig?.fixedScale ?? 0.5); // class bodies fit their capsule eye height — the body IS the class silhouette
+    const scale = rig?.fitH === undefined ? (rig?.fixedScale ?? 0.5) : rig.fitH / size.y; // class bodies fit their capsule eye height — the body IS the class silhouette
     this.model.scale.setScalar(scale);
     this.model.rotation.y = rig?.yaw ?? Math.PI; // Face forward
     this.modelScale = scale;
@@ -250,8 +250,8 @@ export class PlayerModel {
     // Procedural gun: bone-mounted on rigs whose bones match the
     // rendered body (mannequin/robot), socket-mounted on class bodies
     // whose armature frames don't (cyber's bones sit ~98 units off).
-    if (this.handBone || classBody?.gunLocal) this.attachGun();
-    else logger.warn('GUN NOT ATTACHED — no hand bone or gun socket');
+    if (this.handBone || classBody?.gunLocal) {this.attachGun();}
+    else {logger.warn('GUN NOT ATTACHED — no hand bone or gun socket');}
 
     // No Y offset needed — model origin is already at feet
 
@@ -261,8 +261,8 @@ export class PlayerModel {
     // Store animations with mapping. Mannequin clips ARE the UAL
     // clips natively — alias them under the UAL_ names the state map
     // prefers so ANIM_NAMES resolves without a retarget pass.
-    for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
-    if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
+    for (const clip of gltf.animations) {this.registerClip(clip, mann, knight);}
+    if (CLASS_BODY_SPEC[this.variant]) {this.alignHipYaw();}
     // Any variant whose clips carry Pistol_Aim_* gets the masked layer —
     // mk() no-ops when the rig ships none (polyart, vexa).
     this.pose.buildAimLayer(this.mixer!, this.animations);
@@ -274,8 +274,8 @@ export class PlayerModel {
     // load and ask for Running/Walking before the mixer exists). The
     // default goes through the state table — a bare 'Idle' name only
     // exists on knight's rig, other variants resolve their own idle.
-    if (this._queuedAnim) this.playAnimation(this._queuedAnim);
-    else this.forceAnimationState('idle');
+    if (this._queuedAnim) {this.playAnimation(this._queuedAnim);}
+    else {this.forceAnimationState('idle');}
     this._queuedAnim = null;
 
     // Retargeted UAL clips arrive async — a native clip plays until
@@ -290,7 +290,7 @@ export class PlayerModel {
     // their own clip sets). Cybersoldier ships zero clips — it bakes the
     // mannequin's state set AND the kevdev directionals; vexa bakes
     // kevdev locomotion under her native states.
-    if ((RIG_MANIFEST[this.variant]?.sources.length ?? 0) > 0) this.retargetUAL();
+    if ((RIG_MANIFEST[this.variant]?.sources.length ?? 0) > 0) {this.retargetUAL();}
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -323,8 +323,8 @@ export class PlayerModel {
   // Per-node load prep: mesh shadows/frustum fix + flash material capture,
   // then rig-bone capture (aim chain, hand grip, foot-snap helpers).
   private prepareChild(child: THREE.Object3D): void {
-    if (child instanceof THREE.Mesh) this.prepareMesh(child);
-    if ((child as THREE.Bone).isBone) this.captureBone(child);
+    if (child instanceof THREE.Mesh) {this.prepareMesh(child);}
+    if ((child as THREE.Bone).isBone) {this.captureBone(child);}
   }
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
@@ -336,7 +336,7 @@ export class PlayerModel {
    *  built from the generic constants and never matched light/heavy sim
    *  capsules. */
   setColliderCapsule(cap: { height: number; half: number; radius: number }): void {
-    if (!this.colliderGizmo) return;
+    if (!this.colliderGizmo) {return;}
     this.colliderGizmo.geometry.dispose();
     this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
     this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale - this.feetOffsetY;
@@ -345,7 +345,7 @@ export class PlayerModel {
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
    *  nobody reads a 200m figure's cast shadow. */
   setCastShadow(on: boolean): void {
-    for (const m of this.skinnedMeshes) m.castShadow = on;
+    for (const m of this.skinnedMeshes) {m.castShadow = on;}
   }
 
   // Offscreen remotes skip the mixer entirely, so their bones are static —
@@ -356,7 +356,7 @@ export class PlayerModel {
   setBonesFrozen(frozen: boolean): void {
     for (const b of this.bones) {
       b.matrixAutoUpdate = !frozen;
-      if (frozen) b.updateMatrix();
+      if (frozen) {b.updateMatrix();}
     }
   }
 
@@ -381,7 +381,7 @@ export class PlayerModel {
       const src = action.getClip();
       const tracks = src.tracks.filter(t =>
         !this.distalNameSet.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-      a = this.mixer!.clipAction(new THREE.AnimationClip(src.name + '.far', src.duration, tracks));
+      a = this.mixer!.clipAction(new THREE.AnimationClip(`${src.name  }.far`, src.duration, tracks));
       this.farActions.set(action, a);
     }
     return a;
@@ -402,16 +402,16 @@ export class PlayerModel {
       ...this.pose.keyBones(),
     ];
     for (const k of keys) {
-      for (let o = k; o && o !== this.model; o = o.parent!) essential.add(o);
+      for (let o = k; o && o !== this.model; o = o.parent!) {essential.add(o);}
     }
     this.distalBones = this.bones.filter(b => {
-      if (essential.has(b)) return false;
+      if (essential.has(b)) {return false;}
       const nb = normBone(b.name);
       return PlayerModel.HELPER_BONES.test(nb) || !PlayerModel.LIMB_BONES.test(nb);
     });
     this.distalNameSet = new Set(this.distalBones.map(b => normBone(b.name)));
     // Model may finish loading while a far LOD is already armed.
-    if (this.distalFrozen) this.setDistalFrozen(true);
+    if (this.distalFrozen) {this.setDistalFrozen(true);}
   }
 
   setDistalFrozen(frozen: boolean): void {
@@ -419,7 +419,7 @@ export class PlayerModel {
     this.distalFrozen = frozen;
     for (const b of this.distalBones) {
       b.matrixAutoUpdate = !frozen;
-      if (frozen) b.updateMatrix();
+      if (frozen) {b.updateMatrix();}
     }
     // Swap the running action onto the track-filtered (or full) variant —
     // same phase so the core pose doesn't pop; distal bones simply hold
@@ -441,7 +441,7 @@ export class PlayerModel {
   }
 
   private baseAction(a: THREE.AnimationAction): THREE.AnimationAction {
-    for (const [base, far] of this.farActions) if (far === a) return base;
+    for (const [base, far] of this.farActions) {if (far === a) return base;}
     return a;
   }
 
@@ -451,35 +451,35 @@ export class PlayerModel {
   setLod(level: 0 | 1): void {
     // The decimated rig is mannequin-only — LOD-swapping it onto a class
     // body would graft mannequin geometry onto a foreign skeleton.
-    if (this.variant !== 'mannequin') return;
-    if (level === this.lod) return;
+    if (this.variant !== 'mannequin') {return;}
+    if (level === this.lod) {return;}
     this.lod = level;
     if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
     if (!this.lodLoadP) {
       this.lodLoadP = mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
         const geos: THREE.BufferGeometry[] = [];
         g.scene.traverse((o) => {
-          if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));
+          if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}
         });
         this.lodGeos = geos;
-        if (this.lod === 1) this.applyLodGeos();
+        if (this.lod === 1) {this.applyLodGeos();}
       }).catch(() => { this.lodLoadP = null; });
     }
   }
 
   private applyLodGeos(): void {
-    if (this.lod === 1 && !this.lodGeos) return;
+    if (this.lod === 1 && !this.lodGeos) {return;}
     const toLod = this.lod === 1;
     this.skinnedMeshes.forEach((m, i) => {
       if (toLod) {
-        if (!m.userData.baseGeo) m.userData.baseGeo = m.geometry;
+        if (!m.userData.baseGeo) {m.userData.baseGeo = m.geometry;}
         const g = this.lodGeos![i];
-        if (g) m.geometry = g;
+        if (g) {m.geometry = g;}
       } else if (m.userData.baseGeo) {
         m.geometry = m.userData.baseGeo as THREE.BufferGeometry;
       }
       m.computeBoundingSphere();
-      if (m.boundingSphere) m.boundingSphere.radius += 0.6;
+      if (m.boundingSphere) {m.boundingSphere.radius += 0.6;}
     });
   }
 
@@ -509,7 +509,7 @@ export class PlayerModel {
         const sk = child as THREE.SkinnedMesh;
         this.skinnedMeshes.push(sk);
         sk.computeBoundingSphere();
-        if (sk.boundingSphere) sk.boundingSphere.radius += 0.6;
+        if (sk.boundingSphere) {sk.boundingSphere.radius += 0.6;}
       }
       // Capture emissive materials for the damage flash — dedupe,
       // a GLB often shares one material across several meshes.
@@ -537,9 +537,9 @@ export class PlayerModel {
       this.handBone = child as THREE.Bone;
     }
     const mbn = RIG_MANIFEST[this.variant]?.mount?.bone;
-    if (mbn && nb === mbn) this.mountBone = child as THREE.Bone;
+    if (mbn && nb === mbn) {this.mountBone = child as THREE.Bone;}
     this.pose.captureBone(child, nb);
-    if (child.name === 'FootL' || child.name === 'FootR') this.pose.captureFootBone(child, this.model!);
+    if (child.name === 'FootL' || child.name === 'FootR') {this.pose.captureFootBone(child, this.model!);}
   }
 
   // Procedural gun in the right hand — follows every animation.
@@ -550,13 +550,13 @@ export class PlayerModel {
   private attachGun(): void {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
     const handBone = this.mountBone ?? this.handBone;
-    if (!handBone && !classGun) return;
+    if (!handBone && !classGun) {return;}
     // Socket rigs without native armed anims get the canned grip pose —
     // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
     // need arms posed on top of them.
-    this.pose.wantHoldPose = !CLASS_BODY_SPEC[this.variant]?.anims && !!handBone;
+    this.pose.wantHoldPose = !CLASS_BODY_SPEC[this.variant]?.anims && Boolean(handBone);
     if (!PlayerModel._gunMat) {
-      PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
+      PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a_2e_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
     }
     if (!PlayerModel._gunGeo) {
       const body = new THREE.BoxGeometry(0.16, 0.26, 0.9);
@@ -595,7 +595,7 @@ export class PlayerModel {
       this.gun.add(this.muzzleFlash);
       this.model!.add(this.gun);
       this.socketGun = true;
-      if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
+      if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
       return;
     }
     const ws = handBone!.getWorldScale(new THREE.Vector3());
@@ -617,7 +617,7 @@ export class PlayerModel {
       this.muzzleFlash = ModelFx.buildMuzzleFlash();
       this.gun.add(this.muzzleFlash);
       this.model.add(this.gun);
-      if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
+      if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
       return;
     }
     // Per-axis: some rigs (polyart) carry non-uniform bone scale that
@@ -625,7 +625,7 @@ export class PlayerModel {
     const gunSize = mount?.size ?? 0.7;
     this.gunSize = gunSize;
     this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
-    if (mount?.fat) this.gunMesh!.scale.set(mount.fat, mount.fat, 1);
+    if (mount?.fat) {this.gunMesh!.scale.set(mount.fat, mount.fat, 1);}
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
     this.gunUnit = 1 / ws.x;
@@ -659,7 +659,7 @@ export class PlayerModel {
     this.gun.add(this.muzzleFlash);
 
     handBone!.add(this.gun);
-    if (this.heldWeapon >= 0) this.setWeapon(this.heldWeapon);
+    if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
   }
 
   // Nodes above the hips that authored rigs animate as root motion —
@@ -688,7 +688,7 @@ export class PlayerModel {
     }
     const action = this.mixer!.clipAction(clip);
     this.animations.set(clip.name, action);
-    if (mann) this.animations.set('UAL_' + clip.name, action);
+    if (mann) {this.animations.set('UAL_' + clip.name, action);}
   }
 
   /** Authored clips can bake a facing turn into the hip track — the
@@ -699,7 +699,7 @@ export class PlayerModel {
    *  and unwind outliers (>~30°) back onto it in the node's parent
    *  frame. */
   private alignHipYaw(): void {
-    if (!this.model) return;
+    if (!this.model) {return;}
     const fwd = new THREE.Vector3();
     const q = new THREE.Quaternion();
     // Track names may carry loader dedup suffixes (Hips_1) and rigs can
@@ -710,11 +710,11 @@ export class PlayerModel {
       let best: { tr: THREE.KeyframeTrack; node: THREE.Object3D } | null = null;
       let any: { tr: THREE.KeyframeTrack; node: THREE.Object3D } | null = null;
       for (const tr of clip.tracks) {
-        if (!tr.name.endsWith('.quaternion')) continue;
+        if (!tr.name.endsWith('.quaternion')) {continue;}
         const node = this.model!.getObjectByName(tr.name.slice(0, -'.quaternion'.length));
-        if (!node) continue;
-        if ((node as THREE.Bone).isBone && (!best || this.depthOf(node) < this.depthOf(best.node))) best = { tr, node };
-        if (!any || this.depthOf(node) < this.depthOf(any.node)) any = { tr, node };
+        if (!node) {continue;}
+        if ((node as THREE.Bone).isBone && (!best || this.depthOf(node) < this.depthOf(best.node))) {best = { tr, node };}
+        if (!any || this.depthOf(node) < this.depthOf(any.node)) {any = { tr, node };}
       }
       return best ?? any;
     };
@@ -733,9 +733,9 @@ export class PlayerModel {
       const collect = (names: (n: string) => boolean) => {
         const buckets = new Map<number, { sum: number; n: number }>();
         for (const [name, a] of this.animations) {
-          if (!names(name)) continue;
+          if (!names(name)) {continue;}
           const hit = hipTrackOf(a.getClip());
-          if (!hit) continue;
+          if (!hit) {continue;}
           const y = yawOf(hit.tr);
           const k = Math.round(y / (Math.PI / 18));
           const b = buckets.get(k) ?? { sum: 0, n: 0 };
@@ -743,13 +743,13 @@ export class PlayerModel {
           buckets.set(k, b);
         }
         let best = { sum: 0, n: 0 };
-        for (const b of buckets.values()) if (b.n > best.n) best = b;
+        for (const b of buckets.values()) {if (b.n > best.n) best = b;}
         return best.n ? best.sum / best.n : null;
       };
       const natives = collect(n => !n.startsWith('UAL_'));
       return natives ?? collect(() => true);
     })();
-    if (canonical === null) return;
+    if (canonical === null) {return;}
     // clipYawFix is an explicit unwind: rigs whose whole retarget set
     // shares the wrong convention (100%-bake rigs) can't derive a target
     // from local-track yaw — the armature parent carries its own offset —
@@ -760,19 +760,19 @@ export class PlayerModel {
     for (const [, a] of this.animations) {
       const clip = a.getClip();
       const hit = hipTrackOf(clip);
-      if (!hit?.node.parent) continue;
-      let delta = fixRad !== 0 ? -fixRad : yawOf(hit.tr) - canonical;
-      while (delta > Math.PI) delta -= 2 * Math.PI;
-      while (delta < -Math.PI) delta += 2 * Math.PI;
-      if (Math.abs(delta) < 0.5) continue;
+      if (!hit?.node.parent) {continue;}
+      let delta = fixRad === 0 ? yawOf(hit.tr) - canonical : -fixRad;
+      while (delta > Math.PI) {delta -= 2 * Math.PI;}
+      while (delta < -Math.PI) {delta += 2 * Math.PI;}
+      if (Math.abs(delta) < 0.5) {continue;}
       // Every hip-skeleton copy carries the same yaw — retarget fan-out
       // ships one track per skin joint, so the fix lands on all of them
       // or the meshes rotate away from each other.
       const hipBase = hit.node.name.replace(/_\d+$/, '');
       for (const tr of clip.tracks) {
-        if (!tr.name.endsWith('.quaternion')) continue;
+        if (!tr.name.endsWith('.quaternion')) {continue;}
         const node = this.model.getObjectByName(tr.name.slice(0, -'.quaternion'.length));
-        if (!node?.parent || node.name.replace(/_\d+$/, '') !== hipBase) continue;
+        if (!node?.parent || node.name.replace(/_\d+$/, '') !== hipBase) {continue;}
         const parentQ = new THREE.Quaternion().setFromRotationMatrix(
           new THREE.Matrix4().copy(this.model.matrixWorld).invert().multiply(node.parent.matrixWorld));
         const fix = parentQ.clone().invert()
@@ -786,12 +786,12 @@ export class PlayerModel {
       }
       fixed.push(clip.name);
     }
-    if (fixed.length) logger.debug(`Hip-yaw outliers corrected: ${fixed.join(', ')}`);
+    if (fixed.length > 0) {logger.debug(`Hip-yaw outliers corrected: ${fixed.join(', ')}`);}
   }
 
   private depthOf(node: THREE.Object3D): number {
     let d = 0;
-    for (let p = node.parent; p && p !== this.model; p = p.parent) d++;
+    for (let p = node.parent; p && p !== this.model; p = p.parent) {d++;}
     return d;
   }
 
@@ -817,7 +817,7 @@ export class PlayerModel {
       // (or the first available clip) while the requested one is absent.
       if (!this.currentAction?.isRunning()) {
         const hold = this.animations.has('UAL_Idle_Loop') ? 'UAL_Idle_Loop' : this.animations.keys().next().value;
-        if (hold) return this.playAnimation(hold);
+        if (hold) {return this.playAnimation(hold);}
       }
       return;
     }
@@ -846,10 +846,10 @@ export class PlayerModel {
     // model spreading its arms each trigger pull. Skip to the aimed
     // frame and crossfade fast so the snap reads as recoil, not a draw.
     const isShoot = name === 'Pistol_Shoot' || name === 'UAL_Pistol_Shoot';
-    if (isShoot) action.time = 0.18;
+    if (isShoot) {action.time = 0.18;}
     // Direction flip mid-stride: enter the new clip at the previous clip's
     // cycle phase so the footfall doesn't restart mid-step.
-    else if (startPhase > 0) action.time = startPhase * action.getClip().duration;
+    else if (startPhase > 0) {action.time = startPhase * action.getClip().duration;}
     action.fadeIn(isShoot ? 0.06 : 0.2);
     action.timeScale = 1;
     // Death: play once, clamp the corpse.
@@ -892,7 +892,7 @@ export class PlayerModel {
     if (dir !== this.locoDir) {
       this.locoDir = dir;
       if (this.currentState === 'walk' || this.currentState === 'run')
-        this.forceAnimationState(this.currentState, true);
+        {this.forceAnimationState(this.currentState, true);}
     }
     return this.dirClipActive;
   }
@@ -902,9 +902,9 @@ export class PlayerModel {
   // the footstep phase flips too, which is what kills the moonwalk look).
   setLocomotionReversed(rev: boolean): void {
     const a = this.currentAction;
-    if (!a) return;
+    if (!a) {return;}
     const sign = rev ? -1 : 1;
-    if (Math.sign(a.timeScale || 1) === sign) return;
+    if (Math.sign(a.timeScale || 1) === sign) {return;}
     const dur = a.getClip().duration;
     a.time = dur - a.time; // preserve the cycle phase across the flip
     a.timeScale = Math.abs(a.timeScale || 1) * sign;
@@ -915,7 +915,7 @@ export class PlayerModel {
   }
 
   setAnimationState(state: AnimationState): void {
-    if (this.currentState === state) return;
+    if (this.currentState === state) {return;}
     this.forceAnimationState(state);
   }
 
@@ -935,7 +935,7 @@ export class PlayerModel {
     for (let i = 0; i < cands.length; i++) {
       const c = cands[i];
       const last = i === cands.length - 1;
-      if (!last && !this.animations.has(c.name)) continue;
+      if (!last && !this.animations.has(c.name)) {continue;}
       this.dirClipActive = c.dir;
       this.playAnimation(c.name, c.dir ? phase : 0);
       return;
@@ -950,29 +950,29 @@ export class PlayerModel {
    * rest pose, so the results are identical).
    */
   private retargetUAL(): void {
-    if (!this.model) return;
-    const model = this.model;
+    if (!this.model) {return;}
+    const {model} = this;
     const adopt = (baked: Map<string, THREE.AnimationClip>) => {
-      if (this._disposed || !this.mixer || !this.model) return;
+      if (this._disposed || !this.mixer || !this.model) {return;}
       // Baked clips arrive fully cooked — hip-XZ strip and the
       // mannequin aim-layer carve are applied at bake time.
       // `__holdbake1` marks packs whose arm tracks already carry the
       // hip-fire grip — the runtime holdBones compose stands down.
       this.pose.holdBaked = baked.has('__holdbake1');
       for (const [name, clip] of baked) {
-        if (name === '__holdbake1') continue;
+        if (name === '__holdbake1') {continue;}
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Baked clips land AFTER the load-time alignHipYaw ran — for
       // retarget-only rigs that pass saw an empty table and did nothing.
       // Re-run so the bake's own hip convention gets canonicalized.
-      if (CLASS_BODY_SPEC[this.variant]) this.alignHipYaw();
+      if (CLASS_BODY_SPEC[this.variant]) {this.alignHipYaw();}
       // Aim clips ride inside the retarget pack for rigs like robot —
       // the load-time aim-layer build saw an empty table for them.
       // Robot's aim clips carry pitch in the spine tracks, so his mask
       // includes the torso chain (arm-only sweeps horizontally).
       if ([...baked.keys()].some(n => n.includes('Aim_')))
-        this.pose.buildAimLayer(this.mixer, this.animations, this.variant === 'robot');
+        {this.pose.buildAimLayer(this.mixer, this.animations, this.variant === 'robot');}
       // Re-resolve the current state onto the better clip if one landed —
       // the baked names now sit in the same candidate table the state
       // resolver reads, so let it pick (a bare 'Idle' name doesn't exist
@@ -981,13 +981,13 @@ export class PlayerModel {
     };
     const runtimeBake = () =>
       bakeUALClips(model, this.variant).then(adopt)
-        .catch((e) => { logger.warn('UAL bake failed for ' + this.variant, e); });
+        .catch((error) => { logger.warn('UAL bake failed for ' + this.variant, error); });
     // The offline bake (public/assets/anims/<variant>.glb) ships the
     // whole retarget so load never flashes bind pose or burns a
     // resample; missing file → dev rigs still runtime-bake.
     loadBakedUALClips(this.variant).then(baked => {
-      if (baked && baked.size) adopt(baked);
-      else runtimeBake();
+      if (baked && baked.size > 0) {adopt(baked);}
+      else {runtimeBake();}
     }).catch(runtimeBake);
   }
 
@@ -1024,7 +1024,7 @@ export class PlayerModel {
 
   /** Barrel-tip world point — third-person beam/tracer anchor. */
   muzzleWorld(out: THREE.Vector3): boolean {
-    if (!this.muzzleFlash) return false;
+    if (!this.muzzleFlash) {return false;}
     this.muzzleFlash.getWorldPosition(out);
     return true;
   }
@@ -1043,12 +1043,12 @@ export class PlayerModel {
    *  so types without a baked model — or not yet seen firing — keep the
    *  generic prop rather than guess wrong. */
   setWeapon(wt: number | undefined): void {
-    if (wt === undefined) return;
+    if (wt === undefined) {return;}
     // Weapon switches fire before the GLB loads (spawn loadout races the
     // async mesh) — stash the pick on heldWeapon so attachGun's tail can
     // re-apply it the moment a gun mount exists instead of dropping it.
     this.heldWeapon = wt;
-    if (!this.gunMesh) return;
+    if (!this.gunMesh) {return;}
     const hit = handWeaponGeo(wt);
     const geo = hit?.geo ?? PlayerModel._gunGeo!;
     if (this.gunMesh.geometry !== geo) {
@@ -1056,7 +1056,7 @@ export class PlayerModel {
       // Baked models carry their own per-part materials; the generic prop
       // keeps its shared grey.
       this.gunMesh.material = hit ? hit.mats : PlayerModel._gunMat!;
-      if (this.wireframeOn) this.captureWireframeMats();
+      if (this.wireframeOn) {this.captureWireframeMats();}
       // Flash rides the baked model's real muzzle, not a fixed offset —
       // each baked geo already carries its bounding box from the baker.
       if (this.muzzleFlash && geo.boundingBox) {
@@ -1073,7 +1073,7 @@ export class PlayerModel {
     this.pose.fire();
     // A shot reveals the held weapon — swapping the prop first means the
     // muzzle flash frames the right barrel.
-    if (weaponType !== undefined && weaponType !== WeaponType.Melee) this.setWeapon(weaponType);
+    if (weaponType !== undefined && weaponType !== WeaponType.Melee) {this.setWeapon(weaponType);}
     this.fx.fire(weaponType);
   }
 
@@ -1090,7 +1090,7 @@ export class PlayerModel {
    *  loads. The bot watchdog diffs this against the logical position to
    *  catch a stalled tick/interpolation path. */
   getModelPosition(out: THREE.Vector3): boolean {
-    if (!this.model) return false;
+    if (!this.model) {return false;}
     out.copy(this.model.position);
     out.y -= this.feetOffsetY;
     return true;
@@ -1106,7 +1106,7 @@ export class PlayerModel {
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
     if (this.model) {
       // YXZ so lean pitch/roll resolve in the yawed (facing) frame.
-      if (this.model.rotation.order !== 'YXZ') this.model.rotation.order = 'YXZ';
+      if (this.model.rotation.order !== 'YXZ') {this.model.rotation.order = 'YXZ';}
       this.model.rotation.y = yaw + (RIG_MANIFEST[this.variant]?.yaw ?? 0);
       this.lastRoll = roll;
       this.model.rotation.z = roll;
@@ -1127,13 +1127,13 @@ export class PlayerModel {
   // state back (GLBs share materials across meshes).
   private ghostBaseline: Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }> | null = null;
   setGhost(on: boolean): void {
-    if (!this.model) return;
+    if (!this.model) {return;}
     if (on) {
-      if (this.ghostBaseline) return;
+      if (this.ghostBaseline) {return;}
       this.ghostBaseline = new Map();
       this.model.traverse((child) => {
         const mat = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-        if (!mat) return;
+        if (!mat) {return;}
         for (const m of Array.isArray(mat) ? mat : [mat]) {
           this.ghostBaseline!.set(m, { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
           m.transparent = true;
@@ -1143,7 +1143,7 @@ export class PlayerModel {
       });
       return;
     }
-    if (!this.ghostBaseline) return;
+    if (!this.ghostBaseline) {return;}
     for (const [m, st] of this.ghostBaseline) {
       m.transparent = st.transparent;
       m.opacity = st.opacity;
@@ -1161,7 +1161,7 @@ export class PlayerModel {
     this.colliderMat?.color.setHex(hex);
     // This runs every frame per remote — piggyback the debug-visibility
     // refresh so the menu DEBUG toggle applies without a reload.
-    if (this.colliderGizmo) this.colliderGizmo.visible = this.colliderShown && urlParams.debug;
+    if (this.colliderGizmo) {this.colliderGizmo.visible = this.colliderShown && urlParams.debug;}
   }
 
   private wireframeMats: THREE.Material[] | null = null;
@@ -1169,22 +1169,22 @@ export class PlayerModel {
   /** Debug (?debug / menu DEBUG): render the body as wireframe so it can be
    *  eyeballed against the collider capsule. */
   private captureWireframeMats(): void {
-    if (!this.model) return;
+    if (!this.model) {return;}
     const mats = new Set<THREE.Material>();
     this.model.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
+      if (!mesh.isMesh) {return;}
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {mats.add(m);}
     });
     this.wireframeMats = [...mats];
   }
   setWireframe(on: boolean): void {
-    if (!this.model || on === this.wireframeOn) return;
+    if (!this.model || on === this.wireframeOn) {return;}
     this.wireframeOn = on;
     if (on) {
       this.captureWireframeMats();
     }
-    for (const m of this.wireframeMats || []) (m as THREE.MeshBasicMaterial).wireframe = on;
+    for (const m of this.wireframeMats || []) {(m as THREE.MeshBasicMaterial).wireframe = on;}
   }
 
   private colliderShown = true;
@@ -1214,7 +1214,7 @@ export class PlayerModel {
   setScale(scale: number): void {
     // Class bodies carry the class silhouette in the GLB itself — a
     // _classScale bump on top would double the tiering.
-    if (CLASS_BODY_SPEC[this.variant]) return;
+    if (CLASS_BODY_SPEC[this.variant]) {return;}
     if (this.model) {
       // Multiply the model's own fit scale (0.5 robot, 2.0/size.y mannequin)
       // so the armor-class bump composes with whichever GLB loaded.

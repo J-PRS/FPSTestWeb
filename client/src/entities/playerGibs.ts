@@ -21,7 +21,7 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
     const sWt = geo.getAttribute('skinWeight');
     const pos = geo.getAttribute('position');
     if (!pos || !sIdx || !sWt) {return;}
-    const index = geo.index;
+    const {index} = geo;
     const triCount = Math.floor((index ? index.count : pos.count) / 3);
     const domBone = (v: number): number => {
       let bi = 0, bw = -1;
@@ -45,7 +45,7 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
       out.push({ mesh: sk, indices });
     }
   });
-  return out.length ? out : null;
+  return out.length > 0 ? out : null;
 }
 
 /** Posed body-part fragments at the corpse's current stance — recentered

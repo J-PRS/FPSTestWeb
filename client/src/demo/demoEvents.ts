@@ -7,7 +7,7 @@ import type { ProjectileEvent, TargetEvent } from './types.js';
 // DemoRecorder keeps the flat interface; these take it as the host.
 const MAX_EVENTS_PER_SEC = 1000;
 function checkEventRate(b: DemoRecorder): boolean {
-    if (b.elapsedTime - b.lastEventResetTime >= 1.0) {
+    if (b.elapsedTime - b.lastEventResetTime >= 1) {
       b.eventCountThisSecond = 0;
       b.lastEventResetTime = b.elapsedTime;
     }
@@ -20,7 +20,7 @@ function checkEventRate(b: DemoRecorder): boolean {
 export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, weaponType: number): number {
     if (!b.recording || !checkEventRate(b)) {return 0;}
     const id = b.nextProjectileId;
-    b.nextProjectileId = (b.nextProjectileId % 65535) + 1;
+    b.nextProjectileId = (b.nextProjectileId % 65_535) + 1;
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Fired;
     e.timestamp = b.elapsedTime;

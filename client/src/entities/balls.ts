@@ -3,9 +3,10 @@ import { nextTargetId } from './targetIds.js';
 
 import { GRAVITY, BALL_BASE_RADIUS } from '../core/config.js';
 
-import { Terrain, getHeightfield } from '../world/terrain.js';
+import type { Terrain} from '../world/terrain.js';
+import { getHeightfield } from '../world/terrain.js';
 import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js';
-import { ColliderIndex } from '../../../shared/solidWorld.js';
+import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
 import Logger from '../core/Logger.js';
@@ -29,7 +30,7 @@ function ballGeo(): THREE.IcosahedronGeometry {
 let _ballMat: THREE.MeshLambertMaterial | null = null;
 function ballMat(): THREE.MeshLambertMaterial {
   // White diffuse — instanceColor carries hue + emissive-style glow
-  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff });}
+  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });}
   return _ballMat;
 }
 
@@ -38,13 +39,13 @@ export function ballParts(): SwarmPart[] {
 }
 
 const BALL_COLORS = [
-  new THREE.Color(1.0, 0.25, 0.25),
+  new THREE.Color(1, 0.25, 0.25),
   new THREE.Color(0.25, 0.85, 0.25),
-  new THREE.Color(0.25, 0.55, 1.0),
-  new THREE.Color(1.0, 0.85, 0.1),
+  new THREE.Color(0.25, 0.55, 1),
+  new THREE.Color(1, 0.85, 0.1),
   new THREE.Color(0.9, 0.25, 0.9),
   new THREE.Color(0.15, 0.9, 0.9),
-  new THREE.Color(1.0, 0.5, 0.1),
+  new THREE.Color(1, 0.5, 0.1),
 ];
 
 // Anything a projectile can hit / an explosion can push: balls, crawlers.
@@ -180,7 +181,7 @@ export class Ball {
    *  regime diverged" in one line: simT≫simNow = free-ran past the clock
    *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
   get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean; parked: boolean; anchor: { x: number; y: number; z: number; vx: number; vy: number; vz: number } } | null {
-    const sim = this.netS.sim;
+    const {sim} = this.netS;
     if (!sim) {return null;}
     const simNow = Ball.netSimNow?.() ?? null;
     const legAge = simNow !== null && Number.isFinite(simNow) && this.netS.legT0 >= 0
@@ -241,13 +242,13 @@ export class Ball {
       this.scale = 2.4; this.health = 350;
       this.color = new THREE.Color(0.45, 0.2, 0.85);
     } else if (variant === 2) {
-      this.scale = 3.0; this.health = 130;
-      this.color = new THREE.Color(1.0, 0.25, 0.25);
+      this.scale = 3; this.health = 130;
+      this.color = new THREE.Color(1, 0.25, 0.25);
     } else if (variant === 1) {
-      this.scale = 2.0; this.health = 70;
+      this.scale = 2; this.health = 70;
       this.color = new THREE.Color(0.25, 0.85, 0.25);
     } else {
-      this.scale = 1.0; this.health = 30;
+      this.scale = 1; this.health = 30;
       this.color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)].clone();
     }
     this.maxHealth = this.health;
@@ -268,7 +269,7 @@ export class Ball {
       // Server-owned spawn — pos/vel/color come off the wire, nothing rolled
       this.netDriven = true;
       this.netId = netSpawn.id;
-      this.id = 0x40000000 + netSpawn.id; // net namespace — can't collide with local targetIds
+      this.id = 0x40_00_00_00 + netSpawn.id; // net namespace — can't collide with local targetIds
       this.pos = new THREE.Vector3(netSpawn.x, netSpawn.y, netSpawn.z);
       this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
       if (variant === 0) {this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();}

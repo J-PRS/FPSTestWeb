@@ -29,12 +29,12 @@ export class RabbitBridge {
     // Neutral gold — not either team's color, since the rabbit is FFA.
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6),
-      new THREE.MeshLambertMaterial({ color: 0x888888 }),
+      new THREE.MeshLambertMaterial({ color: 0x88_88_88 }),
     );
     pole.position.y = 1.3;
     const pennant = new THREE.Mesh(
       new THREE.ConeGeometry(0.7, 1.4, 4),
-      new THREE.MeshLambertMaterial({ color: 0xffcc44, emissive: 0x664400 }),
+      new THREE.MeshLambertMaterial({ color: 0xFFCC44, emissive: 0x66_44_00 }),
     );
     pennant.position.y = 2.9;
     pennant.rotation.x = Math.PI;

@@ -13,7 +13,7 @@ export const crcTable = (() => {
   for (let i = 0; i < 256; i++) {
     let crc = i;
     for (let j = 0; j < 8; j++) {
-      crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+      crc = (crc & 1) ? (0xED_B8_83_20 ^ (crc >>> 1)) : (crc >>> 1);
     }
     table[i] = crc;
   }
@@ -21,11 +21,11 @@ export const crcTable = (() => {
 })();
 
 export function crc32(data: Uint8Array): number {
-  let crc = 0xFFFFFFFF;
+  let crc = 0xFF_FF_FF_FF;
   for (let i = 0; i < data.length; i++) {
     crc = crcTable[(crc ^ data[i]!) & 0xFF]! ^ (crc >>> 8);
   }
-  return (crc ^ 0xFFFFFFFF) >>> 0;
+  return (crc ^ 0xFF_FF_FF_FF) >>> 0;
 }
 
 // Write string: uint16 length + UTF-8 bytes

@@ -15,7 +15,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
   if (deadBallIds.has(ev.targetId)) {
     // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
     if (ev.eventType === TargetEventType.Destroyed) {
-      const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xffffff), 1);
+      const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xFFFFFF), 1);
       debrisList.push(debris);
       fastForward(seekTime - ev.timestamp, () => !debris.dead, (s) => debris.update(s));
     }

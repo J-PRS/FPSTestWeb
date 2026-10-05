@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { markProbe } from '../core/fxDiag.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 
 const SEGS = 64;
 const LIFT = 0.18; // clearance above terrain so chords between samples don't clip

@@ -5,8 +5,9 @@
  * back correctly even when the real Spawned fired before the window
  * (or was pruned by the circular buffer).
  */
+import type {
+  ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';
 import {
-  ProjectileEvent, TargetEvent, RemoteFrame,
   ProjectileEventType, TargetEventType,
 } from './types.js';
 
@@ -119,8 +120,8 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
       continue;
     }
     // Preserve targetType and health if the new event doesn't carry them (legacy 0)
-    const targetType = e.targetType !== 0 ? e.targetType : existing.targetType;
-    const health = e.health !== 0 ? e.health : existing.health;
+    const targetType = e.targetType === 0 ? existing.targetType : e.targetType;
+    const health = e.health === 0 ? existing.health : e.health;
     aliveBalls.set(e.targetId, { ...e, targetType, health });
   }
   return aliveBalls;

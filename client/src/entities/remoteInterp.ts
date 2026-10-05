@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { classCapsule } from '../../../shared/botClasses.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 
@@ -239,7 +239,7 @@ export class RemoteInterp {
 
     if (this.h.terrain) {
       const groundY = this.h.terrain.getHeight(p.x, p.z);
-      const eye = classCapsule(this.h.armorClass).eye;
+      const {eye} = classCapsule(this.h.armorClass);
       if (p.y < groundY + eye) { // keep EYE at eye height above feet
         p.y = groundY + eye;
         this.simulatedVelocity.y = 0;

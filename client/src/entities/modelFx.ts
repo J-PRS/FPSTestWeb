@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { makeFlashTexture } from './playerClips.js';
 
-const _white = new THREE.Color(0xffffff);
+const _white = new THREE.Color(0xFFFFFF);
 const _leanEul = new THREE.Euler();
 const _leanNo = new THREE.Quaternion();
 const _leanYes = new THREE.Quaternion();
@@ -64,14 +64,14 @@ export class ModelFx {
   static buildMuzzleFlash(): THREE.Sprite {
     const flashMat = new THREE.SpriteMaterial({
       map: makeFlashTexture(),
-      color: 0xaad4ff,
+      color: 0xAAD4FF,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
     });
     const s = new THREE.Sprite(flashMat);
     s.scale.setScalar(0); // hidden until fire()
-    s.position.set(0, 0.05, 1.0); // barrel tip (gun-local)
+    s.position.set(0, 0.05, 1); // barrel tip (gun-local)
     return s;
   }
 
@@ -115,8 +115,8 @@ export class ModelFx {
     // Reset to the default tint too — a shotgun shouldn't leave the next
     // LG shot flashing amber.
     if (this.h.muzzleFlash) {
-      const glow = weaponType !== undefined ? getProjectileConfig(weaponType)?.glowColor : undefined;
-      (this.h.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xaad4ff);
+      const glow = weaponType === undefined ? undefined : getProjectileConfig(weaponType)?.glowColor;
+      (this.h.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xAAD4FF);
     }
   }
 

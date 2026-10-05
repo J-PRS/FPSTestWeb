@@ -9,7 +9,7 @@
  * A stale shadow map is used for the no-shadow stage (autoUpdate off) so
  * materials don't recompile mid-scan.
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { GameLoopDeps } from './gameLoop.js';
 
 interface StageResult {

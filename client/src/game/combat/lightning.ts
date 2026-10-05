@@ -83,7 +83,7 @@ function shroudTexture(): THREE.Texture {
 // tip spheres); bakes/procedural share the search. undefined = searched
 // and missed; null = not yet attempted (bake swap lands async).
 function isDescendant(node: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let p: THREE.Object3D | null = node; p; p = p.parent) {if (p === root) return true;}
+  for (let p: THREE.Object3D | null = node; p; p = p.parent) {if (p === root) {return true;}}
   return false;
 }
 let lgBall: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null | undefined;
@@ -169,7 +169,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
     // Server sees a normal Lightning blast for remote-player prediction;
     // the scaled damage is the PvE fantasy side (enemies are client-run)
     sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
-    explosionTint: 0x8fdcff, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
+    explosionTint: 0x8FDCFF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
   });
 }
 
@@ -253,7 +253,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   const n = st && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
   lg.ramp.set(t.id, { t: now, n });
   if (lg.ramp.size > 32) {
-    for (const [id, s] of lg.ramp) {if (now - s.t > LG_RAMP_WINDOW_S) lg.ramp.delete(id);}
+    for (const [id, s] of lg.ramp) {if (now - s.t > LG_RAMP_WINDOW_S) {lg.ramp.delete(id);}}
   }
   const dmg = lgTickDamage(n) * dmgScale;
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
@@ -268,7 +268,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   if (!sh) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
       map: shroudTexture(), transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, color: 0x9fd8ff,
+      depthWrite: false, color: 0x9FD8FF,
     }));
     deps.lazyScene().add(sprite);
     sh = { sprite, seenAt: 0 };
@@ -376,7 +376,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     const nV = stV && nowV - stV.t <= LG_RAMP_WINDOW_S ? stV.n + 1 : 1;
     lg.rampP.set(hitPlayerId, { t: nowV, n: nV });
     if (lg.rampP.size > 32) {
-      for (const [id, s] of lg.rampP) {if (nowV - s.t > LG_RAMP_WINDOW_S) lg.rampP.delete(id);}
+      for (const [id, s] of lg.rampP) {if (nowV - s.t > LG_RAMP_WINDOW_S) {lg.rampP.delete(id);}}
     }
     const tick = lgTickDamage(nV);
     // Same per-tick number creatures get (zapTarget) — the beam on a

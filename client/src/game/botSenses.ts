@@ -8,7 +8,7 @@
  * wire bots see with the same eyes.
  */
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../shared/botBrain.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import { shootRevealed } from '../../../shared/status.js';

@@ -12,13 +12,13 @@ const BLINK_TIME = 0.16;     // lerp duration — reads as a flash, not a slide
 // Cooldowns are a spam-breaker, not the economy — the ENERGY.skillCost
 // ante is what actually prices skill use, so every one-shot gets a
 // uniform 1s floor.
-const BLINK_COOLDOWN = 1.0;
+const BLINK_COOLDOWN = 1;
 
 const DASH_IMPULSE = 25;     // m/s added along aim
-const DASH_COOLDOWN = 1.0;   // s between dashes
+const DASH_COOLDOWN = 1;   // s between dashes
 
 const SLAM_SPEED = 55;       // m/s straight down
-const SLAM_COOLDOWN = 1.0;   // s
+const SLAM_COOLDOWN = 1;   // s
 
 
 // Energy economy constants live in shared/movement.ts (ENERGY) — the
@@ -220,7 +220,7 @@ export class PlayerSkills {
   // Landing-transition handling — runs after movement.sync each frame.
   // Bounce arms airborne and fires on touchdown; slam detonates on it.
   postMove(wasOnGround: boolean, onGround: boolean, prevVelY: number): void {
-    const ctx = this.ctx;
+    const {ctx} = this;
     // Bounce skill: arm while airborne, fire on the landing transition —
     // redirect full speed along the crosshair. Pure redirect: magnitude
     // preserved, nothing added or taken away.

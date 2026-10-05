@@ -41,8 +41,8 @@ export function getPuffTexture(size = 128): THREE.Texture {
     // 7 overlapping blobs at fixed-but-ragged offsets — one draw call per
     // particle still, but the silhouette tumbles when the quad spins.
     const blobs: [number, number, number][] = [
-      [0, 0, 0.42], [0.28, -0.12, 0.30], [-0.24, 0.16, 0.32],
-      [0.08, 0.26, 0.26], [-0.10, -0.28, 0.24], [0.30, 0.18, 0.2], [-0.3, -0.06, 0.22],
+      [0, 0, 0.42], [0.28, -0.12, 0.3], [-0.24, 0.16, 0.32],
+      [0.08, 0.26, 0.26], [-0.1, -0.28, 0.24], [0.3, 0.18, 0.2], [-0.3, -0.06, 0.22],
     ];
     for (const [bx, by, br] of blobs) {
       const g = ctx.createRadialGradient(half + bx * half, half + by * half, 0,

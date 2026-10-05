@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 /**
  * Screen shake — trauma model: blasts add trauma, the camera gets smooth
@@ -23,7 +23,7 @@ class ScreenShake {
   /** Swing kick — `sign` follows the swipe direction (L→R punches roll
    *  the camera left and vice versa), `landed` deepens it on connect. */
   swingKick(sign: number, landed: boolean): void {
-    const k = landed ? 1.6 : 1.0;
+    const k = landed ? 1.6 : 1;
     this.kickRoll = sign * 0.05 * k;    // ~2.9° peak roll
     this.kickPitch = 0.03 * k;          // slight downward throw
   }

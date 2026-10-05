@@ -73,7 +73,7 @@ export class PlayerInput {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
-    const h = this.h;
+    const {h} = this;
     if (this.frozen) {return;}
     this.keys[e.code] = true;
     if (matchCode('spectate', e.code) && !e.repeat) {h.toggleSpectator();}
@@ -102,7 +102,7 @@ export class PlayerInput {
   }
 
   private bindInput(): void {
-    const h = this.h;
+    const {h} = this;
     document.addEventListener('keydown', (e) => this.onKeyDown(e));
     // Mouse wheel cycles weapons (down = next, up = previous). Accumulate
     // deltaY so smooth-scroll/trackpads switch once per gesture, not per tick.
@@ -169,7 +169,7 @@ export class PlayerInput {
 
   private bindMenuControls(): void {
     // ESC-menu invert-Y toggle
-    const invertYBtn = document.getElementById('invert-y-toggle') as HTMLButtonElement | null;
+    const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;
     if (invertYBtn) {
       invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
       invertYBtn.addEventListener('click', () => {
@@ -182,13 +182,13 @@ export class PlayerInput {
     // ESC-menu sensitivity field (plain decimal input, no steppers).
     // Display scale is ×10 the internal multiplier so default shows "10"
     // and whole numbers give coarse-but-usable steps.
-    const sensInput = document.getElementById('sens-input') as HTMLInputElement | null;
+    const sensInput = document.querySelector('#sens-input') as HTMLInputElement | null;
     if (sensInput) {
       sensInput.value = (this.sensitivity * 10).toString();
       // Click/focus selects the whole value so typing replaces it outright
       sensInput.addEventListener('focus', () => sensInput.select());
       sensInput.addEventListener('input', () => {
-        const v = parseFloat(sensInput.value);
+        const v = Number.parseFloat(sensInput.value);
         if (!isFinite(v)) {return;}
         this.sensitivity = Math.max(0.5, Math.min(100, v)) / 10;
         settings.set('fps-sens', this.sensitivity);
@@ -197,11 +197,11 @@ export class PlayerInput {
       sensInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    const volInput = document.getElementById('vol-input') as HTMLInputElement | null;
+    const volInput = document.querySelector('#vol-input') as HTMLInputElement | null;
     if (volInput) {
       volInput.value = audio.getVolume().toString();
       volInput.addEventListener('input', () => {
-        const v = parseFloat(volInput.value);
+        const v = Number.parseFloat(volInput.value);
         if (isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
       });
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
@@ -209,7 +209,7 @@ export class PlayerInput {
 
     // Boot-time flags: mode/spawns/debug are read once at module init, so
     // a change persists the setting and reloads rather than half-applying.
-    const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
+    const modeSelect = document.querySelector('#mode-select') as HTMLSelectElement | null;
     if (modeSelect) {
       modeSelect.value = settings.get('fps-mode');
       modeSelect.addEventListener('change', () => {
@@ -219,7 +219,7 @@ export class PlayerInput {
       modeSelect.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    const spawnsBtn = document.getElementById('spawns-toggle') as HTMLButtonElement | null;
+    const spawnsBtn = document.querySelector('#spawns-toggle') as HTMLButtonElement | null;
     if (spawnsBtn) {
       const label = () => { spawnsBtn.textContent = settings.get('fps-spawns') ? 'SPAWNS: RANDOM' : 'SPAWNS: SCRIPTED'; };
       label();
@@ -229,7 +229,7 @@ export class PlayerInput {
       });
     }
 
-    const debugBtn = document.getElementById('debug-toggle') as HTMLButtonElement | null;
+    const debugBtn = document.querySelector('#debug-toggle') as HTMLButtonElement | null;
     if (debugBtn) {
       const label = () => { debugBtn.textContent = settings.get('fps-debug') ? 'DEBUG: ON' : 'DEBUG: OFF'; };
       label();
@@ -242,7 +242,7 @@ export class PlayerInput {
     }
 
     // Read live per message — no reload needed.
-    const ttsBtn = document.getElementById('tts-chat-toggle') as HTMLButtonElement | null;
+    const ttsBtn = document.querySelector('#tts-chat-toggle') as HTMLButtonElement | null;
     if (ttsBtn) {
       const label = () => { ttsBtn.textContent = settings.get('fps-tts-chat') ? 'CHAT TTS: ON' : 'CHAT TTS: OFF'; };
       label();
@@ -255,7 +255,7 @@ export class PlayerInput {
     // VGS chord letters: layout (typed letters, matches the printed chord)
     // vs physical QWERTY positions (classic Tribes muscle memory). Live —
     // vgs.ts reads the setting per keypress.
-    const vgsKeysBtn = document.getElementById('vgs-keys-toggle') as HTMLButtonElement | null;
+    const vgsKeysBtn = document.querySelector('#vgs-keys-toggle') as HTMLButtonElement | null;
     if (vgsKeysBtn) {
       const label = () => { vgsKeysBtn.textContent = settings.get('fps-vgs-physical') ? 'VGS KEYS: PHYSICAL' : 'VGS KEYS: LAYOUT'; };
       label();

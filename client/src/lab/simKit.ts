@@ -44,7 +44,7 @@ export interface SimEntity {
   dispose(): void;
 }
 
-const BALL_LAB_COLORS = [0xff9a3a, 0x5ad0ff, 0x6fe3a5, 0xd98aff];
+const BALL_LAB_COLORS = [0xff_9a_3a, 0x5AD0FF, 0x6FE3A5, 0xD98AFF];
 
 export const LAB_FLAT_FIELD: Heightfield = { size: 8, data: new Uint8Array(8 * 8), stride: 1 };
 
@@ -56,7 +56,7 @@ export const LAB_SURFACE: MoveSurface = {
 /** Seeded LCG — entities share it so replays stay deterministic. */
 export function lcg(seed: number): () => number {
   let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 0xffffffff);
+  return () => ((s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0xFFFFFFFF);
 }
 
 /* ---------------------------------- */
@@ -80,7 +80,7 @@ export function spawnBall(o: BallOpts, world: LabWorld): SimEntity & { sim: SimB
   );
   mesh.position.copy(o.pos as THREE.Vector3);
   world.scene.add(mesh);
-  const rand = o.rand;
+  const {rand} = o;
   return {
     sim: b, mesh,
     tick(dt, w) {
@@ -97,7 +97,7 @@ export function spawnBall(o: BallOpts, world: LabWorld): SimEntity & { sim: SimB
 
 /* ---------------------------------- */
 
-const CRAWLER_STATE_COLOR: Record<string, number> = { wander: 0x8aa0b5, chase: 0xff9a3a, windup: 0xff3355 };
+const CRAWLER_STATE_COLOR: Record<string, number> = { wander: 0x8a_a0_b5, chase: 0xff_9a_3a, windup: 0xff_33_55 };
 
 export interface CrawlerOpts {
   id: number; species?: string; uber?: boolean; seed?: number;
@@ -124,7 +124,7 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
       mesh.position.set(c.x, c.y + 0.8, c.z);
       mesh.rotation.y = -c.yaw;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(
-        c.dead ? 0x333a44 : CRAWLER_STATE_COLOR[c.state] ?? 0x8aa0b5);
+        c.dead ? 0x33_3a_44 : CRAWLER_STATE_COLOR[c.state] ?? 0x8a_a0_b5);
       const k = Math.max(0.3, c.health / base);
       mesh.scale.setScalar(c.uber ? 1.6 : 0.7 + 0.3 * k);
     },
@@ -136,7 +136,7 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
 /* ---------------------------------- */
 
 const FLYER_STATE_COLOR: Record<string, number> = {
-  orbit: 0x7fa2c8, windup: 0xffd24d, dive: 0xff5a3c, climb: 0x8fd6a0,
+  orbit: 0x7f_a2_c8, windup: 0xff_d2_4d, dive: 0xFF5A3C, climb: 0x8FD6A0,
 };
 
 export interface FlyerOpts {
@@ -148,7 +148,7 @@ export interface FlyerOpts {
 export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: SimFlyer } {
   const f = makeSimFlyer(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'rakk');
   const mesh = new THREE.Mesh(
-    new THREE.ConeGeometry(1.0, 2.4, 6),
+    new THREE.ConeGeometry(1, 2.4, 6),
     new THREE.MeshBasicMaterial({ color: FLYER_STATE_COLOR.orbit! }),
   );
   // Cones point +Y — roll forward so the dive reads nose-first.
@@ -167,7 +167,7 @@ export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: Si
       pivot.position.set(f.x, f.y, f.z);
       pivot.rotation.y = -f.yaw;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(
-        f.dead ? 0x333a44 : FLYER_STATE_COLOR[f.state] ?? 0x8aa0b5);
+        f.dead ? 0x333A44 : FLYER_STATE_COLOR[f.state] ?? 0x8AA0B5);
       pivot.scale.setScalar(f.uber ? 1.6 : o.species === 'gnat' ? 0.6 : 1);
     },
     dump: () => [['state', f.state], ['hp', `${Math.max(0, f.health).toFixed(0)}`]],
@@ -193,7 +193,7 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
   const p: SimProjectile = { pos: { ...o.pos }, vel: { ...o.vel }, age: 0 };
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(o.radius ?? 0.3, 10, 10),
-    new THREE.MeshBasicMaterial({ color: o.color ?? 0xffe08a }),
+    new THREE.MeshBasicMaterial({ color: o.color ?? 0xFFE08A }),
   );
   mesh.position.set(o.pos.x, o.pos.y, o.pos.z);
   world.scene.add(mesh);
@@ -203,7 +203,7 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
   const trailGeo = new THREE.BufferGeometry();
   const trailPos = new Float32Array(BOLT_TRAIL_PTS * 3);
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
-  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: o.color ?? 0xffe08a, transparent: true, opacity: 0.8 }));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: o.color ?? 0xFFE08A, transparent: true, opacity: 0.8 }));
   trail.frustumCulled = false;
   const history: { x: number; y: number; z: number }[] = [];
   world.scene.add(trail);
@@ -257,7 +257,7 @@ function groundSimSpawn<T extends { x: number; y: number; z: number; yaw: number
     sync() {
       mesh.position.set(sim.x, sim.y + mesh.scale.y, sim.z);
       mesh.rotation.y = -sim.yaw;
-      (mesh.material as THREE.MeshBasicMaterial).color.setHex(sim.dead ? 0x333a44 : color);
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(sim.dead ? 0x333A44 : color);
       mesh.scale.setScalar(sim.uber ? 1.6 : 0.7 + 0.3 * Math.max(0.3, sim.health / base));
     },
     dump: () => [['state', sim.state], ['hp', `${Math.max(0, sim.health).toFixed(0)}`]],
@@ -267,29 +267,29 @@ function groundSimSpawn<T extends { x: number; y: number; z: number; yaw: number
 
 export function spawnRoller(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimRoller } {
   const c = makeSimRoller(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'roller');
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 10), new THREE.MeshBasicMaterial({ color: 0xb0c86a }));
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 10), new THREE.MeshBasicMaterial({ color: 0xB0C86A }));
   return groundSimSpawn(c, (s, dt, w) => {
     commitTarget(s, 'prey', w.target);
     return stepRoller(s, dt, w.field, w.target, true);
-  }, mesh, 0xb0c86a, world, o.onEvent);
+  }, mesh, 0xB0C86A, world, o.onEvent);
 }
 
 export function spawnSlither(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimSlither } {
   const c = makeSimSlither(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'snake');
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 2.2, 7), new THREE.MeshBasicMaterial({ color: 0x7ad68f }));
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 2.2, 7), new THREE.MeshBasicMaterial({ color: 0x7AD68F }));
   return groundSimSpawn(c, (s, dt, w) => {
     commitTarget(s, 'prey', w.target);
     return stepSlither(s, dt, w.field, w.target, true);
-  }, mesh, 0x7ad68f, world, o.onEvent);
+  }, mesh, 0x7AD68F, world, o.onEvent);
 }
 
 export function spawnBaneling(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimBaneling } {
   const c = makeSimBaneling(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'baneling');
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.7, 9, 9), new THREE.MeshBasicMaterial({ color: 0xc8e04d }));
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.7, 9, 9), new THREE.MeshBasicMaterial({ color: 0xc8_e0_4d }));
   return groundSimSpawn(c, (s, dt, w) => {
     commitTarget(s, 'prey', w.target);
     return stepBaneling(s, dt, w.field, w.target, true);
-  }, mesh, 0xc8e04d, world, o.onEvent);
+  }, mesh, 0xc8_e0_4d, world, o.onEvent);
 }
 
 /* ---------------------------------- */
@@ -299,18 +299,18 @@ export function spawnBaneling(o: { id: number; pos: { x: number; y: number; z: n
 /* ---------------------------------- */
 
 const TOTEM_STATE_COLOR: Record<string, number> = {
-  aim: 0x8aa0b5, charge: 0xffd24d, blinkOut: 0x5a4d6a, blinkIn: 0x9a86c8,
+  aim: 0x8a_a0_b5, charge: 0xFFD24D, blinkOut: 0x5A4D6A, blinkIn: 0x9a_86_c8,
 };
 
 export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimTotem } {
   const c = makeSimTotem(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'totem');
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 1.0, 4.4, 4),
+    new THREE.CylinderGeometry(0.4, 1, 4.4, 4),
     new THREE.MeshBasicMaterial({ color: TOTEM_STATE_COLOR.aim! }),
   );
   world.scene.add(body);
   const beamGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  const beam = new THREE.Line(beamGeo, new THREE.LineBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0 }));
+  const beam = new THREE.Line(beamGeo, new THREE.LineBasicMaterial({ color: 0xff_5a_3c, transparent: true, opacity: 0 }));
   beam.frustumCulled = false;
   world.scene.add(beam);
   let flash = 0;
@@ -327,7 +327,7 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
       body.rotation.y = Math.PI / 4;
       body.scale.setScalar(c.radius);
       (body.material as THREE.MeshBasicMaterial).color.setHex(
-        c.dead ? 0x333a44 : TOTEM_STATE_COLOR[c.state] ?? 0x8aa0b5);
+        c.dead ? 0x333A44 : TOTEM_STATE_COLOR[c.state] ?? 0x8a_a0_b5);
       // Eye rides at EYE_HEIGHT·radius — same origin the client renders.
       const eye = { x: c.x, y: c.y + TOTEM_SIM.EYE_HEIGHT * c.radius, z: c.z };
       const pts = beamGeo.attributes.position!;
@@ -451,7 +451,7 @@ export function spawnMover(o: MoverOpts, world: LabWorld): SimEntity & { sim: Mo
   });
   const mesh = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.9, 1.4, 4, 12),
-    new THREE.MeshBasicMaterial({ color: o.color ?? 0x6fe3a5 }),
+    new THREE.MeshBasicMaterial({ color: o.color ?? 0x6FE3A5 }),
   );
   world.scene.add(mesh);
   const self: SimEntity & { sim: MoveSim; drive?: (dt: number) => void } = {

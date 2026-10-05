@@ -9,7 +9,7 @@
 let counter = 1;
 export function nextTargetId(): number {
   const id = counter;
-  counter = (counter + 1) % 65536;
+  counter = (counter + 1) % 65_536;
   if (counter === 0) {counter = 1;}
   return id;
 }

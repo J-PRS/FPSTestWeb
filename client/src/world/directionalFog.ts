@@ -10,8 +10,8 @@ import * as THREE from 'three';
 
 // Float color ctor is linear-working-space (no sRGB conversion), so these
 // read darker/more saturated than the numbers suggest.
-const _sunTint = new THREE.Color(1.0, 0.82, 0.55);
-const _awayTint = new THREE.Color(0.30, 0.55, 0.92);
+const _sunTint = new THREE.Color(1, 0.82, 0.55);
+const _awayTint = new THREE.Color(0.3, 0.55, 0.92);
 const _camDir = new THREE.Vector3();
 
 const SUNWARD_STRENGTH = 0.42;
@@ -23,8 +23,8 @@ export function fogTint(base: THREE.Color, camDir: THREE.Vector3, sunDir: THREE.
   const fwd = Math.hypot(camDir.x, camDir.z);
   if (fwd < 1e-6) {return out.copy(base);}
   const d = (camDir.x * sunDir.x + camDir.z * sunDir.z) / fwd;
-  out.copy(base).lerp(_sunTint, Math.max(0, d) ** 2.0 * SUNWARD_STRENGTH);
-  out.lerp(_awayTint, Math.max(0, -d) ** 2.0 * AWAY_STRENGTH);
+  out.copy(base).lerp(_sunTint, Math.max(0, d) ** 2 * SUNWARD_STRENGTH);
+  out.lerp(_awayTint, Math.max(0, -d) ** 2 * AWAY_STRENGTH);
   return out;
 }
 

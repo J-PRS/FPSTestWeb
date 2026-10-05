@@ -15,7 +15,7 @@ export class AoeGizmo {
   constructor(scene: THREE.Scene, pos: THREE.Vector3, radius: number) {
     this.scene = scene;
     this.mat = new THREE.MeshBasicMaterial({
-      color: 0xffff00, wireframe: true, transparent: true, opacity: 0.7,
+      color: 0xFFFF00, wireframe: true, transparent: true, opacity: 0.7,
       depthTest: true,
     });
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), this.mat);

@@ -2,7 +2,8 @@
 // server, full snapshot diffs on mismatch, and window-scope debug functions
 // (takeClientSnapshot / requestServerSnapshot / compareState / exportClientSnapshots).
 
-import Logger, { ChildLogger } from './Logger.js';
+import type { ChildLogger } from './Logger.js';
+import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
 import { computeStateHash } from '../../../shared/stateHash.js';
@@ -33,8 +34,8 @@ const SNAPSHOT_COOLDOWN_MS = 5000; // Don't request snapshots more often than ev
 // Per-channel audit tolerances (shared/stateHash.ts FIELD_CHANNELS):
 //   sim  — position is async-snapshot comparison, 50m = obvious parking
 //   echo — health lags by up to one ~2Hz echo interval during heals
-const POSITION_TOLERANCE = 50.0;
-const HEALTH_TOLERANCE = 2.0;
+const POSITION_TOLERANCE = 50;
+const HEALTH_TOLERANCE = 2;
 
 let pendingServerSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
 

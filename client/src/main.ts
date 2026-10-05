@@ -16,7 +16,7 @@ import { DemoManager } from './demo/index.js';
 import { playerProviders } from './demo/playerProviders.js';
 
 import { Player } from './entities/Player.js';
-import { ViewModel } from './entities/ViewModel.js';
+import type { ViewModel } from './entities/ViewModel.js';
 
 import { DamageNumberManager } from './effects/damageNumbers.js';
 import { EffectsManager } from './effects/effects.js';
@@ -113,7 +113,7 @@ let damageNumberManager: DamageNumberManager;
 let networkManager: NetworkManager;
 // All shared mutable entity collections live in world — see game/worldState.ts
 const world = createWorldState();
-const remotePlayers = world.remotePlayers;
+const {remotePlayers} = world;
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
 let effects: EffectsManager;
 
@@ -153,7 +153,7 @@ async function init(): Promise<void> {
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
   // never resident — no default-field flash on F5.
-  const onlineBoot = !!urlParams.room || !!urlParams.p2p || (!!urlParams.mode && urlParams.mode !== 'classic');
+  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p) || (Boolean(urlParams.mode) && urlParams.mode !== 'classic');
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   if (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map))) {
     await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
@@ -195,7 +195,7 @@ async function init(): Promise<void> {
   // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic';
-  if (classicMode) setBallEnrage(false);
+  if (classicMode) {setBallEnrage(false);}
   // Bot roster waits on the first terrain decision — a room's map spec
   // arrives a few seconds after connect, and bots seeded on the boot
   // heightmap first would spawn → re-seat in the same breath. Offline
@@ -203,7 +203,7 @@ async function init(): Promise<void> {
   if (mode) {
     world.onTerrainApplied = () => teamBots?.reseatAll();
     Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
-      .then(() => { if (!teamBots && !networkManager.isConnected()) setupOfflineMode(mode); });
+      .then(() => { if (!teamBots && !networkManager.isConnected()) {setupOfflineMode(mode);} });
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
@@ -219,7 +219,7 @@ async function init(): Promise<void> {
   hud = new HUD();
   // Team-score strip only in team modes — dm painted a permanent
   // ALPHA 0 : 0 BRAVO badge over free-for-all play.
-  if (mode === 'nuggets' || mode === 'ctf') hud.setTeamScore(0, 0);
+  if (mode === 'nuggets' || mode === 'ctf') {hud.setTeamScore(0, 0);}
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
   profiler.markTime('hudCreated');
@@ -282,7 +282,7 @@ async function init(): Promise<void> {
  *  capture-related hangs off this one wiring pass. */
 async function initDemo(): Promise<void> {
   demoManager = new DemoManager();
-  const httpUrl = (await serverEndpoints).httpUrl;
+  const {httpUrl} = (await serverEndpoints);
   Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
   demoManager.setServerUrl(httpUrl);
   const { playerData, inputData } = playerProviders(player);
@@ -312,7 +312,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   const soloMode = !mode && !urlParams.room && !urlParams.p2p;
   // The probed saved map was already primed as boot terrain — apply its
   // structures/arena/interiors/sky now that the net ctx exists.
-  if (!classicMode && !soloMode) bootApplySavedMap(netCtx, savedMap);
+  if (!classicMode && !soloMode) {bootApplySavedMap(netCtx, savedMap);}
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // F5 with a stored session token = the server may hand back our old
@@ -320,7 +320,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // means the offline world owns the first frames outright; a "restoring"
   // curtain over a connect that can never land is the wrong order.
   if (!classicMode && !soloMode && localStorage.getItem('fps-session-token')) {
-    if (await pingServer((await serverEndpoints).httpUrl)) armSessionVeil();
+    if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
   }
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
@@ -328,7 +328,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // Initial balls — offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
   if (!networkManager.isConnected()) {
-    for (let i = 0; i < 8; i++) entities.spawnBall();
+    for (let i = 0; i < 8; i++) {entities.spawnBall();}
   }
 
   // Auto-start demo recording so cool shots are captured seamlessly
@@ -339,7 +339,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
 // Offline death path — the server's kill+respawn round-trip replicated
 // locally. Shared by bot frags and creature/environment damage.
 function killLocal(source: string): void {
-  if (player.isDead) return;
+  if (player.isDead) {return;}
   // Any death is a flag event — carried flags drop; in rabbit the
   // first corpse is what spawns the flag at all. Idempotent for the
   // bot-frag path, which already ran localDied() before the banner.
@@ -365,8 +365,8 @@ function killLocal(source: string): void {
 // (normally roomInfo.team, which never arrives offline).
 function setupOfflineMode(mode: string): void {
   const spec = MODES[mode as keyof typeof MODES];
-  if (!spec) return;
-  if (!spec.ffa) world.localTeam = 'alpha';
+  if (!spec) {return;}
+  if (!spec.ffa) {world.localTeam = 'alpha';}
   teamBots = new TeamBots(
     {
       lazyPlayer: () => player,
@@ -392,7 +392,7 @@ function setupOfflineMode(mode: string): void {
         let best: typeof entities.nuggets[0] | null = null;
         let bd = maxDist * maxDist;
         for (const n of entities.nuggets) {
-          if (n.collected || n.dead) continue;
+          if (n.collected || n.dead) {continue;}
           const d = n.pos.distanceToSquared(pos);
           if (d < bd) { bd = d; best = n; }
         }
@@ -402,7 +402,7 @@ function setupOfflineMode(mode: string): void {
         let best = null;
         let bd = maxDist * maxDist;
         for (const t of entities.targets) {
-          if (t.dead || t.scoreless) continue;
+          if (t.dead || t.scoreless) {continue;}
           const d = t.pos.distanceToSquared(pos);
           if (d < bd) { bd = d; best = t; }
         }
@@ -410,7 +410,7 @@ function setupOfflineMode(mode: string): void {
       },
       damageCreature: (id, dmg, att) => {
         const t = entities.targets.find(x => x.id === id);
-        if (!t || t.dead) return false;
+        if (!t || t.dead) {return false;}
         return combat.hitTargetLocal(t, dmg, att); // same pipeline as a projectile hit
       },
       botDeploy: (kind, pos, owner) =>
@@ -489,7 +489,7 @@ function wirePlayerStatusHooks(): void {
   // Don't shoot the wildlife.
   entities.targets.push(...ambientBirds.targets);
   ambientBirds.onPeck = (pos) => {
-    if (player.isDead) return;
+    if (player.isDead) {return;}
     player.lastDamageSource = 'pecked to death by a buzzard';
     player.applyKnockback(pos, 18 * player.mods.knockbackTaken);
     networkManager?.sendEnvironmentDamage(45);
@@ -507,19 +507,19 @@ function wirePlayerStatusHooks(): void {
   player.onSpectate = (on) => {
     if (on) { hud.hide(); hud.setSpectatorHint(true); }
     // Died mid-flight: the death path owns the HUD — don't resurface it
-    else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
+    else { hud.setSpectatorHint(false); if (!player.isDead) {hud.show();} }
   };
   player.onCloak = (on) => { hud.setCloak(on); viewModel.setGhost(on); };
   // Shield: HUD chip + cyan vignette, viewmodel charge glow, synth cues.
   player.onShield = (on) => {
     hud.setShield(on);
     viewModel.setShield(on);
-    if (on) sfx.shieldOn(); else sfx.shieldBreak();
+    if (on) {sfx.shieldOn();} else {sfx.shieldBreak();}
   };
   player.onMend = (on) => {
     hud.setMend(on);
     viewModel.setMend(on);
-    if (on) sfx.mendOn(); else sfx.mendOff();
+    if (on) {sfx.mendOn();} else {sfx.mendOff();}
   };
   player.onDeploy = () => entities.deployables.deploy();
 }
@@ -536,7 +536,7 @@ function wireNetworkLocal(): void {
   networkManager.localAuthority = {
     envDamage: (amount) => {
       const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));
-      if (player.isDead) return;
+      if (player.isDead) {return;}
       player.health = Math.max(0, player.health - dmg);
       player.lastDamageSource = 'the wilderness';
       hud.showDamage(player.pos, dmg);
@@ -629,7 +629,7 @@ const { requestLock } = wireOverlayInput({
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads
 // and pushes 'stale:changed' events — we count them so you know how much
 // new code is waiting behind Ctrl+R.
-const hot = (import.meta as { hot?: { on(e: string, cb: (d: { count: number }) => void): void } }).hot;
+const {hot} = (import.meta as { hot?: { on(e: string, cb: (d: { count: number }) => void): void } });
 if (hot) {
   let stale = 0;
   let badge: HTMLDivElement | null = null;
@@ -642,7 +642,7 @@ if (hot) {
         'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
         'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
         'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
-      document.body.appendChild(badge);
+      document.body.append(badge);
     }
     badge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed — Ctrl+R`;
   });
@@ -661,7 +661,7 @@ init().then(async () => {
   // toggle flips on mid-session (fps:set event) — no reload needed.
   let debugWired = false;
   const wireDebugTools = async () => {
-    if (debugWired) return;
+    if (debugWired) {return;}
     debugWired = true;
     if (networkManager) {
       const { wireStateDebug } = await import('./core/stateDebug.js');
@@ -690,7 +690,7 @@ init().then(async () => {
     window.__playRec = async (src, speed) =>
       (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
   };
-  if (import.meta.env.DEV || urlParams.debug) await wireDebugTools();
+  if (import.meta.env.DEV || urlParams.debug) {await wireDebugTools();}
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
@@ -701,6 +701,6 @@ init().then(async () => {
     requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap)));
   window.addEventListener('fps:set', (e) => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-    if (key === 'fps-debug' && value === 1) wireDebugTools();
+    if (key === 'fps-debug' && value === 1) {wireDebugTools();}
   });
 });

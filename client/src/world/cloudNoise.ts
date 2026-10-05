@@ -9,9 +9,9 @@
 export const NOISE_WORLD_SCALE = 3200;
 
 export const noiseHash = (x: number, y: number): number => {
-  let h = (x * 374761393 + y * 668265263) | 0;
-  h = (h ^ (h >> 13)) * 1274126177 | 0;
-  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+  let h = (x * 374_761_393 + y * 668_265_263) | 0;
+  h = (h ^ (h >> 13)) * 1_274_126_177 | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4_294_967_295;
 };
 export const _smooth = (t: number) => t * t * (3 - 2 * t);
 

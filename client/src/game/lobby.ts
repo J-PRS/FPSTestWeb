@@ -107,13 +107,13 @@ export class Lobby {
     this.modeSelect.textContent = '';
     const any = document.createElement('option');
     any.value = ''; any.textContent = 'ANY';
-    this.modeSelect.appendChild(any);
-    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length ? m.modes : (m.mode ? [m.mode] : [])))].toSorted();
+    this.modeSelect.append(any);
+    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))].toSorted();
     for (const mode of modes) {
       const o = document.createElement('option');
       o.value = mode;
       o.textContent = mode.toUpperCase();
-      this.modeSelect.appendChild(o);
+      this.modeSelect.append(o);
     }
     this.fillMapSelect();
   }
@@ -123,19 +123,19 @@ export class Lobby {
   fillMapSelect(): void {
     const mode = this.modeSelect.value;
     this.mapSelect.textContent = '';
-    if (!this.maps.length) {
+    if (this.maps.length === 0) {
       const o = document.createElement('option');
       o.textContent = this.mapsFailed ? 'server offline' : 'server default';
       o.value = ''; o.dataset.mode = '';
-      this.mapSelect.appendChild(o);
+      this.mapSelect.append(o);
       return;
     }
-    const rows = mode ? this.maps.filter((m) => (m.modes.length ? m.modes : [m.mode]).includes(mode)) : this.maps;
-    if (!rows.length) {
+    const rows = mode ? this.maps.filter((m) => (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)) : this.maps;
+    if (rows.length === 0) {
       const o = document.createElement('option');
       o.textContent = `no ${mode} maps`;
       o.value = ''; o.dataset.mode = '';
-      this.mapSelect.appendChild(o);
+      this.mapSelect.append(o);
       return;
     }
     for (const m of rows) {
@@ -145,7 +145,7 @@ export class Lobby {
       // Label shows the default ruleset so a shared map doesn't pretend
       // the pick is unique to the selected mode.
       o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
-      this.mapSelect.appendChild(o);
+      this.mapSelect.append(o);
     }
   }
 
@@ -154,7 +154,7 @@ export class Lobby {
     if (open) {
       this.panel.style.display = 'none';
       document.body.classList.remove('lobby-open');
-      if (this.timer) clearInterval(this.timer);
+      if (this.timer) {clearInterval(this.timer);}
       this.timer = null;
     } else {
       this.panel.style.display = 'block';
@@ -174,7 +174,7 @@ export class Lobby {
       const err = document.createElement('div');
       err.style.color = '#f88';
       err.textContent = 'server offline';
-      this.rows.appendChild(err);
+      this.rows.append(err);
       return;
     }
     // Default lobby first — it's the immortal room.
@@ -183,7 +183,7 @@ export class Lobby {
     this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`;
     // Default lobby IS home — leaving it is a no-op.
     this.leaveBtn.disabled = this.currentRoom() === 'default';
-    for (const r of rooms) this.addRow(r);
+    for (const r of rooms) {this.addRow(r);}
   }
 
   private addRow(r: RoomRow): void {
@@ -191,32 +191,32 @@ export class Lobby {
     row.className = 'lb-room';
     const full = r.players >= r.maxPlayers;
     const current = r.name === this.currentRoom();
-    if (full || current) row.disabled = true;
-    if (current) row.classList.add('current');
-    if (full) row.classList.add('full');
+    if (full || current) {row.disabled = true;}
+    if (current) {row.classList.add('current');}
+    if (full) {row.classList.add('full');}
     const name = document.createElement('span');
     name.textContent = r.name;
     const meta = document.createElement('span');
     meta.className = 'meta';
     const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
       : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
-    const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60000)}m` : '';
-    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.map ? r.map + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
+    const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60_000)}m` : '';
+    meta.textContent = `${r.mode ? `${r.mode  } ` : ''}${r.map ? `${r.map  } ` : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(name, meta);
     row.addEventListener('click', () => this.join(r.name));
-    this.rows.appendChild(row);
+    this.rows.append(row);
   }
 
   join(name: string, map?: string, bots?: number, mode?: string): void {
     // Already there — a reload would boot us into the same seat anyway.
-    if (name === this.currentRoom()) return;
+    if (name === this.currentRoom()) {return;}
     // map/bots/mode ride the URL so a disposed room rebuilds with its
     // spec intact — and so refresh/share land in this same match.
     const q = new URLSearchParams(location.search);
-    if (name === 'default') q.delete('room');
-    else q.set('room', name);
+    if (name === 'default') {q.delete('room');}
+    else {q.set('room', name);}
     for (const [k, v] of [['map', map], ['bots', bots], ['mode', mode]] as const) {
-      if (v !== undefined && v !== '') q.set(k, String(v)); else q.delete(k);
+      if (v !== undefined && v !== '') {q.set(k, String(v));} else {q.delete(k);}
     }
     const href = `${location.pathname}?${q.toString()}`;
     // Live socket: hop in place — the gameState rebuild does the rest.

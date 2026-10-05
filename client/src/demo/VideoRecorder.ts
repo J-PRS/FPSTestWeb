@@ -51,7 +51,7 @@ export class VideoRecorder {
       if (!r) { resolve(null); return; }
       r.onstop = () => {
         const type = this.mime.split(';')[0] || 'video/webm';
-        resolve(this.chunks.length ? new Blob(this.chunks, { type }) : null);
+        resolve(this.chunks.length > 0 ? new Blob(this.chunks, { type }) : null);
         this.chunks = [];
         this.recorder = null;
       };

@@ -21,7 +21,7 @@ export interface ChatDeps {
 }
 
 const MAX_LINES = 8;
-const FADE_MS = 12000;
+const FADE_MS = 12_000;
 
 /** The one live feed — Chat is constructed once by netHandlers; other
  *  self-contained modules (offline bots) reach it without threading a
@@ -50,7 +50,7 @@ export class Chat {
     root.style.cssText = 'position:fixed;left:12px;bottom:var(--z-bl-1);z-index:60;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:min(420px, calc(50vw - 170px));';
 
     this.feed = document.createElement('div');
-    root.appendChild(this.feed);
+    root.append(this.feed);
 
     this.inputWrap = document.createElement('div');
     this.inputWrap.style.cssText = 'display:none;margin-top:4px;pointer-events:auto;';
@@ -58,9 +58,9 @@ export class Chat {
     this.input.maxLength = 200;
     this.input.placeholder = 'say…';
     this.input.style.cssText = 'width:100%;background:rgba(0,0,0,.65);border:1px solid #444;color:#fff;font:inherit;padding:3px 6px;outline:none;';
-    this.inputWrap.appendChild(this.input);
-    root.appendChild(this.inputWrap);
-    document.body.appendChild(root);
+    this.inputWrap.append(this.input);
+    root.append(this.inputWrap);
+    document.body.append(root);
 
     // Capture phase: while composing, keys are ours alone.
     window.addEventListener('keydown', (e) => this.onKey(e), true);
@@ -115,7 +115,7 @@ export class Chat {
   echoSelf(text: string, team: boolean, vgs?: string): void {
     const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
     this.pendingSelf.set(key, (this.pendingSelf.get(key) ?? 0) + 1);
-    if (this.pendingSelf.size > 64) this.pendingSelf.clear();
+    if (this.pendingSelf.size > 64) {this.pendingSelf.clear();}
     this.add(this.deps.localName(), text, team, vgs);
   }
 
@@ -131,18 +131,18 @@ export class Chat {
   private swallowSelfEcho(from: string, text: string, team: boolean, vgs?: string): boolean {
     const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
     const n = this.pendingSelf.get(key) ?? 0;
-    if (!n) return false;
-    if (n > 1) this.pendingSelf.set(key, n - 1); else this.pendingSelf.delete(key);
+    if (!n) {return false;}
+    if (n > 1) {this.pendingSelf.set(key, n - 1);} else {this.pendingSelf.delete(key);}
     return true;
   }
 
   add(from: string | null, text: string, team = false, vgs?: string): void {
     if (from !== null) {
       const isSelf = from === this.deps.localName();
-      if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) return;
+      if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) {return;}
       if (vgs) {
         // Own VGS spoke at send time — the echo back is feed-only.
-        if (!isSelf) speakVgs(feedNames(text), from);
+        if (!isSelf) {speakVgs(feedNames(text), from);}
       } else if (chatTtsEnabled()) {
         speakChat(feedNames(text), from); // own lines too — audible send confirmation
       }
@@ -167,8 +167,8 @@ export class Chat {
       }
       line.append(who, body);
     }
-    this.feed.appendChild(line);
-    while (this.feed.children.length > MAX_LINES) this.feed.firstChild?.remove();
+    this.feed.append(line);
+    while (this.feed.children.length > MAX_LINES) {this.feed.firstChild?.remove();}
     setTimeout(() => line.remove(), FADE_MS);
   }
 }

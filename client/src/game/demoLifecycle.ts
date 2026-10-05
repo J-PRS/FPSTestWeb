@@ -11,7 +11,7 @@ import type { Player } from '../entities/Player.js';
 import { noteLocalSnap } from './gameLoop.js';
 import type { Projectile } from '../projectiles/Projectile.js';
 import type { Terrain } from '../world/terrain.js';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { ChildLogger } from '../core/Logger.js';
 import type { WorldState } from './worldState.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
@@ -63,7 +63,7 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
 // rather than breaking playback.
 function widForWeaponType(wt: number): number {
   const i = SLOT_DEFS.findIndex(d => d.weaponType === wt);
-  return i >= 0 ? i : 0;
+  return i !== -1 ? i : 0;
 }
 
 function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
@@ -112,7 +112,7 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
     if (b.disposed) {
       d.balls.splice(i, 1);
       const ti = d.targets.indexOf(b);
-      if (ti >= 0) {d.targets.splice(ti, 1);}
+      if (ti !== -1) {d.targets.splice(ti, 1);}
       d.playbackBallById.delete(b.id);
     }
   }
@@ -137,9 +137,9 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
   for (const ball of d.playbackBallById.values()) {
     ball.dispose();
     const idx = d.balls.indexOf(ball);
-    if (idx >= 0) {d.balls.splice(idx, 1);}
+    if (idx !== -1) {d.balls.splice(idx, 1);}
     const ti = d.targets.indexOf(ball);
-    if (ti >= 0) {d.targets.splice(ti, 1);}
+    if (ti !== -1) {d.targets.splice(ti, 1);}
   }
   d.playbackBallById.clear();
   for (const e of d.world.debrisList) {e.dispose();}
@@ -254,7 +254,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
         b.dispose();
         d.balls.splice(i, 1);
         const ti = d.targets.indexOf(b);
-        if (ti >= 0) {d.targets.splice(ti, 1);}
+        if (ti !== -1) {d.targets.splice(ti, 1);}
       }
     }
     // Clear live projectiles
@@ -268,7 +268,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       for (const e of list) {
         e.dispose();
         const ti = d.targets.indexOf(e);
-        if (ti >= 0) {d.targets.splice(ti, 1);}
+        if (ti !== -1) {d.targets.splice(ti, 1);}
       }
       list.length = 0;
     }

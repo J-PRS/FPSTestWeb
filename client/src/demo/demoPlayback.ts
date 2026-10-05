@@ -97,7 +97,7 @@ export function emitFrameAndEvents(p: DemoPlayer, time: number): void {
 
 export function findFrameIndex(p: DemoPlayer, time: number): number {
     if (!p.demoData || p.demoData.frames.length === 0) {return 0;}
-    const frames = p.demoData.frames;
+    const {frames} = p.demoData;
     // Binary search for the frame at or before `time`
     let lo = 0, hi = frames.length - 1;
     while (lo < hi) {
@@ -144,7 +144,7 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
       };
     }
 
-    const frames = p.demoData.frames;
+    const {frames} = p.demoData;
     const i = Math.min(p.frameIndex, frames.length - 1);
     const f0 = frames[i]!;
     const f1 = i + 1 < frames.length ? frames[i + 1]! : f0;

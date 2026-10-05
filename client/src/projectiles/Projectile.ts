@@ -6,7 +6,7 @@ import { idSeed, jitteredTtl } from '../../../shared/weapons.js';
 
 import type { Targetable } from '../entities/balls.js';
 
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
 
 import { RibbonTrail } from '../effects/RibbonTrail.js';
@@ -15,7 +15,7 @@ import { QuarksTrail } from '../effects/vfx.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import { tickRemote } from './projRemote.js';
-import { ColliderIndex } from '../../../shared/solidWorld.js';
+import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
 import { ProjStuck } from './projStuck.js';
@@ -85,7 +85,7 @@ export class Projectile {
   dead = false;
   exploded = false;
   hitBolt: SweepObstacle | null = null; // mid-air interception — combat turns this into a cookoff blast
-  age = 0.0;
+  age = 0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
   hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
@@ -106,11 +106,11 @@ export class Projectile {
   /** Local player's armor class — the body sweep needs its capsule. */
   localClass: (() => string | undefined) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
-  hitAccuracy = 0.0; // actual center-to-center dist at moment of hit
-  hitAge = 0.0; // projectile age at hit (airtime)
-  hitDistance = 0.0; // travel distance from shot origin
+  hitAccuracy = 0; // actual center-to-center dist at moment of hit
+  hitAge = 0; // projectile age at hit (airtime)
+  hitDistance = 0; // travel distance from shot origin
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
-  minHitDist = 0.0; // minimum distance during sweep (for accurate accuracy)
+  minHitDist = 0; // minimum distance during sweep (for accurate accuracy)
   // Contact bookkeeping — read/written by projCollide (the impact-policy family).
   hitX = 0; hitY = 0; hitZ = 0; hitT = 1;
   lastDt = 0; // dt of the running update — hitAge backs off to swept contact
@@ -177,7 +177,7 @@ export class Projectile {
     if (!ml) {return undefined;}
     const j = this.config.ttlJitter ?? 0;
     if (!j) { this.ttl = ml; return ml; }
-    const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : (Math.random() * 4294967296) >>> 0;
+    const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : (Math.random() * 4_294_967_296) >>> 0;
     this.ttl = jitteredTtl({ maxLifetime: ml, ttlJitter: j }, seed);
     return this.ttl;
   }
@@ -400,7 +400,7 @@ export class Projectile {
     if (this.armedFxDone || !this.armed || this.config.armTime === undefined) {return;}
     this.armedFxDone = true;
     this.ribbons.push(RibbonTrail.acquire(this.scene, {
-      color: 0xffbb33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
+      color: 0xFFBB33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
     }));
   }
 

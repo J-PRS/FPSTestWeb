@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { lerpAngle } from '../../../shared/angles.ts';
 
 /**
@@ -148,7 +148,7 @@ export class SnapshotBuffer {
     const lx = s0.x + ddx * a, ly = s0.y + ddy * a, lz = s0.z + ddz * a;
     let useHermite = false;
     // 1s cap: tier-suppressed streams legitimately span ~500ms.
-    if (spanSec > 0 && spanSec < 1.0) {
+    if (spanSec > 0 && spanSec < 1) {
       const t2 = a * a, t3 = t2 * a;
       const h00 = 2 * t3 - 3 * t2 + 1;
       const h10 = t3 - 2 * t2 + a;

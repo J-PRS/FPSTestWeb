@@ -2,14 +2,15 @@ import * as THREE from 'three';
 
 import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js'
 import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';;
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { PlayerStatus } from './playerStatus.js';
 
-import { MovementController, MovementState } from './movement.js';
+import type { MovementState } from './movement.js';
+import { MovementController } from './movement.js';
 import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
@@ -52,16 +53,16 @@ export type BeltItem = typeof BELT_ITEMS[number];
 export class Player {
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();
-  yaw = 0.0;
-  pitch = 0.0;
+  yaw = 0;
+  pitch = 0;
 
   onGround = false;
   energy = MAX_ENERGY;
   /** Sputter lock — set when the tank bottoms, refuses jets briefly. */
   jetLockT = 0;
   /** Nugget pickup: free jetting for a few seconds (refresh, not stack). */
-  fireTimer = 0.0;
-  beltTimer = 0.0;
+  fireTimer = 0;
+  beltTimer = 0;
   // Primary fire is locked while the belt-throw anim plays — the weapon is
   // physically lowered, shooting mid-throw would fire through the hip.
   throwLockT = 0;
@@ -168,7 +169,7 @@ export class Player {
 
   // Power punch (E): CoD-style lunge toward the crosshair, hit itself is
   // resolved in combat.melee() as a cone + small AOE claim.
-  private meleeCooldown = 0.0;
+  private meleeCooldown = 0;
   tryMelee(): void {
     if (this.meleeCooldown > 0) {return;}
     this.meleeCooldown = MELEE_COOLDOWN;
@@ -187,8 +188,8 @@ export class Player {
   camera: THREE.PerspectiveCamera;
   public movement: MovementController; // Public for client-side prediction reconciliation
   model: PlayerModel | null = null; // public — PlayerEmit/PlayerStatus read it
-  jumpAnimTimer = 0.0; // public — PlayerEmit re-arms it on lift-off
-  shootAnimTimer = 0.0;
+  jumpAnimTimer = 0; // public — PlayerEmit re-arms it on lift-off
+  shootAnimTimer = 0;
   wasOnGround = false; // public — PlayerEmit owns the transition edge
   visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
 

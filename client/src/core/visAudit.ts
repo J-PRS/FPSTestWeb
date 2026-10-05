@@ -4,7 +4,7 @@
 // and flags primitives spanning impossible distances, NaN verts, and
 // giant/orphaned instances. Terrain/sky/sprites legitimately span the
 // world — only structures where a long edge is always wrong are checked.
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { registerDiag } from './fxDiag';
 
 // A legit trail/line segment is a few meters (a 200m/s projectile moves
@@ -42,7 +42,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     const geo = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
     const pos = geo?.attributes?.position;
     const arr = pos?.array as ArrayLike<number> | undefined;
-    if (!geo || !arr || !arr.length) {return;}
+    if (!geo || !arr || arr.length === 0) {return;}
     o.updateWorldMatrix(true, false);
     const m = o.matrixWorld.elements;
     const X = (v: number) => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
@@ -109,7 +109,7 @@ registerDiag('visAudit', () => {
   if (!scene) {return { visAudit: 'no scene' };}
   const r = auditScene(scene);
   return {
-    visAudit: r.offenders.length
+    visAudit: r.offenders.length > 0
       ? `${r.offenders.length} offenders / ${r.scanned} scanned: ${r.offenders.slice(0, 5).map(o => `${o.tag}@${o.edge}m`).join(', ')}`
       : `clean — ${r.scanned} objects scanned`,
   };

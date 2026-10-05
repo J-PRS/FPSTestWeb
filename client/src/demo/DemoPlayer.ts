@@ -33,7 +33,7 @@ export class DemoPlayer {
   demoData: DemoFile | null = null;
   currentTime = 0;
   playing = false;
-  playbackSpeed = 1.0;
+  playbackSpeed = 1;
   loop = false;
   frameIndex = 0;
   callbacks: PlaybackCallbacks = {};

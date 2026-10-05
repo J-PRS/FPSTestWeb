@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import { getHeightmapData, getWorldScale, sampleHeight } from '../world/heightmap.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
@@ -71,7 +71,7 @@ export class CommandMap {
     if (flags) {
       c.lineWidth = 1.5;
       for (const [team, f] of flags) {
-        const col = `#${  (TEAM_COLORS[team] ?? 0xffffff).toString(16).padStart(6, '0')}`;
+        const col = `#${  (TEAM_COLORS[team] ?? 0xFFFFFF).toString(16).padStart(6, '0')}`;
         c.strokeStyle = col;
         if (f.homeKnown) {
           c.beginPath();

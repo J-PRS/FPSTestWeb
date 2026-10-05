@@ -28,8 +28,8 @@ const GIB_CAP = 192;
 // nearest GIB_CAP multiple covering 2× live (same keep-alive contract
 // as the quarks pool).
 
-const UP_BIAS = 2.0;
-const IMPULSE_CARRY = 6.0; // matches Debris — the shot's push travels through
+const UP_BIAS = 2;
+const IMPULSE_CARRY = 6; // matches Debris — the shot's push travels through
 
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -114,10 +114,10 @@ class GibMeshPool {
     // Repack: live slots (life > 0) move down in index order.
     const remap = new Int32Array(cap).fill(-1);
     let next = 0;
-    for (let i = 0; i < cap; i++) {if (this.life[i]! > 0) remap[i] = next++;}
+    for (let i = 0; i < cap; i++) {if (this.life[i]! > 0) {remap[i] = next++;}}
     const moveA = (a: Float32Array): Float32Array<ArrayBuffer> => {
       const n = new Float32Array(target);
-      for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) n[remap[i]!] = a[i]!;}
+      for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) {n[remap[i]!] = a[i]!;}}
       return n;
     };
     const npx = moveA(this.px); const npy = moveA(this.py); const npz = moveA(this.pz);
@@ -129,7 +129,7 @@ class GibMeshPool {
     const nage = moveA(this.age); const nlife = moveA(this.life);
     const nbodyR = moveA(this.bodyR);
     const nla = new Float32Array(target).fill(-1);
-    for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) nla[remap[i]!] = this.landedAt[i]!;}
+    for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) {nla[remap[i]!] = this.landedAt[i]!;}}
     this.px = npx; this.py = npy; this.pz = npz;
     this.vx = nvx; this.vy = nvy; this.vz = nvz;
     this.rx = nrx; this.ry = nry; this.rz = nrz;

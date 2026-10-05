@@ -7,8 +7,8 @@ import type { SkillsCtx } from './skills.js';
 // Warp beacon — Q-down throws the anchor; it flies/arcs/bounces while Q
 // is held, Q-up teleports the player onto it with momentum preserved.
 const TL_THROW_SPEED = 45;   // m/s along the crosshair (+ 50% inherit)
-const TL_COOLDOWN = 1.0;     // s after a teleport — energy does the pricing
-const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
+const TL_COOLDOWN = 1;     // s after a teleport — energy does the pricing
+const TL_MAX_LIFE = 6;     // held beacon fizzles — can't camp it forever
 const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
 export class WarpBeacon {
@@ -31,11 +31,11 @@ export class WarpBeacon {
       // as a warp anchor, not a pebble, at 60m against the sand
       this.mesh = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.32),
-        new THREE.MeshBasicMaterial({ color: 0xaafff4 })
+        new THREE.MeshBasicMaterial({ color: 0xAAFFF4 })
       );
       this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
         map: getGlowTexture(),
-        color: 0x33ffdd,
+        color: 0x33FFDD,
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,

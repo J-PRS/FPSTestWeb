@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Bird, Kettle } from './birds.js';
 
 // Per-bird flight modes — dive (aggro), depart (scatter on kill), and the
@@ -9,10 +9,10 @@ import type { Bird, Kettle } from './birds.js';
 
 const ALT_MIN = 45;
 const DIVE_SPEED = 55;
-const PECK_RANGE = 3.0;
+const PECK_RANGE = 3;
 const PECK_CD = 0.9;
 const PULLUP_TIME = 1.4;
-const SEP_R2 = 9.0; // bird-vs-bird separation distance² (3m)
+const SEP_R2 = 9; // bird-vs-bird separation distance² (3m)
 
 const _target = new THREE.Vector3();
 const _next = new THREE.Vector3();

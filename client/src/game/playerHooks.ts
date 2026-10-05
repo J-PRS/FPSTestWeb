@@ -2,7 +2,7 @@
 // effects for movement skills. Kept out of main.ts so the composition root
 // reads as construction order, not a wall of lambdas.
 import * as THREE from 'three';
-import { Player } from '../entities/Player.js';
+import type { Player } from '../entities/Player.js';
 import { weaponDef } from '../weapons.js';
 import type { createCombat } from './combat.js';
 import type { EffectsManager } from '../effects/effects.js';
@@ -44,10 +44,10 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   //  3. ARRIVAL discharge — a real blast at the landing anchor; it owns
   //     the bigger share of the FX budget.
   world.implosions.push(new Implosion(scene, from, 0, terrain));
-  effects.spawnBeam(from, to, 0x55ffdd);
-  speedLines.surge(from, to, 0x33ffdd, 22);
+  effects.spawnBeam(from, to, 0x55FFDD);
+  speedLines.surge(from, to, 0x33_ff_dd, 22);
   world.explosions.push(new Explosion(
-    scene, to, true, 0, terrain, 5.5 / EXPLOSION_VFX_RADIUS, 0x66ffee, 'punch',
+    scene, to, true, 0, terrain, 5.5 / EXPLOSION_VFX_RADIUS, 0x66_ff_ee, 'punch',
   ));
   effects.spawnBounce(to, player.vel);
   effects.spawnJetpack(to); // extra sparks at the landing anchor
@@ -68,7 +68,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   player.onBounce = (pos, dir) => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
   player.onBlink = (from, to) => {
   // Tracer-style whoosh — cyan streaks stamped along the blink path
-  speedLines.surge(from, to, 0x55ccff);
+  speedLines.surge(from, to, 0x55CCFF);
   viewModel?.kick(0.35);
   // Cyan flash at both ends — departure pop + arrival streak along the path
   _blinkDir.subVectors(to, from).normalize();
@@ -80,7 +80,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   // White-hot streak line along the dash — reads as a boost, not a redirect
   // (bounce's cyan cone is the redirect cue; dash shares no shape language)
   _blinkDir.copy(dir).multiplyScalar(7).add(pos);
-  speedLines.surge(pos, _blinkDir, 0xfff2cc, 10);
+  speedLines.surge(pos, _blinkDir, 0xFFF2CC, 10);
   effects.spawnJumpDust(pos);
   viewModel?.kick(0.4);
   sfx.dash();

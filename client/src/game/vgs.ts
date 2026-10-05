@@ -149,7 +149,7 @@ export class Vgs {
     this.menu.textContent = '';
     const crumb = document.createElement('div');
     crumb.style.color = '#9cf';
-    crumb.textContent = `VGS${  this.path.length ? ` ▸ ${this.path.map((n) => n.label).join(' ▸ ')}` : ''}`;
+    crumb.textContent = `VGS${  this.path.length > 0 ? ` ▸ ${this.path.map((n) => n.label).join(' ▸ ')}` : ''}`;
     this.menu.append(crumb);
     for (const [k, n] of Object.entries(this.node)) {
       const row = document.createElement('div');

@@ -40,7 +40,7 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   vfx: 'bolt', // compact snap — the punch is the count, not each blast
   damageColor: '#ff8833',
   trailColors: [
-    new THREE.Color(1.0, 0.6, 0.25),
+    new THREE.Color(1, 0.6, 0.25),
     new THREE.Color(0.8, 0.35, 0.15),
     new THREE.Color(0.4, 0.25, 0.2),
   ],
@@ -49,17 +49,17 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   trailLifeMax: 0.45,
   trailSpread: 0.08,
   trailForwardSpread: 0.05,
-  trailParticleGravity: 0.0,
+  trailParticleGravity: 0,
   trailOpacity: 0.4,
   trailBaseSize: 0.06,
   trailSizeRange: 0.15,
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0,
-  meshColor: 0x8a2a18,
+  meshColor: 0x8A2A18,
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xff5522,
+  glowColor: 0xFF5522,
   glowOpacity: 0.45,
   glowScale: 0.7,
   meshRampIn: true,
@@ -73,7 +73,7 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.18,
   ribbonLife: 0.3,
-  ribbonColor: 0xff7733,
+  ribbonColor: 0xFF7733,
 };
 
 export const MRV_CONFIG: ProjectileConfig = {
@@ -95,7 +95,7 @@ export const MRV_CONFIG: ProjectileConfig = {
   vfx: 'concussion',
   damageColor: '#ff6622',
   trailColors: [
-    new THREE.Color(1.0, 0.65, 0.3),
+    new THREE.Color(1, 0.65, 0.3),
     new THREE.Color(0.9, 0.4, 0.15),
     new THREE.Color(0.55, 0.25, 0.15),
     new THREE.Color(0.3, 0.2, 0.18),
@@ -105,17 +105,17 @@ export const MRV_CONFIG: ProjectileConfig = {
   trailLifeMax: 0.9,
   trailSpread: 0.2,
   trailForwardSpread: 0.1,
-  trailParticleGravity: 0.0,
+  trailParticleGravity: 0,
   trailOpacity: 0.45,
   trailBaseSize: 0.12,
   trailSizeRange: 0.3,
   trailScaleMin: 0.6,
   trailScaleMax: 1.8,
   trailRampIn: 0.05,
-  meshColor: 0xb84a18,
+  meshColor: 0xB84A18,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0xff6633,
+  glowColor: 0xFF6633,
   glowOpacity: 0.3,
   glowScale: 1.1,
   meshRampIn: true,
@@ -134,7 +134,7 @@ export const MRV_CONFIG: ProjectileConfig = {
   // Full carrier-velocity inherit + uniform sphere scatter — bomblets
   // ride the arc as a cloud, then rain down and contact-pop at different
   // times instead of flash-popping in unison.
-  cluster: { count: 6, spread: 1.0, sphere: true },
+  cluster: { count: 6, spread: 1, sphere: true },
   // The carrier is a delivery truck, not a shell — contact pops would
   // make it a 55 m/s mortar with a bonus bomblet rain. Fuse or GTFO.
   passThroughTargets: W.fuseOnly,
@@ -143,5 +143,5 @@ export const MRV_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.5,
   ribbonLife: 0.35,
-  ribbonColor: 0xcc5522,
+  ribbonColor: 0xCC5522,
 };

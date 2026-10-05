@@ -22,7 +22,7 @@ describe('position frame round-trip', () => {
   it('quantizes velocity to 0.1 m/s', () => {
     const vel = { x: 1.04, y: 1.05, z: 1.06 };
     const d = decodePosition(encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, vel, 1, 0))!;
-    expect(d.velocity.x).toBeCloseTo(1.0, 5);
+    expect(d.velocity.x).toBeCloseTo(1, 5);
     expect(d.velocity.z).toBeCloseTo(1.1, 5);
   });
 
@@ -65,7 +65,7 @@ describe('tick frame round-trip', () => {
     });
     const p2 = encodeTickPlayer({
       playerId: 'player_xyz', position: { x: -1, y: -2, z: -3 },
-      rotation: { yaw: 3.0, pitch: 0.2 }, velocity: { x: 0, y: 0, z: 0 },
+      rotation: { yaw: 3, pitch: 0.2 }, velocity: { x: 0, y: 0, z: 0 },
       health: 0, isDead: true, ping: undefined, ski: 0,
     });
     const frame = encodeTickFrame(77, 900, 41, [p1, p2]);

@@ -21,7 +21,7 @@ u.timeline.style.cssText = `
   height: 6px; background: #333; border-radius: 3px; outline: none;
 `;
 u.timeline.addEventListener('input', () => {
-  const time = parseFloat(u.timeline.value);
+  const time = Number.parseFloat(u.timeline.value);
   u.callbacks?.onSeek(time);
 });
 // While the thumb is held, setTime must not write .value back — playback
@@ -31,7 +31,7 @@ u.timeline.addEventListener('pointerdown', () => { u.timelineDragging = true; })
 window.addEventListener('pointerup', () => { u.timelineDragging = false; });
 
 // Inject thumb styling (pseudo-elements can't be set via inline styles)
-if (!document.getElementById('demo-ui-slider-style')) {
+if (!document.querySelector('#demo-ui-slider-style')) {
   const style = document.createElement('style');
   style.id = 'demo-ui-slider-style';
   style.textContent = `
@@ -70,7 +70,7 @@ export function initControls(u: DemoUI): void {
 // Speed selector
 u.speedSelect = document.createElement('select');
 u.speedSelect.style.cssText = 'background: #222; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-family: monospace;';
-for (const speed of [0.25, 0.5, 1.0, 2.0, 4.0]) {
+for (const speed of [0.25, 0.5, 1, 2, 4]) {
   const opt = document.createElement('option');
   opt.value = String(speed);
   opt.textContent = `${speed}x`;
@@ -78,7 +78,7 @@ for (const speed of [0.25, 0.5, 1.0, 2.0, 4.0]) {
 }
 u.speedSelect.value = '1';
 u.speedSelect.addEventListener('change', () => {
-  u.callbacks?.onSpeedChange(parseFloat(u.speedSelect.value));
+  u.callbacks?.onSpeedChange(Number.parseFloat(u.speedSelect.value));
 });
 
 // Loop button

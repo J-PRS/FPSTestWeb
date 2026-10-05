@@ -98,7 +98,7 @@ class SpeciesKitImpl {
   removeTarget = <T extends Targetable>(list: T[], i: number, e: T): void  => {
     list.splice(i, 1);
     const ti = this.targets.indexOf(e);
-    if (ti >= 0) {this.targets.splice(ti, 1);}
+    if (ti !== -1) {this.targets.splice(ti, 1);}
   }
 
   // Spawn position on a ring around the player — every ambient spawn uses it.
@@ -183,7 +183,7 @@ class SpeciesKitImpl {
       force * (u ? (uber?.force ?? 2) : 1),
       dmg * (u ? (uber?.dmg ?? 2) : 1),
       u && uber?.text ? uber.text : text,
-      reachGap !== undefined ? attacker.radius + reachGap : undefined,
+      reachGap === undefined ? undefined : attacker.radius + reachGap,
       attacker);
   }
 

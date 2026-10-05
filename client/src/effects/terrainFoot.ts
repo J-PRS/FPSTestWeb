@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { markProbe } from '../core/fxDiag.js';
 
 const _v = new THREE.Vector3();
@@ -25,7 +25,7 @@ export class TerrainFoot {
     private rimRadius: number,
     private depth = 0.15,
     segs = 28,
-    color = 0x4a4235, // dirt
+    color = 0x4A4235, // dirt
   ) {
     this.segs = segs;
     this.geo = new THREE.BufferGeometry();

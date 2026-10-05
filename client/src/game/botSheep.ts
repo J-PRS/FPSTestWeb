@@ -1,4 +1,4 @@
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { SheepCore, type SheepVec } from '../../../shared/botSheep.js';
 
 /** The meter only reads body state — the same tick runs on bots and on

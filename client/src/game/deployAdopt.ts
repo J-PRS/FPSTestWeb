@@ -42,7 +42,7 @@ export class DeployAdopter {
       v: t,
       update: (dt) => {
         const shot = t.update(dt, this.host.foesFor(owner));
-        if (!shot) return;
+        if (!shot) {return;}
         this.rockets.spawn(shot.muzzle, shot.target, 1, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
       },
@@ -51,8 +51,8 @@ export class DeployAdopter {
       team: owner?.team,
     };
     // Keep item.dead in step with the entity's — gnaw damage lands on `t`.
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (t.dead) this.host.killItem(item); };
+    const {hurt} = item;
+    item.hurt = (dmg) => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -67,7 +67,7 @@ export class DeployAdopter {
       update: (dt) => {
         // Anchor is the plant owner — a bot's drone chases the bot.
         const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.host.foesFor(owner));
-        if (!shot) return;
+        if (!shot) {return;}
         this.rockets.spawn(shot.muzzle, shot.target, 0.6, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
       },
@@ -75,8 +75,8 @@ export class DeployAdopter {
       owner: owner?.id,
       team: owner?.team,
     };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (d.dead) this.host.killItem(item); };
+    const {hurt} = item;
+    item.hurt = (dmg) => { hurt(dmg); if (d.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -85,26 +85,26 @@ export class DeployAdopter {
     m.onDetonate = (mine) => {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, mine.pos, false, 0, this.deps.lazyTerrain(),
-        mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xffaa44));
+        mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFFAA44));
       sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, 2.5, player.pos);
       // Friendly mine — creatures + enemy bots take the blast, not you.
       for (const c of this.deps.targets) {
-        if (c.dead) continue;
+        if (c.dead) {continue;}
         const d = c.pos.distanceTo(mine.pos);
         if (d < mine.blastRadius) {
           const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
-          if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg, owner?.id);
+          if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, owner?.id);}
         }
       }
       for (const b of this.host.foesFor(owner)) {
-        if (!b.playerId) continue; // creatures take the blast via targets above
+        if (!b.playerId) {continue;} // creatures take the blast via targets above
         const d = b.pos.distanceTo(mine.pos);
         // 'local' resolves through the same hit funnel — it routes to
         // hurtLocal on the TeamBots side.
         if (b.alive && d < mine.blastRadius) {
           const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
-          if (dmg > 0) this.deps.damageBot?.(b.playerId, dmg, mine.pos);
+          if (dmg > 0) {this.deps.damageBot?.(b.playerId, dmg, mine.pos);}
         }
       }
     };
@@ -120,14 +120,14 @@ export class DeployAdopter {
         for (const b of this.host.foesFor(owner)) {
           // Player-sourced mines exclude the owner's teammates; the
           // botFoes list already filters by team for bot owners.
-          if (!b.alive) continue;
+          if (!b.alive) {continue;}
           const d2 = b.pos.distanceToSquared(m.pos);
           if (d2 < bd) { bd = d2; bx = b.pos.x; by = b.pos.y; bz = b.pos.z; }
         }
-        if (bd === Infinity) return; // nothing hostile alive — stay dormant
+        if (bd === Infinity) {return;} // nothing hostile alive — stay dormant
         nearest.set(bx, by, bz);
         m.update(dt, nearest);
-        if (m.dead) this.host.killItem(item);
+        if (m.dead) {this.host.killItem(item);}
       },
       dispose: () => m.dispose(),
       owner: owner?.id,
@@ -148,7 +148,7 @@ export class DeployAdopter {
       update: (dt) => {
         // Field owner gets the charge — a bot's pad heals the bot.
         const who = owner ?? p;
-        if (!s.update(dt, who.pos)) return;
+        if (!s.update(dt, who.pos)) {return;}
         if (owner) {
           owner.addEnergy(StationClass.JET_RATE * dt);
           owner.heal(StationClass.HP_RATE * dt);
@@ -161,8 +161,8 @@ export class DeployAdopter {
       owner: owner?.id,
       team: owner?.team,
     };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };
+    const {hurt} = item;
+    item.hurt = (dmg) => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -180,8 +180,8 @@ export class DeployAdopter {
       team: owner?.team,
       beacon: b,
     };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (b.dead) this.host.killItem(item); };
+    const {hurt} = item;
+    item.hurt = (dmg) => { hurt(dmg); if (b.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -199,8 +199,8 @@ export class DeployAdopter {
       team: owner?.team,
       flash: () => s.flash(),
     };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };
+    const {hurt} = item;
+    item.hurt = (dmg) => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 }

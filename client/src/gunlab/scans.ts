@@ -80,7 +80,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
       // the fighting patch; painting whole tris flags innocent surface.
       let poly = xa;
       const cx = (ya[0]!.x + ya[1]!.x + ya[2]!.x) / 3, cy = (ya[0]!.y + ya[1]!.y + ya[2]!.y) / 3;
-      for (let e = 0; e < 3 && poly.length; e++) {
+      for (let e = 0; e < 3 && poly.length > 0; e++) {
         const p = ya[e]!, q = ya[(e + 1) % 3]!;
         const nx = -(q.y - p.y), ny = q.x - p.x; // edge normal
         const sign = Math.sign(nx * (cx - p.x) + ny * (cy - p.y)) || 1; // inside = centroid side
@@ -192,13 +192,13 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
   for (let i = 0; i < parts.length; i++)
     {for (let j = i + 1; j < parts.length; j++)
-      if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);}
+      {if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);}}
   const roots = new Set(parts.map((_, i) => find(i)));
   // Orphan = a cluster of one (not merely a small cluster).
   const size = new Map<number, number>();
   for (let i = 0; i < parts.length; i++) {size.set(find(i), (size.get(find(i)) ?? 0) + 1);}
   const orphans: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
-  for (let i = 0; i < parts.length; i++) {if (size.get(find(i)) === 1) orphans.push(parts[i]!);}
+  for (let i = 0; i < parts.length; i++) {if (size.get(find(i)) === 1) {orphans.push(parts[i]!);}}
   const who: string[] = [], at: number[][] = [];
   for (const o of orphans.slice(0, 8)) {
     who.push(o.m.name || o.m.geometry.type);

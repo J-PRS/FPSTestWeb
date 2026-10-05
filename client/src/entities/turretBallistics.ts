@@ -100,7 +100,7 @@ export function launch(t: BalHost, playerPos: THREE.Vector3, playerVel?: THREE.V
 // fixed 60 m/s, elevation from the range equation, low arc preferred.
 // Returns null when the target is beyond max range (disc < 0).
 export function solveBolt(t: BalHost, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): THREE.Vector3 | null {
-  const muzzleY = t.pos.y + 1.0;
+  const muzzleY = t.pos.y + 1;
   const v = TURRET_BOLT_SPEED;
   const g = Math.abs(GRAVITY);
 
@@ -126,7 +126,7 @@ export function solveBolt(t: BalHost, playerPos: THREE.Vector3, playerVel?: THRE
 // March the solved arc and check it clears terrain — 12 samples is plenty
 // for a 1s flight. Cheap: no allocation, getHeight is a heightmap read.
 export function pathClear(t: BalHost, vel: THREE.Vector3): boolean {
-  const muzzle = t.pos.y + 1.0;
+  const muzzle = t.pos.y + 1;
   const g = Math.abs(GRAVITY);
   const tEnd = Math.min(1.5, 2 * vel.y / g + 0.3); // up-and-down time + margin
   for (let i = 1; i <= 12; i++) {

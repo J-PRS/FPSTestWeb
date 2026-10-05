@@ -37,7 +37,7 @@ for (const base of [-0.16, 0.05]) {
 }
 // Frame — lower body under the slide; chamfered like the slide.
 const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.22), darkMat);
-pFrame.position.set(0, 0.0, -0.03);
+pFrame.position.set(0, 0, -0.03);
 pistol.add(pFrame);
 // Accessory rail under the muzzle — the two-slot Picatinny stub.
 const railP = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.02, 0.09), darkMat);
@@ -56,12 +56,12 @@ const gBottom = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.08), darkMat
 gBottom.position.set(0, -0.085, -0.01);
 pistol.add(gBottom);
 const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.03, 0.012), darkMat);
-trigger.position.set(0, -0.055, 0.0);
+trigger.position.set(0, -0.055, 0);
 trigger.rotation.x = 0.25;
 pistol.add(trigger);
 // Grip — autopistol rake: straighter than a revolver, ~15° back.
 // Extruded profile again: flat front strap, convex backstrap, squared butt.
-const gripMat = new THREE.MeshLambertMaterial({ color: 0x33362f, emissive: 0x0b0c0a });
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x33362F, emissive: 0x0b_0c_0a });
 const gs = new THREE.Shape();
 gs.moveTo(0, 0);
 gs.lineTo(-0.005, -0.11);                        // front strap — near vertical
@@ -158,7 +158,7 @@ const web = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.03), bodyMat);
 web.position.set(0, -0.02, -0.005);
 revolver.add(web);
 const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.065, 0.12), bodyMat);
-frame.position.set(0, 0.0, 0.1);
+frame.position.set(0, 0, 0.1);
 revolver.add(frame);
 // Trigger guard bow + trigger.
 const guard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.014, 0.07), darkMat);
@@ -182,14 +182,14 @@ revolver.add(spur);
 // the palm, rounding into the butt) — stacked rotated boxes will never
 // read as a grip; the silhouette curve is the whole trick. Drawn in
 // the YZ plane (x = backward along +Z, y = down is -Y), extruded thick.
-const gripMat = new THREE.MeshLambertMaterial({ color: 0x5a3d28, emissive: 0x140c06 });
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x5A3D28, emissive: 0x140C06 });
 const gripShape = new THREE.Shape();
 // Shape x = backward (+Z after the Y-rotation below), y = down (-Y).
 gripShape.moveTo(0, 0);                                       // top front at frame junction
-gripShape.quadraticCurveTo(-0.01, -0.06, 0.005, -0.10);       // front strap falls, sweeps back
+gripShape.quadraticCurveTo(-0.01, -0.06, 0.005, -0.1);       // front strap falls, sweeps back
 gripShape.quadraticCurveTo(-0.01, -0.125, 0.035, -0.14);      // round the front butt corner
 gripShape.quadraticCurveTo(0.07, -0.145, 0.085, -0.115);      // butt bottom rounds up
-gripShape.quadraticCurveTo(0.10, -0.07, 0.065, -0.01);        // long convex backstrap sweep
+gripShape.quadraticCurveTo(0.1, -0.07, 0.065, -0.01);        // long convex backstrap sweep
 gripShape.lineTo(0, 0);                                       // close along the frame seat
 const gripGeo = new THREE.ExtrudeGeometry(gripShape, { depth: 0.055, steps: 3, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 });
 const rGrip = new THREE.Mesh(gripGeo, gripMat);
@@ -213,8 +213,8 @@ return revolver;
 // underneath. The beam color (0x7dffb8) is the only glow it needs.
 export function mkRepair(): THREE.Group {
 const rep = new THREE.Group();
-const weldGlow = new THREE.MeshBasicMaterial({ color: 0x7dffb8 }); // matches the repair beam
-const cableMat = new THREE.MeshLambertMaterial({ color: 0xcc6a1a, emissive: 0x2a1204 });
+const weldGlow = new THREE.MeshBasicMaterial({ color: 0x7d_ff_b8 }); // matches the repair beam
+const cableMat = new THREE.MeshLambertMaterial({ color: 0xCC6A1A, emissive: 0x2A1204 });
 // T:A repair tool language: an industrial handpiece, not a gun — two
 // octagonal housings (same faceting as the emitter plate) bridged by
 // exposed orange cabling, green guts visible in the gap. Cylinders
@@ -244,16 +244,16 @@ rep.add(tip);
 // Green guts in the gap between housings — the internals show where
 // the body splits, like the ref's green bay between the plates.
 const bay = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.06),
-  new THREE.MeshLambertMaterial({ color: 0x1a3a28, emissive: 0x0a2a14 }));
-bay.position.set(0, 0.03, 0.0);
+  new THREE.MeshLambertMaterial({ color: 0x1A3A28, emissive: 0x0A2A14 }));
+bay.position.set(0, 0.03, 0);
 rep.add(bay);
 // Exposed orange cabling bridging front↔rear — THE detail that kills
 // the gun read. Ribbed: two strands along each flank.
 for (const side of [-1, 1]) {
-  for (const yOff of [0.0, 0.06]) {
+  for (const yOff of [0, 0.06]) {
     const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.16, 6), cableMat);
     cable.rotation.x = Math.PI / 2;
-    cable.position.set(side * 0.045, 0.03 + yOff, 0.0);
+    cable.position.set(side * 0.045, 0.03 + yOff, 0);
     rep.add(cable);
     // cable ribs — tiny rings, the corrugated-hose look
     for (let i = 0; i < 4; i++) {
@@ -277,7 +277,7 @@ repGrip.position.set(0, -0.06, 0.1);
 repGrip.rotation.x = 0.3;
 rep.add(repGrip);
 const repGuard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.07), darkMat);
-repGuard.position.set(0, -0.045, 0.0);
+repGuard.position.set(0, -0.045, 0);
 rep.add(repGuard);
 rep.visible = false;
 return rep;

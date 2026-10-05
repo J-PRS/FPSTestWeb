@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
 import type { Player } from './Player.js';

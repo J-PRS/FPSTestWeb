@@ -56,7 +56,7 @@ export class ProjCollide {
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
   checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
-    const h = this.h;
+    const {h} = this;
     if (sweepTerrain(h, terrain)) {
       // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
       if (h.canBounce && this.bounceOffTerrain(terrain)) {
@@ -72,7 +72,7 @@ export class ProjCollide {
     // Map structures next — walls stop shells like terrain does; without
     // this a mortar splashes the generator room straight through the roof.
     const solids = h.solids();
-    if (solids.length) {
+    if (solids.length > 0) {
       const hit = segSolidHit(h.prevPos, h.pos, solids, h.solidIdx() ?? undefined);
       if (hit) {
         h.hitAt(hit.x, hit.y, hit.z, hit.t);
@@ -101,7 +101,7 @@ export class ProjCollide {
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
-    const h = this.h;
+    const {h} = this;
     if (!obstacles) {return false;}
     let best: SweepObstacle | null = null, bestT = Infinity;
     for (const o of obstacles) {
@@ -130,12 +130,12 @@ export class ProjCollide {
   // when the impact was too weak to bounce — caller should treat it as a
   // detonation instead of letting the shell sink or jitter in place.
   bounceOffTerrain(terrain: Terrain): boolean {
-    const h = this.h;
+    const {h} = this;
     if (h.config.maxBounces !== undefined && ++h.bouncesTaken > h.config.maxBounces) {
       return false; // out of bounces — treat as impact
     }
     const e = 0.5;
-    const x = h.hitPoint.x, z = h.hitPoint.z;
+    const {x} = h.hitPoint, {z} = h.hitPoint;
     _tNormal.set(
       -(terrain.getHeight(x + e, z) - terrain.getHeight(x - e, z)) / (2 * e),
       1,
@@ -174,7 +174,7 @@ export class ProjCollide {
   }
 
   private checkBalls(balls?: Targetable[]): boolean {
-    const h = this.h;
+    const {h} = this;
     if (!balls) {return false;}
     for (const ball of balls) {
       if (ball.dead) {continue;}
@@ -195,7 +195,7 @@ export class ProjCollide {
   }
 
   private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean {
-    const h = this.h;
+    const {h} = this;
     if (h.sweepLocal) {
       const lp = h.sweepLocal();
       if (lp && sweepPlayer(h, lp, 'local', h.localClass?.())) {
@@ -226,7 +226,7 @@ export class ProjCollide {
   }
 
   private recordHit(minDist: number): void {
-    const h = this.h;
+    const {h} = this;
     h.hitAccuracy = Math.max(0, minDist);
     h.hitAge = h.age - h.lastDt * (1 - h.hitT);
     const dx = h.hitX - h.shotOrigin.x;

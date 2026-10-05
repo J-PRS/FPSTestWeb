@@ -42,10 +42,10 @@ export const CANNON_CONFIG: ProjectileConfig = {
   trailScaleMin: 0,
   trailScaleMax: 0,
   trailRampIn: 0,
-  meshColor: 0x23252b, // dark iron cannonball
+  meshColor: 0x23252B, // dark iron cannonball
   meshType: 'ball',
   glowShell: false, // iron, not energy — the ember trail carries the read
-  glowColor: 0x000000, // unused — glowShell is off
+  glowColor: 0x00_00_00, // unused — glowShell is off
   glowOpacity: 0,
   // Ramp-in uses the global default (20% → 100% over 0.2s) — explicitly
   // NOT overriding here: the 1.6m ball needs the full ramp, not GL's 40ms

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { ViewModel } from './entities/ViewModel.js';
 
 const q = new URLSearchParams(location.search);
-const w = parseInt(q.get('w') ?? '0');
+const w = Number.parseInt(q.get('w') ?? '0');
 const ao = q.get('ao') !== 'off';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -17,12 +17,12 @@ document.body.append(renderer.domElement);
 document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x25282e);
+scene.background = new THREE.Color(0x25282E);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 100);
 scene.add(camera);
-scene.add(new THREE.AmbientLight(0x886644, 0.35));            // AMBIENT_*
-scene.add(new THREE.HemisphereLight(0x5599cc, 0x664422, 0.5)); // HEMI_*
-const sun = new THREE.DirectionalLight(0xffe8aa, 3.2);         // SUN_*
+scene.add(new THREE.AmbientLight(0x88_66_44, 0.35));            // AMBIENT_*
+scene.add(new THREE.HemisphereLight(0x5599CC, 0x66_44_22, 0.5)); // HEMI_*
+const sun = new THREE.DirectionalLight(0xFFE8AA, 3.2);         // SUN_*
 sun.position.set(2, 4, 1);
 scene.add(sun);
 
@@ -91,7 +91,7 @@ if (q.get('close')) {
   camera.remove(vm.group);
   if (active) {
     active.position.set(0, 0, 0);
-    active.rotation.set(0, Math.PI * parseFloat(q.get('yaw') ?? '0.75'), 0); // default: muzzle toward camera, 3/4 view
+    active.rotation.set(0, Math.PI * Number.parseFloat(q.get('yaw') ?? '0.75'), 0); // default: muzzle toward camera, 3/4 view
     scene.add(active);
     const box = new THREE.Box3().setFromObject(active);
     const size = box.getSize(new THREE.Vector3()).length();

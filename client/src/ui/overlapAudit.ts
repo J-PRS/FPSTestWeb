@@ -38,7 +38,7 @@ function isChrome(el: Element, vw: number, vh: number): boolean {
   if (el.matches(EXEMPT)) {return false;}
   const cs = getComputedStyle(el);
   if (cs.display === 'none' || cs.visibility === 'hidden') {return false;}
-  if (parseFloat(cs.opacity) < 0.05) {return false;} // hidden-by-opacity overlays
+  if (Number.parseFloat(cs.opacity) < 0.05) {return false;} // hidden-by-opacity overlays
   if (cs.display === 'none' || cs.visibility === 'hidden') {return false;}
   if (cs.position !== 'fixed' && cs.position !== 'absolute') {return false;}
   const r = el.getBoundingClientRect();

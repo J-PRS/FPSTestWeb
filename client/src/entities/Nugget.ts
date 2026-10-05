@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 
@@ -14,7 +14,7 @@ const INHERIT_VEL = 0.5;      // fraction of destroyed target's velocity
 const BOUNCE = 0.25;          // vertical restitution on terrain hits
 const GROUND_FRICTION = 0.6;  // horizontal damping per bounce
 const SETTLE_SPEED = 0.8;     // below this on ground => settle
-const MAGNET_RADIUS = 7.0;    // start flying toward player inside this
+const MAGNET_RADIUS = 7;    // start flying toward player inside this
 const PICKUP_RADIUS = 1.3;
 const MAGNET_ACCEL = 90;      // lerp toward target speed
 const MAGNET_MAX_SPEED = 45;
@@ -58,11 +58,11 @@ export class Nugget {
   /** tint: pickup kind sells itself by color — gold gems, green heals,
    *  red tags — no marquee iconography needed. `parts` swaps the plain
    *  gem for a diegetic shape: dark body + accent part in the tint. */
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xffd54a, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFFD54A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
     this.scene = scene;
     this.baseColor = new THREE.Color(tint);
     // Emit slightly desaturated so bloom reads hot without clipping to white
-    this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.33);
+    this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFFFFFF), 0.33);
     this.pos = pos.clone();
     this.vel = inheritVel.clone().multiplyScalar(INHERIT_VEL);
     // Small random spread so multi-nugget drops scatter naturally
@@ -71,7 +71,7 @@ export class Nugget {
     this.vel.z += (Math.random() - 0.5) * 4;
 
     if (parts) {
-      this.mat = new THREE.MeshStandardMaterial({ color: parts.bodyColor ?? 0x3a4048, roughness: 0.45, metalness: 0.75 });
+      this.mat = new THREE.MeshStandardMaterial({ color: parts.bodyColor ?? 0x3A4048, roughness: 0.45, metalness: 0.75 });
       this.accentMat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
       this.mesh = new THREE.Mesh(parts.body, this.mat);
       const am = new THREE.Mesh(parts.accent, this.accentMat);
@@ -164,7 +164,7 @@ export class Nugget {
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y + this.vel.y * dt > gy + NUGGET_RADIUS) {return;}
     this.pos.y = gy + NUGGET_RADIUS;
-    if (Math.abs(this.vel.y) > 2.0) {
+    if (Math.abs(this.vel.y) > 2) {
       this.vel.y = -this.vel.y * BOUNCE;
       this.vel.x *= GROUND_FRICTION;
       this.vel.z *= GROUND_FRICTION;

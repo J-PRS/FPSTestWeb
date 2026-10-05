@@ -9,7 +9,7 @@ const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
 
 // Step size for CPU-side normal calculation (matches finest clipmap spacing)
-const CPU_STEP = 5.0;
+const CPU_STEP = 5;
 
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
@@ -59,7 +59,7 @@ function buildMaxGrid(): void {
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
   if (!hmData || !hmSize) {return 0;}
   const toCell = (w: number) => {
-    const u = (((w / hmWorldScale) % 1.0) + 1.0) % 1.0;
+    const u = (((w / hmWorldScale) % 1) + 1) % 1;
     return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
   };
   // Walk cells from each end mod MAXGRID — a seam-crossing rect covers
@@ -162,8 +162,8 @@ function sampleHeightmap(wx: number, wz: number): number {
   // (i + 0.5)/N in UV space. Sample identically on CPU (u shifted by -0.5) or
   // physics height is offset half a texel from the rendered mesh, which puts
   // the player/projectiles inside hills on steep slopes.
-  const u = (((wx / hmWorldScale) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
-  const v = (((wz / hmWorldScale) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
+  const u = (((wx / hmWorldScale) % 1) + 1) % 1 * hmSize - 0.5;
+  const v = (((wz / hmWorldScale) % 1) + 1) % 1 * hmSize - 0.5;
   const x0 = ((Math.floor(u) % hmSize) + hmSize) % hmSize;
   const z0 = ((Math.floor(v) % hmSize) + hmSize) % hmSize;
   const x1 = (x0 + 1) % hmSize;
@@ -192,7 +192,7 @@ export function sampleHeight(wx: number, wz: number): number {
 // invisible for decoration; sim code must keep calling sampleHeight above.
 const _hvc = new Map<number, number>();
 export function sampleHeightVisual(wx: number, wz: number): number {
-  const k = (wx | 0) * 131072 + (wz | 0);
+  const k = (wx | 0) * 131_072 + (wz | 0);
   let v = _hvc.get(k);
   if (v === undefined) {
     if (_hvc.size > 2048) {_hvc.clear();}
@@ -223,5 +223,5 @@ export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
   const hR = sampleHeight(wx + e, wz);
   const hD = sampleHeight(wx, wz - e);
   const hU = sampleHeight(wx, wz + e);
-  return _normalTmp.set(hL - hR, 2.0 * e, hD - hU).normalize();
+  return _normalTmp.set(hL - hR, 2 * e, hD - hU).normalize();
 }

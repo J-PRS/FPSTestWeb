@@ -10,10 +10,10 @@ import { urlParams } from '../core/params.js';
 // draw calls regardless of piece count. Collision is the next layer —
 // for now these are cover you can stand behind, not walls that stop you.
 const TINTS = {
-  neutral: 0x4a5058,
-  alpha: 0x3a5a80,
-  bravo: 0x80483a,
-  root: 0x4d3a24,
+  neutral: 0x4A5058,
+  alpha: 0x3A5A80,
+  bravo: 0x80483A,
+  root: 0x4D3A24,
 } as const;
 
 let built: THREE.Group | null = null;
@@ -40,7 +40,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
     dome = null;
   }
   const mat = new THREE.MeshBasicMaterial({
-    color: 0x66ccff, transparent: true, opacity: 0,
+    color: 0x66CCFF, transparent: true, opacity: 0,
     side: THREE.BackSide, depthWrite: false,
   });
   dome = new THREE.Mesh(
@@ -72,7 +72,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
     built.traverse((o) => { if (o instanceof THREE.Mesh) {o.geometry.dispose();} });
     built = null;
   }
-  if (!list.length) {return;}
+  if (list.length === 0) {return;}
   built = new THREE.Group();
   built.name = 'mapStructures';
   built.matrixAutoUpdate = false;
@@ -143,7 +143,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
     colliderGizmos = null;
   }
   const colliders = structureColliders(list);
-  if (!colliders.length) {return;}
+  if (colliders.length === 0) {return;}
   const unitEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
   const edges: THREE.BufferGeometry[] = [];
@@ -161,7 +161,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   if (!merged) {return;}
   colliderGizmos = new THREE.LineSegments(
     merged,
-    new THREE.LineBasicMaterial({ color: 0x33ff88, transparent: true, opacity: 0.55, depthTest: false }),
+    new THREE.LineBasicMaterial({ color: 0x33FF88, transparent: true, opacity: 0.55, depthTest: false }),
   );
   colliderGizmos.renderOrder = 999;
   colliderGizmos.matrixAutoUpdate = false;

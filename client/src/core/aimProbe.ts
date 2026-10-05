@@ -24,7 +24,7 @@ export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
   scene.traverse(o => { if (o.userData.dbg) {objs.push(o);} });
   _ray.setFromCamera(_ndc, camera);
   const hits = _ray.intersectObjects(objs, false);
-  if (hits.length) {return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);}
+  if (hits.length > 0) {return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);}
   // Nothing tagged under the reticle — blind spot report. Raycast the
   // whole scene and describe what IS there by type/parent/material, so a
   // frozen thing made by an untagged system still names itself (that's
@@ -80,9 +80,12 @@ function describePooled(d: DbgTag, h: THREE.Intersection): string {
       const ps = d.ps as ParticleSystem;
       return `quarks paused=${ps.paused} particles=${ps.particleNum ?? '?'}`;
     }
-    case 'beam': return `beam(${d.label ?? 'hitscan flash'})`;
-    case 'fxMesh': return `fx(${d.label ?? 'mesh'})`;
-    default: return `dbg:${d.kind}`;
+    case 'beam': { return `beam(${d.label ?? 'hitscan flash'})`;
+    }
+    case 'fxMesh': { return `fx(${d.label ?? 'mesh'})`;
+    }
+    default: { return `dbg:${d.kind}`;
+    }
   }
 }
 
@@ -95,6 +98,6 @@ function describeOwner(owner: SwarmSlotOwner | undefined): string {
     netId?: number; playerId?: string; dead?: boolean;
   };
   const pos = o.pos ? ` @${o.pos.x.toFixed(0)},${o.pos.y.toFixed(0)},${o.pos.z.toFixed(0)}` : '';
-  const id = o.playerId ?? (o.netId !== undefined ? `net${o.netId}` : '');
+  const id = o.playerId ?? (o.netId === undefined ? '' : `net${o.netId}`);
   return `${o.constructor.name}${id ? `(${id})` : ''}${o.dead ? ' DEAD' : ''}${pos}`;
 }

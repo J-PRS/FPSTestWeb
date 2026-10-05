@@ -10,12 +10,12 @@ import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore } from './weaponKit
 // tapered barrel. Replaced by the tapering-tube + crowned-hoop version.
 export function mkCannon_v1(): THREE.Group {
 const cn = new THREE.Group();
-let cz = 0.0;
+let cz = 0;
 const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
   cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
   cz -= len;
 };
-cnSeg(0.10, 0.13, 0.04, bodyMat);   // breech cap flare
+cnSeg(0.1, 0.13, 0.04, bodyMat);   // breech cap flare
 cnSeg(0.13, 0.16, 0.05, bodyMat);   // bulge 1 out
 cnSeg(0.16, 0.11, 0.05, bodyMat);   // bulge 1 in
 cnSeg(0.105, 0.105, 0.02, darkMat); // pinch ring
@@ -49,7 +49,7 @@ plasmagun.add(mkTube(0.12, 0.13, 0.05, -0.22, darkMat)); // emitter collar
 plasmagun.add(mkBore(0.09, -0.246));
 const plasmagunGlow = new THREE.Mesh(
   new THREE.CylinderGeometry(0.08, 0.08, 0.02, 16),
-  new THREE.MeshBasicMaterial({ color: 0x44bbff })
+  new THREE.MeshBasicMaterial({ color: 0x44BBFF })
 );
 plasmagunGlow.rotation.x = Math.PI / 2;
 plasmagunGlow.position.z = -0.247;
@@ -128,7 +128,7 @@ for (let i = 0; i < 3; i++) {
   lug.position.set(Math.cos(a) * (CLUSTER_R + 0.045), Math.sin(a) * (CLUSTER_R + 0.045), -0.31);
   chain.add(lug);
 }
-chain.add(mkBore(0.1, -0.30));
+chain.add(mkBore(0.1, -0.3));
 const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), darkMat);
 drum.rotation.z = Math.PI / 2;
 drum.position.set(-0.08, -0.14, 0.12);
@@ -164,10 +164,10 @@ return chain;
 // articulated two-segment scalloped wing.
 export function mkRakk_v1(): THREE.Group {
   const g = new THREE.Group();
-  const hide = new THREE.MeshLambertMaterial({ color: 0x54413f });
-  const memb = new THREE.MeshLambertMaterial({ color: 0x4a2f3a, side: THREE.DoubleSide });
+  const hide = new THREE.MeshLambertMaterial({ color: 0x54413F });
+  const memb = new THREE.MeshLambertMaterial({ color: 0x4A2F3A, side: THREE.DoubleSide });
   const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hide);
-  body.scale.set(0.75, 0.6, 1.0);
+  body.scale.set(0.75, 0.6, 1);
   g.add(body);
   for (const s of [-1, 1]) {
     const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.7, 4), hide);

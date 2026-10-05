@@ -25,10 +25,10 @@ function tsLocal(d = new Date()): string {
 export namespace Logger {
   let currentLevel: LogLevel = LogLevel.INFO;
   // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
-  let consoleLevel: LogLevel = LogLevel.WARN;
+  const consoleLevel: LogLevel = LogLevel.WARN;
   let currentTag: string = '';
-  let logBuffer: string[] = [];
-  let maxBufferSize = 1000; // Keep last 1000 log entries
+  const logBuffer: string[] = [];
+  const maxBufferSize = 1000; // Keep last 1000 log entries
   // Trim a whole chunk once over cap+grace instead of shift() per push —
   // shift() is O(n) on every line under sustained log spam.
   const TRIM_GRACE = 128;
@@ -46,7 +46,7 @@ export namespace Logger {
    *  keeps our own console writes from recursing back in. */
   let tapInstalled = false;
   export function installConsoleTap(): void {
-    if (tapInstalled || typeof window === 'undefined') return;
+    if (tapInstalled || typeof window === 'undefined') {return;}
     tapInstalled = true;
     const origWarn = console.warn.bind(console);
     const origError = console.error.bind(console);
@@ -78,21 +78,26 @@ export namespace Logger {
   export function setLogLevelFromString(levelStr: string): void {
     const level = levelStr.toUpperCase();
     switch (level) {
-      case 'DEBUG':
+      case 'DEBUG': {
         currentLevel = LogLevel.DEBUG;
         break;
-      case 'INFO':
+      }
+      case 'INFO': {
         currentLevel = LogLevel.INFO;
         break;
-      case 'WARN':
+      }
+      case 'WARN': {
         currentLevel = LogLevel.WARN;
         break;
-      case 'ERROR':
+      }
+      case 'ERROR': {
         currentLevel = LogLevel.ERROR;
         break;
-      default:
+      }
+      default: {
         console.warn(`[Logger] Unknown log level: ${levelStr}, using INFO`);
         currentLevel = LogLevel.INFO;
+      }
     }
   }
 
@@ -107,7 +112,7 @@ export namespace Logger {
    * Core logging method
    */
   function log(level: LogLevel, message: string, context?: unknown): void {
-    if (!shouldLog(level)) return;
+    if (!shouldLog(level)) {return;}
 
     const levelStr = LogLevel[level];
     const timestamp = tsLocal();
@@ -119,15 +124,18 @@ export namespace Logger {
       try {
         switch (level) {
           case LogLevel.DEBUG:
-          case LogLevel.INFO:
+          case LogLevel.INFO: {
             console.log(fullMessage, context || '');
             break;
-          case LogLevel.WARN:
+          }
+          case LogLevel.WARN: {
             console.warn(fullMessage, context || '');
             break;
-          case LogLevel.ERROR:
+          }
+          case LogLevel.ERROR: {
             console.error(fullMessage, context || '');
             break;
+          }
         }
       } finally {
         writingToConsole = false;
@@ -135,13 +143,13 @@ export namespace Logger {
     }
 
     // Add to in-memory buffer for export
-    const logLine = context !== undefined 
-      ? `${fullMessage} ${JSON.stringify(context)}`
-      : fullMessage;
+    const logLine = context === undefined 
+      ? fullMessage
+      : `${fullMessage} ${JSON.stringify(context)}`;
     logBuffer.push(logLine);
 
     // WARN+ also queues for server shipping — the on-disk client.log
-    if (level >= LogLevel.WARN) shipQueue.push(logLine);
+    if (level >= LogLevel.WARN) {shipQueue.push(logLine);}
 
     lineListener?.(logLine, level);
     trimBuffer();
@@ -166,9 +174,9 @@ export namespace Logger {
   function buildHeader(): string[] {
     const lines = [`=== DIAGNOSTICS @ ${tsLocal()} ===`];
     try {
-      if (diagnosticsProvider) lines.push(...diagnosticsProvider());
-    } catch (e) {
-      lines.push(`diagnostics threw: ${e}`);
+      if (diagnosticsProvider) {lines.push(...diagnosticsProvider());}
+    } catch (error) {
+      lines.push(`diagnostics threw: ${error}`);
     }
     lines.push('=== LOGS ===');
     return lines;
@@ -184,7 +192,7 @@ export namespace Logger {
     const a = document.createElement('a');
     a.href = url;
     a.download = `client-${tsLocal().split('T')[0]}.log`;
-    document.body.appendChild(a);
+    document.body.append(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
@@ -218,14 +226,14 @@ export namespace Logger {
   // WARN/ERROR lines stream to POST <server>/client-log, which appends to
   // logs/client.log on disk. Batched every 5s; a sendBeacon on pagehide
   // catches the tail. No-op until initShipping is called with the URL.
-  let shipQueue: string[] = [];
+  const shipQueue: string[] = [];
   let shipUrl = '';
 
   export function initShipping(httpUrl: string): void {
     shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
     setInterval(() => flushShipping(), 5000);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushShipping(true);
+      if (document.visibilityState === 'hidden') {flushShipping(true);}
     });
   }
 
@@ -234,7 +242,7 @@ export namespace Logger {
   // endpoint resolves (or stays in the local buffer if it never does).
   let errorHooksInstalled = false;
   export function installErrorHooks(): void {
-    if (errorHooksInstalled) return;
+    if (errorHooksInstalled) {return;}
     errorHooksInstalled = true;
     window.addEventListener('error', (e) => {
       error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
@@ -251,26 +259,26 @@ export namespace Logger {
   // endpoint the same way connectServer does (?server= → tunnel wss/https,
   // else same-host:8000) and beacon the queue immediately.
   function flushBootCrash(): void {
-    if (shipUrl || shipQueue.length === 0) return;
+    if (shipUrl || shipQueue.length === 0) {return;}
     const qp = new URLSearchParams(window.location.search);
     let host = qp.get('server')?.trim() ?? '';
     let url: string;
     if (host && (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host) || host.includes(':'))) {
       url = `http://${host.replace(/^https?:\/\//, '')}/client-log`;
     } else {
-      if (host && !host.includes('.')) host = `${host}.trycloudflare.com`;
+      if (host && !host.includes('.')) {host = `${host}.trycloudflare.com`;}
       url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
     }
-    const body = shipQueue.splice(0, shipQueue.length).join('\n') + '\n';
+    const body = `${shipQueue.splice(0, shipQueue.length).join('\n')  }\n`;
     try {
-      if (navigator.sendBeacon) navigator.sendBeacon(url, body);
-      else fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});
+      if (navigator.sendBeacon) {navigator.sendBeacon(url, body);}
+      else {fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});}
     } catch { /* shipping must never break the game */ }
   }
 
   function flushShipping(beacon = false): void {
-    if (!shipUrl || shipQueue.length === 0) return;
-    const body = shipQueue.splice(0, shipQueue.length).join('\n') + '\n';
+    if (!shipUrl || shipQueue.length === 0) {return;}
+    const body = `${shipQueue.splice(0, shipQueue.length).join('\n')  }\n`;
     try {
       if (beacon && navigator.sendBeacon) {
         navigator.sendBeacon(shipUrl, body);
@@ -285,7 +293,7 @@ export namespace Logger {
     logBuffer.push(line);
     lineListener?.(line, level);
     trimBuffer();
-    if (line.includes('[WARN]') || line.includes('[ERROR]')) shipQueue.push(line);
+    if (line.includes('[WARN]') || line.includes('[ERROR]')) {shipQueue.push(line);}
   }
 
   export function isWritingToConsole(): boolean {
@@ -370,8 +378,8 @@ if (typeof window !== 'undefined') {
       // Raw console lines keep their level for the panel's coloring —
       // log/info read as INFO, warn/error stay warn/error.
       const lvl = m === 'warn' ? LogLevel.WARN : m === 'error' ? LogLevel.ERROR : LogLevel.INFO;
-      if (!Logger.isWritingToConsole()) Logger.pushRaw(`${tsLocal()} [${m.toUpperCase()}] ${fmtArgs(args)}`, lvl);
-      if (passthrough) orig(...args);
+      if (!Logger.isWritingToConsole()) {Logger.pushRaw(`${tsLocal()} [${m.toUpperCase()}] ${fmtArgs(args)}`, lvl);}
+      if (passthrough) {orig(...args);}
     };
   }
 
@@ -383,7 +391,7 @@ if (typeof window !== 'undefined') {
       toastEl = document.createElement('div');
       toastEl.id = 'altq-toast';
       toastEl.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:6px;background:rgba(10,16,22,0.9);border:1px solid rgba(255,255,255,0.2);color:#dfe;font:600 13px/1.2 "Segoe UI",Arial,sans-serif;letter-spacing:0.05em;z-index:99999;pointer-events:none;transition:opacity 0.2s;';
-      document.body.appendChild(toastEl);
+      document.body.append(toastEl);
     }
     toastEl.textContent = msg;
     toastEl.style.borderColor = ok ? 'rgba(120,255,180,0.5)' : 'rgba(255,120,120,0.5)';

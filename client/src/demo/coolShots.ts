@@ -3,7 +3,7 @@
 // clips with the demo server (upload on save, list/download on demand).
 // DemoManager owns mode/playback/UI; this owns everything clip-shaped.
 
-import { DemoRecorder } from './DemoRecorder.js';
+import type { DemoRecorder } from './DemoRecorder.js';
 import type { DemoFile } from './types.js';
 import * as net from './coolShotsNet.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -84,7 +84,7 @@ export class CoolShotManager {
   // If a new cool shot happens during an existing pending clip's wait period,
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0, hitTime?: number): void {
+  onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5, bufferAfter: number = 5, hitTime?: number): void {
     if (!this.deps.isRecording()) {return;}
     if (projectileLifetime < minLifetime) {return;}
 
@@ -160,9 +160,9 @@ export class CoolShotManager {
         entry.clipData = undefined;
         this.onChanged?.(this.coolShots);
       }
-    }).catch((e) => {
+    }).catch((error) => {
       // Upload failing must not eat the local copy — it stays downloadable.
-      logger.warn('Clip upload failed', e);
+      logger.warn('Clip upload failed', error);
     });
     this.coolShots.push(entry);
     this.trimList();
@@ -195,7 +195,7 @@ export class CoolShotManager {
 
   playById(id: string): void {
     const index = this.coolShots.findIndex(s => s.id === id);
-    if (index >= 0) {this.playAt(index);}
+    if (index !== -1) {this.playAt(index);}
   }
 
   async downloadById(id: string): Promise<void> {

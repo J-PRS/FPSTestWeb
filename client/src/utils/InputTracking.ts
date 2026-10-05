@@ -1,4 +1,4 @@
-import { ChildLogger } from '../core/Logger.js';
+import type { ChildLogger } from '../core/Logger.js';
 
 export function setupInputTracking(logger: ChildLogger): { isTabHidden: () => boolean; isJetActive: () => boolean } {
   let isTabHidden = false;

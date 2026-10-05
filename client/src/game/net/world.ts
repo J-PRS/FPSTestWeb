@@ -34,17 +34,17 @@ let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function armSessionVeil(): void {
-  if (sessionVeil) return;
+  if (sessionVeil) {return;}
   const el = document.createElement('div');
   el.id = 'session-veil';
-  document.body.appendChild(el);
+  document.body.append(el);
   sessionVeil = el;
   // A label implies a wait — only show it if the veil outlives ~1s,
   // which means the restore hit a genuinely slow path.
   sessionVeilLabelTimer = setTimeout(() => {
     const label = document.createElement('span');
     label.textContent = 'RECONNECTING'; // player's frame, not the protocol's — F5 with a stored token IS a rejoin
-    sessionVeil?.appendChild(label);
+    sessionVeil?.append(label);
   }, 1000);
   // Connect may fail outright — never leave a black curtain up.
   sessionVeilTimer = setTimeout(dropSessionVeil, 8000);
@@ -63,53 +63,53 @@ export function isSessionVeiled(): boolean { return sessionVeil !== null; }
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
-  const logger = deps.logger;
+  const {logger} = deps;
 
   // Server-owned creatures — events only; the client replays the shared
   // sim between segments.
   networkManager.onBallSpawn = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netBallSpawn(data);
   };
   networkManager.onBallSegment = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netBallSegment(data);
   };
   networkManager.onBallDie = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netBallDie(data);
   };
   networkManager.onBallRoster = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netBallRoster(data);
   };
 
   // Server-owned melee species — crawl* events drive netDriven Crawler
   // instances replaying shared/creatureSim.ts (see game/netCrawlers.ts).
   networkManager.onCrawlSpawn = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlSpawn(data);
   };
   networkManager.onCrawlEvt = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlEvt(data);
   };
   networkManager.onCrawlDie = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlDie(data);
   };
   networkManager.onCrawlRoster = (data) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlRoster(data);
   };
 
   // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
   // static geometry exactly like the join path does from gameState.
   networkManager.onMapUpdate = (map) => {
-    if (map.mapName) deps.world.mapName = map.mapName;
+    if (map.mapName) {deps.world.mapName = map.mapName;}
     buildStructures(map.structures ?? [], deps.lazyScene());
     Ball.colliders = structureColliders(map.structures);
-    Ball.colliderIndex = Ball.colliders.length ? new ColliderIndex(Ball.colliders) : null;
+    Ball.colliderIndex = Ball.colliders.length > 0 ? new ColliderIndex(Ball.colliders) : null;
     Projectile.solidColliders = Ball.colliders;
     Projectile.solidIndex = Ball.colliderIndex;
     deps.lazyPlayer().movement.setStructures(map.structures);
@@ -119,11 +119,11 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
-    if (map.terrain || map.heightScale || map.tileSize) applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);
+    if (map.terrain || map.heightScale || map.tileSize) {applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);}
     applyMapFog(ctx, map.fog);
     applyInteriors(ctx, map.interiors);
     resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
-    if (!map.silent) chat.add(null, 'map updated by admin');
+    if (!map.silent) {chat.add(null, 'map updated by admin');}
   };
 
   // Initial connection and reconnection — full roster + local restore.
@@ -135,7 +135,7 @@ export function wireWorld(ctx: NetCtx): void {
     // died and rejoined while we were still looking at the screen).
     dropVolatileWorldFx(deps.world);
     applyRoomInfo(ctx, players.length, roomInfo);
-    if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
+    if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
     dropSessionVeil(); // state is real now — default spawn never painted
   };
 }
@@ -144,18 +144,18 @@ export function wireWorld(ctx: NetCtx): void {
  *  geometry, mid-flight pickups/flags. Pure world setup, no local player. */
 function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2]): void {
   const { deps, networkManager } = ctx;
-  if (!roomInfo) return;
+  if (!roomInfo) {return;}
   deps.world.mode = roomInfo.mode;
-  if (roomInfo.mapName) deps.world.mapName = roomInfo.mapName;
-  if (roomInfo.room !== undefined) deps.retireOfflineBots?.();
+  if (roomInfo.mapName) {deps.world.mapName = roomInfo.mapName;}
+  if (roomInfo.room !== undefined) {deps.retireOfflineBots?.();}
   applyMatchMeta(ctx, roomInfo);
-  if (roomInfo.respawnMs) deps.world.respawnMs = roomInfo.respawnMs;
+  if (roomInfo.respawnMs) {deps.world.respawnMs = roomInfo.respawnMs;}
   announceRoom(ctx, playerCount, roomInfo);
   // Pickups still lying on the field when we (re)joined — the roster is
   // authoritative both ways: spawn what's there, drop ghosts whose
   // pickupGone we missed while disconnected.
   ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map(p => p.id)));
-  for (const p of roomInfo.pickups ?? []) ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');
+  for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');}
   reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
   // Remember this room's map — F5 boots straight into it while the
@@ -182,17 +182,17 @@ function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
     deps.world.matchEndsAt = roomInfo.matchEndsAt ?? null;
     return;
   }
-  if (roomInfo?.team !== undefined) deps.world.localTeam = roomInfo.team;
-  if (roomInfo?.scores) deps.world.teamScores = roomInfo.scores;
-  if (roomInfo?.matchEndsAt) deps.world.matchEndsAt = roomInfo.matchEndsAt;
-  if (roomInfo?.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
+  if (roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo.team;}
+  if (roomInfo?.scores) {deps.world.teamScores = roomInfo.scores;}
+  if (roomInfo?.matchEndsAt) {deps.world.matchEndsAt = roomInfo.matchEndsAt;}
+  if (roomInfo?.ffaScores) {deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));}
 }
 
 /** Chat lines summarizing what we just joined — clock, room, team, board. */
 function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): void {
   const { chat } = ctx;
   if (roomInfo?.matchEndsAt) {
-    const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60000));
+    const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60_000));
     chat.add(null, `match clock — ~${leftMin}m left${leftMin === 0 ? ' (overtime)' : ''}`);
   }
   if (roomInfo?.room && roomInfo.room !== 'default') {
@@ -201,7 +201,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
   if (roomInfo?.team) {
     chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
   }
-  if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length) {
+  if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length > 0) {
     const top = Object.entries(roomInfo.ffaScores).toSorted((a, b) => b[1] - a[1]).slice(0, 3);
     chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
   }
@@ -217,7 +217,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   // Same collider list the server sims against — ball prediction
   // ricochets off structures identically instead of phasing through.
   Ball.colliders = structureColliders(map?.structures);
-  Ball.colliderIndex = Ball.colliders.length ? new ColliderIndex(Ball.colliders) : null;
+  Ball.colliderIndex = Ball.colliders.length > 0 ? new ColliderIndex(Ball.colliders) : null;
   Projectile.solidColliders = Ball.colliders;
   Projectile.solidIndex = Ball.colliderIndex;
   // Player collision — the move sim's solid layer must hold the same
@@ -233,7 +233,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   applyMapFog(ctx, map?.fog);
   applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize);
   applyInteriors(ctx, map?.interiors)
-    .catch((e) => ctx.deps.logger.warn(`applyInteriors failed: ${e instanceof Error ? e.message : String(e)}`));
+    .catch((error) => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 /** Local-player half of gameState — position/rotation/health restore on
@@ -280,5 +280,5 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
  *  arena, interiors, albedo, sky. gameState that follows re-applies the
  *  same map for free or corrects it outright. */
 export function bootApplySavedMap(ctx: NetCtx, map: MapSnapshot | null): void {
-  if (map) applyMapSnapshot(ctx, map);
+  if (map) {applyMapSnapshot(ctx, map);}
 }

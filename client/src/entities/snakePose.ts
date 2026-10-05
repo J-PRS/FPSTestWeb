@@ -14,7 +14,7 @@ const PART_SEG = 0;
 const PART_EYE = 1;
 const SEGS_PER = 22; // matches Snake.ts — tighter spacing so thin tail lobes still overlap
 const EYES_PER = 2;
-const BODY_LEN = 7.0; // total spine length in radius units — a real viper
+const BODY_LEN = 7; // total spine length in radius units — a real viper
 const STEP = 0.18;    // trail breadcrumb spacing, radius units
 const _local = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -89,10 +89,10 @@ const _segB = new Float32Array(SEGS_PER);
 /** Anatomical profile head→tail: head bulge, neck pinch, max girth
  *  ~40% back, whiplash tail. Slim — fat reads grub, not viper. */
 function segWidth(t: number): number {
-  return (t < 0.10 ? 0.40 - t * 1.2
-       : t < 0.45 ? 0.28 + (t - 0.10) * 0.17
-       : t < 0.80 ? 0.34 - (t - 0.45) * 0.55
-       :            0.145 - (t - 0.80) * 0.55) * 1.3;
+  return (t < 0.1 ? 0.4 - t * 1.2
+       : t < 0.45 ? 0.28 + (t - 0.1) * 0.17
+       : t < 0.8 ? 0.34 - (t - 0.45) * 0.55
+       :            0.145 - (t - 0.8) * 0.55) * 1.3;
 }
 
 export function writeInstances(s: Snake, terrain: Terrain): void {
@@ -147,7 +147,7 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
       _segX[i] = wx2; _segY[i] = segGround + w * r * 0.45 + rear + air * (1 - t) ** 1.3; _segZ[i] = wz2;
       // Anatomical width + banded viper pattern ride along for pass two.
       _segW[i] = w;
-      const band = i % 2 === 0 ? 1.0 : 0.72;
+      const band = i % 2 === 0 ? 1 : 0.72;
       _segB[i] = band;
     }
 

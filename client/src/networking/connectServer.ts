@@ -36,8 +36,8 @@ async function quickRoomCode(serverUrl: string): Promise<string | null> {
 async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
   const { serverUrl, networkManager, logger, fragMessages, profiler } = ctx;
   const colon = p2p.indexOf(':');
-  let role = colon < 0 ? p2p : p2p.slice(0, colon);
-  let room = colon < 0 ? 'duel' : (p2p.slice(colon + 1) || 'duel');
+  let role = colon === -1 ? p2p : p2p.slice(0, colon);
+  let room = colon === -1 ? 'duel' : (p2p.slice(colon + 1) || 'duel');
   if (role === 'quick') {
     const found = await quickRoomCode(serverUrl);
     if (!found) { fragMessages?.show('No open lobbies — host one and a friend can quick-join'); return; }
@@ -58,7 +58,7 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
       const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel opens
       // Host plays immediately over loopback — no need to wait for a guest
       await networkManager.connect(serverUrl, (cfg) => new LoopbackTransport(host, cfg));
-      dc.then((chan) => host.attachDataChannel(chan)).catch((e) => logger.warn('P2P guest handshake failed', e));
+      dc.then((chan) => host.attachDataChannel(chan)).catch((error) => logger.warn('P2P guest handshake failed', error));
       logger.info(`P2P hosting room "${room}"${open ? ' (open lobby)' : ''} — share ?p2p=join:${room}`);
       fragMessages?.show(open
         ? `Open lobby "${room}" — anyone can quick-join`
@@ -77,7 +77,7 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
 
 export async function connectServer(ctx: ConnectCtx): Promise<void> {
   const { serverUrl, classicMode, networkManager, logger, profiler } = ctx;
-  const p2p = urlParams.p2p;
+  const {p2p} = urlParams;
   if (!classicMode && p2p) {
     await connectP2PMode(ctx, p2p);
   } else if (!classicMode) {

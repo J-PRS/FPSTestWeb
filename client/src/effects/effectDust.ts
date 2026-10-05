@@ -17,9 +17,9 @@ export function spawnJetpack(m: EffectsManager, pos: THREE.Vector3): void {
       count: 2,
       pos: [0.15, 0, 0.15],
       velMin: [-1.25, -20, -1.25], velMax: [1.25, -14, 1.25],
-      lifeMin: 0.18, lifeMax: 0.30,
+      lifeMin: 0.18, lifeMax: 0.3,
       sizeScale: 0.35,
-      colA: [0.3, 0.7, 1.0], colB: [0.6, 1.0, 1.0],
+      colA: [0.3, 0.7, 1], colB: [0.6, 1, 1],
       additive: true,
     });
   }
@@ -31,8 +31,8 @@ export function spawnWarpTrail(pos: THREE.Vector3): void {
     fxPuff(pos, {
       count: 2,
       velMin: [-1, -2, -1], velMax: [1, -0.5, 1],
-      lifeMin: 0.25, lifeMax: 0.40,
-      colA: [0.35, 0.9, 0.95], colB: [0.35, 1.0, 0.95],
+      lifeMin: 0.25, lifeMax: 0.4,
+      colA: [0.35, 0.9, 0.95], colB: [0.35, 1, 0.95],
     });
   }
 
@@ -68,7 +68,7 @@ export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Ve
       lifeMin: 0.25, lifeMax: 0.55,
       sizeMin: 0.25, sizeMax: 0.45,
       gravity: 0,
-      c1: [0.5, 1.0, 1.0], c2: [0.9, 1.0, 1.0],
+      c1: [0.5, 1, 1], c2: [0.9, 1, 1],
       opacity: 0.9,
     }, true);
     blastBurst(_v3, {

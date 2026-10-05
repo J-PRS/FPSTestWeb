@@ -63,7 +63,7 @@ export class P2PHost {
       close: () => { try { dc.close(); } catch { /* gone */ } },
     };
     dc.addEventListener('message', (ev) => {
-      const data = ev.data;
+      const {data} = ev;
       this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
     });
     dc.addEventListener('close', () => this.onClose(link));

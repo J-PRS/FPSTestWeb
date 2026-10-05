@@ -5,11 +5,11 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 // Shared material palette + tube/bore helpers for the procedural weapon
 // builders. Hoisted so every family file (weaponsGeo, weaponsGeoEnergy,
 // weaponsGeoSidearm) builds against the same palette.
-export const bodyMat = new THREE.MeshLambertMaterial({ color: 0x555a60, emissive: 0x1c1e20 });
-export const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2d30, emissive: 0x0e0f10 });
-export const boreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-export const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8241a, emissive: 0x2a0604 });
-export const brassMat = new THREE.MeshLambertMaterial({ color: 0xb08a3a, emissive: 0x241a08 });
+export const bodyMat = new THREE.MeshLambertMaterial({ color: 0x55_5a_60, emissive: 0x1C1E20 });
+export const darkMat = new THREE.MeshLambertMaterial({ color: 0x2A2D30, emissive: 0x0E0F10 });
+export const boreMat = new THREE.MeshBasicMaterial({ color: 0x00_00_00 });
+export const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8_24_1a, emissive: 0x2a_06_04 });
+export const brassMat = new THREE.MeshLambertMaterial({ color: 0xB08A3A, emissive: 0x241A08 });
 
 // hseg: vertex AO bakes per-vertex — a 1-segment cylinder only has two
 // vert rings, so one occluded rim shades the WHOLE length black. Long
@@ -310,8 +310,8 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   // Counts mismatch? Re-sample the inner to the outer's count so e.g. a
   // hex rim can carry a 12-sided bore. Starts must be angle-aligned.
   validateRing(outer, 'annulus outer');
-  if (inner.length !== seg) {inner = resampleRing(inner, seg);}
-  else {validateRing(inner, 'annulus inner');}
+  if (inner.length === seg) {validateRing(inner, 'annulus inner');}
+  else {inner = resampleRing(inner, seg);}
   const pos: number[] = [], uv: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], u0: number, u1: number, v0: number, v1: number) => {
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);

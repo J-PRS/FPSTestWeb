@@ -140,7 +140,7 @@ export class GameBot extends RemotePlayer {
     // them through update()→snapshot interp made tick() stomp pos with a
     // ~200ms-delayed sample every frame (the frozen/crawling bot bug).
     this.localDriven = true;
-    this.setGizmoColor(team === 'ffa' ? 0xcc66ff : TEAM_COLORS[team]);
+    this.setGizmoColor(team === 'ffa' ? 0xCC66FF : TEAM_COLORS[team]);
   }
 
   /** Local-authority damage — the same role the server's hit validation
@@ -216,7 +216,7 @@ export class GameBot extends RemotePlayer {
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
         // read, so meter snapping is invisible to the senses — and wider
         // cells give the shared memo a much higher hit rate.
-        const k = ((x * 0.5) | 0) * 131072 + ((z * 0.5) | 0);
+        const k = ((x * 0.5) | 0) * 131_072 + ((z * 0.5) | 0);
         let v = gyc.get(k);
         if (v === undefined) {
           // Cap the memo — roaming bots would otherwise grow it a cell at
@@ -264,7 +264,7 @@ export class GameBot extends RemotePlayer {
       aimSkill: (d, targetSpeed) =>
         aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)), targetSpeed),
     });
-    const dest = out.dest;
+    const {dest} = out;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.lastMove = out.move;
     this.wantBelt = Boolean(out.belt);

@@ -33,7 +33,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const hit = origin.clone().addScaledVector(dirV.normalize(), MELEE_RANGE * 0.7);
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
-      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
+      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAADDFF, 'punch',
     ));
     // Enemy swings get the slash arc too — the streak is what makes a
     // punch readable at range (there's no arm animation to read).
@@ -48,7 +48,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       meleeFlash(origin, dir);
     } else if (weaponType !== undefined && getWeaponStats(weaponType).speed <= 0) {
       const beamCfg = getProjectileConfig(weaponType);
-      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8fdcff);
+      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8FDCFF);
     } else {
       return false;
     }
@@ -91,7 +91,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
     if (cosmeticShot(ownerId, weaponType, origin, dir)) {return;}
-    const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? BOLT_CONFIG;
+    const cfg = (weaponType === undefined ? undefined : getProjectileConfig(weaponType)) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;

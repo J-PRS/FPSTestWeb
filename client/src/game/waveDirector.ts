@@ -80,7 +80,7 @@ const WAVES: WaveBeat[] = [
     } },
   { at: 290, name: 'Elite + enrage storm', run: (d) => {
       d.entities.spawnEliteBall();
-      for (const b of d.entities.balls) {if (!b.dead) b.enrage();}
+      for (const b of d.entities.balls) {if (!b.dead) {b.enrage();}}
     } },
   { at: 360, name: 'Siege: totem + wall', run: (d) => {
       d.entities.spawnTotem();
@@ -89,7 +89,7 @@ const WAVES: WaveBeat[] = [
 ];
 const WAVE_LOOP = 120; // after the last beat, loop on a 2-minute cycle at higher intensity
 
-const SPEND_INTERVAL = 5.0;  // seconds between credit spends
+const SPEND_INTERVAL = 5;  // seconds between credit spends
 const CREDIT_CAP = 140;      // hoard cap — prevents absurd dump-bursts
 const CREDIT_BASE = 0.45;    // credits/sec at t=0 — one cheap pick every ~15s early
 const CREDIT_RAMP = 0.0045;  // extra credits/sec per elapsed second (~+27/min by minute 10)
@@ -107,16 +107,16 @@ const RANDOM_MODE = urlParams.randomSpawns;
 const CLASSIC_MODE = urlParams.isClassic;
 
 const RANDOM_POOL: { weight: number; label: string; spawn: (e: ReturnType<typeof createEntities>) => void }[] = [
-  { weight: 6.0, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
-  { weight: 6.0, label: 'grub',       spawn: (e) => e.spawnGrub() },
-  { weight: 4.0, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
-  { weight: 5.0, label: 'ball',       spawn: (e) => e.spawnBall() },
-  { weight: 4.0, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
-  { weight: 3.0, label: 'viper',      spawn: (e) => e.spawnSnake() },
+  { weight: 6, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
+  { weight: 6, label: 'grub',       spawn: (e) => e.spawnGrub() },
+  { weight: 4, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
+  { weight: 5, label: 'ball',       spawn: (e) => e.spawnBall() },
+  { weight: 4, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
+  { weight: 3, label: 'viper',      spawn: (e) => e.spawnSnake() },
   { weight: 2.5, label: 'seeker',     spawn: (e) => e.spawnSeeker() },
-  { weight: 2.0, label: 'rakk',       spawn: (e) => e.spawnRakk() },
+  { weight: 2, label: 'rakk',       spawn: (e) => e.spawnRakk() },
   { weight: 1.5, label: 'boulder',     spawn: (e) => e.spawnRoller() },
-  { weight: 1.0, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
+  { weight: 1, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
   { weight: 0.7, label: 'overlord',   spawn: (e) => e.spawnOverlord() },
   { weight: 0.6, label: 'totem',      spawn: (e) => e.spawnTotem() },
   { weight: 0.2, label: 'uber totem', spawn: (e) => e.spawnUberTotem() },
@@ -148,7 +148,7 @@ const RANDOM_INTERVAL_RAMP = 0.006; // s shaved off per elapsed second
 function aliveCount(e: ReturnType<typeof createEntities>): number {
   let n = 0;
   for (const l of [e.balls, e.crawlers, e.turrets, e.rollers, e.seekers, e.overlords, e.totems, e.rakks] as { dead: boolean }[][]) {
-    for (const t of l) {if (!t.dead) n++;}
+    for (const t of l) {if (!t.dead) {n++;}}
   }
   return n;
 }
@@ -210,7 +210,7 @@ export function createWaveDirector(deps: DirectorDeps) {
     if (spendTimer <= 0) {
       spendTimer = SPEND_INTERVAL;
       const affordable = POOL.filter(p => p.minT <= elapsed && p.cost <= credits);
-      if (affordable.length) {
+      if (affordable.length > 0) {
         let roll = Math.random() * affordable.reduce((s, p) => s + p.weight, 0);
         let pick = affordable[0];
         for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }

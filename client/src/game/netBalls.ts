@@ -5,7 +5,7 @@ import { hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { stepBall, makeSimBall, type SimBall, type SimVec } from '../../../shared/ballSim.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
-import { Nugget } from '../entities/Nugget.js';
+import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
 import type { ChildLogger } from '../core/Logger.js';
 
@@ -92,7 +92,7 @@ function rubberbandForensics(deps: EntitiesDeps, b: Ball, m: { position: Vec3Msg
   return {
     pred: { x: Number(b.pos.x.toFixed(1)), y: Number(b.pos.y.toFixed(1)), z: Number(b.pos.z.toFixed(1)) },
     truth: { x: Number(m.position.x.toFixed(1)), y: Number(m.position.y.toFixed(1)), z: Number(m.position.z.toFixed(1)) },
-    fieldH: Number((bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1)),
+    fieldH: Number((bf ? hmHeight(bf, m.position.x, m.position.z) : Number.NaN).toFixed(1)),
     terrainH: Number(deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1)),
     fieldFp: bf ? hmFingerprint(bf) : 'none',
     // Regime forensics: simT>simNow = the catch-all free-ran ahead;
@@ -147,7 +147,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
   let rbFleetCount = 0;
   let rbFleetWorst = { id: -1, err: 0 };
   let rbFleetFlushAt = 0;
-  const RB_FLEET_MS = 10000;
+  const RB_FLEET_MS = 10_000;
 
   function rbFleetNote(id: number, err: number): void {
     rbFleetCount++;
@@ -178,7 +178,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     // estSimNow (simT stays at the anchor) — take whichever leads, so
     // the compare can't misread clock lead as divergence. The 8s cap is
     // the same bound the inert T evaluation uses.
-    const span = m.t !== undefined ? Math.min(8, Math.max(b.netDiag?.simT ?? 0, estSimNow()) - m.t) : age;
+    const span = m.t === undefined ? age : Math.min(8, Math.max(b.netDiag?.simT ?? 0, estSimNow()) - m.t);
     if (!field || span <= 0) {
       _truthPos.set(
         m.position.x + m.velocity.x * age,
@@ -271,7 +271,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     rbSuppressed.delete(m.id);
     const diag = b.netDiag;
     const regime = diag
-      ? ` enr=${diag.enraged ? 1 : 0} tgt=${diag.tgtValid ? 1 : 0} leg=${diag.legAge.toFixed(1)} simT=${diag.simT.toFixed(1)} now=${diag.simNow !== null ? diag.simNow.toFixed(1) : '?'}` +
+      ? ` enr=${diag.enraged ? 1 : 0} tgt=${diag.tgtValid ? 1 : 0} leg=${diag.legAge.toFixed(1)} simT=${diag.simT.toFixed(1)} now=${diag.simNow === null ? '?' : diag.simNow.toFixed(1)}` +
         ` py=${b.pos.y.toFixed(0)} ty=${m.position.y.toFixed(0)} gy=${Ball.netField ? hmHeight(Ball.netField, m.position.x, m.position.z).toFixed(0) : '?'}`
       : '';
     logger.warn(

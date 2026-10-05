@@ -106,7 +106,7 @@ describe('BotBrain senses', () => {
     // Wander goals that land inside the repel radius get re-rolled — run
     // several think cadences; none should settle ~north of the body.
     for (let i = 0; i < 12; i++) {b.think(4, ctx(pos, flat, {}));}
-    const goal = (b as unknown as { goalS: { goal: { x: number; z: number } } }).goalS.goal;
+    const {goal} = (b as unknown as { goalS: { goal: { x: number; z: number } } }).goalS;
     expect(Math.hypot(goal.x, goal.z - 20) > 12 || Math.hypot(goal.x - pos.x, goal.z - pos.z) < 15).toBe(true);
   });
 
@@ -145,7 +145,7 @@ describe('BotBrain senses', () => {
   it('a builder parked at a defensive anchor plants a deployable', () => {
     // random=0.0 forces builder=true and the turret roll; cooldown elapses
     // on the first think past the initial stagger.
-    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
       const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
       // Trait rolls ride the spawn hash now (Math.random can't reach them);
@@ -163,7 +163,7 @@ describe('BotBrain senses', () => {
   });
 
   it('a builder fighting on the stand never plants mid-duel', () => {
-    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
       const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
       const pos = { x: 0, y: 1.6, z: 0 };
@@ -180,7 +180,7 @@ describe('BotBrain senses', () => {
 
   it('a hero bot pushes into the fight even while hurt', () => {
     // Force the hero roll on — the rising edge of hurt arms hero mode.
-    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
       const b = new BotBrain({ x: 0, y: 0, z: 0 });
       const pos = { x: 0, y: 1.6, z: 0 };

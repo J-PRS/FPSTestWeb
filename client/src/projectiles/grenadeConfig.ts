@@ -27,8 +27,8 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   // Ember-streak trail — tighter and faster-fading than the old smoky
   // fireball trail, matching the small thrown ball
   trailColors: [
-    new THREE.Color(1.0, 0.85, 0.4),
-    new THREE.Color(1.0, 0.55, 0.1),
+    new THREE.Color(1, 0.85, 0.4),
+    new THREE.Color(1, 0.55, 0.1),
     new THREE.Color(0.9, 0.3, 0.05),
     new THREE.Color(0.5, 0.2, 0.1),
     new THREE.Color(0.3, 0.2, 0.18),
@@ -38,17 +38,17 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   trailLifeMax: 0.8,
   trailSpread: 0.1,
   trailForwardSpread: 0.05,
-  trailParticleGravity: 0.0,
+  trailParticleGravity: 0,
   trailOpacity: 0.55,
   trailBaseSize: 0.06,
   trailSizeRange: 0.15,
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0.05,
-  meshColor: 0x3a3d42, // dark shell — the glow reads as heat leaking out
+  meshColor: 0x3A3D42, // dark shell — the glow reads as heat leaking out
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xff5500,
+  glowColor: 0xFF5500,
   glowOpacity: 0.4,
   glowScale: 0.7,
   meshRampIn: true,

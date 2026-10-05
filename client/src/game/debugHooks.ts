@@ -23,8 +23,8 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   const qp = urlParams;
   const { player } = deps;
 
-  if (qp.has('yaw')) {player.yaw = (parseFloat(qp.get('yaw')!) || 0) * Math.PI / 180;}
-  if (qp.has('pitch')) {player.pitch = (parseFloat(qp.get('pitch')!) || 0) * Math.PI / 180;}
+  if (qp.has('yaw')) {player.yaw = (Number.parseFloat(qp.get('yaw')!) || 0) * Math.PI / 180;}
+  if (qp.has('pitch')) {player.pitch = (Number.parseFloat(qp.get('pitch')!) || 0) * Math.PI / 180;}
   // ?dummylineup — three real RemotePlayers (light/medium/heavy) pinned
   // side by side in front of the camera for class-body screenshots.
   if (qp.has('dummylineup')) {
@@ -60,10 +60,10 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   }, deps.terrain);
   deps.remotePlayers.set('dummy', dummy);
 
-  const dummyPitch = (parseFloat(qp.get('dummypitch')!) || 0) * Math.PI / 180;
+  const dummyPitch = (Number.parseFloat(qp.get('dummypitch')!) || 0) * Math.PI / 180;
   const marker = new THREE.Mesh(
     new THREE.SphereGeometry(0.5),
-    new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    new THREE.MeshBasicMaterial({ color: 0xFF0000 })
   );
   deps.scene.add(marker);
   const scratch = new THREE.Vector3();
@@ -71,7 +71,7 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   return (_dt: number) => {
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
     // Float above eye — never buried in terrain
-    dummy.teleportTo(scratch.set(player.pos.x + fx * 4, player.pos.y + 2.0, player.pos.z + fz * 4));
+    dummy.teleportTo(scratch.set(player.pos.x + fx * 4, player.pos.y + 2, player.pos.z + fz * 4));
     const m = dummy.model?.object3D;
     deps.logger.debug(`[dummy] pos=${dummy.position.toArray().map(v => v.toFixed(1)).join(',')} modelPos=${m ? m.getWorldPosition(scratch).toArray().map(v => v.toFixed(1)).join(',') : 'none'} visible=${m?.visible} scale=${m?.scale.x.toFixed(3)}`);
     marker.position.copy(dummy.position);

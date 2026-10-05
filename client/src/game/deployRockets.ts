@@ -20,17 +20,17 @@ const ROCKET_DMG = 30;    // center-of-blast damage
 
 const _geoRktBody = new THREE.CylinderGeometry(0.045, 0.065, 0.32, 6);
 const _geoRktNose = new THREE.ConeGeometry(0.045, 0.14, 6);
-const _rktBodyMat = new THREE.MeshLambertMaterial({ color: 0x5a616b });
-const _rktNoseMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+const _rktBodyMat = new THREE.MeshLambertMaterial({ color: 0x5A616B });
+const _rktNoseMat = new THREE.MeshBasicMaterial({ color: 0xFFCC66 });
 const _rktGlowMat = new THREE.SpriteMaterial({
-  map: getGlowTexture(), color: 0xff9944, transparent: true,
+  map: getGlowTexture(), color: 0xFF9944, transparent: true,
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const _FWD = new THREE.Vector3(0, 0, 1);
 // Ribbon colors — hot orange band, white-hot core pair. Same 3-lane recipe
 // as live projectiles so a sentry rocket reads as the same class of threat.
-const RKTT_COLOR = 0xff9944;
-const RKTT_CORE = new THREE.Color(RKTT_COLOR).lerp(new THREE.Color(0xffffff), 0.6).getHex();
+const RKTT_COLOR = 0xFF9944;
+const RKTT_CORE = new THREE.Color(RKTT_COLOR).lerp(new THREE.Color(0xFFFFFF), 0.6).getHex();
 const RKTT_W = 0.32;
 const RKTT_LIFE = 0.4;
 
@@ -87,7 +87,7 @@ export class DeployRockets {
     };
     r.driver = new TrailDriver(r, [], r.ribbons);
     if (!target) { // fired with no live target — lob up-forward, no homing
-      const yaw = this.deps.lazyPlayer().yaw;
+      const {yaw} = this.deps.lazyPlayer();
       r.vel.set(Math.sin(yaw), 0.3, Math.cos(yaw)).normalize().multiplyScalar(ROCKET_SPEED);
       group.position.copy(muzzle);
       this.deps.scene.add(group);
@@ -166,7 +166,7 @@ export class DeployRockets {
   private detonate(r: Rocket): void {
     r.ttl = 0;
     this.deps.world.explosions.push(new Explosion(
-      this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xffaa44));
+      this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xFFAA44));
     sfx.explosionAt(r.pos, false);
     for (const c of this.deps.targets) {
       if (c.dead || c.scoreless) {continue;}

@@ -25,7 +25,7 @@ export class FragMessages {
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:2.6rem;font-weight:700;color:#ff5544;letter-spacing:0.12em;text-shadow:0 0 18px rgba(255,60,40,0.55),1px 2px 4px #000">${esc(head ?? '')}</div>${ 
-      rest.length
+      rest.length > 0
         ? `<div style="font-size:1.05rem;font-weight:600;color:#e8d8cc;letter-spacing:0.15em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
         : ''}`;
     this.flash();
@@ -37,7 +37,7 @@ export class FragMessages {
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:1.35rem;font-weight:700;color:#ffd9cc;letter-spacing:0.1em;text-shadow:0 0 10px rgba(255,120,80,0.4),1px 2px 3px #000">${esc(head ?? '')}</div>${ 
-      rest.length
+      rest.length > 0
         ? `<div style="font-size:0.9rem;font-weight:600;color:#e8d8cc;letter-spacing:0.14em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
         : ''}`;
     this.flash();
@@ -49,10 +49,10 @@ export class FragMessages {
   // airtime frag is a bigger deal than a 0.4s plink, so it LOOKS bigger.
   private static readonly SCORE_TIERS: [number, string, string][] = [
     // [min airtime, stats font, score font] — capped at the top tier
-    [2.0, '1.05rem', '2.2rem'],
-    [1.0, '0.95rem', '1.7rem'],
+    [2, '1.05rem', '2.2rem'],
+    [1, '0.95rem', '1.7rem'],
     [0.5, '0.9rem', '1.4rem'],
-    [0.0, '0.85rem', '1.2rem'],
+    [0, '0.85rem', '1.2rem'],
   ];
 
   showScore(msg: string, air = 0): void {
@@ -60,7 +60,7 @@ export class FragMessages {
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:${tier[1]};font-weight:600;color:#cfe0ff;letter-spacing:0.1em;text-shadow:1px 1px 3px #000">${esc(head ?? '')}</div>${ 
-      rest.length
+      rest.length > 0
         ? `<div style="font-size:${tier[2]};font-weight:700;color:#8fd8a8;letter-spacing:0.08em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
         : ''}`;
     this.flash();

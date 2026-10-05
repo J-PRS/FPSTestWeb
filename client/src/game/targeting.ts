@@ -40,19 +40,19 @@ export interface TargetProfile {
 // weights reads as completely different behavior.
 export const PROFILES = {
   /** Mindless swarm — chase whatever's closest, barely care who shoots. */
-  fodder:    { wDist: 1.0, wDmg: 0.15, sticky: 1.2,  evalEvery: 2.0, decay: 0.15, leash: 300 },
+  fodder:    { wDist: 1, wDmg: 0.15, sticky: 1.2,  evalEvery: 2, decay: 0.15, leash: 300 },
   /** Pack hunters — nearest, but a real damage-dealer pulls aggro. */
-  hunter:    { wDist: 1.0, wDmg: 0.5,  sticky: 1.35, evalEvery: 1.0, decay: 0.12, leash: 300 },
+  hunter:    { wDist: 1, wDmg: 0.5,  sticky: 1.35, evalEvery: 1, decay: 0.12, leash: 300 },
   /** Committed ram — momentum IS the personality, almost never re-picks. */
-  rammer:    { wDist: 1.0, wDmg: 0.2,  sticky: 2.5,  evalEvery: 3.0, decay: 0.10, leash: 350 },
+  rammer:    { wDist: 1, wDmg: 0.2,  sticky: 2.5,  evalEvery: 3, decay: 0.1, leash: 350 },
   /** Airborne harasser — opportunist: nearest with strong damage aggro. */
-  flyer:     { wDist: 1.0, wDmg: 0.8,  sticky: 1.4,  evalEvery: 1.5, decay: 0.18, leash: 350 },
+  flyer:     { wDist: 1, wDmg: 0.8,  sticky: 1.4,  evalEvery: 1.5, decay: 0.18, leash: 350 },
   /** Artillery — punishes whoever's shooting it; distance barely matters. */
-  artillery: { wDist: 0.3, wDmg: 1.0,  sticky: 1.6,  evalEvery: 2.0, decay: 0.08, leash: 400 },
+  artillery: { wDist: 0.3, wDmg: 1,  sticky: 1.6,  evalEvery: 2, decay: 0.08, leash: 400 },
   /** Sniper/beam — locks a lane and holds it unless someone else hurts it. */
-  sniper:    { wDist: 0.25, wDmg: 1.2, sticky: 2.0,  evalEvery: 2.5, decay: 0.08, leash: 450 },
+  sniper:    { wDist: 0.25, wDmg: 1.2, sticky: 2,  evalEvery: 2.5, decay: 0.08, leash: 450 },
   /** Siege dropper — orbits whoever's convenient, loathes to re-orbit. */
-  siege:     { wDist: 0.6, wDmg: 0.3,  sticky: 1.8,  evalEvery: 2.5, decay: 0.10, leash: 350 },
+  siege:     { wDist: 0.6, wDmg: 0.3,  sticky: 1.8,  evalEvery: 2.5, decay: 0.1, leash: 350 },
 } satisfies Record<string, TargetProfile>;
 
 /** One creature's targeting state. Owns: who it currently hates, how much

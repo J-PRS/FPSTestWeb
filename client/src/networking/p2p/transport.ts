@@ -41,7 +41,7 @@ export class LoopbackTransport implements GameTransport {
 
   private deliver(data: string | Uint8Array): void {
     if (typeof data === 'string') {
-      try { this.config.onMessage?.(JSON.parse(data)); } catch (e) { logger.error('loopback parse', e); }
+      try { this.config.onMessage?.(JSON.parse(data)); } catch (error) { logger.error('loopback parse', error); }
     } else {
       this.config.onBinaryMessage?.(data);
     }
@@ -59,9 +59,9 @@ export class DataChannelTransport implements GameTransport {
   constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {
     dc.binaryType = 'arraybuffer';
     dc.addEventListener('message', (ev) => {
-      const data = ev.data;
+      const {data} = ev;
       if (typeof data === 'string') {
-        try { this.config.onMessage?.(JSON.parse(data)); } catch (e) { logger.error('dc parse', e); }
+        try { this.config.onMessage?.(JSON.parse(data)); } catch (error) { logger.error('dc parse', error); }
       } else if (data instanceof ArrayBuffer) {
         this.config.onBinaryMessage?.(new Uint8Array(data));
       }

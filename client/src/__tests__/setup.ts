@@ -79,7 +79,7 @@ if (typeof globalThis.document === 'undefined') {
         appendChild(n: unknown) { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
         remove() {
           const p = el._parent as { children: unknown[] } | null;
-          if (p) { const i = p.children.indexOf(el); if (i >= 0) {p.children.splice(i, 1);} }
+          if (p) { const i = p.children.indexOf(el); if (i !== -1) {p.children.splice(i, 1);} }
         },
       };
       (globalThis.document as unknown as { _all: unknown[] })._all.push(el);

@@ -20,8 +20,8 @@ const bow = new THREE.Group();
 // the top rail floats above, bolt living in the gap.
 bow.add(mkLoft([
   { z: 0.26, ring: profOct(0.17, 0.15, 0.02) },
-  { z: 0.10, ring: profOct(0.16, 0.13, 0.02) },
-  { z: -0.06, ring: profOct(0.12, 0.10, 0.02) },
+  { z: 0.1, ring: profOct(0.16, 0.13, 0.02) },
+  { z: -0.06, ring: profOct(0.12, 0.1, 0.02) },
 ], bodyMat));
 // Channel floor — the bolt's runway, recessed so the glowing bolt in
 // the slit shadows its sides correctly under the AO bake.
@@ -31,13 +31,13 @@ bow.add(chanFloor);
 // Top rail — floats over the channel on two cheek pylons; the gap
 // between rail and floor IS the slit the bolt shows through.
 bow.add(mkLoft([
-  { z: 0.18, ring: profOct(0.10, 0.05, 0.012), dy: 0.095 },
+  { z: 0.18, ring: profOct(0.1, 0.05, 0.012), dy: 0.095 },
   { z: -0.14, ring: profOct(0.08, 0.045, 0.012), dy: 0.095 },
 ], bodyMat));
 // Rail risers — the top rail can't float on air: side webs tie its
 // underside to the channel floor, flanking the bolt slit.
 for (const side of [-1, 1]) {
-  for (const z of [-0.10, 0.15]) {
+  for (const z of [-0.1, 0.15]) {
     const riser = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.07, 0.04), darkMat);
     riser.position.set(side * 0.035, 0.0625, z);
     bow.add(riser);
@@ -93,8 +93,8 @@ for (const side of [-1, 1]) {
   // laterally, bowed TOWARD the bolt path mid-span (recurve bows the
   // belly forward, not the spine). Tip knob carries the cam wheel.
   const limb = mkLoft([
-    { z: 0.0, ring: profOct(0.075, 0.018, 0.008) },
-    { z: -0.20, ring: profOct(0.060, 0.014, 0.006), dx: -side * 0.03 },
+    { z: 0, ring: profOct(0.075, 0.018, 0.008) },
+    { z: -0.2, ring: profOct(0.06, 0.014, 0.006), dx: -side * 0.03 },
     { z: -0.38, ring: profOct(0.048, 0.013, 0.006) },
     { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);
@@ -104,7 +104,7 @@ for (const side of [-1, 1]) {
   // -side*0.03), not a straight bar floating off the bent plate.
   arm.add(tubePath([
     [0, 0.02, 0, 0.008],
-    [-side * 0.03, 0.02, -0.20, 0.008],
+    [-side * 0.03, 0.02, -0.2, 0.008],
     [0, 0.02, -ARM_LEN - 0.02, 0.008],
   ], 0.008, darkMat, 4));
   // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
@@ -132,7 +132,7 @@ for (const side of [-1, 1]) {
 // the vertex rides bowString's z (drawn-back at rest, snapped to the
 // cam line when fired).
 const CAM_R = 0.065;
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x18_1a_1c });
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const knot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), darkMat);
@@ -177,7 +177,7 @@ shaft.rotation.x = Math.PI / 2;
 shaft.position.set(0, 0.035, 0.04);
 boltG.add(shaft);
 const tip = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6),
-  new THREE.MeshBasicMaterial({ color: 0xffc866 }));
+  new THREE.MeshBasicMaterial({ color: 0xff_c8_66 }));
 tip.rotation.x = -Math.PI / 2;
 tip.position.set(0, 0.035, -0.11);
 boltG.add(tip);
@@ -300,12 +300,12 @@ disc.add(collar);
 // out of the breech into the slit (the "it really fires discs" sell).
 const ammo = new THREE.Group();
 ammo.name = 'discAmmo';
-const loadedMat = new THREE.MeshLambertMaterial({ color: 0x3a3f45, emissive: 0x14161a });
+const loadedMat = new THREE.MeshLambertMaterial({ color: 0x3A3F45, emissive: 0x14161A });
 const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.028, 24), loadedMat);
 loaded.position.set(0, 0, -0.15);
 ammo.add(loaded);
 const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 6, 32),
-  new THREE.MeshBasicMaterial({ color: 0x77e8ff }));
+  new THREE.MeshBasicMaterial({ color: 0x77_e8_ff }));
 rim.rotation.x = Math.PI / 2;
 rim.position.set(0, 0, -0.15);
 ammo.add(rim);
@@ -348,7 +348,7 @@ for (let i = 0; i < CHAIN_BARRELS; i++) {
   // slight swell at the breech root, tapering to the muzzle.
   const barrel = mkLoft([
     { z: -0.12, ring: rotRing(profCircle(0.072, 8), a), dx, dy },
-    { z: -0.30, ring: rotRing(profCircle(0.066, 8), a), dx, dy },
+    { z: -0.3, ring: rotRing(profCircle(0.066, 8), a), dx, dy },
     { z: -0.78, ring: rotRing(profCircle(0.06, 8), a), dx, dy },
   ], bodyMat, false); // open ends — throat + breech collar cap both
   // Per-barrel fire recoil — kick() knocks the TOP barrel back a beat.
@@ -410,7 +410,7 @@ return { g: chain, barrels: chainBarrels };
 export function mkMortar(): THREE.Group {
 const mortar = new THREE.Group();
 mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat)); // main bore tube
-mortar.add(mkTube(0.22, 0.20, 0.1, -0.22, bodyMat)); // flared muzzle
+mortar.add(mkTube(0.22, 0.2, 0.1, -0.22, bodyMat)); // flared muzzle
 mortar.add(mkBore(0.17, -0.271));
 // Breech block + base plate — the mortar's tell: a flat plate the tube
 // seats on, like it's meant to be slammed down
@@ -430,7 +430,7 @@ for (const side of [-1, 1]) {
 }
 // Shell hopper on the left flank — a rack of finned bombs, tips
 // visible above the tube. Live ordnance = the mortar read.
-const finMat = new THREE.MeshLambertMaterial({ color: 0x5a4a28, emissive: 0x181205 });
+const finMat = new THREE.MeshLambertMaterial({ color: 0x5a_4a_28, emissive: 0x18_12_05 });
 for (let i = 0; i < 3; i++) {
   const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
   shell.position.set(-0.15, -0.02, shell.position.z);
@@ -469,7 +469,7 @@ gl.add(drumHub);
 // Six chamber bores ringed around the drum face — the revolver read.
 // Solid drum looked like a wheel; dark mouths with brass rims sell
 // "six 40mm chambers" at viewmodel distance.
-const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8a7a4a, emissive: 0x1a1408 });
+const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8A7A4A, emissive: 0x1A1408 });
 for (let i = 0; i < 6; i++) {
   const a = (i / 6) * Math.PI * 2;
   const cy = -0.09 + Math.sin(a) * 0.105;
@@ -524,8 +524,8 @@ sticky.add(stickyDrum);
 // Chambered bombs peeking through the drum's front face — five dark
 // shells ringed around the hub, each with a fuse nub. Visible ordnance =
 // the "sticky bombs loaded" read at viewmodel distance.
-const bombMat = new THREE.MeshLambertMaterial({ color: 0x1e2226, emissive: 0x0a0c0e });
-const fuseMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 }); // amber fuse glow — hazard, not candy
+const bombMat = new THREE.MeshLambertMaterial({ color: 0x1E2226, emissive: 0x0a_0c_0e });
+const fuseMat = new THREE.MeshBasicMaterial({ color: 0xff_aa_22 }); // amber fuse glow — hazard, not candy
 for (let i = 0; i < 5; i++) {
   const a = (i / 5) * Math.PI * 2;
   const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), bombMat);
@@ -547,7 +547,7 @@ stickyRecv.position.set(0, -0.01, 0.14);
 sticky.add(stickyRecv);
 // Warning stripe across the receiver flank — ordnance hardware marking,
 // not decoration. Same trick as the shotgun's red shells.
-const warnMat = new THREE.MeshLambertMaterial({ color: 0xcc8818, emissive: 0x301f04 });
+const warnMat = new THREE.MeshLambertMaterial({ color: 0xCC8818, emissive: 0x30_1f_04 });
 const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.03, 0.14), warnMat);
 stripe.position.set(0, 0.03, 0.14);
 sticky.add(stripe);
@@ -679,7 +679,7 @@ return sg;
 // bore, rounded breech ball.
 export function mkCannon(): THREE.Group {
 const cn = new THREE.Group();
-let cz = 0.0; // running z, barrel extends toward -Z from breech
+let cz = 0; // running z, barrel extends toward -Z from breech
 const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
   cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
   cz -= len;
@@ -699,9 +699,9 @@ cnSeg(0.13, 0.12, 0.12, bodyMat);   // tube taper 1
 cnHoop(0.127);                      // hoop 1
 cnSeg(0.12, 0.11, 0.12, bodyMat);   // tube taper 2
 cnHoop(0.117);                      // hoop 2
-cnSeg(0.11, 0.10, 0.10, bodyMat);   // chase — slimmest stretch
+cnSeg(0.11, 0.1, 0.1, bodyMat);   // chase — slimmest stretch
 cnHoop(0.107);                      // hoop 3
-cnSeg(0.10, 0.125, 0.035, bodyMat); // muzzle flare (trumpet lip)
+cnSeg(0.1, 0.125, 0.035, bodyMat); // muzzle flare (trumpet lip)
 cnHoop(0.128);                      // muzzle ring
 // cz ends ≈ -0.46; muzzle ring's own capped face serves as the dark bore.
 // Cascabel — the breech knob, proper: a slim neck off the cap widening
@@ -792,7 +792,7 @@ for (const z of [-0.02, 0.18]) {
   mrv.add(flange);
 }
 // Chamber windows + glowing shell noses — the volley is visibly LOADED
-const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xff5518, emissive: 0x992200 });
+const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xFF5518, emissive: 0x99_22_00 });
 for (let i = 0; i < 6; i++) {
   const a = (i / 6) * Math.PI * 2;
   const cx = Math.cos(a) * 0.1, cy = -0.05 + Math.sin(a) * 0.1;

@@ -80,7 +80,7 @@ const parse = {
   boolean: (raw: string | null, def: boolean) => (raw === null ? def : raw === 'true'),
   number: (raw: string | null, def: number) => {
     if (raw === null) {return def;}
-    const n = parseFloat(raw);
+    const n = Number.parseFloat(raw);
     return Number.isFinite(n) ? n : def;
   },
 };

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mkGltfLoader } from '../gltfLoad';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
@@ -73,7 +73,7 @@ export class VmBaked {
       // GLB fetch doesn't flash the old model for a frame. Restored on
       // failure below.
       const forced = !bakeAll;
-      if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false; });}
+      if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = false;} });}
       if (done.has(g)) {continue;}
       done.add(g);
       try {
@@ -86,20 +86,20 @@ export class VmBaked {
         // non-HTML body is a real bake.
         const ct = probe.headers.get('content-type') ?? '';
         if (!probe.ok || ct.includes('html')) {
-          if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });}
+          if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
           bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
           continue;
         }
         await this.swapBaked(wt, g, loader, texLoader);
-      } catch (e) {
+      } catch (error) {
         if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });}
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
         // neither is worth a log line. Only a real parse/decode failure is.
-        const is404 = !(e instanceof Error) ||
-          /404|not found|fetch/i.test(e.message);
-        if (!is404) {Logger.warn(`[vm] w${wt} bake load failed`, e);}
+        const is404 = !(error instanceof Error) ||
+          /404|not found|fetch/i.test(error.message);
+        if (!is404) {Logger.warn(`[vm] w${wt} bake load failed`, error);}
       }
     }
   }
@@ -124,8 +124,8 @@ export class VmBaked {
     }
     const bakedMat = new THREE.MeshLambertMaterial();
     if (tex) {bakedMat.map = tex;}
-    if (!tex) {bakedMat.color.set(0x3a3632);} // gunmetal fallback until an ao bake exists
-    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
+    if (!tex) {bakedMat.color.set(0x3a_36_32);} // gunmetal fallback until an ao bake exists
+    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xFF00FF); }
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
     // static geometry — a merged bake folds it into the body and the gun
     // stops spinning forever. null = merged bake, procedural barrels keep
@@ -172,7 +172,7 @@ export class VmBaked {
     if (spin) {this.seatChainPivot(spin.node, g);}
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.
-    if (this.h.ghostMats.length) {
+    if (this.h.ghostMats.length > 0) {
       const seen = new Set<THREE.Material>();
       const toShell: THREE.Mesh[] = [];
       gltf.scene.traverse((o: THREE.Object3D) => {
@@ -254,7 +254,7 @@ export class VmBaked {
   private seatChainPivot(spinNode: THREE.Object3D, g: THREE.Group): void {
     if (!spinNode.parent) {return;}
     const boreCenter = new THREE.Vector3(0, 0, -0.28); // cluster z in weapon space
-    const parent = spinNode.parent;
+    const {parent} = spinNode;
     parent.updateWorldMatrix(true, false);
     g.updateWorldMatrix(true, false);
     const parentInv = new THREE.Matrix4().copy(parent.matrixWorld).invert();

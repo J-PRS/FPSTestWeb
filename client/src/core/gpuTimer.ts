@@ -25,7 +25,7 @@ function harvest(): void {
   // A disjoint event (GPU reset, context loss) invalidates every in-flight
   // result — drop the queue and report it rather than trusting a stale ms.
   if (gl.getParameter(ext!.GPU_DISJOINT_EXT)) { pending.length = 0; disjointSeen = true; }
-  while (pending.length && gl.getQueryParameter(pending[0]!, gl.QUERY_RESULT_AVAILABLE)) {
+  while (pending.length > 0 && gl.getQueryParameter(pending[0]!, gl.QUERY_RESULT_AVAILABLE)) {
     const q = pending.shift()!;
     lastNs = Number(gl.getQueryParameter(q, gl.QUERY_RESULT));
     gl.deleteQuery(q);

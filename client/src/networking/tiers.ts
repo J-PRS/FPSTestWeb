@@ -30,18 +30,18 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
     arm() { armed = true; },
     config: {
       ...config,
-      onConnect: () => { if (armed) config.onConnect?.(); },
-      onDisconnect: (c, r) => { if (armed) config.onDisconnect?.(c, r); },
-      onError: (e) => { if (armed) config.onError?.(e); },
-      onMessage: (m) => { if (armed) config.onMessage?.(m); },
-      onBinaryMessage: (b) => { if (armed) config.onBinaryMessage?.(b); },
+      onConnect: () => { if (armed) {config.onConnect?.();} },
+      onDisconnect: (c, r) => { if (armed) {config.onDisconnect?.(c, r);} },
+      onError: (e) => { if (armed) {config.onError?.(e);} },
+      onMessage: (m) => { if (armed) {config.onMessage?.(m);} },
+      onBinaryMessage: (b) => { if (armed) {config.onBinaryMessage?.(b);} },
     },
   };
 }
 
 export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
   const want = urlParams.net ?? 'auto';
-  if (want !== 'auto') return pinnedTier(want, config);
+  if (want !== 'auto') {return pinnedTier(want, config);}
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
   const probeRtc = now >= missUntil.rtc;
@@ -57,8 +57,8 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   ]);
   // Only an actual probe refreshes the miss window — a skipped probe must
   // not extend the cache or the tier never gets retried.
-  if (probeWt && !wt) missUntil.wt = Date.now() + MISS_CACHE_MS;
-  if (probeRtc && !rtc) missUntil.rtc = Date.now() + MISS_CACHE_MS;
+  if (probeWt && !wt) {missUntil.wt = Date.now() + MISS_CACHE_MS;}
+  if (probeRtc && !rtc) {missUntil.rtc = Date.now() + MISS_CACHE_MS;}
   if (wt) { wtC.arm(); rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
   if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
   logger.info('tier: WebSocket');
@@ -69,8 +69,8 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
  *  the session layer's bug source once — muteable/gen/flap-breaker/miss-
  *  cache now hold that fault line, so the ladder is the default again. */
 async function pinnedTier(want: string | null | undefined, config: ConnectionConfig): Promise<GameTransport> {
-  if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
-  if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
+  if (want === 'wt') {return (await tryWebTransport(config)) ?? new WebSocketConnection(config);}
+  if (want === 'rtc') {return (await tryWebRTC(config)) ?? new WebSocketConnection(config);}
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
@@ -104,8 +104,8 @@ class ServerRtcTransport implements GameTransport {
   ) {
     dc.binaryType = 'arraybuffer';
     dc.addEventListener('message', (ev) => {
-      const data = ev.data;
-      if (data instanceof ArrayBuffer) config.onBinaryMessage?.(new Uint8Array(data));
+      const {data} = ev;
+      if (data instanceof ArrayBuffer) {config.onBinaryMessage?.(new Uint8Array(data));}
       else if (typeof data === 'string') {
         try { config.onMessage?.(JSON.parse(data)); } catch { /* malformed */ }
       }
@@ -129,12 +129,12 @@ class ServerRtcTransport implements GameTransport {
       } else if (s === 'disconnected') {
         setTimeout(() => {
           const now = pc.iceConnectionState;
-          if (now === 'disconnected' || now === 'failed') this.killLanes(`ice ${now}`);
+          if (now === 'disconnected' || now === 'failed') {this.killLanes(`ice ${now}`);}
         }, 2500);
       }
     });
     ctrl?.addEventListener('message', (ev) => {
-      const data = ev.data;
+      const {data} = ev;
       // Binary CAN arrive here — the server pushes ball segments down the
       // reliable lane, which is this channel on RTC. Dropping them was a
       // silent desync source.
@@ -151,7 +151,7 @@ class ServerRtcTransport implements GameTransport {
     }
   }
   send(data: string | Uint8Array): boolean {
-    if (!this.open) return false;
+    if (!this.open) {return false;}
     // Last-ditch detector: if neither lane is open the pipe is dead —
     // declare it so a silent SCTP teardown still triggers the reconnect,
     // even if neither 'close' nor an ICE transition ever fired.
@@ -167,16 +167,16 @@ class ServerRtcTransport implements GameTransport {
     const lane = binary ? this.dc : this.ctrl;
     const alt = binary ? this.ctrl : this.dc;
     const dc = lane?.readyState === 'open' ? lane : alt?.readyState === 'open' ? alt : null;
-    if (!dc) return false;
-    if (typeof data === 'string') dc.send(data);
-    else dc.send(new Uint8Array(data));
+    if (!dc) {return false;}
+    if (typeof data === 'string') {dc.send(data);}
+    else {dc.send(new Uint8Array(data));}
     return true;
   }
   private dead = false;
   /** The single disconnect declaration — lane-close events AND the ICE
    *  watchdog both land here so either detection path reconnects. */
   private declareDead(reason: string): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.dead = true;
     this.open = false;
     this.config.onDisconnect?.(1000, reason);
@@ -185,7 +185,7 @@ class ServerRtcTransport implements GameTransport {
     // A lane 'close' event can precede its readyState flip — check both.
     const gameOpen = this.dc.readyState === 'open';
     const ctrlOpen = this.ctrl?.readyState === 'open';
-    if (gameOpen || ctrlOpen) return;
+    if (gameOpen || ctrlOpen) {return;}
     this.declareDead(`rtc closed (${lane} last)`);
   }
   /** ICE verdict is the authority — SCTP teardown doesn't reliably fire
@@ -208,13 +208,13 @@ class ServerRtcTransport implements GameTransport {
 }
 
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
-  if (typeof RTCPeerConnection === 'undefined') return null;
+  if (typeof RTCPeerConnection === 'undefined') {return null;}
   let pc: RTCPeerConnection | undefined;
   let signalRef: WebSocket | undefined;
   try {
     // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
     // deployment property, not a client constant; LAN/dev needs neither.
-    const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
+    const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
     const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
       .then((r) => r.json())
       .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
@@ -249,7 +249,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
       // Server gathers its own ICE (STUN) before answering — that window
       // is seconds, so a LAN-era 3s timeout would always fall back to ws
       // for internet peers. 10s covers a slow srflx gather.
-      const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 10000);
+      const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 10_000);
       signal.addEventListener('message', (ev) => {
         try {
           const m = JSON.parse(ev.data);
@@ -279,8 +279,8 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // opening and shut it then.
     const s = signalRef;
     if (s && s.readyState !== WebSocket.CLOSED && s.readyState !== WebSocket.CLOSING) {
-      if (s.readyState === WebSocket.OPEN) s.close();
-      else s.addEventListener('open', () => s.close(), { once: true });
+      if (s.readyState === WebSocket.OPEN) {s.close();}
+      else {s.addEventListener('open', () => s.close(), { once: true });}
     }
     return null;
   }
@@ -330,9 +330,9 @@ export class TieredTransport implements GameTransport {
       onDisconnect: (code, reason) => {
         // Stale generation — a losing probe's teardown or a superseded
         // attempt's timer. Forward nothing, schedule nothing.
-        if (gen !== this.gen) return;
+        if (gen !== this.gen) {return;}
         this.config.onDisconnect?.(code, reason);
-        if (this.closed) return;
+        if (this.closed) {return;}
         // Flap breaker: a tier that dies seconds after connecting is worse
         // than not having it — mark the miss so the re-probe skips it and
         // the session lands on WS instead of connect/disconnect looping.
@@ -342,50 +342,50 @@ export class TieredTransport implements GameTransport {
         }
         // WebSocketConnection runs its own reconnect loop — reprobing here
         // would double-schedule connections.
-        if (this.inner instanceof WebSocketConnection) return;
+        if (this.inner instanceof WebSocketConnection) {return;}
         if (this.attempts < (this.config.maxReconnectAttempts ?? Infinity)) {
           this.attempts++;
           this.reconnectTimer = setTimeout(() => {
-            if (!this.closed && this.gen === gen) this.connect(this.url);
+            if (!this.closed && this.gen === gen) {this.connect(this.url);}
           }, TieredTransport.BACKOFF_MS);
         }
       },
       onConnect: () => {
-        if (gen !== this.gen) return;
+        if (gen !== this.gen) {return;}
         this.attempts = 0;
         this.connectedAt = Date.now();
         this.config.onConnect?.();
       },
-      onMessage: (data) => { if (gen === this.gen) this.config.onMessage?.(data); },
-      onBinaryMessage: (data) => { if (gen === this.gen) this.config.onBinaryMessage?.(data); },
+      onMessage: (data) => { if (gen === this.gen) {this.config.onMessage?.(data);} },
+      onBinaryMessage: (data) => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} },
     };
     connectGameTransport(innerConfig).then((t) => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);
-      for (const d of this.pending) t.send(d);
+      for (const d of this.pending) {t.send(d);}
       this.pending.length = 0;
-    }).catch((e) => {
+    }).catch((error) => {
       if (gen !== this.gen) return;
-      this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
+      this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
     });
   }
 
   send(data: string | Uint8Array): boolean {
-    if (this.inner) return this.inner.send(data);
+    if (this.inner) {return this.inner.send(data);}
     // Binary frames are volatile state — keep only the freshest while the
     // probe resolves, same rule WebSocketConnection applies during downtime.
     if (data instanceof Uint8Array) {
       this.pending = this.pending.filter(m => !(m instanceof Uint8Array));
     }
-    if (this.pending.length < 100) this.pending.push(data);
+    if (this.pending.length < 100) {this.pending.push(data);}
     return false;
   }
 
   connected(): boolean { return this.inner?.connected() ?? false; }
   disconnect(): void {
     this.closed = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) {clearTimeout(this.reconnectTimer);}
     this.inner?.disconnect();
   }
 }

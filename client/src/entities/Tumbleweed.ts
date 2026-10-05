@@ -8,7 +8,7 @@ import {
   WEED_WIND_X, WEED_WIND_Z, WEED_KILL_DIST,
   EMERGE_DUR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -54,7 +54,7 @@ function growStem(twigs: THREE.BufferGeometry[], origin: THREE.Vector3, dir: THR
     d.normalize();
     p.addScaledVector(d, STEP_LEN);
     pts.push(p.clone());
-    if (p.length() > 1.15) break; // strayed too far — dead stem
+    if (p.length() > 1.15) {break;} // strayed too far — dead stem
 
     // Occasional fork — thin child stem diverging tangentially
     if (Math.random() < 0.3 && i > 1) {
@@ -62,7 +62,7 @@ function growStem(twigs: THREE.BufferGeometry[], origin: THREE.Vector3, dir: THR
       growStem(twigs, p, _rnd2, radius * 0.6, Math.max(2, steps - i - 2));
     }
   }
-  if (pts.length < 2) return;
+  if (pts.length < 2) {return;}
 
   const curve = new THREE.CatmullRomCurve3(pts);
   twigs.push(new THREE.TubeGeometry(curve, steps * 2, radius, 3, false));
@@ -95,17 +95,17 @@ function buildTumbleweedGeometry(): THREE.BufferGeometry {
     dir.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     _radial.copy(origin).normalize();
     dir.addScaledVector(_radial, -dir.dot(_radial)); // strip the radial part
-    if (dir.lengthSq() < 0.01) dir.set(1, 0, 0);
+    if (dir.lengthSq() < 0.01) {dir.set(1, 0, 0);}
     dir.normalize();
     growStem(twigs, origin, dir, TWIG_R, STEPS);
   }
   const geo = mergeGeometries(twigs, false)!;
   // Slight squash — real tumbleweeds are oblate, wider than tall
-  geo.scale(1.0, 0.88, 1.0);
+  geo.scale(1, 0.88, 1);
   // Keep ~20 evenly-spread twigs as the debris pool (same squash so shard
   // silhouettes match the live weed — merge copies data, so scale separately)
   _twigPool = twigs.filter((_, i) => i % 4 === 0);
-  for (const t of _twigPool) t.scale(1.0, 0.88, 1.0);
+  for (const t of _twigPool) {t.scale(1.0, 0.88, 1.0);}
   geo.computeBoundingSphere();
   return geo;
 }
@@ -117,7 +117,7 @@ let _mat: THREE.MeshLambertMaterial | null = null;
 /** Swarm part table — one twig-ball per weed. */
 export function weedParts(): SwarmPart[] {
   if (!_mat) {
-    _mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    _mat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
   }
   return [{ geometry: _geo, material: _mat, castShadow: false }];
 }
@@ -185,12 +185,12 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
     const speed = WEED_SPEED * (0.7 + Math.random() * 0.6);
     this.vel = new THREE.Vector3(WIND_DIR.x * speed, 0, WIND_DIR.z * speed);
     this.hasSlots = allocSlots('tumbleweed', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.flash > 0) this.flash -= dt;
+    if (this.dead) {return;}
+    if (this.flash > 0) {this.flash -= dt;}
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
 
@@ -207,12 +207,12 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
         this.airborne = false;
         // Tumbleweeds are light — they skip, not thud
         this.vel.y = Math.abs(this.vel.y) > 6 ? WEED_HOP * 0.5 : 0;
-        if (this.vel.y > 0) this.airborne = true;
+        if (this.vel.y > 0) {this.airborne = true;}
         this.vel.x *= 0.9; this.vel.z *= 0.9;
       }
     } else {
       // Wind accelerates toward cruise speed — gusts of jitter on top
-      const gust = Math.sin(this.wobblePhase + this.id * 1.7) * 0.5 + 1.0;
+      const gust = Math.sin(this.wobblePhase + this.id * 1.7) * 0.5 + 1;
       _dir.copy(WIND_DIR).multiplyScalar(gust);
       this.vel.x += (_dir.x * WEED_SPEED - this.vel.x) * 1.2 * dt;
       this.vel.z += (_dir.z * WEED_SPEED - this.vel.z) * 1.2 * dt;
@@ -270,13 +270,13 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
   applyKnockback(from: THREE.Vector3, force: number): void {
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * (this.mega ? 0.8 : 1.5)); // mega weeds are heavy — blasts shove, not launch
-    if (Math.abs(this.vel.y) > 1.5 || force > 10) this.airborne = true;
+    if (Math.abs(this.vel.y) > 1.5 || force > 10) {this.airborne = true;}
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.5);
-    if (Math.abs(this.vel.y) > 1.5 || force > 10) this.airborne = true;
+    if (Math.abs(this.vel.y) > 1.5 || force > 10) {this.airborne = true;}
   }
 
   dispose(): void {

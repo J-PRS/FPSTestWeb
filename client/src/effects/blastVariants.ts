@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { blastBurst, type BlastSpec } from './vfx.js';
 import type { ExplosionSparks } from './explosionSparks.js';
 
@@ -71,8 +71,8 @@ export class BlastVariants {
       // dissipates, it doesn't smolder.
       this.h.spawnFlash(pos, mult * 0.9);
       this.energy(pos, mult, directHit);
-      this.h.allocShock(pos, 0xffffff, 0.35, 5.0 * mult * 0.8, 0.35);
-      this.h.allocShock(pos, this.h.hasTint ? this.h.tint : 0xffcc66, 0.45, 6.5 * mult * 0.8, 0.5);
+      this.h.allocShock(pos, 0xFFFFFF, 0.35, 5 * mult * 0.8, 0.35);
+      this.h.allocShock(pos, this.h.hasTint ? this.h.tint : 0xFFCC66, 0.45, 6.5 * mult * 0.8, 0.5);
       this.electricSparks(pos, mult);
       if (directHit) {this.directHitLayers(pos, timeScale);}
       this.h.spawnGroundRing(pos, mult * 1.2, terrain); // wider, brighter — the ring IS the read
@@ -120,7 +120,7 @@ export class BlastVariants {
    *  the weapon tint, one hard spike fan, and zero smolder. Everything
    *  decays in <0.5s — the hit should read as a SNAP, not a fire. */
   private energy(pos: THREE.Vector3, mult: number, directHit: boolean): void {
-    const dh = directHit ? 1.2 : 1.0;
+    const dh = directHit ? 1.2 : 1;
     this.h.spawnBurst(pos, { // hot core — white center bleeding to tint
       count: 34, countMult: mult,
       elvBase: 0.3, elvSpan: Math.PI,
@@ -135,9 +135,9 @@ export class BlastVariants {
       elvBase: 0.2, elvSpan: Math.PI * 0.8,
       spdMin: 10, spdMax: 42, vy: 5,
       lifeMin: 0.3, lifeMax: 0.5,
-      sizeMin: 0.5, sizeMax: 1.0,
+      sizeMin: 0.5, sizeMax: 1,
       gravity: -8,
-      c1: [0.8, 0.9, 1.0], c2: [0.2, 0.3, 0.5],
+      c1: [0.8, 0.9, 1], c2: [0.2, 0.3, 0.5],
       opacity: 0.85, stagger: 0.08,
     });
     this.h.blastTinted(pos, { // spike fan — thin fast energy streaks
@@ -147,7 +147,7 @@ export class BlastVariants {
       lifeMin: 0.18, lifeMax: 0.18,
       sizeMin: 0.22, sizeMax: 0.22,
       gravity: 0,
-      c1: [0.9, 0.95, 1.0], c2: [0.4, 0.5, 0.7],
+      c1: [0.9, 0.95, 1], c2: [0.4, 0.5, 0.7],
       opacity: 0.9,
       stretched: true, stretchLen: 16, stagger: 0.04,
     });
@@ -172,8 +172,8 @@ export class BlastVariants {
       lifeMin: 0.08, lifeMax: 0.08,
       sizeMin: 4 * mult, sizeMax: 4 * mult,
       gravity: 0,
-      c1: [1, 1, 1], c2: [0.7, 0.8, 1.0],
-      opacity: 1.0,
+      c1: [1, 1, 1], c2: [0.7, 0.8, 1],
+      opacity: 1,
     }, true);
     this.h.blastTinted(pos, { // speedline fan — the whole silhouette
       count: Math.floor(16 * mult),
@@ -182,7 +182,7 @@ export class BlastVariants {
       lifeMin: 0.16, lifeMax: 0.28,
       sizeMin: 0.18, sizeMax: 0.22,
       gravity: -12,
-      c1: [0.8, 0.9, 1.0], c2: [0.3, 0.4, 0.6],
+      c1: [0.8, 0.9, 1], c2: [0.3, 0.4, 0.6],
       opacity: 0.9,
       stretched: true, stretchLen: 18, stagger: 0.06,
     });
@@ -193,7 +193,7 @@ export class BlastVariants {
       lifeMin: 0.3, lifeVar: 0.3, lifeBoost: 1,
       sizeMin: 0.2, sizeVar: 0.3, sizeBoost: 1,
       gravity: -20,
-      r1: 0.55, g1: 0.5, b1: 0.45, r2: 0.2, g2: 0.18, b2: 0.16, kind: 'smoke', stagger: 0.10, spin: 1.2,
+      r1: 0.55, g1: 0.5, b1: 0.45, r2: 0.2, g2: 0.18, b2: 0.16, kind: 'smoke', stagger: 0.1, spin: 1.2,
       planar: true,
     });
     // A few hot chips — sparks sell the metal-on-metal read
@@ -202,7 +202,7 @@ export class BlastVariants {
       const elv = (Math.random() - 0.2) * Math.PI * 0.6;
       const spd = 25 + Math.random() * 40;
       const spark = this.h.sparks.alloc(pos);
-      spark.r = 1.0; spark.g = 0.85; spark.b = 0.5;
+      spark.r = 1; spark.g = 0.85; spark.b = 0.5;
       spark.o = 0.6;
       spark.vel.set(spd * Math.cos(elv) * Math.sin(ang), spd * Math.sin(elv) + 8, spd * Math.cos(elv) * Math.cos(ang));
       spark.life = 0.4 + Math.random() * 0.3;
@@ -219,7 +219,7 @@ export class BlastVariants {
       lifeMin: 0.12, lifeMax: 0.22,
       sizeMin: 0.14, sizeMax: 0.2,
       gravity: -6,
-      c1: [0.8, 0.9, 1.0], c2: [0.3, 0.4, 0.9],
+      c1: [0.8, 0.9, 1], c2: [0.3, 0.4, 0.9],
       opacity: 0.9,
       stretched: true, stretchLen: 12, stagger: 0.05,
     });
@@ -253,7 +253,7 @@ export class BlastVariants {
       lifeMin: 0.14, lifeMax: 0.14,
       sizeMin: 0.16, sizeMax: 0.16,
       gravity: 0,
-      c1: [0.9, 0.95, 1.0], c2: [0.4, 0.5, 0.7],
+      c1: [0.9, 0.95, 1], c2: [0.4, 0.5, 0.7],
       opacity: 0.9,
       stretched: true, stretchLen: 12, stagger: 0.03,
     });
@@ -279,7 +279,7 @@ export class BlastVariants {
       sizeMin: 4.5 * mult, sizeMax: 4.5 * mult,
       gravity: 0,
       c1: [1, 0.95, 0.8], c2: [1, 0.5, 0.15],
-      opacity: 1.0,
+      opacity: 1,
     }, true);
     this.h.spawnBurst(pos, { // shard swarm — full sphere, fast, hot
       count: 30, countMult: mult,
@@ -297,7 +297,7 @@ export class BlastVariants {
       lifeMin: 0.7, lifeVar: 0.5, lifeBoost: 1,
       sizeMin: 0.25, sizeVar: 0.3, sizeBoost: 1,
       gravity: -1,
-      r1: 0.3, g1: 0.28, b1: 0.26, r2: 0.1, g2: 0.1, b2: 0.1, kind: 'smoke', stagger: 0.10, spin: 1.2,
+      r1: 0.3, g1: 0.28, b1: 0.26, r2: 0.1, g2: 0.1, b2: 0.1, kind: 'smoke', stagger: 0.1, spin: 1.2,
       planar: true,
     });
     // A few spark chips sell the shell-casing shred
@@ -306,7 +306,7 @@ export class BlastVariants {
       const elv = (Math.random() - 0.5) * Math.PI;
       const spd = 30 + Math.random() * 40;
       const spark = this.h.sparks.alloc(pos);
-      spark.r = 1.0; spark.g = 0.7; spark.b = 0.3;
+      spark.r = 1; spark.g = 0.7; spark.b = 0.3;
       spark.o = 0.5;
       spark.vel.set(spd * Math.cos(elv) * Math.sin(ang), spd * Math.sin(elv), spd * Math.cos(elv) * Math.cos(ang));
       spark.life = 0.35 + Math.random() * 0.25;
@@ -325,7 +325,7 @@ export class BlastVariants {
         _c.copy(this.h.tint).lerp(_c2.setRGB(1, 1, 1), 0.3 + Math.random() * 0.4);
         spark.r = _c.r; spark.g = _c.g; spark.b = _c.b;
       } else {
-        spark.r = 0.7; spark.g = 0.85; spark.b = 1.0;
+        spark.r = 0.7; spark.g = 0.85; spark.b = 1;
       }
       spark.o = 0.55;
       spark.vel.set(spd * Math.cos(elv) * Math.sin(ang), spd * Math.sin(elv) + 7, spd * Math.cos(elv) * Math.cos(ang));
@@ -340,7 +340,7 @@ export class BlastVariants {
    *  recipe: whitewater foam core + streaked crown + aerosol droplets
    *  + surface sheet; mist is a garnish, never a layer. */
   private splash(pos: THREE.Vector3, mult: number, directHit: boolean): void {
-    const dh = directHit ? 1.25 : 1.0;
+    const dh = directHit ? 1.25 : 1;
     // Energy core — it's a charged hose, not plain water: a hot lime
     // sphere that flashes fat and collapses inside ~0.25s, wrapped by a
     // fast shock shell. Reads as the charge that drove the splash.
@@ -351,11 +351,11 @@ export class BlastVariants {
       lifeMin: 0.12, lifeMax: 0.24,
       sizeMin: 2.2 * mult, sizeMax: 3.4 * mult,
       gravity: 0,
-      c1: [0.9, 1.0, 0.55], c2: [0.3, 0.8, 0.1],
+      c1: [0.9, 1, 0.55], c2: [0.3, 0.8, 0.1],
       opacity: 0.95,
     });
-    this.h.allocShock(pos, 0xaaff44, 0.22, 3.2 * mult, 0.65); // shell pops
-    this.h.allocShock(pos, 0xeaffaa, 0.14, 1.8 * mult, 0.8);  // hot inner rim
+    this.h.allocShock(pos, 0xAAFF44, 0.22, 3.2 * mult, 0.65); // shell pops
+    this.h.allocShock(pos, 0xea_ff_aa, 0.14, 1.8 * mult, 0.8);  // hot inner rim
     this.h.spawnBurst(pos, { // whitewater — pale foam globs, NORMAL blend
       count: 12, countMult: mult,   // opaque-ish: foam scatters light back
       elvBase: 0.15, elvSpan: Math.PI * 0.45,
@@ -363,7 +363,7 @@ export class BlastVariants {
       lifeMin: 0.3, lifeVar: 0.3, lifeBoost: dh,
       sizeMin: 0.3, sizeVar: 0.5, sizeBoost: dh,
       gravity: -42,
-      r1: 0.92, g1: 1.0, b1: 0.82, r2: 0.5, g2: 0.78, b2: 0.38, kind: 'solid', stagger: 0.05, spin: 2,
+      r1: 0.92, g1: 1, b1: 0.82, r2: 0.5, g2: 0.78, b2: 0.38, kind: 'solid', stagger: 0.05, spin: 2,
     });
     blastBurst(pos, { // crown droplets — streaked, lit (not emissive)
       count: Math.floor(14 * mult),
@@ -372,7 +372,7 @@ export class BlastVariants {
       lifeMin: 0.35 * dh, lifeMax: 0.7 * dh,
       sizeMin: 0.45 * dh, sizeMax: 0.9 * dh,
       gravity: -48, // water drops hard — a soft fall is what reads gassy
-      c1: [0.9, 1.0, 0.75], c2: [0.4, 0.65, 0.2], // white foam → lime
+      c1: [0.9, 1, 0.75], c2: [0.4, 0.65, 0.2], // white foam → lime
       opacity: 0.95, stretched: true, stretchLen: 5, stagger: 0.06,
     }, false);
     blastBurst(pos, { // aerosol spray — many thin fast streaks
@@ -403,7 +403,7 @@ export class BlastVariants {
       sizeMin: 0.1, sizeMax: 0.2,
       gravity: -50,
       c1: [1, 1, 0.9], c2: [0.6, 0.9, 0.4],
-      opacity: 1.0, stretched: true, stretchLen: 9, stagger: 0.04,
+      opacity: 1, stretched: true, stretchLen: 9, stagger: 0.04,
     });
     this.h.spawnBurst(pos, { // one breath of dew — a garnish, not fog
       count: 3, countMult: mult,
@@ -453,10 +453,10 @@ export class BlastVariants {
       count: Math.floor(60 * timeScale),
       elvBase: 0.5, elvSpan: Math.PI,
       spdMin: 20, spdMax: 70, vy: 10,
-      lifeMin: 0.6, lifeMax: 1.0,
-      sizeMin: 1.25, sizeMax: 2.0,
+      lifeMin: 0.6, lifeMax: 1,
+      sizeMin: 1.25, sizeMax: 2,
       gravity: -25,
-      c1: [0.6, 0.8, 1.0], c2: [0.2, 0.4, 0.8],
+      c1: [0.6, 0.8, 1], c2: [0.2, 0.4, 0.8],
       opacity: 0.9, stagger: 0.08,
     });
 
@@ -468,14 +468,14 @@ export class BlastVariants {
       lifeMin: 0.5, lifeMax: 0.9,
       sizeMin: 0.75, sizeMax: 1.375,
       gravity: -10,
-      c1: [0.0, 0.3, 1.0], c2: [0.0, 0.0, 0.4],
-      opacity: 0.9, stagger: 0.10,
+      c1: [0, 0.3, 1], c2: [0, 0, 0.4],
+      opacity: 0.9, stagger: 0.1,
     });
 
     // Layers 8+9: Shockwave spheres — white expanding sphere, then blue
     for (const [color, life, maxRadius, opacity] of [
-      [0xffffff, 0.5, 10.0 * timeScale, 0.6],
-      [0x00ccff, 0.4, 12.0 * timeScale, 0.7],
+      [0xFFFFFF, 0.5, 10 * timeScale, 0.6],
+      [0x00CCFF, 0.4, 12 * timeScale, 0.7],
     ] as const) {
       this.h.allocShock(pos, color, life, maxRadius, opacity);
     }
@@ -488,7 +488,7 @@ export class BlastVariants {
       const isBlue = Math.random() < 0.4;
 
       const spark = this.h.sparks.alloc(pos);
-      spark.r = isBlue ? 0.1 : 1.0; spark.g = isBlue ? 0.4 : 0.8 + Math.random() * 0.2; spark.b = isBlue ? 1.0 : 0.3 + Math.random() * 0.3;
+      spark.r = isBlue ? 0.1 : 1; spark.g = isBlue ? 0.4 : 0.8 + Math.random() * 0.2; spark.b = isBlue ? 1 : 0.3 + Math.random() * 0.3;
       spark.o = 0.55;
       spark.vel.set(
         spd * Math.cos(elv) * Math.sin(ang),

@@ -31,7 +31,7 @@ export const RKT_CONFIG: ProjectileConfig = {
   // MRV-inspired linger: at 2.5s cadence each missile is an event, so the
   // smoke column hangs around to read the flight line after it's gone.
   trailColors: [
-    new THREE.Color(1.0, 0.6, 0.15),
+    new THREE.Color(1, 0.6, 0.15),
     new THREE.Color(0.9, 0.45, 0.1),
     new THREE.Color(0.6, 0.55, 0.5),
     new THREE.Color(0.45, 0.45, 0.45),
@@ -47,12 +47,12 @@ export const RKT_CONFIG: ProjectileConfig = {
   trailBaseSize: 0.2,
   trailSizeRange: 0.5,
   trailScaleMin: 0.8,
-  trailScaleMax: 3.0,
+  trailScaleMax: 3,
   trailRampIn: 0.1,
-  meshColor: 0x3d4a35, // military olive — ordnance, not energy
+  meshColor: 0x3D4A35, // military olive — ordnance, not energy
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0xff5500, // burning motor at the tail
+  glowColor: 0xFF5500, // burning motor at the tail
   glowOpacity: 0.35,
   glowScale: 0.9,
   // Billboard streak like the MRV carrier — the missile's flight line
@@ -60,7 +60,7 @@ export const RKT_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.5,
-  ribbonColor: 0xff6622,
+  ribbonColor: 0xFF6622,
   terrainOffset: WEAPONS[15].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[15].maxLifetime,

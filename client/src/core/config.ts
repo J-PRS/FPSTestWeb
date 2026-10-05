@@ -1,14 +1,14 @@
-export const GRAVITY = -28.0;
+export const GRAVITY = -28;
 
 // Physics constants for debris and death physics
 export const BOUNCE_Y = 0.35; // Vertical bounce coefficient
-export const FRICTION_XZ = 0.80; // Horizontal friction coefficient
+export const FRICTION_XZ = 0.8; // Horizontal friction coefficient
 export const SHRINK_DUR = 0.5; // Debris shrink duration
-export const GREY_DUR = 1.0; // Debris grey fade duration
-export const BASE_SPEED = 9.0; // Base debris speed
-export const EXTRA_SPEED = 14.0; // Extra random debris speed
-export const LIFE_BASE = 6.0; // Base debris lifetime
-export const LIFE_RAND = 2.0; // Random debris lifetime variation
+export const GREY_DUR = 1; // Debris grey fade duration
+export const BASE_SPEED = 9; // Base debris speed
+export const EXTRA_SPEED = 14; // Extra random debris speed
+export const LIFE_BASE = 6; // Base debris lifetime
+export const LIFE_RAND = 2; // Random debris lifetime variation
 
 // Player capsule geometry lives in shared/constants.ts — the server needs
 // the same numbers to validate hit claims against networked positions.
@@ -28,16 +28,16 @@ export const JET_CHARGE: number = ENERGY.jetCharge;
 
 // Weapon constants
 export const BOLT_FIRE_RATE = 0.8; // bolt launcher fire rate (seconds)
-export const DISC_RATE = 1.0; // Disc fire rate (seconds)
+export const DISC_RATE = 1; // Disc fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
-export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outranged by totems
+export const LG_RANGE = 55;      // hard beam cap — mid-range tracker, outranged by totems
 // Death-burst economy lives in shared/combat.ts — the server banks and
 // detonates the same numbers the client predicts.
 export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECAY_S, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN } from '../../../shared/combat.js';
 // Chain fork: after the beam lands, it arcs to one more enemy within range
 // of the first — half damage, but it charges the pop too
-export const LG_CHAIN_RANGE = 9.0;
+export const LG_CHAIN_RANGE = 9;
 export const LG_CHAIN_DMG_SCALE = 0.5;
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
@@ -45,14 +45,14 @@ import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { ENERGY } from '../../../shared/movement.js';
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
-export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
+export const EXPLOSION_VFX_RADIUS = 6; // explosion VFX scale unit — blastRadius/this = visual size
 export const SCORCH_MAX = 48;          // terrain char decals — oldest evicted first
 export const SPLAT_MAX = 24;           // ichor stain decals — matches terrain slot count
 
 
 
 // Mortar — T1/T2 heavy siege shell: slow lob, the biggest splash in the game
-export const MORTAR_RATE = 2.0; // Mortar fire rate — T2 is 0.5 rounds/sec
+export const MORTAR_RATE = 2; // Mortar fire rate — T2 is 0.5 rounds/sec
 
 // Grenade launcher — T2 style: bouncing timed shells, explode on player contact
 export const GL_RATE = 0.7; // Grenade launcher fire rate (seconds)
@@ -62,7 +62,7 @@ export const GL_RATE = 0.7; // Grenade launcher fire rate (seconds)
 // Flak cannon — UT style: a spray of bouncing shards, direct-hit only
 export const FLAK_RATE = 1.1; // Flak fire rate (seconds)
 export const FLAK_SHARDS = 9; // Shards per shell
-export const FLAK_SPREAD = 0.10; // Cone half-angle (radians-ish slope factor)
+export const FLAK_SPREAD = 0.1; // Cone half-angle (radians-ish slope factor)
 export const SG_PELLETS = 10;   // pellets per pump
 export const SG_SPREAD = 0.035; // ~3× tighter than flak — mid-range viable
 // Flak maxBounces lives in shared/weaponTable.ts (WEAPONS[6].maxBounces).
@@ -86,17 +86,17 @@ export const MRV_RATE = 2.4; // MRV launcher — slower than mortar, one trigger
 export const MELEE_COOLDOWN = 0.9;
 export const MELEE_RANGE = 3.2;    // fist reach, meters
 export const MELEE_ARC_DOT = 0.55; // ~57° half-cone — generous, CoD-style
-export const MELEE_LUNGE = 8.0;    // forward shove on swing
+export const MELEE_LUNGE = 8;    // forward shove on swing
 export const MELEE_DAMAGE = 60;    // flat enemy damage — a punch doesn't falloff
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
 
 // Ball constants
-export const BALL_MAX_DIST = 300.0; // Maximum distance before teleport
-export const BALL_TELE_MIN = 60.0; // Minimum teleport distance
-export const BALL_TELE_MAX = 120.0; // Maximum teleport distance
-export const BALL_TELE_HEIGHT = 25.0; // Teleport height
+export const BALL_MAX_DIST = 300; // Maximum distance before teleport
+export const BALL_TELE_MIN = 60; // Minimum teleport distance
+export const BALL_TELE_MAX = 120; // Maximum teleport distance
+export const BALL_TELE_HEIGHT = 25; // Teleport height
 export const BALL_MAX = 10; // Maximum number of balls in play
 
 // Ball enrage mode: instead of teleporting when out of range, far balls get
@@ -106,29 +106,29 @@ export const BALL_MAX = 10; // Maximum number of balls in play
 export let BALL_ENRAGE_ENABLED = true;
 // ESM `let` exports can't be assigned by importers — flip via the setter
 export function setBallEnrage(on: boolean): void { BALL_ENRAGE_ENABLED = on; }
-export const BALL_ENRAGE_FORCE = 12.0; // Linear attraction accel toward player (m/s^2)
+export const BALL_ENRAGE_FORCE = 12; // Linear attraction accel toward player (m/s^2)
 // Balls stay enraged until they get a lunge off (or time out) — no distance
 // cooldown, otherwise they'd always calm before reaching dash range
-export const BALL_ENRAGE_TIMEOUT = 20.0; // Seconds enraged before teleport fallback
-export const BALL_ENRAGE_DASH_DIST = 100.0; // Ground hit within this XZ range becomes a lunge
-export const BALL_ENRAGE_DASH_SPEED = 45.0; // Lunge speed toward the player
-export const BALL_ENRAGE_TELEGRAPH_H = 8.0; // Glow ramps to white under this height in dash range
+export const BALL_ENRAGE_TIMEOUT = 20; // Seconds enraged before teleport fallback
+export const BALL_ENRAGE_DASH_DIST = 100; // Ground hit within this XZ range becomes a lunge
+export const BALL_ENRAGE_DASH_SPEED = 45; // Lunge speed toward the player
+export const BALL_ENRAGE_TELEGRAPH_H = 8; // Glow ramps to white under this height in dash range
 
 export const EMERGE_DUR = 0.8; // Ground spawns burrow up out of the dirt over this many seconds
 
 // Crawlers — terrain-hugging targets that hop, chase, and pounce
 export const CRAWLER_MAX = 6; // Max crawlers alive
-export const CRAWLER_SPAWN_INTERVAL = 4.0; // Seconds between spawn attempts
-export const CRAWLER_SPAWN_MIN = 40.0; // Spawn ring: min distance from player
-export const CRAWLER_SPAWN_MAX = 90.0;
+export const CRAWLER_SPAWN_INTERVAL = 4; // Seconds between spawn attempts
+export const CRAWLER_SPAWN_MIN = 40; // Spawn ring: min distance from player
+export const CRAWLER_SPAWN_MAX = 90;
 export const CRAWLER_RADIUS = 0.9;
 export const CRAWLER_HEALTH = 70; // damage points — a rocket (50+15 splash) one-shots, chaingun needs ~14 slugs
-export const CRAWLER_AGGRO_DIST = 70.0; // Chases inside this range
-export const CRAWLER_POUNCE_DIST = 25.0; // Ground inside this range → windup → pounce
+export const CRAWLER_AGGRO_DIST = 70; // Chases inside this range
+export const CRAWLER_POUNCE_DIST = 25; // Ground inside this range → windup → pounce
 export const CRAWLER_WINDUP = 0.35; // Crouch telegraph before pounce (s)
-export const CRAWLER_HOP_SPEED = 10.0; // Chase hop horizontal speed
-export const CRAWLER_HOP_UP = 5.0; // Hop vertical kick
-export const CRAWLER_POUNCE_SPEED = 30.0; // Pounce horizontal speed
+export const CRAWLER_HOP_SPEED = 10; // Chase hop horizontal speed
+export const CRAWLER_HOP_UP = 5; // Hop vertical kick
+export const CRAWLER_POUNCE_SPEED = 30; // Pounce horizontal speed
 export const CRAWLER_POUNCE_DAMAGE = 25; // Server-authoritative self-damage on pounce hit
 export const CRAWLER_STUN = 0.5; // Blast knockback suppresses hopping this long
 
@@ -136,16 +136,16 @@ export const CRAWLER_STUN = 0.5; // Blast knockback suppresses hopping this long
 // Everything about them is small except the count — they exist to be
 // mowed down in satisfying clumps.
 export const SCARAB_MAX = 16;             // total alive — packs chew through the cap
-export const SCARAB_SPAWN_INTERVAL = 5.0;
-export const SCARAB_SPAWN_MIN = 45.0;
-export const SCARAB_SPAWN_MAX = 85.0;
+export const SCARAB_SPAWN_INTERVAL = 5;
+export const SCARAB_SPAWN_MIN = 45;
+export const SCARAB_SPAWN_MAX = 85;
 export const SCARAB_PACK_MIN = 4;         // spawn cluster size
 export const SCARAB_PACK_MAX = 7;
 export const SCARAB_RADIUS = 0.55;
 export const SCARAB_HEALTH = 20;          // one chaingun burst, a rocket takes the whole pack
-export const SCARAB_SPEED = 12.0;         // fast ground skitter — they close distance NOW
-export const SCARAB_ZIGZAG = 5.0;         // lateral weave amplitude (m/s) — hard to track
-export const SCARAB_AGGRO_DIST = 90.0;    // pack descends from far
+export const SCARAB_SPEED = 12;         // fast ground skitter — they close distance NOW
+export const SCARAB_ZIGZAG = 5;         // lateral weave amplitude (m/s) — hard to track
+export const SCARAB_AGGRO_DIST = 90;    // pack descends from far
 // Player-favor reach: every creature contact trigger uses the visual
 // distance × this. Enemy melee landing at exactly its apparent reach reads
 // as unfair; landing at 85% of it produces "oh I dodged that" moments —
@@ -162,13 +162,13 @@ export const SCARAB_STUN = 0.3;
 // Grubs — the most mundane thing alive: slow fat maggots that inch
 // toward you and pop. Walking piñatas — the nuggets are the point.
 export const GRUB_MAX = 10;
-export const GRUB_SPAWN_INTERVAL = 7.0;
-export const GRUB_SPAWN_MIN = 40.0;
-export const GRUB_SPAWN_MAX = 80.0;
+export const GRUB_SPAWN_INTERVAL = 7;
+export const GRUB_SPAWN_MIN = 40;
+export const GRUB_SPAWN_MAX = 80;
 export const GRUB_RADIUS = 0.7;
 export const GRUB_HEALTH = 30;
 export const GRUB_SPEED = 2.4;            // genuinely slow — a slug pace
-export const GRUB_AGGRO_DIST = 60.0;
+export const GRUB_AGGRO_DIST = 60;
 export const GRUB_BITE_DIST = 1.5;
 export const GRUB_BITE_DAMAGE = 6;
 export const GRUB_BITE_FORCE = 5;
@@ -179,19 +179,19 @@ export const GRUB_STUN = 0.4;
 // wind-up, then a committed straight-line lunge. Mid-tier predator:
 // faster and meaner than fodder, frailer than a crawler.
 export const SNAKE_MAX = 8;
-export const SNAKE_SPAWN_INTERVAL = 9.0;
-export const SNAKE_SPAWN_MIN = 30.0;
-export const SNAKE_SPAWN_MAX = 60.0;
+export const SNAKE_SPAWN_INTERVAL = 9;
+export const SNAKE_SPAWN_MIN = 30;
+export const SNAKE_SPAWN_MAX = 60;
 export const SNAKE_RADIUS = 0.85;
 export const SNAKE_HEALTH = 45;
 export const SNAKE_SPEED = 6.5;           // weaves in FAST
-export const SNAKE_AGGRO_DIST = 70.0;
+export const SNAKE_AGGRO_DIST = 70;
 export const SNAKE_STRIKE_DIST = 5.5;     // coil trigger (3D)
 export const SNAKE_STRIKE_CD = 2.2;
 export const SNAKE_WINDUP = 0.45;         // telegraph — dodge window
 export const SNAKE_LUNGE_TIME = 1.2;      // safety cap — touchdown ends the leap first
-export const SNAKE_LUNGE_SPEED = 14.0;
-export const SNAKE_LEAP_GRAV = -28.0;     // leap arc gravity = creatureCore
+export const SNAKE_LUNGE_SPEED = 14;
+export const SNAKE_LEAP_GRAV = -28;     // leap arc gravity = creatureCore
 export const SNAKE_LEAP_OVERSHOOT = 3.5;  // aim past the target — flies THROUGH
 export const SNAKE_BITE_DIST = 2.4;       // lunge contact (3D)
 export const SNAKE_BITE_DAMAGE = 14;
@@ -202,16 +202,16 @@ export const SNAKE_BITE_FORCE = 9;
 // a committed divebomb — harassment, not a bombing run.
 export const GNAT_MAX = 16;               // total alive across all clouds
 export const GNAT_SPAWN_INTERVAL = 6.5;
-export const GNAT_SPAWN_MIN = 50.0;
-export const GNAT_SPAWN_MAX = 80.0;
+export const GNAT_SPAWN_MIN = 50;
+export const GNAT_SPAWN_MAX = 80;
 export const GNAT_CLOUD_MIN = 5;          // swarm size per spawn
 export const GNAT_CLOUD_MAX = 9;
 export const GNAT_RADIUS = 0.3;
 export const GNAT_HEALTH = 8;             // a single chaingun slug pops one
-export const GNAT_SPEED = 13.0;           // cruise speed around the cloud
-export const GNAT_DART_SPEED = 24.0;      // nip dart — quick in-and-out
-export const GNAT_ORBIT_R = 5.0;          // cloud radius around its center
-export const GNAT_ORBIT_ALT = 4.0;        // cloud hovers above the player
+export const GNAT_SPEED = 13;           // cruise speed around the cloud
+export const GNAT_DART_SPEED = 24;      // nip dart — quick in-and-out
+export const GNAT_ORBIT_R = 5;          // cloud radius around its center
+export const GNAT_ORBIT_ALT = 4;        // cloud hovers above the player
 export const GNAT_NIP_DIST = 1.3;         // nip contact range
 export const GNAT_NIP_DAMAGE = 3;         // mosquito-tier — insult, not injury
 export const GNAT_NIP_FORCE = 2;
@@ -225,30 +225,30 @@ export const GNAT_STUN = 0.3;
 export const TURRET_MAX = 3;
 // Turretter creature params — NOT the sentry deployable (that range/damage
 // lives in shared/deployItems.ts as DEPLOY_ITEMS.turret.*).
-export const TURRET_SPAWN_INTERVAL = 12.0; // spawn attempts are slow — they're persistent threats
-export const TURRET_SPAWN_MIN = 60.0;
-export const TURRET_SPAWN_MAX = 120.0;
+export const TURRET_SPAWN_INTERVAL = 12; // spawn attempts are slow — they're persistent threats
+export const TURRET_SPAWN_MIN = 60;
+export const TURRET_SPAWN_MAX = 120;
 export const TURRET_RADIUS = 1.2;
 export const TURRET_HEALTH = 300;         // planted halves incoming damage, airborne doubles it
-export const TURRET_RANGE = 65.0;         // fires bolts inside this
-export const TURRET_RELAUNCH = 75.0;      // beyond this → ballistic hop at you
-export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between hops (no ping-pong)
+export const TURRET_RANGE = 65;         // fires bolts inside this
+export const TURRET_RELAUNCH = 75;      // beyond this → ballistic hop at you
+export const TURRET_MIN_DWELL = 3;      // must sit planted this long between hops (no ping-pong)
 export const TURRET_HOP_T = 1.6;          // solved flight time of the launch arc
 export const TURRET_REFIRE = 1.6;         // s between bolts
-export const TURRET_BOLT_SPEED = 60.0;    // m/s muzzle speed — elevation solved per shot
+export const TURRET_BOLT_SPEED = 60;    // m/s muzzle speed — elevation solved per shot
 export const TURRET_DEPRESS = 0.087;      // ~5° below horizontal — muzzle kisses the hull rim past this
 export const TURRET_BOLT_DAMAGE = 12;
 
 // Roller — a big ball that just rolls at you. No hops, no brains:
 // terrain-following homing boulder. Hitbox is the threat.
 export const ROLLER_MAX = 4;
-export const ROLLER_SPAWN_INTERVAL = 8.0;
-export const ROLLER_SPAWN_MIN = 50.0;
-export const ROLLER_SPAWN_MAX = 110.0;
+export const ROLLER_SPAWN_INTERVAL = 8;
+export const ROLLER_SPAWN_MIN = 50;
+export const ROLLER_SPAWN_MAX = 110;
 export const ROLLER_RADIUS = 1.6;        // decently big
 export const ROLLER_HEALTH = 200;
-export const ROLLER_ACCEL = 14.0;        // m/s² steering toward the player
-export const ROLLER_TOPSPEED = 26.0;     // downhill it can exceed via gravity
+export const ROLLER_ACCEL = 14;        // m/s² steering toward the player
+export const ROLLER_TOPSPEED = 26;     // downhill it can exceed via gravity
 export const ROLLER_HIT_DAMAGE = 18;
 export const ROLLER_HIT_FORCE = 22;      // shove on contact
 
@@ -256,31 +256,31 @@ export const ROLLER_HIT_FORCE = 22;      // shove on contact
 // as the ambient dust), bounce off slopes, pop into twigs when shot.
 export const WEED_MAX = 10;
 export const WEED_SPAWN_INTERVAL = 2.5;
-export const WEED_SPAWN_MIN = 40.0;      // spawn upwind of the player…
-export const WEED_SPAWN_MAX = 70.0;
-export const WEED_KILL_DIST = 110.0;     // …despawn once blown this far past
+export const WEED_SPAWN_MIN = 40;      // spawn upwind of the player…
+export const WEED_SPAWN_MAX = 70;
+export const WEED_KILL_DIST = 110;     // …despawn once blown this far past
 export const WEED_RADIUS = 1.5;
 export const WEED_HEALTH = 25;           // pops to any direct hit
-export const WEED_SPEED = 7.0;           // cruise speed downwind
+export const WEED_SPEED = 7;           // cruise speed downwind
 export const WEED_WIND_X = 1.4;          // same wind vector as ambientParticles
 export const WEED_WIND_Z = 0.6;
-export const WEED_HOP = 3.0;             // bounce impulse cresting bumps
+export const WEED_HOP = 3;             // bounce impulse cresting bumps
 
 // Seeker — airborne skull-wasp. Ignores terrain while cruising above it,
 // commits to a telegraphed straight-line dart (the dodge window IS the
 // design), stings on contact, then drifts off to recover.
 export const SEEKER_MAX = 4;
-export const SEEKER_SPAWN_INTERVAL = 7.0;
-export const SEEKER_SPAWN_MIN = 35.0;
-export const SEEKER_SPAWN_MAX = 70.0;
+export const SEEKER_SPAWN_INTERVAL = 7;
+export const SEEKER_SPAWN_MIN = 35;
+export const SEEKER_SPAWN_MAX = 70;
 export const SEEKER_RADIUS = 0.6;
 export const SEEKER_HEALTH = 70;
-export const SEEKER_AGGRO_DIST = 45.0;
-export const SEEKER_HOVER = 5.0;        // cruise height above terrain
-export const SEEKER_SPEED = 16.0;       // chase top speed
-export const SEEKER_ACCEL = 22.0;
-export const SEEKER_DART_RANGE = 11.0;  // telegraph triggers inside this
-export const SEEKER_DART_SPEED = 32.0;
+export const SEEKER_AGGRO_DIST = 45;
+export const SEEKER_HOVER = 5;        // cruise height above terrain
+export const SEEKER_SPEED = 16;       // chase top speed
+export const SEEKER_ACCEL = 22;
+export const SEEKER_DART_RANGE = 11;  // telegraph triggers inside this
+export const SEEKER_DART_SPEED = 32;
 export const SEEKER_DART_TELEGRAPH = 0.4; // rear-back pause before launch
 export const SEEKER_DART_MAX = 0.8;     // committed dash duration
 export const SEEKER_STING_DIST = 1.8;   // contact damage range
@@ -293,17 +293,17 @@ export const SEEKER_STUN = 0.6;         // blast knockback suppresses attacks th
 // sows mines across the dunes. Always visible, huge hitbox, high HP — a
 // priority target, not a lurker. The mine trail punishes ignoring it.
 export const OVERLORD_MAX = 2;
-export const OVERLORD_SPAWN_INTERVAL = 20.0; // slow — a persistent menace, not a swarm
-export const OVERLORD_SPAWN_MIN = 60.0;
-export const OVERLORD_SPAWN_MAX = 100.0;
+export const OVERLORD_SPAWN_INTERVAL = 20; // slow — a persistent menace, not a swarm
+export const OVERLORD_SPAWN_MIN = 60;
+export const OVERLORD_SPAWN_MAX = 100;
 export const OVERLORD_RADIUS = 2.2;
 export const OVERLORD_HEALTH = 400;
-export const OVERLORD_SPEED = 5.0;         // ponderous drift
-export const OVERLORD_ACCEL = 3.0;
-export const OVERLORD_ALTITUDE = 11.0;     // cruise height above terrain
-export const OVERLORD_LOITER_DIST = 30.0;  // ring radius it circles the player at
+export const OVERLORD_SPEED = 5;         // ponderous drift
+export const OVERLORD_ACCEL = 3;
+export const OVERLORD_ALTITUDE = 11;     // cruise height above terrain
+export const OVERLORD_LOITER_DIST = 30;  // ring radius it circles the player at
 export const OVERLORD_DROP_INTERVAL = 2.8; // seconds between mine drops
-export const OVERLORD_DROP_RANGE = 50.0;   // only sows inside the player's play space
+export const OVERLORD_DROP_RANGE = 50;   // only sows inside the player's play space
 export const OVERLORD_STUN = 0.4;          // blast knockback stalls its steering
 
 // Mines — the droppings. Shootable (detonating one clears it), proximity-fused.
@@ -317,37 +317,37 @@ export const MINE_TRIGGER_DIST = DEPLOY_ITEMS.mine.triggerDist!;
 export const MINE_BLAST_RADIUS = DEPLOY_ITEMS.mine.blastRadius!;
 export const MINE_DAMAGE_MAX = DEPLOY_ITEMS.mine.blastDamage!;
 export const MINE_KNOCKBACK = DEPLOY_ITEMS.mine.knockback!;
-export const MINE_LIFE = 45.0;          // seconds before it fizzle-pops
+export const MINE_LIFE = 45;          // seconds before it fizzle-pops
 
 // Banelings — rolling suicide bombs birthed by the Overlord (was: Overlord)
 export const BANELING_MAX = 12;          // brood cap across all overlords
 export const BANELING_RADIUS = 0.7;      // small — an exploding sac, not a boulder
 export const BANELING_HEALTH = 15;       // pops to a couple of hits
-export const BANELING_ACCEL = 22.0;      // zippy homing
-export const BANELING_TOPSPEED = 20.0;
+export const BANELING_ACCEL = 22;      // zippy homing
+export const BANELING_TOPSPEED = 20;
 export const BANELING_FUSE_DIST = 2.6;   // proximity fuse
-export const BANELING_BLAST_RADIUS = 5.0;
+export const BANELING_BLAST_RADIUS = 5;
 export const BANELING_DAMAGE_MAX = 18;   // at zero distance
-export const BANELING_KNOCKBACK = 14.0;
-export const BANELING_LIFE = 25.0;       // self-detonates eventually
+export const BANELING_KNOCKBACK = 14;
+export const BANELING_LIFE = 25;       // self-detonates eventually
 
 // Totem — peak-seeking sniper obelisk. Blinks to local high ground, charges
 // a visible aim-beam, fires a fast flat bolt. Relocates when crowded,
 // when LOS is blocked, or after a few shots — it always wants the crest.
 export const TOTEM_MAX = 2;
-export const TOTEM_SPAWN_INTERVAL = 18.0; // rare — a persistent ranged threat
-export const TOTEM_SPAWN_MIN = 50.0;
-export const TOTEM_SPAWN_MAX = 95.0;    // inside readable fog distance
-export const TOTEM_RADIUS = 1.0;
+export const TOTEM_SPAWN_INTERVAL = 18; // rare — a persistent ranged threat
+export const TOTEM_SPAWN_MIN = 50;
+export const TOTEM_SPAWN_MAX = 95;    // inside readable fog distance
+export const TOTEM_RADIUS = 1;
 export const TOTEM_HEALTH = 200;
-export const TOTEM_RANGE = 105.0;       // engages inside the fog line — sniping from beyond it reads as invisible cheating
-export const TOTEM_MIN_RANGE = 22.0;    // player closer than this → blink away
+export const TOTEM_RANGE = 105;       // engages inside the fog line — sniping from beyond it reads as invisible cheating
+export const TOTEM_MIN_RANGE = 22;    // player closer than this → blink away
 export const TOTEM_REFIRE = 2.6;        // seconds between shots
 export const TOTEM_BOLT_DAMAGE = 15;
 export const TOTEM_CHARGE = 0.65;       // aim-beam telegraph — dodgeable, not free
 export const TOTEM_RELOCATE_HOPS = 3;   // shots fired before seeking a new perch
-export const TOTEM_PEAK_RADIUS = 45.0;  // how far it samples terrain for peaks
-export const TOTEM_PEAK_MIN_GAIN = 3.0; // min height gain to count as "better perch"
+export const TOTEM_PEAK_RADIUS = 45;  // how far it samples terrain for peaks
+export const TOTEM_PEAK_MIN_GAIN = 3; // min height gain to count as "better perch"
 export const TOTEM_MATERIALIZE = 0.7;   // post-blink vulnerable window
 
 // Uber totem — the elite sniper. Bigger, tankier, slower to fire, but it
@@ -362,7 +362,7 @@ export const UBER_CHANCE = 0.07;          // ~1 in 14 ambient spawns is an uber
 export const UBER_TOTEM_RADIUS = 1.8;     // nearly double the obelisk
 export const UBER_TOTEM_HEALTH = 500;
 export const UBER_TOTEM_REFIRE = 4.5;     // slow, deliberate, devastating
-export const UBER_TOTEM_CHARGE = 1.0;     // long telegraph — your juke window
+export const UBER_TOTEM_CHARGE = 1;     // long telegraph — your juke window
 export const UBER_TOTEM_BOLT_DAMAGE = 30;
 export const UBER_TOTEM_HIT_RADIUS = 1.5; // beam catch envelope vs 1.7²≈1.3 normal
 export const UBER_TOTEM_BEAM_WIDTH = 1.2; // fat red telegraph — reads "death ray"
@@ -371,18 +371,18 @@ export const UBER_TOTEM_BEAM_WIDTH = 1.2; // fat red telegraph — reads "death 
 // and swoops a gliding pass through the player. Flock attack token keeps
 // it to one diver at a time; the slow climb-out is the shoot-it window.
 export const RAKK_MAX = 3;
-export const RAKK_SPAWN_INTERVAL = 9.0;
-export const RAKK_SPAWN_MIN = 40.0;
-export const RAKK_SPAWN_MAX = 80.0;
+export const RAKK_SPAWN_INTERVAL = 9;
+export const RAKK_SPAWN_MIN = 40;
+export const RAKK_SPAWN_MAX = 80;
 export const RAKK_RADIUS = 1.1;
 export const RAKK_HEALTH = 100;
-export const RAKK_ORBIT_ALT = 22.0;     // cruise height above terrain
-export const RAKK_ORBIT_R = 25.0;       // circling radius around the player
-export const RAKK_SPEED = 18.0;         // soar speed
-export const RAKK_ACCEL = 18.0;
-export const RAKK_DIVE_CD_MIN = 3.0;    // seconds between dive opportunities
-export const RAKK_DIVE_CD_MAX = 7.0;
-export const RAKK_DIVE_SPEED = 40.0;    // fold-and-scream speed
+export const RAKK_ORBIT_ALT = 22;     // cruise height above terrain
+export const RAKK_ORBIT_R = 25;       // circling radius around the player
+export const RAKK_SPEED = 18;         // soar speed
+export const RAKK_ACCEL = 18;
+export const RAKK_DIVE_CD_MIN = 3;    // seconds between dive opportunities
+export const RAKK_DIVE_CD_MAX = 7;
+export const RAKK_DIVE_SPEED = 40;    // fold-and-scream speed
 export const RAKK_CLAW_DIST = 2.2;      // pass-through contact range
 export const RAKK_CLAW_DAMAGE = 12;
 export const RAKK_CLAW_FORCE = 10;      // shove on hit
@@ -392,23 +392,23 @@ export const RAKK_STUN = 0.5;
 // Strifer — standoff strafing drone: orbits you at range, hovers to volley
 export const STRIFER_RADIUS = 0.9;
 export const STRIFER_HEALTH = 55;
-export const STRIFER_ORBIT_ALT = 14.0;    // lower than rakk — it wants line of fire
-export const STRIFER_ORBIT_R = 34.0;      // standoff ring — outside melee reach
-export const STRIFER_SPEED = 22.0;
-export const STRIFER_ACCEL = 20.0;
-export const STRIFER_REFIRE_MIN = 4.0;    // seconds of orbiting between volleys
-export const STRIFER_REFIRE_MAX = 8.0;
-export const STRIFER_HOVER_T = 3.0;       // max hover window
-export const STRIFER_BOLT_SPEED = 55.0;
-export const STRIFER_BOLT_LIFE = 3.0;
+export const STRIFER_ORBIT_ALT = 14;    // lower than rakk — it wants line of fire
+export const STRIFER_ORBIT_R = 34;      // standoff ring — outside melee reach
+export const STRIFER_SPEED = 22;
+export const STRIFER_ACCEL = 20;
+export const STRIFER_REFIRE_MIN = 4;    // seconds of orbiting between volleys
+export const STRIFER_REFIRE_MAX = 8;
+export const STRIFER_HOVER_T = 3;       // max hover window
+export const STRIFER_BOLT_SPEED = 55;
+export const STRIFER_BOLT_LIFE = 3;
 export const STRIFER_BOLT_DIST = 1.6;     // bolt contact radius
 export const STRIFER_BOLT_DAMAGE = 9;
 export const STRIFER_BOLT_FORCE = 5;      // bolt impact shove
 export const STRIFER_STUN = 0.6;
 export const STRIFER_MAX = 3;
-export const STRIFER_SPAWN_INTERVAL = 11.0;
-export const STRIFER_SPAWN_MIN = 45.0;
-export const STRIFER_SPAWN_MAX = 90.0;
+export const STRIFER_SPAWN_INTERVAL = 11;
+export const STRIFER_SPAWN_MIN = 45;
+export const STRIFER_SPAWN_MAX = 90;
 
 // Renderer constants
 export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)
@@ -419,16 +419,16 @@ export const CAMERA_NEAR = 0.05; // Near clipping plane — small value to preve
 export const CAMERA_FAR = 6000; // Far clipping plane
 
 // Fog constants
-export const FOG_COLOR = 0xbbd0e8; // Fog and clear color (matches sky haze horizon)
-export const FOG_START = 120.0; // Linear fog start distance
-export const FOG_END = 600.0; // Linear fog end distance
+export const FOG_COLOR = 0xBBD0E8; // Fog and clear color (matches sky haze horizon)
+export const FOG_START = 120; // Linear fog start distance
+export const FOG_END = 600; // Linear fog end distance
 
 // Atmospheric sky constants (physical Rayleigh/Mie scattering — glsl-atmosphere)
-export const SKY_TURBIDITY = 10.0;
-export const SKY_RAYLEIGH = 1.0; // Multiplier on Earth Rayleigh coefficients
+export const SKY_TURBIDITY = 10;
+export const SKY_RAYLEIGH = 1; // Multiplier on Earth Rayleigh coefficients
 export const SKY_MIE_COEFFICIENT = 21e-6; // Earth Mie scattering coefficient
 export const SKY_MIE_DIRECTIONAL_G = 0.758; // Mie forward-scatter directionality
-export const SKY_SUN_INTENSITY = 22.0; // Sun radiance for scattering (not a visible disc)
+export const SKY_SUN_INTENSITY = 22; // Sun radiance for scattering (not a visible disc)
 
 // Volumetric cloud constants
 // Layered-deck + billboard hybrid shelved for now — visuals weren't
@@ -437,22 +437,22 @@ export const SKY_SUN_INTENSITY = 22.0; // Sun radiance for scattering (not a vis
 export const CLOUDS_ENABLED = false;
 export const CLOUD_COUNT = 30; // Number of cloud clusters
 export const CLOUD_DENSITY = 0.35; // Cloud density
-export const CLOUD_WIND_SPEED = 3.0; // Wind speed
+export const CLOUD_WIND_SPEED = 3; // Wind speed
 export const CLOUD_MIN_HEIGHT = 500; // Minimum cloud height
 export const CLOUD_MAX_HEIGHT = 900; // Maximum cloud height
 export const CLOUD_SPREAD_RADIUS = 4000; // Cloud spread radius
 
 // Lighting constants
-export const AMBIENT_COLOR = 0x886644; // Ambient light color
+export const AMBIENT_COLOR = 0x88_66_44; // Ambient light color
 export const AMBIENT_INTENSITY = 0.35; // Ambient light intensity — lower fill deepens shading
-export const SUN_COLOR = 0xffe8aa; // Sun light color
+export const SUN_COLOR = 0xFFE8AA; // Sun light color
 export const SUN_INTENSITY = 3.2; // Sun light intensity
 export const SHADOW_MAP_SIZE = 2048; // Shadow map resolution
 export const SHADOW_CAMERA_NEAR = 1; // Shadow camera near plane
 export const SHADOW_CAMERA_FAR = 2000; // Shadow camera far plane
 export const SHADOW_CAMERA_SIZE = 130; // Shadow camera half-extent — follows the camera; ~0.13m/texel at 2048². Measured on the 3070Ti bench: 250m box → 681 shadow-pass draw calls; ~130m cuts the caster count ~4× while distant shadows are unreadable anyway.
-export const HEMI_SKY_COLOR = 0x5599cc; // Hemisphere sky color
-export const HEMI_GROUND_COLOR = 0x664422; // Hemisphere ground color
+export const HEMI_SKY_COLOR = 0x5599CC; // Hemisphere sky color
+export const HEMI_GROUND_COLOR = 0x66_44_22; // Hemisphere ground color
 export const HEMI_INTENSITY = 0.5; // Hemisphere light intensity
 
 // Network constants
@@ -479,7 +479,7 @@ export const PULL_MULTIPLIER = 0.5; // Pull force multiplier
 
 // Accuracy constants
 export const ACCURACY_MAX = 10; // Maximum accuracy score
-export const ACCURACY_NORMALIZATION = 8.0; // Accuracy normalization divisor
+export const ACCURACY_NORMALIZATION = 8; // Accuracy normalization divisor
 
 // Game loop constants
 export const MAX_DELTA_TIME = 0.05; // Maximum delta time in seconds
@@ -495,9 +495,9 @@ export const MAX_HEALTH = 100; // Maximum player health
 // Effect constants
 
 // Terrain constants
-export const TERRAIN_HEIGHT_SCALE = 125.0; // Terrain height scale
-export const TERRAIN_WORLD_SCALE = 1500.0; // Terrain world scale
-export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor
+export const TERRAIN_HEIGHT_SCALE = 125; // Terrain height scale
+export const TERRAIN_WORLD_SCALE = 1500; // Terrain world scale
+export const TERRAIN_HEIGHTMAP_DIVISOR = 255; // Heightmap value divisor
 
 // Networking backend configuration
 // Options: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay), 'fastapi' (Simple JSON-based WebSocket)

@@ -11,6 +11,8 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noUnusedLocals": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
     "noUnusedParameters": false,
     "skipLibCheck": true,
     // P2P host reuses server_bun modules, which import each other with

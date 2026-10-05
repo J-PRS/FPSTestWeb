@@ -8,13 +8,13 @@ import type { Terrain } from '../world/terrain.js';
 // and the HUD solves the mortar arc onto it (deployables.ts). Same entity
 // contract as the other deployables so pods/owner/blast treat it alike.
 
-const _dark = new THREE.MeshLambertMaterial({ color: 0x1b2229 });
-const _metal = new THREE.MeshLambertMaterial({ color: 0x39434e });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x1B2229 });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x39434E });
 const _geoBase = new THREE.CylinderGeometry(0.3, 0.45, 0.16, 8);
 const _geoMast = new THREE.CylinderGeometry(0.05, 0.08, 0.7, 6);
 const _geoHolo = new THREE.OctahedronGeometry(0.16, 0);
 const _holoMat = new THREE.MeshBasicMaterial({
-  color: 0x7df9ff, transparent: true, opacity: 0.85,
+  color: 0x7DF9FF, transparent: true, opacity: 0.85,
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 // Sky pillar — unit-height additive shaft anchored at the emitter base
@@ -24,7 +24,7 @@ const _geoPillar = new THREE.CylinderGeometry(0.18, 0.6, 1, 6, 1, true);
 _geoPillar.translate(0, 0.5, 0);
 const _UP = new THREE.Vector3(0, 1, 0);
 const _pillarMat = new THREE.MeshBasicMaterial({
-  color: 0x44ddee, transparent: true, opacity: 0.12,
+  color: 0x44DDEE, transparent: true, opacity: 0.12,
   blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
 });
 
@@ -64,15 +64,15 @@ export class DeployBeacon {
     this.group.add(base, mast);
 
     this.holo = new THREE.Mesh(_geoHolo, _holoMat);
-    this.holo.position.y = 1.0;
+    this.holo.position.y = 1;
     this.group.add(this.holo);
 
     this.holoGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x7df9ff, transparent: true,
+      map: getGlowTexture(), color: 0x7DF9FF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.holoGlow.scale.setScalar(0.8);
-    this.holoGlow.position.y = 1.0;
+    this.holoGlow.position.y = 1;
     this.group.add(this.holoGlow);
 
     // The shaft is world-mounted (not in the slope-tilted group) so the
@@ -100,23 +100,23 @@ export class DeployBeacon {
   }
 
   update(dt: number): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.animT += dt;
     // The emitter's pos can move after construction (pod flight → touchdown);
     // the pillar tracks it here rather than at plant sites.
     this.pillar.position.copy(this.pos);
     this.pillar.quaternion.setFromUnitVectors(_UP, this.aimDir);
     this.pillar.scale.set(1, this.aimLen, 1);
-    this.holo.rotation.y += dt * 3.0;
-    this.holo.position.y = 1.0 + Math.sin(this.animT * 2.2) * 0.06;
-    const pulse = 0.7 + Math.sin(this.animT * 4.0) * 0.3;
+    this.holo.rotation.y += dt * 3;
+    this.holo.position.y = 1 + Math.sin(this.animT * 2.2) * 0.06;
+    const pulse = 0.7 + Math.sin(this.animT * 4) * 0.3;
     this.holoGlow.material.opacity = 0.4 + pulse * 0.4;
     this.holoGlow.scale.setScalar(0.6 + pulse * 0.4);
     _pillarMat.opacity = 0.18 + pulse * 0.14;
   }
 
   tickUnfold(dt: number): void {
-    if (this.unfoldT >= 1) return;
+    if (this.unfoldT >= 1) {return;}
     this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
     const k = this.unfoldT - 1;
     this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k));
@@ -131,11 +131,11 @@ export class DeployBeacon {
   }
 
   takeDamage(dmg: number): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     const soak = Math.min(this.armor, dmg);
     this.armor -= soak;
     this.health -= dmg - soak;
-    if (this.health <= 0) this.dead = true;
+    if (this.health <= 0) {this.dead = true;}
   }
 
   dispose(scene: THREE.Scene): void {

@@ -21,7 +21,7 @@ import { BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME } from '../../../shared
 const logger = new ChildLogger('Ball');
 
 const BALL_GRAVITY = GRAVITY;
-const BOUNCE = 1.0;
+const BOUNCE = 1;
 const _enrageTint = new THREE.Color(1, 0.12, 0.08);
 const _enrageDir = new THREE.Vector3();
 
@@ -137,13 +137,13 @@ export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos:
   // orbit. (Mirrors shared/ballSim.ts BALL_OVERSPEED — keep in sync.)
   const elasticity = (b.dampNextBounce || velBeforeReflection.length() > BALL_OVERSPEED) ? 0.5 : BOUNCE;
   b.dampNextBounce = false;
-  b.vel.addScaledVector(n, -(1.0 + elasticity) * dot);
+  b.vel.addScaledVector(n, -(1 + elasticity) * dot);
 
   // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
   const velAfterMag = b.vel.length();
   const velBeforeMag = velBeforeReflection.length();
   const reflectionEnergyRatio = velAfterMag / velBeforeMag;
-  if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
+  if (Math.abs(reflectionEnergyRatio - 1) > 0.01) {
     logger.debug(`Ball reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
   }
 
@@ -247,7 +247,7 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   const currentSpeed = b.vel.length();
   const n = terrain.getNormal(b.pos.x, b.pos.z);
   const dot = b.vel.dot(n);
-  b.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+  b.vel.addScaledVector(n, -2 * dot * BOUNCE);
   b.vel.normalize().multiplyScalar(currentSpeed);
 
   // Reset energy tracking on teleport (intentional energy reset)

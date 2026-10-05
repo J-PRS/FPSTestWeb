@@ -138,9 +138,9 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   robot:        { url: '/assets/models/RobotExpressive.glb', yaw: 0, fixedScale: 0.5,
                   sources: ['ual1', 'ual2', 'kevdev'] },
   mannequin:    { url: '/assets/models/mannequin_opt.glb', lodUrl: '/assets/models/mannequin_lod1.glb',
-                  yaw: 0, fitH: 2.0, ualAlias: true, sources: ['kevdev'],
+                  yaw: 0, fitH: 2, ualAlias: true, sources: ['kevdev'],
                   mount: { euler: [Math.PI / 2, 0, 0] } },
-  knight:       { url: '/assets/models/knight.glb', yaw: 0, fitH: 2.0, sources: [] },
+  knight:       { url: '/assets/models/knight.glb', yaw: 0, fitH: 2, sources: [] },
   // All class rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — no yaw needed.
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's

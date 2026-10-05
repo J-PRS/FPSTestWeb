@@ -56,9 +56,9 @@ describe('recentNoises', () => {
   it('earshot is 50m and age gate is 1.5s', () => {
     const r = mkRig();
     r.worldState.explosions.push(
-      { pos: v(10, 0, 0), age: 1.0 },
-      { pos: v(60, 0, 0), age: 1.0 },  // out of earshot
-      { pos: v(10, 0, 0), age: 2.0 },  // too old
+      { pos: v(10, 0, 0), age: 1 },
+      { pos: v(60, 0, 0), age: 1 },  // out of earshot
+      { pos: v(10, 0, 0), age: 2 },  // too old
     );
     const out = r.senses.recentNoises(v());
     expect(out).toHaveLength(1);

@@ -122,7 +122,7 @@ export class PlayerLoadout {
       this.pendingLoadout = null;
       settings.set('fps-loadout', this.h.loadout.join(','));
     }
-    if (this.h.appliedClass === c) return;
+    if (this.h.appliedClass === c) {return;}
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
@@ -162,9 +162,9 @@ export class PlayerLoadout {
    *  tier shoulders it) unless it's already equipped — then the first
    *  legal, not-always-carried wid so two slots never hold the same gun. */
   static fallbackWid(cls: ArmorClass, loadout: readonly number[]): number {
-    if (!loadout.includes(2)) return 2;
+    if (!loadout.includes(2)) {return 2;}
     for (let w = 0; w < SLOT_COUNT; w++) {
-      if (!loadout.includes(w) && !PlayerLoadout.lockedForClass(cls, w)) return w;
+      if (!loadout.includes(w) && !PlayerLoadout.lockedForClass(cls, w)) {return w;}
     }
     return 2;
   }
@@ -184,7 +184,7 @@ export class PlayerLoadout {
   /** Respawn-time perk application — the picked perk banks here so its
    *  HP/energy/speed mods never flip mid-life under the server's nose. */
   applyPendingPerk(): void {
-    if (this.h.appliedPerk !== this.h.perk) this.h.appliedPerk = this.h.perk;
+    if (this.h.appliedPerk !== this.h.perk) {this.h.appliedPerk = this.h.perk;}
   }
 
   /** Kill-refund (railgun): ready instantly, but requires a fresh click —
@@ -195,7 +195,7 @@ export class PlayerLoadout {
   }
 
   setLoadoutSlot(slot: number, weaponId: number): void {
-    const h = this.h;
+    const {h} = this;
     // Heavy-only ordnance bounces off lighter armor — the menu filters it
     // out, this is the belt line for stale loadouts/console picks. Gates on
     // appliedClass (the tier the server enforces), not armorClass — a mid-
@@ -208,16 +208,16 @@ export class PlayerLoadout {
     // still gate on appliedClass, the tier the server enforces.
     const kit = this.pendingLoadout ?? h.loadout;
     const gate = this.pendingLoadout ? h.armorClass : h.appliedClass;
-    if (this.lockedFor(gate, weaponId)) return;
+    if (this.lockedFor(gate, weaponId)) {return;}
     // Picking a weapon that's already equipped elsewhere swaps the slots
     // instead of duplicating it — standard loadout-menu behavior.
     const other = kit.indexOf(weaponId);
-    if (other >= 0 && other !== slot) kit[other] = kit[slot]!;
+    if (other !== -1 && other !== slot) {kit[other] = kit[slot]!;}
     kit[slot] = weaponId;
     // Persist under the tier the kit belongs to; 'fps-loadout' mirrors
     // the LIVE kit only — it's the construction-time default.
     settings.set(PlayerLoadout.CLASS_KEY[h.armorClass], kit.join(','));
-    if (this.pendingLoadout) return; // banked kit — nothing re-draws now
+    if (this.pendingLoadout) {return;} // banked kit — nothing re-draws now
     settings.set('fps-loadout', kit.join(','));
     if (h.weaponIndex === slot || h.weaponIndex === other) {
       this.emitWeaponSwitch(kit[h.weaponIndex]!);
@@ -269,7 +269,7 @@ export class PlayerLoadout {
   }
 
   selectSlot(i: number): void {
-    const h = this.h;
+    const {h} = this;
     if (i !== h.weaponIndex) {
       h.weaponIndex = i;
       this.emitWeaponSwitch(h.loadout[i]);
@@ -277,7 +277,7 @@ export class PlayerLoadout {
   }
 
   cycleWeapon(step: number): void {
-    const h = this.h;
+    const {h} = this;
     const n = h.loadout.length;
     const idx = (h.weaponIndex + step + n) % n;
     if (idx !== h.weaponIndex) {

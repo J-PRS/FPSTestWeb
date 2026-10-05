@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { Ball, type Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { settings } from '../core/settings.js';
@@ -39,7 +39,7 @@ export class Minimap {
     this.ctx = this.canvas.getContext('2d')!;
 
     // Settings-panel toggle — applies live, no reload
-    const btn = document.getElementById('minimap-toggle');
+    const btn = document.querySelector('#minimap-toggle');
     if (btn) {
       const label = () => { btn.textContent = this.cross ? 'MINIMAP: CROSSHAIR' : 'MINIMAP: CORNER'; };
       label();

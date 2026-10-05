@@ -57,7 +57,7 @@ describe('validateHitClaim', () => {
   };
   const base = {
     projectile: proj,
-    airtime: 1.0,
+    airtime: 1,
     shooterVel: { x: 0, y: 0, z: 0 },
     now: 2000,
   };
@@ -82,7 +82,7 @@ describe('validateHitClaim', () => {
   it('rejects airtime beyond wall-clock age', () => {
     const v = validateHitClaim({
       ...base,
-      airtime: 5.0,
+      airtime: 5,
       hitPos: { x: 120, y: 60, z: 0 },
       targetPos: { x: 120, y: 60, z: 0 },
     });
@@ -103,7 +103,7 @@ describe('target ID allocator', () => {
     for (let i = 0; i < 1000; i++) {
       const id = nextTargetId();
       expect(id).toBeGreaterThanOrEqual(1);
-      expect(id).toBeLessThanOrEqual(65535);
+      expect(id).toBeLessThanOrEqual(65_535);
       expect(seen.has(id)).toBe(false);
       seen.add(id);
     }

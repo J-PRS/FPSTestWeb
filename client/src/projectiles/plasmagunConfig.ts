@@ -31,9 +31,9 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   vfx: 'bolt', // repeater pop — half-size energy snap, not a full blast
   damageColor: '#66ccff',
   trailColors: [
-    new THREE.Color(0.4, 0.8, 1.0),
-    new THREE.Color(0.1, 0.6, 1.0),
-    new THREE.Color(0.0, 0.4, 0.8),
+    new THREE.Color(0.4, 0.8, 1),
+    new THREE.Color(0.1, 0.6, 1),
+    new THREE.Color(0, 0.4, 0.8),
     new THREE.Color(0.05, 0.2, 0.5),
   ],
   trailParticlesPerUnit: 0.6, // a volley × 7.7/s — keep the trail sparse
@@ -48,10 +48,10 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0.02,
-  meshColor: 0x66ddff,
+  meshColor: 0x66DDFF,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0x44bbff,
+  glowColor: 0x44BBFF,
   glowOpacity: 0.5,
   glowScale: 0.7,
   meshRampIn: true,
@@ -66,5 +66,5 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.18,
   ribbonLife: 0.1,
-  ribbonColor: 0x44bbff,
+  ribbonColor: 0x44BBFF,
 };

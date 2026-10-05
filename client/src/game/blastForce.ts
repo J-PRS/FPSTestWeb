@@ -2,7 +2,7 @@
 // nuggets, and remote players — plus splash damage numbers/health bars.
 // Extracted from combat.ts; the explosion VFX path stays there.
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
@@ -79,7 +79,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     applyTo: (t: Forceable, f: number) => void
   ): void {
     const { pos, radius, aoeDamage, weaponType } = a;
-    const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
+    const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
     for (const ball of deps.targets) {
       if (ball.dead) {continue;}
       const db = ball.pos.distanceTo(pos);
@@ -114,7 +114,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // no snap-back when interpolation resumes.
   function applyForceToRemotes(a: BlastArgs): void {
     const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
-    const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
+    const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) {continue;}
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
@@ -144,7 +144,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
     const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
-    const scales = a.weaponType !== undefined ? getWeaponStats(a.weaponType).aoeScales : undefined;
+    const scales = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType).aoeScales;
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
 

@@ -10,7 +10,7 @@ const KEY = 'fps-last-room-map';
 interface SavedRoomMap { host: string; map: MapSnapshot }
 
 export function saveLastRoomMap(host: string, map: MapSnapshot | undefined): void {
-  if (!map || !Object.keys(map).length) {return;}
+  if (!map || Object.keys(map).length === 0) {return;}
   try { localStorage.setItem(KEY, JSON.stringify({ host, map } satisfies SavedRoomMap)); }
   catch { /* quota/private mode — the next boot just falls back */ }
 }

@@ -42,16 +42,16 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     // from every angle, and it can't degenerate into a screen-filling fan
     // when the beam points at/away from the camera like a billboard does.
 
-    b.glow = mkRibbon(tint?.glow ?? 0x2266ff, 0.35);
-    b.core = mkRibbon(tint?.core ?? 0xeaf6ff, 0.95);
+    b.glow = mkRibbon(tint?.glow ?? 0x2266FF, 0.35);
+    b.core = mkRibbon(tint?.core ?? 0xEAF6FF, 0.95);
     // Chain hop: same ribbon machinery, slightly dimmer — it reads as a
     // fork off the main bolt
-    b.chainCore = mkRibbon(tint?.chain ?? 0x9fd4ff, 0.7);
+    b.chainCore = mkRibbon(tint?.chain ?? 0x9FD4FF, 0.7);
     b.chainCore.visible = false;
     b.chainPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
     // Damage arc: same ribbon machinery at the core color — a second,
     // jaggier bolt riding the main shaft while the tip bites
-    b.arc = mkRibbon(tint?.core ?? 0xeaf6ff, 0.9);
+    b.arc = mkRibbon(tint?.core ?? 0xEAF6FF, 0.9);
     b.arc.visible = false;
     b.arcPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
     b.group.add(b.glow, b.core, b.chainCore, b.arc);
@@ -65,7 +65,7 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     // Contact glow — bright ball pinned at the hit point
     const glowTex = LightningBeam.makeGlowTexture();
     b.hitGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: tint?.hit ?? 0xaaddff, transparent: true, opacity: 0.9,
+      map: glowTex, color: tint?.hit ?? 0xAADDFF, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     b.hitGlow.scale.setScalar(2.2);
@@ -79,7 +79,7 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     sGeo.setAttribute('position', new THREE.BufferAttribute(b.sparkPos, 3));
     // Per-spark color jitter — white core to deep blue edge, no two alike
     const sCol = new Float32Array(SPARKS * 3);
-    const sparkTop = new THREE.Color(tint?.sparkTop ?? 0xffffff);
+    const sparkTop = new THREE.Color(tint?.sparkTop ?? 0xFFFFFF);
     for (let i = 0; i < SPARKS; i++) {
       const t = Math.random();
       if (tint) {
@@ -89,7 +89,7 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
       } else {
         sCol[i * 3] = 0.55 + t * 0.45;
         sCol[i * 3 + 1] = 0.75 + t * 0.25;
-        sCol[i * 3 + 2] = 1.0;
+        sCol[i * 3 + 2] = 1;
       }
     }
     sGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));

@@ -68,7 +68,7 @@ export function createScene(): SceneSetup {
   const volumetricClouds = (CLOUDS_ENABLED || urlParams.get('clouds') === 'on')
     ? new VolumetricClouds(scene, {
         count: CLOUD_COUNT,
-        cloudColor: new THREE.Color(0xffffff),
+        cloudColor: new THREE.Color(0xFFFFFF),
         cloudDensity: CLOUD_DENSITY,
         windSpeed: CLOUD_WIND_SPEED,
         windDirection: new THREE.Vector3(1, 0, 0.1),

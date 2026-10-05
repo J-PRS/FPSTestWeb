@@ -12,7 +12,7 @@ import SamJs from 'sam-js';
 import { audio } from './audio.js';
 import { settings } from './settings.js';
 
-const SAM_RATE = 22050; // sam-js renders at a fixed 22050Hz
+const SAM_RATE = 22_050; // sam-js renders at a fixed 22050Hz
 
 // Per-speaker SAM voices — pitch/mouth/throat sweeps around the default
 // 64/72/128-ish register. Divergent enough to tell speakers apart,
@@ -66,7 +66,7 @@ export function speakVgs(text: string, who?: string): void {
   }
   // buf32 returns false (not throws) on unparseable text — apostrophes,
   // stray symbols — degrade to the system voice rather than silent.
-  if (!(pcm instanceof Float32Array) || !pcm.length) { speakSystem(text); return; }
+  if (!(pcm instanceof Float32Array) || pcm.length === 0) { speakSystem(text); return; }
   const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   playRadioVoice(ctx, bus, buf);
@@ -77,7 +77,7 @@ export function speakVgs(text: string, who?: string): void {
  *  Pitch jitters per speaker so voices differ by who typed. */
 export function speakChat(text: string, who?: string): void {
   let h = 0;
-  if (who) {for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) | 0;}
+  if (who) {for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
   speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
 }
 

@@ -76,8 +76,8 @@ describe('applyStatus', () => {
 
   it('non-status bits in the claim never latch', () => {
     const b = mkBot(100);
-    applyStatus(b, STATUS.MEND | 0x400, 0.1);
-    expect(b.status & 0x400).toBe(0);
+    applyStatus(b, STATUS.MEND | 0x4_00, 0.1);
+    expect(b.status & 0x4_00).toBe(0);
   });
 });
 

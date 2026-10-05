@@ -17,7 +17,7 @@ interface SignalMsg { t: string; sdp?: string; ice?: RTCIceCandidateInit; host?:
 
 export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Promise<RTCDataChannel> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('P2P signalling timed out')), opts.timeoutMs ?? 15000);
+    const timeout = setTimeout(() => reject(new Error('P2P signalling timed out')), opts.timeoutMs ?? 15_000);
     const fail = (e: Error) => { clearTimeout(timeout); ws.close(); reject(e); };
 
     const ws = new WebSocket(opts.signalUrl);
@@ -46,13 +46,14 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
       const msg = JSON.parse(ev.data as string) as SignalMsg;
       try {
         switch (msg.t) {
-          case 'role':
+          case 'role': {
             isHost = Boolean(msg.host);
             // The host must outwait the guest — a 15s handshake timeout here
             // killed the room's signalling socket for anyone arriving late.
             // Guests keep the deadline: their join either works fast or not.
             if (isHost) {clearTimeout(timeout);}
             break;
+          }
           case 'peer': {
             // Second member arrived — host makes the offer
             pc = newPc();
@@ -72,22 +73,25 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
             send({ t: 'answer', sdp: answer.sdp });
             break;
           }
-          case 'answer':
+          case 'answer': {
             await pc?.setRemoteDescription({ type: 'answer', sdp: msg.sdp! });
             break;
-          case 'ice':
+          }
+          case 'ice': {
             await pc?.addIceCandidate(msg.ice);
             break;
-          case 'peer-left':
+          }
+          case 'peer-left': {
             // Host waits for the next guest — the first join attempt may be
             // the friend retrying after a failed hole punch.
             if (isHost) { try { pc?.close(); } catch { /* gone */ } pc = null; break; }
             fail(new Error('peer left during handshake'));
             break;
+          }
         }
-      } catch (e) {
-        logger.error('signalling error', e);
-        fail(e as Error);
+      } catch (error) {
+        logger.error('signalling error', error);
+        fail(error as Error);
       }
     });
 

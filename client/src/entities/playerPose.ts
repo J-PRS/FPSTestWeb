@@ -202,7 +202,7 @@ export class PoseControl {
       if (!src) {return null;}
       const tracks = src.tracks.filter(t =>
         mask.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-      if (!tracks.length) {return null;}
+      if (tracks.length === 0) {return null;}
       const clip = new THREE.AnimationClip(`${name  }.aim`, src.duration, tracks);
       const a = mixer.clipAction(clip);
       a.setLoop(THREE.LoopOnce, 1);
@@ -306,7 +306,7 @@ export class PoseControl {
   // Retargeted clips don't drive the robot's IK foot bones — pin each
   // foot to its shin tip and give it the shin's orientation.
   private snapFeetToShins(playingUAL: boolean): void {
-    if (!playingUAL || !this.footSnaps.length) {return;}
+    if (!playingUAL || this.footSnaps.length === 0) {return;}
     for (const fs of this.footSnaps) {
       fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
       const parent = fs.foot.parent!;

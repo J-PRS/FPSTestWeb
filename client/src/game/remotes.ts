@@ -18,7 +18,7 @@ import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 // Hostiles always read red — team colors are for your own side only.
-const ENEMY_RED = 0xff3333;
+const ENEMY_RED = 0xFF3333;
 
 // Shared scratch for the per-tick offscreen test.
 const _frustum = new THREE.Frustum();
@@ -123,13 +123,13 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   const jetting = isJetting(remotePlayer, playerState.isDead);
   if (jetting) {deps.lazyEffects().spawnJetpack(remotePlayer.position);}
   sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel, remotePlayer.armorClass);
-  if (!playerState.isDead) {
+  if (playerState.isDead) {
+    hud.removePlayerIndicator(playerId);
+  } else {
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
     hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass });
-  } else {
-    hud.removePlayerIndicator(playerId);
   }
 }
 
@@ -208,7 +208,7 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
   // constructor's default green.
   const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
-  remotePlayer.setColliderColor(friendly ? 0x00ff00 : ENEMY_RED);
+  remotePlayer.setColliderColor(friendly ? 0x00_ff_00 : ENEMY_RED);
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);

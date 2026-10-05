@@ -92,7 +92,7 @@ function updateDeadList<T extends { update(dt: number): void; dead: boolean; dis
   }
 }
 
-const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) n++;} return n; };
+const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) {n++;}} return n; };
 
 // Live-explosion ceiling — a busy room stacks blasts until particles
 // and draw calls crush the frame (seen: 155 live, 30k particles). Past
@@ -221,7 +221,7 @@ function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEn
 // follows the sun: looking sunward warms the haze, away cools it; the sky
 // horizon uniform takes the same tint so fogged ground stays seamless.
 function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
-  const fog = deps.sceneSetup.scene.fog;
+  const {fog} = deps.sceneSetup.scene;
   if (!(fog instanceof THREE.Fog)) {return;}
   _sunDir.copy(deps.sceneSetup.sun.position).normalize();
   const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
@@ -239,7 +239,7 @@ const _contactBodies: BodyCapsule[] = [];
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
-const fmtBps = (b: number) => b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
+const fmtBps = (b: number) => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
   const { dt, player, demoManager, networkManager } = f;
   // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
@@ -296,7 +296,7 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
 }
 
 function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
-  const entities = deps.entities;
+  const {entities} = deps;
   entities.updateBalls(dt);
   perf.mark('balls');
   // ?mode=classic — balls are the whole roster, every other species'
@@ -554,7 +554,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       const rows = [...lastWeaponByPlayer.entries()]
         .filter(([id]) => isBotId(id))
         .map(([id, r]) => `${id} ${WeaponType[r.wt] ?? `w${r.wt}`} shots=${r.n}`);
-      Logger.info(rows.length ? `[botweapons] ${rows.join(' | ')}` : '[botweapons] no bot fire seen yet');
+      Logger.info(rows.length > 0 ? `[botweapons] ${rows.join(' | ')}` : '[botweapons] no bot fire seen yet');
       return;
     }
     if (e.code === 'Backquote') {
@@ -636,7 +636,7 @@ export function createGameLoop(deps: GameLoopDeps) {
   // AUTO QUALITY toggle (top of SETTINGS): off freezes the ladder where it
   // is AND restores full quality, so the user isn't left on a preset they
   // never picked. No reload — ladders gate on the setting live.
-  const autoqBtn = document.getElementById('autoq-toggle') as HTMLButtonElement | null;
+  const autoqBtn = document.querySelector('#autoq-toggle') as HTMLButtonElement | null;
   if (autoqBtn) {
     const label = () => { autoqBtn.textContent = settings.get('fps-autoq') ? 'AUTO QUALITY: ON' : 'AUTO QUALITY: OFF'; };
     label();
@@ -651,7 +651,7 @@ export function createGameLoop(deps: GameLoopDeps) {
   // vsync-off isn't possible in a browser, but capping buys battery on
   // chromebooks and headroom measurement on high-refresh displays.
   const FPS_CAPS = [0, 30, 60, 120];
-  const capBtn = document.getElementById('fpscap-toggle') as HTMLButtonElement | null;
+  const capBtn = document.querySelector('#fpscap-toggle') as HTMLButtonElement | null;
   if (capBtn) {
     const label = () => { const c = settings.get('fps-cap'); capBtn.textContent = c > 0 ? `FPS CAP: ${c}` : 'FPS CAP: OFF'; };
     label();
@@ -720,7 +720,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       // real renders or the FPS panel reads the rAF rate under a cap.
       // (Still gated on display — they paint even while hidden.)
       if ((statsPanels[0]!.dom as HTMLElement).style.display !== 'none')
-        {for (const s of statsPanels) s.update();}
+        {for (const s of statsPanels) {s.update();}}
       renderElapsed = 0;
       renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     }
@@ -751,7 +751,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     const viewModel = deps.lazyViewModel();
     const vmCamera = deps.vmCamera();
     const vmScene = deps.vmScene();
-    const renderer = rendererSetup.renderer;
+    const {renderer} = rendererSetup;
 
     gateInteriorCasters(deps, st, camera);
     maybeWarmShaders(deps, st);

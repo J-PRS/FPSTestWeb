@@ -18,9 +18,9 @@ const SPRING = 14;          // anchor pull strength — lag is emergent, not fak
 const DAMP = 5.5;           // velocity damping — settles without orbit-jitter
 const CLEARANCE = 1.1;      // min height above terrain
 
-const _metal = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x23282e });
-const _glow = new THREE.MeshBasicMaterial({ color: 0x88ddff });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x4A5560 });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x23282E });
+const _glow = new THREE.MeshBasicMaterial({ color: 0x88DDFF });
 const _geoHull = new THREE.SphereGeometry(0.3, 10, 6);
 const _geoRotor = new THREE.CylinderGeometry(0.34, 0.34, 0.03, 8);
 const _geoPod = new THREE.CylinderGeometry(0.07, 0.09, 0.5, 6);
@@ -46,7 +46,7 @@ export class DeployDrone {
   private rotor: THREE.Mesh;
   private flash: THREE.Sprite;
   private flashT = 0;
-  private fireCd = 1.0 + Math.random() * 0.4;
+  private fireCd = 1 + Math.random() * 0.4;
   private terrain: Terrain;
   private unfoldT = 0;
 
@@ -68,7 +68,7 @@ export class DeployDrone {
     this.group.add(hull, this.rotor, pod, eye);
 
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x88ddff, transparent: true,
+      map: getGlowTexture(), color: 0x88DDFF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.flash.scale.setScalar(0.5);

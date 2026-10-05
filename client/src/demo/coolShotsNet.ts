@@ -31,8 +31,8 @@ export async function fetchDemo(m: CoolShotManager, filename: string): Promise<D
       }
       const buffer = await resp.arrayBuffer();
       return DemoSerializer.deserialize(buffer);
-    } catch (e) {
-      logger.warn('Failed to download from server:', e);
+    } catch (error) {
+      logger.warn('Failed to download from server:', error);
       m.deps.setStatus('Download failed');
       return null;
     }
@@ -75,10 +75,10 @@ export async function uploadClipToServer(m: CoolShotManager, clipData: DemoFile)
       }
       logger.debug(`Clip uploaded to server: ${result.filename}`);
       return result.filename as string;
-    } catch (e) {
+    } catch (error) {
       m.uploadFailureCount++;
       if (m.uploadFailureCount <= MAX_UPLOAD_WARNINGS) {
-        logger.warn(`Failed to upload clip (${m.uploadFailureCount}):`, e);
+        logger.warn(`Failed to upload clip (${m.uploadFailureCount}):`, error);
         if (m.uploadFailureCount === MAX_UPLOAD_WARNINGS) {
           logger.warn('Suppressing further upload failure warnings. Check server CORS/network.');
         }
@@ -116,7 +116,7 @@ export async function fetchFromServer(m: CoolShotManager): Promise<void> {
       m.onChanged?.(m.coolShots);
 
       logger.debug(`[CoolShots] ${m.coolShots.length} entries (top: ${m.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
-    } catch (e) {
-      logger.warn('Failed to fetch cool shots from server:', e);
+    } catch (error) {
+      logger.warn('Failed to fetch cool shots from server:', error);
     }
   }

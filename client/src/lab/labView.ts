@@ -165,8 +165,8 @@ class LabView {
   private ensureRenderer(): void {
     if (this.renderer) {return;}
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-    const grid = new THREE.GridHelper(120, 24, 0x22384f, 0x14202e);
-    const light = new THREE.AmbientLight(0xffffff, 1.2);
+    const grid = new THREE.GridHelper(120, 24, 0x22384F, 0x14202E);
+    const light = new THREE.AmbientLight(0xFFFFFF, 1.2);
     this.statics.add(grid).add(light);
     this.labRoot.add(grid, light);
   }
@@ -233,8 +233,8 @@ declare global {
  *  asset-iteration tool, not an in-match overlay, so it keeps its own
  *  renderer rather than borrowing the game's. */
 export function wireLabButton(): void {
-  const btn = document.getElementById('lab-open');
-  document.getElementById('gunlab-open')?.addEventListener('click', () =>
+  const btn = document.querySelector('#lab-open');
+  document.querySelector('#gunlab-open')?.addEventListener('click', () =>
     window.open('gunlab.html', '_blank'));
   if (!btn) {return;}
   window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);

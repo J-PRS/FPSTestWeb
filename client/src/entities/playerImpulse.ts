@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { weaponDef } from '../weapons.js';
 import { DISC_RATE } from '../core/config.js';
 import { THROW_TOTAL } from './ViewModel.js';

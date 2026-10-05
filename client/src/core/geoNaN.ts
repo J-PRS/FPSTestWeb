@@ -49,8 +49,8 @@ function reportNaN(geo: THREE.BufferGeometry): void {
         throw STOP;
       }
     });
-  } catch (e) {
-    if (e !== STOP) {throw e;}
+  } catch (error) {
+    if (error !== STOP) {throw error;}
   }
   hits.set(geo.uuid, {
     uuid: geo.uuid.slice(0, 8),

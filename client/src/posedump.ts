@@ -8,7 +8,7 @@ import { mkGltfLoader } from './gltfLoad';
 const q = new URLSearchParams(location.search);
 const mann = q.get('model') === 'mannequin';
 const wantClip = q.get('clip') ?? '';
-const wantT = parseFloat(q.get('t') ?? '0.4');
+const wantT = Number.parseFloat(q.get('t') ?? '0.4');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -19,20 +19,20 @@ document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
 // Studio look: white cyclorama + neutral lighting so silhouette/shading read clean.
-scene.background = new THREE.Color(0xf2f3f5);
+scene.background = new THREE.Color(0xF2F3F5);
 scene.fog = null;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1));
-const key = new THREE.DirectionalLight(0xffffff, 2.2);
+scene.add(new THREE.HemisphereLight(0xFFFFFF, 0x8899AA, 1.1));
+const key = new THREE.DirectionalLight(0xff_ff_ff, 2.2);
 key.position.set(3, 5, 4);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0xdde8ff, 1.0);
+const rim = new THREE.DirectionalLight(0xDDE8FF, 1);
 rim.position.set(-3, 3, -4);
 scene.add(rim);
 
 // Light floor so feet/legs have a ground reference without scene clutter.
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(6, 48),
-  new THREE.MeshStandardMaterial({ color: 0xe2e5e9, roughness: 1 }));
+  new THREE.MeshStandardMaterial({ color: 0xe2_e5_e9, roughness: 1 }));
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
@@ -49,8 +49,8 @@ if (pvariant) {
   // &weapon=<WeaponType int> drives the real hand-prop swap; &pitch=<rad>
   // feeds setRotation so the aim bones/aim layer pose mid-frame.
   const wantWeapon = q.get('weapon');
-  if (wantWeapon !== null) {pm.setWeapon(parseInt(wantWeapon));}
-  const wantPitch = parseFloat(q.get('pitch') ?? '0');
+  if (wantWeapon !== null) {pm.setWeapon(Number.parseInt(wantWeapon));}
+  const wantPitch = Number.parseFloat(q.get('pitch') ?? '0');
   if (wantPitch) {pm.setRotation(0, wantPitch, 0);}
   const wantState = q.get('state') ?? 'ski';
   // dir=B|BL|L|FL|FR|R|BR feeds setLocomotionVector before the state
@@ -115,8 +115,8 @@ mkGltfLoader().load(url, (gltf) => {
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).
   const box0 = new THREE.Box3().setFromObject(model);
   const size0 = box0.getSize(new THREE.Vector3());
-  const classScale = parseFloat(q.get('scale') ?? '1') || 1;
-  model.scale.setScalar((mann || ual2 || knight ? 2.0 / size0.y : 0.5) * classScale);
+  const classScale = Number.parseFloat(q.get('scale') ?? '1') || 1;
+  model.scale.setScalar((mann || ual2 || knight ? 2 / size0.y : 0.5) * classScale);
   model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
   model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
   scene.add(model);

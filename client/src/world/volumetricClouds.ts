@@ -264,11 +264,11 @@ export class VolumetricClouds {
       fragmentShader,
       uniforms: {
         noiseTex: { value: this.noiseTex },
-        cloudColor: { value: params.cloudColor ?? new THREE.Color(0xffffff) },
+        cloudColor: { value: params.cloudColor ?? new THREE.Color(0xFFFFFF) },
         fogColor: { value: new THREE.Color(FOG_COLOR) },
         sunDirection: { value: this.sunDirection },
         windScroll: { value: this.scroll },
-        density: { value: (params.cloudDensity ?? CLOUD_DENSITY) * 2.0 },
+        density: { value: (params.cloudDensity ?? CLOUD_DENSITY) * 2 },
         coverage: { value: 0.55 },
         yMin: { value: params.minHeight ?? CLOUD_MIN_HEIGHT },
         yMax: { value: params.maxHeight ?? CLOUD_MAX_HEIGHT },

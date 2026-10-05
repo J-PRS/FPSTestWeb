@@ -57,9 +57,9 @@ export async function loadDemo(h: DemoIOHost, file: File): Promise<void> {
     const data = DemoSerializer.deserialize(buffer);
     finishLoad(h, data);
     h.ui.setStatus(`Loaded: ${data.frames.length} frames, ${data.header.duration.toFixed(1)}s`);
-  } catch (e) {
-    logger.error('Failed to load demo:', e);
-    h.ui.setStatus(`Load error: ${(e as Error).message}`);
+  } catch (error) {
+    logger.error('Failed to load demo:', error);
+    h.ui.setStatus(`Load error: ${(error as Error).message}`);
   }
 }
 
@@ -67,9 +67,9 @@ export async function loadDemo(h: DemoIOHost, file: File): Promise<void> {
 export function loadDemoFromBuffer(h: DemoIOHost, buffer: ArrayBuffer): void {
   try {
     finishLoad(h, DemoSerializer.deserialize(buffer));
-  } catch (e) {
-    logger.error('Failed to load demo:', e);
-    h.ui.setStatus(`Load error: ${(e as Error).message}`);
+  } catch (error) {
+    logger.error('Failed to load demo:', error);
+    h.ui.setStatus(`Load error: ${(error as Error).message}`);
   }
 }
 

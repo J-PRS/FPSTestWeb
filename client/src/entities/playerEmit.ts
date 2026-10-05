@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 // Move-event FX family — jetpack trail, ski dust, footstep dust, plus
 // the land/jump transitions that hang off the ground-contact edges.
@@ -30,7 +30,7 @@ export class PlayerEmit {
   constructor(private h: EmitHost) {}
 
   moveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean, dt: number): void {
-    const h = this.h;
+    const {h} = this;
     if (isJetting) {this.jetpack();}
     this.skiDust(skiHeld);
     this.footDust(dt);
@@ -61,7 +61,7 @@ export class PlayerEmit {
   // Jetpack trail particles — every frame while burning, plus a ~20/s
   // throttled network event so remotes see the same plume.
   private jetpack(): void {
-    const h = this.h;
+    const {h} = this;
     if (!h.onJetpack) {return;}
     h.onJetpack(h.pos); // read-only use — no clone, runs every frame
     const now = performance.now();
@@ -73,7 +73,7 @@ export class PlayerEmit {
 
   // Ski dust particles (when space is held, on ground, and moving)
   private skiDust(skiHeld: boolean): void {
-    const h = this.h;
+    const {h} = this;
     h.skiing = skiHeld && h.onGround && h.vel.lengthSq() > 10;
     if (h.skiing && h.onSki) {
       h.onSki(h.pos, h.vel); // read-only use — no clones, runs every frame
@@ -84,7 +84,7 @@ export class PlayerEmit {
   // (~0.9m ≈ one puff per step) so a jog puffs at footfall cadence and
   // standing still puffs nothing.
   private footDust(dt: number): void {
-    const h = this.h;
+    const {h} = this;
     const wsp = Math.hypot(h.vel.x, h.vel.z);
     if (h.onGround && !h.skiing && wsp > 1.5) {
       this.stepAcc += wsp * dt;

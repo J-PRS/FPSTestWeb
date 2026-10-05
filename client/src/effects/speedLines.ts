@@ -12,12 +12,12 @@ import { markProbe } from '../core/fxDiag.js';
 const MAX_STREAKS = 20;
 const MIN_SPEED = 30;    // m/s — no lines below this
 const FULL_SPEED = 85;   // full intensity
-const DISC_AHEAD_MIN = 3.0;   // spawn disc sits ahead along -vel
-const DISC_AHEAD_MAX = 18.0;
+const DISC_AHEAD_MIN = 3;   // spawn disc sits ahead along -vel
+const DISC_AHEAD_MAX = 18;
 const DISC_R_MIN = 1.6;  // inner radius — keeps the view center clear
-const DISC_R_MAX = 5.0;
+const DISC_R_MAX = 5;
 const STREAK_LEN_MIN = 0.9;   // world-space streak length (m)
-const STREAK_LEN_MAX = 2.0;
+const STREAK_LEN_MAX = 2;
 const LIFE_MIN = 0.35;
 const LIFE_MAX = 0.7;
 
@@ -59,7 +59,7 @@ export class SpeedLines {
    * travel path so the teleport reads as a whoosh, not a cut. Also flares
    * intensity so they render even if velocity just changed.
    */
-  surge(from: THREE.Vector3, to: THREE.Vector3, color = 0x55ccff, count = 14): void {
+  surge(from: THREE.Vector3, to: THREE.Vector3, color = 0x55CCFF, count = 14): void {
     _velDir.subVectors(to, from);
     const len = _velDir.length();
     if (len < 0.5) { this.burst(); return; }
@@ -104,7 +104,7 @@ export class SpeedLines {
     let s = this.pool.pop();
     if (!s) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x9db8d4,
+        color: 0x9DB8D4,
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,

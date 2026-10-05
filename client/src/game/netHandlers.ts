@@ -3,7 +3,7 @@
 // this orchestrator only owns the cross-domain pieces (chat, lobby, pickup
 // mesh factory feeding both pickups.ts and the join path in world.ts).
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { ChildLogger } from '../core/Logger.js';
 import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
@@ -109,28 +109,28 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
     listRooms: async () => {
       const res = await fetch(`${httpUrl}/rooms`);
-      if (!res.ok) throw new Error(`rooms ${res.status}`);
+      if (!res.ok) {throw new Error(`rooms ${res.status}`);}
       return res.json() as Promise<import('./lobby.js').RoomRow[]>;
     },
     listMaps: async () => {
       const res = await fetch(`${httpUrl}/maps`);
-      if (!res.ok) throw new Error(`maps ${res.status}`);
+      if (!res.ok) {throw new Error(`maps ${res.status}`);}
       return res.json() as Promise<import('./lobby.js').MapRow[]>;
     },
     quickJoin: async (mode, map, bots) => {
       const q = new URLSearchParams({ mode });
-      if (map) q.set('map', map);
-      if (bots !== undefined) q.set('bots', String(bots));
+      if (map) {q.set('map', map);}
+      if (bots !== undefined) {q.set('bots', String(bots));}
       const res = await fetch(`${httpUrl}/join?${q}`);
-      if (!res.ok) throw new Error(`join ${res.status}`);
+      if (!res.ok) {throw new Error(`join ${res.status}`);}
       return res.json() as Promise<{ room: string }>;
     },
     switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
-  })).catch((e) => {
+  })).catch((error) => {
     // Endpoint resolution failing leaves no lobby button — log it so a
     // dead /rooms host doesn't read as a missing feature.
-    logger.warn('Lobby browser unavailable', e);
+    logger.warn('Lobby browser unavailable', error);
   });
 
   return ctx;

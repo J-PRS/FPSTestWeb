@@ -26,7 +26,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 // the first deployHp tick either way.
 const DEPLOY_V_CAP = DEPLOY_HP;
 
-const PING_TTL = 3.0;
+const PING_TTL = 3;
 
 export class RemoteDeployables {
   private remote = new Map<number, Item>();
@@ -62,7 +62,7 @@ export class RemoteDeployables {
 
   spawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
     const { owner, kind, pos, hp, armor, team } = spec;
-    if (kind === 'nugget' || this.remote.has(id)) return; // mints pickups, never a deploySpawn
+    if (kind === 'nugget' || this.remote.has(id)) {return;} // mints pickups, never a deploySpawn
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     let item: Item;
@@ -99,7 +99,7 @@ export class RemoteDeployables {
       const group = new THREE.Group();
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
-        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8a5a2a : 0x4a5560 }));
+        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A5A2A : 0x4a_55_60 }));
       group.add(m);
       group.position.copy(at);
       group.position.y = terrain.getHeight(at.x, at.z);
@@ -109,7 +109,7 @@ export class RemoteDeployables {
       const update = kind === 'drone'
         ? () => {
             const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
-            if (op) group.position.set(op.x, op.y + 2.5, op.z);
+            if (op) {group.position.set(op.x, op.y + 2.5, op.z);}
           }
         : () => {};
       item = {
@@ -145,11 +145,11 @@ export class RemoteDeployables {
    *  and breathes a thin smoke wisp until it's welded or respawns. The
    *  deck plinth stays lit either way — the socket reads even dead. */
   private baseAssetItem(kind: 'generator' | 'sensor' | 'sentry', at: THREE.Vector3, hp?: number, armor?: number, team?: string): Item {
-    const teamColor = team === 'alpha' ? 0x55aaff : team === 'bravo' ? 0xff8855 : 0x99aabb;
+    const teamColor = team === 'alpha' ? 0x55AAFF : team === 'bravo' ? 0xff_88_55 : 0x99AABB;
     const group = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
-    const darkMat = new THREE.MeshLambertMaterial({ color: 0x39424e });
-    const hullMat = new THREE.MeshLambertMaterial({ color: 0x55606e });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x39424E });
+    const hullMat = new THREE.MeshLambertMaterial({ color: 0x55606E });
     // Mounting plinth — a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
@@ -169,18 +169,18 @@ export class RemoteDeployables {
       const core = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 2.6, 10), glowMat);
       core.position.y = 1.8;
       group.add(core);
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      for (const sx of [-1, 1]) {for (const sz of [-1, 1]) {
         const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.7, 4.4, 0.7), darkMat);
         pylon.position.set(sx * 2.1, 2.2, sz * 2.1);
         group.add(pylon);
-      }
+      }}
     } else if (kind === 'sentry') {
       // Base gun — squat armored block on a swivel, twin barrels, glow
       // optic; deliberately chunkier than the field turret silhouette.
       const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, 0.8, 8), darkMat);
       base.position.y = 0.75;
       group.add(base);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 2.0), hullMat);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 2), hullMat);
       head.position.y = 1.75;
       group.add(head);
       for (const sx of [-0.45, 0.45]) {
@@ -212,12 +212,12 @@ export class RemoteDeployables {
     const wrecked = hp !== undefined && hp <= 0;
     let downed = wrecked;
     let smokeT = 0;
-    if (wrecked) { glowMat.color.setHex(0x181c22); group.rotation.z = 0.07; group.scale.y = 0.82; }
+    if (wrecked) { glowMat.color.setHex(0x181C22); group.rotation.z = 0.07; group.scale.y = 0.82; }
     const item: Item = {
       kind, candId: `rdep:${at.x.toFixed(0)},${at.z.toFixed(0)}`, pos: group.position, dead: false,
       hurt: () => {},
       update: (dt) => {
-        if (spin) spin.rotation.y += dt * 0.8;
+        if (spin) {spin.rotation.y += dt * 0.8;}
         // Burnout wisp — a downed asset smokes gently so the site reads
         // "weld me" from across the field, not just "darker box".
         if (downed) {
@@ -228,7 +228,7 @@ export class RemoteDeployables {
               count: 2, pos: [0.5, 2.6, 0.5],
               velMin: [-0.2, 0.9, -0.2], velMax: [0.3, 1.9, 0.3],
               lifeMin: 1.6, lifeMax: 2.8, sizeScale: 1.7,
-              colA: [0.10, 0.10, 0.11], colB: [0.26, 0.25, 0.24],
+              colA: [0.1, 0.1, 0.11], colB: [0.26, 0.25, 0.24],
               gravity: false,
             });
           }
@@ -239,7 +239,7 @@ export class RemoteDeployables {
       downed,
       setDown: (down) => {
         downed = down;
-        glowMat.color.setHex(down ? 0x181c22 : teamColor);
+        glowMat.color.setHex(down ? 0x18_1c_22 : teamColor);
         if (down) { group.rotation.z = 0.07; group.scale.y = 0.82; }
         else { group.rotation.z = 0; group.scale.y = 1; }
       },
@@ -259,19 +259,19 @@ export class RemoteDeployables {
    *  dying — a generator going down is the loudest event on the map. */
   down(id: number): void {
     const it = this.byId.get(id);
-    if (!it) return;
+    if (!it) {return;}
     it.downed = true;
     it.setDown?.(true);
     it.v.health = 0;
     this.deps.world.explosions.push(new Explosion(
-      this.deps.scene, it.pos, false, 0, this.deps.lazyTerrain(), 1.6, 0xffaa55));
+      this.deps.scene, it.pos, false, 0, this.deps.lazyTerrain(), 1.6, 0xFFAA55));
     sfx.explosionAt(it.pos, true);
     screenShake.blast(it.pos, 3, this.deps.lazyPlayer().pos);
   }
 
   up(id: number): void {
     const it = this.byId.get(id);
-    if (!it) return;
+    if (!it) {return;}
     it.downed = false;
     it.setDown?.(false);
   }
@@ -281,12 +281,12 @@ export class RemoteDeployables {
   remoteWeld(srcId: string, serverId: number): void {
     const item = this.byId.get(serverId);
     const rp = this.deps.world.remotePlayers.get(srcId);
-    if (!item || item.dead || !rp) return;
+    if (!item || item.dead || !rp) {return;}
     let w = this.weldBeams.get(srcId);
     if (!w) {
       w = {
         beam: new LightningBeam(this.deps.scene, {
-          glow: 0x1fbb66, core: 0xdcffe8, chain: 0x7dffb8, hit: 0xaaffcc, sparkTop: 0x66ffaa,
+          glow: 0x1FBB66, core: 0xDCFFE8, chain: 0x7DFFB8, hit: 0xAAFFCC, sparkTop: 0x66_ff_aa,
         }),
         last: 0,
       };
@@ -300,7 +300,7 @@ export class RemoteDeployables {
   remove(id: number): void {
     this.byId.delete(id);
     const item = this.remote.get(id);
-    if (!item) return;
+    if (!item) {return;}
     this.remote.delete(id);
     item.dispose();
   }
@@ -315,11 +315,11 @@ export class RemoteDeployables {
   sensorPing(_id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
     const nm = this.deps.lazyNetworkManager();
     const mine = nm.getPlayers().get(nm.getLocalPlayerId() ?? '')?.team;
-    if (team && mine && team !== mine) return;
+    if (team && mine && team !== mine) {return;}
     for (const t of targets) {
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.8, 1.0, 24),
-        new THREE.MeshBasicMaterial({ color: 0xff5544, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+        new THREE.RingGeometry(0.8, 1, 24),
+        new THREE.MeshBasicMaterial({ color: 0xFF5544, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(t.x, t.y + 0.15, t.z);
       this.deps.scene.add(ring);
@@ -331,17 +331,17 @@ export class RemoteDeployables {
    *  the defender sees the incoming, not just the health loss. */
   turretShot(id: number, targetId: string): void {
     const item = this.byId.get(id);
-    if (!item) return;
+    if (!item) {return;}
     const nm = this.deps.lazyNetworkManager();
     const t = nm.getPlayers().get(targetId);
     const tp = targetId === nm.getLocalPlayerId()
       ? this.deps.lazyPlayer().pos
       : t?.position;
-    if (!tp) return;
+    if (!tp) {return;}
     // Positions are feet — home at capsule center or the rocket slams
     // terrain at the target's toes (the damage lands regardless, so the
     // visual was reading as "sentry shoots the ground").
-    const target = { pos: new THREE.Vector3(tp.x, tp.y + 1.0, tp.z), vel: new THREE.Vector3(), alive: true };
+    const target = { pos: new THREE.Vector3(tp.x, tp.y + 1, tp.z), vel: new THREE.Vector3(), alive: true };
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target, 1, item.owner);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
@@ -351,7 +351,7 @@ export class RemoteDeployables {
    *  straight line the server flew. */
   sentryShot(id: number, owner: string, x: number, y: number, z: number): void {
     const item = this.byId.get(id);
-    if (!item) return;
+    if (!item) {return;}
     const target = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), alive: true };
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 2.2, 0)), target, 1, owner);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
@@ -365,7 +365,7 @@ export class RemoteDeployables {
   }
 
   update(dt: number): void {
-    for (const i of this.remote.values()) i.update(dt);
+    for (const i of this.remote.values()) {i.update(dt);}
     for (let i = this.pings.length - 1; i >= 0; i--) {
       const p = this.pings[i]!;
       p.t -= dt;
@@ -385,11 +385,11 @@ export class RemoteDeployables {
   }
 
   dispose(): void {
-    for (const p of this.pings) this.deps.scene.remove(p.ring);
+    for (const p of this.pings) {this.deps.scene.remove(p.ring);}
     this.pings.length = 0;
-    for (const i of this.remote.values()) i.dispose();
+    for (const i of this.remote.values()) {i.dispose();}
     this.remote.clear();
-    for (const w of this.weldBeams.values()) w.beam.dispose();
+    for (const w of this.weldBeams.values()) {w.beam.dispose();}
     this.weldBeams.clear();
   }
 }

@@ -30,8 +30,8 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   vfx: 'kinetic',
   damageColor: '#66ccff',
   trailColors: [
-    new THREE.Color(0.7, 0.95, 1.0), // white-hot core
-    new THREE.Color(0.3, 0.7, 1.0),  // cyan
+    new THREE.Color(0.7, 0.95, 1), // white-hot core
+    new THREE.Color(0.3, 0.7, 1),  // cyan
     new THREE.Color(0.1, 0.4, 0.9),  // deep blue tail
   ],
   trailParticlesPerUnit: 1.2,
@@ -46,10 +46,10 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0,
-  meshColor: 0xbbeeff,
+  meshColor: 0xBBEEFF,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0x66ccff,
+  glowColor: 0x66CCFF,
   glowOpacity: 0.6,
   glowScale: 1.2,
   meshRampIn: true,        // classic spawn pop: 10% → full over 0.1s
@@ -63,5 +63,5 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.4,
-  ribbonColor: 0x55bbff,
+  ribbonColor: 0x55BBFF,
 };

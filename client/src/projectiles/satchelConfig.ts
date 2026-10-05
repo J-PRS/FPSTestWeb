@@ -34,7 +34,7 @@ export const SATCHEL_CONFIG: ProjectileConfig = {
   // Short sputtering fuse-spark trail — it barely flies, so the trail is
   // brief and hot rather than a streak.
   trailColors: [
-    new THREE.Color(1.0, 0.4, 0.25),
+    new THREE.Color(1, 0.4, 0.25),
     new THREE.Color(0.9, 0.25, 0.15),
     new THREE.Color(0.6, 0.15, 0.1),
     new THREE.Color(0.3, 0.1, 0.08),
@@ -51,10 +51,10 @@ export const SATCHEL_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0.04,
-  meshColor: 0x3a2e28, // dark casement — the red glow reads as the armed light
+  meshColor: 0x3A2E28, // dark casement — the red glow reads as the armed light
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xff3322,
+  glowColor: 0xFF3322,
   glowOpacity: 0.7,
   glowScale: 0.9,
   meshRampIn: true,

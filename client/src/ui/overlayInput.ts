@@ -1,6 +1,6 @@
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
-import { Player } from '../entities/Player.js';
+import type { Player } from '../entities/Player.js';
 import type { HUD } from './hud.js';
 import { audio } from '../core/audio.js';
 import { buildKeysMenu } from './keysMenu.js';
@@ -30,7 +30,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   // Loadout bar lives in its own module — it builds the chip/dropup DOM and
   // owns the refreshLoadout funnel the overlay opens through.
   const loadout = wireLoadoutBar(deps);
-  const refreshLoadout = loadout.refreshLoadout;
+  const {refreshLoadout} = loadout;
 
   const keysOpen = document.getElementById('keys-open');
   const keysModal = document.getElementById('keys-modal');
@@ -136,7 +136,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     if (handleDemoKey(e)) {return;}
     if (e.code === 'Escape' && deps.isGameStarted()) {handleEscapeKey();}
     if (e.code === 'F4') {
-      const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
+      const pixelToggleBtn = document.querySelector('#pixel-toggle')! as HTMLButtonElement;
       pixelToggleBtn.click();
     }
   });

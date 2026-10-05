@@ -121,7 +121,7 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
   return () => {
     const g = new THREE.Group();
     const base = new THREE.Color(PICKUP_ACCENT[kind]);
-    const emit = base.clone().lerp(new THREE.Color(0xffffff), 0.33).multiplyScalar(EMIT_GAIN);
+    const emit = base.clone().lerp(new THREE.Color(0xFFFFFF), 0.33).multiplyScalar(EMIT_GAIN);
     const gem = new THREE.Mesh(
       new THREE.IcosahedronGeometry(NUGGET_R, 0),
       new THREE.MeshBasicMaterial({ color: emit }),

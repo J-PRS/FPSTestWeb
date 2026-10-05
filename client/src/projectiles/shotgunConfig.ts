@@ -25,8 +25,8 @@ export const SHOTGUN_CONFIG: ProjectileConfig = {
   aoeRadius: 0,
   damageColor: '#ffcc66',
   trailColors: [
-    new THREE.Color(1.0, 0.9, 0.5),
-    new THREE.Color(1.0, 0.7, 0.3),
+    new THREE.Color(1, 0.9, 0.5),
+    new THREE.Color(1, 0.7, 0.3),
     new THREE.Color(0.8, 0.4, 0.1),
   ],
   trailParticlesPerUnit: 0, // ribbon tracers only — 10 particles/shot is fine, 110/s is not
@@ -39,12 +39,12 @@ export const SHOTGUN_CONFIG: ProjectileConfig = {
   trailBaseSize: 0.04,
   trailSizeRange: 0.03,
   trailScaleMin: 0.3,
-  trailScaleMax: 1.0,
+  trailScaleMax: 1,
   trailRampIn: 0,
-  meshColor: 0xffbb55,
+  meshColor: 0xFFBB55,
   meshType: 'rocket',
   glowShell: false,
-  glowColor: 0xffbb55,
+  glowColor: 0xFFBB55,
   glowOpacity: 0,
   meshRampIn: false,
   meshRampInDuration: 0,
@@ -59,5 +59,5 @@ export const SHOTGUN_CONFIG: ProjectileConfig = {
   ribbonLanes: 1,
   ribbonWidth: 0.16,
   ribbonLife: 0.07,
-  ribbonColor: 0xffaa44,
+  ribbonColor: 0xFFAA44,
 };

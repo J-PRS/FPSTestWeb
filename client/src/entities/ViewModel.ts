@@ -57,16 +57,16 @@ export class ViewModel {
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
-    [WeaponType.Chaingun]: -0.80, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
+    [WeaponType.Chaingun]: -0.8, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.38, // group ×1.4 — collar tip moved to ≈-0.39 [WeaponType.Sprinkler]: -0.30,
     [WeaponType.Railgun]: -0.64, // clear of the prong cluster — at -0.57 the hex tips frame-swallow the flash
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
-    [WeaponType.Sticky]: -0.40,
+    [WeaponType.Sticky]: -0.4,
     [WeaponType.Pistol]: -0.17,   // stubby barrel face
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
-    [WeaponType.Repair]: -0.20,   // emitter stud on the reflector dish
+    [WeaponType.Repair]: -0.2,   // emitter stud on the reflector dish
     [WeaponType.MRVLauncher]: -0.56, // group-space: scaled bore face (-0.445 model) ×1.25
   };
   chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
@@ -129,7 +129,7 @@ export class ViewModel {
     // Muzzle light — the half of a retro flash nobody draws: for ~60ms
     // the shot actually LIGHTS the gun and hands. Parented to the quad so
     // it inherits the per-weapon muzzle park and sway/kick for free.
-    this.flashLight = new THREE.PointLight(0xffffff, 0, 2.2, 2);
+    this.flashLight = new THREE.PointLight(0xFFFFFF, 0, 2.2, 2);
     this.flashLight.visible = false;
     this.flashMesh.add(this.flashLight);
 
@@ -221,7 +221,7 @@ export class ViewModel {
   private bowT = -1; // <0 idle; >=0 s since the shot ejected the chambered bolt
   private static readonly BOW_HIDE = 0.05;
   private static readonly BOW_SLIDE = 0.4;  // drum→channel feed travel
-  private static readonly BOW_DRAW = 1.0;   // slow re-cock after the snap
+  private static readonly BOW_DRAW = 1;   // slow re-cock after the snap
   private static readonly UP_Y = new THREE.Vector3(0, 1, 0);
   private strA = new THREE.Vector3();
   private strB = new THREE.Vector3();
@@ -328,10 +328,10 @@ export class ViewModel {
   // Energy shield, first-person read: the same hex+fresnel field that wraps
   // the third-person bubble crawls over the gun's surface.
   shieldShells: THREE.Object3D[] = []; // public — switch envelope re-wraps
-  shellColor = 0x66ccff;
-  setShield(on: boolean, color = 0x66ccff): void { vm.setShield(this, on, color); }
+  shellColor = 0x66CCFF;
+  setShield(on: boolean, color = 0x66CCFF): void { vm.setShield(this, on, color); }
   // Medkit reuses the gun shell — same field, green read.
-  setMend(on: boolean): void { vm.setShield(this, on, 0x3fdd6f); }
+  setMend(on: boolean): void { vm.setShield(this, on, 0x3FDD6F); }
   /** Tick the field animation on the gun shells (called from update). */
   updateShieldShells(dt: number): void { vm.updateShieldShells(this, dt); }
 

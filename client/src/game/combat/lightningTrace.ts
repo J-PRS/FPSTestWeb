@@ -75,7 +75,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
 
   // Structures: the beam stops at walls — a bolt that could pierce a
   // base would splash targets inside it (server rejects those claims).
-  if (Projectile.solidColliders.length) {
+  if (Projectile.solidColliders.length > 0) {
     _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
     const sh = segSolidHit(_lgO, _lgP, Projectile.solidColliders);
     if (sh) {hitT *= sh.t;} // entry as a fraction of the current reach

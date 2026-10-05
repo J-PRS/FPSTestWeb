@@ -54,7 +54,7 @@ export class PlayerSheep {
   private foeNear(player: Player, remotes: RemoteSet<RemotePlayer, RemotePlayerState>, localTeam: TeamId | undefined): boolean {
     for (const [, rp] of remotes) {
       if (rp.isDead) {continue;}
-      const team = (rp as { team?: string }).team;
+      const {team} = (rp as { team?: string });
       if (localTeam && team === localTeam) {continue;}
       const p = rp.position;
       const d = (p.x - player.pos.x) ** 2 + (p.y - player.pos.y) ** 2 + (p.z - player.pos.z) ** 2;

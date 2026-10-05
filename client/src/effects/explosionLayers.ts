@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { TerrainRing } from './TerrainRing.js';
 import { blastBurst, type BlastSpec } from './vfx.js';
 import type { ExplosionSparks } from './explosionSparks.js';
@@ -65,7 +65,7 @@ export class ExplosionLayers implements VariantHost {
   // Layer 0: Instant flash — one giant white-hot sprite, gone in ~90ms.
   // The frame-zero flash is what reads as "something violent happened".
   spawnFlash(pos: THREE.Vector3, mult: number): void {
-    _c.setHex(0xfff6d8);
+    _c.setHex(0xFFF6D8);
     if (this.hasTint) {_c.lerp(this.tint, 0.3);}
     // One batched particle, not a pooled sprite — a flash is a burst of 1.
     blastBurst(pos, {
@@ -74,7 +74,7 @@ export class ExplosionLayers implements VariantHost {
       sizeMin: 7 * mult, sizeMax: 7 * mult,
       gravity: 0,
       c1: [_c.r, _c.g, _c.b], c2: [1, 0.5, 0.2],
-      opacity: 1.0,
+      opacity: 1,
     }, true);
   }
 
@@ -101,7 +101,7 @@ export class ExplosionLayers implements VariantHost {
   spawnBurst(pos: THREE.Vector3, l: BurstLayer): void {
     // One batched quarks burst instead of count pooled meshes/sprites —
     // the whole layer lands in a single draw call.
-    let r1 = l.r1, g1 = l.g1, b1 = l.b1, r2 = l.r2, g2 = l.g2, b2 = l.b2;
+    let {r1} = l, {g1} = l, {b1} = l, {r2} = l, {g2} = l, {b2} = l;
     if (this.hasTint && l.kind === 'glow') {
       const k = 0.55;
       r1 += (this.tint.r - r1) * k; g1 += (this.tint.g - g1) * k; b1 += (this.tint.b - b1) * k;
@@ -127,11 +127,11 @@ export class ExplosionLayers implements VariantHost {
 
   private spawnBaseLayers(pos: THREE.Vector3, mult: number, directHit: boolean, heavy = false): void {
     const dh = directHit;
-    const dhBoost = (v: number) => (dh ? v : 1.0);
+    const dhBoost = (v: number) => (dh ? v : 1);
     const dhLife = dhBoost(1.4), dhSize = dhBoost(1.2);
     // 'heavy' (concussion: mortar/cannon/warhead) — slower, dirtier, more
     // smoke. HE reads as a thump with a black tail, not a clean fireball.
-    const hv = heavy ? 1.0 : 0.0;
+    const hv = heavy ? 1 : 0;
 
     // Layer 1: Flash — white-yellow, very short
     this.spawnBurst(pos, {
@@ -149,7 +149,7 @@ export class ExplosionLayers implements VariantHost {
       count: 65, countMult: mult,
       elvBase: 0.25, elvSpan: Math.PI,
       spdMin: 7, spdMax: 35, spdBoost: dhBoost(1.4 - hv * 0.15), vy: 8,
-      lifeMin: 0.40, lifeVar: 0.30, lifeBoost: dhBoost(1.5 + hv * 0.2),
+      lifeMin: 0.4, lifeVar: 0.3, lifeBoost: dhBoost(1.5 + hv * 0.2),
       sizeMin: 0.35, sizeVar: 0.65, sizeBoost: dhBoost(1.3),
       gravity: -18 + hv * 4,
       r1: 1, g1: 0.4 - hv * 0.15, g1Var: 0.35, b1: 0, r2: 0.55 - hv * 0.1, g2: 0.02, b2: 0, kind: 'glow', stagger: 0.07,
@@ -160,10 +160,10 @@ export class ExplosionLayers implements VariantHost {
       count: 32 + Math.floor(hv * 14), countMult: mult,
       elvBase: 0.2, elvSpan: Math.PI * 0.75,
       spdMin: 16, spdMax: 56 - hv * 10, spdBoost: dhBoost(1.5), vy: 14 + hv * 4,
-      lifeMin: 0.30, lifeVar: 0.35, lifeBoost: dhBoost(1.6 + hv * 0.3),
+      lifeMin: 0.3, lifeVar: 0.35, lifeBoost: dhBoost(1.6 + hv * 0.3),
       sizeMin: 0.09, sizeVar: 0.15, sizeBoost: dhBoost(1.4),
       gravity: -32 - hv * 10,
-      r1: 1 - hv * 0.55, g1: 0.3 - hv * 0.12, g1Var: 0.2, b1: 0, r2: 0.12, g2: 0.05, b2: 0.01, kind: 'solid', stagger: 0.10, spin: 5,
+      r1: 1 - hv * 0.55, g1: 0.3 - hv * 0.12, g1Var: 0.2, b1: 0, r2: 0.12, g2: 0.05, b2: 0.01, kind: 'solid', stagger: 0.1, spin: 5,
     });
 
     // Layer 4: Embers — tiny, long life
@@ -172,7 +172,7 @@ export class ExplosionLayers implements VariantHost {
       elvBase: 0.3, elvSpan: Math.PI,
       spdMin: 8, spdMax: 43, spdBoost: dhBoost(1.3), vy: 6,
       lifeMin: 0.7, lifeVar: 0.8, lifeBoost: dhLife,
-      sizeMin: 0.05, sizeVar: 0.10, sizeBoost: dhSize,
+      sizeMin: 0.05, sizeVar: 0.1, sizeBoost: dhSize,
       gravity: -14,
       r1: 1, g1: 0.5, g1Var: 0.3, b1: 0, r2: 0.2, g2: 0, b2: 0, kind: 'glow', stagger: 0.15,
     });
@@ -184,10 +184,10 @@ export class ExplosionLayers implements VariantHost {
       count: 14 + Math.floor(hv * 12), countMult: mult,
       elvBase: 0, elvSpan: 0,
       spdMin: 1, spdMax: 5 - hv * 1.5, spdBoost: 1, vy: 2.5 + hv,
-      lifeMin: 1.0 + hv * 0.5, lifeVar: 0.6 + hv * 0.4, lifeBoost: dhBoost(1.3),
+      lifeMin: 1 + hv * 0.5, lifeVar: 0.6 + hv * 0.4, lifeBoost: dhBoost(1.3),
       sizeMin: 0.28 + hv * 0.1, sizeVar: 0.35 + hv * 0.15, sizeBoost: dhSize,
       gravity: -1,
-      r1: 0.22 - hv * 0.08, g1: 0.20 - hv * 0.07, b1: 0.18 - hv * 0.06, r2: 0.06, g2: 0.06, b2: 0.06, kind: 'smoke', stagger: 0.12, spin: 1.4,
+      r1: 0.22 - hv * 0.08, g1: 0.2 - hv * 0.07, b1: 0.18 - hv * 0.06, r2: 0.06, g2: 0.06, b2: 0.06, kind: 'smoke', stagger: 0.12, spin: 1.4,
       planar: true,
     });
   }
@@ -196,8 +196,8 @@ export class ExplosionLayers implements VariantHost {
   // is why ground-detonating weapons (mortar/GL/plasma) looked weak. Radius
   // scales with the weapon's real blast size (mult).
   private spawnShockDome(pos: THREE.Vector3, mult: number): void {
-    this.allocShock(pos, 0xffffff, 0.35, 5.0 * mult, 0.35);
-    this.allocShock(pos, this.hasTint ? this.tint : 0xffcc66, 0.45, 6.5 * mult, 0.5);
+    this.allocShock(pos, 0xFFFFFF, 0.35, 5 * mult, 0.35);
+    this.allocShock(pos, this.hasTint ? this.tint : 0xff_cc_66, 0.45, 6.5 * mult, 0.5);
   }
 
   allocShock(pos: THREE.Vector3, color: number | THREE.Color, life: number, maxRadius: number, opacity: number): void {
@@ -238,7 +238,7 @@ export class ExplosionLayers implements VariantHost {
         _c.copy(this.tint).lerp(_c2.setRGB(1, 0.9, 0.6), Math.random() * 0.5);
         spark.r = _c.r; spark.g = _c.g; spark.b = _c.b;
       } else {
-        spark.r = 1.0; spark.g = 0.6 + Math.random() * 0.3; spark.b = 0.2;
+        spark.r = 1; spark.g = 0.6 + Math.random() * 0.3; spark.b = 0.2;
       }
       spark.o = 0.5;
       spark.vel.set(
@@ -251,7 +251,7 @@ export class ExplosionLayers implements VariantHost {
   }
 
   spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain): void {
-    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xffaa33, 0.45, 9.0 * mult, terrain));
+    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xFFAA33, 0.45, 9 * mult, terrain));
   }
 
   /** blastBurst with the weapon-energy tint applied to glow colors. */
@@ -270,7 +270,7 @@ export class ExplosionLayers implements VariantHost {
 
   update(dt: number): number {
     let alive = this.updateShockwaves(dt);
-    for (const r of this.rings) {if (r.update(dt)) alive++;}
+    for (const r of this.rings) {if (r.update(dt)) {alive++;}}
     return alive;
   }
 

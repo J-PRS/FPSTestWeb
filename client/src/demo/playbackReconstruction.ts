@@ -6,11 +6,11 @@
 import * as THREE from 'three';
 import type { ProjectileEvent, TargetEvent } from './types.js';
 import { ProjectileEventType, TargetEventType } from './types.js';
-import { Ball } from '../entities/balls.js';
+import type { Ball } from '../entities/balls.js';
 import type { Player } from '../entities/Player.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig, computeAccuracy } from '../projectiles/index.js';
-import { BallDebris } from '../effects/debris.js';
+import type { BallDebris } from '../effects/debris.js';
 import { Explosion } from '../effects/explosion.js';
 import { Implosion } from '../effects/implosion.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
@@ -66,7 +66,7 @@ export function releasePlaybackBeam(world: PlaybackWorld, b: PlaybackBeam): void
   else {world.beamPool.push(b);}
 }
 
-export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
+export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99EEFF): void {
   _beamDir.subVectors(to, from);
   const len = _beamDir.length();
   if (len < 0.01) {return;}
@@ -231,7 +231,7 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
   const { scene, terrain, explosions, implosions } = world;
 
   // Compute accuracy using the recorded target position when available
-  const ball = ev.targetId && ev.targetId !== 0xFFFF ? world.playbackBallById.get(ev.targetId) : undefined;
+  const ball = ev.targetId && ev.targetId !== 0xFF_FF ? world.playbackBallById.get(ev.targetId) : undefined;
   let directHit = false;
   let accRaw = 0;
   if (ball) {
@@ -262,7 +262,7 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
   if (ball) {
     const distBall = r.pos.distanceTo(ball.pos);
     logger.debug(`Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${distBall.toFixed(1)}m`);
-  } else if (ev.targetId && ev.targetId !== 0xFFFF && ev.targetId !== 0) {
+  } else if (ev.targetId && ev.targetId !== 0xFF_FF && ev.targetId !== 0) {
     logger.debug(`Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
   }
 }

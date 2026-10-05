@@ -107,9 +107,9 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
       // The pop is an fx edge only — the server's blast funnel already
       // dealt the damage; crawlDie sweeps the entity right behind it.
       const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
-      deps.world.explosions.push(new Explosion(deps.scene, pos, false, 0, deps.lazyTerrain(), c.blastRadius / EXPLOSION_VFX_RADIUS, 0x77ff44));
+      deps.world.explosions.push(new Explosion(deps.scene, pos, false, 0, deps.lazyTerrain(), c.blastRadius / EXPLOSION_VFX_RADIUS, 0x77FF44));
       sfx.explosionAt(pos, true);
-      screenShake.blast(pos, c.uber ? 3.5 : 2.0, deps.camera.position);
+      screenShake.blast(pos, c.uber ? 3.5 : 2, deps.camera.position);
     }
   }
 

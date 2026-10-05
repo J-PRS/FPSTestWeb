@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { audio } from '../audio.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
@@ -22,12 +22,12 @@ export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: numbe
 // Per-weapon explosion identities — same physics, different voice so you
 // can hear WHAT blew up, not just that something did.
 const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, number?][]>> = {
-  [WeaponType.Mortar]: [['explosion1', 1.0, 0.6], ['thud_big', 0.9, 0.6, 300]],
+  [WeaponType.Mortar]: [['explosion1', 1, 0.6], ['thud_big', 0.9, 0.6, 300]],
   [WeaponType.BoltLauncher]: [['explosion1', 0.95], ['thud_big', 0.5, 0.7]],
   [WeaponType.GrenadeLauncher]: [['explosion_small', 0.9, 0.9], ['thud_big', 0.4, 0.8, 500]],
   [WeaponType.Grenade]: [['explosion_small', 0.9, 1.2]],
   [WeaponType.Flak]: [['explosion_small', 0.9, 1.5], ['sparks', 0.4, 1.2, undefined, 0.3]],
-  [WeaponType.PlasmaCannon]: [['explosion_small', 0.6, 1.3], ['sparks', 0.5, 1.0, undefined, 0.4]],
+  [WeaponType.PlasmaCannon]: [['explosion_small', 0.6, 1.3], ['sparks', 0.5, 1, undefined, 0.4]],
   // Rapid bolt pop — bright and small; a chain of these shouldn't stack
   // into a roar, so it stays thin and pitched up.
   [WeaponType.PlasmaGun]: [['explosion_small', 0.35, 1.7], ['sparks', 0.25, 1.4, undefined, 0.25]],
@@ -36,7 +36,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   [WeaponType.Sprinkler]: [['explosion_small', 0.28, 2.1], ['sparks', 0.2, 1.8, undefined, 0.2]],
   [WeaponType.Railgun]: [['shot_energy', 0.7, 0.8], ['explosion_small', 0.6, 1.4]],
   // Remote railgun pop: the capacitor dumping — zap forward, blast behind.
-  [WeaponType.RemoteRailgun]: [['shot_energy', 0.8, 0.8], ['explosion_small', 0.7, 1.1], ['sparks', 0.5, 1.0, undefined, 0.3]],
+  [WeaponType.RemoteRailgun]: [['shot_energy', 0.8, 0.8], ['explosion_small', 0.7, 1.1], ['sparks', 0.5, 1, undefined, 0.3]],
   [WeaponType.Chaingun]: [['explosion_small', 0.5, 1.6]],
   // Spear strike: no powder — a deep impact thunk, the iron ring of the
   // tip, and spark scatter. Reads as MASS landing, not a bang.
@@ -49,7 +49,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // "that was a solid shot", not a shell
   [WeaponType.Cannon]: [['explosion1', 0.9, 0.75], ['thud_big', 0.7, 0.7, 400], ['hg_clang', 0.25, 1.4, undefined, 0.2]],
   // Warhead pop: the biggest layered boom — full blast + deep tail
-  [WeaponType.RocketLauncher]: [['explosion1', 1.0, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
+  [WeaponType.RocketLauncher]: [['explosion1', 1, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
   // MRV airburst pop — the carrier's delivery bang: mid-size blast +
   // spark scatter; the bomblet rain follows on its own voices.
   [WeaponType.MRVLauncher]: [['explosion1', 0.8, 1.1], ['sparks', 0.6, 0.9, undefined, 0.4], ['thud_big', 0.5, 0.9, 400]],
@@ -59,7 +59,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Satchel pop: the loudest voice in the kit — two stacked blasts + a
   // deep tail + iron ring. A planted charge should sound heavier than
   // anything you can shoot.
-  [WeaponType.SatchelCharge]: [['explosion1', 1.0, 0.7], ['explosion2', 0.85, 0.55], ['thud_big', 0.9, 0.6, 350], ['hg_clang', 0.3, 1.1, undefined, 0.3]],
+  [WeaponType.SatchelCharge]: [['explosion1', 1, 0.7], ['explosion2', 0.85, 0.55], ['thud_big', 0.9, 0.6, 350], ['hg_clang', 0.3, 1.1, undefined, 0.3]],
   // Heal pop: a mist burst, not a bang — soft energy puff + airy sparks.
   [WeaponType.HealGrenade]: [['shot_energy', 0.45, 1.5], ['explosion_small', 0.3, 1.7], ['sparks', 0.3, 1.2, undefined, 0.3]],
   // Proxy pop: the sensor tripping — a zap-forward snap + compact blast.
@@ -68,7 +68,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 
 /** LG damage connect — frying sizzle at the contact point. Caller throttles
  *  (~6/s); positional so a beam on a distant target reads quieter. */function explosionSample(g: GainNode, big: boolean, weaponType?: number): boolean {
-  const w = weaponType !== undefined ? BOOM_SAMPLES[weaponType] : undefined;
+  const w = weaponType === undefined ? undefined : BOOM_SAMPLES[weaponType];
   if (w && layer(g, w)) {return true;}
   if (!big) {return sample('explosion_small', g, 0.9);}
   // Layer blast + deep thud at half rate — the stacking trick: two cheap

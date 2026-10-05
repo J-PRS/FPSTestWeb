@@ -2,8 +2,9 @@ import * as THREE from 'three';
 
 import { EMIT_GAIN } from '../core/config.js';
 import { registerDiag } from '../core/fxDiag.js';
-import {
-  TrailBatch, RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
+import type {
+  TrailBatch} from './trailBatch.js';
+import { RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
   retireBatchIfOverflow, slotLit, litAudit, sweepLit, reapedLit,
   batchStats,
 } from './trailBatch.js';
@@ -61,9 +62,9 @@ export class RibbonTrail {
   // samples keep their positions and just fade.
   private pushed = 0;
   private time = 0;
-  private _camX = NaN;
-  private _camY = NaN;
-  private _camZ = NaN;
+  private _camX = Number.NaN;
+  private _camY = Number.NaN;
+  private _camZ = Number.NaN;
   private stopped = false;
   // Wall-clock of the last update() call — the orphan detector: every
   // owner ticks its ribbons each frame, so a stale stamp means the owner
@@ -402,7 +403,7 @@ export class RibbonTrail {
     }
     if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(camPos);
-    const pos = this.batch.pos;
+    const {pos} = this.batch;
     const base = this.slot * RIBBON_FLOATS_PER_SLOT;
     // Positions only move when new samples arrive (or a billboard needs
     // re-siding as the camera moves) — the rest of the ribbon is static,
@@ -473,7 +474,7 @@ export class RibbonTrail {
     if (fq === 0 && i === this.liveFrom) {this.liveFrom = i + 1;}
     if (this._lf[i] === fq) {return false;}
     this._lf[i] = fq;
-    const col = this.batch.col;
+    const {col} = this.batch;
     const v = EMIT_GAIN * (fq / 255);
     col[o] = this.baseColor.r * v;
     col[o + 1] = this.baseColor.g * v;

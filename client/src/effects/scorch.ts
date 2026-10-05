@@ -1,8 +1,8 @@
-import * as THREE from 'three';
-import { Terrain } from '../world/terrain.js';
+import type * as THREE from 'three';
+import type { Terrain } from '../world/terrain.js';
 
-const LIFETIME = 5.0;
-const HOLD = 2.0;            // full intensity for the first 2s, then fades
+const LIFETIME = 5;
+const HOLD = 2;            // full intensity for the first 2s, then fades
 const PEAK_INTENSITY = 0.5;  // shader: col *= 1 - mask*intensity
 const EMBER_LIFE = 0.8;      // seconds the rim glows after impact
 const EMBER_PEAK = 0.9;

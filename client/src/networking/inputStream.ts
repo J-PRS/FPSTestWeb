@@ -57,7 +57,7 @@ export class InputStream {
   /** Journal entries with seq > `after` — what the server hadn't consumed
    *  when it issued a correction. Also prunes consumed entries. */
   inputsAfter(after: number): { t: number; input: MoveInput }[] {
-    while (this.inputJournal.length && this.inputJournal[0].seq <= after) {this.inputJournal.shift();}
+    while (this.inputJournal.length > 0 && this.inputJournal[0].seq <= after) {this.inputJournal.shift();}
     return this.inputJournal;
   }
 

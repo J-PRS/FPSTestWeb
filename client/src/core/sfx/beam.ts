@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { audio } from '../audio.js';
 import { ctx, play, osc, noise, layer } from './util.js';
 

@@ -42,5 +42,5 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
     if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) {mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });}
     else if (d.hp !== undefined) {mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);}
   }
-  for (const id of mgr.remoteIds()) {if (!live.has(id)) mgr.remoteRemove(id);}
+  for (const id of mgr.remoteIds()) {if (!live.has(id)) {mgr.remoteRemove(id);}}
 }

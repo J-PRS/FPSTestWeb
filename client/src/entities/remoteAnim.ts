@@ -11,7 +11,7 @@ import { pickLocomotionAnim } from './locomotionAnim.js';
 // oneshots and the distance-tiered mixer LOD. Split out of RemotePlayer so
 // that file stays netcode; this family owns all its internal timers.
 
-const _trailTint = new THREE.Color(0.75, 0.85, 1.0); // cool air-sheen — jets tint it warmer on top
+const _trailTint = new THREE.Color(0.75, 0.85, 1); // cool air-sheen — jets tint it warmer on top
 
 export interface AnimHost {
   readonly position: THREE.Vector3;
@@ -64,7 +64,7 @@ export class RemoteAnim {
   }
 
   tickModel(dt: number): void {
-    const h = this.h;
+    const {h} = this;
     if (!h.loaded) {return;}
     h.model.setPosition(h.position.x, h.feetY, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
@@ -117,7 +117,7 @@ export class RemoteAnim {
    *  bodies get an Infinity cadence — the renderer already culls the skin,
    *  only CPU bone evaluation was still burning. */
   private stepMixer(dt: number): void {
-    const h = this.h;
+    const {h} = this;
     const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0 || this.throwT > 0;
     const animDt = pickAnimCadence(h.onScreen, h.camDistSq, moving);
     // Frozen bones skip updateMatrixWorld entirely — valid only while the
@@ -152,7 +152,7 @@ export class RemoteAnim {
 
   /** Distance-tiered render budget — cast shadows, skinned geo LOD. */
   private tickRenderLod(): void {
-    const h = this.h;
+    const {h} = this;
     // Shadow pass re-runs skinning on every caster — past ~80m a figure's
     // cast shadow is unreadable anyway, so far remotes drop out of it.
     const cast = h.camDistSq < 80 * 80;
@@ -169,7 +169,7 @@ export class RemoteAnim {
   private _distalFrozen = false;
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
-    const h = this.h;
+    const {h} = this;
     this._trailAnchor.copy(h.position); this._trailAnchor.y -= 0.7;
     this._trailOn = airborne && speed > 6;
     this._trailDt = dt;
@@ -198,7 +198,7 @@ export class RemoteAnim {
   // the whole body toward horizontal velocity in the facing frame: pitch
   // into forward thrust, roll into lateral strafe.
   private tickAnimState(dt: number, speed: number, airborne: boolean): void {
-    const h = this.h;
+    const {h} = this;
     const jetting = airborne && h.velocity.y > 3;
     const state = airborne
       ? (jetting ? 'jet' : 'jump')

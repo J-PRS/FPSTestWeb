@@ -19,9 +19,9 @@ const ATLAS_H = 80;
 const MAX_NUMBERS = 48;
 const MAX_GLYPHS = 5;               // '-9999!' worst case
 const MAX_QUADS = MAX_NUMBERS * MAX_GLYPHS;
-const DURATION = 1.0;
+const DURATION = 1;
 const POP_SCALE = 0.1;
-const BASE_SCALE = 4.0;
+const BASE_SCALE = 4;
 
 interface LiveNumber {
   pos: THREE.Vector3;             // drifting world position
@@ -39,7 +39,7 @@ let _atlas: THREE.CanvasTexture | null = null;
 const glyphUv = new Map<string, [number, number, number, number]>();
 
 function buildAtlas(): THREE.CanvasTexture {
-  if (_atlas) return _atlas;
+  if (_atlas) {return _atlas;}
   const canvas = document.createElement('canvas');
   canvas.width = CELL_W * GLYPHS.length;
   canvas.height = ATLAS_H;
@@ -133,12 +133,12 @@ export class DamageNumberManager {
   }
 
   spawn(pos: THREE.Vector3, damage: number, color = '#ffffff', camera?: THREE.Camera): void {
-    let distScale = 1.0;
+    let distScale = 1;
     if (camera) {
       const dist = camera.position.distanceTo(pos);
       // sqrt distance scaling — constant-screen-size makes far numbers
       // comically huge; 1.0 at the ~15m reference range.
-      distScale = Math.max(0.45, Math.min(3.0, Math.sqrt(dist / 15)));
+      distScale = Math.max(0.45, Math.min(3, Math.sqrt(dist / 15)));
     }
     const n = this.pool.pop() ?? {
       pos: new THREE.Vector3(), vel: new THREE.Vector3(),
@@ -157,11 +157,11 @@ export class DamageNumberManager {
     n.r = _c.r; n.g = _c.g; n.b = _c.b;
     n.distScale = distScale;
     n.dmgScale = Math.min(1.6, 1 + Math.sqrt(Math.max(0, damage)) * 0.05);
-    n.pos.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.0, pos.z + (Math.random() - 0.5) * 0.4);
+    n.pos.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1, pos.z + (Math.random() - 0.5) * 0.4);
     n.vel.set((Math.random() - 0.5) * 1.6, 3.2 + Math.random() * 0.8, (Math.random() - 0.5) * 1.6);
     n.age = 0;
     n.dead = false;
-    if (this.numbers.length < MAX_NUMBERS) this.numbers.push(n);
+    if (this.numbers.length < MAX_NUMBERS) {this.numbers.push(n);}
     else { this.numbers.shift(); this.numbers.push(n); } // oldest drops early under flood
   }
 
@@ -180,7 +180,7 @@ export class DamageNumberManager {
       }
       // Ballistic drift — up fast, gravity eases it to a hover
       n.vel.y -= 5.5 * dt;
-      if (n.vel.y < 0) n.vel.y *= 0.9;
+      if (n.vel.y < 0) {n.vel.y *= 0.9;}
       n.pos.addScaledVector(n.vel, dt);
       quad = this.writeQuads(n, n.age / DURATION, quad);
     }
@@ -209,7 +209,7 @@ export class DamageNumberManager {
     const alpha = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
     // Half-extents keep the atlas cell aspect (56px digit in an 80×52
     // cell) at sprite scale s.
-    const hh = s * 0.30;
+    const hh = s * 0.3;
     const hw = hh * (CELL_W / ATLAS_H);
     const step = hw * 1.7;
     const x0 = -(n.glyphCount - 1) * step * 0.5;

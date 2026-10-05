@@ -11,7 +11,7 @@ export const PART_SHIMMER = 4;  // blink-in arrival column — zero-scale when i
 export const PART_CORE = 5;     // white-hot core of the FIRED ray — zero-scale otherwise
 
 const _shaftGeo = new THREE.CylinderGeometry(0.35, 0.7, 4.2, 4); // 4-sided obelisk
-const _capGeo = new THREE.ConeGeometry(0.5, 1.0, 4);
+const _capGeo = new THREE.ConeGeometry(0.5, 1, 4);
 // Aim beam — a thin quad stretched between totem and player during charge;
 // origin at the totem end so scaling +z extends it downrange.
 const _beamGeo = (() => {
@@ -29,21 +29,21 @@ let _shimmerMat: THREE.MeshBasicMaterial | null = null;
 let _coreMat: THREE.MeshBasicMaterial | null = null;
 
 export function totemParts(): SwarmPart[] {
-  if (!_shaftMat) {_shaftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });}
+  if (!_shaftMat) {_shaftMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });}
   if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0x66DDFF, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });}
   if (!_beamMat) {_beamMat = new THREE.MeshBasicMaterial({
-    color: 0xff3344, transparent: true, blending: THREE.AdditiveBlending,
+    color: 0xFF3344, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });}
   if (!_shimmerMat) {_shimmerMat = new THREE.MeshBasicMaterial({
-    color: 0x8899ff, transparent: true, blending: THREE.AdditiveBlending,
+    color: 0x8899FF, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false,
   });}
   if (!_coreMat) {_coreMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending,
+    color: 0xFFFFFF, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });}
   return [

@@ -6,7 +6,7 @@
 
 const PING_HISTORY_MAX = 10;
 const TICK_WINDOW_MS = 5000;
-const RTT_REJECT_MS = 10000;
+const RTT_REJECT_MS = 10_000;
 
 export class NetTelemetry {
   ping = 0;
@@ -33,7 +33,7 @@ export class NetTelemetry {
       const gap = now - this.lastTickAt;
       const missed = Math.max(0, Math.round(gap / this.expectedTickMs) - 1);
       if (missed > 0) {this.tickWindow.push({ t: now, missed });}
-      while (this.tickWindow.length && now - this.tickWindow[0]!.t > TICK_WINDOW_MS) {this.tickWindow.shift();}
+      while (this.tickWindow.length > 0 && now - this.tickWindow[0]!.t > TICK_WINDOW_MS) {this.tickWindow.shift();}
     }
     this.lastTickAt = now;
     if (this.firstTickAt === 0) {this.firstTickAt = now;}

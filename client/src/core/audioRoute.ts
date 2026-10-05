@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { AudioEngine } from './audio.js';
 
 // Positional routing: doppler pitch factor + the distance/pan/air-absorb
@@ -9,7 +9,7 @@ const WORLD_MAX_DIST = 260;     // beyond this, don't spawn the node at all
 const DOPPLER_C = 550;
 const AIR_ABSORB_M = 45;
 const airAbsorbHz = (d: number): number =>
-  Math.max(400, Math.min(20000, 18000 * Math.exp(-d / AIR_ABSORB_M)));
+  Math.max(400, Math.min(20_000, 18_000 * Math.exp(-d / AIR_ABSORB_M)));
 
   /** Relative-pitch factor for a positional emitter: >1 approaching,
    *  <1 receding. Sampled once per one-shot (a sub-second sound doesn't
@@ -72,6 +72,6 @@ export function worldInput(e: AudioEngine, pos: THREE.Vector3, emitVel?: THREE.V
 export function freeInput(g: GainNode): void {
     g.disconnect();
     const tail = (g as GainNode & { _tail?: AudioNode[] })._tail;
-    if (tail) {for (const n of tail) n.disconnect();}
+    if (tail) {for (const n of tail) {n.disconnect();}}
   }
 

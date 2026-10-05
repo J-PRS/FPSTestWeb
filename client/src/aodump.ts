@@ -17,19 +17,19 @@ renderer.toneMappingExposure = 0.4;
 document.body.append(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x25282e);
+scene.background = new THREE.Color(0x25_28_2e);
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0.45, 0.3, 0.55);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.02, 0);
 
-scene.add(new THREE.AmbientLight(0x886644, 0.35));
-scene.add(new THREE.HemisphereLight(0x5599cc, 0x664422, 0.5));
-const sun = new THREE.DirectionalLight(0xffe8aa, 3.2);
+scene.add(new THREE.AmbientLight(0x88_66_44, 0.35));
+scene.add(new THREE.HemisphereLight(0x55_99_cc, 0x66_44_22, 0.5));
+const sun = new THREE.DirectionalLight(0xff_e8_aa, 3.2);
 sun.position.set(2, 4, 1);
 scene.add(sun);
 // Fill from camera side so edges read — game viewmodels are lit mostly by sun+hemi.
-const fill = new THREE.DirectionalLight(0x8899bb, 0.8);
+const fill = new THREE.DirectionalLight(0x8899BB, 0.8);
 fill.position.set(-1.5, 1, 2);
 scene.add(fill);
 
@@ -41,26 +41,26 @@ scene.add(vm.group);
 // uniforms so tweaks apply the same frame — no recompile.
 const U = {
   uGrungeAmp:  { value: 0.14 },
-  uGrungeFreq: { value: 35.0 },
-  uLineW:      { value: parseFloat(q.get('lw') ?? '3') },   // barycentric edge line width
-  uLineGain:   { value: 1.0 },   // edge line strength
+  uGrungeFreq: { value: 35 },
+  uLineW:      { value: Number.parseFloat(q.get('lw') ?? '3') },   // barycentric edge line width
+  uLineGain:   { value: 1 },   // edge line strength
   uEdgeLo:     { value: 0.22 },  // curv smoothstep low
-  uEdgeHi:     { value: 0.70 },  // curv smoothstep high
+  uEdgeHi:     { value: 0.7 },  // curv smoothstep high
   uVWLo:       { value: 0.45 },  // vWear smoothstep low
   uVWHi:       { value: 0.95 },  // vWear smoothstep high
-  uVGain:      { value: 0.40 },  // vWear weight vs curv
-  uPatchFloor: { value: 0.50 },  // patches mask floor
-  uPatchFreq:  { value: 90.0 },
+  uVGain:      { value: 0.4 },  // vWear weight vs curv
+  uPatchFloor: { value: 0.5 },  // patches mask floor
+  uPatchFreq:  { value: 90 },
   uPatchLo:    { value: 0.55 },
-  uPatchHi:    { value: 0.80 },
+  uPatchHi:    { value: 0.8 },
   uExpLo:      { value: 0.45 },  // AO exposure mask low
   uExpHi:      { value: 0.85 },  // AO exposure mask high
   uWearMix:    { value: 0.85 },  // final wear blend strength
-  uWearTint:   { value: new THREE.Color(0.72, 0.70, 0.68) },
+  uWearTint:   { value: new THREE.Color(0.72, 0.7, 0.68) },
   uScratch:    { value: 0.12 },
-  uCavityLo:   { value: 0.20 },  // AO cavity ramp low
+  uCavityLo:   { value: 0.2 },  // AO cavity ramp low
   uCavityHi:   { value: 0.75 },
-  uCavityFloor:{ value: 0.60 },  // darkest cavity multiplier
+  uCavityFloor:{ value: 0.6 },  // darkest cavity multiplier
   uSpace:      { value: 0 },     // 0 = object space, 1 = world space
   uView:       { value: 0 },     // 0 final, 1 AO, 2 wear attr, 3 edge, 4 normal
 };
@@ -179,7 +179,7 @@ function rebake(): void {
 
 // ---- weapon picker -----------------------------------------------------------
 const wnames = Object.entries(WeaponType).filter(([, v]) => typeof v === 'number') as [string, number][];
-let currentW = parseInt(q.get('w') ?? '0');
+let currentW = Number.parseInt(q.get('w') ?? '0');
 function show(wt: number): void {
   currentW = wt;
   for (const [w, g] of vm.weapons) {g.visible = w === wt;}
@@ -188,7 +188,7 @@ function show(wt: number): void {
 }
 
 // ---- UI ---------------------------------------------------------------------
-const panel = document.getElementById('panel')!;
+const panel = document.querySelector('#panel')!;
 const h = (t: string) => { const e = document.createElement('h3'); e.textContent = t; panel.append(e); };
 const slider = (label: string, u: { value: number }, lo: number, hi: number, step = 0.01) => {
   const row = document.createElement('div'); row.className = 'row';
@@ -262,7 +262,7 @@ slider('cav lo', U.uCavityLo, 0, 1);
 slider('cav hi', U.uCavityHi, 0, 1);
 slider('cav floor', U.uCavityFloor, 0.2, 1);
 
-const qv = parseInt(q.get('view') ?? '0');
+const qv = Number.parseInt(q.get('view') ?? '0');
 if (!isNaN(qv)) {U.uView.value = qv;}
 
 rebake();

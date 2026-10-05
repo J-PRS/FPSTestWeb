@@ -13,7 +13,7 @@ export function getRightXZ(p: Player): THREE.Vector2 {
   }
 
 export function getInputState(p: Player): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; beltHeld: boolean } {
-    const keys = p.input.keys;
+    const {keys} = p.input;
     let forward = 0, right = 0;
     if (isDown(keys, 'forward') || keys['ArrowUp'])    {forward += 1;}
     if (isDown(keys, 'back') || keys['ArrowDown'])     {forward -= 1;}
@@ -38,7 +38,7 @@ export function getInputState(p: Player): { forward: number; right: number; jump
 export function readMoveInput(p: Player): { forward: number; right: number; jumpHeld: boolean; skiHeld: boolean; moveX: number; moveZ: number } {
     const fwd = getForwardXZ(p);
     const rgt = getRightXZ(p);
-    const keys = p.input.keys;
+    const {keys} = p.input;
 
     let forward = 0, right = 0;
     if (isDown(keys, 'forward') || keys['ArrowUp'])    {forward += 1;}

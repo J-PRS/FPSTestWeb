@@ -16,8 +16,8 @@ export function collectDiag(): DiagSection {
   for (const [name, fn] of providers) {
     try {
       Object.assign(out, fn());
-    } catch (e) {
-      out[name] = { error: (e as Error).message };
+    } catch (error) {
+      out[name] = { error: (error as Error).message };
     }
   }
   return out;

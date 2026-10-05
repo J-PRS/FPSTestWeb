@@ -108,7 +108,7 @@ export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.Pe
     const down = Math.max(0, -Math.sin(pitch)); // pitch<0 = looking down
     if (down > 0.01) {
       const fx = Math.sin(yaw) * 1.6, fz = Math.cos(yaw) * 1.6; // ~1.6m ahead
-      const sx = Number(Math.cos(yaw)), sz = -Math.sin(yaw) * 1.0; // flank flares
+      const sx = Number(Math.cos(yaw)), sz = -Math.sin(yaw) * 1; // flank flares
       const aheadY = Math.max(
         terrain.getHeight(pos.x + fx, pos.z + fz),
         terrain.getHeight(pos.x + fx + sx, pos.z + fz + sz),

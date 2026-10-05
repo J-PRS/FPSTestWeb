@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
@@ -95,7 +95,7 @@ export class RemotePlayer {
       this._loaded = false;
       this._model = new PlayerModel(this.scene, want);
       this._model.load().then(() => this.finishModelLoad())
-        .catch((e) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(e) }));
+        .catch((error) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(error) }));
       return;
     }
     if (this._loaded) {this.applyClassScale();}
@@ -161,10 +161,10 @@ export class RemotePlayer {
     this.model.load().then(() => {
       this.finishModelLoad();
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
-    }).catch((e) => {
+    }).catch((error) => {
       // load() rejects after 4 retries — the player stays a sphere
       // gizmo; log once instead of an unhandled rejection.
-      logger.warn('Model load gave up', { playerId, error: String(e) });
+      logger.warn('Model load gave up', { playerId, error: String(error) });
     });
   }
 
@@ -212,7 +212,7 @@ export class RemotePlayer {
     if (this._loaded) {
       this._model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
-      if (this.corpse.scale !== 1.0) {
+      if (this.corpse.scale !== 1) {
         this._model.setScale(this.corpse.scale);
       }
       this._model.update(dt);
@@ -353,7 +353,7 @@ export class RemotePlayer {
     // re-arm entirely (`<= 0` gate), so at fast cadences the pose dropped
     // to the neutral grip between every shot. +0.12 covers wire jitter.
     if (!this._isDead && this._model.variant !== 'mannequin') {
-      const hold = Math.max(0.3, (weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0 : 0) + 0.12);
+      const hold = Math.max(0.3, (weaponType === undefined ? 0 : WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0) + 0.12);
       this.anim.shootT = Math.max(this.anim.shootT, hold);
     }
     if (this._loaded) {

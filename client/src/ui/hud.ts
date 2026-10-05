@@ -9,7 +9,7 @@ import { Scoreboard, type SbRow } from './hud/scoreboard.js';
 import { HudStats } from './hud/hudStats.js';
 import * as ch from './hud/hudChrome.js';
 
-import { Player } from '../entities/Player.js';
+import type { Player } from '../entities/Player.js';
 import type { TeamId } from '../../../shared/teams.js';
 import { feedNames } from '../../../shared/botNames.js';
 
@@ -403,7 +403,9 @@ export class HUD {
     // pointing at the arc (same read as off-screen player indicators).
     const m = 14;
     const onScreen = x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
-    if (!onScreen) {
+    if (onScreen) {
+      el.classList.remove('edge');
+    } else {
       const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
       const ang = Math.atan2(y - cy, x - cx);
       const hw = cx - m, hh = cy - m;
@@ -411,8 +413,6 @@ export class HUD {
       x = cx + Math.cos(ang) * r;
       y = cy + Math.sin(ang) * r;
       el.classList.add('edge');
-    } else {
-      el.classList.remove('edge');
     }
     el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }

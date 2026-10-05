@@ -58,7 +58,7 @@ const NUGGET_LOB = 0.55;   // fraction of pod speed — a nugget lobs, not launc
 // (entities/Nugget.ts): faceted gold icosa + additive halo. What leaves
 // your hand must read as the thing you'll pick back up.
 const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
-const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffee88).multiplyScalar(EMIT_GAIN) });
+const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFFEE88).multiplyScalar(EMIT_GAIN) });
 const _UP = new THREE.Vector3(0, 1, 0);
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
@@ -218,7 +218,7 @@ export class Deployables {
       pod.nugget.layers.enable(BLOOM_LAYER);
       // Same additive halo the pickup wears — the pickup read at distance.
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: getGlowTexture(32), color: 0xffd54a, transparent: true,
+        map: getGlowTexture(32), color: 0xff_d5_4a, transparent: true,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       halo.scale.setScalar(2.2);
@@ -455,14 +455,14 @@ export class Deployables {
     let best: Item | null = null;
     let bestT = range;
     for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
-      if (i.dead) continue;
+      if (i.dead) {continue;}
       _repTo.copy(i.pos).sub(origin);
       _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
       const proj = _repTo.dot(dir);
-      if (proj < 0 || proj > bestT) continue;
+      if (proj < 0 || proj > bestT) {continue;}
       const perp2 = _repTo.lengthSq() - proj * proj;
       const r = 1.1;
-      if (perp2 >= r * r) continue;
+      if (perp2 >= r * r) {continue;}
       const entry = proj - Math.sqrt(r * r - perp2);
       if (entry < bestT) { bestT = Math.max(entry, 0); best = i; }
     }}
@@ -473,7 +473,7 @@ export class Deployables {
    *  write is the offline authority AND the prediction — the server's
    *   deployHp echo lands the same number when connected. */
   healItem(item: Item, n: number): void {
-    const v = item.v;
+    const {v} = item;
     const over = Math.max(0, v.health + n - v.maxHealth);
     v.health = Math.min(v.maxHealth, v.health + n);
     v.armor = Math.min(v.maxHealth * REPAIR_ARMOR_MULT, v.armor + over);
@@ -486,7 +486,7 @@ export class Deployables {
   // the brain's `repair` intent resolves identically on both hosts.
 
   private keyOf(i: Item): string {
-    return i.serverId !== undefined ? `s${i.serverId}` : i.candId;
+    return i.serverId === undefined ? i.candId : `s${i.serverId}`;
   }
 
   /** Nearest damaged item the bot could weld — own gear always, same-team
@@ -512,7 +512,7 @@ export class Deployables {
    *  the caller can paint the work, null when the item died mid-walk. */
   weld(key: string, n: number): Item | null {
     const find = (list: Iterable<Item>) => {
-      for (const i of list) {if (this.keyOf(i) === key && !i.dead) return i;}
+      for (const i of list) {if (this.keyOf(i) === key && !i.dead) {return i;}}
       return null;
     };
     const item = find(this.items) ?? find(this.remotes.values());
@@ -583,13 +583,13 @@ export class Deployables {
     item.dead = true;
     if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
       // Fizzle-pop — smaller than the turret's, still tells you it died.
-      const tint = item.kind === 'drone' ? 0x88ddff : item.kind === 'shield' ? 0x66ccff : 0x55ffcc;
+      const tint = item.kind === 'drone' ? 0x88_dd_ff : item.kind === 'shield' ? 0x66_cc_ff : 0x55FFCC;
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 0.9, tint));
       sfx.explosionAt(item.pos, false);
     } else if (item.kind === 'turret') {
       this.deps.world.explosions.push(new Explosion(
-        this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 1.4, 0xff7744));
+        this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 1.4, 0xFF7744));
       sfx.explosionAt(item.pos, true);
       screenShake.blast(item.pos, 2, this.deps.lazyPlayer().pos);
     }
@@ -664,7 +664,7 @@ export class Deployables {
   get count(): number { return this.items.filter(i => !i.dead).length; }
 
   update(dt: number): void {
-    for (const i of this.items) {if (!i.dead) i.update(dt);}
+    for (const i of this.items) {if (!i.dead) {i.update(dt);}}
 
     for (let i = this.pods.length - 1; i >= 0; i--) {
       const pod = this.pods[i]!;

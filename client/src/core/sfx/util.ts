@@ -1,7 +1,7 @@
 // Sound bank internals — Web Audio one-shot plumbing shared by every
 // effect family: context guard, voice cap, envelopes, osc/noise/sample
 // synths, and the generic positional player `at`.
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { audio } from '../audio.js';
 
 export function ctx(): BaseAudioContext | null { return audio.context; }

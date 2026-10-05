@@ -9,7 +9,7 @@ import { BallTrailDots } from '../effects/ballTrails.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 
 const _airP = new THREE.Vector3();
-const _airTint = new THREE.Color(0.75, 0.85, 1.0);
+const _airTint = new THREE.Color(0.75, 0.85, 1);
 
 /**
  * First-person presentation for Player: camera follow + terrain clamp, shadow
@@ -33,7 +33,7 @@ export class PlayerVisuals {
     const shadowGeo = new THREE.PlaneGeometry(1.6, 1.6, 10, 10);
     const shadowMat = new THREE.ShaderMaterial({
       uniforms: {
-        color: { value: new THREE.Color(0x000000) },
+        color: { value: new THREE.Color(0x00_00_00) },
         opacity: { value: 0.4 }
       },
       vertexShader: `
@@ -73,7 +73,7 @@ export class PlayerVisuals {
 
     // Feet marker — soft glowing ring flat on the terrain (reads nicer than a wireframe sphere)
     const gizmoGeo = new THREE.RingGeometry(0.28, 0.36, 32);
-    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66ffcc, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66FFCC, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
     this.groundGizmo = new THREE.Mesh(gizmoGeo, gizmoMat);
     this.groundGizmo.rotation.x = -Math.PI / 2;
     this.groundGizmo.renderOrder = 999;
@@ -119,8 +119,8 @@ export class PlayerVisuals {
     this.shadowBlob.position.set(pos.x, 0, pos.z);
     // Fade shadow smoothly when in air
     const airHeight = pos.y - groundY;
-    const opacity = airHeight > 2.0
-      ? Math.max(0, 0.4 * (1 - (airHeight - 2.0) / 6.0))
+    const opacity = airHeight > 2
+      ? Math.max(0, 0.4 * (1 - (airHeight - 2) / 6))
       : 0.4;
     (this.shadowBlob.material as THREE.ShaderMaterial).uniforms.opacity.value = opacity;
   }

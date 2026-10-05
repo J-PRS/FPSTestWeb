@@ -1,10 +1,10 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import { MoveSim, MOVEMENT_CONFIG, type BodyCapsule, type MoveState, type MoveInput, type Vec3Like } from '../../../shared/movement.js';
 import { SolidWorld } from '../../../shared/solidWorld.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 
 // MOVEMENT_CONFIG now lives in shared/movement.ts — re-exported so existing
 // imports keep working.

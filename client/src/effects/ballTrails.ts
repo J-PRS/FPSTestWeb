@@ -260,7 +260,7 @@ export class BallTrailDots {
     d.age = 0;
     d.wIdx = -1; // fresh position — force a pos write on next fade
     d.life = 0.35 + Math.random() * 0.85;
-    d.haloSz = radius * (1.8 + Math.random() * 2.0) * this.sizeMul;
+    d.haloSz = radius * (1.8 + Math.random() * 2) * this.sizeMul;
     d.coreSz = radius * (0.9 + Number(Math.random())) * this.sizeMul;
     d.tint.copy(tint);
     if (this.dots.length >= this.maxDots) {freeDot(this.dots.shift()!);}
@@ -288,7 +288,7 @@ export class BallTrailDots {
     trailMat().uniforms.uHeight!.value = fxBufferHeight();
     let w = 0; // live-dot write cursor over the attribute pair
     for (const d of this.dots) {
-      const t = 1.0 - d.age / d.life;
+      const t = 1 - d.age / d.life;
       const haloA = t * 0.28 * this.opacity;
       const coreA = t * 0.7 * this.opacity;
       const haloS = d.haloSz * (0.7 + 0.3 * t);

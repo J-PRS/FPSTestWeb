@@ -199,7 +199,7 @@ export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
 export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   const s = bag.sim;
   if (!s) {return;}
-  const simT = seg.simT;
+  const {simT} = seg;
   if (isStaleSeg(bag, simT)) {return;} // older stamp — never rewind
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
   s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
@@ -275,7 +275,7 @@ export interface NetSeg {
  *  so the predictor finds the wall at (≤1 tick behind) the same instant
  *  authority does. Infinity = no contact before T. */
 function firstStructureContact(colliders: readonly StructureCollider[], s: SimBall, T: number): number {
-  if (!colliders.length) {return Infinity;}
+  if (colliders.length === 0) {return Infinity;}
   const r = s.radius;
   for (let tt = 0.05; tt <= T; tt += 0.05) {
     const x = s.x + s.vx * tt;

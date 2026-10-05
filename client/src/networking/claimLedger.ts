@@ -149,7 +149,7 @@ export class ClaimLedger {
       rejectCensus.last = `unconfirmed →${h.targetId}`;
       logger.warn(`predicted hit never confirmed — claim lost or silently dropped`, {
         shotId: id, targetId: h.targetId,
-        weapon: h.weaponType !== undefined ? WeaponType[h.weaponType] ?? h.weaponType : undefined,
+        weapon: h.weaponType === undefined ? undefined : WeaponType[h.weaponType] ?? h.weaponType,
         ageMs: Math.round(now - h.t), pingMs: ctx.pingMs, tier: ctx.tier,
       });
     }
