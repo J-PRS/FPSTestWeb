@@ -264,22 +264,14 @@ entries evicted on roster.
   the ambient-draws invariant covers shared sim paths, and these never
   reach one.
 
-### 4.5 Video export resolution *(optional enhancement)*
+### 4.5 Video export resolution — *closed*
 
-`exportCoolShotMp4` records the live render canvas via `captureStream` —
-output size is whatever the window happens to be. Current mitigation:
-the export requests fullscreen up front (released on stop/download), so
-exports land at display resolution. Still not guaranteed 16:9.
-
-Proper fix, when it matters: a staged export canvas. Create an offscreen
-`canvas` at fixed 1920×1080 (or source height × 16/9), drawImage the
-render canvas into it each rAF with letterbox/contain math, and
-`captureStream` the staging canvas instead. Guarantees aspect +
-resolution regardless of window. Caveat: drawImage from a WebGL canvas
-is only reliable when `preserveDrawingBuffer` is on (main renderer at
-`core/renderer.ts` doesn't set it) or when the blit runs inside the same
-task as the render — so the staging draw needs a hook into the game's
-rAF tail, not its own rAF.
+Staged 1920×1080 export canvas in `VideoRecorder` (`start(fps, staged)`):
+the live canvas blits in contain-fit with letterbox bars via `pump()`,
+driven from `renderFrame` inside the same rAF (the GL readback caveat —
+drawImage on a WebGL canvas is only live within the frame it rendered,
+no `preserveDrawingBuffer` needed). Output is fixed 16:9 regardless of
+window size; fullscreen stays for the view-during-record benefit.
 
 ### 4.6 Verified-flake record
 

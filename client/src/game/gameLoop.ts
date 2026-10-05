@@ -795,6 +795,10 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
     gpuEnd();
 
+    // Staged video export: captureStream reads a blank GL buffer unless
+    // preserveDrawingBuffer is on — the blit must ride this same rAF.
+    deps.lazyDemoManager()?.video.pump();
+
     // Damage numbers update after post-processing (bypass bloom/contrast for visibility)
     deps.damageNumberManager().update(dt, deps.camera);
   }

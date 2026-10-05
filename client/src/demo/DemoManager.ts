@@ -128,17 +128,56 @@ export class DemoManager implements demoIO.DemoIOHost {
       void this.video.stopAndDownload(`kribes_${ctx}_${demoIO.timestampStr()}`).then(ok => {
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
       });
+      this.releaseExportFullscreen();
       return;
     }
+    this.startVideoCapture();
+  }
+
+  private startVideoCapture(): boolean {
     const canvas = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height)[0];
-    if (!canvas) { this.ui.setStatus('no canvas'); return; }
+    if (!canvas) { this.ui.setStatus('no canvas'); return false; }
     this.video.setCanvas(canvas);
     if (this.video.start(60)) {
       this.ui.setVideoRecording(true);
       this.ui.setStatus('rec video');
-    } else {
-      this.ui.setStatus('video unsupported');
+      return true;
     }
+    this.ui.setStatus('video unsupported');
+    return false;
+  }
+
+  /** Armed by exportCoolShotMp4, consumed by playDemoData — the recorder
+   *  starts only when the clip actually begins playing, so a server-
+   *  fetched clip doesn't record its own loading gap. 0 = disarmed; the
+   *  30s staleness window drops an arm whose fetch never resolves. */
+  private videoExportArmedAt = 0;
+  /** True while an export holds the fullscreen we entered for it —
+   *  released when the capture stops, never on a user-owned fullscreen. */
+  private exportOwnsFullscreen = false;
+
+  /** Cool-shot context-menu "EXPORT MP4": plays the clip fullscreen with
+   *  the canvas recorder armed; onPlaybackEnd stops+downloads and drops
+   *  fullscreen. The recorder blits into a staged 1920×1080 canvas, so
+   *  the export is fixed 16:9 regardless of window size — fullscreen is
+   *  kept for the view-DURING-record benefit, not the output size. */
+  exportCoolShotMp4(id: string): void {
+    if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
+    if (this.video.isRecording) { this.ui.setStatus('video already rolling'); return; }
+    this.player.setLoop(false); // looping suppresses onPlaybackEnd = the auto-stop
+    this.videoExportArmedAt = Date.now();
+    // Called inside the menu click — transient activation still holds for
+    // a server clip's async fetch because the request happens NOW.
+    void document.documentElement.requestFullscreen?.()
+      .then(() => { this.exportOwnsFullscreen = true; })
+      .catch(() => {}); // gesture rejected — export still works, just windowed
+    this.coolShotMgr.playById(id);
+  }
+
+  private releaseExportFullscreen(): void {
+    if (!this.exportOwnsFullscreen) {return;}
+    this.exportOwnsFullscreen = false;
+    void document.exitFullscreen?.().catch(() => {});
   }
 
   get isRecording(): boolean { return this.mode === 'recording'; }
@@ -176,6 +215,8 @@ export class DemoManager implements demoIO.DemoIOHost {
   }
 
   stopPlayback(): void {
+    this.videoExportArmedAt = 0;
+    this.releaseExportFullscreen(); // ESC mid-export returns the window
     this.player.stop();
     this.mode = 'idle';
     this.ui.setPlaying(false);
@@ -268,6 +309,11 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.uiVisible = true;
     this.ui.setTime(0, data.header.duration);
     demoIO.updateHitMarkers(this, data);
+    if (this.videoExportArmedAt) {
+      const fresh = Date.now() - this.videoExportArmedAt < 30_000;
+      this.videoExportArmedAt = 0;
+      if (fresh) this.startVideoCapture();
+    }
     this.onPlaybackStart?.();
   }
 
