@@ -148,6 +148,9 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // lands facing +Z (toward the third-person camera), so the whole set
   // gets a π unwind onto the rig's -Z forward.
   'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: Math.PI,
+                    // Bake ships no overhand clip — Pistol_Shoot's fast
+                    // arm extension stands in for the belt throw.
+                    anims: { throw: 'UAL_Pistol_Shoot' },
                     mount: { quat: [-0.4085, 0.3914, -0.0042, 0.8246] } },
   // Vexa fits 10% over her 2.0m capsule eye — slim anatomy reads small
   // next to the armored classes; the cap keeps the honest hitbox.
