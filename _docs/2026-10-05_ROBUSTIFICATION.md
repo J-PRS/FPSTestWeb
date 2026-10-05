@@ -232,8 +232,11 @@ entries evicted on roster.
   (scoreboard parity per `meterHumans`), the bug was the `maxed sheep`
   WARN firing on `player_*` ids — parked humans aren't agent faults.
   Warn now bot-id gated on both ends; score accumulation unchanged.
-- **Join/hash race**: `tick=31` desync — gameState join raced a mutated room.
-  Skip hash checks for players younger than ~1s or add an init barrier.
+- ~~**Join/hash race**~~ — *closed*: `stateDebug` tracks each remote's
+  first-seen wall time; field diffs on ids younger than 1.5s are the join
+  race (default health record vs already-mutated server state), not
+  desync. Roster-level mismatches still report — missing replica has no
+  grace story.
 - **`roomGrace` zero-key residue**: trivially small; one-line prune.
 - **`killFeed` ambient `Math.random` ×4**: chatter-only, not a sim path —
   cosmetic consistency.

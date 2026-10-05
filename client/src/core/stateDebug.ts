@@ -80,6 +80,29 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
   return allPlayers;
 }
 
+// Join race: a fresh remote's first record defaults health to 100 while
+// the server already hashes their real (regen/damage-mutated) value —
+// the diff fires before any health-bearing tick record lands. Track
+// first-seen wall time; ids younger than the window aren't diffed.
+const firstSeenAt = new Map<string, number>();
+const JOIN_GRACE_MS = 1500;
+
+function noteSeenIds(ids: Iterable<string>): void {
+  const now = Date.now();
+  const live = new Set(ids);
+  for (const id of live) {
+    if (!firstSeenAt.has(id)) {firstSeenAt.set(id, now);}
+  }
+  for (const id of firstSeenAt.keys()) {
+    if (!live.has(id)) {firstSeenAt.delete(id);}
+  }
+}
+
+function youngId(id: string): boolean {
+  const t = firstSeenAt.get(id);
+  return t !== undefined && Date.now() - t < JOIN_GRACE_MS;
+}
+
 function hashableEntry(
   rp: RemotePlayer | undefined,
   playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
@@ -114,6 +137,10 @@ function diffServerSnapshot(
       if (cp !== sp) {diffs.push(`Player ${id} on ${cp ? 'client but not server' : 'server but not client'}`);}
       continue;
     }
+    // A just-joined remote diffs its default record against a mutated
+    // server state — the join race, not desync. Roster-level mismatches
+    // (missing on one end) still count; those have no grace story.
+    if (youngId(id)) {continue;}
 
     diffs.push(...diffPlayerFields(id, cp, sp));
   }
@@ -231,6 +258,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     hashCheckCount++;
 
     const allPlayers = buildHashablePlayerMap(ctx);
+    noteSeenIds(allPlayers.keys());
 
     // shared/stateHash.ts owns the algorithm on both ends — an FNV over
     // (id, rounded xyz, health, dead). The old client-side djb2 string
