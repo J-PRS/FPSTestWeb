@@ -275,10 +275,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~240m of reach
   },
   [WeaponType.Railgun]: {
-    // Quake railgun: 80dmg slug at 450 m/s ≈ hitscan past ~200m. Small AOE
-    // so near-misses still pop and the weapon isn't useless vs movement.
-    directDamage: 80,
-    aoeDamage: 30,
+    // Quake railgun: 60dmg slug at 450 m/s ≈ hitscan past ~200m — a
+    // three-shot on mediums, not two (was dominant at range: 7/12 FFA
+    // wins). Small AOE so near-misses still pop.
+    directDamage: 60,
+    aoeDamage: 20,
     aoeRadius: 6.0,
     knockbackForce: 35.0,
     forceMode: 'push',

@@ -1,3 +1,4 @@
+2026-10-01 - balance: Railgun 80/30 -> 60/20 (two-shot medium -> three-shot); FFA wins 7/12 -> 0/4 batch, dmg -17%, still competitive mid-pack.
 2026-10-01 - netcode: clockSkew lane — client rAF dishonesty (0.8x/1.25x frame dt) stays correction-bounded; wire carries no client timestamps so prediction dt is the only skew channel. reseed fires once per profile (bridge fix).
 2026-10-01 - netcode: reseedChaos lane — staged authority simState applied after outage+delivery lag re-centers prediction on an adverse link (2.6m pre-seed residual, tail p95 3.7m); bridge reseed fires once per profile.
 2026-10-01 - bot LG aim rebuilt end-to-end: hitscan zero-flight lead (pickFire), weaponSpeed honesty in senses, weaponRange hold-fire past 55m beam reach, and smooth-pursuit tracking for speed-0 weapons (OU wander weighted along target motion axis, sized by target speed+turn difficulty). FFA LG acc 2.5% -> 41.8%, slightly above Quake pro ~35%.
