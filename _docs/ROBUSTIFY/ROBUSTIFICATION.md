@@ -342,7 +342,11 @@ telemetry lines it greps.
   edge-only semantics); `botLos` memo TTL + 4096-cap;
   `botGraph` evicts oldest; `botHunt` caps at 6; `solidWorld.cells`
   is spatial-hash geometry; `flagGoals`/`weapons`/`botClasses` are
-  static tables. Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
+  static tables. `botSkill` pinned 2026-10-05 (`botSkill.test.ts`:
+  private mulberry32 never touches botRand — green under armed
+  strictRng — same spawn same matrix, axis clamps, tier/mix
+  resolution, weapon-axis map, still/moving blend, form drift
+  bounds + gate). Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
   are the strictRng-gated seams themselves; remaining `Math.random`
   defaults (`rollVariant`/`spawnRng`/`deps.rng`) are documented with
   all callers passing seeded rng.
