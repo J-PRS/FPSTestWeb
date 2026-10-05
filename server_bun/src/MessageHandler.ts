@@ -188,6 +188,10 @@ export class MessageHandler {
   // Server-owned melee species (crawlers) — same pattern as ballSim.
   creatureSim: CreatureSim | null = null;
   private rateLimitWarnings: Map<string, number> = new Map();
+  /** Bot bolt ids are wallNow-keyed — a bot firing several bolts in the
+   *  same millisecond (multi-weapon tick) would otherwise broadcast one
+   *  id twice and the client's registry would overwrite the first mesh. */
+  private botBoltSeq = 0;
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
   roomInfo: RoomInfo = { room: 'default', mode: '' };
@@ -284,7 +288,7 @@ export class MessageHandler {
   botFire(shooterId: string, targetId: string | null, position: Vec3, velocity: Vec3, weaponType: number, hit: boolean): void {
     this.broadcast({
       type: 'projectileCreated',
-      projectileId: `bot-${shooterId}-${wallNow()}`,
+      projectileId: `bot-${shooterId}-${wallNow()}-${this.botBoltSeq++}`,
       ownerId: shooterId,
       position,
       velocity,

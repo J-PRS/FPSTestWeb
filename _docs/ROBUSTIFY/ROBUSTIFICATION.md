@@ -401,6 +401,12 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Id-space collisions** (2026-10-05): every replicated id mint
+  audited — creature `nextId++` and projectile `sp-${nextId++}` are
+  per-room monotonic, never reused; pickup/ball ids same shape. FIXED:
+  `botFire`'s `bot-${shooterId}-${wallNow()}` was ms-granularity —
+  a multi-weapon tick could mint one id twice → client registry
+  overwrite; now suffixed with a monotonic seq (`MessageHandler.ts`).
 - **`client/src/game/net/` handler tail** (2026-10-05): the
   un-dirty files swept (mapAssets/projectiles/RemoteSet/pickups/
   resync/deployables/lastRoom/ctx; flags/match/playerKill/players are
