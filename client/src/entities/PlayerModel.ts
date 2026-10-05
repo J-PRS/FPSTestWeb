@@ -209,8 +209,14 @@ export class PlayerModel {
   private onModelLoaded(gltf: { scene: THREE.Group; animations: THREE.AnimationClip[] }, mann: boolean, knight: boolean): void {
     this.model = gltf.scene;
 
-    // Log model bounding box for hitbox calibration
-    const box = new THREE.Box3().setFromObject(this.model);
+    // Log model bounding box for hitbox calibration. `precise` bakes
+    // skinned vertices — quantized rigs (class_heavy's int16 attrs)
+    // otherwise report the normalized attribute box (~±1) instead of
+    // the posed size and the fit math explodes the model ~100x. The
+    // skeleton has to be posed for the bake to mean anything.
+    this.model.updateMatrixWorld(true);
+    this.model.traverse((c) => (c as THREE.SkinnedMesh).skeleton?.update());
+    const box = new THREE.Box3().setFromObject(this.model, true);
     const size = box.getSize(new THREE.Vector3());
     const min = box.min;
     const max = box.max;

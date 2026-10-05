@@ -284,7 +284,7 @@ export type ServerMessage =
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; mapName?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number }; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
+  | { type: 'mapUpdate'; mapName?: string; silent?: boolean; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number }; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
 
 export interface GameStatePlayer {
   id: string;

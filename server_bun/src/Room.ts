@@ -351,6 +351,7 @@ export class Room {
     if (this.spec.bots) this.bots.populate(this.spec.bots);
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
+    if (this.spec.deploys) this.deployables.seedBase(this.spec.deploys);
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.effStructures());
     this.registerSims();
@@ -476,7 +477,7 @@ export class Room {
     let top = this.field ? hmHeight(this.field, x, z) : 0;
     for (const s of this.spec.structures ?? []) {
       if (Math.abs(x - s.pos.x) <= s.size.x / 2 && Math.abs(z - s.pos.z) <= s.size.z / 2) {
-        top = Math.max(top, s.pos.y + s.size.y / 2);
+        top = Math.max(top, s.pos.y + s.size.y);
       }
     }
     return top;
@@ -521,10 +522,17 @@ export class Room {
    *  without this refresh the homes stay snapped to the wrong ground.
    *  Called again on every terrain attach and applySpec (bases can move
    *  with the map). */
-  refreshFlagHomes(): void {
+  refreshFlagHomes(broadcastUpdate = true): void {
     if (!this.flags) return;
+    // Clients hold the LAST emitted structure list — a home re-snap moves
+    // the injected stand hulls server-side, and without a re-push early
+    // joiners keep boot-snap colliders floating where the mesh no longer
+    // sits. The join echo stays fresh either way (effStructures is live).
+    const standsBefore = JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand'));
     if (this.mode === 'rabbit') {
       this.flags.retargetHomes({ alpha: this.rabbitFlagHome() });
+      this.attachAllStructures();
+      if (broadcastUpdate) this.pushStructureUpdate(standsBefore);
       return;
     }
     const bases = this.spec.bases;
@@ -539,6 +547,27 @@ export class Room {
     // Stands may have moved with the re-snap — their collision hulls
     // are spec entries, so the sims must re-attach the merged list.
     this.attachAllStructures();
+    if (broadcastUpdate) this.pushStructureUpdate(standsBefore);
+  }
+
+  /** Re-push the merged structure list when the stand hulls moved — a
+   *  skinny mapUpdate (no terrain/name keys) so clients rebuild colliders
+   *  without a full map reload. */
+  private pushStructureUpdate(standsBefore: string): void {
+    const structures = this.effStructures();
+    if (JSON.stringify(structures.filter((s) => s.kind === 'stand')) === standsBefore) return;
+    const spec = this.spec;
+    this.broadcast({
+      type: 'mapUpdate',
+      silent: true,
+      structures,
+      arena: spec.arena ?? null,
+      ambient: spec.ambient,
+      fog: spec.fog,
+      terrainTex: spec.terrainTex,
+      sky: spec.sky,
+      interiors: spec.interiors,
+    });
   }
 
   /** The spec's authored structures PLUS collision hulls for the flag
@@ -890,9 +919,10 @@ export class Room {
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.players.teamSpawns = spec.teamSpawns ?? null;
     this.attachAllStructures(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
-    // Bases can move with a new spec — re-snap homes. If the terrain is
+    // Bases can move with a new spec — re-snap homes (no update push: the
+    // mapUpdate below carries the post-snap list). If the terrain is
     // also rotating the attach below corrects them once it lands.
-    this.refreshFlagHomes();
+    this.refreshFlagHomes(false);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.creatureSim.pops = spec.creatures ?? {};

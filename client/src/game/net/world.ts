@@ -43,7 +43,7 @@ export function armSessionVeil(): void {
   // which means the restore hit a genuinely slow path.
   sessionVeilLabelTimer = setTimeout(() => {
     const label = document.createElement('span');
-    label.textContent = 'RESTORING SESSION';
+    label.textContent = 'RECONNECTING'; // player's frame, not the protocol's — F5 with a stored token IS a rejoin
     sessionVeil?.appendChild(label);
   }, 1000);
   // Connect may fail outright — never leave a black curtain up.
@@ -56,6 +56,10 @@ export function dropSessionVeil(): void {
   sessionVeil?.remove();
   sessionVeil = null;
 }
+
+/** While veiled there IS no session — the game loop freezes rather than
+ *  simulating a boot world the incoming gameState discards anyway. */
+export function isSessionVeiled(): boolean { return sessionVeil !== null; }
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
@@ -119,7 +123,7 @@ export function wireWorld(ctx: NetCtx): void {
     applyMapFog(ctx, map.fog);
     void applyInteriors(ctx, map.interiors);
     void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
-    chat.add(null, 'map updated by admin');
+    if (!map.silent) chat.add(null, 'map updated by admin');
   };
 
   // Initial connection and reconnection — full roster + local restore.

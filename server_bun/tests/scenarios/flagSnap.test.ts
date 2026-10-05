@@ -53,8 +53,9 @@ describe('scenario: flag stand snapping', () => {
       // narrower than the ring is correctly walked OFF as unreachable.
       structures: [{ kind: 'box', pos: { x: -70, y: 20, z: 0 }, size: { x: 200, y: 40, z: 200 } }],
     }, 'ctf', 1337, false, H(0));
-    // Deck top = 20 + 40/2 = 40, over terrain 0 — the flag stands on the roof.
-    expect(room.flags!.flags.get('alpha')!.home.y).toBeCloseTo(40, 1);
+    // Deck top = 20 + 40 = 60 (pos.y is the piece BASE), over terrain 0 —
+    // the flag stands on the roof.
+    expect(room.flags!.flags.get('alpha')!.home.y).toBeCloseTo(60, 1);
     // Bravo base has no structure — de-shelf may slide it but it lands LOW.
     expect(room.flags!.flags.get('bravo')!.home.y).toBeCloseTo(0, 1);
   });
