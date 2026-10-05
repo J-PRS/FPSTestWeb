@@ -1,9 +1,19 @@
 import { Room } from '../../src/Room.ts';
-import { botRng, tauntRng } from '../../../shared/botRand.ts';
+import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
+import { setSharedEnv } from '../../../shared/env.ts';
+
+// Fail loud on ambient dice: any botRand draw outside an injected
+// stream (between step() windows, or a test that forgot to seed) is a
+// trajectory the suite can't reproduce — throw instead of flaking.
+setSharedEnv({ strictRng: true });
 import { losMemoReset } from '../../../shared/botLos.ts';
 import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
+import { computeStateHash } from '../../../shared/stateHash.ts';
+import { decodeTickFrame, type WireTickPlayer } from '../../../shared/wire.ts';
+import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
+import { wallNow } from '../../src/wallClock.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 import type { PlayerState, Vec3 } from '../../src/types.ts';
@@ -73,7 +83,10 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   roomStreams.set(room, stream);
   // Construction draws done — close the window so a stray timer between
   // here and the first step() can't spend this room's dice.
-  botRng(Math.random);
+  // Release via the tagged ambient — strictRng allows marked-ambient
+  // draws (zombie timers) but throws on unmarked Math.random, i.e. a
+  // consumer that was never seeded.
+  botRngRelease();
   tauntRng(Math.random);
   return room;
 }
@@ -112,7 +125,7 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
     simNowAdvance(dt * 1000);
   }
   } finally {
-    if (stream) botRng(Math.random);
+    if (stream) botRngRelease();
     if (tstream) tauntRng(Math.random);
   }
 }
@@ -149,5 +162,116 @@ export function watch(room: Room, now?: () => number): { count: (type: string, k
     msgs,
     count: (type, kind) =>
       msgs.filter((m) => m.type === type && (kind === undefined || (m as { kind?: string }).kind === kind)).length,
+  };
+}
+
+/** Headless client replica — the parity check the live client's StateHash
+ *  warns run, without a browser. A replica "spectates" the room: it eats
+ *  the same wireIds rosters and binary tick frames the fanout emits (the
+ *  spectator tier gets the full record set, no interest-rate loss), keeps
+ *  the roster the client would hold, and re-hashes it at will so a test
+ *  can assert replica === server authority — the drift classes the wire
+ *  is supposed to converge (health echoes, liveness edges, positions)
+ *  instead of only ever being observed in production consoles. */
+export interface Replica {
+  /** Replica-held players — what a real client's replica would carry
+   *  (specimens the wire delivered, not the room's truth). */
+  readonly players: ReadonlyMap<string, { x: number; y: number; z: number; health: number; isDead: boolean }>;
+  /** computeStateHash over the replica — compare against roomHash(). */
+  hash(): string;
+  /** computeStateHash over the room's authoritative players — the value
+   *  the server's TickLoop hash broadcast ships. */
+  roomHash(): string;
+  /** Field-level diff vs room truth — names every diverging player so a
+   *  failed parity assert reports WHO drifted, not just a hash. */
+  diff(): string[];
+  /** Restore the room's broadcast/frame paths and drop the spectator seat
+   *  — an attached replica keeps an otherwise-idle room's spectator count
+   *  non-zero, which delays room disposal. */
+  detach(): void;
+}
+
+export function replica(room: Room): Replica {
+  const REPLICA_ID = '__replica__';
+  const held = new Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>();
+  const roster = new Map<number, string>(); // wireId → playerId
+  const pool = { slots: [] as WireTickPlayer[], resolveId: (wid: number) => roster.get(wid) };
+  const prevBroadcast = room.connections.broadcast;
+  const prevSendBin = room.connections.sendBinaryToPlayer;
+  room.spectators.add(REPLICA_ID);
+  // The record fanout lives in TickLoop, outside room.sims — a scenario
+  // step() would starve the replica of frames entirely. Mount it as a
+  // sim so step() drives the production ordering (input → sim → fanout).
+  const fanoutMetrics: FanoutMetrics = {
+    recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
+    recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0,
+  };
+  const fanout = new TickFanout(fanoutMetrics,
+    (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+  const fanoutSim = { name: 'fanout', tick: () => {
+    room.tickSeq++;
+    const players = room.players.getAllPlayers();
+    fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
+  } };
+  room.sims.push(fanoutSim);
+  room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
+    if (m.type === 'wireIds') {
+      const w = m as { add?: Record<number, string>; remove?: number[] };
+      for (const [wid, id] of Object.entries(w.add ?? {})) roster.set(Number(wid), id);
+      for (const wid of w.remove ?? []) roster.delete(wid);
+    } else if (m.type === 'playerLeft') {
+      held.delete((m as { playerId: string }).playerId);
+    }
+    return prevBroadcast.call(room.connections, m, exclude);
+  };
+  room.connections.sendBinaryToPlayer = (playerId: string, data: Uint8Array) => {
+    if (playerId !== REPLICA_ID) return prevSendBin.call(room.connections, playerId, data);
+    const f = decodeTickFrame(data, pool);
+    if (!f) return 'gone';
+    for (let i = 0; i < f.count; i++) {
+      const u = f.updates[i]!;
+      if (!u.playerId) continue; // unresolved wireId — roster arrives on its own event
+      held.set(u.playerId, { x: u.position.x, y: u.position.y, z: u.position.z, health: u.health, isDead: u.isDead });
+    }
+    return 'sent';
+  };
+  const flat = (map: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>) => map;
+  return {
+    players: held,
+    hash: () => computeStateHash(flat(new Map(held))),
+    roomHash: () => {
+      const truth = new Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>();
+      for (const [id, p] of room.players.getAllPlayers()) {
+        truth.set(id, { x: p.position.x, y: p.position.y, z: p.position.z, health: p.health, isDead: p.isDead });
+      }
+      return computeStateHash(truth);
+    },
+    diff: () => {
+      const out: string[] = [];
+      const truth = new Map([...room.players.getAllPlayers()].map(([id, p]) => [id, p]));
+      for (const id of new Set([...held.keys(), ...truth.keys()])) {
+        const hp = held.get(id);
+        const tp = truth.get(id);
+        if (!hp || !tp) {
+          if (hp !== undefined || tp !== undefined) out.push(`${id}: replica=${hp ? 'held' : 'missing'} room=${tp ? 'live' : 'gone'}`);
+          continue;
+        }
+        if (Math.round(hp.x) !== Math.round(tp.position.x) || Math.round(hp.y) !== Math.round(tp.position.y) || Math.round(hp.z) !== Math.round(tp.position.z)) {
+          out.push(`${id}: pos replica(${hp.x.toFixed(1)},${hp.y.toFixed(1)},${hp.z.toFixed(1)}) room(${tp.position.x.toFixed(1)},${tp.position.y.toFixed(1)},${tp.position.z.toFixed(1)})`);
+        }
+        if (Math.floor(hp.health / 4) !== Math.floor(tp.health / 4)) {
+          out.push(`${id}: health replica=${hp.health} room=${tp.health}`);
+        }
+        if (hp.isDead !== tp.isDead) out.push(`${id}: isDead replica=${hp.isDead} room=${tp.isDead}`);
+      }
+      return out;
+    },
+    detach: () => {
+      room.spectators.delete(REPLICA_ID);
+      const i = room.sims.indexOf(fanoutSim);
+      if (i >= 0) room.sims.splice(i, 1);
+      room.connections.broadcast = prevBroadcast;
+      room.connections.sendBinaryToPlayer = prevSendBin;
+    },
   };
 }

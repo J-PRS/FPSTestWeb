@@ -108,6 +108,19 @@ echo-channel lag cannot trip the hash — 48/49/51hp hash identically to 50;
 - `sizeWatch` re-pinned: `serverSenses.ts` at 1039 (committed file already
   over the old 903 pin — the watch now guards from reality).
 
+### 2.6b Headless wire parity — `tests/scenarios/harness.ts` `replica()`
+
+A browser was the only place the StateHash comparator ran — every
+production DESYNC warn (in-flight heal drift, roster staleness, missed
+liveness edges) was invisible to the suite by construction. `replica(room)`
+mounts a headless spectator: it eats the room's real wire output (wireIds
+rosters + binary tick frames — the spectator tier gets the full record
+set), keeps the roster a client would hold, and exposes `hash()`/`diff()`
+so a test asserts replica === server truth. The fanout mounts as an extra
+sim so `step()` drives the production input→sim→fanout ordering. Pinned
+by `replicaParity.test.ts` (damage/kill/respawn/move/removal + suppression
+churn).
+
 ### 2.6 Console stray capture — altq pipeline
 
 - `console.warn`/`console.error` route into the Logger buffer
@@ -151,6 +164,11 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
   ledger / moves / combat / killFeed / wireIds is complete.
 - **`SessionRegistry`**: anomaly counters + edge totals on `/metrics`.
 - **Client `Math.random`**: all hits are VFX/ambient decor — no sim paths.
+- **2026-10-05 re-sweep** (post-§4 drain): `claimLedger` bounded
+  (MAX_SPENT + per-player cleanup), `clientLogs.postIps` capped,
+  `botKill`/`bots` ambient draws are client-only cosmetics (never reach
+  shared sim paths), spectator lifecycle has id-claim eviction +
+  onClose delete + registry terminate. Nothing new to classify.
 
 ---
 
