@@ -296,13 +296,18 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
     const { goal, now, sh, nuggetNear, ctx } = s;
     if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
     // Stand suppression: a committed runner with clear LOS takes a few
     // potshots at the stand while closing — humans pre-soften the ring
     // (disc/GL/bolt, not a mortar barrage) so the pass doesn't fly
     // through untouched defenders. Never interrupts a live hunt shot.
+    // Wave members firing it too tried and reverted: chip volleys at
+    // the stand steal the member's committed-fire windows and the
+    // scatter doesn't hit posted defenders (soaks 11g/2c + 7g/1c vs
+    // 14g/8c + 9g/2c — eHp rose, caps fell; suppression that doesn't
+    // threaten costs the shooter more than the target).
     else if (goal?.runner && (this.suppressT.get(id) ?? 0) <= now) {
       const sd = Math.hypot(goal.pos.x - p.position.x, goal.pos.z - p.position.z);
       const eye = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
