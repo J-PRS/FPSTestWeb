@@ -66,7 +66,7 @@ export class BotRoster {
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.
       const cls = botClassForLoadout(loadout);
-      const p = this.room.players.addPlayer(id, undefined, loadout.perk, cls);
+      const p = this.room.players.addPlayer(id, undefined, loadout.perk, cls, true);
       this.loadouts.set(id, loadout);
       this.roles.set(id, 'offense');
       this.applyClass(p, cls);

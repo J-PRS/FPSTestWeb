@@ -20,6 +20,8 @@ function nextInternalId(): string {
 
 export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
+  // Kept as a counter, not a scan — Room.empty asks every room every tick.
+  private humans = 0;
   /** Spawn anchors — map specs override, default is the config ring. */
   spawnPoints: SpawnPoint[] | null = null;
   /** Team-owned spawn spheres from the map spec — when set, team members
@@ -65,7 +67,7 @@ export class PlayerManager {
     rng: () => this.spawnRng(),
   });
 
-  addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium'): PlayerState {
+  addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium', isBot = false): PlayerState {
     const spawn = this.spawnPicker.pick(playerId, team);
     const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
     const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth + CLASS_STATS[cls].maxHealth;
@@ -115,6 +117,11 @@ export class PlayerManager {
       healthEchoAt: 0,
     };
 
+    // Bots stamp p.isBot after this returns — the counter must key on
+    // the join call's own answer, not the field's late arrival.
+    const was = this.players.get(playerId);
+    if (was && !was.isBot) this.humans--;
+    if (!isBot) this.humans++;
     this.players.set(playerId, player);
     return player;
   }
@@ -122,6 +129,7 @@ export class PlayerManager {
   removePlayer(playerId: string): PlayerState | undefined {
     const player = this.players.get(playerId);
     if (player) {
+      if (!player.isBot) this.humans--;
       this.players.delete(playerId);
     }
     return player;
@@ -174,9 +182,7 @@ export class PlayerManager {
 
   /** Humans only — server bots don't keep a match alive on their own. */
   getHumanCount(): number {
-    let n = 0;
-    for (const p of this.players.values()) if (!p.isBot) n++;
-    return n;
+    return this.humans;
   }
 
   toGameStatePlayer(player: PlayerState): GameStatePlayer {

@@ -1,3 +1,4 @@
+2026-10-01 - O(1) human census for Room.empty: getHumanCount scanned every player every room every tick; bots now flag at join time since p.isBot stamps after addPlayer returns
 2026-10-01 - drownCheck skipped sockets with no data slot (test mocks) instead of crashing every broadcast; RTC relay guard for mocks without getBufferedAmount
 2026-10-01 - faultedRooms bounded at 512 names (oldest evicted): a fault loop creating doomed rooms under fresh names grew the /metrics set ~one name per 10 ticks forever
 2026-10-01 - RTC relay drops a drowned peer at 4MB buffered (1011): relayed messages queued unboundedly for a member that stopped reading
