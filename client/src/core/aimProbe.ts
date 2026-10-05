@@ -21,10 +21,10 @@ const MAX_HITS = 5;
  *  `42m ribbon {"slot":20,"owner":true,...}`. Empty when nothing tags. */
 export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
   const objs: THREE.Object3D[] = [];
-  scene.traverse(o => { if (o.userData.dbg) objs.push(o); });
+  scene.traverse(o => { if (o.userData.dbg) {objs.push(o);} });
   _ray.setFromCamera(_ndc, camera);
   const hits = _ray.intersectObjects(objs, false);
-  if (hits.length) return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);
+  if (hits.length) {return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);}
   // Nothing tagged under the reticle — blind spot report. Raycast the
   // whole scene and describe what IS there by type/parent/material, so a
   // frozen thing made by an untagged system still names itself (that's
@@ -40,7 +40,7 @@ export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
 function describeRaw(o: THREE.Object3D): string {
   const chain: string[] = [];
   for (let p: THREE.Object3D | null = o; p && chain.length < 3; p = p.parent)
-    chain.push(`${p.type}${p.name ? `(${p.name})` : ''}`);
+    {chain.push(`${p.type}${p.name ? `(${p.name})` : ''}`);}
   return chain.join(' < ');
 }
 
@@ -89,7 +89,7 @@ function describePooled(d: DbgTag, h: THREE.Intersection): string {
 // SwarmSlotOwner carries no name — best-effort identity from whatever
 // the concrete owner exposes (Ball has pos/netId, RemotePlayer has id).
 function describeOwner(owner: SwarmSlotOwner | undefined): string {
-  if (!owner) return 'none';
+  if (!owner) {return 'none';}
   const o = owner as SwarmSlotOwner & {
     pos?: { x: number; y: number; z: number };
     netId?: number; playerId?: string; dead?: boolean;

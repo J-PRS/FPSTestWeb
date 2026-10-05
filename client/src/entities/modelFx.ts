@@ -97,7 +97,7 @@ export class ModelFx {
   /** Landing compress — a quick forward pitch scaled by impact speed,
    *  stacked inside the lean write (jet lean keeps working on top). */
   landPulse(impactSpeed: number): void {
-    if (impactSpeed < 6) return; // stepping off a ledge isn't a landing
+    if (impactSpeed < 6) {return;} // stepping off a ledge isn't a landing
     this.landAmp = Math.min(1, impactSpeed / 30);
     this.landT = 0;
   }
@@ -139,10 +139,10 @@ export class ModelFx {
    *  viewmodel-matched timings. */
   private env(field: 'swapT' | 'throwT' | 'punchT' | 'landT', dt: number, up: number, hold: number, down: number): number {
     let t = this[field];
-    if (t < 0) return 0;
+    if (t < 0) {return 0;}
     this[field] = t += dt;
     const e = t < up ? t / up : t < up + hold ? 1 : Math.max(0, 1 - (t - up - hold) / down);
-    if (e <= 0 && t > up + hold) this[field] = -1;
+    if (e <= 0 && t > up + hold) {this[field] = -1;}
     return e;
   }
 
@@ -154,7 +154,7 @@ export class ModelFx {
     const punchE = this.env('punchT', dt, 0.09, 0.08, 0.32);
     // Landing: sharp compress then a slower settle — read in tickJetLean.
     this.landE = this.env('landT', dt, 0.07, 0, 0.32) * this.landAmp;
-    if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 7);
+    if (this.recoil > 0) {this.recoil = Math.max(0, this.recoil - dt * 7);}
     const { gun } = this.h;
     if (gun) {
       const k = this.recoil * this.recoil; // snappy attack, soft release
@@ -192,12 +192,12 @@ export class ModelFx {
   // the euler back, or the lean would double-apply.
   private tickJetLean(dt: number): void {
     const { model } = this.h;
-    if (!model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0 && this.landE === 0)) return;
+    if (!model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0 && this.landE === 0)) {return;}
     const k = 1 - Math.exp(-dt * 7);
     this.leanP += (this.leanPT - this.leanP) * k;
     this.leanR += (this.leanRT - this.leanR) * k;
-    if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
-    if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
+    if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) {this.leanP = 0;}
+    if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) {this.leanR = 0;}
     // Landing pitch stacks on the lean — the absorb crouch reads as the
     // whole body tipping forward a beat, not just the knees.
     const pitch = this.leanP + this.landE * 0.18;
@@ -217,7 +217,7 @@ export class ModelFx {
   // Damage flash: emissive snaps toward white then decays back to each
   // material's own baseline (the gun keeps its 0x334455 glow).
   private tickDamageFlash(dt: number): void {
-    if (this.dmgFlash <= 0) return;
+    if (this.dmgFlash <= 0) {return;}
     this.dmgFlash = Math.max(0, this.dmgFlash - dt);
     const k = this.dmgFlash / 0.15;
     for (const f of this.h.flashMats) {

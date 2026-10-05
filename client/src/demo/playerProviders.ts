@@ -21,14 +21,14 @@ export function playerProviders(player: Player): { playerData: IPlayerDataProvid
       get inputFlags() {
         const input = player.getInputState();
         let flags = 0;
-        if (input.forward > 0) flags |= InputFlags.Forward;
-        if (input.forward < 0) flags |= InputFlags.Backward;
-        if (input.right < 0) flags |= InputFlags.Left;
-        if (input.right > 0) flags |= InputFlags.Right;
-        if (input.jumpHeld) flags |= InputFlags.Jump;
-        if (input.skiHeld) flags |= InputFlags.Ski;
-        if (input.firePressed) flags |= InputFlags.Fire;
-        if (input.beltHeld) flags |= InputFlags.Disc; // flag name kept for demo-format compat
+        if (input.forward > 0) {flags |= InputFlags.Forward;}
+        if (input.forward < 0) {flags |= InputFlags.Backward;}
+        if (input.right < 0) {flags |= InputFlags.Left;}
+        if (input.right > 0) {flags |= InputFlags.Right;}
+        if (input.jumpHeld) {flags |= InputFlags.Jump;}
+        if (input.skiHeld) {flags |= InputFlags.Ski;}
+        if (input.firePressed) {flags |= InputFlags.Fire;}
+        if (input.beltHeld) {flags |= InputFlags.Disc;} // flag name kept for demo-format compat
         return flags;
       },
       get mouseDeltaX() { return 0; },

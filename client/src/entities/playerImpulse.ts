@@ -14,8 +14,8 @@ import { PlayerLoadout } from './playerLoadout.js';
    *  in a stale/banked slot never predicts a shot — the menu greys it
    *  and the server rejects every claim (same gate, appliedClass). */
 function wantFireWeapon(p: Player, wid: number, auto: boolean): boolean {
-    if (p.throwLockT > 0 || PlayerLoadout.lockedForClass(p.appliedClass, wid)) return false;
-    if (p.armory.secondaryWid !== null) return p.armory.secondaryDrawT <= 0;
+    if (p.throwLockT > 0 || PlayerLoadout.lockedForClass(p.appliedClass, wid)) {return false;}
+    if (p.armory.secondaryWid !== null) {return p.armory.secondaryDrawT <= 0;}
     return auto ? p.input.mouseHeld : (p.input.firePending || (p.input.mouseHeld && !p.input.needsRelease));
   }
 
@@ -25,7 +25,7 @@ function wantFireWeapon(p: Player, wid: number, auto: boolean): boolean {
    *  class shoulders it — and the pull falls through to the swapped gun. */
 function unshoulderOnPull(p: Player, wid: number): number {
     if (p.armory.secondaryWid !== null
-        || !PlayerLoadout.lockedForClass(p.appliedClass, wid)) return wid;
+        || !PlayerLoadout.lockedForClass(p.appliedClass, wid)) {return wid;}
     p.setLoadoutSlot(p.weaponIndex, PlayerLoadout.fallbackWid(p.appliedClass, p.loadout));
     return p.loadout[p.weaponIndex];
   }
@@ -36,7 +36,7 @@ export function fireWeapons(p: Player): void {
     wid = unshoulderOnPull(p, wid);
     const def = weaponDef(wid);
     const wantFire = wantFireWeapon(p, wid, def.auto);
-    if (!p.input.mouseHeld) p.input.needsRelease = false;
+    if (!p.input.mouseHeld) {p.input.needsRelease = false;}
     if (wantFire && p.fireTimer <= 0) {
       p.fireTimer = def.rate;
       p.shootAnimTimer = 0.3;

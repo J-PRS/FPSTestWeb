@@ -44,7 +44,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     overlay.style.display = open ? 'flex' : 'none';
     document.body.classList.toggle('menu-open', open);
     audio.setDucked(open);
-    if (open) refreshLoadout();
+    if (open) {refreshLoadout();}
     else {
       // Nothing may strand open over a resume — dropups, the keybind
       // popup, or a live "press any key" capture all reset here.
@@ -83,14 +83,14 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   // Demo playback keys (arrow keys). Returns true if the key was consumed.
   function handleDemoKey(e: KeyboardEvent): boolean {
     const dm = deps.lazyDemoManager();
-    if (!dm?.isPlaying) return false;
+    if (!dm?.isPlaying) {return false;}
     const action = ({
       ArrowUp: () => dm.togglePlayPause(),
       ArrowDown: () => dm.restart(),
       ArrowLeft: () => dm.seekBy(-2),
       ArrowRight: () => dm.seekBy(2),
     } as Record<string, () => void>)[e.code];
-    if (!action) return false;
+    if (!action) {return false;}
     e.preventDefault();
     action();
     return true;
@@ -118,7 +118,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     // A keybind capture owns the next keystroke — it must not leak into
     // menu/demo handling (its listener already stops propagation, this is
     // belt-and-braces for ordering across modules)
-    if (isCapturing()) return;
+    if (isCapturing()) {return;}
     if (e.code === 'Tab') {
       e.preventDefault();
       deps.lazyHud().setScoreboardVisible(true);
@@ -133,8 +133,8 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
         e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
       return;
     }
-    if (handleDemoKey(e)) return;
-    if (e.code === 'Escape' && deps.isGameStarted()) handleEscapeKey();
+    if (handleDemoKey(e)) {return;}
+    if (e.code === 'Escape' && deps.isGameStarted()) {handleEscapeKey();}
     if (e.code === 'F4') {
       const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
       pixelToggleBtn.click();
@@ -157,14 +157,14 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   });
 
   overlay.addEventListener('click', (e) => {
-    if (e.target !== overlay) return;
+    if (e.target !== overlay) {return;}
     const dm = deps.lazyDemoManager();
     if (dm?.isPlaying) { dm.stopPlayback(); return; }
     requestLock();
   });
   rendererCanvas.addEventListener('click', () => {
-    if (deps.lazyDemoManager()?.isPlaying) return;
-    if (document.pointerLockElement !== rendererCanvas) requestLock();
+    if (deps.lazyDemoManager()?.isPlaying) {return;}
+    if (document.pointerLockElement !== rendererCanvas) {requestLock();}
   });
 
   return { requestLock };

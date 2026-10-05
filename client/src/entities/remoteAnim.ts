@@ -65,7 +65,7 @@ export class RemoteAnim {
 
   tickModel(dt: number): void {
     const h = this.h;
-    if (!h.loaded) return;
+    if (!h.loaded) {return;}
     h.model.setPosition(h.position.x, h.feetY, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
     // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
@@ -78,7 +78,7 @@ export class RemoteAnim {
       : false;
     // Landing compress — peak fall speed at touchdown drives the pulse,
     // same cue the local model gets from onLand.
-    if (airborne) this._fallV = Math.min(this._fallV, h.velocity.y);
+    if (airborne) {this._fallV = Math.min(this._fallV, h.velocity.y);}
     else if (this._airborne) { h.model.landPulse(-this._fallV); this._fallV = 0; }
     this._airborne = airborne;
     this.tickAirTrail(dt, airborne, speed);
@@ -89,17 +89,17 @@ export class RemoteAnim {
       this.throwT -= dt;
       // A belt/deploy swing outranks the armed pose — the arm is
       // committed to the throw, not the aim.
-      if (this.throwT > 0) h.model.setAnimationState('throw');
+      if (this.throwT > 0) {h.model.setAnimationState('throw');}
     } else if (this.shootT > 0) {
       // Re-arm while already 'shoot' (auto fire) means a new shot —
       // force replays the clip from its aimed frame; otherwise the
       // oneshot plays once and every following pull shows nothing.
-      if (this.shootT > this._lastShootT) h.model.forceAnimationState('shoot');
+      if (this.shootT > this._lastShootT) {h.model.forceAnimationState('shoot');}
       this.shootT -= dt;
-      if (this.shootT > 0) h.model.setAnimationState('shoot');
+      if (this.shootT > 0) {h.model.setAnimationState('shoot');}
     } else if (this.hitT > 0) {
       this.hitT -= dt;
-      if (this.hitT > 0) h.model.setAnimationState('hit');
+      if (this.hitT > 0) {h.model.setAnimationState('hit');}
     } else {
       this.tickAnimState(dt, speed, airborne);
     }
@@ -183,7 +183,7 @@ export class RemoteAnim {
         },
         [{
           emitSegment: () => {
-            if (!this.airTrail) this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
+            if (!this.airTrail) {this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });}
             this.airTrail.emit(this._trailDt, this._trailAnchor, h.velocity, 0.4, _trailTint);
           },
           teleport: () => { /* dots fade fast — emit suppression is the cut */ },
@@ -210,8 +210,8 @@ export class RemoteAnim {
     // Dedicated 8-dir clips when the KevDev bake landed; otherwise the
     // reverse-playback backpedal + strafe roll lean keep covering it.
     const dedicated = h.model.setLocomotionVector(fwd, side);
-    if (!dedicated) h.model.setLocomotionReversed(
-      (state === 'walk' || state === 'run') && speed > 1 && fwd < -0.6 * speed && -fwd > Math.abs(side));
+    if (!dedicated) {h.model.setLocomotionReversed(
+      (state === 'walk' || state === 'run') && speed > 1 && fwd < -0.6 * speed && -fwd > Math.abs(side));}
     if (!jetting) {
       const strafing = !dedicated && Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
       h.model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
@@ -227,8 +227,8 @@ export class RemoteAnim {
  *  culls the skin, so only CPU bone evaluation was burning). Floor is
  *  15Hz — slower idle tiers read as steppy even at distance. */
 export function pickAnimCadence(onScreen: boolean, camDistSq: number, _moving: boolean): number {
-  if (onScreen === false) return Infinity;
-  if (camDistSq > 120 * 120) return 1 / 15;
-  if (camDistSq > 60 * 60) return 1 / 30;
+  if (onScreen === false) {return Infinity;}
+  if (camDistSq > 120 * 120) {return 1 / 15;}
+  if (camDistSq > 60 * 60) {return 1 / 30;}
   return 0;
 }

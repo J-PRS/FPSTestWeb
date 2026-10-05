@@ -30,7 +30,7 @@ export function downloadDemoFile(data: DemoFile, filename: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
-  document.body.appendChild(a);
+  document.body.append(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
@@ -108,9 +108,9 @@ export function updateHitMarkers(h: DemoIOHost, data: DemoFile): void {
   const hitTimes: { t: number; hot: boolean }[] = [];
   const shotTimes: { t: number; hot: boolean }[] = [];
   for (const e of data.projectileEvents) {
-    if (e.eventType !== ProjectileEventType.Hit) continue;
+    if (e.eventType !== ProjectileEventType.Hit) {continue;}
     const firedAt = firedTimes.get(e.projectileId);
-    if (firedAt === undefined) continue;
+    if (firedAt === undefined) {continue;}
     const hot = isHot(e.timestamp - firedAt);
     hitTimes.push({ t: e.timestamp, hot });
     shotTimes.push({ t: firedAt, hot });

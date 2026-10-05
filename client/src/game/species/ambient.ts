@@ -19,7 +19,7 @@ export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx) {
   const weedWind = new THREE.Vector3(WEED_WIND_X, 0, WEED_WIND_Z).normalize();
 
   function spawnWeed(): void {
-    if (atCap(weeds, capFor('tumbleweed', WEED_MAX))) return;
+    if (atCap(weeds, capFor('tumbleweed', WEED_MAX))) {return;}
     const player = deps.lazyPlayer();
     // Spawn upwind so it rolls across the player's field of view; a lateral
     // jitter keeps the parade from becoming a conveyor line.

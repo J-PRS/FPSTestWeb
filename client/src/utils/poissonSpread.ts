@@ -9,7 +9,7 @@ const cache = new Map<number, { x: number; y: number }[]>();
 // n is small (<=32) so rejection sampling converges instantly.
 export function poissonDisc(n: number): { x: number; y: number }[] {
   const hit = cache.get(n);
-  if (hit) return hit;
+  if (hit) {return hit;}
 
   // Min separation for ~n points in a unit disc (area heuristic, relaxed
   // a bit so sampling terminates quickly for small n)
@@ -28,19 +28,19 @@ export function poissonDisc(n: number): { x: number; y: number }[] {
     attempts++;
     const x = Math.random() * 2 - 1;
     const y = Math.random() * 2 - 1;
-    if (x * x + y * y > 1) continue;
+    if (x * x + y * y > 1) {continue;}
     const c = cellOf(x, y);
     const cx = c % gridSize, cy = Math.floor(c / gridSize);
     let ok = true;
     for (let gy = Math.max(0, cy - 2); ok && gy <= Math.min(gridSize - 1, cy + 2); gy++) {
       for (let gx = Math.max(0, cx - 2); gx <= Math.min(gridSize - 1, cx + 2); gx++) {
         const pi = grid[gy * gridSize + gx]!;
-        if (pi < 0) continue;
+        if (pi < 0) {continue;}
         const dx = pts[pi]!.x - x, dy = pts[pi]!.y - y;
         if (dx * dx + dy * dy < minDist * minDist) { ok = false; break; }
       }
     }
-    if (!ok) continue;
+    if (!ok) {continue;}
     grid[c] = pts.length;
     pts.push({ x, y });
   }

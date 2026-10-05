@@ -137,7 +137,7 @@ export class PlayerLoadout {
       const old = this.h.model;
       const m = new PlayerModel(this.h.scene, want as PlayerModelVariant);
       this.h.model = m;
-      void m.load().then(() => {
+      m.load().then(() => {
         m.setScale(CLASS_MODEL_SCALE[c]);
         m.setVisible(false);
         m.setColliderVisible(false);

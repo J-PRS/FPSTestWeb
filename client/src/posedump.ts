@@ -14,7 +14,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
-document.body.appendChild(renderer.domElement);
+document.body.append(renderer.domElement);
 document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
@@ -49,9 +49,9 @@ if (pvariant) {
   // &weapon=<WeaponType int> drives the real hand-prop swap; &pitch=<rad>
   // feeds setRotation so the aim bones/aim layer pose mid-frame.
   const wantWeapon = q.get('weapon');
-  if (wantWeapon !== null) pm.setWeapon(parseInt(wantWeapon));
+  if (wantWeapon !== null) {pm.setWeapon(parseInt(wantWeapon));}
   const wantPitch = parseFloat(q.get('pitch') ?? '0');
-  if (wantPitch) pm.setRotation(0, wantPitch, 0);
+  if (wantPitch) {pm.setRotation(0, wantPitch, 0);}
   const wantState = q.get('state') ?? 'ski';
   // dir=B|BL|L|FL|FR|R|BR feeds setLocomotionVector before the state
   // resolves — exercises the KevDev directional clip table.
@@ -76,7 +76,7 @@ if (pvariant) {
     const anims = (pm as unknown as { animations: Map<string, unknown> }).animations;
     // Retargeted frames can land outside the bind-pose bounds — same fix
     // the raw path applies below.
-    model?.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
+    model?.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
     // Wait for the GLB AND the async retarget bake — natives fill the map
     // first, so a bare size check would race past the bake every time.
     // Mannequin bakes the KevDev set (UAL clips are native); robot bakes
@@ -85,12 +85,12 @@ if (pvariant) {
       ? anims.has('UAL_Walk01_Left')
       : pvariant === 'robot' ? anims.has('UAL_Slide_Loop') : anims.size > 0;
     if (!model || !anims || !need) { setTimeout(poll, 120); return; }
-    if (wantDir && DIRV[wantDir]) (pm as unknown as { setLocomotionVector(f: number, s: number): void })
-      .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);
+    if (wantDir && DIRV[wantDir]) {(pm as unknown as { setLocomotionVector(f: number, s: number): void })
+      .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);}
     pm.forceAnimationState(wantState as never);
     window.__pm = pm;
     // Step the mixer a fixed phase so loops settle mid-cycle.
-    for (let i = 0; i < 30; i++) pm.update(1 / 60 * wantT * 4);
+    for (let i = 0; i < 30; i++) {pm.update(1 / 60 * wantT * 4);}
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const c = box.getCenter(new THREE.Vector3());
@@ -118,7 +118,7 @@ mkGltfLoader().load(url, (gltf) => {
   const classScale = parseFloat(q.get('scale') ?? '1') || 1;
   model.scale.setScalar((mann || ual2 || knight ? 2.0 / size0.y : 0.5) * classScale);
   model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
-  model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
+  model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
   scene.add(model);
 
   const mixer = new THREE.AnimationMixer(model);

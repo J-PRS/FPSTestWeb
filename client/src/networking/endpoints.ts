@@ -17,7 +17,7 @@ export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl
       host = cfg.server?.trim() ?? '';
     } catch { /* no server.json — stay local */ }
   }
-  if (!host) return local;
+  if (!host) {return local;}
   // LAN/plain hosts — localhost, private IPs, anything with an explicit
   // port — can't ride the tunnel's wss/https rewrite; hitting them with
   // wss just fails the handshake silently (botwatch hit this on :8460).
@@ -26,6 +26,6 @@ export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl
     return { wsUrl: `ws://${h}/ws`, httpUrl: `http://${h}` };
   }
   // Bare name like ?server=foo-bar-baz → assume a trycloudflare quick tunnel
-  if (!host.includes('.')) host = `${host}.trycloudflare.com`;
+  if (!host.includes('.')) {host = `${host}.trycloudflare.com`;}
   return { wsUrl: `wss://${host}/ws`, httpUrl: `https://${host}` };
 }

@@ -7,13 +7,13 @@ import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: number, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.8, inNode)) { audio.freeInput(inNode); return; }
-    if (explosionSample(g, big, weaponType)) return;
+    if (explosionSample(g, big, weaponType)) {return;}
     noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
     osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);
   } finally { audio.emitterPitch = 1; }
@@ -69,8 +69,8 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 /** LG damage connect — frying sizzle at the contact point. Caller throttles
  *  (~6/s); positional so a beam on a distant target reads quieter. */function explosionSample(g: GainNode, big: boolean, weaponType?: number): boolean {
   const w = weaponType !== undefined ? BOOM_SAMPLES[weaponType] : undefined;
-  if (w && layer(g, w)) return true;
-  if (!big) return sample('explosion_small', g, 0.9);
+  if (w && layer(g, w)) {return true;}
+  if (!big) {return sample('explosion_small', g, 0.9);}
   // Layer blast + deep thud at half rate — the stacking trick: two cheap
   // samples at different pitches read as one massive detonation.
   return layer(g, [
@@ -82,16 +82,16 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 /** Pull-mode detonation (disc) — a suck-in zap layered over a deep pop. */
 export function implosionAt(pos: THREE.Vector3, direct: boolean, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.7, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['shot_energy', 0.8, 0.6],
       ['explosion_small', direct ? 0.7 : 0.5, 1.2],
-    ])) return;
+    ])) {return;}
     osc('sawtooth', 1800, 200, 0.25, 0.4, g);
     noise(0.4, 0.5, g, 'lowpass', 4000, 300);
   } finally { audio.emitterPitch = 1; }
@@ -101,18 +101,18 @@ export function implosionAt(pos: THREE.Vector3, direct: boolean, emitVel?: THREE
  *  so candidate mixes can be auditioned/analyzed headlessly. */
 export function debugMix(parts: [string, number, number?, number?, number?][]): void {
   const bus = audio.sfxBus, c = ctx();
-  if (!bus || !c) return;
+  if (!bus || !c) {return;}
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 1)) return;
+  if (!play(g, 1)) {return;}
   layer(g, parts);
 }
 
 export function explosionClose(big: boolean): void {
   const bus = audio.sfxBus, c = ctx();
-  if (!bus || !c) return;
+  if (!bus || !c) {return;}
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.8, undefined, 1)) return;
-  if (explosionSample(g, big)) return;
+  if (!play(g, 0.8, undefined, 1)) {return;}
+  if (explosionSample(g, big)) {return;}
   noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
   osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);
 }

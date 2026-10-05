@@ -18,8 +18,8 @@ const TPL_RE = new RegExp('`(/(assets|weapons|sfx|fonts)/[^`]*\\$\\{[^`]*)`', 'g
 function* walk(dir: string): Generator<string> {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) yield* walk(p);
-    else if (e.name.endsWith('.ts')) yield p;
+    if (e.isDirectory()) {yield* walk(p);}
+    else if (e.name.endsWith('.ts')) {yield p;}
   }
 }
 
@@ -31,19 +31,19 @@ describe('asset manifest', () => {
   const missing: string[] = [];
   const missingDirs = new Set<string>();
   for (const file of walk(SRC)) {
-    if (file.includes('__tests__')) continue;
+    if (file.includes('__tests__')) {continue;}
     const src = fs.readFileSync(file, 'utf-8');
     const rel = path.relative(SRC, file);
     for (const m of src.matchAll(LIT_RE)) {
       const p = m[1];
-      if (p!.includes('${')) continue; // template literal — TPL_RE handles it
-      if (KNOWN_MISSING.has(p!)) continue;
-      if (!fs.existsSync(path.join(PUB, p!))) missing.push(`${rel} -> ${p}`);
+      if (p!.includes('${')) {continue;} // template literal — TPL_RE handles it
+      if (KNOWN_MISSING.has(p!)) {continue;}
+      if (!fs.existsSync(path.join(PUB, p!))) {missing.push(`${rel} -> ${p}`);}
     }
     for (const m of src.matchAll(TPL_RE)) {
       const prefix = m[1].split('${')[0]!;
       const dir = prefix.slice(0, prefix.lastIndexOf('/') + 1);
-      if (dir.length > 1 && !fs.existsSync(path.join(PUB, dir))) missingDirs.add(`${rel} -> ${dir}`);
+      if (dir.length > 1 && !fs.existsSync(path.join(PUB, dir))) {missingDirs.add(`${rel} -> ${dir}`);}
     }
   }
   it('every literal asset path exists under client/public', () => {

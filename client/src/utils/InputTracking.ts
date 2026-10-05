@@ -5,8 +5,8 @@ export function setupInputTracking(logger: ChildLogger): { isTabHidden: () => bo
   let isJetActive = false;
 
   // Track jet button for continuous particles
-  document.addEventListener('mousedown', (e) => { if (e.button === 2) isJetActive = true; });
-  document.addEventListener('mouseup', (e) => { if (e.button === 2) isJetActive = false; });
+  document.addEventListener('mousedown', (e) => { if (e.button === 2) {isJetActive = true;} });
+  document.addEventListener('mouseup', (e) => { if (e.button === 2) {isJetActive = false;} });
 
   // Detect tab visibility changes to keep sending position when alt-tabbed
   document.addEventListener('visibilitychange', () => {

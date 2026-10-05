@@ -57,7 +57,7 @@ export function handleRewindWrap(p: DemoPlayer): void {
   // Clear all in-flight objects and return every event up to `time`, so the
   // game can rebuild the full state at that timestamp (seek/reverse playback).
 export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents: ProjectileEvent[]; newTargetEvents: TargetEvent[]; projCount: number; tgtCount: number } {
-    if (!p.demoData) return { newProjEvents: [], newTargetEvents: [], projCount: 0, tgtCount: 0 };
+    if (!p.demoData) {return { newProjEvents: [], newTargetEvents: [], projCount: 0, tgtCount: 0 };}
     p.lastProjectileEventIndex = 0;
     p.lastTargetEventIndex = 0;
     p.lastRemoteFrameIndex = 0;
@@ -75,7 +75,7 @@ export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents:
   // Emit the interpolated frame state and events up to `time` without advancing
   // currentTime. Used by loop wraparound to flush the final partial step.
 export function emitFrameAndEvents(p: DemoPlayer, time: number): void {
-    if (!p.demoData) return;
+    if (!p.demoData) {return;}
     p.frameIndex = findFrameIndex(p, time);
     const state = getInterpolatedState(p,);
     const projCount = findEventIndex(p.demoData.projectileEvents, time);
@@ -96,7 +96,7 @@ export function emitFrameAndEvents(p: DemoPlayer, time: number): void {
   }
 
 export function findFrameIndex(p: DemoPlayer, time: number): number {
-    if (!p.demoData || p.demoData.frames.length === 0) return 0;
+    if (!p.demoData || p.demoData.frames.length === 0) {return 0;}
     const frames = p.demoData.frames;
     // Binary search for the frame at or before `time`
     let lo = 0, hi = frames.length - 1;
@@ -126,7 +126,7 @@ export function findEventIndex(events: { timestamp: number }[], time: number): n
   }
 
 export function collectNewEvents<T extends { timestamp: number }>(p: DemoPlayer, events: T[], lastIndex: number): T[] {
-    if (!p.demoData) return [];
+    if (!p.demoData) {return [];}
     if (p.playbackSpeed > 0) {
       const newIndex = findEventIndex(events, p.currentTime);
       return events.slice(lastIndex, newIndex);

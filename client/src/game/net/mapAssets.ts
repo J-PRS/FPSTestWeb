@@ -24,7 +24,7 @@ export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z
 const _fogColor = new THREE.Color();
 export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
   const sceneFog = ctx.deps.lazyScene().fog;
-  if (!(sceneFog instanceof THREE.Fog)) return;
+  if (!(sceneFog instanceof THREE.Fog)) {return;}
   if (fog?.color) {
     _fogColor.setRGB(fog.color[0], fog.color[1], fog.color[2], THREE.SRGBColorSpace);
   } else {
@@ -58,10 +58,10 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
   const mult = heightScale ?? 1;
   const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
   const key = `${file}@${mult}@${wscale}|${texPath}|${skyDir}`;
-  if (terrainActive === key) return;
+  if (terrainActive === key) {return;}
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
-    if (terrainActive === key) return;
+    if (terrainActive === key) {return;}
     Ball.terrainSwapping = true;
     try {
       // Scale applies to whichever field is resident — a scale-only map
@@ -194,8 +194,8 @@ function skySeamErr(E: SkyEdge[][][], assign: number[], orient: number[]): numbe
   for (const [f, fe, g, ge, flip] of SKY_PAIRS) {
     const a = E[assign[f]!]![orient[f]!]![fe]!;
     const b = E[assign[g]!]![orient[g]!]![ge]!;
-    if (flip) for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);
-    else for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[i]!);
+    if (flip) {for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);}
+    else {for (let i = 0; i < SKY_SOLVE_PX; i++) tot += Math.abs(a[i]! - b[i]!);}
   }
   return tot;
 }
@@ -205,10 +205,10 @@ interface SkyCand { s: number; assign: number[]; orient: number[] }
 /** Keep the best-K assemblies — the seam score can't tell a right-side-up
  *  cube from a rotated one, so near-ties get re-picked by the up-prior. */
 function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: number[], cap = 64): void {
-  if (list.length >= cap && s >= list[list.length - 1]!.s) return;
+  if (list.length >= cap && s >= list[list.length - 1]!.s) {return;}
   list.push({ s, assign: assign.slice(), orient: orient.slice() });
   list.sort((a, b) => a.s - b.s);
-  if (list.length > cap) list.length = cap;
+  if (list.length > cap) {list.length = cap;}
 }
 
 /** Cap faces (sky dome, ground haze) are flat in both directions; side
@@ -226,7 +226,7 @@ function skyAxisGrad(d: Uint8ClampedArray, horizontal: boolean): number {
       const i = (horizontal ? v * S + u : u * S + v) * 4;
       band += d[i]! + d[i + 1]! + d[i + 2]!;
     }
-    if (u < T) g += band; else if (u >= S - T) g -= band;
+    if (u < T) {g += band;} else if (u >= S - T) {g -= band;}
   }
   return g;
 }
@@ -235,7 +235,7 @@ function skyCapFaces(data: Uint8ClampedArray[]): { up: number; dn: number } {
   const scores: number[] = [], lum: number[] = [];
   for (const d of data) {
     let l = 0;
-    for (let i = 0; i < d.length; i += 4) l += d[i]! + d[i + 1]! + d[i + 2]!;
+    for (let i = 0; i < d.length; i += 4) {l += d[i]! + d[i + 1]! + d[i + 2]!;}
     scores.push(Math.max(Math.abs(skyAxisGrad(d, false)), Math.abs(skyAxisGrad(d, true))));
     lum.push(l);
   }
@@ -250,7 +250,7 @@ function skyCapFaces(data: Uint8ClampedArray[]): { up: number; dn: number } {
  *  can't tell a horizon face from a cap. */
 function skyPickUpright(cands: SkyCand[], caps: { up: number; dn: number }): SkyCand | undefined {
   for (const c of cands) {
-    if (c.assign[2] === caps.up && c.assign[3] === caps.dn) return c;
+    if (c.assign[2] === caps.up && c.assign[3] === caps.dn) {return c;}
   }
   return undefined;
 }
@@ -278,12 +278,12 @@ function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
   const next = (): boolean => {
     // Iterative lexicographic next_permutation.
     let i = 4;
-    while (i >= 0 && perm[i]! > perm[i + 1]!) i--;
-    if (i < 0) return false;
+    while (i >= 0 && perm[i]! > perm[i + 1]!) {i--;}
+    if (i < 0) {return false;}
     let j = 5;
-    while (perm[j]! < perm[i]!) j--;
+    while (perm[j]! < perm[i]!) {j--;}
     [perm[i], perm[j]] = [perm[j]!, perm[i]!];
-    for (let a = i + 1, b = 5; a < b; a++, b--) [perm[a], perm[b]] = [perm[b]!, perm[a]!];
+    for (let a = i + 1, b = 5; a < b; a++, b--) {[perm[a], perm[b]] = [perm[b]!, perm[a]!];}
     return true;
   };
   // One coordinate-descent polish per permutation: each slot takes the
@@ -312,7 +312,8 @@ function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
 function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof faces | HTMLCanvasElement[] {
   const S = SKY_SOLVE_PX;
   const small = document.createElement('canvas');
-  small.width = small.height = S;
+  small.height = S;
+  small.width = small.height;
   const sctx = small.getContext('2d', { willReadFrequently: true })!;
   const data: Uint8ClampedArray[] = [];
   const E = faces.map((img, fi) => {
@@ -334,7 +335,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
     }
   }
   const pick = skyPickUpright(cands, caps);
-  if (!pick || pick.s >= ident) return faces; // names were fine
+  if (!pick || pick.s >= ident) {return faces;} // names were fine
   const { assign, orient } = pick;
   const out: HTMLCanvasElement[] = [];
   for (let slot = 0; slot < 6; slot++) {
@@ -344,7 +345,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
     c.width = src.width; c.height = src.height;
     const g = c.getContext('2d')!;
     g.translate(c.width / 2, c.height / 2);
-    if (k >= 4) g.scale(-1, 1);
+    if (k >= 4) {g.scale(-1, 1);}
     g.rotate((k % 4) * Math.PI / 2);
     g.drawImage(src, -src.width / 2, -src.height / 2);
     out.push(c);
@@ -402,7 +403,7 @@ function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
 /** Per-frame: keep the dome glued to the camera and its haze band on the
  *  live (sun-tinted) fog color. */
 export function updateCubeSky(camera: THREE.Camera, fogColor: THREE.Color): void {
-  if (!cubeDome || !cubeDome.visible) return;
+  if (!cubeDome || !cubeDome.visible) {return;}
   cubeDome.position.copy(camera.position);
   ((cubeDome.material as THREE.ShaderMaterial).uniforms.uFog.value as THREE.Color).copy(fogColor);
 }
@@ -413,8 +414,8 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
   const skyMesh = deps.lazyScene().getObjectByName('__sky');
   if (!skyDir) {
     deps.lazyScene().background = null;
-    if (cubeDome) cubeDome.visible = false;
-    if (skyMesh) skyMesh.visible = true;
+    if (cubeDome) {cubeDome.visible = false;}
+    if (skyMesh) {skyMesh.visible = true;}
     return;
   }
   // Baked ports ship .webp faces; .png is the fallback for a sky
@@ -425,7 +426,7 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     const faces = await Promise.all(SKY_FACES.map(async (f, i) => {
       const img = await loader.loadAsync(`${base(f)}.webp`)
         .catch(() => loader.loadAsync(`${base(f)}.png`));
-      if (!SKY_VFLIP.has(SKY_FACES[i]!)) return img;
+      if (!SKY_VFLIP.has(SKY_FACES[i]!)) {return img;}
       const c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;
       const ctx = c.getContext('2d')!;
@@ -437,14 +438,14 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     let assembled: typeof faces | HTMLCanvasElement[] = faces;
     try {
       assembled = skyAssemble(faces);
-      if (assembled !== faces) deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);
+      if (assembled !== faces) {deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);}
     } catch { /* canvas taint/security — keep the named assembly */ }
     const cube = new THREE.CubeTexture(assembled);
     cube.colorSpace = THREE.SRGBColorSpace;
     cube.needsUpdate = true;
     applyCubeDome(deps.lazyScene(), cube);
     deps.lazyScene().background = null;
-    if (skyMesh) skyMesh.visible = false;
+    if (skyMesh) {skyMesh.visible = false;}
   } catch (e) {
     const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
     deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(e)}`);
@@ -462,13 +463,14 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   }
   const tex = await new THREE.TextureLoader().loadAsync(`${httpUrl}/maps/${texPath}`);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapS = tex.wrapT;
   terrain.setAlbedo(tex);
   try {
     const mats = urlParams.has('mats')
       ? await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`)
       : null;
-    if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);
+    if (mats) {terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);}
   } catch {
     terrain.setMaterialBlend(null, null, null, 0, null);
   }
@@ -491,7 +493,7 @@ async function loadMats(dirUrl: string): Promise<{
   means: number[];
 } | null> {
   const res = await fetch(`${dirUrl}/mats.json`);
-  if (!res.ok) return null;
+  if (!res.ok) {return null;}
   const man = await res.json() as { grid: number; count: number; tiles: string[]; alphas: string; tileMeters: number };
   const raw = new Uint8Array(await (await fetch(`${dirUrl}/${man.alphas}`)).arrayBuffer());
   const grid = man.grid, count = man.count;
@@ -502,8 +504,8 @@ async function loadMats(dirUrl: string): Promise<{
     const rgba = new Uint8Array(grid * grid * 4);
     for (let c = 0; c < 4; c++) {
       const layer = offset + c;
-      if (layer >= count) break;
-      for (let i = 0; i < grid * grid; i++) rgba[i * 4 + c] = raw[i * count + layer];
+      if (layer >= count) {break;}
+      for (let i = 0; i < grid * grid; i++) {rgba[i * 4 + c] = raw[i * count + layer];}
     }
     const t = new THREE.DataTexture(rgba, grid, grid, THREE.RGBAFormat, THREE.UnsignedByteType);
     t.magFilter = THREE.LinearFilter;
@@ -532,7 +534,7 @@ async function loadMats(dirUrl: string): Promise<{
     // erase the grass bake outright).
     const d = g.getImageData(cx, cy, 256, 256).data;
     let s = 0;
-    for (let i = 0; i < d.length; i += 4) s += 0.299 * srgb2lin(d[i]) + 0.587 * srgb2lin(d[i + 1]) + 0.114 * srgb2lin(d[i + 2]);
+    for (let i = 0; i < d.length; i += 4) {s += 0.299 * srgb2lin(d[i]) + 0.587 * srgb2lin(d[i + 1]) + 0.114 * srgb2lin(d[i + 2]);}
     means[k] = Math.max(s / (d.length / 4), 1e-3);
   }));
   const tilesTex = new THREE.CanvasTexture(atlas);
@@ -608,7 +610,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
     std.transparent ? 't' : 'o',
   ].join('|');
   const hit = _canonMats.get(key);
-  if (hit) return hit;
+  if (hit) {return hit;}
   // GLTFLoader gives every DIF interior MeshStandardMaterial — PBR shading
   // on ~85k tris while the whole rest of the world runs Lambert. Downgrade
   // here: interiors are static, unmapped geometry; Lambert keeps the same
@@ -644,7 +646,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
         .replace('#include <fog_vertex>',
           '#include <fog_vertex>\n#ifdef USE_FOG\n  vIntWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vIntDelta = cameraPosition - vIntWorld;\n#endif');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vIntWorld;\nvarying vec3 vIntDelta;\nuniform float uIntHscale;\n' + INTERIOR_FOG_GLSL)
+        .replace('#include <common>', `#include <common>\nvarying vec3 vIntWorld;\nvarying vec3 vIntDelta;\nuniform float uIntHscale;\n${  INTERIOR_FOG_GLSL}`)
         .replace('#include <fog_fragment>', `#ifdef USE_FOG
   // Same curve as the terrain shader: linear haze + the exponential
   // valley mist, so interiors dissolve into the same air the ground does.
@@ -672,7 +674,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
 // casting (geometry is world-baked — boundingSphere.center is the mesh's
 // true position).
 function interiorCastRadius(g: THREE.BufferGeometry): number {
-  if (!g.boundingSphere) g.computeBoundingSphere();
+  if (!g.boundingSphere) {g.computeBoundingSphere();}
   const r = g.boundingSphere?.radius ?? 0;
   return r > 4 ? r : 0;
 }
@@ -690,7 +692,7 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
   // A cached miss is poison: a transient blip at first load would hide
   // the hull for the whole session. Drop the entry so the next map swap
   // or rejoin retries the fetch.
-  if (!out) glbCache.delete(name);
+  if (!out) {glbCache.delete(name);}
   return out;
 }
 
@@ -703,10 +705,10 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
   if (interiorGroup) {
     scene.remove(interiorGroup);
     interiorGroup = null;
-    for (const g of interiorGeos) g.dispose();
+    for (const g of interiorGeos) {g.dispose();}
     interiorGeos = [];
   }
-  if (!list?.length) return;
+  if (!list?.length) {return;}
   const { httpUrl } = await resolveServerEndpoints();
   const group = new THREE.Group();
   group.name = '__t2interiors';
@@ -730,7 +732,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     const m = new THREE.Matrix4();
     const pos = spec.pos;
     m.setPosition(pos.x, pos.y, pos.z);
-    if (spec.scale) m.multiply(new THREE.Matrix4().makeScale(spec.scale.x, spec.scale.y, spec.scale.z));
+    if (spec.scale) {m.multiply(new THREE.Matrix4().makeScale(spec.scale.x, spec.scale.y, spec.scale.z));}
     m.multiply(SWAP_YZ);
     if (spec.rot) {
       _axis.set(spec.rot[0], spec.rot[1], spec.rot[2]);
@@ -748,9 +750,9 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     inst.updateMatrixWorld(true);
     inst.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
+      if (!mesh.isMesh) {return;}
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const mat of mats) if (mat) mat.side = THREE.DoubleSide;
+      for (const mat of mats) {if (mat) mat.side = THREE.DoubleSide;}
       if (mats.length !== 1) {
         // Rare path: keep the multi-material mesh but pin the baked world
         // transform — re-parenting to `group` drops the instance matrix.
@@ -797,7 +799,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
       }
       continue;
     }
-    for (const g of geos) g.dispose(); // baked clones — merged owns their data now
+    for (const g of geos) {g.dispose();} // baked clones — merged owns their data now
     mergedGeo.push(merged);
     const mesh = new THREE.Mesh(merged, mat);
     mesh.matrixAutoUpdate = false; // baked world transform — static
@@ -809,7 +811,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
     mesh.castShadow = mesh.userData.castR > 0;
     group.add(mesh);
   }
-  if (missing.size) deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);
+  if (missing.size) {deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);}
   // Bake every world matrix once, then freeze the whole subtree — the
   // per-frame updateMatrixWorld walk skips it entirely instead of
   // re-multiplying hundreds of static nodes.
@@ -828,15 +830,15 @@ const _q = new THREE.Quaternion();
 export async function probeBootMap(): Promise<{ map: MapSnapshot; httpUrl: string } | null> {
   const { httpUrl } = await resolveServerEndpoints();
   const map = loadLastRoomMap(httpUrl);
-  if (!map) return null;
-  if (!(await pingServer(httpUrl))) return null;
+  if (!map) {return null;}
+  if (!(await pingServer(httpUrl))) {return null;}
   return { map, httpUrl };
 }
 
 /** Load the saved map's heightfield as the boot terrain (instead of the
  *  default PNG) and mark it resident so applyTerrain dedupes the swap. */
 export async function bootPrimeTerrain(httpUrl: string, map: MapSnapshot): Promise<boolean> {
-  if (!map.terrain) return false;
+  if (!map.terrain) {return false;}
   setHeightScale(map.heightScale ?? 1);
   await loadHeightfieldBin(`${httpUrl}/maps/${map.terrain}`);
   fieldLoaded = `${map.terrain}@${map.heightScale ?? 1}`;

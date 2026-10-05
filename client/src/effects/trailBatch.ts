@@ -40,8 +40,8 @@ export class TrailBatch {
   dirtyHi = 0;
 
   mark(lo: number, hi: number): void {
-    if (lo < this.dirtyLo) this.dirtyLo = lo;
-    if (hi > this.dirtyHi) this.dirtyHi = hi;
+    if (lo < this.dirtyLo) {this.dirtyLo = lo;}
+    if (hi > this.dirtyHi) {this.dirtyHi = hi;}
     this.dirty = true;
   }
 
@@ -64,7 +64,7 @@ export class TrailBatch {
   }
 
   release(slot: number): void {
-    if (!this.used.delete(slot)) return; // stale release can't double-free
+    if (!this.used.delete(slot)) {return;} // stale release can't double-free
     const b = slot * RIBBON_FLOATS_PER_SLOT;
     this.pos.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
     this.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
@@ -148,12 +148,12 @@ export class TrailBatch {
     // Aim-probe tag — the crosshair raycast resolves a slot via faceIndex
     // back to whichever RibbonTrail owns it (or proves it ownerless).
     markProbe(this.mesh, { kind: 'trailBatch', batch: this });
-    for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
+    for (let s = MAX_TRAILS - 1; s >= 0; s--) {this.free.push(s);}
     scene.add(this.mesh);
   }
 
   flush(): void {
-    if (!this.dirty) return;
+    if (!this.dirty) {return;}
     this.dirty = false;
     const n = this.dirtyHi - this.dirtyLo;
     if (n > 0) {
@@ -171,7 +171,7 @@ export class TrailBatch {
     if (this.slotsDirty) {
       this.slotsDirty = false;
       let hw = 0;
-      for (const s of this.used) if (s + 1 > hw) hw = s + 1;
+      for (const s of this.used) {if (s + 1 > hw) hw = s + 1;}
       this.hw = hw;
     }
     this.geo.setDrawRange(0, this.hw * IDX);
@@ -197,12 +197,12 @@ export function retireBatchIfOverflow(b: TrailBatch): void {
  *  used, so they're provably black. */
 export function slotLit(b: TrailBatch, s: number): boolean {
   const base = s * VERTS * 3;
-  for (let i = 0; i < VERTS * 3; i++) if (b.col[base + i] !== 0) return true;
+  for (let i = 0; i < VERTS * 3; i++) {if (b.col[base + i] !== 0) return true;}
   return false;
 }
 
 function* allBatches(): Generator<TrailBatch> {
-  for (const list of batches.values()) yield* list;
+  for (const list of batches.values()) {yield* list;}
 }
 
 /** Slots lit in the batch color buffer — and, more importantly, slots
@@ -214,9 +214,9 @@ export function litAudit(): { lit: number; unowned: number[] } {
   let lit = 0;
   for (const b of allBatches()) {
     for (let s = 0; s < b.hw; s++) {
-      if (!slotLit(b, s)) continue;
+      if (!slotLit(b, s)) {continue;}
       lit++;
-      if (!b.used.has(s)) unowned.push(s);
+      if (!b.used.has(s)) {unowned.push(s);}
     }
   }
   return { lit, unowned };
@@ -230,14 +230,14 @@ export function sweepLit(): void {
   for (const b of allBatches()) {
     let dirty = false;
     for (let s = 0; s < b.hw; s++) {
-      if (b.used.has(s) || !slotLit(b, s)) continue;
+      if (b.used.has(s) || !slotLit(b, s)) {continue;}
       const base = s * VERTS * 3;
       b.col.fill(0, base, base + VERTS * 3);
       b.mark(base, base + VERTS * 3);
       dirty = true;
       reapedLit++;
     }
-    if (dirty) b.flush();
+    if (dirty) {b.flush();}
   }
 }
 

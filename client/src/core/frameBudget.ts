@@ -42,8 +42,8 @@ export function createFrameBudget(): FrameBudget {
       fn(items[done]!);
       const itemMs = performance.now() - i0;
       done++;
-      if (itemMs > s.worst) s.worst = itemMs;
-      if (performance.now() - t0 >= msCap && done < items.length) break;
+      if (itemMs > s.worst) {s.worst = itemMs;}
+      if (performance.now() - t0 >= msCap && done < items.length) {break;}
     }
     // One O(n) splice for the completed prefix — shift()-per-item would
     // be O(n²) on a big backlog.
@@ -60,12 +60,12 @@ export function createFrameBudget(): FrameBudget {
       // First-run phase — a cheap name hash spaces sweeps so three
       // 40ms jobs don't all fire on frame N together.
       let h = 0;
-      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+      for (let i = 0; i < name.length; i++) {h = (h * 31 + name.charCodeAt(i)) | 0;}
       last = performance.now() - intervalMs + (Math.abs(h) % Math.max(1, intervalMs));
       sweeps.set(name, last);
     }
     const now = performance.now();
-    if (now - last < intervalMs) return false;
+    if (now - last < intervalMs) {return false;}
     sweeps.set(name, now);
     fn();
     return true;
@@ -78,8 +78,8 @@ export function createFrameBudget(): FrameBudget {
       const out: Record<string, { perFrame: number; worstItemMs: number; backlog: number }> = {};
       for (const [k, s] of stats) {
         out[k] = {
-          perFrame: s.calls > 0 ? +(s.done / s.calls).toFixed(2) : 0,
-          worstItemMs: +s.worst.toFixed(3),
+          perFrame: s.calls > 0 ? Number((s.done / s.calls).toFixed(2)) : 0,
+          worstItemMs: Number(s.worst.toFixed(3)),
           backlog: s.backlog,
         };
       }

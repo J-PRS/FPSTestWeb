@@ -12,8 +12,8 @@ const lgLoopSrcs: AudioScheduledSourceNode[] = [];
 
 export function beamLoop(): void {
   const bus = audio.sfxBus, c = ctx();
-  if (!bus || !c) return;
-  if (lgLoopGain) return; // already droning — keepalive is implicit
+  if (!bus || !c) {return;}
+  if (lgLoopGain) {return;} // already droning — keepalive is implicit
   const g = c.createGain();
   g.connect(bus);
   g.gain.value = 0.0001;
@@ -47,7 +47,7 @@ export function beamLoop(): void {
 
 export function beamLoopStop(): void {
   const c = ctx();
-  if (!lgLoopGain) return;
+  if (!lgLoopGain) {return;}
   const g = lgLoopGain;
   const srcs = lgLoopSrcs.splice(0);
   lgLoopGain = null;
@@ -59,16 +59,16 @@ export function beamLoopStop(): void {
 
 export function lgSizzle(pos: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.25, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['sparks', 0.5, 1.5 + Math.random() * 0.4, undefined, 0.12],
       ['hg_tick', 0.35, 2.4, 5000, 0.1],
-    ])) return;
+    ])) {return;}
     noise(0.14, 0.3, g, 'bandpass', 4500, 800);
     osc('square', 2400, 900, 0.1, 0.12, g);
   } finally { audio.emitterPitch = 1; }

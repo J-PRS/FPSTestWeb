@@ -35,12 +35,12 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
 
   if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged || ev.eventType === TargetEventType.Hit) {
     const ball = playbackBallById.get(ev.targetId);
-    if (!ball || ball.dead) return;
+    if (!ball || ball.dead) {return;}
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
     if (ev.eventType === TargetEventType.Hit) {
       ball.health = ev.health;
-      if (ball.health <= 0) ball.dead = true;
+      if (ball.health <= 0) {ball.dead = true;}
     }
     ball.update(0, terrain, playerPos);
     fastForward(seekTime - ev.timestamp, () => !ball.dead, (s) => ball.update(s, terrain, playerPos));
@@ -53,7 +53,7 @@ const PLAYBACK_SMOOTH_FACTOR = 0.25; // per-event gentle correction for small dr
 function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number, evx: number, evy: number, evz: number]): void {
   const [ex, ey, ez, evx, evy, evz] = rest;
   const dx = ball.pos.x - ex, dy = ball.pos.y - ey, dz = ball.pos.z - ez;
-  const drift = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const drift = Math.hypot(dx, dy, dz);
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
@@ -87,7 +87,7 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
   }
 
   const ball = playbackBallById.get(ev.targetId);
-  if (!ball || ball.dead) return;
+  if (!ball || ball.dead) {return;}
 
   if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged) {
     // Correct toward recorded keyframe; hard-snap only on large drift
@@ -103,7 +103,7 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
     world.damageNumberManager.spawn(ball.pos, 1, '#ffffff', world.camera);
-    if (ball.dead) playbackBallById.delete(ev.targetId);
+    if (ball.dead) {playbackBallById.delete(ev.targetId);}
   } else if (ev.eventType === TargetEventType.Destroyed) {
     ball.dead = true;
     world.debrisList.push(new BallDebris(scene, terrain, ball.pos, ball.color, ball.scale));

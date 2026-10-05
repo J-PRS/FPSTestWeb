@@ -158,7 +158,7 @@ export class AmbientParticles {
   }
 
   update(dt: number, camPos: THREE.Vector3, terrain: Terrain): void {
-    if (!this.active) return;
+    if (!this.active) {return;}
     this.time += dt;
     const cfg = this.cfg;
     const n = cfg.count;
@@ -167,7 +167,7 @@ export class AmbientParticles {
     // First tick: seed the whole field around wherever the camera started.
     if (!this.seeded) {
       this.seeded = true;
-      for (let i = 0; i < n; i++) this.respawn(i, camPos, terrain);
+      for (let i = 0; i < n; i++) {this.respawn(i, camPos, terrain);}
       this.posAttr.needsUpdate = true;
       return;
     }
@@ -206,6 +206,6 @@ export class AmbientParticles {
     }
 
     this.posAttr.needsUpdate = true;
-    if (colorDirty) this.colorAttr.needsUpdate = true;
+    if (colorDirty) {this.colorAttr.needsUpdate = true;}
   }
 }

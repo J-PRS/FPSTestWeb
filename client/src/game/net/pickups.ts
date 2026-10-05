@@ -42,18 +42,18 @@ export function wirePickups(ctx: NetCtx): void {
   ctx.addPickup = addPickup;
   ctx.reconcilePickups = (liveIds) => {
     for (const [id, e] of pickupMeshes) {
-      if (liveIds.has(id)) continue;
+      if (liveIds.has(id)) {continue;}
       e.nugget.serverCollect(); // fade; updateNuggets reaps
       pickupMeshes.delete(id);
     }
   };
 
   networkManager.onPickupSpawn = (id, pos, kind) => {
-    if (deps.world.playbackMode) return; // live match gems don't belong in the replay
+    if (deps.world.playbackMode) {return;} // live match gems don't belong in the replay
     addPickup(id, pos, kind ?? 'gem');
   };
   networkManager.onPickupGone = (id, by) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     const e = pickupMeshes.get(id);
     if (e) {
       pickupBurst(e.nugget.pos.clone(), e.kind);
@@ -89,13 +89,13 @@ export function wirePickups(ctx: NetCtx): void {
   // Server-applied powerup landing on us: mirror the numbers, HUD reads
   // player.armor / player.buffUntil each frame.
   networkManager.onBuff = (msg) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     const p = deps.lazyPlayer();
-    if (msg.health !== undefined) p.health = msg.health;
-    if (msg.armor !== undefined) p.armor = msg.armor;
+    if (msg.health !== undefined) {p.health = msg.health;}
+    if (msg.armor !== undefined) {p.armor = msg.armor;}
     if (msg.until !== undefined) {
-      if (msg.kind === 'regen') p.buffUntil.regen = msg.until;
-      if (msg.kind === 'dd') p.buffUntil.dd = msg.until;
+      if (msg.kind === 'regen') {p.buffUntil.regen = msg.until;}
+      if (msg.kind === 'dd') {p.buffUntil.dd = msg.until;}
     }
     const label = { heal: 'HEAL +50', armor: 'ARMOR +100', regen: 'REGENERATION', dd: 'DOUBLE DAMAGE' }[msg.kind];
     chat.add(null, label);

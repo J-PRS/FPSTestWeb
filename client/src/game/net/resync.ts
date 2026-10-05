@@ -18,7 +18,7 @@ const HIDDEN_RESYNC_MS = 3000;
 export function dropVolatileWorldFx(w: { projectiles: { isRemote: boolean; dispose(): void }[]; explosions: { dispose(): void }[]; implosions: { dead: boolean }[] }): number {
   let dropped = 0;
   w.projectiles = w.projectiles.filter((p) => {
-    if (!p.isRemote) return true;
+    if (!p.isRemote) {return true;}
     p.dispose();
     dropped++;
     return false;
@@ -41,8 +41,8 @@ export function wireResync(ctx: NetCtx): void {
     }
     const hiddenMs = hiddenAt === null ? 0 : performance.now() - hiddenAt;
     hiddenAt = null;
-    if (hiddenMs < HIDDEN_RESYNC_MS) return;
-    if (deps.world.playbackMode) return;
+    if (hiddenMs < HIDDEN_RESYNC_MS) {return;}
+    if (deps.world.playbackMode) {return;}
 
     // Purge even while disconnected — the socket often dies during the
     // hidden stretch ("CONNECTION LOST" on return) and gating the purge

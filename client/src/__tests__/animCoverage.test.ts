@@ -47,10 +47,10 @@ function available(variant: string): Set<string> {
   const out = new Set(natives);
   if (variant === 'mannequin') {
     // registerClip self-aliases mannequin's natives to UAL_ names.
-    for (const n of natives) out.add('UAL_' + n);
+    for (const n of natives) {out.add(`UAL_${n}`);}
   }
   for (const src of rig.sources) {
-    for (const n of clipNames(src)) out.add('UAL_' + n);
+    for (const n of clipNames(src)) {out.add(`UAL_${n}`);}
   }
   return out;
 }

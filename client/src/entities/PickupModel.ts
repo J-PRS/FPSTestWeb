@@ -28,7 +28,7 @@ const _parts = new Map<PickupKind, PickupParts | null>();
 
 export function pickupParts(kind: PickupKind): PickupParts | null {
   const hit = _parts.get(kind);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) {return hit;}
   const built = buildParts(kind);
   _parts.set(kind, built);
   return built;
@@ -83,11 +83,11 @@ function buildParts(kind: PickupKind): PickupParts | null {
       // axis so the cage merges as a solid mesh.
       const rods: THREE.BufferGeometry[] = [];
       const L = 0.36, T = 0.04, H = L / 2;
-      for (const a of [-H, H]) for (const b of [-H, H]) {
+      for (const a of [-H, H]) {for (const b of [-H, H]) {
         const rx = new THREE.BoxGeometry(L, T, T); rx.translate(0, a, b); rods.push(rx);
         const ry = new THREE.BoxGeometry(T, L, T); ry.translate(a, 0, b); rods.push(ry);
         const rz = new THREE.BoxGeometry(T, T, L); rz.translate(a, b, 0); rods.push(rz);
-      }
+      }}
       const core = new THREE.IcosahedronGeometry(0.14, 1);
       return { body: mergeGeometries(rods, false)!, accent: core };
     }

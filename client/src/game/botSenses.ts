@@ -74,7 +74,7 @@ export class BotSenses {
       out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now())) });
     }
     for (const b of this.host.bots) {
-      if (b.team === team) continue;
+      if (b.team === team) {continue;}
       out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && (!b.isCloakHidden || b.ghostT > 0) });
     }
     return out;
@@ -86,7 +86,7 @@ export class BotSenses {
     const out: { x: number; y: number; z: number }[] = [];
     const vecBase = _vecUsed;
     for (const e of this.host.world().explosions) {
-      if (e.age > 1.5) continue;
+      if (e.age > 1.5) {continue;}
       const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
       if (dx * dx + dy * dy + dz * dz < 50 * 50) {
         const v = nextVec();
@@ -104,9 +104,9 @@ export class BotSenses {
     const out: { x: number; y: number; z: number }[] = [];
     for (const p of this.host.world().projectiles) {
       const dx = pos.x - p.pos.x, dy = pos.y - p.pos.y, dz = pos.z - p.pos.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d > 12) continue;
-      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) continue;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 12) {continue;}
+      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) {continue;}
       const v = nextVec();
       v.x = p.pos.x; v.y = p.pos.y; v.z = p.pos.z;
       out.push(v);
@@ -127,9 +127,9 @@ export class BotSenses {
       _enemies.push(e);
     }
     for (const [id, rp] of this.host.world().remotePlayers) {
-      if (id === bot.playerId) continue;
+      if (id === bot.playerId) {continue;}
       const team = this.host.teamOf.get(id);
-      if (team === bot.team) continue;
+      if (team === bot.team) {continue;}
       // A held cloak removes the bot from enemy senses — same rule the
       // local player's cloak enjoys in this list. A shimmer reveal
       // (ghostT from his own shot) unmasks him for its remainder.
@@ -159,7 +159,7 @@ export class BotSenses {
   rekey(oldId: string, newId: string): void {
     const v = this.foeSeenCache.get(oldId);
     this.foeSeenCache.delete(oldId);
-    if (v !== undefined) this.foeSeenCache.set(newId, v);
+    if (v !== undefined) {this.foeSeenCache.set(newId, v);}
   }
 
   /** Any living PLAYER foe in brawl range with a clear eye line?
@@ -169,17 +169,17 @@ export class BotSenses {
   foeSeen(bot: GameBot, foes: FoeEntry[], terrain: Terrain): boolean {
     const now = performance.now();
     const hit = this.foeSeenCache.get(bot.playerId);
-    if (hit && now - hit.t < 200) return hit.v;
+    if (hit && now - hit.t < 200) {return hit.v;}
     let v = false;
     const fx = Math.sin(bot.rotation.yaw), fz = Math.cos(bot.rotation.yaw);
     for (const e of foes) {
-      if (!e.alive || e.id.startsWith('creature:')) continue;
-      if (e.pos.distanceTo(bot.position) >= BRAWL_RANGE) continue; // brawl range — server mirror
+      if (!e.alive || e.id.startsWith('creature:')) {continue;}
+      if (e.pos.distanceTo(bot.position) >= BRAWL_RANGE) {continue;} // brawl range — server mirror
       // The wire senses only count a foe inside the ~113° view cone —
       // charging a bot for "ignoring" an enemy behind it was the drift.
       const dx = e.pos.x - bot.position.x, dz = e.pos.z - bot.position.z;
       const gd = Math.hypot(dx, dz) || 1;
-      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
+      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
       _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
       _losCtx.now = now;
       if (losClear(_losCtx, bot.position, e.pos)) { v = true; break; }

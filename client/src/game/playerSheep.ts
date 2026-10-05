@@ -27,14 +27,14 @@ export class PlayerSheep {
    *  nothing here samples stale state. Fire recency comes off the
    *  shoot-anim rising edge (covers every weapon incl. melee/burst). */
   tick(dt: number, player: Player, terrain: Terrain | null, remotes: RemoteSet<RemotePlayer, RemotePlayerState>, localTeam: TeamId | undefined): void {
-    if (!terrain) return;
+    if (!terrain) {return;}
     this.meter.advance(dt);
     this.body.playerId = this.playerIdOf();
     this.body.pos = player.pos;
     this.body.vel = player.vel;
     // Fresh life is unproven — the meter re-earns credibility each spawn.
     if (player.isDead) { this.meter.clear(this.body.playerId); this.body.sheep = this.body.sheepShown = 100; return; }
-    if (this.prevShoot <= 0 && player.shootAnimTimer > 0) this.meter.markShot(this.body.playerId);
+    if (this.prevShoot <= 0 && player.shootAnimTimer > 0) {this.meter.markShot(this.body.playerId);}
     this.prevShoot = player.shootAnimTimer;
     const foe = this.foeNear(player, remotes, localTeam);
     this.meter.tick(this.body, dt, terrain, {
@@ -53,12 +53,12 @@ export class PlayerSheep {
    *  wire humans; LOS stays out of it since a human owns the sneak. */
   private foeNear(player: Player, remotes: RemoteSet<RemotePlayer, RemotePlayerState>, localTeam: TeamId | undefined): boolean {
     for (const [, rp] of remotes) {
-      if (rp.isDead) continue;
+      if (rp.isDead) {continue;}
       const team = (rp as { team?: string }).team;
-      if (localTeam && team === localTeam) continue;
+      if (localTeam && team === localTeam) {continue;}
       const p = rp.position;
       const d = (p.x - player.pos.x) ** 2 + (p.y - player.pos.y) ** 2 + (p.z - player.pos.z) ** 2;
-      if (d < BRAWL_RANGE * BRAWL_RANGE) return true;
+      if (d < BRAWL_RANGE * BRAWL_RANGE) {return true;}
     }
     return false;
   }

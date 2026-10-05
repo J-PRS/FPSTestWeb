@@ -34,9 +34,9 @@ describe('weapon registry', () => {
   it('fan weapons declare pellets; beams are hitscan only', () => {
     const BEAM_WEAPONS = new Set([WeaponType.Lightning, WeaponType.Repair]);
     for (const def of SLOT_DEFS) {
-      if (def.kind === 'fan') expect(def.pellets).toBeDefined();
-      if (def.kind === 'beam') expect(BEAM_WEAPONS.has(def.weaponType)).toBe(true);
-      if (BEAM_WEAPONS.has(def.weaponType)) expect(def.kind).toBe('beam');
+      if (def.kind === 'fan') {expect(def.pellets).toBeDefined();}
+      if (def.kind === 'beam') {expect(BEAM_WEAPONS.has(def.weaponType)).toBe(true);}
+      if (BEAM_WEAPONS.has(def.weaponType)) {expect(def.kind).toBe('beam');}
     }
   });
 
@@ -49,7 +49,7 @@ describe('weapon registry', () => {
       expect(c.aoeRadius).toBe(w.aoeRadius);
       // aoeDamage is inert when there's no splash (chaingun keeps a
       // placeholder) — only real AOE weapons must agree on it.
-      if (c.aoeRadius > 0) expect(c.aoeDamage).toBe(w.aoeDamage);
+      if (c.aoeRadius > 0) {expect(c.aoeDamage).toBe(w.aoeDamage);}
       expect(c.bodyRadius).toBe(w.bodyRadius);
     }
     const seen = new Set<number>();
@@ -76,7 +76,7 @@ const flatTerrain = { getHeight: () => 0 } as unknown as Terrain;
 
 function stepUntil(p: Projectile, cond: () => boolean, maxSeconds = 10): void {
   const dt = 1 / 60;
-  for (let t = 0; t < maxSeconds && !cond(); t += dt) p.update(dt, flatTerrain);
+  for (let t = 0; t < maxSeconds && !cond(); t += dt) {p.update(dt, flatTerrain);}
 }
 
 function spawnRRG(origin: THREE.Vector3, dir: THREE.Vector3): Projectile {
@@ -107,7 +107,7 @@ describe('ray-burst discharge (remote railgun)', () => {
     // level at y=50 and crosses x=70 on the throw axis.
     const players = new Map<string, THREE.Vector3>([['p1', new THREE.Vector3(70, 50, 0)]]);
     const dt = 1 / 60;
-    for (let t = 0; t < 2 && !p.exploded; t += dt) p.update(dt, flatTerrain, undefined, players);
+    for (let t = 0; t < 2 && !p.exploded; t += dt) {p.update(dt, flatTerrain, undefined, players);}
     expect(p.hitPlayerId).toBe('p1');
   });
 });

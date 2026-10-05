@@ -74,29 +74,29 @@ export class PlayerInput {
 
   private onKeyDown(e: KeyboardEvent): void {
     const h = this.h;
-    if (this.frozen) return;
+    if (this.frozen) {return;}
     this.keys[e.code] = true;
-    if (matchCode('spectate', e.code) && !e.repeat) h.toggleSpectator();
+    if (matchCode('spectate', e.code) && !e.repeat) {h.toggleSpectator();}
     // Spectating: only the spectate toggle and raw movement keys (tracked
     // above for the fly cam) respond — no weapons, skills, camera flips
-    if (h.isSpectating()) return;
-    if (matchCode('sidearm', e.code)) h.secondaryDown(h.sidearmWid());
-    if (matchCode('jump', e.code)) this.jumpHeld = true;
-    if (matchCode('belt', e.code)) this.beltHeld = true;
-    if (matchCode('melee', e.code)) h.melee();
-    if (matchCode('camera', e.code)) h.toggleCamera();
+    if (h.isSpectating()) {return;}
+    if (matchCode('sidearm', e.code)) {h.secondaryDown(h.sidearmWid());}
+    if (matchCode('jump', e.code)) {this.jumpHeld = true;}
+    if (matchCode('belt', e.code)) {this.beltHeld = true;}
+    if (matchCode('melee', e.code)) {h.melee();}
+    if (matchCode('camera', e.code)) {h.toggleCamera();}
     if (!e.repeat) {
-      if (matchCode('skill', e.code)) h.skillPress();
-      if (matchCode('deploy', e.code)) h.deploy();
-      if (matchCode('respawn', e.code)) h.respawn();
+      if (matchCode('skill', e.code)) {h.skillPress();}
+      if (matchCode('deploy', e.code)) {h.deploy();}
+      if (matchCode('respawn', e.code)) {h.respawn();}
     }
     const slot = this.slotForCode(e.code);
-    if (slot >= 0) h.selectSlot(slot);
+    if (slot >= 0) {h.selectSlot(slot);}
   }
 
   private slotForCode(code: string): number {
     for (let i = 0; i < LOADOUT_SLOTS; i++) {
-      if (matchCode(`slot${i}` as BindAction, code)) return i;
+      if (matchCode(`slot${i}` as BindAction, code)) {return i;}
     }
     return -1;
   }
@@ -107,46 +107,46 @@ export class PlayerInput {
     // Mouse wheel cycles weapons (down = next, up = previous). Accumulate
     // deltaY so smooth-scroll/trackpads switch once per gesture, not per tick.
     document.addEventListener('wheel', (e) => {
-      if (this.frozen) return;
-      if (!document.pointerLockElement) return;
+      if (this.frozen) {return;}
+      if (!document.pointerLockElement) {return;}
       this.wheelAcc += e.deltaY;
-      if (Math.abs(this.wheelAcc) < 40) return;
+      if (Math.abs(this.wheelAcc) < 40) {return;}
       const step = this.wheelAcc > 0 ? 1 : -1;
       this.wheelAcc = 0;
       h.cycleWeapon(step);
     }, { passive: true });
     document.addEventListener('keyup', (e) => {
-      if (this.frozen) return;
+      if (this.frozen) {return;}
       this.keys[e.code] = false;
-      if (matchCode('jump', e.code)) this.jumpHeld = false;
-      if (matchCode('skill', e.code)) h.skillRelease();
-      if (matchCode('belt', e.code)) this.beltHeld = false;
-      if (matchCode('sidearm', e.code)) h.secondaryUp();
+      if (matchCode('jump', e.code)) {this.jumpHeld = false;}
+      if (matchCode('skill', e.code)) {h.skillRelease();}
+      if (matchCode('belt', e.code)) {this.beltHeld = false;}
+      if (matchCode('sidearm', e.code)) {h.secondaryUp();}
     });
     document.addEventListener('mousedown', (e) => {
-      if (this.frozen) return;
-      if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
+      if (this.frozen) {return;}
+      if (!document.pointerLockElement) {return;} // ignore clicks that lock the cursor
       this.keys[`Mouse${e.button}`] = true;
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
       if (e.button === 1) { this.midHeld = !this.midHeld; e.preventDefault(); }
       if (e.button === 2) { this.jetPending = true; }
       // Buttons bound to key actions (keybinds allow Mouse0-4) need the
       // same press/release semantics as keyboard codes
-      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = true;
-      if (matchCode('skill', `Mouse${e.button}`)) h.skillPress();
-      if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = true;
-      if (matchCode('melee', `Mouse${e.button}`)) h.melee();
-      if (matchCode('camera', `Mouse${e.button}`)) h.toggleCamera();
-      if (matchCode('respawn', `Mouse${e.button}`)) h.respawn();
+      if (matchCode('jump', `Mouse${e.button}`)) {this.jumpHeld = true;}
+      if (matchCode('skill', `Mouse${e.button}`)) {h.skillPress();}
+      if (matchCode('belt', `Mouse${e.button}`)) {this.beltHeld = true;}
+      if (matchCode('melee', `Mouse${e.button}`)) {h.melee();}
+      if (matchCode('camera', `Mouse${e.button}`)) {h.toggleCamera();}
+      if (matchCode('respawn', `Mouse${e.button}`)) {h.respawn();}
     });
     document.addEventListener('mouseup', (e) => {
-      if (this.frozen) return;
+      if (this.frozen) {return;}
       this.keys[`Mouse${e.button}`] = false;
-      if (e.button === 0) this.mouseHeld = false;
+      if (e.button === 0) {this.mouseHeld = false;}
       if (e.button === 2) { this.jetPending = false; }
-      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
-      if (matchCode('skill', `Mouse${e.button}`)) h.skillRelease();
-      if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = false;
+      if (matchCode('jump', `Mouse${e.button}`)) {this.jumpHeld = false;}
+      if (matchCode('skill', `Mouse${e.button}`)) {h.skillRelease();}
+      if (matchCode('belt', `Mouse${e.button}`)) {this.beltHeld = false;}
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     // Chrome's pointer-lock quirk: mousemoves queued before lock fire after
@@ -156,14 +156,14 @@ export class PlayerInput {
     // rather than just the first one. Clamped per-event deltas stay: a real
     // violent flick is <100px anyway.
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement) this.lockSettleUntil = performance.now() + 80;
+      if (document.pointerLockElement) {this.lockSettleUntil = performance.now() + 80;}
     });
     document.addEventListener('mousemove', (e) => {
-      if (!document.pointerLockElement || this.frozen) return;
-      if (performance.now() < this.lockSettleUntil) return;
+      if (!document.pointerLockElement || this.frozen) {return;}
+      if (performance.now() < this.lockSettleUntil) {return;}
       const mx = Math.max(-800, Math.min(800, e.movementX));
       const my = Math.max(-800, Math.min(800, e.movementY));
-      if (this.midHeld) h.orbitLook(mx, my); else h.look(mx, my);
+      if (this.midHeld) {h.orbitLook(mx, my);} else {h.look(mx, my);}
     });
   }
 
@@ -189,7 +189,7 @@ export class PlayerInput {
       sensInput.addEventListener('focus', () => sensInput.select());
       sensInput.addEventListener('input', () => {
         const v = parseFloat(sensInput.value);
-        if (!isFinite(v)) return;
+        if (!isFinite(v)) {return;}
         this.sensitivity = Math.max(0.5, Math.min(100, v)) / 10;
         settings.set('fps-sens', this.sensitivity);
       });
@@ -202,7 +202,7 @@ export class PlayerInput {
       volInput.value = audio.getVolume().toString();
       volInput.addEventListener('input', () => {
         const v = parseFloat(volInput.value);
-        if (isFinite(v)) audio.setVolume(Math.max(0, Math.min(1, v)));
+        if (isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
       });
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }

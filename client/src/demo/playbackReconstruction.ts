@@ -62,14 +62,14 @@ const _beamUp = new THREE.Vector3(0, 1, 0);
 // pins peak memory forever otherwise (each beam owns a material).
 const BEAM_POOL_KEEP = 32;
 export function releasePlaybackBeam(world: PlaybackWorld, b: PlaybackBeam): void {
-  if (world.beamPool.length >= BEAM_POOL_KEEP) b.mat.dispose();
-  else world.beamPool.push(b);
+  if (world.beamPool.length >= BEAM_POOL_KEEP) {b.mat.dispose();}
+  else {world.beamPool.push(b);}
 }
 
 export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
   _beamDir.subVectors(to, from);
   const len = _beamDir.length();
-  if (len < 0.01) return;
+  if (len < 0.01) {return;}
   let b = world.beamPool.pop();
   if (!b) {
     const mat = new THREE.MeshBasicMaterial({
@@ -82,7 +82,8 @@ export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to:
   b.mesh.scale.set(0.14, len, 0.14);
   b.mat.color.setHex(colorHex);
   b.mat.opacity = 0.85;
-  b.life = b.maxLife = 0.35;
+  b.maxLife = 0.35;
+  b.life = b.maxLife;
   world.scene.add(b.mesh);
   world.beams.push(b);
 }
@@ -153,7 +154,7 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
 
   if (ev.eventType === ProjectileEventType.Bounce) {
     const r = world.playbackProjectileById.get(ev.projectileId);
-    if (!r || r.exploded) return;
+    if (!r || r.exploded) {return;}
     r.pos.set(ev.posX, ev.posY, ev.posZ);
     r.vel.set(ev.velX, ev.velY, ev.velZ);
     fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
@@ -204,7 +205,7 @@ function applyPlaybackProjectileEvent(world: PlaybackWorld, ev: ProjectileEvent)
   }
 
   const r = world.playbackProjectileById.get(ev.projectileId);
-  if (!r || r.exploded) return;
+  if (!r || r.exploded) {return;}
 
   if (ev.eventType === ProjectileEventType.Bounce) {
     r.pos.set(ev.posX, ev.posY, ev.posZ);

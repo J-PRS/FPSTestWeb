@@ -27,7 +27,7 @@ const _segDir = new THREE.Vector3();
 // with dir so the cross product can't degenerate (vertical beams included).
 function perpBasis(dir: THREE.Vector3, side: THREE.Vector3, up: THREE.Vector3): void {
   up.set(0, 1, 0);
-  if (Math.abs(dir.y) > Math.abs(dir.x) && Math.abs(dir.y) > Math.abs(dir.z)) up.set(1, 0, 0);
+  if (Math.abs(dir.y) > Math.abs(dir.x) && Math.abs(dir.y) > Math.abs(dir.z)) {up.set(1, 0, 0);}
   side.crossVectors(dir, up).normalize();
   up.crossVectors(side, dir).normalize();
 }
@@ -67,9 +67,10 @@ export class LightningBeam {
 
   private static _glowTex: THREE.Texture | null = null;
   static makeGlowTexture(): THREE.Texture {
-    if (this._glowTex) return this._glowTex;
+    if (this._glowTex) {return this._glowTex;}
     const c = document.createElement('canvas');
-    c.width = c.height = 64;
+    c.height = 64;
+    c.width = c.height;
     const ctx = c.getContext('2d')!;
     const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     g.addColorStop(0, 'rgba(255,255,255,1)');
@@ -137,7 +138,7 @@ export class LightningBeam {
       const len = _dir.length();
       // Degenerate (point-blank) beam: any basis works, just don't NaN
       if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
-      else perpBasis(_dir, _side, _up);
+      else {perpBasis(_dir, _side, _up);}
       for (let i = 0; i <= SEGS; i++) {
         const t = i / SEGS;
         const amp = Math.sin(t * Math.PI) * JAG * Math.min(1, len / 30);
@@ -236,7 +237,7 @@ export class LightningBeam {
       _segDir.copy(next).sub(prev).normalize();
       // Stable side/up from the segment dir (never degenerate)
       _side.set(-_segDir.z, 0, _segDir.x);
-      if (_side.lengthSq() < 0.01) _side.set(1, 0, 0);
+      if (_side.lengthSq() < 0.01) {_side.set(1, 0, 0);}
       _side.normalize();
       _up.crossVectors(_segDir, _side).normalize();
       // Strip A: ±side

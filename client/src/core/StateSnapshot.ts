@@ -132,9 +132,7 @@ export namespace StateSnapshot {
    */
   export function exportSnapshots(): void {
     const data = {
-      snapshots: snapshotBuffer.map(s => Object.assign({}, s, {
-        players: Array.from(s.players.entries())
-      }))
+      snapshots: snapshotBuffer.map(s => ({ ...s, players: Array.from(s.players.entries())}))
     };
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -142,7 +140,7 @@ export namespace StateSnapshot {
     const a = document.createElement('a');
     a.href = url;
     a.download = `client-snapshots-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
+    document.body.append(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
@@ -199,10 +197,10 @@ export namespace StateSnapshot {
     const p2Ids = new Set(s2.projectiles.map(p => p.id));
 
     for (const id of p1Ids) {
-      if (!p2Ids.has(id)) diffs.push(`Projectile ${id} missing in snapshot2`);
+      if (!p2Ids.has(id)) {diffs.push(`Projectile ${id} missing in snapshot2`);}
     }
     for (const id of p2Ids) {
-      if (!p1Ids.has(id)) diffs.push(`Projectile ${id} missing in snapshot1`);
+      if (!p1Ids.has(id)) {diffs.push(`Projectile ${id} missing in snapshot1`);}
     }
     return diffs;
   }

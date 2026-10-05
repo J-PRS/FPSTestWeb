@@ -107,7 +107,8 @@ export class PlayerSkills {
   }
 
   reset(): void {
-    this.bounceHeld = this.bounceArmed = false;
+    this.bounceArmed = false;
+    this.bounceHeld = this.bounceArmed;
     this.blinkActive = false;
     this.slamActive = false;
     this.chan.resetAll();
@@ -116,20 +117,20 @@ export class PlayerSkills {
 
   // Q pressed — one dispatch point per skill.
   press(skill: SkillId): void {
-    if (skill === 'blink') this.tryBlink();
-    else if (skill === 'dash') this.tryDash();
-    else if (skill === 'slam') this.trySlam();
-    else if (skill === 'warp') this.warp.throwBeacon();
-    else if (skill === 'cloak') this.chan.toggleCloak();
-    else if (skill === 'shield') this.chan.toggleShield();
-    else if (skill === 'medkit') this.chan.toggleMend();
-    else this.bounceHeld = true;
+    if (skill === 'blink') {this.tryBlink();}
+    else if (skill === 'dash') {this.tryDash();}
+    else if (skill === 'slam') {this.trySlam();}
+    else if (skill === 'warp') {this.warp.throwBeacon();}
+    else if (skill === 'cloak') {this.chan.toggleCloak();}
+    else if (skill === 'shield') {this.chan.toggleShield();}
+    else if (skill === 'medkit') {this.chan.toggleMend();}
+    else {this.bounceHeld = true;}
   }
 
   release(skill: SkillId): void {
     this.bounceHeld = false;
     this.bounceArmed = false;
-    if (skill === 'warp') this.warp.releaseBeacon();
+    if (skill === 'warp') {this.warp.releaseBeacon();}
   }
 
   tickCooldowns(dt: number): void {
@@ -147,13 +148,13 @@ export class PlayerSkills {
   /** The instant-skill ante: spend the energy AND tell the server shadow.
    *  False = the tank can't cover it and the skill fizzles. */
   private paySkill(): boolean {
-    if (!this.ctx.spendEnergy(ENERGY.skillCost)) return false;
+    if (!this.ctx.spendEnergy(ENERGY.skillCost)) {return false;}
     this.ctx.skillUsed();
     return true;
   }
 
   private tryBlink(): void {
-    if (this.blinkActive || this.blinkCooldown > 0) return;
+    if (this.blinkActive || this.blinkCooldown > 0) {return;}
 
     const dir = this.ctx.aimDir();
     const { pos, terrain } = this.ctx;
@@ -164,11 +165,11 @@ export class PlayerSkills {
       const px = pos.x + dir.x * d;
       const py = pos.y + dir.y * d;
       const pz = pos.z + dir.z * d;
-      if (py < terrain.getHeight(px, pz) + 0.5) break;
+      if (py < terrain.getHeight(px, pz) + 0.5) {break;}
       dist = d;
     }
-    if (dist < 2) return; // wall in the face — fizzle, no cooldown
-    if (!this.paySkill()) return; // dry tank — the trick costs real mobility
+    if (dist < 2) {return;} // wall in the face — fizzle, no cooldown
+    if (!this.paySkill()) {return;} // dry tank — the trick costs real mobility
 
     this.blinkFrom.copy(pos);
     this.blinkTo.copy(dir).multiplyScalar(dist).add(pos);
@@ -184,7 +185,7 @@ export class PlayerSkills {
   // velocity held at zero until the restore on completion. Returns true
   // while active — Player's update early-outs on it.
   updateBlink(dt: number): boolean {
-    if (!this.blinkActive) return false;
+    if (!this.blinkActive) {return false;}
     this.blinkT += dt / BLINK_TIME;
     const t = Math.min(this.blinkT, 1);
     const ease = t * t * (3 - 2 * t); // smoothstep — snap in, settle out
@@ -198,8 +199,8 @@ export class PlayerSkills {
   }
 
   private tryDash(): void {
-    if (this.dashCooldown > 0) return;
-    if (!this.paySkill()) return;
+    if (this.dashCooldown > 0) {return;}
+    if (!this.paySkill()) {return;}
     this.dashCooldown = DASH_COOLDOWN;
     const dir = this.ctx.aimDir();
     this.ctx.vel.addScaledVector(dir, DASH_IMPULSE);
@@ -208,8 +209,8 @@ export class PlayerSkills {
   }
 
   private trySlam(): void {
-    if (this.ctx.isOnGround() || this.slamCooldown > 0) return; // airborne only
-    if (!this.paySkill()) return;
+    if (this.ctx.isOnGround() || this.slamCooldown > 0) {return;} // airborne only
+    if (!this.paySkill()) {return;}
     this.slamActive = true;
     this.slamCooldown = SLAM_COOLDOWN;
     this.ctx.vel.y = -SLAM_SPEED; // keep horizontal momentum — spike the vertical
@@ -223,7 +224,7 @@ export class PlayerSkills {
     // Bounce skill: arm while airborne, fire on the landing transition —
     // redirect full speed along the crosshair. Pure redirect: magnitude
     // preserved, nothing added or taken away.
-    if (this.bounceHeld && !onGround) this.bounceArmed = true;
+    if (this.bounceHeld && !onGround) {this.bounceArmed = true;}
     if (this.bounceArmed && !wasOnGround && onGround) {
       const speed = ctx.vel.length();
       if (speed > 0.01 && this.paySkill()) {

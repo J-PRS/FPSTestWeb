@@ -72,10 +72,10 @@ export class CoolShotManager {
 
   // Recording stops mid-wait — extract now with whatever buffer exists
   flushPending(): void {
-    if (this.pendingClips.length === 0) return;
+    if (this.pendingClips.length === 0) {return;}
     const pending = this.pendingClips;
     this.pendingClips = [];
-    for (const p of pending) this.extractPendingClip(p);
+    for (const p of pending) {this.extractPendingClip(p);}
   }
 
   // Auto-clip: called when a projectile hits something.
@@ -85,8 +85,8 @@ export class CoolShotManager {
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0, hitTime?: number): void {
-    if (!this.deps.isRecording()) return;
-    if (projectileLifetime < minLifetime) return;
+    if (!this.deps.isRecording()) {return;}
+    if (projectileLifetime < minLifetime) {return;}
 
     const actualHitTime = hitTime ?? this.deps.recorder().duration;
     const shotTime = actualHitTime - projectileLifetime;
@@ -126,11 +126,11 @@ export class CoolShotManager {
 
   // Called every frame while recording
   tick(): void {
-    if (this.pendingClips.length === 0) return;
+    if (this.pendingClips.length === 0) {return;}
     const now = this.deps.recorder().duration;
     for (let i = this.pendingClips.length - 1; i >= 0; i--) {
       const pending = this.pendingClips[i];
-      if (now < pending.extractAt) continue;
+      if (now < pending.extractAt) {continue;}
       this.pendingClips.splice(i, 1);
       this.extractPendingClip(pending);
     }
@@ -183,7 +183,7 @@ export class CoolShotManager {
   }
 
   playAt(index: number): void {
-    if (index < 0 || index >= this.coolShots.length) return;
+    if (index < 0 || index >= this.coolShots.length) {return;}
     const entry = this.coolShots[index];
     if (entry.clipData) {
       this.deps.playDemoData(entry.clipData);
@@ -195,7 +195,7 @@ export class CoolShotManager {
 
   playById(id: string): void {
     const index = this.coolShots.findIndex(s => s.id === id);
-    if (index >= 0) this.playAt(index);
+    if (index >= 0) {this.playAt(index);}
   }
 
   async downloadById(id: string): Promise<void> {

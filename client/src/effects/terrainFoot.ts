@@ -58,7 +58,7 @@ export class TerrainFoot {
     for (let i = 0; i <= this.segs; i++) {
       const a = (i / this.segs) * Math.PI * 2;
       _v.set(Math.cos(a) * this.rimRadius, 0.02, Math.sin(a) * this.rimRadius);
-      if (quat) _v.applyQuaternion(quat);
+      if (quat) {_v.applyQuaternion(quat);}
       const wx = cx + _v.x, wz = cz + _v.z;
       const o = i * 3, ob = (i + ringVerts) * 3;
       arr[o] = _v.x;

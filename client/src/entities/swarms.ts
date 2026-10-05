@@ -43,9 +43,9 @@ export function initSwarms(scene: THREE.Scene, terrain: Terrain, specs: Record<s
 
 export function getSwarm(species: string): SpeciesSwarm | null {
   const existing = swarms.get(species);
-  if (existing) return existing;
+  if (existing) {return existing;}
   const spec = specTable[species];
-  if (!spec || !registryScene) return null;
+  if (!spec || !registryScene) {return null;}
   const parts = spec.parts();
   if (spec.bake) {
     for (const p of parts) {
@@ -55,7 +55,7 @@ export function getSwarm(species: string): SpeciesSwarm | null {
       // mesh renders the virgin buffer. And bake ONE part per host:
       // stacked parts at origin mutually occlude and the whole bake
       // floors out black — each part wants its own self-occlusion only.
-      if (p.geometry.index) p.geometry = p.geometry.toNonIndexed();
+      if (p.geometry.index) {p.geometry = p.geometry.toNonIndexed();}
       const host = new THREE.Group();
       host.add(new THREE.Mesh(p.geometry, p.material));
       bakeVertexAO(host, { grime: true, wearBoost: 0.7 }); // same grime+wear as the chaingun bake
@@ -77,7 +77,7 @@ export function getShadows(): InstancedBlobShadows | null {
  *  species — the pools themselves grow on demand and never fill. */
 export function allocSlots(species: string, owner: SwarmSlotOwner): boolean {
   const swarm = getSwarm(species);
-  if (!swarm || swarm.alloc(owner) < 0) return false;
+  if (!swarm || swarm.alloc(owner) < 0) {return false;}
   owner.shadowSlot = shadows?.alloc(owner) ?? -1;
   owner.swarmSpecies = species;
   return true;
@@ -85,14 +85,14 @@ export function allocSlots(species: string, owner: SwarmSlotOwner): boolean {
 
 export function freeSlots(species: string, owner: SwarmSlotOwner): void {
   swarms.get(species)?.free(owner.swarmSlot);
-  if (owner.shadowSlot >= 0) shadows?.free(owner);
+  if (owner.shadowSlot >= 0) {shadows?.free(owner);}
 }
 
 function getGibPool(species: string): GibPool | null {
   const existing = gibPools.get(species);
-  if (existing) return existing;
+  if (existing) {return existing;}
   const swarm = getSwarm(species);
-  if (!swarm || !registryScene) return null;
+  if (!swarm || !registryScene) {return null;}
   const pool = new GibPool(registryScene, swarm);
   gibPools.set(species, pool);
   return pool;
@@ -111,9 +111,9 @@ export function burstGibs(
 ): boolean {
   const species = owner.swarmSpecies;
   const slot = owner.swarmSlot ?? -1;
-  if (!species || slot < 0) return false;
+  if (!species || slot < 0) {return false;}
   const pool = getGibPool(species);
-  if (!pool || !pool.burst(slot, center, impulseDir, inheritVel)) return false;
+  if (!pool || !pool.burst(slot, center, impulseDir, inheritVel)) {return false;}
   freeSlots(species, owner as SwarmSlotOwner);
   owner.swarmSlot = -1;
   return true;
@@ -123,11 +123,11 @@ export function burstGibs(
  *  Also the idle-shrink pass for the three grow-only capacity buffers:
  *  occupancy under a quarter for 30s contracts them back to initCap. */
 export function updateGibs(dt: number): void {
-  if (!registryTerrain) return;
-  for (const pool of gibPools.values()) pool.update(dt, registryTerrain);
+  if (!registryTerrain) {return;}
+  for (const pool of gibPools.values()) {pool.update(dt, registryTerrain);}
   const now = performance.now();
-  for (const s of swarms.values()) s.checkShrink(now);
-  for (const g of gibPools.values()) g.checkShrink(now);
+  for (const s of swarms.values()) {s.checkShrink(now);}
+  for (const g of gibPools.values()) {g.checkShrink(now);}
   shadows?.checkShrink(now);
 }
 
@@ -135,9 +135,9 @@ export function updateGibs(dt: number): void {
  *  or a gib pool that never drains shows up here before it starves. */
 export function swarmStats(): Record<string, unknown> {
   const species: Record<string, { live: number; cap: number }> = {};
-  for (const [k, s] of swarms) species[k] = { live: s.liveCount, cap: s.capacity };
+  for (const [k, s] of swarms) {species[k] = { live: s.liveCount, cap: s.capacity };}
   const gibs: Record<string, { live: number; cap: number }> = {};
-  for (const [k, g] of gibPools) gibs[k] = { live: g.live, cap: g.cap };
+  for (const [k, g] of gibPools) {gibs[k] = { live: g.live, cap: g.cap };}
   return {
     species,
     gibs,

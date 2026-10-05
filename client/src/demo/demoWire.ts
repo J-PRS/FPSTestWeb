@@ -16,7 +16,7 @@ export function wirePlayerCallbacks(m: DemoManager): void {
         m.ui.setPlaying(false);
         // End of the clip = end of the capture — stop + download here so
         // the MP4 button is "record this demo", not a manual timer.
-        if (m.video.isRecording) m.toggleVideoRecord();
+        if (m.video.isRecording) {m.toggleVideoRecord();}
         m.onPlaybackEnd?.();
       },
       onTimeUpdate: (current, duration) => {
@@ -52,7 +52,7 @@ export function buildDemoUI(m: DemoManager): void {
         m.onPlaybackStop?.();
         // Stop exits replay — flush any in-flight video export so the clip
         // isn't abandoned silently.
-        if (m.video.isRecording) m.toggleVideoRecord();
+        if (m.video.isRecording) {m.toggleVideoRecord();}
       },
       onSave: () => {
         m.saveDemo();

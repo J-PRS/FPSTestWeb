@@ -28,17 +28,17 @@ export function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeo
   const cam = deps.lazyCamera();
   cam.getWorldDirection(_lgTo);
   for (const t of deps.targets) {
-    if (t.dead || t === exclude) continue;
+    if (t.dead || t === exclude) {continue;}
     // Front hemisphere only — a bolt can't arc backward through you,
     // and a fork to an enemy beside/behind draws a giant fan ACROSS
     // the view that reads as "the beam detached" (it did, sorta)
     _lgTo2.copy(t.pos).sub(cam.position);
-    if (_lgTo2.dot(_lgTo) <= 0) continue;
+    if (_lgTo2.dot(_lgTo) <= 0) {continue;}
     // Fork must continue FORWARD-ish along the bolt — a perpendicular
     // hop (bird overhead, enemy beside the contact) draws an arc into
     // the sky that reads as the beam detaching, not a chain
     _lgTo2.copy(t.pos).sub(from);
-    if (_lgTo2.dot(_lgD) < _lgTo2.length() * 0.35) continue;
+    if (_lgTo2.dot(_lgD) < _lgTo2.length() * 0.35) {continue;}
     const d2 = t.pos.distanceToSquared(from);
     if (d2 < bestD2) { bestD2 = d2; best = t; }
   }
@@ -67,7 +67,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
       for (let i = 0; i < 6; i++) {
         const mid = (lo + hi) * 0.5;
         _lgP.copy(_lgO).addScaledVector(_lgD, mid);
-        if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) hi = mid; else lo = mid;
+        if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {hi = mid;} else {lo = mid;}
       }
       hitT = lo; break;
     }
@@ -78,7 +78,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   if (Projectile.solidColliders.length) {
     _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
     const sh = segSolidHit(_lgO, _lgP, Projectile.solidColliders);
-    if (sh) hitT *= sh.t; // entry as a fraction of the current reach
+    if (sh) {hitT *= sh.t;} // entry as a fraction of the current reach
   }
 
   // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
@@ -97,13 +97,13 @@ function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
   traceT.t = hitT;
   let hit: (typeof deps.targets)[number] | null = null;
   for (const t of deps.targets) {
-    if (t.dead) continue;
+    if (t.dead) {continue;}
     _lgTo.copy(t.pos).sub(_lgO);
     // Capsule bodies (totem): aim the test at the shaft's midpoint —
     // the feet-sphere misses a beam through the upper half entirely.
-    if (t.capsuleTop) _lgTo.y += t.capsuleTop * 0.5;
+    if (t.capsuleTop) {_lgTo.y += t.capsuleTop * 0.5;}
     const proj = _lgTo.dot(_lgD);
-    if (proj < 0 || proj > traceT.t) continue;
+    if (proj < 0 || proj > traceT.t) {continue;}
     const entry = sphereEntry(traceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
     if (entry !== null) { traceT.t = entry; hit = t; }
   }
@@ -114,7 +114,7 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
   traceT.t = hitT;
   let hitId: string | null = null;
   for (const [pid, rp] of deps.world.remotePlayers) {
-    if (rp.isDead) continue;
+    if (rp.isDead) {continue;}
     // Ray vs the class capsule (shared/botClasses — the same shape the
     // server validates). rp.position is eye height; the capsule axis runs
     // feet+R .. feet+HEIGHT−R below it.
@@ -151,7 +151,7 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
   const py = _lgO.y + _lgD.y * t - (yLo + s);
   const pz = _lgO.z + _lgD.z * t - eyePos.z;
   const d2 = px * px + py * py + pz * pz;
-  if (d2 >= capPad * capPad) return null;
+  if (d2 >= capPad * capPad) {return null;}
   const entry = t - Math.sqrt(capPad * capPad - d2);
   return entry < hitT ? Math.max(entry, 0) : null;
 }
@@ -161,7 +161,7 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
 // Beam is thin but not needle-thin — callers pad the radius.
 function sphereEntry(hitT: number, r: number, proj: number): number | null {
   const perp2 = _lgTo.lengthSq() - proj * proj;
-  if (perp2 >= r * r) return null;
+  if (perp2 >= r * r) {return null;}
   const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
   return entry < hitT ? Math.max(entry, 0) : null;
 }

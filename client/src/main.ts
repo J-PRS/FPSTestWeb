@@ -202,7 +202,7 @@ async function init(): Promise<void> {
   // (no gameState ever) falls back to the boot field after 8s.
   if (mode) {
     world.onTerrainApplied = () => teamBots?.reseatAll();
-    void Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
+    Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
       .then(() => { if (!teamBots && !networkManager.isConnected()) setupOfflineMode(mode); });
   }
 
@@ -293,7 +293,7 @@ async function initDemo(): Promise<void> {
     overlay,
     requestLock,
   });
-  void _coolShots;
+  _coolShots;
 
   demoLifecycle = makeDemoLifecycle();
   demoLifecycle.wireDemoHandlers(demoManager, () => {
@@ -701,6 +701,6 @@ init().then(async () => {
     requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap)));
   window.addEventListener('fps:set', (e) => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-    if (key === 'fps-debug' && value === 1) void wireDebugTools();
+    if (key === 'fps-debug' && value === 1) wireDebugTools();
   });
 });

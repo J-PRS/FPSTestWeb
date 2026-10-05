@@ -51,37 +51,35 @@ function startFrame(first: DemoFrame | null) {
 }
 
 export function extractClip(r: DemoRecorder, startTime: number, endTime: number, description: string, projectileLifetime = 0): DemoFile | null {
-  if (r.frameBuffer.IsEmpty) return null;
+  if (r.frameBuffer.IsEmpty) {return null;}
 
   const oldest = r.frameBuffer.peekOldest().timestamp;
   const newest = r.frameBuffer.peekNewest().timestamp;
   const clipStart = Math.max(startTime, oldest);
   const clipEnd = Math.min(endTime, newest);
-  if (clipEnd <= clipStart) return null;
+  if (clipEnd <= clipStart) {return null;}
 
   const startIdx = r.frameBuffer.findIndexAfterTimestamp(
     clipStart - 0.001, f => f.timestamp
   );
-  if (startIdx < 0) return null;
+  if (startIdx < 0) {return null;}
 
   const frames: DemoFrame[] = [];
   for (let i = startIdx; i < r.frameBuffer.Count; i++) {
     const f = r.frameBuffer.getUnsafe(i);
-    if (f.timestamp > clipEnd) break;
+    if (f.timestamp > clipEnd) {break;}
     frames.push(f);
   }
-  if (frames.length === 0) return null;
+  if (frames.length === 0) {return null;}
 
   const projEvents = collectProjectileEvents(r.projectileEvents, clipStart, clipEnd);
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
 
   const first = frames[0];
-  const normFrames = frames.map(f => Object.assign({}, f, {
-    timestamp: f.timestamp - clipStart,
-    frameNumber: (f.frameNumber - first.frameNumber + 65536) % 65536,
-  }));
-  const normProj = projEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
-  const normTgt = tgtEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
+  const normFrames = frames.map(f => ({ ...f, timestamp: f.timestamp - clipStart,
+    frameNumber: (f.frameNumber - first.frameNumber + 65536) % 65536,}));
+  const normProj = projEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart}));
+  const normTgt = tgtEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart}));
 
   return {
     header: {

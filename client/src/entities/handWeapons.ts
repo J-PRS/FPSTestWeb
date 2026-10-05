@@ -38,9 +38,9 @@ const cache = new Map<number, HandWeaponModel>();
 export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   const id = ALIASES.get(wt) ?? wt;
   const hit = cache.get(id);
-  if (hit) return hit;
+  if (hit) {return hit;}
   const mk = builders.get(id);
-  if (!mk) return undefined;
+  if (!mk) {return undefined;}
 
   const group = mk();
   group.updateMatrixWorld(true);
@@ -48,7 +48,7 @@ export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   const mats: THREE.Material[] = [];
   group.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
+    if (!mesh.isMesh) {return;}
     // Mixed indexed/non-indexed sources won't merge — flatten first.
     const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
     g.applyMatrix4(mesh.matrixWorld);
@@ -61,7 +61,7 @@ export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   // gun renders in one stock grey and the glow bits lose their emissive.
   const merged = mergeGeometries(parts, true);
   parts.forEach((p) => p.dispose());
-  if (!merged) return undefined;
+  if (!merged) {return undefined;}
 
   // -Z barrel → +Z, then scale to the hand-prop footprint (~1.05m) and
   // park the grip end where the old prop sat.

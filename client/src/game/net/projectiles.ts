@@ -16,7 +16,7 @@ import type { NetCtx } from './ctx.js';
  *  what each bot is actually drawing. */
 export const lastWeaponByPlayer = new Map<string, { wt: number; n: number }>();
 function noteWeapon(id: string, weaponType: number | undefined): void {
-  if (weaponType === undefined) return;
+  if (weaponType === undefined) {return;}
   const rec = lastWeaponByPlayer.get(id) ?? { wt: 0, n: 0 };
   rec.wt = weaponType; rec.n++;
   lastWeaponByPlayer.set(id, rec);
@@ -79,7 +79,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   };
 
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string) => {
-    if (deps.world.playbackMode) return; // live shots don't belong in the replay
+    if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
@@ -90,7 +90,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
-    if (cosmeticShot(ownerId, weaponType, origin, dir)) return;
+    if (cosmeticShot(ownerId, weaponType, origin, dir)) {return;}
     const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
@@ -130,13 +130,13 @@ export function wireProjectiles(ctx: NetCtx): void {
   // server-stamped position plus a recoil kick on the remote model; beams
   // also paint a short tracer along the claimed aim dir.
   networkManager.onPlayerShot = (id, weaponType, pos, dir) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     noteWeapon(id, weaponType);
     const rp = deps.world.remotePlayers.get(id);
     const origin = pos
       ? new THREE.Vector3(pos.x, pos.y, pos.z)
       : rp?.position;
-    if (!origin) return;
+    if (!origin) {return;}
     rp?.fire(weaponType);
     sfx.shotAt(origin, weaponType ?? 0, rp?.vel);
     // Instant classes (beam weld, melee swing) paint the same flash the
@@ -148,7 +148,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string) => {
-    if (deps.world.playbackMode) return;
+    if (deps.world.playbackMode) {return;}
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
     // not this map; keeping dead entries leaks one record per shot ever fired.
@@ -166,7 +166,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (localProjectile) {
       localProjectile.explode();
       registry.byId.delete(projectileId);
-      if (localProjectile.shotId) registry.byShotId.delete(localProjectile.shotId);
+      if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
     }
   };
 }

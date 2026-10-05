@@ -31,7 +31,7 @@ export class PlayerEmit {
 
   moveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean, dt: number): void {
     const h = this.h;
-    if (isJetting) this.jetpack();
+    if (isJetting) {this.jetpack();}
     this.skiDust(skiHeld);
     this.footDust(dt);
 
@@ -49,7 +49,7 @@ export class PlayerEmit {
     // or micro-airtime at running speed keeps re-arming the tuck pose
     // and the model "slides" while grounded.
     if (h.wasOnGround && !h.onGround) {
-      if (jumpHeld || h.vel.y > 3) h.jumpAnimTimer = 0.8;
+      if (jumpHeld || h.vel.y > 3) {h.jumpAnimTimer = 0.8;}
       if (jumpHeld && h.onJump) {
         h.onJump(h.pos.clone());
       }
@@ -62,7 +62,7 @@ export class PlayerEmit {
   // throttled network event so remotes see the same plume.
   private jetpack(): void {
     const h = this.h;
-    if (!h.onJetpack) return;
+    if (!h.onJetpack) {return;}
     h.onJetpack(h.pos); // read-only use — no clone, runs every frame
     const now = performance.now();
     if (h.onNetworkJetpack && now - this.lastJetpackSend > 50) {

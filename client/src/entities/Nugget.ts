@@ -115,7 +115,7 @@ export class Nugget {
   /** playerPos is the player's eye/camera position (player.pos). */
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, pickupScale = 1): void {
     this.age += dt;
-    if (!this.serverOwned && this.age > LIFETIME) this.collected = true; // fade out if ignored
+    if (!this.serverOwned && this.age > LIFETIME) {this.collected = true;} // fade out if ignored
 
     if (this.collected) {
       this.updateCollectFade(dt);
@@ -123,7 +123,7 @@ export class Nugget {
       return;
     }
 
-    if (this.scatterTimer > 0) this.scatterTimer -= dt;
+    if (this.scatterTimer > 0) {this.scatterTimer -= dt;}
 
     // playerPos is the eye position (camera) — aim below it at belt height so
     // pickups sweep into the torso instead of flying into your face
@@ -147,7 +147,7 @@ export class Nugget {
     this.mesh.scale.setScalar(Math.max(0, 1 - this.collectFade));
     this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
     this.glow.scale.setScalar(2.2 * Math.max(0, 1 - this.collectFade));
-    if (this.collectFade >= 1 && this.trailFx.size === 0) this.dead = true;
+    if (this.collectFade >= 1 && this.trailFx.size === 0) {this.dead = true;}
   }
 
   private magnetStep(dt: number, dist: number, pickupScale = 1): void {
@@ -156,13 +156,13 @@ export class Nugget {
     const speed = Math.min(MAGNET_MAX_SPEED, MAGNET_ACCEL * this.age * 0.5 + 15);
     this.vel.lerp(_dir.multiplyScalar(speed), Math.min(1, dt * 10));
     this.settled = false;
-    if (dist < PICKUP_RADIUS * pickupScale) this.collected = true;
+    if (dist < PICKUP_RADIUS * pickupScale) {this.collected = true;}
   }
 
   private ballisticStep(dt: number, terrain: Terrain): void {
     this.vel.y += GRAVITY * dt;
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y + this.vel.y * dt > gy + NUGGET_RADIUS) return;
+    if (this.pos.y + this.vel.y * dt > gy + NUGGET_RADIUS) {return;}
     this.pos.y = gy + NUGGET_RADIUS;
     if (Math.abs(this.vel.y) > 2.0) {
       this.vel.y = -this.vel.y * BOUNCE;
@@ -185,7 +185,7 @@ export class Nugget {
   // the settle state; magnet is suppressed for a beat so the blast actually
   // throws them instead of being lerped straight back at the player.
   applyKnockback(from: THREE.Vector3, force: number): void {
-    if (this.collected || this.dead) return;
+    if (this.collected || this.dead) {return;}
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force);
     this.vel.y += force * 0.3;
@@ -196,9 +196,9 @@ export class Nugget {
   /** Server truth for a knocked-around gem's rest spot — a correction,
    *  not a teleport: only snap when the local tumble diverged for real. */
   serverRest(p: { x: number; y: number; z: number }): void {
-    if (this.collected || this.dead) return;
+    if (this.collected || this.dead) {return;}
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
-    if (dx * dx + dy * dy + dz * dz < 0.5 * 0.5) return;
+    if (dx * dx + dy * dy + dz * dz < 0.5 * 0.5) {return;}
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);
     this.settled = true;
@@ -207,13 +207,13 @@ export class Nugget {
   /** Server said someone banked it — fade out where it lies; the wire
    *  burst + rewards are the caller's job. */
   serverCollect(): void {
-    if (this.collected || this.dead) return;
+    if (this.collected || this.dead) {return;}
     this.collected = true;
     this.collectNotified = true;
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (this.collected || this.dead) return;
+    if (this.collected || this.dead) {return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force);
     this.settled = false;

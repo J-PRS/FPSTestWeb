@@ -594,9 +594,9 @@ function paintTools(): void {
     flushSave();
     location.href = u.toString();
   });
-  mk(unionOn ? '⛛ union: ON' : '⛛ union', () => { void unionToggle().then(paintRail); });
-  mk('ⓘ info', () => void infoDump());
-  mk('▣ src', () => void copyBuilderSrc());
+  mk(unionOn ? '⛛ union: ON' : '⛛ union', () => { unionToggle().then(paintRail); });
+  mk('ⓘ info', () => infoDump());
+  mk('▣ src', () => copyBuilderSrc());
   mk('▸ kick', () => vm.kick(1));
   mk('▸ punch', () => vm.punch(false));
   mk('▸ throw', () => vm.startThrow());
@@ -690,9 +690,9 @@ function shotSheet(): void {
     // Clipboard for instant paste; /shot middleware drops the file in
     // client/shots/ so agents can read it without a download dance.
     const name = `w${state.wt}_sheet.png`;
-    void navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': b })])
+    navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': b })])
       .catch(() => flashStatus('clipboard blocked — file still saved'));
-    void fetch(`/shot?name=${name}`, { method: 'POST', body: b });
+    fetch(`/shot?name=${name}`, { method: 'POST', body: b });
   });
   flashStatus(`w${state.wt} sheet → clipboard + shots/`);
 }
@@ -817,8 +817,8 @@ addEventListener('mousedown', (e) => {
 });
 addEventListener('mouseup', () => { dragging = false; });
 addEventListener('keydown', (e) => {
-  if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); void infoDump(false); return; }
-  if (e.altKey && e.code === 'KeyW') { e.preventDefault(); void infoDump(true); return; }
+  if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); infoDump(false); return; }
+  if (e.altKey && e.code === 'KeyW') { e.preventDefault(); infoDump(true); return; }
   if (e.code !== 'Space' || e.repeat) return;
   e.preventDefault(); // page scroll
   setInspect(!state.inspect);
@@ -885,7 +885,7 @@ function pickPiece(cx: number, cy: number): void {
     fp = ` box(${s.x.toFixed(3)}×${s.y.toFixed(3)}×${s.z.toFixed(3)} @ ${c.x.toFixed(3)},${c.y.toFixed(3)},${c.z.toFixed(3)})`;
   }
   const label = `${WeaponType[state.wt] ?? state.wt} › ${segs.join(' › ')} hit(${hit.point.x.toFixed(3)}, ${hit.point.y.toFixed(3)}, ${hit.point.z.toFixed(3)}) rel(${rel.x.toFixed(3)}, ${rel.y.toFixed(3)}, ${rel.z.toFixed(3)})${fp}`;
-  void navigator.clipboard?.writeText(label);
+  navigator.clipboard?.writeText(label);
   flashStatus(`copied: ${label}`);
   // Flash the picked mesh — the piece materials are SHARED across the
   // gun, so flash by swapping this mesh's material, not by mutating one.

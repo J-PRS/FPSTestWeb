@@ -66,10 +66,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   ): void {
     const f = force * forceMultiplier * 1.3;
     for (const n of deps.nuggets) {
-      if (n.dead || n.collected) continue;
+      if (n.dead || n.collected) {continue;}
       if (n.pos.distanceToSquared(pos) < radius * radius) {
-        if (forceMode === 'push') n.applyKnockback(pos, f);
-        else n.applyPull(pos, f);
+        if (forceMode === 'push') {n.applyKnockback(pos, f);}
+        else {n.applyPull(pos, f);}
       }
     }
   }
@@ -81,25 +81,25 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const { pos, radius, aoeDamage, weaponType } = a;
     const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
     for (const ball of deps.targets) {
-      if (ball.dead) continue;
+      if (ball.dead) {continue;}
       const db = ball.pos.distanceTo(pos);
       const br = ball.hitRadius ?? ball.radius;
       // One envelope for every blast effect — the creature's own body
       // radius still counts (a surface graze is contact, like players).
       const threshold = radius + br;
-      if (db >= threshold || occluded(pos, ball.pos)) continue;
+      if (db >= threshold || occluded(pos, ball.pos)) {continue;}
       applyTo(ball, a.force * a.forceMultiplier);
       // Splash actually hurts enemies — falloff-scaled like players, with
       // the same damage number + health bar feedback as direct hits
       // (without it, splash damage was invisible and read as "no damage").
       const dmg = aoeDamageOf(aoeDamage, db, radius, scales);
-      if (dmg < 1) continue;
+      if (dmg < 1) {continue;}
       // Numbers are MY-hit feedback — a bot blast salting a creature
       // shouldn't stamp them under my crosshair (same gate as remotes).
-      if (!a.shooterId) deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
+      if (!a.shooterId) {deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());}
       deps.reportTargetDamage?.(ball, dmg);
       if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
-      if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
+      if (!ball.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);}
       const dm = deps.lazyDemoManager();
       if (dm?.isRecording) {
         dm.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
@@ -116,19 +116,19 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
     const scales = weaponType !== undefined ? getWeaponStats(weaponType).aoeScales : undefined;
     for (const [playerId, rp] of deps.world.remotePlayers) {
-      if (rp.isDead) continue;
+      if (rp.isDead) {continue;}
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
       // knockback uses the same envelope (aoeImpulseT1), so nothing predicts
       // damage or shove the server never applies.
       const dist = rp.position.distanceTo(pos);
       const impulse = Math.min(aoeImpulseT1At(force, pos, rp.position, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
-      if (impulse <= 0) continue;
-      if (occluded(pos, rp.position)) continue;
+      if (impulse <= 0) {continue;}
+      if (occluded(pos, rp.position)) {continue;}
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
-      if (playerId === directHitTargetId) continue;
+      if (playerId === directHitTargetId) {continue;}
       // Hitmarker is personal feedback — a bot's blast (shooterId set)
       // clipping a remote isn't my frag to celebrate.
-      if (!a.shooterId) deps.lazyHud().showHitMarker();
+      if (!a.shooterId) {deps.lazyHud().showHitMarker();}
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius, scales);
       // Splash on a player/bot shows a number too — direct hits had one
       // (impact.ts) but blast feedback stopped at the hitmarker, so the
@@ -136,7 +136,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (!a.shooterId && aoeDmg >= 1) {
         deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
       }
-      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) continue; // local authority resolved it
+      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) {continue;} // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }
@@ -161,7 +161,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // so the blast can't land twice.
       const stamps = deps.world.selfBlastStamps;
       stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: performance.now() });
-      if (stamps.length > 8) stamps.shift();
+      if (stamps.length > 8) {stamps.shift();}
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
@@ -201,7 +201,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
           // Own blast: server applies the self-splash now — claiming it
           // too would double-charge. Keep the local flash; yourHealth
           // echo corrects the bar. Enemy blasts still report for credit.
-          if (enemyBlast) deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
+          if (enemyBlast) {deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);}
           deps.lazyHud().showDamage(null, selfDmg);
         }
       }

@@ -53,17 +53,18 @@ let dischargeFx: ((pos: THREE.Vector3, amount: number) => void) | null = null;
 export function lgDischarge(id: number, damage: number, at: THREE.Vector3): number {
   const acc = chargeBank.get(id) ?? 0;
   const pop = Math.min(acc, damage);
-  if (pop <= 0) return 0;
-  if (acc - pop <= 0) chargeBank.delete(id); else chargeBank.set(id, acc - pop);
+  if (pop <= 0) {return 0;}
+  if (acc - pop <= 0) {chargeBank.delete(id);} else {chargeBank.set(id, acc - pop);}
   dischargeFx?.(at, pop);
   return pop;
 }
 
 let _shroudTex: THREE.Texture | null = null;
 function shroudTexture(): THREE.Texture {
-  if (_shroudTex) return _shroudTex;
+  if (_shroudTex) {return _shroudTex;}
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.height = 64;
+  c.width = c.height;
   const ctx = c.getContext('2d')!;
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,0.9)');
@@ -82,7 +83,7 @@ function shroudTexture(): THREE.Texture {
 // tip spheres); bakes/procedural share the search. undefined = searched
 // and missed; null = not yet attempted (bake swap lands async).
 function isDescendant(node: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let p: THREE.Object3D | null = node; p; p = p.parent) if (p === root) return true;
+  for (let p: THREE.Object3D | null = node; p; p = p.parent) {if (p === root) return true;}
   return false;
 }
 let lgBall: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null | undefined;
@@ -93,14 +94,14 @@ function lgBallNode(deps: CombatDeps): { mesh: THREE.Mesh; mat: THREE.MeshLamber
     // a cached mesh can be left detached with a frozen matrixWorld,
     // which reads as the beam firing from world origin. Re-search
     // whenever the ball is no longer inside the live group.
-    if (lgBall && g && isDescendant(lgBall.mesh, g)) return lgBall;
+    if (lgBall && g && isDescendant(lgBall.mesh, g)) {return lgBall;}
     lgBall = undefined;
   }
   lgBall = null;
   let best: THREE.Mesh | null = null, bestR = 0;
   g?.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh || (m.geometry as THREE.BufferGeometry).type !== 'SphereGeometry') return;
+    if (!m.isMesh || (m.geometry as THREE.BufferGeometry).type !== 'SphereGeometry') {return;}
     m.geometry.computeBoundingSphere();
     const r = m.geometry.boundingSphere?.radius ?? 0;
     if (r > bestR) { bestR = r; best = m; }
@@ -126,7 +127,7 @@ function lgBallNode(deps: CombatDeps): { mesh: THREE.Mesh; mat: THREE.MeshLamber
 // the lerp keeps pull/release from popping.
 function updateBall(deps: CombatDeps, firing: boolean, damaging: boolean, dt: number): void {
   const ball = lgBallNode(deps);
-  if (!ball) return;
+  if (!ball) {return;}
   const { mesh, mat } = ball;
   const target = firing ? (damaging ? 1 : 0.55) : 0;
   const cur = mesh.userData.__flare ?? 0;
@@ -136,8 +137,8 @@ function updateBall(deps: CombatDeps, firing: boolean, damaging: boolean, dt: nu
   mesh.scale.setScalar(1 + flare * 0.35 + jitter);
   // Lambert emissive on the baked ball, plain color on the procedural
   // Basic core — either way a firing ball reads charged.
-  mat.emissive?.setRGB(0.25 * flare, 0.75 * flare, 1.0 * flare);
-  if (mat.emissive) mat.emissiveIntensity = 1.5 * flare;
+  mat.emissive?.setRGB(0.25 * flare, 0.75 * flare, Number(flare));
+  if (mat.emissive) {mat.emissiveIntensity = 1.5 * flare;}
 }
 
 // Beam start: the emitter ball's rendered pixel, unprojected into world
@@ -149,7 +150,7 @@ function lgAnchorLive(deps: CombatDeps, cam: THREE.Camera, out: THREE.Vector3): 
   // Third person: the viewmodel is hidden — its muzzle node still resolves
   // to the first-person screen spot, so the beam visibly springs from mid-
   // air under the crosshair. Anchor at the body model's barrel tip instead.
-  if (player.thirdPerson && player.muzzleWorld(out)) return;
+  if (player.thirdPerson && player.muzzleWorld(out)) {return;}
   const vm = deps.lazyViewModel();
   if (!vm?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
     lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
@@ -178,7 +179,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
 // rotated into world space (vmScene shares the camera quaternion about
 // the eye) — the bolt is welded to the rendered gun, sway and all.
 function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
-  if (!lg.beam || lg.lastFire <= 0 || performance.now() - lg.lastFire > 90) return;
+  if (!lg.beam || lg.lastFire <= 0 || performance.now() - lg.lastFire > 90) {return;}
   const cam = deps.lazyCamera();
   lgAnchorLive(deps, cam, _lgMuzzle);
   // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
@@ -195,7 +196,7 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
   updateBall(deps, true, hitTarget !== null || hitPlayerId !== null, dtV);
   if (hitTarget) {
     const chain = pickChain(deps, _lgHit, hitTarget);
-    if (chain) lg.beam.fireChain(_lgHit, chain.pos); else lg.beam.clearChain();
+    if (chain) {lg.beam.fireChain(_lgHit, chain.pos);} else {lg.beam.clearChain();}
   } else {
     lg.beam.clearChain();
   }
@@ -204,7 +205,7 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
 
 // Beam fades ~80ms after the last tick — driven from updateProjectiles.
 function tickBeam(deps: CombatDeps, lg: LgState, dt: number): void {
-  if (!lg.beam) return;
+  if (!lg.beam) {return;}
   lg.beam.update(dt);
   const lgAge = performance.now() - lg.lastFire;
   if (lg.lastFire > 0 && lgAge > 90) {
@@ -252,7 +253,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   const n = st && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
   lg.ramp.set(t.id, { t: now, n });
   if (lg.ramp.size > 32) {
-    for (const [id, s] of lg.ramp) if (now - s.t > LG_RAMP_WINDOW_S) lg.ramp.delete(id);
+    for (const [id, s] of lg.ramp) {if (now - s.t > LG_RAMP_WINDOW_S) lg.ramp.delete(id);}
   }
   const dmg = lgTickDamage(n) * dmgScale;
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
@@ -317,7 +318,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     const cam = deps.lazyCamera();
     const player = deps.lazyPlayer();
     const stats = getWeaponStats(WeaponType.Lightning);
-    if (!lg.beam) lg.beam = new LightningBeam(deps.lazyScene());
+    if (!lg.beam) {lg.beam = new LightningBeam(deps.lazyScene());}
 
     const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT);
 
@@ -341,7 +342,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     deps.lazyViewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
     // Contact sparks only when the bolt actually lands on something —
     // a max-range miss is arcing into empty air, no impact to show
-    if (hitT < LG_RANGE) deps.lazyEffects().spawnImpact(_lgHit, _lgD);
+    if (hitT < LG_RANGE) {deps.lazyEffects().spawnImpact(_lgHit, _lgD);}
     sfx.shoot(WeaponType.Lightning);
 
     if (hitTarget) {
@@ -361,7 +362,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       lg.beam?.setCharge(0); // arcing air — nothing banked, nothing to show
     }
 
-    if (hitPlayerId) zapPlayer(hitPlayerId, stats);
+    if (hitPlayerId) {zapPlayer(hitPlayerId, stats);}
   }
 
   // One beam tick on a remote player: the victim can't ride the generic
@@ -375,12 +376,12 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     const nV = stV && nowV - stV.t <= LG_RAMP_WINDOW_S ? stV.n + 1 : 1;
     lg.rampP.set(hitPlayerId, { t: nowV, n: nV });
     if (lg.rampP.size > 32) {
-      for (const [id, s] of lg.rampP) if (nowV - s.t > LG_RAMP_WINDOW_S) lg.rampP.delete(id);
+      for (const [id, s] of lg.rampP) {if (nowV - s.t > LG_RAMP_WINDOW_S) lg.rampP.delete(id);}
     }
     const tick = lgTickDamage(nV);
     // Same per-tick number creatures get (zapTarget) — the beam on a
     // player was hitmarker-only, which read as "beam does no damage".
-    if (tick >= 1) deps.lazyDamageNumbers().spawn(_lgHit, tick, '#8fdcff', deps.lazyCamera());
+    if (tick >= 1) {deps.lazyDamageNumbers().spawn(_lgHit, tick, '#8fdcff', deps.lazyCamera());}
     if (!deps.botHit?.(hitPlayerId, tick, _lgHit, 'local')) {
       deps.lazyHealthBarSystem().predictDamage(hitPlayerId, tick);
     }

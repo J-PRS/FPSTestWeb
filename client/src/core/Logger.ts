@@ -264,7 +264,7 @@ export namespace Logger {
     const body = shipQueue.splice(0, shipQueue.length).join('\n') + '\n';
     try {
       if (navigator.sendBeacon) navigator.sendBeacon(url, body);
-      else void fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});
+      else fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});
     } catch { /* shipping must never break the game */ }
   }
 
@@ -275,7 +275,7 @@ export namespace Logger {
       if (beacon && navigator.sendBeacon) {
         navigator.sendBeacon(shipUrl, body);
       } else {
-        void fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
+        fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
       }
     } catch { /* shipping must never break the game */ }
   }

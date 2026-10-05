@@ -19,9 +19,9 @@ const _enrageTint = new THREE.Color(1, 0.12, 0.08);
 
   // Ball body → swarm slot; instanceColor = hue + emissive glow.
 export function writeBallInstance(b: Ball): void {
-    if (b.meshRemoved || b.swarmSlot < 0) return;
+    if (b.meshRemoved || b.swarmSlot < 0) {return;}
     const swarm = getSwarm('ball');
-    if (!swarm) return;
+    if (!swarm) {return;}
     b._rpos.copy(b.pos).add(b.renderOffset);
     _m.compose(b._rpos, _q.identity(), _s.setScalar(b.scale));
     swarm.setMatrix(0, b.swarmSlot, _m);
@@ -45,9 +45,9 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
     }
     b._rpos.copy(b.pos).add(b.renderOffset);
     const sim = b.netS.sim;
-    if (!(b.netDriven && sim && sim.enraged && sim.tgtValid)) return;
+    if (!(b.netDriven && sim && sim.enraged && sim.tgtValid)) {return;}
     const rem = b.netS.netAcc;
-    if (rem <= 0) return;
+    if (rem <= 0) {return;}
     b._rpos.x += b.vel.x * rem;
     b._rpos.y += b.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
     b._rpos.z += b.vel.z * rem;
@@ -81,23 +81,23 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
       );
     }
     b.trails.fade(dt);
-    for (const r of b.ribbons) r.update(dt, viewPos);
+    for (const r of b.ribbons) {r.update(dt, viewPos);}
   }
 
   // Dead ball: swarm slot freed, just fade out remaining trail dots/ribbons
 export function updateBallDead(b: Ball, dt: number, viewPos: THREE.Vector3): void {
     if (!b.meshRemoved) {
-      for (const r of b.ribbons) r.stop();
+      for (const r of b.ribbons) {r.stop();}
       freeSlots('ball', b);
       b.meshRemoved = true;
     }
     b.trails.fade(dt);
-    for (const r of b.ribbons) r.update(dt, viewPos);
+    for (const r of b.ribbons) {r.update(dt, viewPos);}
     if (b.trails.size === 0 && b.ribbons.every(r => r.done)) {
       // Final cleanup — caller splices on `disposed` without dispose(),
       // so dispose() is invoked here only to leave Ball.live.
       b.trails.dispose();
-      for (const r of b.ribbons) r.dispose();
+      for (const r of b.ribbons) {r.dispose();}
       b._disposed = true;
       b.dispose();
     }

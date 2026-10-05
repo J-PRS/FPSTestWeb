@@ -30,7 +30,7 @@ export function claimShot(b: BoltHost, bot: GameBot, targetId: string, claim: { 
     if (targetId.startsWith('creature:')) { claimCreature(b, bot, targetId, aim, dmg); return; }
     const rp = b.host.world().remotePlayers.get(targetId);
     if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
-      if (rp.takeDamageLocal(dmg, bot.position)) b.host.botKilled(bot.playerId, rp, weapon);
+      if (rp.takeDamageLocal(dmg, bot.position)) {b.host.botKilled(bot.playerId, rp, weapon);}
     }
   }
 
@@ -42,10 +42,10 @@ function claimLocal(b: BoltHost, bot: GameBot, aim: THREE.Vector3, melee: boolea
   }
 
 function claimCreature(b: BoltHost, bot: GameBot, targetId: string, aim: THREE.Vector3, dmg: number): void {
-    const id = +targetId.slice(9);
+    const id = Number(targetId.slice(9));
     const t = b.host.targets.find(x => x.id === id);
     if (t && !t.dead && aim.distanceTo(t.pos) < t.radius + 1) {
-      if (b.host.damageCreature(t.id, dmg, bot.playerId)) b.host.creditKill(bot.playerId, true);
+      if (b.host.damageCreature(t.id, dmg, bot.playerId)) {b.host.creditKill(bot.playerId, true);}
     }
   }
 
@@ -78,9 +78,9 @@ export function tickBolts(h: BoltHost, dt: number): void {
   }
 
 export function disposeBolts(h: BoltHost): void {
-    for (const tr of h.bolts) h.host.scene().remove(tr.line);
+    for (const tr of h.bolts) {h.host.scene().remove(tr.line);}
     h.bolts.length = 0;
-    for (const l of h.boltPool) l.geometry.dispose();
+    for (const l of h.boltPool) {l.geometry.dispose();}
     h.boltPool.length = 0;
   }
 

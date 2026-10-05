@@ -32,9 +32,10 @@ export class Minimap {
     this.cross = settings.get('fps-minimap') === 1;
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.canvas.height = SIZE;
+    this.canvas.height = SIZE;
+    this.canvas.width = this.canvas.height;
     this.applyMode();
-    parent.appendChild(this.canvas);
+    parent.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
 
     // Settings-panel toggle — applies live, no reload
@@ -72,7 +73,7 @@ export class Minimap {
     const t = { pos, sin, cos, k, mid };
 
     // Crosshair mode is threats-only — pickups and hazards aren't threats.
-    if (!this.cross) this.drawNuggets(nuggets, t);
+    if (!this.cross) {this.drawNuggets(nuggets, t);}
     this.drawTargets(targets, t);
     this.drawPlayers(players, t);
     this.drawBirds(birds, t);
@@ -103,12 +104,12 @@ export class Minimap {
   private drawTargets(targets: Targetable[], t: MapBasis): void {
     const c = this.ctx, m = this._map;
     for (const e of targets) {
-      if (e.dead) continue;
+      if (e.dead) {continue;}
       // Scoreless props (tumbleweeds, buzzards) aren't threats — don't ping
       // radar. Buzzards still get their own debug rings below.
-      if (e.scoreless) continue;
+      if (e.scoreless) {continue;}
       // Crosshair mode is threats-only — but an enraged ball IS a threat
-      if (this.cross && e instanceof Ball && !e.isEnraged) continue;
+      if (this.cross && e instanceof Ball && !e.isEnraged) {continue;}
       this.toMap(e.pos.x - t.pos.x, e.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
       // Enraged balls are actively hunting you — promote cyan hazard to
       // red threat so an incoming dash pings radar like a real enemy.
@@ -126,7 +127,7 @@ export class Minimap {
   // Humans draw as diamonds, bots as round dots — same split as the
   // overhead markers, so "who's real" reads on radar too.
   private drawPlayers(players: Iterable<MinimapPlayer> | undefined, t: MapBasis): void {
-    if (!players) return;
+    if (!players) {return;}
     const c = this.ctx, m = this._map;
     c.lineWidth = 1;
     for (const p of players) {
@@ -152,7 +153,7 @@ export class Minimap {
 
   // Debug: ambient buzzards — white hollow rings, unmistakably not enemies
   private drawBirds(birds: THREE.Vector3[] | undefined, t: MapBasis): void {
-    if (!birds) return;
+    if (!birds) {return;}
     const c = this.ctx, m = this._map;
     c.strokeStyle = 'rgba(240,240,255,0.8)';
     c.lineWidth = 1;

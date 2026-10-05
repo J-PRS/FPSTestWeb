@@ -65,7 +65,7 @@ export class SpeedLines {
     if (len < 0.5) { this.burst(); return; }
     _velDir.normalize();
     _side.crossVectors(_velDir, _upAxis);
-    if (_side.lengthSq() < 1e-6) _side.set(1, 0, 0); else _side.normalize();
+    if (_side.lengthSq() < 1e-6) {_side.set(1, 0, 0);} else {_side.normalize();}
     _up.crossVectors(_side, _velDir);
 
     for (let i = 0; i < count; i++) {
@@ -81,7 +81,7 @@ export class SpeedLines {
       // Same cylindrical billboard orientation as spawnOne — streaks lie
       // along the blink direction
       _toCam.subVectors(_pos, from).addScaledVector(_velDir, -_toCam.dot(_velDir));
-      if (_toCam.lengthSq() < 1e-6) _toCam.set(0, 0, 1); else _toCam.normalize();
+      if (_toCam.lengthSq() < 1e-6) {_toCam.set(0, 0, 1);} else {_toCam.normalize();}
       _x.crossVectors(_velDir, _toCam);
       _m.makeBasis(_x, _velDir, _toCam);
       s.mesh.quaternion.setFromRotationMatrix(_m);
@@ -89,7 +89,8 @@ export class SpeedLines {
 
       s.mat.color.setHex(color);
       s.drift.copy(_velDir).multiplyScalar(-4 - Math.random() * 4);
-      s.maxLife = s.life = LIFE_MAX;
+      s.life = LIFE_MAX;
+      s.maxLife = s.life;
       this.streaks.push(s);
     }
     this.burstLvl = 1;
@@ -143,7 +144,7 @@ export class SpeedLines {
     // normal (local Z) facing the camera — the quad always reads as a
     // line, never a flat sheet.
     _toCam.subVectors(camPos, _pos).addScaledVector(velDir, -_toCam.dot(velDir)); // reject vel component
-    if (_toCam.lengthSq() < 1e-6) _toCam.set(0, 0, 1); else _toCam.normalize();
+    if (_toCam.lengthSq() < 1e-6) {_toCam.set(0, 0, 1);} else {_toCam.normalize();}
     _x.crossVectors(velDir, _toCam); // local X — thin edge
     _m.makeBasis(_x, velDir, _toCam);
     s.mesh.quaternion.setFromRotationMatrix(_m);
@@ -181,7 +182,7 @@ export class SpeedLines {
       s.mat.opacity = effective * t * 0.28;
     }
 
-    if (effective <= 0.01) return;
+    if (effective <= 0.01) {return;}
 
     // Maintain streak population proportional to intensity (burst over-spawns)
     const want = Math.floor(MAX_STREAKS * effective);
@@ -189,7 +190,7 @@ export class SpeedLines {
       _velDir.copy(vel).normalize();
       // Basis perpendicular to velocity
       _side.crossVectors(_velDir, _upAxis);
-      if (_side.lengthSq() < 1e-6) _side.set(1, 0, 0); else _side.normalize();
+      if (_side.lengthSq() < 1e-6) {_side.set(1, 0, 0);} else {_side.normalize();}
       _up.crossVectors(_side, _velDir);
 
       this.spawnAcc += dt * 60; // up to ~60 spawns/s when ramping up

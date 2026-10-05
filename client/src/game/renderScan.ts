@@ -29,7 +29,7 @@ function makeTimer(r: THREE.WebGLRenderer): { begin(): void; end(): void; read()
   const gl = r.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as GlTimerExt | null;
   const queries: WebGLQuery[] = [];
-  if (!ext) return { begin() {}, end() {}, async read() { return null; } };
+  if (!ext) {return { begin() {}, end() {}, async read() { return null; } };}
   return {
     begin() {
       const q = gl.createQuery();
@@ -60,7 +60,7 @@ async function sampleStage(run: () => void, frames: number, r: THREE.WebGLRender
   let cpu = 0, calls = 0, tris = 0;
   // Two warmup frames first: lazy shader compiles and buffer uploads would
   // otherwise poison the first measured frame of every stage.
-  for (let i = 0; i < 2; i++) run();
+  for (let i = 0; i < 2; i++) {run();}
   for (let i = 0; i < frames; i++) {
     r.info.reset();
     const t0 = performance.now();
@@ -72,8 +72,8 @@ async function sampleStage(run: () => void, frames: number, r: THREE.WebGLRender
     tris = r.info.render.triangles;
   }
   const gpuMs = await timer.read();
-  const out: StageResult = { cpuMs: +(cpu / frames).toFixed(3), calls, tris };
-  if (gpuMs !== null) out.gpuMs = +gpuMs.toFixed(3);
+  const out: StageResult = { cpuMs: Number((cpu / frames).toFixed(3)), calls, tris };
+  if (gpuMs !== null) {out.gpuMs = Number(gpuMs.toFixed(3));}
   return out;
 }
 

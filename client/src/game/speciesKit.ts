@@ -49,7 +49,7 @@ const rollUber = (): boolean => Math.random() < UBER_CHANCE;
 function atCap<T extends { dead: boolean }>(list: T[], max: number): boolean {
   let n = 0;
   for (const e of list) {
-    if (!e.dead && ++n >= max) return true;
+    if (!e.dead && ++n >= max) {return true;}
   }
   return false;
 }
@@ -98,7 +98,7 @@ class SpeciesKitImpl {
   removeTarget = <T extends Targetable>(list: T[], i: number, e: T): void  => {
     list.splice(i, 1);
     const ti = this.targets.indexOf(e);
-    if (ti >= 0) this.targets.splice(ti, 1);
+    if (ti >= 0) {this.targets.splice(ti, 1);}
   }
 
   // Spawn position on a ring around the player — every ambient spawn uses it.
@@ -117,7 +117,7 @@ class SpeciesKitImpl {
   // this damage is the killing blow — the server only reports 'environment'.
   hurtPlayer = (fromPos: THREE.Vector3, force: number, damage: number, deathText: string, reach?: number, attacker?: object): boolean  => {
     const p = this.deps.lazyPlayer();
-    if (p.isDead) return false; // corpse shouldn't get knocked around or re-hurt
+    if (p.isDead) {return false;} // corpse shouldn't get knocked around or re-hurt
     // Victim check — a creature's bite fires for whomever ITS threat table
     // committed to. Only an EXPLICIT local commitment hurts this client: a
     // remote target means their sim claims it, and a NULL target means the
@@ -128,16 +128,16 @@ class SpeciesKitImpl {
       const brain = this.targetReg.for(attacker);
       const t = brain.target;
       // Committed to someone else — their sim claims it, not yours.
-      if (t && t.id !== 'local') return false;
+      if (t && t.id !== 'local') {return false;}
       // No commitment: a waypoint bite is biting air — UNLESS the creature
       // is frenzied, where its thrash lunges at your last-known position
       // are real contact and landing one is legit. This is what keeps
       // point-blank cloak sniping dangerous.
-      if (!t && brain.frenzyT <= 0) return false;
+      if (!t && brain.frenzyT <= 0) {return false;}
       // "Always miss the first time" — a creature that JUST committed to you
       // whiffs its opening strike instead of arriving pre-warmed. Reads as a
       // warning shot: you get a beat to react before contact damage starts.
-      if (brain.engagedT < this.ENGAGE_GRACE) return false;
+      if (brain.engagedT < this.ENGAGE_GRACE) {return false;}
     }
     // Reach gate — melee callers pass their contact reach. A hit landing
     // from beyond it is a phantom: triggers fire against the brain's
@@ -154,9 +154,9 @@ class SpeciesKitImpl {
         const moving = p.vel.lengthSq() > 30 * 30;
         const log = moving ? this.deps.logger.debug : this.deps.logger.warn;
         log.call(this.deps.logger, `melee whiff beyond reach: ${deathText}`, {
-          dist: +d.toFixed(2), reach: +reach.toFixed(2),
-          from: { x: +fromPos.x.toFixed(1), y: +fromPos.y.toFixed(1), z: +fromPos.z.toFixed(1) },
-          player: { x: +p.pos.x.toFixed(1), y: +p.pos.y.toFixed(1), z: +p.pos.z.toFixed(1) },
+          dist: Number(d.toFixed(2)), reach: Number(reach.toFixed(2)),
+          from: { x: Number(fromPos.x.toFixed(1)), y: Number(fromPos.y.toFixed(1)), z: Number(fromPos.z.toFixed(1)) },
+          player: { x: Number(p.pos.x.toFixed(1)), y: Number(p.pos.y.toFixed(1)), z: Number(p.pos.z.toFixed(1)) },
         });
         return false;
       }
@@ -193,11 +193,11 @@ class SpeciesKitImpl {
   // player was outside the envelope).
   blastAtPlayer = (origin: THREE.Vector3, radius: number, maxDmg: number, knockback: number, deathText: string, mult = 1): number  => {
     const p = this.deps.lazyPlayer();
-    if (p.isDead) return 0;
+    if (p.isDead) {return 0;}
     const dist = origin.distanceTo(p.pos);
-    if (dist >= radius) return 0;
+    if (dist >= radius) {return 0;}
     const dmg = Math.round(maxDmg * (1 - dist / radius) * mult);
-    if (dmg <= 0) return 0;
+    if (dmg <= 0) {return 0;}
     p.lastDamageSource = deathText;
     p.applyKnockback(origin, knockback * p.mods.knockbackTaken);
     this.deps.lazyNetworkManager()?.sendEnvironmentDamage(dmg);
@@ -240,13 +240,13 @@ class SpeciesKitImpl {
       // anyway are harmless defense — director events call them directly.)
       // ?spawns=random: ambient timers stay off — the random director
       // owns population so the total budget isn't double-spent.
-      if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying) s.spawn();
+      if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying) {s.spawn();}
     }
     const playerPos = this.deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
       const tickDt = this.lodTick(e, e.pos.distanceToSquared(playerPos), dt);
-      if (tickDt > 0) s.tick(e, tickDt);
+      if (tickDt > 0) {s.tick(e, tickDt);}
       this.tickGnaw(e, tickDt);
       if (e.dead) {
         this.lodAcc.delete(e);
@@ -259,7 +259,7 @@ class SpeciesKitImpl {
   // Accumulated LOD dt for one entity this frame — 0 = skip the tick.
   lodTick = (e: Targetable, dSq: number, dt: number): number  => {
     const tier = dSq > this.AI_LOD_FAR_SQ ? this.AI_LOD_FAR_DT : dSq > this.AI_LOD_MID_SQ ? this.AI_LOD_MID_DT : 0;
-    if (!tier) return dt;
+    if (!tier) {return dt;}
     const acc = (this.lodAcc.get(e) ?? this.lodPhase(e, tier)) + dt;
     if (acc < tier) { this.lodAcc.set(e, acc); return 0; }
     this.lodAcc.set(e, 0);
@@ -269,11 +269,11 @@ class SpeciesKitImpl {
   // Gnaw: a creature committed to a deployable and standing on it chews
   // it down — reach envelope is generous since bite anim reach varies.
   tickGnaw = (e: Targetable & { radius: number }, tickDt: number): void  => {
-    if (tickDt <= 0) return;
+    if (tickDt <= 0) {return;}
     const bt = this.targetReg.for(e).target;
-    if (!bt || !bt.id.startsWith('dep:')) return;
+    if (!bt || !bt.id.startsWith('dep:')) {return;}
     const rr = e.radius + 2.5;
-    if (e.pos.distanceToSquared(bt.pos) < rr * rr) this.deployables?.()?.hurt(bt.id, DEP_GNAW_DPS * tickDt);
+    if (e.pos.distanceToSquared(bt.pos) < rr * rr) {this.deployables?.()?.hurt(bt.id, DEP_GNAW_DPS * tickDt);}
   }
 
   // Ground species slide up out of the dirt instead of popping into existence.
@@ -294,11 +294,11 @@ class SpeciesKitImpl {
   // stir the dirt. Per-entity accumulator dies with the entity.
   readonly dustAcc = new WeakMap<Targetable, number>();
   kickDust = (e: { dead: boolean; pos: THREE.Vector3; vel: THREE.Vector3; radius: number } & Targetable, dt: number): void  => {
-    if (e.dead) return;
+    if (e.dead) {return;}
     const sp = Math.hypot(e.vel.x, e.vel.z);
-    if (sp < 2) return; // creepers don't raise dust
+    if (sp < 2) {return;} // creepers don't raise dust
     const gy = this.deps.lazyTerrain().getHeight(e.pos.x, e.pos.z);
-    if (e.pos.y - gy > e.radius * 2.5) return; // airborne — no ground contact
+    if (e.pos.y - gy > e.radius * 2.5) {return;} // airborne — no ground contact
     const acc = (this.dustAcc.get(e) ?? 0) + sp * dt;
     const spacing = e.radius * 1.5 + 0.4;
     if (acc >= spacing) {
@@ -313,9 +313,9 @@ class SpeciesKitImpl {
   // a hundred faint motes is a hundred draw-submit worth of noise.
   readonly trailAcc = new WeakMap<Targetable, number>();
   kickTrail = (e: { dead: boolean; pos: THREE.Vector3; vel: THREE.Vector3 } & Targetable, dt: number): void  => {
-    if (e.dead) return;
+    if (e.dead) {return;}
     const sp = Math.hypot(e.vel.x, e.vel.z);
-    if (sp < 6) return; // hovering/circling slow = no trail
+    if (sp < 6) {return;} // hovering/circling slow = no trail
     const acc = (this.trailAcc.get(e) ?? 0) + sp * dt;
     const spacing = 2.5 + Math.random() * 1.5; // irregular — no dotted-line uniformity
     if (acc >= spacing) {

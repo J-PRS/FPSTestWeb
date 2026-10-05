@@ -36,9 +36,9 @@ export function buildSkillsCtx(p: Player, terrain: Terrain, scene: THREE.Scene):
     emitMend: (on) => p.status.setMending(on),
     healSelf: (hp) => { p.health = Math.min(p.maxHealth, p.health + hp); },
     netHeals: () => p.serverOwnsHealth?.() ?? false,
-    shieldAbsorb: (dmg) => { p.energy = Math.max(0, p.energy - dmg); if (p.energy <= 0) p.status.setShielded(false); },
+    shieldAbsorb: (dmg) => { p.energy = Math.max(0, p.energy - dmg); if (p.energy <= 0) {p.status.setShielded(false);} },
     energy: () => p.energy,
-    spendEnergy: (n) => { if (p.energy < n) return false; p.energy -= n; return true; },
+    spendEnergy: (n) => { if (p.energy < n) {return false;} p.energy -= n; return true; },
     skillUsed: () => p.onSkillUse?.(),
     drainEnergy: (n) => { p.energy = Math.max(0, p.energy - n); },
   };

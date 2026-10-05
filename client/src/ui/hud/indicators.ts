@@ -35,9 +35,9 @@ export class PlayerIndicators {
   private refreshCamera(camera: THREE.Camera): void {
     const e = camera.matrixWorld.elements;
     if (!this.camDirty) {
-      for (let i = 0; i < 16; i++) if (this.lastCamMat[i] !== e[i]) { this.camDirty = true; break; }
+      for (let i = 0; i < 16; i++) {if (this.lastCamMat[i] !== e[i]) { this.camDirty = true; break; }}
     }
-    if (!this.camDirty) return;
+    if (!this.camDirty) {return;}
     this.lastCamMat.set(e);
     this.camDirty = false;
     camera.getWorldPosition(_cameraPos);
@@ -50,17 +50,17 @@ export class PlayerIndicators {
     if (!indicator) {
       indicator = document.createElement('div');
       indicator.className = 'player-indicator';
-      this.container.appendChild(indicator);
+      this.container.append(indicator);
       this.indicators.set(playerId, indicator);
       logger.debug('INDICATOR CREATED', { playerId, total: this.indicators.size });
     }
     indicator.classList.toggle('friendly', friendly);
     // Silhouette = armor class (light chevron / medium V+◆ / heavy ▼);
     // bots render the same shape dimmed — class stays readable on bots.
-    indicator.classList.toggle('bot', !!bot);
+    indicator.classList.toggle('bot', Boolean(bot));
     const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
-    for (const k of ['light', 'medium', 'heavy']) indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);
-    if (variant) for (const c of variant.split(' ')) indicator.classList.add(c);
+    for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
+    if (variant) {for (const c of variant.split(' ')) indicator.classList.add(c);}
     this.updateSheepBadge(playerId, indicator, sheep);
 
     if (isDead) {
@@ -139,14 +139,14 @@ export class PlayerIndicators {
     // textContent writes dirty the DOM every frame — the rounded value
     // only changes ~1/s, so skip the write unless the display changed.
     const v = shown ? Math.round(sheep) : -1;
-    if (this.lastSheep.get(playerId) === v) return;
+    if (this.lastSheep.get(playerId) === v) {return;}
     this.lastSheep.set(playerId, v);
     let badge = indicator.firstElementChild as HTMLElement | null;
     if (shown) {
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'sheep-badge';
-        indicator.appendChild(badge);
+        indicator.append(badge);
       }
       badge.textContent = `${v}`;
       badge.style.color = sheep! >= 60 ? '#ff6b6b' : sheep! >= 30 ? '#ffd166' : '#7ddf7d';
@@ -160,7 +160,7 @@ export class PlayerIndicators {
   // 0.1px-quantized key skips the style write entirely on still frames.
   private setPos(playerId: string, el: HTMLElement, x: number, y: number): void {
     const q = Math.round(x * 10) * 100000 + Math.round(y * 10);
-    if (this.lastPos.get(playerId) === q) return;
+    if (this.lastPos.get(playerId) === q) {return;}
     this.lastPos.set(playerId, q);
     el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }

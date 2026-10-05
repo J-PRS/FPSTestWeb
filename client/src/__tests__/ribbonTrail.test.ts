@@ -48,7 +48,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.push(pos(1), vel());
     r.stop();
     expect(r.done).toBe(false);
-    for (let i = 0; i < 20 && !r.done; i++) r.update(0.05);
+    for (let i = 0; i < 20 && !r.done; i++) {r.update(0.05);}
     expect(r.done).toBe(true);
     r.dispose();
   });
@@ -138,7 +138,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.stop();
-    for (let i = 0; i < 20 && !r.done; i++) r.update(0.05);
+    for (let i = 0; i < 20 && !r.done; i++) {r.update(0.05);}
     expect(r.done).toBe(true);
     // Owner walked away without dispose() — sweepStale is the reaper.
     (r as unknown as { lastUpdateAt: number }).lastUpdateAt = 0;

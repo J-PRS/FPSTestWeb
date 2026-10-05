@@ -6,7 +6,7 @@ import { Logger } from '../core/Logger.js';
 
 describe('Logger ring buffer', () => {
   it('stays bounded under sustained spam and keeps the newest lines', () => {
-    for (let i = 0; i < 2500; i++) Logger.pushRaw(`spam-${i}`);
+    for (let i = 0; i < 2500; i++) {Logger.pushRaw(`spam-${i}`);}
     const logs = Logger.getLogs();
     expect(logs.length).toBeLessThanOrEqual(1000 + 128);
     expect(logs.length).toBeGreaterThan(900); // never over-trims

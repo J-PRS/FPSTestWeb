@@ -125,7 +125,7 @@ function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
 function readRecordCount(r: Reader, what: string, recordSize: number, max: number): number {
   r.ensure(4, `${what} count`);
   const count = r.u32();
-  if (count > max) throw new Error(`Invalid ${what} count: ${count} (max ${max})`);
+  if (count > max) {throw new Error(`Invalid ${what} count: ${count} (max ${max})`);}
   r.ensure(count * recordSize, `${what} array`);
   return count;
 }
@@ -204,7 +204,7 @@ function readTargetEvents(r: Reader): TargetEvent[] {
 function readRoster(r: Reader): DemoRosterEntry[] {
   r.ensure(2, 'roster count');
   const count = r.u16();
-  if (count > 256) throw new Error(`Invalid roster count: ${count} (max 256)`);
+  if (count > 256) {throw new Error(`Invalid roster count: ${count} (max 256)`);}
   const roster: DemoRosterEntry[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     roster[i] = { name: r.str() };

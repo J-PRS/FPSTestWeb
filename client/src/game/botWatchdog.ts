@@ -36,26 +36,26 @@ export class BotWatchdog {
 
   step(dt: number, bots: Iterable<WatchBot>): void {
     this.t += dt;
-    if (this.t < WD_DT) return;
+    if (this.t < WD_DT) {return;}
     this.t = 0;
     let alive = 0, stuckNow = 0, stuckEval = 0;
     for (const bot of bots) {
-      if (bot.isDead) continue;
+      if (bot.isDead) {continue;}
       alive++;
       const prev = this.logic.get(bot.playerId);
       const logicD = prev ? prev.distanceTo(bot.position) : 99;
-      if (prev) prev.copy(bot.position); else this.logic.set(bot.playerId, bot.position.clone());
+      if (prev) {prev.copy(bot.position);} else {this.logic.set(bot.playerId, bot.position.clone());}
 
       const evald = this.checkDisplacement(bot);
       if (evald === 'stuck') { stuckEval++; stuckNow++; }
-      else if (evald === 'ok') stuckEval++;
+      else if (evald === 'ok') {stuckEval++;}
 
       this.checkRender(bot, logicD);
     }
     // Whole-squad freeze: every bot that finished a displacement window
     // this tick came up stuck. Two consecutive all-stuck ticks = brains
     // aren't producing travel at all (not just one wedged path).
-    if (stuckEval === 0) return; // nobody closed a window — keep the streak
+    if (stuckEval === 0) {return;} // nobody closed a window — keep the streak
     if (stuckNow === stuckEval && stuckEval >= Math.max(1, alive >> 1) && !this.matchOver()) {
       if (++this.idleWindows >= 2) {
         this.log.warn(`all ${alive} bots pinned — <${WD_STUCK_D}m net travel per ${WD_STUCK_T}s window (brains not ticking?)`);
@@ -75,7 +75,7 @@ export class BotWatchdog {
       return 'pending';
     }
     a.t += WD_DT;
-    if (a.t < WD_STUCK_T) return 'pending';
+    if (a.t < WD_STUCK_T) {return 'pending';}
     const disp = a.p.distanceTo(bot.position);
     a.p.copy(bot.position);
     a.t = 0;
@@ -96,7 +96,7 @@ export class BotWatchdog {
    *  EYE below the logical pos; only the delta matters. */
   private checkRender(bot: WatchBot, logicD: number): void {
     const have = bot.model.getModelPosition(_wdPos);
-    if (!have) return;
+    if (!have) {return;}
     const rp = this.render.get(bot.playerId);
     if (!rp) {
       this.render.set(bot.playerId, _wdPos.clone());

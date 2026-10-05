@@ -18,7 +18,7 @@ export function createPerfHud() {
     'max-height:calc(100vh - var(--z-br-4) - 130px);overflow:hidden;' +
     'color:#8f8;background:rgba(0,0,0,0.55);padding:4px 8px;font:11px/1.35 monospace;' +
     'margin:0;pointer-events:none;text-align:right;';
-  document.body.appendChild(el);
+  document.body.append(el);
 
   const phases = new Map<string, number>(); // EMA ms
   let frameMs = 0, frameStart = 0, lastMark = 0, lastText = 0;
@@ -31,7 +31,8 @@ export function createPerfHud() {
       renderer.info.autoReset = false;
       renderer.info.reset();
     }
-    frameStart = lastMark = performance.now();
+    lastMark = performance.now();
+    frameStart = lastMark;
   }
 
   /** Records ms since the previous mark under `name` — place marks at
@@ -47,11 +48,11 @@ export function createPerfHud() {
   function end(renderer: WebGLRenderer, counts: () => string): void {
     frameMs = frameMs * 0.9 + (performance.now() - frameStart) * 0.1;
     const now = performance.now();
-    if (el.style.display === 'none' || now - lastText < 250) return;
+    if (el.style.display === 'none' || now - lastText < 250) {return;}
     lastText = now;
     const i = renderer.info;
     const lines = [`frame ${frameMs.toFixed(1)}ms`];
-    for (const [k, v] of phases) lines.push(`${k} ${v.toFixed(1)}`);
+    for (const [k, v] of phases) {lines.push(`${k} ${v.toFixed(1)}`);}
     lines.push(`calls ${i.render.calls} tris ${(i.render.triangles / 1000).toFixed(0)}k`);
     lines.push(`geo ${i.memory.geometries} tex ${i.memory.textures} prog ${i.programs?.length ?? 0}`);
     lines.push(counts());
@@ -65,8 +66,8 @@ export function createPerfHud() {
    *  says which subsystem was eating the frame. */
   function snapshot(): Record<string, number> {
     const o: Record<string, number> = {};
-    for (const [k, v] of phases) o[k] = +v.toFixed(2);
-    o.frame = +frameMs.toFixed(2);
+    for (const [k, v] of phases) {o[k] = Number(v.toFixed(2));}
+    o.frame = Number(frameMs.toFixed(2));
     return o;
   }
 

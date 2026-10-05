@@ -42,6 +42,6 @@ export class ScorchDecal {
   }
 
   dispose(): void {
-    if (this.entry) this.terrain.removeScorch(this.entry);
+    if (this.entry) {this.terrain.removeScorch(this.entry);}
   }
 }

@@ -19,7 +19,7 @@ export class CapGovernor {
    *  2× live), or null to hold. */
   shrinkTarget(live: number, cap: number, floor: number, now: number): number | null {
     if (live * 4 >= cap) { this.idleAt = now; return null; }
-    if (cap <= floor || now - this.idleAt < IDLE_SHRINK_MS) return null;
+    if (cap <= floor || now - this.idleAt < IDLE_SHRINK_MS) {return null;}
     const target = Math.max(floor, Math.ceil((live * 2) / floor) * floor);
     if (target >= cap) { this.idleAt = now; return null; }
     return target;

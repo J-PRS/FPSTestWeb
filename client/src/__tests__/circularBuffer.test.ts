@@ -29,7 +29,7 @@ describe('CircularBuffer', () => {
 
   it('extracts ranges and clears', () => {
     const b = new CircularBuffer<number>(5);
-    for (let i = 0; i < 4; i++) b.add(i);
+    for (let i = 0; i < 4; i++) {b.add(i);}
     expect(b.extractNewest(2)).toEqual([2, 3]);
     expect(b.extractAll()).toEqual([0, 1, 2, 3]);
     expect(b.IsEmpty).toBe(true);
@@ -37,7 +37,7 @@ describe('CircularBuffer', () => {
 
   it('findIndexAfterTimestamp lands on the first newer item', () => {
     const b = new CircularBuffer<{ t: number }>(8);
-    for (const t of [1, 2, 3, 4, 5]) b.add({ t });
+    for (const t of [1, 2, 3, 4, 5]) {b.add({ t });}
     expect(b.findIndexAfterTimestamp(2.5, (x) => x.t)).toBe(2); // {t:3}
     expect(b.findIndexAfterTimestamp(5, (x) => x.t)).toBe(-1);  // nothing newer
     expect(b.findIndexAfterTimestamp(0, (x) => x.t)).toBe(0);

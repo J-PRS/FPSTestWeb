@@ -70,7 +70,7 @@ export class ProjectileTrail {
     if (this.skipSeg) { this.skipSeg = false; return; }
     const { pos, prevPos, vel } = this.host;
     const trailDist = pos.distanceTo(prevPos);
-    if (trailDist < 1e-6) return;
+    if (trailDist < 1e-6) {return;}
     // Jump cut lives inside emit, not in the caller — a teleport the host
     // forgot to declare used to bridge prevPos→pos with a straight line.
     const jump = vel.length() * 0.25 + 12;
@@ -168,7 +168,7 @@ export class ProjectileTrail {
       if (meshType === 'ring' || meshType === 'disc') {
         pooled.mesh.rotation.set(0, 0, 0);
         pooled.mesh.lookAt(_tLookAt.copy(pos).add(dir));
-        if (meshType === 'disc') pooled.mesh.rotateX(Math.PI / 2);
+        if (meshType === 'disc') {pooled.mesh.rotateX(Math.PI / 2);}
       }
       scene.add(pooled.mesh);
       return pooled;

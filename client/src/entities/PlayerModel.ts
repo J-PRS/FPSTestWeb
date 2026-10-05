@@ -987,7 +987,7 @@ export class PlayerModel {
     // resample; missing file → dev rigs still runtime-bake.
     loadBakedUALClips(this.variant).then(baked => {
       if (baked && baked.size) adopt(baked);
-      else void runtimeBake();
+      else runtimeBake();
     }).catch(runtimeBake);
   }
 

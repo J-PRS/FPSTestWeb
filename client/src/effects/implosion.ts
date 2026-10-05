@@ -36,16 +36,16 @@ const SHOCK_POOL_KEEP = 8;
 const CORE_POOL_KEEP = 4;
 const ARC_POOL_KEEP = 16;
 function releaseShock(sw: Shock): void {
-  if (shockPool.length >= SHOCK_POOL_KEEP) sw.mat.dispose();
-  else shockPool.push(sw);
+  if (shockPool.length >= SHOCK_POOL_KEEP) {sw.mat.dispose();}
+  else {shockPool.push(sw);}
 }
 function releaseCore(c: Core): void {
-  if (corePool.length >= CORE_POOL_KEEP) c.mat.dispose();
-  else corePool.push(c);
+  if (corePool.length >= CORE_POOL_KEEP) {c.mat.dispose();}
+  else {corePool.push(c);}
 }
 function releaseArc(a: Arc): void {
   if (arcPool.length >= ARC_POOL_KEEP) { a.mat.dispose(); a.line.geometry.dispose(); }
-  else arcPool.push(a);
+  else {arcPool.push(a);}
 }
 
 export class Implosion {
@@ -183,12 +183,12 @@ export class Implosion {
       this.updateCore() +
       this.updateShockwaves(dt) +
       this.updateArcs(dt);
-    for (const r of this.rings) if (r.update(dt)) alive++;
-    if (alive === 0) this.dead = true;
+    for (const r of this.rings) {if (r.update(dt)) alive++;}
+    if (alive === 0) {this.dead = true;}
   }
 
   private updateCore(): number {
-    if (!this.core) return 0;
+    if (!this.core) {return 0;}
     const coreLife = 0.25;
     if (this.elapsed < coreLife) {
       const t = this.elapsed / coreLife;
@@ -207,7 +207,7 @@ export class Implosion {
   private updateShockwaves(dt: number): number {
     let alive = 0;
     for (const sw of this.shockwaves) {
-      if (sw.dead) continue;
+      if (sw.dead) {continue;}
       sw.elapsed += dt;
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
@@ -226,7 +226,7 @@ export class Implosion {
   private updateArcs(dt: number): number {
     let alive = 0;
     for (const arc of this.arcs) {
-      if (arc.dead) continue;
+      if (arc.dead) {continue;}
       arc.elapsed += dt;
       if (arc.elapsed >= arc.life) {
         this.scene.remove(arc.line);
@@ -259,7 +259,7 @@ export class Implosion {
         releaseShock(sw);
       }
     }
-    for (const r of this.rings) r.dispose();
+    for (const r of this.rings) {r.dispose();}
     if (this.core && !this.core.dead) {
       this.scene.remove(this.core.mesh);
       this.core.dead = true;

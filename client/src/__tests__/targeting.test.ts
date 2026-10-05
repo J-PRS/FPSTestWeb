@@ -10,7 +10,7 @@ const self = new THREE.Vector3();
 // eval ticks jitter on Math.random — pump enough sim time to guarantee one.
 const evalNow = (t: ThreatTable, cands: TargetCandidate[]) => {
   let out: TargetCandidate | null = null;
-  for (let i = 0; i < 20 && !out; i++) out = t.update(0.5, self, cands, PROFILES.hunter);
+  for (let i = 0; i < 20 && !out; i++) {out = t.update(0.5, self, cands, PROFILES.hunter);}
   return out;
 };
 
@@ -94,7 +94,7 @@ describe('ThreatTable', () => {
     t.reportDamage('a', 100);
     const a = cand('a', 60), near = cand('near', 10);
     // ~20s of decay: hunter profile erases a single hit from the table.
-    for (let i = 0; i < 80; i++) t.update(0.5, self, [a, near], PROFILES.hunter);
+    for (let i = 0; i < 80; i++) {t.update(0.5, self, [a, near], PROFILES.hunter);}
     // With threat decayed the near candidate wins again.
     expect(evalNow(t, [a, near])).toBe(near);
   });

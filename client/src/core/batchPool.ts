@@ -12,7 +12,7 @@ export function acquireBatch<K, T>(
 ): T {
   let list = map.get(key);
   if (!list) { list = []; map.set(key, list); }
-  for (const b of list) if (hasRoom(b)) return b;
+  for (const b of list) {if (hasRoom(b)) return b;}
   const b = make(key);
   list.push(b);
   return b;
@@ -24,9 +24,9 @@ export function retireBatch<K, T>(
   map: BatchMap<K, T>, key: K, b: T, isDrained: (b: T) => boolean, dispose: (b: T) => void,
 ): void {
   const list = map.get(key);
-  if (!list || list[0] === b || !isDrained(b)) return;
+  if (!list || list[0] === b || !isDrained(b)) {return;}
   const i = list.indexOf(b);
-  if (i < 0) return;
+  if (i < 0) {return;}
   list.splice(i, 1);
   dispose(b);
 }

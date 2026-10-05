@@ -20,16 +20,16 @@ const REMOTE_SAMPLE_HZ = 20;
 // Splice out all events with timestamp < cutoff in one batch (list is
 // append-ordered, so binary search finds the first keeper index).
 function pruneEventsBefore<T extends { timestamp: number }>(events: T[], cutoff: number, pool: T[]): void {
-  if (events.length === 0 || events[0].timestamp >= cutoff) return;
+  if (events.length === 0 || events[0].timestamp >= cutoff) {return;}
   let lo = 0, hi = events.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (events[mid].timestamp < cutoff) lo = mid + 1;
-    else hi = mid;
+    if (events[mid].timestamp < cutoff) {lo = mid + 1;}
+    else {hi = mid;}
   }
   // Retired events go back on the freelist — recording is always-on now,
   // so a churn-free spool keeps GC out of the steady frame.
-  for (const e of events.splice(0, lo)) pool.push(e);
+  for (const e of events.splice(0, lo)) {pool.push(e);}
 }
 
 // Minimal shape the recorder needs from a live remote player —
@@ -96,7 +96,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   get duration(): number { return this.elapsedTime; }
 
   start(playerData: IPlayerDataProvider, inputData: IInputProvider): void {
-    if (this.recording) return;
+    if (this.recording) {return;}
     this.recording = true;
     this.frameNumber = 0;
     this.nextProjectileId = 1;
@@ -132,8 +132,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   private sampleRemotes(now: number): void {
-    if (!this.remoteSource) return;
-    if (now - this.lastRemoteSampleT < 1 / REMOTE_SAMPLE_HZ) return;
+    if (!this.remoteSource) {return;}
+    if (now - this.lastRemoteSampleT < 1 / REMOTE_SAMPLE_HZ) {return;}
     this.lastRemoteSampleT = now;
     for (const s of this.remoteSource()) {
       let idx = this.rosterIdxById.get(s.id);
@@ -145,7 +145,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       const flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
       // Same dead-reckon skip as the local frame: an identical sample
       // reproduces exactly under playback's timestamp lerp.
-      if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) continue;
+      if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) {continue;}
       const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
       f.timestamp = now;
       f.rosterIdx = idx;
@@ -168,7 +168,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     const same = prev.posX === s.posX && prev.posY === s.posY && prev.posZ === s.posZ &&
       prev.velX === s.velX && prev.velY === s.velY && prev.velZ === s.velZ &&
       prev.yaw === s.yaw && prev.pitch === s.pitch && prev.flags === flags;
-    if (same) return true;
+    if (same) {return true;}
     prev.posX = s.posX; prev.posY = s.posY; prev.posZ = s.posZ;
     prev.velX = s.velX; prev.velY = s.velY; prev.velZ = s.velZ;
     prev.yaw = s.yaw; prev.pitch = s.pitch; prev.flags = flags;
@@ -190,13 +190,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // Called every game frame. Only records at tick interval.
   // dt is seconds since last game frame.
   update(dt: number): void {
-    if (!this.recording || !this.playerData || !this.inputData) return;
+    if (!this.recording || !this.playerData || !this.inputData) {return;}
 
     this.elapsedTime += dt;
     const now = this.elapsedTime;
 
     // Only record at tick rate
-    if (now - this.lastTickTime < this.tickInterval) return;
+    if (now - this.lastTickTime < this.tickInterval) {return;}
     this.lastTickTime = now;
 
     const p = this.playerData;

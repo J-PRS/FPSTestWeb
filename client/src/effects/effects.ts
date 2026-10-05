@@ -68,7 +68,7 @@ class InstBucket {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false; // instances span the map; culling is per-slot pointless
-    for (let i = POOL_MAX - 1; i >= 0; i--) this.free.push(i);
+    for (let i = POOL_MAX - 1; i >= 0; i--) {this.free.push(i);}
   }
 
   take(): number {
@@ -103,7 +103,7 @@ class InstBucket {
   flush(highSlot: number): void {
     this.mesh.count = highSlot + 1;
     this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    if (this.mesh.instanceColor) {this.mesh.instanceColor.needsUpdate = true;}
     this.alphaAttr.needsUpdate = true;
   }
 }
@@ -199,7 +199,8 @@ export class EffectsManager {
     p.quat.identity();
     p.scale = 1;
     p.vel.copy(vel);
-    p.life = p.maxLife = life;
+    p.maxLife = life;
+    p.life = p.maxLife;
     p.color.copy(color);
     p.opacity = opts.opacity ?? 0.7;
     p.noGravity = opts.noGravity;
@@ -249,7 +250,7 @@ export class EffectsManager {
   // out over ~1s. Pooled; only stamped for actual terrain hits (a mid-air
   // mark where a ball stood would read as a floating smudge).
   spawnBulletMark(pos: THREE.Vector3): void {
-    if (!this.terrain) return;
+    if (!this.terrain) {return;}
     const e = 0.4;
     const h  = this.terrain.getHeight(pos.x, pos.z);
     const hx = this.terrain.getHeight(pos.x + e, pos.z) - this.terrain.getHeight(pos.x - e, pos.z);
@@ -286,7 +287,7 @@ export class EffectsManager {
   spawnBeam(from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
     _v.subVectors(to, from);
     const len = _v.length();
-    if (len < 0.01) return;
+    if (len < 0.01) {return;}
     let b = this.beamPool.pop();
     if (!b) {
       const mat = new THREE.MeshBasicMaterial({
@@ -300,7 +301,8 @@ export class EffectsManager {
     b.mesh.scale.set(0.14, len, 0.14);
     b.mat.color.setHex(colorHex);
     b.mat.opacity = 0.85;
-    b.life = b.maxLife = 0.35;
+    b.maxLife = 0.35;
+    b.life = b.maxLife;
     this.scene.add(b.mesh);
     this.beams.push(b);
   }
@@ -357,13 +359,13 @@ export class EffectsManager {
       p.pos.addScaledVector(p.vel, dt);
       p.scale = (0.3 + t * 1.4) * p.sizeScale;
       p.bucket.write(p);
-      if (p.slot > (highOf.get(p.bucket) ?? -1)) highOf.set(p.bucket, p.slot);
+      if (p.slot > (highOf.get(p.bucket) ?? -1)) {highOf.set(p.bucket, p.slot);}
     }
-    for (const [bucket, high] of highOf) bucket.flush(high);
+    for (const [bucket, high] of highOf) {bucket.flush(high);}
     for (const list of this.buckets.values()) {
-      for (const bucket of list) if (!highOf.has(bucket)) bucket.mesh.count = 0;
+      for (const bucket of list) {if (!highOf.has(bucket)) bucket.mesh.count = 0;}
     }
-    if (this.deadP.length > EffectsManager.DEADP_KEEP) this.deadP.length = EffectsManager.DEADP_KEEP;
-    while (this.beamPool.length > EffectsManager.BEAM_KEEP) this.beamPool.pop()!.mat.dispose();
+    if (this.deadP.length > EffectsManager.DEADP_KEEP) {this.deadP.length = EffectsManager.DEADP_KEEP;}
+    while (this.beamPool.length > EffectsManager.BEAM_KEEP) {this.beamPool.pop()!.mat.dispose();}
   }
 }

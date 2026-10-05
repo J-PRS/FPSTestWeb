@@ -140,7 +140,7 @@ export class PlayerVisuals {
     const travel = Math.max(1e-4, (vel?.length() ?? 0) * dt);
     const correcting = moved > Math.max(6, travel * 4);
     if (emit && !correcting) {
-      if (!this.airTrail) this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
+      if (!this.airTrail) {this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });}
       _airP.copy(pos); _airP.y -= 0.7;
       this.airTrail.emit(dt, _airP, vel ?? _airP, 0.4, _airTint);
     }
@@ -191,11 +191,11 @@ export class PlayerVisuals {
    *  the Pistol_Shoot clip only flickers the arms off-aim, so it never
    *  owns the state. */
   private pickAnimState(model: PlayerModel, airborne: boolean, jetting: boolean, shootT: number, speed: number, skiing?: boolean, throwT = 0): AnimationState {
-    if (airborne) return jetting ? 'jet' : 'jump';
+    if (airborne) {return jetting ? 'jet' : 'jump';}
     // A belt/deploy swing outranks the armed pose the same way a shot
     // does — the arm is committed to the throw, not the aim.
-    if (throwT > 0) return 'throw';
-    if (shootT > 0 && model.variant !== 'mannequin') return 'shoot';
+    if (throwT > 0) {return 'throw';}
+    if (shootT > 0 && model.variant !== 'mannequin') {return 'shoot';}
     return pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
   }
 
@@ -206,8 +206,8 @@ export class PlayerVisuals {
       // oneshot clip, and at fast cadences the fadeIn/fadeOut pair cycles
       // the arms through the unarmed grip mid-volley. Sustained fire keeps
       // the armed clip asserted; only the procedural kick pulses per shot.
-      if (animState === 'shoot' && model.animationState !== 'shoot') model.forceAnimationState('shoot');
-      else model.setAnimationState(animState);
+      if (animState === 'shoot' && model.animationState !== 'shoot') {model.forceAnimationState('shoot');}
+      else {model.setAnimationState(animState);}
     } else {
       model.setAnimationState(animState);
     }
@@ -226,8 +226,8 @@ export class PlayerVisuals {
     // Dedicated 8-dir clips when the KevDev bake landed — otherwise the
     // reverse-playback backpedal trick covers backward motion.
     const dedicated = model.setLocomotionVector(fwd, side);
-    if (!dedicated) model.setLocomotionReversed(
-      (animState === 'walk' || animState === 'run') && fwd < -0.6 * speed && -fwd > Math.abs(side));
+    if (!dedicated) {model.setLocomotionReversed(
+      (animState === 'walk' || animState === 'run') && fwd < -0.6 * speed && -fwd > Math.abs(side));}
     // Same directional jet tilt remotes get — your own body is visible
     // in third-person, so it should lean into the thrust too. Grounded
     // strafing gets a smaller version of the same roll — without it the

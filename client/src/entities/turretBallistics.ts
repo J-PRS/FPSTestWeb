@@ -80,7 +80,7 @@ export function seat(t: BalHost, terrain: Terrain): void {
 // flight time, solve for the launch velocity. Inert from here on out.
 export function launch(t: BalHost, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
   _v.copy(playerPos);
-  if (playerVel) _v.addScaledVector(playerVel, TURRET_HOP_T * 0.7); // lead, not lag
+  if (playerVel) {_v.addScaledVector(playerVel, TURRET_HOP_T * 0.7);} // lead, not lag
   _v.y = 0; // land at terrain height — solve on XZ + terrain
   const tx = _v.x, tz = _v.z;
   const ty = playerPos.y; // aim at the player's feet-ish
@@ -108,7 +108,7 @@ export function solveBolt(t: BalHost, playerPos: THREE.Vector3, playerVel?: THRE
   // then aim at the player's position predicted over that time.
   const pd = Math.hypot(playerPos.x - t.pos.x, playerPos.z - t.pos.z) || 0.001;
   _v.copy(playerPos);
-  if (playerVel) _v.addScaledVector(playerVel, (pd / v) * 0.5);
+  if (playerVel) {_v.addScaledVector(playerVel, (pd / v) * 0.5);}
 
   const dx = _v.x - t.pos.x;
   const dz = _v.z - t.pos.z;
@@ -117,7 +117,7 @@ export function solveBolt(t: BalHost, playerPos: THREE.Vector3, playerVel?: THRE
 
   // tan θ = (v² ∓ √(v⁴ - g(g·d² + 2·dy·v²))) / (g·d) — take the low arc.
   const disc = v * v * v * v - g * (g * d * d + 2 * dy * v * v);
-  if (disc < 0) return null; // out of range entirely
+  if (disc < 0) {return null;} // out of range entirely
   const theta = Math.atan((v * v - Math.sqrt(disc)) / (g * d));
   const cosT = Math.cos(theta), sinT = Math.sin(theta);
   return new THREE.Vector3((dx / d) * v * cosT, v * sinT, (dz / d) * v * cosT);
@@ -134,7 +134,7 @@ export function pathClear(t: BalHost, vel: THREE.Vector3): boolean {
     const x = t.pos.x + vel.x * tt;
     const z = t.pos.z + vel.z * tt;
     const y = muzzle + vel.y * tt - 0.5 * g * tt * tt;
-    if (y < t.terrain.getHeight(x, z) + 0.3) return false; // arc clips terrain
+    if (y < t.terrain.getHeight(x, z) + 0.3) {return false;} // arc clips terrain
   }
   return true;
 }

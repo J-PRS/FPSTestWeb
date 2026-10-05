@@ -55,8 +55,8 @@ class ScreenShake {
       const d = Math.exp(-dt * 14);
       this.kickRoll *= d;
       this.kickPitch *= d;
-      if (Math.abs(this.kickRoll) < 1e-4) this.kickRoll = 0;
-      if (Math.abs(this.kickPitch) < 1e-4) this.kickPitch = 0;
+      if (Math.abs(this.kickRoll) < 1e-4) {this.kickRoll = 0;}
+      if (Math.abs(this.kickPitch) < 1e-4) {this.kickPitch = 0;}
     }
   }
 }

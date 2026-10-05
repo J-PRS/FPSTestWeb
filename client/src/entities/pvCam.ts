@@ -95,8 +95,8 @@ export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.Pe
     const right = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
     pos.addScaledVector(fwd, input.forward * OBSERVER_SPEED * dt);
     pos.addScaledVector(right, input.right * OBSERVER_SPEED * dt);
-    if (input.jumpHeld) pos.y += OBSERVER_SPEED * dt;
-    if (input.shiftDown) pos.y -= OBSERVER_SPEED * dt;
+    if (input.jumpHeld) {pos.y += OBSERVER_SPEED * dt;}
+    if (input.shiftDown) {pos.y -= OBSERVER_SPEED * dt;}
     // Terrain collider, spectator-flavored: the floor under the EYE always
     // holds, and when the view pitches down the terrain ahead of the eye
     // matters too — the near plane is what dirt clips. Blend the look-dir
@@ -108,16 +108,16 @@ export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.Pe
     const down = Math.max(0, -Math.sin(pitch)); // pitch<0 = looking down
     if (down > 0.01) {
       const fx = Math.sin(yaw) * 1.6, fz = Math.cos(yaw) * 1.6; // ~1.6m ahead
-      const sx = Math.cos(yaw) * 1.0, sz = -Math.sin(yaw) * 1.0; // flank flares
+      const sx = Number(Math.cos(yaw)), sz = -Math.sin(yaw) * 1.0; // flank flares
       const aheadY = Math.max(
         terrain.getHeight(pos.x + fx, pos.z + fz),
         terrain.getHeight(pos.x + fx + sx, pos.z + fz + sz),
         terrain.getHeight(pos.x + fx - sx, pos.z + fz - sz),
       );
-      if (aheadY > groundY) groundY += (aheadY - groundY) * down;
+      if (aheadY > groundY) {groundY += (aheadY - groundY) * down;}
     }
     const floorY = groundY + 0.6; // eye clearance — not a buried-body fight
-    if (pos.y < floorY) pos.y = floorY;
+    if (pos.y < floorY) {pos.y = floorY;}
     vel.set(0, 0, 0); // observer drift isn't body momentum
     updateCamera(v, camera, terrain, { pos, yaw, pitch, thirdPerson: false }); // keeps the camera above the terrain surface
   }

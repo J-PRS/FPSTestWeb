@@ -21,7 +21,7 @@ let lastNs = 0;
 let disjointSeen = false;
 
 function harvest(): void {
-  if (!gl) return;
+  if (!gl) {return;}
   // A disjoint event (GPU reset, context loss) invalidates every in-flight
   // result — drop the queue and report it rather than trusting a stale ms.
   if (gl.getParameter(ext!.GPU_DISJOINT_EXT)) { pending.length = 0; disjointSeen = true; }
@@ -38,10 +38,10 @@ export function gpuBegin(renderer: THREE.WebGLRenderer): void {
     gl = ctx instanceof WebGL2RenderingContext ? ctx : null;
     ext = gl ? (gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExt | null) : null;
   }
-  if (!ext || !gl) return;
+  if (!ext || !gl) {return;}
   harvest();
   const q = gl.createQuery();
-  if (!q) return;
+  if (!q) {return;}
   // A query left open by an aborted frame must be closed before a new
   // one starts — nested TIME_ELAPSED queries are illegal.
   if (active) { gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push(active); }
@@ -50,7 +50,7 @@ export function gpuBegin(renderer: THREE.WebGLRenderer): void {
 }
 
 export function gpuEnd(): void {
-  if (!active || !ext || !gl) return;
+  if (!active || !ext || !gl) {return;}
   gl.endQuery(ext.TIME_ELAPSED_EXT);
   pending.push(active);
   active = null;
@@ -60,5 +60,5 @@ export function gpuEnd(): void {
  *  queries are still in flight or the ext is missing). */
 export function gpuMs(): number { return lastNs / 1e6; }
 
-export function gpuTimerSupported(): boolean { return !!ext; }
+export function gpuTimerSupported(): boolean { return Boolean(ext); }
 export function gpuTimerDisjoint(): boolean { return disjointSeen; }

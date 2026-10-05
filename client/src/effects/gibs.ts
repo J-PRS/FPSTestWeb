@@ -70,7 +70,7 @@ class GibMeshPool {
     markProbe(this.mesh, { kind: 'gib', label: `gib/${per}`, gib: this });
     scene.add(this.mesh);
     this.freeIdx = Array.from({ length: GIB_CAP }, (_, i) => GIB_CAP - 1 - i);
-    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    if (!geo.boundingSphere) {geo.computeBoundingSphere();}
   }
 
   /** Realloc every parallel state array + the instance buffers at `cap`.
@@ -90,7 +90,7 @@ class GibMeshPool {
     this.bodyR = growA(this.bodyR);
     const la = new Float32Array(cap).fill(-1); la.set(this.landedAt); this.landedAt = la;
     const oldCap = cap / 2;
-    for (let i = cap - 1; i >= oldCap; i--) this.freeIdx.push(i);
+    for (let i = cap - 1; i >= oldCap; i--) {this.freeIdx.push(i);}
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16);
     mat.array.set(this.mesh.instanceMatrix.array.subarray(0, cap * 16));
     mat.setUsage(THREE.DynamicDrawUsage);
@@ -110,14 +110,14 @@ class GibMeshPool {
   checkShrink(now: number): void {
     const cap = this.freeIdx.length + this.live;
     const target = this.capGov.shrinkTarget(this.live, cap, GIB_CAP, now);
-    if (target === null) return;
+    if (target === null) {return;}
     // Repack: live slots (life > 0) move down in index order.
     const remap = new Int32Array(cap).fill(-1);
     let next = 0;
-    for (let i = 0; i < cap; i++) if (this.life[i]! > 0) remap[i] = next++;
+    for (let i = 0; i < cap; i++) {if (this.life[i]! > 0) remap[i] = next++;}
     const moveA = (a: Float32Array): Float32Array<ArrayBuffer> => {
       const n = new Float32Array(target);
-      for (let i = 0; i < cap; i++) if (remap[i]! >= 0) n[remap[i]!] = a[i]!;
+      for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) n[remap[i]!] = a[i]!;}
       return n;
     };
     const npx = moveA(this.px); const npy = moveA(this.py); const npz = moveA(this.pz);
@@ -129,7 +129,7 @@ class GibMeshPool {
     const nage = moveA(this.age); const nlife = moveA(this.life);
     const nbodyR = moveA(this.bodyR);
     const nla = new Float32Array(target).fill(-1);
-    for (let i = 0; i < cap; i++) if (remap[i]! >= 0) nla[remap[i]!] = this.landedAt[i]!;
+    for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) nla[remap[i]!] = this.landedAt[i]!;}
     this.px = npx; this.py = npy; this.pz = npz;
     this.vx = nvx; this.vy = nvy; this.vz = nvz;
     this.rx = nrx; this.ry = nry; this.rz = nrz;
@@ -144,7 +144,7 @@ class GibMeshPool {
     const srcM = this.mesh.instanceMatrix, srcC = this.mesh.instanceColor!;
     for (let i = 0; i < cap; i++) {
       const j = remap[i]!;
-      if (j < 0) continue;
+      if (j < 0) {continue;}
       mat.array.set(srcM.array.subarray(i * 16, i * 16 + 16), j * 16);
       col.array.set(srcC.array.subarray(i * 3, i * 3 + 3), j * 3);
     }
@@ -154,7 +154,7 @@ class GibMeshPool {
     mat.needsUpdate = true; col.needsUpdate = true;
     // Dead slots vanish — everything past live is a fresh free index.
     this.freeIdx = [];
-    for (let i = target - 1; i >= this.live; i--) this.freeIdx.push(i);
+    for (let i = target - 1; i >= this.live; i--) {this.freeIdx.push(i);}
     this.mesh.count = Math.max(this.mesh.count, this.live);
     this.capGov.shrunk(now);
   }
@@ -190,12 +190,12 @@ class GibMeshPool {
   update(dt: number, terrain: Terrain): void {
     // Nothing alive: skip the slot walk AND the GPU buffer upload — with
     // ~20 species pools this is 20 dead matrix writes per frame otherwise
-    if (this.live === 0) return;
+    if (this.live === 0) {return;}
     // Walk live slots via the count bound; dead slots get compacted lazily
     // by skip (they're in freeIdx already).
     let wrote = false;
     for (let i = 0; i < this.mesh.count; i++) {
-      if (this.life[i]! <= 0) continue; // dead slot
+      if (this.life[i]! <= 0) {continue;} // dead slot
       this.age[i]! += dt;
       const landed = this.landedAt[i]! >= 0;
       const dead = this.age[i]! >= this.life[i]! || (landed && (this.age[i]! - this.landedAt[i]!) >= SHRINK_DUR);
@@ -274,26 +274,26 @@ export class GibPool {
 
   get totalPartsPerBody(): number {
     let n = 0;
-    for (const p of this.pools) n += p.per;
+    for (const p of this.pools) {n += p.per;}
     return n;
   }
 
   /** Live gib slots across all part pools — dump census. */
   get live(): number {
     let n = 0;
-    for (const p of this.pools) n += p.live;
+    for (const p of this.pools) {n += p.live;}
     return n;
   }
 
   /** Idle-shrink pass — delegates to each part pool's compaction check. */
   checkShrink(now: number): void {
-    for (const p of this.pools) p.checkShrink(now);
+    for (const p of this.pools) {p.checkShrink(now);}
   }
 
   /** Allocated gib slots across part pools — census pair for `live`. */
   get cap(): number {
     let n = 0;
-    for (const p of this.pools) n += p.cap;
+    for (const p of this.pools) {n += p.cap;}
     return n;
   }
 
@@ -307,7 +307,7 @@ export class GibPool {
     ownerSlot: number, center: THREE.Vector3,
     impulseDir: THREE.Vector3 | null, inheritVel: THREE.Vector3 | null,
   ): boolean {
-    if (this.totalPartsPerBody < 3) return false;
+    if (this.totalPartsPerBody < 3) {return false;}
     let spawned = 0;
     for (let pi = 0; pi < this.pools.length; pi++) {
       const pool = this.pools[pi]!;
@@ -322,7 +322,7 @@ export class GibPool {
         _m.decompose(_p, _q, _s);
         const bodyR = geoR * Math.max(_s.x, _s.y, _s.z);
         const gi = pool.spawn(_m, _c, bodyR * 0.5);
-        if (gi < 0) continue;
+        if (gi < 0) {continue;}
         // Outward from the body center; tiny parts near the core take a
         // random dir so the burst doesn't collapse to a point
         let dx = _p.x - center.x, dy = _p.y - center.y, dz = _p.z - center.z;
@@ -350,6 +350,6 @@ export class GibPool {
   }
 
   update(dt: number, terrain: Terrain): void {
-    for (const p of this.pools) p.update(dt, terrain);
+    for (const p of this.pools) {p.update(dt, terrain);}
   }
 }

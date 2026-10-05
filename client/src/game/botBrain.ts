@@ -71,7 +71,7 @@ export class GameBot extends RemotePlayer {
     const cap = BOT_HP + CLASS_STATS[this.armorClass].maxHealth + this.perkHealthBonus;
     const gained = cap - this.botMaxHp;
     this.botMaxHp = cap;
-    if (gained > 0) this.botHp = Math.min(cap, this.botHp + gained);
+    if (gained > 0) {this.botHp = Math.min(cap, this.botHp + gained);}
   }
   respawnAt = 0;
   /** CTF: carrying the enemy flag home — objective overrides roam. */
@@ -146,7 +146,7 @@ export class GameBot extends RemotePlayer {
   /** Local-authority damage — the same role the server's hit validation
    *  plays online. Returns true when the hit killed. */
   takeDamageLocal(dmg: number, fromPos: THREE.Vector3): boolean {
-    if (this.isDead) return false;
+    if (this.isDead) {return false;}
     // Plated et al — the server's applyDamage applies the same resist.
     dmg *= 1 - effectiveResist(this.mods, this.botHp, this.botMaxHp);
     // Held shield burns tank instead of flesh — same exchange rate the
@@ -155,7 +155,7 @@ export class GameBot extends RemotePlayer {
       const absorbed = Math.min(dmg, this.energy * ENERGY.shieldDmgPerEnergy);
       this.energy -= absorbed / ENERGY.shieldDmgPerEnergy;
       dmg -= absorbed;
-      if (this.energy <= 0.5) this.dropSkill(STATUS.SHIELD);
+      if (this.energy <= 0.5) {this.dropSkill(STATUS.SHIELD);}
     }
     this.botHp -= dmg;
     this.brain.takeHit(fromPos); // recoil decision lives in the shared brain
@@ -222,7 +222,7 @@ export class GameBot extends RemotePlayer {
           // Cap the memo — roaming bots would otherwise grow it a cell at
           // a time for the whole match. Clear-and-refill beats LRU here:
           // a Map reset is one alloc, per-entry LRU bookkeeping is worse.
-          if (gyc.size > 2048) gyc.clear();
+          if (gyc.size > 2048) {gyc.clear();}
           v = ctx.terrain.getHeight(x, z);
           gyc.set(k, v);
         }
@@ -267,12 +267,12 @@ export class GameBot extends RemotePlayer {
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.lastMove = out.move;
-    this.wantBelt = !!out.belt;
+    this.wantBelt = Boolean(out.belt);
     this.wantDeploy = out.deploy ?? null;
     this.wantRepair = out.repair ?? null;
     this.wantSay = out.say ?? null;
-    if (out.status !== undefined) this.applyStatus(out.status, dt);
-    if (!out.fire) return null;
+    if (out.status !== undefined) {this.applyStatus(out.status, dt);}
+    if (!out.fire) {return null;}
     this.fire();
     return { targetId: out.fire.targetId, aim: _aim.set(out.fire.aim.x, out.fire.aim.y, out.fire.aim.z) };
   }
@@ -290,7 +290,7 @@ export class GameBot extends RemotePlayer {
    *  Uses the last think's dest/move; a stale plan for 2 frames is
    *  fine, a stale position is not. */
   stepFrame(dt: number, ctx: { terrain: Terrain }): void {
-    if (this.propelJetT > 0) this.propelJetT -= dt;
+    if (this.propelJetT > 0) {this.propelJetT -= dt;}
     this.locomote(dt, ctx, this.lastDest, this.lastMove);
   }
 
@@ -307,7 +307,7 @@ export class GameBot extends RemotePlayer {
     const md = Math.hypot(dest.x - pos.x, dest.z - pos.z);
     // Wrist-speed turn — same slew the server host applies, so an
     // offline bot carves its view around instead of fly-flicking.
-    if (md > 0.01) this.rotation.yaw = slewYaw(this.rotation.yaw, Math.atan2(dest.x - pos.x, dest.z - pos.z), 5 * dt);
+    if (md > 0.01) {this.rotation.yaw = slewYaw(this.rotation.yaw, Math.atan2(dest.x - pos.x, dest.z - pos.z), 5 * dt);}
     this.rotation.pitch = 0;
     this.rotation.roll = 0; // corpse roll would otherwise stick forever
 
@@ -317,18 +317,18 @@ export class GameBot extends RemotePlayer {
     }
     this.moveState.yaw = this.rotation.yaw;
     this.moveState.pitch = 0;
-    const jet = (!!move?.jet || this.propelJetT > 0) && this.energy > 0.5;
+    const jet = (Boolean(move?.jet) || this.propelJetT > 0) && this.energy > 0.5;
     this.movement.setInput({
       forward: md > 0.5 ? 1 : 0,
       right: 0,
-      jumpHeld: !!move?.jump,
-      skiHeld: !!move?.ski,
+      jumpHeld: Boolean(move?.jump),
+      skiHeld: Boolean(move?.ski),
       jetHeld: jet,
     });
     this.movement.update(dt);
     en.fuelTick(this, dt, jet);
 
-    this.wireSki = !!move?.ski;
+    this.wireSki = Boolean(move?.ski);
     // Real jet button for the trail — the vel.y heuristic can't tell a
     // burn from a knockback launch; the brain knows.
     this.wireJet = jet;
@@ -341,7 +341,7 @@ export class GameBot extends RemotePlayer {
     const dx = this.position.x - fromPos.x;
     const dy = this.position.y - fromPos.y;
     const dz = this.position.z - fromPos.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+    const dist = Math.hypot(dx, dy, dz) || 0.001;
     const mag = impulseMag * this.mods.knockbackTaken;
     const s = pull ? -1 : 1;
     this.velocity.x += (dx / dist) * mag * s;
@@ -368,8 +368,8 @@ export function setBotStructureSpecs(list: readonly StructureSpec[] | undefined)
  *  turns have wrist speed, so a snapped 180° reads as a fly-flick. */
 function slewYaw(cur: number, want: number, maxDelta: number): number {
   let d = want - cur;
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
+  if (d > Math.PI) {d -= Math.PI * 2;}
+  if (d < -Math.PI) {d += Math.PI * 2;}
   return cur + Math.max(-maxDelta, Math.min(maxDelta, d));
 }
 

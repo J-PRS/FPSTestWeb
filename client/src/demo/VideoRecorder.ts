@@ -22,13 +22,13 @@ export class VideoRecorder {
   get isRecording(): boolean { return this.recorder !== null; }
 
   static isSupported(): boolean {
-    return typeof MediaRecorder !== 'undefined' && !!HTMLCanvasElement.prototype.captureStream;
+    return typeof MediaRecorder !== 'undefined' && Boolean(HTMLCanvasElement.prototype.captureStream);
   }
 
   start(fps = 60): boolean {
-    if (this.recorder || !this.canvas) return false;
+    if (this.recorder || !this.canvas) {return false;}
     const mime = MIME_PREFERENCES.find(m => MediaRecorder.isTypeSupported(m));
-    if (!mime) return false;
+    if (!mime) {return false;}
     try {
       const stream = this.canvas.captureStream(fps);
       this.recorder = new MediaRecorder(stream, {
@@ -40,7 +40,7 @@ export class VideoRecorder {
     }
     this.mime = mime;
     this.chunks = [];
-    this.recorder.ondataavailable = (e) => { if (e.data.size > 0) this.chunks.push(e.data); };
+    this.recorder.ondataavailable = (e) => { if (e.data.size > 0) {this.chunks.push(e.data);} };
     this.recorder.start(250); // periodic chunks so a crash keeps most of the clip
     return true;
   }
@@ -61,7 +61,7 @@ export class VideoRecorder {
 
   async stopAndDownload(filename = 'kribes_clip'): Promise<boolean> {
     const blob = await this.stop();
-    if (!blob) return false;
+    if (!blob) {return false;}
     const ext = this.mime.includes('mp4') ? 'mp4' : 'webm';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

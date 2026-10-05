@@ -80,7 +80,7 @@ const WAVES: WaveBeat[] = [
     } },
   { at: 290, name: 'Elite + enrage storm', run: (d) => {
       d.entities.spawnEliteBall();
-      for (const b of d.entities.balls) if (!b.dead) b.enrage();
+      for (const b of d.entities.balls) {if (!b.dead) b.enrage();}
     } },
   { at: 360, name: 'Siege: totem + wall', run: (d) => {
       d.entities.spawnTotem();
@@ -148,7 +148,7 @@ const RANDOM_INTERVAL_RAMP = 0.006; // s shaved off per elapsed second
 function aliveCount(e: ReturnType<typeof createEntities>): number {
   let n = 0;
   for (const l of [e.balls, e.crawlers, e.turrets, e.rollers, e.seekers, e.overlords, e.totems, e.rakks] as { dead: boolean }[][]) {
-    for (const t of l) if (!t.dead) n++;
+    for (const t of l) {if (!t.dead) n++;}
   }
   return n;
 }
@@ -170,10 +170,10 @@ export function createWaveDirector(deps: DirectorDeps) {
   function updateRandom(dt: number): void {
     elapsed += dt;
     randomT -= dt;
-    if (randomT > 0) return;
+    if (randomT > 0) {return;}
     randomT = Math.max(RANDOM_INTERVAL_MIN, RANDOM_INTERVAL_BASE - elapsed * RANDOM_INTERVAL_RAMP);
     const budget = Math.min(RANDOM_BUDGET_MAX, RANDOM_BUDGET_BASE + Math.floor(elapsed / RANDOM_BUDGET_RAMP_T));
-    if (aliveCount(deps.entities) >= budget) return;
+    if (aliveCount(deps.entities) >= budget) {return;}
     let roll = Math.random() * RANDOM_WEIGHT_TOTAL;
     for (const p of RANDOM_POOL) {
       roll -= p.weight;
@@ -188,7 +188,7 @@ export function createWaveDirector(deps: DirectorDeps) {
   function update(dt: number): void {
     if (RANDOM_MODE) { updateRandom(dt); return; }
     elapsed += dt;
-    if (CLASSIC_MODE) return;
+    if (CLASSIC_MODE) {return;}
     credits = Math.min(CREDIT_CAP, credits + (CREDIT_BASE + elapsed * CREDIT_RAMP) * dt);
 
     // Scripted beats — after the table runs out, loop the heavy ones

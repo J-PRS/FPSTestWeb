@@ -72,7 +72,7 @@ function makePool(scene: THREE.Scene): RingPool {
     pos, col, free: [], live: 0,
     scene, geo, meshes: [mesh], mats: [mat],
   };
-  for (let i = MAX_RINGS - 1; i >= 0; i--) pool.free.push(i);
+  for (let i = MAX_RINGS - 1; i >= 0; i--) {pool.free.push(i);}
   return pool;
 }
 
@@ -86,9 +86,9 @@ function releaseRingSlot(pool: RingPool, slot: number): void {
   pool.free.push(slot);
   pool.live--;
   retireBatch(pools, pool.scene, pool, p => p.live === 0, p => {
-    for (const m of p.meshes) p.scene.remove(m);
+    for (const m of p.meshes) {p.scene.remove(m);}
     p.geo.dispose();
-    for (const m of p.mats) m.dispose();
+    for (const m of p.mats) {m.dispose();}
   });
 }
 
@@ -158,7 +158,7 @@ export class TerrainRing {
   }
 
   dispose(): void {
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     const col = this.pool.col.array as Float32Array;
     const base = this.slot * VERTS * 3;
     col.fill(0, base, base + VERTS * 3);

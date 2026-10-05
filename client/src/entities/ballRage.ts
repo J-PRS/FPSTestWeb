@@ -53,7 +53,7 @@ export interface BallRageHost {
 export function tickStallBreaker(b: BallRageHost, dt: number, playerPos: THREE.Vector3): void {
   const sp = b.vel.length();
   b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
-  if (b.slowTimer < BALL_STALL_TIME) return;
+  if (b.slowTimer < BALL_STALL_TIME) {return;}
   b.slowTimer = 0;
   launchAt(b, playerPos, Math.SQRT1_2);
   b.dashFlash = 0.15;
@@ -103,13 +103,13 @@ export function tickEnrage(b: BallRageHost, dt: number, terrain: Terrain, player
   if (b.dashFlash > 0) {
     b.dashFlash -= dt;
     b.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
-    if (b.dashFlash <= 0 && b.enraged) b.emissive.setRGB(0.55, 0, 0);
+    if (b.dashFlash <= 0 && b.enraged) {b.emissive.setRGB(0.55, 0, 0);}
   }
 }
 
 export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
   const gy = terrain.getHeight(b.pos.x, b.pos.z);
-  if (b.pos.y - b.radius > gy) return;
+  if (b.pos.y - b.radius > gy) {return;}
   b.pos.y = gy + b.radius;
   const n = terrain.getNormal(b.pos.x, b.pos.z);
   const dot = b.vel.dot(n);
@@ -119,12 +119,12 @@ export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos:
   // after a playback keyframe snap: the ball sits exactly on the ground with
   // upward velocity, and without this guard the reflection would flip it back
   // downward, causing a one-frame dip/stutter (and a possible stray teleport).
-  if (dot >= 0) return;
+  if (dot >= 0) {return;}
 
   // Enraged lunge: touching down within range launches at the player
   // instead of a normal bounce — velocity is REPLACED (clean readable dash,
   // not a bounce that adds up unpredictably)
-  if (b.enraged && tryEnrageLunge(b, playerPos)) return;
+  if (b.enraged && tryEnrageLunge(b, playerPos)) {return;}
 
   // Calculate total mechanical energy at bounce: KE + PE
   // KE = 0.5 * v^2, PE = g * (global height above reference)
@@ -167,7 +167,7 @@ export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos:
 function tryEnrageLunge(b: BallRageHost, playerPos: THREE.Vector3): boolean {
   const pdx = playerPos.x - b.pos.x;
   const pdz = playerPos.z - b.pos.z;
-  if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) return false;
+  if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {return false;}
   dashAt(b, playerPos);
   b.dashFlash = 0.15;
   setEnraged(b, false); // lunge discharges the rage
@@ -183,7 +183,7 @@ function tryEnrageLunge(b: BallRageHost, playerPos: THREE.Vector3): boolean {
 function chaseIfFar(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
   const dx = b.pos.x - playerPos.x;
   const dz = b.pos.z - playerPos.z;
-  if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) return;
+  if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) {return;}
   if (!BALL_ENRAGE_ENABLED) { teleportNearPlayer(b, terrain, playerPos); return; }
   setEnraged(b, true);
   // Spring at the player on enrage — 45° launch, same redirect physics
@@ -201,7 +201,7 @@ function chaseIfFar(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3)
 function launchAt(b: BallRageHost, playerPos: THREE.Vector3, upFrac: number): void {
   const pdx = playerPos.x - b.pos.x;
   const pdz = playerPos.z - b.pos.z;
-  const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+  const pd = Math.hypot(pdx, pdz) || 0.001;
   const speed = Math.max(b.vel.length(), BALL_ENRAGE_DASH_SPEED * 0.5);
   const h = Math.sqrt(1 - upFrac * upFrac);
   b.vel.set((pdx / pd) * speed * h, 0, (pdz / pd) * speed * h);
@@ -216,7 +216,7 @@ function launchAt(b: BallRageHost, playerPos: THREE.Vector3, upFrac: number): vo
 function dashAt(b: BallRageHost, playerPos: THREE.Vector3): void {
   const pdx = playerPos.x - b.pos.x;
   const pdz = playerPos.z - b.pos.z;
-  const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+  const pd = Math.hypot(pdx, pdz) || 0.001;
   const hSpeed = Math.max(Math.hypot(b.vel.x, b.vel.z), BALL_ENRAGE_DASH_SPEED * 0.5);
   const t = Math.max(0.15, pd / hSpeed); // flight time
   const vy = (playerPos.y - b.pos.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
@@ -225,7 +225,7 @@ function dashAt(b: BallRageHost, playerPos: THREE.Vector3): void {
 
 /** Director hook — enrage storms light up every ball at once. */
 export function setEnraged(b: BallRageHost, on: boolean): void {
-  if (b.enraged === on) return;
+  if (b.enraged === on) {return;}
   b.enraged = on;
   b.enrageTimer = 0;
   // Visual cue: emissive red burn while enraged
@@ -241,7 +241,7 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   b.pos.y = terrain.getHeight(b.pos.x, b.pos.z) + BALL_TELE_HEIGHT;
 
   // Position jumped — cut the ribbons so they don't streak across the teleport
-  for (const r of b.ribbons) r.clear();
+  for (const r of b.ribbons) {r.clear();}
 
   // Preserve absolute velocity, redirect according to terrain normal at teleport point
   const currentSpeed = b.vel.length();

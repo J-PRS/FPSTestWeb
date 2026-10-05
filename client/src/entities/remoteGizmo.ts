@@ -63,28 +63,28 @@ export class RemoteGizmo {
 
   follow(pos: { x: number; y: number; z: number }): void {
     this.pos.set(pos.x, pos.y + 0.7, pos.z); // head top is ~0.6 above eye
-    if (this.slot >= 0) this.write();
+    if (this.slot >= 0) {this.write();}
   }
 
   setColor(hex: number): void {
     this.pool.mesh.setColorAt(this.slot, _c.setHex(hex));
-    if (this.pool.mesh.instanceColor) this.pool.mesh.instanceColor.needsUpdate = true;
+    if (this.pool.mesh.instanceColor) {this.pool.mesh.instanceColor.needsUpdate = true;}
   }
 
   attach(): void {
     this.shown = true;
-    if (this.slot >= 0) this.write();
+    if (this.slot >= 0) {this.write();}
   }
 
   detach(): void {
     this.shown = false;
-    if (this.slot >= 0) this.write();
+    if (this.slot >= 0) {this.write();}
   }
 
   hide(): void { this.detach(); }
 
   dispose(): void {
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     this.shown = false;
     this.write();
     this.pool.free.push(this.slot);

@@ -23,13 +23,13 @@ const BALL_GRAVITY   = GRAVITY;
 // in the instance matrix.
 let _ballGeo: THREE.IcosahedronGeometry | null = null;
 function ballGeo(): THREE.IcosahedronGeometry {
-  if (!_ballGeo) _ballGeo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);
+  if (!_ballGeo) {_ballGeo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);}
   return _ballGeo;
 }
 let _ballMat: THREE.MeshLambertMaterial | null = null;
 function ballMat(): THREE.MeshLambertMaterial {
   // White diffuse — instanceColor carries hue + emissive-style glow
-  if (!_ballMat) _ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff });}
   return _ballMat;
 }
 
@@ -181,7 +181,7 @@ export class Ball {
    *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
   get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean; parked: boolean; anchor: { x: number; y: number; z: number; vx: number; vy: number; vz: number } } | null {
     const sim = this.netS.sim;
-    if (!sim) return null;
+    if (!sim) {return null;}
     const simNow = Ball.netSimNow?.() ?? null;
     const legAge = simNow !== null && Number.isFinite(simNow) && this.netS.legT0 >= 0
       ? simNow - this.netS.legT0 : -1;
@@ -271,7 +271,7 @@ export class Ball {
       this.id = 0x40000000 + netSpawn.id; // net namespace — can't collide with local targetIds
       this.pos = new THREE.Vector3(netSpawn.x, netSpawn.y, netSpawn.z);
       this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
-      if (variant === 0) this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();
+      if (variant === 0) {this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();}
       this.netS.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
         { x: netSpawn.x, y: netSpawn.y, z: netSpawn.z },
         { x: netSpawn.vx, y: netSpawn.vy, z: netSpawn.vz });
@@ -323,7 +323,7 @@ export class Ball {
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
+      if (this.flashTimer <= 0) {this.emissive.setRGB(0, 0, 0);}
     }
 
     tickBallTrails(this, dt, Ball.viewPos);
@@ -389,7 +389,7 @@ export class Ball {
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
     this.trailDriver?.release();
     this.trails.dispose();
-    for (const r of this.ribbons) r.dispose();
+    for (const r of this.ribbons) {r.dispose();}
   }
 }
 
@@ -404,8 +404,8 @@ registerDiag('balls', () => ({
     rows: [...Ball.live].map(b => ({
       id: b.id, v: b.variant, net: b.netDriven || undefined, dead: b.dead || undefined,
       pos: `${b._rpos.x.toFixed(0)},${b._rpos.y.toFixed(0)},${b._rpos.z.toFixed(0)}`,
-      spd: +Math.sqrt(b.vel.lengthSq()).toFixed(1),
-      camD: +Math.sqrt(b._rpos.distanceToSquared(Ball.viewPos)).toFixed(0),
+      spd: Number(Math.sqrt(b.vel.lengthSq()).toFixed(1)),
+      camD: Number(Math.sqrt(b._rpos.distanceToSquared(Ball.viewPos)).toFixed(0)),
       dots: b.trails.dbg(),
       rib: b.ribbons.map(r => r.dbg()),
     })),
@@ -416,8 +416,8 @@ export type { NetSeg } from './ballNet.js';
 
 export function pickVariant(): 0 | 1 | 2 | 3 {
   const r = Math.random();
-  if (r < 0.08) return 3; // elites are rare — each one is an event
-  if (r < 0.18) return 2;
-  if (r < 0.38) return 1;
+  if (r < 0.08) {return 3;} // elites are rare — each one is an event
+  if (r < 0.18) {return 2;}
+  if (r < 0.38) {return 1;}
   return 0;
 }

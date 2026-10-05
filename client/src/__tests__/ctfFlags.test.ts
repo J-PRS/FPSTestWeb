@@ -114,7 +114,7 @@ describe('CtfFlags', () => {
     r.flags.update(0.016); // grab again
     r.flags.dropCarried('b2', new THREE.Vector3(0, 0, 0));
     r.touch.length = 0;
-    for (let t = 0; t < FLAG_RESET_S + 1; t += 1) r.flags.update(1);
+    for (let t = 0; t < FLAG_RESET_S + 1; t += 1) {r.flags.update(1);}
     const markers = r.flags.markers();
     const alpha = markers.find((m) => m.team === 'alpha')!;
     expect(alpha.pos.x).toBe(ALPHA_HOME);

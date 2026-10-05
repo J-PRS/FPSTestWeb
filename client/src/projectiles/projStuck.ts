@@ -70,7 +70,7 @@ export class ProjStuck {
     this.stuckPlayerId = playerId ?? null;
     this.stuckMap = remotePlayers ?? null;
     const anchor = ball ? ball.pos : (playerId && remotePlayers?.get(playerId));
-    if (anchor) this.stuckOffset.copy(p).sub(anchor);
+    if (anchor) {this.stuckOffset.copy(p).sub(anchor);}
     // Arming is a contact event — the fuse and the armed-light ramp both
     // start here, so flight time doesn't burn the 3s down.
     this.armAge ??= h.age;
@@ -98,9 +98,9 @@ export class ProjStuck {
         this.stuckPlayerId = null;
       }
     }
-    if (!h.stuck) return false; // dropped — fall through into physics with zero velocity
-    if (h.fuseTtl() && h.fuseAge() >= h.fuseTtl()!) h.explode();
-    else h.updateMesh();
+    if (!h.stuck) {return false;} // dropped — fall through into physics with zero velocity
+    if (h.fuseTtl() && h.fuseAge() >= h.fuseTtl()!) {h.explode();}
+    else {h.updateMesh();}
     return true;
   }
 
@@ -109,7 +109,7 @@ export class ProjStuck {
   tryEmbed(): boolean {
     const h = this.h;
     if (h.config.embeds === undefined || !h.hitPointValid
-        || h.hitBall || h.hitPlayerId || h.hitBolt) return false;
+        || h.hitBall || h.hitPlayerId || h.hitBolt) {return false;}
     this.embedded = true;
     this.embedAge = 0;
     // Tip-origin mesh: slide only a little along the flight line — the
@@ -137,7 +137,7 @@ export class ProjStuck {
     const h = this.h;
     this.embedAge += dt;
     const shrink = (this.embedAge - h.config.embeds!) / EMBED_SHRINK_TIME;
-    if (shrink >= 1) return false; // caller removes the mesh
+    if (shrink >= 1) {return false;} // caller removes the mesh
     if (shrink > 0) { h.mesh.scale.setScalar(1 - shrink); syncProjectileInstance(h.mesh); }
     return true;
   }

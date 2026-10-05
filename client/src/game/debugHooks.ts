@@ -23,8 +23,8 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   const qp = urlParams;
   const { player } = deps;
 
-  if (qp.has('yaw')) player.yaw = (parseFloat(qp.get('yaw')!) || 0) * Math.PI / 180;
-  if (qp.has('pitch')) player.pitch = (parseFloat(qp.get('pitch')!) || 0) * Math.PI / 180;
+  if (qp.has('yaw')) {player.yaw = (parseFloat(qp.get('yaw')!) || 0) * Math.PI / 180;}
+  if (qp.has('pitch')) {player.pitch = (parseFloat(qp.get('pitch')!) || 0) * Math.PI / 180;}
   // ?dummylineup — three real RemotePlayers (light/medium/heavy) pinned
   // side by side in front of the camera for class-body screenshots.
   if (qp.has('dummylineup')) {
@@ -53,7 +53,7 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
     };
   }
 
-  if (!qp.has('dummy')) return null;
+  if (!qp.has('dummy')) {return null;}
 
   const dummy = new RemotePlayer(deps.scene, 'dummy', {
     x: player.pos.x, y: player.pos.y, z: player.pos.z,

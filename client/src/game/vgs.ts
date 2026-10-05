@@ -20,7 +20,7 @@ const TIMEOUT_MS = 3000;
 function chordLetter(e: KeyboardEvent): string {
   if (!settings.get('fps-vgs-physical')) {
     const k = e.key;
-    if (k.length === 1 && /[a-zA-Z]/.test(k)) return k.toUpperCase();
+    if (k.length === 1 && /[a-zA-Z]/.test(k)) {return k.toUpperCase();}
   }
   return e.code.startsWith('Key') ? e.code.slice(3) : '';
 }
@@ -32,11 +32,11 @@ export const vgsGate = { active: false };
 /** A node's chat scope: leaves read their own `team` flag; a category
  *  inherits when every leaf agrees, else 'mixed'. */
 function nodeScope(n: VgsNode): 'global' | 'team' | 'mixed' {
-  if ('line' in n) return n.team === false ? 'global' : 'team';
+  if ('line' in n) {return n.team === false ? 'global' : 'team';}
   let scope: 'global' | 'team' | null = null;
   for (const c of Object.values(n.children)) {
     const s = nodeScope(c);
-    if (s === 'mixed' || (scope && s !== scope)) return 'mixed';
+    if (s === 'mixed' || (scope && s !== scope)) {return 'mixed';}
     scope = s;
   }
   return scope ?? 'mixed';
@@ -69,7 +69,7 @@ export class Vgs {
       'position:fixed;left:12px;bottom:var(--z-bl-2);z-index:60;display:none;' +
       'font:13px/1.5 monospace;color:#fff;background:rgba(0,0,0,.65);' +
       'border:1px solid #555;padding:6px 10px;min-width:220px;pointer-events:none;';
-    document.body.appendChild(this.menu);
+    document.body.append(this.menu);
     window.addEventListener('keydown', (e) => this.onKey(e), true);
     // While the menu is up the keys belong to it entirely — keyup too,
     // so a release can't reach game handlers that never saw the press.
@@ -107,7 +107,7 @@ export class Vgs {
     if (!next) { this.close(); return; }
     if ('line' in next) {
       const team = next.team !== false;
-      const chord = 'V' + this.keys.join('') + letter;
+      const chord = `V${  this.keys.join('')  }${letter}`;
       this.deps.send(next.line, team, chord);
       // Own VGS lands immediately like Tribes — the wire echo (if the
       // send actually landed) dedupes inside the feed.
@@ -149,8 +149,8 @@ export class Vgs {
     this.menu.textContent = '';
     const crumb = document.createElement('div');
     crumb.style.color = '#9cf';
-    crumb.textContent = 'VGS' + (this.path.length ? ' ▸ ' + this.path.map((n) => n.label).join(' ▸ ') : '');
-    this.menu.appendChild(crumb);
+    crumb.textContent = `VGS${  this.path.length ? ` ▸ ${this.path.map((n) => n.label).join(' ▸ ')}` : ''}`;
+    this.menu.append(crumb);
     for (const [k, n] of Object.entries(this.node)) {
       const row = document.createElement('div');
       const key = document.createElement('span');
@@ -159,7 +159,7 @@ export class Vgs {
       key.style.color = scopeColor(nodeScope(n));
       key.textContent = `[${k}] `;
       row.append(key, document.createTextNode(n.label));
-      this.menu.appendChild(row);
+      this.menu.append(row);
     }
   }
 
@@ -167,7 +167,7 @@ export class Vgs {
   private blip(): void {
     const bus = audio.uiBus;
     const c = bus?.context;
-    if (!bus || !c) return;
+    if (!bus || !c) {return;}
     const t = c.currentTime;
     for (const [f, dt] of [[880, 0], [660, 0.07]] as const) {
       const o = c.createOscillator();

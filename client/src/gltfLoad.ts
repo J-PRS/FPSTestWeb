@@ -21,7 +21,7 @@ export function loadGltfCached(loader: GLTFLoader, url: string): Promise<GLTF> {
   if (!p) {
     p = new Promise<GLTF>((res, rej) => loader.load(url, res, undefined, rej));
     gltfCache.set(url, p);
-    p.catch(() => { if (gltfCache.get(url) === p) gltfCache.delete(url); });
+    p.catch(() => { if (gltfCache.get(url) === p) {gltfCache.delete(url);} });
   }
   return p;
 }

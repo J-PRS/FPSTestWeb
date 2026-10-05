@@ -71,7 +71,7 @@ export class AudioEngine {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     this.wire(new AC());
-    void this.loadSamples();
+    this.loadSamples();
   }
 
   /** Decoded sample lookup — null until loadSamples resolves it. */

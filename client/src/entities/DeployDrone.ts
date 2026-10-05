@@ -87,7 +87,7 @@ export class DeployDrone {
   update(dt: number, ownerPos: THREE.Vector3, ownerYaw: number,
          enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } } | null {
-    if (this.dead) return null;
+    if (this.dead) {return null;}
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; }
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
@@ -108,7 +108,7 @@ export class DeployDrone {
     const floor = this.terrain.getHeight(this.pos.x, this.pos.z) + CLEARANCE;
     if (this.pos.y < floor) {
       this.pos.y = floor;
-      if (this.vel.y < 0) this.vel.y = 0;
+      if (this.vel.y < 0) {this.vel.y = 0;}
     }
 
     // Lean into motion — a hover body that doesn't bank reads as a sprite.
@@ -123,13 +123,13 @@ export class DeployDrone {
     let best: (typeof enemies)[0] | null = null;
     let bestD2 = RANGE * RANGE;
     for (const e of enemies) {
-      if (!e.alive) continue;
+      if (!e.alive) {continue;}
       const d2 = this.pos.distanceToSquared(e.pos);
       if (d2 < bestD2) { bestD2 = d2; best = e; }
     }
 
     this.fireCd -= dt;
-    if (!best || this.fireCd > 0) return null;
+    if (!best || this.fireCd > 0) {return null;}
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
     const muzzle = this.pos.clone();
@@ -138,7 +138,7 @@ export class DeployDrone {
   }
 
   tickUnfold(dt: number): void {
-    if (this.unfoldT >= 1) return;
+    if (this.unfoldT >= 1) {return;}
     this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
     const k = this.unfoldT - 1;
     this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k)); // easeOutBack
@@ -156,11 +156,11 @@ export class DeployDrone {
   }
 
   takeDamage(dmg: number): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     const soak = Math.min(this.armor, dmg);
     this.armor -= soak;
     this.health -= dmg - soak;
-    if (this.health <= 0) this.dead = true;
+    if (this.health <= 0) {this.dead = true;}
   }
 
   dispose(scene: THREE.Scene): void {

@@ -33,7 +33,7 @@ describe('pickAnimCadence', () => {
     // fall inside (0, 1/30) or the freeze table silently stops applying.
     for (const d of [61, 100, 121, 400]) {
       const c = pickAnimCadence(true, d * d, true);
-      if (c > 0) expect(c).toBeGreaterThanOrEqual(1 / 30);
+      if (c > 0) {expect(c).toBeGreaterThanOrEqual(1 / 30);}
     }
   });
 });

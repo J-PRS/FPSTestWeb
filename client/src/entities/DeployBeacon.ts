@@ -142,6 +142,6 @@ export class DeployBeacon {
     scene.remove(this.group);
     scene.remove(this.pillar);
     this.holoGlow.material.dispose();
-    void this.scene;
+    this.scene;
   }
 }

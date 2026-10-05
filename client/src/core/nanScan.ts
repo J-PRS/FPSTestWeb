@@ -23,7 +23,7 @@ function scanArray(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
     if (!Number.isFinite(v)) {
       if (bad === 0) { hit.index = i; hit.value = v; }
       bad++;
-      if (bad >= maxBad) break;
+      if (bad >= maxBad) {break;}
     }
   }
   hit.count = bad;
@@ -38,7 +38,7 @@ function scanHuge(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
     const v = arr[i]!;
     if (Number.isFinite(v) && Math.abs(v) > 1e5) {
       if (bad === 0) { hit.index = i; hit.value = v; }
-      if (++bad >= maxBad) break;
+      if (++bad >= maxBad) {break;}
     }
   }
   hit.count = bad;
@@ -47,34 +47,34 @@ function scanHuge(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
 
 function label(o: THREE.Object3D): string {
   const bits = [o.type];
-  if (o.name) bits.push(`"${o.name}"`);
+  if (o.name) {bits.push(`"${o.name}"`);}
   const mesh = o as THREE.Mesh;
   if (mesh.geometry) {
     bits.push(`verts:${mesh.geometry.getAttribute('position')?.count ?? '?'}`);
     const mat = mesh.material as THREE.Material | undefined;
-    if (mat) bits.push(`mat:${mat.type}${mat.name ? ` "${mat.name}"` : ''}`);
+    if (mat) {bits.push(`mat:${mat.type}${mat.name ? ` "${mat.name}"` : ''}`);}
   }
   const wp = new THREE.Vector3();
   o.getWorldPosition(wp);
   bits.push(`@(${Math.round(wp.x)},${Math.round(wp.y)},${Math.round(wp.z)})`);
   let p = o.parent;
   let hops = 0;
-  while (p && hops++ < 3) { if (p.name) bits.push(`<"${p.name}"`); p = p.parent; }
+  while (p && hops++ < 3) { if (p.name) {bits.push(`<"${p.name}"`);} p = p.parent; }
   return bits.join(' ');
 }
 
 function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
   const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
   const mesh = o as THREE.Mesh;
-  if (!mesh.geometry) return;
+  if (!mesh.geometry) {return;}
   const geo = mesh.geometry;
 
   const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (pos) {
     const h = { ...base, attr: 'position' };
-    if (scanArray(pos.array, h)) hits.push(h);
+    if (scanArray(pos.array, h)) {hits.push(h);}
     const huge = { ...base, attr: 'positionHuge' };
-    if (scanHuge(pos.array, huge)) hits.push(huge);
+    if (scanHuge(pos.array, huge)) {hits.push(huge);}
   }
 
   scanInstAndBones(o, base, hits);
@@ -82,9 +82,9 @@ function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
   // InstancedBufferAttributes other than position (ribbon cols, opacity,
   // quarks particle data all live in custom attributes)
   for (const [name, attr] of Object.entries(geo.attributes)) {
-    if (name === 'position' || name === 'normal' || name === 'uv') continue;
+    if (name === 'position' || name === 'normal' || name === 'uv') {continue;}
     const h = { ...base, attr: name };
-    if (scanArray((attr as THREE.BufferAttribute).array, h)) hits.push(h);
+    if (scanArray((attr as THREE.BufferAttribute).array, h)) {hits.push(h);}
   }
 }
 
@@ -95,9 +95,9 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
   const inst = o as THREE.InstancedMesh;
   if (inst.isInstancedMesh && inst.instanceMatrix) {
     const h = { ...base, attr: 'instanceMatrix' };
-    if (scanArray(inst.instanceMatrix.array, h)) hits.push(h);
+    if (scanArray(inst.instanceMatrix.array, h)) {hits.push(h);}
     const hugeM = { ...base, attr: 'instanceMatrixHuge' };
-    if (scanHuge(inst.instanceMatrix.array, hugeM)) hits.push(hugeM);
+    if (scanHuge(inst.instanceMatrix.array, hugeM)) {hits.push(hugeM);}
   }
 
   // Only flag NON-FINITE spheres — a big finite radius is legit (sky domes
@@ -112,9 +112,9 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
   const bones = sk.isSkinnedMesh ? sk.skeleton?.boneMatrices : null;
   if (bones) {
     const h = { ...base, attr: 'boneMatrices' };
-    if (scanArray(bones, h)) hits.push(h);
+    if (scanArray(bones, h)) {hits.push(h);}
     const hugeB = { ...base, attr: 'boneMatricesHuge' };
-    if (scanHuge(bones, hugeB)) hits.push(hugeB);
+    if (scanHuge(bones, hugeB)) {hits.push(hugeB);}
   }
 }
 
@@ -124,7 +124,7 @@ export function nanScanScene(scene: THREE.Scene): Hit[] {
     // matrixWorld NaN: the attribute buffers stay clean — the GPU-side
     // NaN only appears after modelViewMatrix × position. Same triangle.
     const h: Hit = { name: label(o), kind: o.type, attr: 'matrixWorld', index: -1, value: 0, count: 0 };
-    if (scanArray(o.matrixWorld.elements, h)) hits.push(h);
+    if (scanArray(o.matrixWorld.elements, h)) {hits.push(h);}
     scanMesh(o, hits);
   });
   return hits;
@@ -143,7 +143,7 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
   scene.traverse((o) => {
     const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
     const mw = { ...base, attr: 'matrixWorld' };
-    if (scanArray(o.matrixWorld.elements, mw)) hits.push(mw);
+    if (scanArray(o.matrixWorld.elements, mw)) {hits.push(mw);}
     scanInstAndBones(o, base, hits);
 
     // Dynamic buffers (quarks batcher, ribbons, arc lines) are rewritten
@@ -155,11 +155,11 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
     if (geo && Object.values(geo.attributes).some(isDynAttr)) {
       for (const [name, attr] of Object.entries(geo.attributes)) {
         const arr = (attr as THREE.BufferAttribute).array;
-        if (!arr) continue;
+        if (!arr) {continue;}
         const h = { ...base, attr: `${name}(dyn)` };
-        if (scanArray(arr, h)) hits.push(h);
+        if (scanArray(arr, h)) {hits.push(h);}
         const huge = { ...base, attr: `${name}Huge(dyn)` };
-        if (scanHuge(arr, huge)) hits.push(huge);
+        if (scanHuge(arr, huge)) {hits.push(huge);}
       }
     }
   });
@@ -174,7 +174,7 @@ const seen = new Set<string>();
 
 function report(h: Hit): void {
   const key = `${h.kind}:${h.attr}:${h.name}`;
-  if (seen.has(key)) return; // spam guard — first sighting per buffer only
+  if (seen.has(key)) {return;} // spam guard — first sighting per buffer only
   seen.add(key);
   Logger.warn(
     `[nanscan] BAD ${h.attr} @${h.index}=${h.value} (${h.count}+ non-finite) on ${h.name}`,
@@ -189,12 +189,12 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
     const base: Hit = { name: 'camera', kind: camera.type, attr: '', index: -1, value: 0, count: 0 };
     for (const attr of ['matrixWorld', 'projectionMatrix', 'projectionMatrixInverse'] as const) {
       const h = { ...base, attr };
-      if (scanArray((camera[attr] as THREE.Matrix4).elements, h)) report(h);
+      if (scanArray((camera[attr] as THREE.Matrix4).elements, h)) {report(h);}
     }
   }
-  for (const h of nanScanTransforms(scene)) report(h);
+  for (const h of nanScanTransforms(scene)) {report(h);}
   if (++tick % EVERY === 0) {
-    for (const h of nanScanScene(scene)) report(h);
+    for (const h of nanScanScene(scene)) {report(h);}
   }
 }
 
@@ -205,10 +205,10 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
 // owner/slot/pool identity, not just mesh type.
 export function nanScanBindProbe(getCtx: () => { scene: THREE.Scene; camera: THREE.Camera }): void {
   window.addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyB') return;
+    if (e.code !== 'KeyB') {return;}
     const { scene, camera } = getCtx();
     const rows = aimProbe(scene, camera);
-    Logger.warn('[nanprobe] ' + (rows.join(' | ') || 'no hits'));
+    Logger.warn(`[nanprobe] ${  rows.join(' | ') || 'no hits'}`);
   });
 }
 

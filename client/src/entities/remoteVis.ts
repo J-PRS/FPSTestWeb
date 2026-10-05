@@ -17,26 +17,26 @@ export function hideRemote(p: RemotePlayer): void {
 export function showRemote(p: RemotePlayer): void {
   p.model.setVisible(true);
   // Only add collider if model is loaded (colliderGizmo exists)
-  if (p.loaded) p.model.addColliderGizmo();
+  if (p.loaded) {p.model.addColliderGizmo();}
   p.gizmo?.attach();
   p.auras.show();
 }
 
 export function setStaleVis(p: RemotePlayer, hidden: boolean): void {
-  if (hidden === p.staleHidden) return;
+  if (hidden === p.staleHidden) {return;}
   p.staleHidden = hidden;
-  if (hidden) hideRemote(p); else if (!p.cloakHidden) showRemote(p);
+  if (hidden) {hideRemote(p);} else if (!p.cloakHidden) {showRemote(p);}
 }
 
 export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
-  if (hidden === p.cloakHidden) return;
+  if (hidden === p.cloakHidden) {return;}
   p.cloakHidden = hidden;
   if (hidden) {
     // Recloaking mid-reveal doesn't wash the shot — the shimmer (and
     // HUD marker, via ghostT) owes the window its remainder.
     if (p.revealT > 0 && p._loaded) { p.ghostT = p.revealT; p._model.setGhost(true); p.model.setVisible(true); return; }
     hideRemote(p);
-  } else if (!p.staleHidden) showRemote(p);
+  } else if (!p.staleHidden) {showRemote(p);}
 }
 
 // Friendly cloak: a teammate's held cloak renders as the ghost shimmer,
@@ -44,7 +44,7 @@ export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
 // swaps the model's materials, so stale/frustum/dead gates keep owning
 // real visibility and a decloak restores the skin untouched.
 export function setCloakGhost(p: RemotePlayer, on: boolean): void {
-  if (on === p.cloakGhost) return;
+  if (on === p.cloakGhost) {return;}
   p.cloakGhost = on;
   p._model.setGhost(on);
 }
@@ -55,7 +55,7 @@ export function setCloakGhost(p: RemotePlayer, on: boolean): void {
 // gizmos/indicators have their own offscreen gates, so only the model
 // and auras toggle.
 export function setFrustumVis(p: RemotePlayer, hidden: boolean): void {
-  if (hidden === p.frustumHidden) return;
+  if (hidden === p.frustumHidden) {return;}
   p.frustumHidden = hidden;
   if (hidden) { p.model.setVisible(false); p.auras.hide(); }
   else if (!p.staleHidden && !p.cloakHidden) { p.model.setVisible(true); p.auras.show(); }
@@ -73,10 +73,10 @@ export function shootReveal(p: RemotePlayer): void {
 }
 
 export function tickGhostF(p: RemotePlayer, dt: number): void {
-  if (p.revealT > 0) p.revealT -= dt;
-  if (p.ghostT <= 0) return;
+  if (p.revealT > 0) {p.revealT -= dt;}
+  if (p.ghostT <= 0) {return;}
   p.ghostT -= dt;
-  if (p.ghostT > 0) return;
+  if (p.ghostT > 0) {return;}
   p._model.setGhost(false);
-  if (p.cloakHidden || p.staleHidden) p.model.setVisible(false);
+  if (p.cloakHidden || p.staleHidden) {p.model.setVisible(false);}
 }

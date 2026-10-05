@@ -23,9 +23,9 @@ const ROOT_POS_BONES = new Set(['defhips', 'root', 'hips', 'bone']);
  *  too (Vexa moves `Armature`, Yurowm `Rig`), which no name table covers. */
 export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<string>): void {
   for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.position')) continue;
+    if (!tr.name.endsWith('.position')) {continue;}
     const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) continue;
+    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) {continue;}
     const v = tr.values;
     for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
   }
@@ -39,13 +39,13 @@ export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<s
  *  each clip keeps its own stance height. */
 export function clampHipY(clip: THREE.AnimationClip, maxDev = 0.25, extraRoots?: ReadonlySet<string>): void {
   for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.position')) continue;
+    if (!tr.name.endsWith('.position')) {continue;}
     const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) continue;
+    if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) {continue;}
     const v = tr.values, base = v[1]!;
     for (let i = 1; i < v.length; i += 3) {
       const d = v[i]! - base;
-      if (Math.abs(d) > maxDev) v[i] = base + Math.sign(d) * maxDev;
+      if (Math.abs(d) > maxDev) {v[i] = base + Math.sign(d) * maxDev;}
     }
   }
 }
@@ -58,14 +58,14 @@ export function computeRootMotionNodes(model: THREE.Object3D): Set<string> {
   const set = new Set<string>();
   model.traverse(o => {
     const sk = o as THREE.SkinnedMesh;
-    if (!sk.isSkinnedMesh || !sk.skeleton) return;
+    if (!sk.isSkinnedMesh || !sk.skeleton) {return;}
     let root: THREE.Object3D | null = null, rootDepth = Infinity;
     for (const b of sk.skeleton.bones) {
-      let d = 0; for (let p = b.parent; p && p !== model; p = p.parent) d++;
+      let d = 0; for (let p = b.parent; p && p !== model; p = p.parent) {d++;}
       if (d < rootDepth) { root = b; rootDepth = d; }
     }
     for (let n = root; n && n !== model; n = n.parent) {
-      if (n.name) set.add(normBone(n.name));
+      if (n.name) {set.add(normBone(n.name));}
     }
   });
   return set;
@@ -122,9 +122,9 @@ export const SWAY_BONES = new Set([
  *  the mask lives next to the other rig-bone tables in PlayerModel. */
 export function dampenSway(clip: THREE.AnimationClip, swayBones: ReadonlySet<string>, amt = 0.5): void {
   for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.quaternion')) continue;
+    if (!tr.name.endsWith('.quaternion')) {continue;}
     const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (!swayBones.has(node)) continue;
+    if (!swayBones.has(node)) {continue;}
     const v = tr.values;
     _dampA.set(v[0], v[1], v[2], v[3]);
     for (let i = 4; i < v.length; i += 4) {

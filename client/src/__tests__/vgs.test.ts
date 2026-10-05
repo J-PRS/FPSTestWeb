@@ -26,7 +26,7 @@ beforeEach(() => {
   const win = globalThis.window as unknown as Record<string, unknown>;
   const add = win.addEventListener as (t: string, fn: Handler) => void;
   win.addEventListener = (t: string, fn: Handler) => {
-    if (t === 'keydown') keydown = fn;
+    if (t === 'keydown') {keydown = fn;}
   };
   return () => { win.addEventListener = add; };
 });
@@ -90,7 +90,7 @@ describe('Vgs', () => {
         if ('line' in n) {
           expect(seen.has(chord), `dup chord ${chord}`).toBe(false);
           seen.set(chord, n.label);
-        } else walk(n.children, chord);
+        } else {walk(n.children, chord);}
       }
     };
     walk(TREE, 'V');

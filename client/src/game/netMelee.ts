@@ -75,7 +75,7 @@ export function bindNetSim<S extends NetSimState>(
 
 export function applyNetEdgeSim<S extends NetSimState>(e: NetDrivenLike<S>, m: NetEdgeMsg): void {
   const s = e.sim;
-  if (!s) return;
+  if (!s) {return;}
   s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
   s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
   commitTarget(s, m.targetId, m.tp ?? null);
@@ -93,7 +93,7 @@ export function updateNetSim<S extends NetSimState>(
 ): void {
   const s = e.sim;
   const field = getHeightfield();
-  if (!s || !field) return;
+  if (!s || !field) {return;}
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
@@ -154,7 +154,7 @@ export function bindNetTotem(e: NetTotemLike, b: NetBindArgs, make: MakeSim<SimT
 
 export function applyNetEdgeTotem(e: NetTotemLike, m: NetEdgeMsg): void {
   const s = e.sim;
-  if (!s) return;
+  if (!s) {return;}
   // 'blink' position = the committed DESTINATION, not the totem's pos —
   // force the blink cycle so a client that missed the decision still
   // teleports to the same perch.
@@ -165,7 +165,7 @@ export function applyNetEdgeTotem(e: NetTotemLike, m: NetEdgeMsg): void {
       s.hopTimer = s.sp.BLINK_OUT_S;
     }
   }
-  if (m.kind === 'fire') e.onSimFire();
+  if (m.kind === 'fire') {e.onSimFire();}
   if (m.kind !== 'blink' && s.state !== 'blinkOut' && s.state !== 'blinkIn') {
     s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
     e.pos.set(s.x, s.y, s.z);
@@ -178,14 +178,14 @@ export function updateNetTotem(
 ): void {
   const s = e.sim;
   const field = getHeightfield();
-  if (!s || !field) return;
+  if (!s || !field) {return;}
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
     // Solid colliders ride the projectile-static set — same list the
     // server sims, so the predictor clips the beam identically.
-    if (step(s, 0.05, field, tgt, false, Projectile.solidColliders) === 'fire') e.onSimFire();
+    if (step(s, 0.05, field, tgt, false, Projectile.solidColliders) === 'fire') {e.onSimFire();}
   }
   e.pos.set(s.x, s.y, s.z);
   e.health = s.health;

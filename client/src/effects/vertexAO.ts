@@ -61,7 +61,7 @@ const SHARP_DIHEDRAL = 0.357;
  *  would leak into every tri touching it. Must run BEFORE vertex colors
  *  are baked (they're sized to the vertex count). */
 function ensureNonIndexed(mesh: THREE.Mesh): void {
-  if (mesh.geometry.index) mesh.geometry = mesh.geometry.toNonIndexed();
+  if (mesh.geometry.index) {mesh.geometry = mesh.geometry.toNonIndexed();}
 }
 
 /** One geometric edge's triangle refs. t = tri index, c = the corner slot
@@ -90,7 +90,7 @@ const flagEdge = (ctx: EdgeCtx, list: EdgeRef[]) => {
   // opposite corner interpolates the flag to zero exactly at the edge
   // it marks (vAedge.c ≈ bary.c → 0), so the line could never draw.
   // Constant flags across the tri give a real distance-to-edge field.
-  for (const e of list) for (let v = 0; v < 3; v++) ctx.aedge[(e.t * 3 + v) * 3 + e.c] = 1;
+  for (const e of list) {for (let v = 0; v < 3; v++) ctx.aedge[(e.t * 3 + v) * 3 + e.c] = 1;}
 };
 
 /** Face normals + welded-vertex edge map. */
@@ -118,7 +118,7 @@ function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Fl
     const add = (a: number, b: number, c: number) => {
       const key = pk(a) < pk(b) ? `${pk(a)}|${pk(b)}` : `${pk(b)}|${pk(a)}`;
       let l = edges.get(key);
-      if (!l) edges.set(key, l = []);
+      if (!l) {edges.set(key, l = []);}
       l.push({ t, c, a, b });
     };
     add(v0, v1, 2); // edge 0-1, opposite corner 2
@@ -137,7 +137,7 @@ function flagSharpPairs(ctx: EdgeCtx): void {
     // faces and paint phantom wear diagonals. All our primitives are
     // closed solids, so a shared-edge dihedral is the only signal that
     // counts.
-    if (list.length < 2) continue;
+    if (list.length < 2) {continue;}
     // Test ALL pairs, not just [0],[1]: the 1mm weld can merge two
     // DISTINCT geometric edges into one list (dense small geometry —
     // chamfers, ring steps), and picking one pair decided for every
@@ -147,7 +147,7 @@ function flagSharpPairs(ctx: EdgeCtx): void {
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const x = list[i]!, y = list[j]!;
-        if (!(1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL)) continue;
+        if (!(1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL)) {continue;}
         // Flag EVERY ref on this edge, not just the sharp pair: duplicated
         // verts / T-junctions put a coplanar third tri on the same key —
         // unflagged, its side of the seam has no distance field and the
@@ -174,7 +174,7 @@ function propagateContinuations(ctx: EdgeCtx): void {
     for (const ep of [e.a, e.b]) {
       const vk = pk(ep);
       let l = vmap.get(vk);
-      if (!l) vmap.set(vk, l = []);
+      if (!l) {vmap.set(vk, l = []);}
       l.push(key);
     }
   }
@@ -188,14 +188,14 @@ function propagateContinuations(ctx: EdgeCtx): void {
     dirOf(list[0]!, _d);
     for (const ep of [list[0]!.a, list[0]!.b]) {
       for (const k2 of vmap.get(pk(ep)) ?? []) {
-        if (k2 === key || flagged.has(k2)) continue;
+        if (k2 === key || flagged.has(k2)) {continue;}
         const l2 = edges.get(k2)!;
         dirOf(l2[0]!, _d2);
-        if (Math.abs(_d.dot(_d2)) < 0.995) continue; // not a straight continuation
+        if (Math.abs(_d.dot(_d2)) < 0.995) {continue;} // not a straight continuation
         // Continuation must sit in a tri coplanar with one of the
         // flagged edge's incident faces — else it's a different crease.
         const coplanar = l2.some(r2 => list.some(r => 1 - faceDot(faceN, r2.t, r.t) < 0.02));
-        if (!coplanar) continue;
+        if (!coplanar) {continue;}
         flagEdge(ctx, l2);
         flagged.add(k2);
         queue.push(k2);
@@ -221,10 +221,10 @@ function healTJunctions(ctx: EdgeCtx): void {
   const pointOnSeg = (p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3) => {
     _d2.subVectors(b, a);
     const len = _d2.length();
-    if (len < 1e-9) return false;
+    if (len < 1e-9) {return false;}
     _d2.divideScalar(len);
     const t = _d.subVectors(p, a).dot(_d2);
-    if (t < -1e-4 || t > len + 1e-4) return false;
+    if (t < -1e-4 || t > len + 1e-4) {return false;}
     _cp.copy(a).addScaledVector(_d2, t);
     return _cp.distanceToSquared(p) < 1e-6;
   };
@@ -232,7 +232,7 @@ function healTJunctions(ctx: EdgeCtx): void {
   while (healed) {
     healed = false;
     for (const [key, list] of edges) {
-      if (flagged.has(key)) continue;
+      if (flagged.has(key)) {continue;}
       segOf(list[0]!);
       _m.addVectors(_pa, _pb).multiplyScalar(0.5);
       let onCrease = false;
@@ -242,7 +242,7 @@ function healTJunctions(ctx: EdgeCtx): void {
         _pb.set(pos.getX(fe.b), pos.getY(fe.b), pos.getZ(fe.b));
         if (pointOnSeg(_m, _pa, _pb)) { onCrease = true; break; }
       }
-      if (!onCrease) continue;
+      if (!onCrease) {continue;}
       flagEdge(ctx, list);
       flagged.add(key);
       healed = true;
@@ -264,7 +264,7 @@ function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number
       const e = list[0]!;
       segs[w++] = pos.getX(e.a); segs[w++] = pos.getY(e.a); segs[w++] = pos.getZ(e.a);
       segs[w++] = pos.getX(e.b); segs[w++] = pos.getY(e.b); segs[w++] = pos.getZ(e.b);
-      for (const r of list) refs.push({ t: r.t, a: r.a, b: r.b });
+      for (const r of list) {refs.push({ t: r.t, a: r.a, b: r.b });}
     }
     geo.userData.__sharpEdges = segs;
     geo.userData.__sharpEdgeRefs = refs;
@@ -272,14 +272,14 @@ function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number
   if ((geo.userData.__dbgEdge as boolean | undefined) !== true) {
     geo.userData.__dbgEdge = true;
     let shared = 0, bnd = 0, sharpN = 0, flaggedN = 0;
-    for (const l of edges.values()) { if (l.length > 1) shared++; else bnd++; }
+    for (const l of edges.values()) { if (l.length > 1) {shared++;} else {bnd++;} }
     for (const l of edges.values()) {
       if (l.length === 1) { sharpN++; flaggedN += l.length; continue; }
       const [x, y] = [l[0]!, l[1]!];
       if (1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL) { sharpN++; flaggedN += l.length; }
     }
-    let set = 0; for (let i = 0; i < count * 3; i++) if (aedge[i]! > 0) set++;
-    if ((window as any).__edgebakeLog) console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);
+    let set = 0; for (let i = 0; i < count * 3; i++) {if (aedge[i]! > 0) set++;}
+    if ((window as any).__edgebakeLog) {console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);}
   }
 }
 
@@ -307,7 +307,7 @@ function bakeBaryAttrs(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, tr
       _ac.subVectors(pc, pa);
       const len = _ab.length();
       const alt = len < 1e-9 ? 0 : _ac.cross(_ab).length() / len;
-      for (let k = 0; k < 3; k++) aalt[(t * 3 + k) * 3 + c] = alt;
+      for (let k = 0; k < 3; k++) {aalt[(t * 3 + k) * 3 + c] = alt;}
     }
   }
   return { abary, aalt };
@@ -405,9 +405,9 @@ function whiteTex(): THREE.Texture {
 function bakeWearTexture(geo: THREE.BufferGeometry): void {
   // Baked GLBs carry a real unwrap shared with their ao.png + the
   // blend's exported edge bake — the atlas would clobber that uv.
-  if (geo.userData.__keepUv) return;
+  if (geo.userData.__keepUv) {return;}
   const refs = geo.userData.__sharpEdgeRefs as { t: number; a: number; b: number }[] | undefined;
-  if (!refs || !refs.length) return;
+  if (!refs || !refs.length) {return;}
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const triCount = pos.count / 3;
   const cols = Math.ceil(Math.sqrt(triCount));
@@ -452,7 +452,8 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
   geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
+  canvas.height = size;
+  canvas.width = canvas.height;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, size, size);
@@ -485,7 +486,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
       const oz = _wA.z + (_wB.z - _wA.z) * (t0 + t1) / 2;
       const n = wFbm3(ox * 90, oy * 90, oz * 90);
       const amp = 0.35 + 0.65 * sstep(0.35, 0.75, n); // mostly solid, noisy bite
-      if (amp < 0.42) continue; // rare worn-through pinhole
+      if (amp < 0.42) {continue;} // rare worn-through pinhole
       const x0 = ax + (bx - ax) * t0, y0 = ay + (by - ay) * t0;
       const x1 = ax + (bx - ax) * t1, y1 = ay + (by - ay) * t1;
       ctx.globalAlpha = amp * 0.4;
@@ -500,7 +501,8 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
   ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(canvas);
   tex.flipY = false;
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.wrapS = tex.wrapT;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.anisotropy = 4;
   geo.userData.__wearTex = tex;
@@ -521,7 +523,7 @@ export function attachEdgeWear(mesh: THREE.Mesh): void {
 function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void {
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const nor = geo.attributes.normal as THREE.BufferAttribute;
-  if (!pos || !nor) return;
+  if (!pos || !nor) {return;}
   const count = pos.count;
   const idx = geo.index;
   const triCount = idx ? idx.count / 3 : count / 3;
@@ -555,8 +557,8 @@ function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void
     wear[i] = Math.min(1, Math.max(soft, hard[i]!));
   }
   geo.setAttribute('wear', new THREE.BufferAttribute(wear, 1));
-  if (wearBoost) geo.setAttribute('awear', new THREE.BufferAttribute(new Float32Array(count).fill(wearBoost), 1));
-  if (grime) bakeGrime(geo, pos, count, triCount, idx);
+  if (wearBoost) {geo.setAttribute('awear', new THREE.BufferAttribute(new Float32Array(count).fill(wearBoost), 1));}
+  if (grime) {bakeGrime(geo, pos, count, triCount, idx);}
 }
 
 /** Signed-curvature split — the half of Blender-style edge wear the
@@ -588,24 +590,24 @@ function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count:
       const ka = pk(v[a]!), kb = pk(v[b]!);
       const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
       let l = edges.get(key);
-      if (!l) edges.set(key, l = []);
+      if (!l) {edges.set(key, l = []);}
       l.push({ t, c, a: v[a]!, b: v[b]! });
     }
   }
   const grime = new Float32Array(count);
   const CONCAVE_DIHEDRAL = 0.034; // 1 - cos(15°)
   for (const list of edges.values()) {
-    if (list.length !== 2) continue; // boundary rims: no valley either side
+    if (list.length !== 2) {continue;} // boundary rims: no valley either side
     const [x, y] = [list[0]!, list[1]!];
     const dn = faceN[x.t * 3]! * faceN[y.t * 3]! + faceN[x.t * 3 + 1]! * faceN[y.t * 3 + 1]! + faceN[x.t * 3 + 2]! * faceN[y.t * 3 + 2]!;
-    if (1 - dn < CONCAVE_DIHEDRAL) continue;
+    if (1 - dn < CONCAVE_DIHEDRAL) {continue;}
     // Concavity test: y's centroid vs x's plane. A point on the shared
     // edge anchors the plane; sign of n·(c_y - edgePoint) tells which
     // side of x's face y bends toward. Negative = bends under = valley.
     _ca.fromBufferAttribute(pos, x.a); // edge endpoint = plane point
     _cb.set(faceC[y.t * 3]!, faceC[y.t * 3 + 1]!, faceC[y.t * 3 + 2]!).sub(_ca);
     const side = _cb.x * faceN[x.t * 3]! + _cb.y * faceN[x.t * 3 + 1]! + _cb.z * faceN[x.t * 3 + 2]!;
-    if (side >= 0) continue; // convex — wear line already claims it
+    if (side >= 0) {continue;} // convex — wear line already claims it
     const g = Math.min(1, (1 - dn) * 3); // steeper groove → deeper grime
     for (const e of list) { grime[e.a] = Math.max(grime[e.a]!, g); grime[e.b] = Math.max(grime[e.b]!, g); }
   }
@@ -619,20 +621,20 @@ function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribu
   for (let i = 0; i < count; i++) {
     const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
     let list = byPos.get(key);
-    if (!list) byPos.set(key, list = []);
+    if (!list) {byPos.set(key, list = []);}
     list.push(i);
   }
   const hard = new Float32Array(count);
   const _ni = new THREE.Vector3(), _nj = new THREE.Vector3();
   for (const list of byPos.values()) {
-    if (list.length < 2) continue;
+    if (list.length < 2) {continue;}
     for (const i of list) {
       _ni.fromBufferAttribute(nor, i);
       for (const j of list) {
-        if (i === j) continue;
+        if (i === j) {continue;}
         _nj.fromBufferAttribute(nor, j);
         const d = 1 - _ni.dot(_nj);
-        if (d > hard[i]!) hard[i] = d;
+        if (d > hard[i]!) {hard[i] = d;}
       }
     }
   }
@@ -660,7 +662,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   const geo = mesh.geometry;
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const nor = geo.attributes.normal as THREE.BufferAttribute;
-  if (!pos || !nor) return;
+  if (!pos || !nor) {return;}
   const count = pos.count;
   const colors = new Float32Array(count * 3).fill(1);
   const mm = mesh.matrixWorld;
@@ -670,7 +672,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
     _n.fromBufferAttribute(nor, i).transformDirection(mm).normalize();
     // tangent frame for hemisphere jitter
     _tan.set(1, 0, 0).cross(_n);
-    if (_tan.lengthSq() < 1e-4) _tan.set(0, 1, 0).cross(_n);
+    if (_tan.lengthSq() < 1e-4) {_tan.set(0, 1, 0).cross(_n);}
     _tan.normalize();
     _bitan.crossVectors(_n, _tan);
 
@@ -684,7 +686,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
       _origin.copy(_p).addScaledVector(_n, EPS);
       _ray.set(_origin, _dir);
       _ray.far = rayDist;
-      if (_ray.intersectObject(occluder, false).length > 0) occluded++;
+      if (_ray.intersectObject(occluder, false).length > 0) {occluded++;}
     }
     const ao = 1 - (occluded / RAYS) * (1 - MIN_LIGHT);
     colors[i * 3] = ao;
@@ -701,15 +703,15 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   for (let i = 0; i < count; i++) {
     const k = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}|${nor.getX(i).toFixed(2)},${nor.getY(i).toFixed(2)},${nor.getZ(i).toFixed(2)}`;
     let l = weld.get(k);
-    if (!l) weld.set(k, l = []);
+    if (!l) {weld.set(k, l = []);}
     l.push(i);
   }
   for (const l of weld.values()) {
-    if (l.length < 2) continue;
+    if (l.length < 2) {continue;}
     let s = 0;
-    for (const i of l) s += colors[i * 3]!;
+    for (const i of l) {s += colors[i * 3]!;}
     const a = s / l.length;
-    for (const i of l) colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = a;
+    for (const i of l) {colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = a;}
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   bakeWear(geo, grime, wearBoost);
@@ -722,7 +724,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
 export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
   group.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
+    if (!m.isMesh) {return;}
     ensureNonIndexed(m);
     // Always rebake — GLBs can carry a STALE wear attribute round-tripped
     // through the dump pipeline (baked before the hard-edge pass existed).
@@ -730,11 +732,11 @@ export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBo
     bakeEdgeLines(m.geometry);
     attachEdgeWear(m);
     const mats = Array.isArray(m.material) ? m.material : [m.material];
-    for (const mat of mats) if (mat && mat.type !== 'MeshBasicMaterial') {
+    for (const mat of mats) {if (mat && mat.type !== 'MeshBasicMaterial') {
       mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
       mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
       enhanceWeaponMaterial(mat);
-    }
+    }}
   });
 }
 
@@ -748,8 +750,8 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
   // positions; baking scene-space AO into it double-darkens the swarm
   // species that already got their own bake via SwarmSpec.bake.
   const meshes: THREE.Mesh[] = [];
-  group.traverse((o) => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) meshes.push(o as THREE.Mesh); });
-  if (!meshes.length) return;
+  group.traverse((o) => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
+  if (!meshes.length) {return;}
 
   const occluderGeo = mergeGeometries(meshes);
   occluderGeo.boundsTree = new MeshBVH(occluderGeo);
@@ -768,8 +770,8 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
   for (const m of meshes) {
     // Emissive/glow parts (MeshBasicMaterial: glow rings, muzzle glows) must
     // stay lit — AO would dim them. Only lit materials get vertex colors.
-    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') continue;
-    if (baked.has(m.geometry)) m.geometry = m.geometry.clone();
+    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {continue;}
+    if (baked.has(m.geometry)) {m.geometry = m.geometry.clone();}
     baked.add(m.geometry);
     bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost);
     const mat = m.material as THREE.Material & { vertexColors?: boolean };
@@ -791,10 +793,10 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
  * plate tops get scuffed-brighter streaks. The baked-Blender look, faked.
  */
 function enhanceWeaponMaterial(mat: THREE.Material): void {
-  if (mat.userData.__grunge) return;
+  if (mat.userData.__grunge) {return;}
   mat.userData.__grunge = true;
   mat.onBeforeCompile = (sh) => {
-    if (WEARVIZ) sh.defines = { ...sh.defines, WEARVIZ: 1 };
+    if (WEARVIZ) {sh.defines = { ...sh.defines, WEARVIZ: 1 };}
     sh.uniforms.uWearMap = { value: (mat.userData.__wearTex as THREE.Texture) ?? blankWearTex() };
     sh.uniforms.uGrimeMap = { value: (mat.userData.__grimeTex as THREE.Texture) ?? whiteTex() };
     // Materials can dose the effect up — gunmetal swarm species need a
@@ -942,7 +944,7 @@ function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
     parts.push(out);
   }
   let total = 0;
-  for (const p of parts) total += p.length;
+  for (const p of parts) {total += p.length;}
   const merged = new Float32Array(total);
   let off = 0;
   for (const p of parts) { merged.set(p, off); off += p.length; }

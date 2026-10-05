@@ -50,9 +50,9 @@ export class RabbitBridge {
   /** Damage gate mirroring CombatHandler.friendly — true = blocked.
    *  No carrier (unspawned or loose flag) means open season. */
   blocks(attacker: string, victim: string, bottom: ReadonlySet<string>): boolean {
-    if (attacker === victim) return false; // self-splash / rocket jumps stay legal
+    if (attacker === victim) {return false;} // self-splash / rocket jumps stay legal
     const c = this.carrierId();
-    if (!c || attacker === c || victim === c) return false;
+    if (!c || attacker === c || victim === c) {return false;}
     return !(bottom.has(attacker) || bottom.has(victim));
   }
 
@@ -64,7 +64,7 @@ export class RabbitBridge {
       this.announce('FLAG LOOSE — GRAB IT');
       return;
     }
-    if (this.carrier === id) this.drop(pos);
+    if (this.carrier === id) {this.drop(pos);}
   }
 
   private drop(pos: THREE.Vector3): void {
@@ -82,7 +82,7 @@ export class RabbitBridge {
     posOf: (id: string) => THREE.Vector3 | null,
     scoreHold: (id: string) => void,
   ): void {
-    if (this.state === 'unspawned') return;
+    if (this.state === 'unspawned') {return;}
     if (this.state === 'carried') {
       const cp = posOf(this.carrier!);
       if (cp) {
@@ -97,9 +97,9 @@ export class RabbitBridge {
       return;
     }
     for (const c of candidates) {
-      if (!c.alive) continue;
+      if (!c.alive) {continue;}
       const r = FLAG_PICKUP_R * c.pickupScale;
-      if (c.pos.distanceToSquared(this.pos) > r * r) continue;
+      if (c.pos.distanceToSquared(this.pos) > r * r) {continue;}
       this.state = 'carried';
       this.carrier = c.id;
       this.holdAcc = 0;
@@ -111,8 +111,8 @@ export class RabbitBridge {
   /** Bot brain objective — hunters run at the loose flag or the rabbit;
    *  the rabbit itself gets none (its combat/kite logic takes over). */
   goalFor(id: string, posOf: (id: string) => THREE.Vector3 | null): THREE.Vector3 | null {
-    if (this.state === 'unspawned' || this.carrier === id) return null;
-    if (this.state === 'dropped') return this.pos;
+    if (this.state === 'unspawned' || this.carrier === id) {return null;}
+    if (this.state === 'dropped') {return this.pos;}
     return posOf(this.carrier!);
   }
 

@@ -26,8 +26,8 @@ type Vec3Msg = { x: number; y: number; z: number };
 // batch window), so the heartbeat floor scales the same way. A truly
 // missed resync drifts two whole intervals — still well above it.
 function rubberbandWarnAt(kind: string, speed: number): number {
-  if (kind === 'lunge' || kind === 'teleport' || kind === 'spawn') return 40;
-  if (kind === 'bounce' || kind === 'stall') return Math.max(12, speed * 0.6);
+  if (kind === 'lunge' || kind === 'teleport' || kind === 'spawn') {return 40;}
+  if (kind === 'bounce' || kind === 'stall') {return Math.max(12, speed * 0.6);}
   return Math.max(4, speed * 0.5);
 }
 
@@ -90,24 +90,24 @@ function rubberbandForensics(deps: EntitiesDeps, b: Ball, m: { position: Vec3Msg
   const bf = Ball.netField;
   const diag = b.netDiag;
   return {
-    pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
-    truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
-    fieldH: +(bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1),
-    terrainH: +deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1),
+    pred: { x: Number(b.pos.x.toFixed(1)), y: Number(b.pos.y.toFixed(1)), z: Number(b.pos.z.toFixed(1)) },
+    truth: { x: Number(m.position.x.toFixed(1)), y: Number(m.position.y.toFixed(1)), z: Number(m.position.z.toFixed(1)) },
+    fieldH: Number((bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1)),
+    terrainH: Number(deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1)),
     fieldFp: bf ? hmFingerprint(bf) : 'none',
     // Regime forensics: simT>simNow = the catch-all free-ran ahead;
     // legAge pinned ~8 = inert leg extrapolating a stale anchor.
-    simT: diag ? +diag.simT.toFixed(2) : null,
-    simNow: diag && diag.simNow !== null ? +diag.simNow.toFixed(2) : null,
-    legT0: diag ? +diag.legT0.toFixed(2) : null,
-    legAge: diag ? +diag.legAge.toFixed(2) : null,
+    simT: diag ? Number(diag.simT.toFixed(2)) : null,
+    simNow: diag && diag.simNow !== null ? Number(diag.simNow.toFixed(2)) : null,
+    legT0: diag ? Number(diag.legT0.toFixed(2)) : null,
+    legAge: diag ? Number(diag.legAge.toFixed(2)) : null,
     enraged: diag?.enraged ?? null,
     tgtValid: diag?.tgtValid ?? null,
     // Anchor = leg start state, rounded — raw f64s made every warn line
     // triple-wide for digits nobody reads (replay offline if needed).
     anchor: diag?.anchor
-      ? { x: +diag.anchor.x.toFixed(1), y: +diag.anchor.y.toFixed(1), z: +diag.anchor.z.toFixed(1),
-          vx: +diag.anchor.vx.toFixed(1), vy: +diag.anchor.vy.toFixed(1), vz: +diag.anchor.vz.toFixed(1) }
+      ? { x: Number(diag.anchor.x.toFixed(1)), y: Number(diag.anchor.y.toFixed(1)), z: Number(diag.anchor.z.toFixed(1)),
+          vx: Number(diag.anchor.vx.toFixed(1)), vy: Number(diag.anchor.vy.toFixed(1)), vz: Number(diag.anchor.vz.toFixed(1)) }
       : null,
   };
 }
@@ -115,7 +115,7 @@ function rubberbandForensics(deps: EntitiesDeps, b: Ball, m: { position: Vec3Msg
 function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
     m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
   const b = netBallById.get(m.id);
-  if (!b) return;
+  if (!b) {return;}
   netBallById.delete(m.id);
   const dm = deps.lazyDemoManager();
   if (dm?.isRecording) {
@@ -151,16 +151,16 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
 
   function rbFleetNote(id: number, err: number): void {
     rbFleetCount++;
-    if (err > rbFleetWorst.err) rbFleetWorst = { id, err };
-    if (rbFleetFlushAt === 0) rbFleetFlushAt = performance.now() + RB_FLEET_MS;
+    if (err > rbFleetWorst.err) {rbFleetWorst = { id, err };}
+    if (rbFleetFlushAt === 0) {rbFleetFlushAt = performance.now() + RB_FLEET_MS;}
   }
 
   function rbFleetFlush(): void {
-    if (!rbFleetCount) return;
+    if (!rbFleetCount) {return;}
     const nowMs = performance.now();
-    if (nowMs < rbFleetFlushAt) return;
-    logger.warn(`ball rubberbands: ${rbFleetCount} suppressed in ${RB_FLEET_MS / 1000}s` +
-      (rbFleetWorst.id >= 0 ? `, worst #${rbFleetWorst.id} ${rbFleetWorst.err.toFixed(0)}m` : ''));
+    if (nowMs < rbFleetFlushAt) {return;}
+    logger.warn(`ball rubberbands: ${rbFleetCount} suppressed in ${RB_FLEET_MS / 1000}s${ 
+      rbFleetWorst.id >= 0 ? `, worst #${rbFleetWorst.id} ${rbFleetWorst.err.toFixed(0)}m` : ''}`);
     rbFleetCount = 0;
     rbFleetWorst = { id: -1, err: 0 };
     rbFleetFlushAt = nowMs + RB_FLEET_MS;
@@ -192,7 +192,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
     s.enraged = m.enraged ?? false;
     s.enrageTimer = m.et ?? 0; s.slowTimer = m.slowT ?? 0; s.dampNextBounce = m.damp ?? false;
-    if (m.tp) { s.tx = m.tp.x; s.ty = m.tp.y; s.tz = m.tp.z; s.tgtValid = true; } else s.tgtValid = false;
+    if (m.tp) { s.tx = m.tp.x; s.ty = m.tp.y; s.tz = m.tp.z; s.tgtValid = true; } else {s.tgtValid = false;}
     s.radius = b.radius; s.gt = 0; s.dead = false;
     _rbTgt.x = s.tx; _rbTgt.y = s.ty; _rbTgt.z = s.tz;
     const steps = Math.min(48, Math.floor(span / 0.05));
@@ -211,7 +211,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
    *  out is a divergence that's the design working, not a desync signal. */
   function gated(b: Ball, m: RbMsg, kind: string, err: number, speed: number): boolean {
     if (err <= rubberbandWarnAt(kind, speed)) {
-      if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
+      if (err > 2) {logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);}
       return true;
     }
     // A terrain swap leaves prediction on the previous field until the new
@@ -247,7 +247,7 @@ function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => n
     truthAt(b, m, age);
     const err = b.pos.distanceTo(_truthPos);
     const kind = m.kind ?? 'segment';
-    if (gated(b, m, kind, err, speed)) return;
+    if (gated(b, m, kind, err, speed)) {return;}
     // Edge kinds (bounce/stall/enrage/lunge/teleport/spawn) aren't desync
     // probes — they ARE the correction. A burst of stale legs lands each
     // event ~one flight-leg off the previous snap (pred == anchor in the
@@ -294,7 +294,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   Ball.netSimNow = estSimNow;
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
-    if (netBallById.has(m.id)) return;
+    if (netBallById.has(m.id)) {return;}
     Ball.initNetMode();
     const ball = new Ball(scene, deps.lazyTerrain(), m.variant as 0 | 1 | 2 | 3, {
       id: m.id,
@@ -327,7 +327,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
-    if (!b) return;
+    if (!b) {return;}
     // Out-of-order delivery guard: an older stamp would rewind the sim
     // anchor and the next frames would extrapolate a stale leg — that
     // rewind was a live source of the giant rubberband warns.
@@ -362,7 +362,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     const live = new Set<number>();
     for (const b of m.balls) { live.add(b.id); netBallSpawn(b); }
     for (const [id, ball] of netBallById) {
-      if (live.has(id)) continue;
+      if (live.has(id)) {continue;}
       netBallById.delete(id);
       ball.netKill();
     }
@@ -374,7 +374,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     const id = b.netTargetId;
     if (id) {
       const p = targetPosForId(deps, id);
-      if (p) return p;
+      if (p) {return p;}
     }
     return b.pos; // no committed target — self pos means zero pull direction
   }

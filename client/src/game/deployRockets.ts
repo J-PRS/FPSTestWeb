@@ -117,7 +117,7 @@ export class DeployRockets {
         this.rockets.splice(i, 1);
         continue;
       }
-      for (const t of r.ribbons) t.update(dt); // emission is driver-owned
+      for (const t of r.ribbons) {t.update(dt);} // emission is driver-owned
     }
     this.dying.update(dt);
   }
@@ -169,19 +169,19 @@ export class DeployRockets {
       this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xffaa44));
     sfx.explosionAt(r.pos, false);
     for (const c of this.deps.targets) {
-      if (c.dead || c.scoreless) continue;
+      if (c.dead || c.scoreless) {continue;}
       const d = c.pos.distanceTo(r.pos);
       if (d < ROCKET_AOE) {
         const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);
+        if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);}
       }
     }
     for (const b of this.deps.enemyBots?.() ?? []) {
-      if (!b.alive) continue;
+      if (!b.alive) {continue;}
       const d = b.pos.distanceTo(r.pos);
       if (d < ROCKET_AOE) {
         const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) this.deps.damageBot?.(b.playerId, dmg, r.pos);
+        if (dmg > 0) {this.deps.damageBot?.(b.playerId, dmg, r.pos);}
       }
     }
     this.deps.scene.remove(r.group);
@@ -191,7 +191,7 @@ export class DeployRockets {
     for (const r of this.rockets) {
       r.driver?.release();
       this.deps.scene.remove(r.group);
-      for (const t of r.ribbons) t.dispose();
+      for (const t of r.ribbons) {t.dispose();}
     }
     this.rockets.length = 0;
     this.dying.disposeAll();

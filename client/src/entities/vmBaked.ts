@@ -53,7 +53,7 @@ export class VmBaked {
     // can never pick up new geometry. Still bake AO: the dump pipeline
     // round-trips the procedural vertex colors into the GLB.
     if (urlParams.has('export')) {
-      for (const [wt, g] of this.h.weapons) bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+      for (const [wt, g] of this.h.weapons) {bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });}
       return;
     }
     // Procedural is the default look — baked GLBs only load behind ?bake
@@ -73,8 +73,8 @@ export class VmBaked {
       // GLB fetch doesn't flash the old model for a frame. Restored on
       // failure below.
       const forced = !bakeAll;
-      if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false; });
-      if (done.has(g)) continue;
+      if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = false; });}
+      if (done.has(g)) {continue;}
       done.add(g);
       try {
         // HEAD-probe first: a missing GLB makes the dev server serve the
@@ -86,20 +86,20 @@ export class VmBaked {
         // non-HTML body is a real bake.
         const ct = probe.headers.get('content-type') ?? '';
         if (!probe.ok || ct.includes('html')) {
-          if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });
+          if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });}
           bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
           continue;
         }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
-        if (forced) g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });
+        if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });}
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
         // neither is worth a log line. Only a real parse/decode failure is.
         const is404 = !(e instanceof Error) ||
           /404|not found|fetch/i.test(e.message);
-        if (!is404) Logger.warn(`[vm] w${wt} bake load failed`, e);
+        if (!is404) {Logger.warn(`[vm] w${wt} bake load failed`, e);}
       }
     }
   }
@@ -123,8 +123,8 @@ export class VmBaked {
       tex.colorSpace = THREE.LinearSRGBColorSpace;
     }
     const bakedMat = new THREE.MeshLambertMaterial();
-    if (tex) bakedMat.map = tex;
-    if (!tex) bakedMat.color.set(0x3a3632); // gunmetal fallback until an ao bake exists
+    if (tex) {bakedMat.map = tex;}
+    if (!tex) {bakedMat.color.set(0x3a3632);} // gunmetal fallback until an ao bake exists
     if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
     // static geometry — a merged bake folds it into the body and the gun
@@ -132,7 +132,7 @@ export class VmBaked {
     // spinning and this weapon's swap is skipped.
     const spin = wt === WeaponType.Chaingun
       ? await this.adoptChainSpin(gltf.scene, wt, texLoader) : null;
-    if (wt === WeaponType.Chaingun && !spin) return;
+    if (wt === WeaponType.Chaingun && !spin) {return;}
     const swap = new Set<THREE.Object3D>();
     // ALWAYS_BAKE bakes carry their own bore/glow geometry — the usual
     // "keep Basic parts procedural" rule would leave the old mkBore disc
@@ -140,12 +140,12 @@ export class VmBaked {
     const dropAll = ALWAYS_BAKE.has(wt);
     g.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && (dropAll || (m.material as THREE.Material).type !== 'MeshBasicMaterial')) swap.add(o);
+      if (m.isMesh && (dropAll || (m.material as THREE.Material).type !== 'MeshBasicMaterial')) {swap.add(o);}
     });
     for (const o of swap) { o.parent?.remove(o); }
     gltf.scene.traverse((o: THREE.Object3D) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+      if (!m.isMesh) {return;}
       const inBarrels = spin && (o === spin.node || spin.node.children.includes(o) || o.parent === spin.node);
       m.material = inBarrels && spin.barrelMat ? spin.barrelMat : bakedMat;
     });
@@ -157,19 +157,19 @@ export class VmBaked {
     if (edgeTex || grimeTex) {
       gltf.scene.traverse((o: THREE.Object3D) => {
         const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
+        if (!m.isMesh) {return;}
         m.geometry.userData.__keepUv = true;
-        if (edgeTex) m.geometry.userData.__wearTex = edgeTex;
-        if (grimeTex) m.geometry.userData.__grimeTex = grimeTex;
+        if (edgeTex) {m.geometry.userData.__wearTex = edgeTex;}
+        if (grimeTex) {m.geometry.userData.__grimeTex = grimeTex;}
       });
     }
     // With an ao.png the AO lives in the texture — bake only curvature
     // for the wear shader. Without one (new GLBs before their bake
     // passes), run the FULL vertex bake so the mesh shades exactly like
     // the procedural weapons — same AO, same shader base.
-    if (tex) bakeWearOnly(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-    else bakeVertexAO(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-    if (spin) this.seatChainPivot(spin.node, g);
+    if (tex) {bakeWearOnly(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });}
+    else {bakeVertexAO(gltf.scene as THREE.Group, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });}
+    if (spin) {this.seatChainPivot(spin.node, g);}
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.
     if (this.h.ghostMats.length) {
@@ -177,17 +177,17 @@ export class VmBaked {
       const toShell: THREE.Mesh[] = [];
       gltf.scene.traverse((o: THREE.Object3D) => {
         const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
+        if (!mesh.isMesh) {return;}
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         let shelled = false;
         for (const m of mats) {
-          if (!m || seen.has(m)) continue;
+          if (!m || seen.has(m)) {continue;}
           seen.add(m);
           if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
           this.h.ghostify(m);
         }
       });
-      for (const mesh of toShell) this.h.ghostifyMesh(mesh);
+      for (const mesh of toShell) {this.h.ghostifyMesh(mesh);}
     }
     Logger.debug(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
   }
@@ -203,7 +203,7 @@ export class VmBaked {
    *  the same unwrap as _ao.png. null when absent — caller falls back. */
   private async loadWeaponTex(wt: number, suffix: string, texLoader: THREE.TextureLoader): Promise<THREE.Texture | null> {
     const url = await this.probeTex(`/weapons/w${wt}_${suffix}`);
-    if (!url) return null;
+    if (!url) {return null;}
     try {
       const t = await texLoader.loadAsync(`${url}?v=${Date.now()}`);
       t.flipY = false;
@@ -218,7 +218,7 @@ export class VmBaked {
   private async probeTex(base: string): Promise<string | null> {
     for (const ext of ['webp', 'png', 'jpg']) {
       const probe = await fetch(`${base}.${ext}`, { method: 'HEAD' });
-      if (probe.ok && !(probe.headers.get('content-type') ?? '').includes('html')) return `${base}.${ext}`;
+      if (probe.ok && !(probe.headers.get('content-type') ?? '').includes('html')) {return `${base}.${ext}`;}
     }
     return null;
   }
@@ -230,8 +230,8 @@ export class VmBaked {
   private async adoptChainSpin(scene: THREE.Object3D, wt: number, texLoader: THREE.TextureLoader):
     Promise<{ node: THREE.Object3D; barrelMat: THREE.MeshLambertMaterial | null } | null> {
     let node: THREE.Object3D | undefined;
-    scene.traverse((o) => { if (!node && o.name.startsWith('barrels')) node = o; });
-    if (!node) return null;
+    scene.traverse((o) => { if (!node && o.name.startsWith('barrels')) {node = o;} });
+    if (!node) {return null;}
     this.h.chainBarrels = node as THREE.Group;
     let barrelMat: THREE.MeshLambertMaterial | null = null;
     const burl = await this.probeTex(`/weapons/w${wt}b_ao`);
@@ -252,7 +252,7 @@ export class VmBaked {
    *  THAT. Matrix math runs after the reparent so matrixWorld already
    *  includes g's transform. */
   private seatChainPivot(spinNode: THREE.Object3D, g: THREE.Group): void {
-    if (!spinNode.parent) return;
+    if (!spinNode.parent) {return;}
     const boreCenter = new THREE.Vector3(0, 0, -0.28); // cluster z in weapon space
     const parent = spinNode.parent;
     parent.updateWorldMatrix(true, false);

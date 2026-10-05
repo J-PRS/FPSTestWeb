@@ -56,9 +56,9 @@ export class P2PHost {
     dc.binaryType = 'arraybuffer';
     const link: P2PLink = {
       send: (data) => {
-        if (dc.readyState !== 'open') return;
-        if (typeof data === 'string') dc.send(data);
-        else dc.send(new Uint8Array(data));
+        if (dc.readyState !== 'open') {return;}
+        if (typeof data === 'string') {dc.send(data);}
+        else {dc.send(new Uint8Array(data));}
       },
       close: () => { try { dc.close(); } catch { /* gone */ } },
     };
@@ -73,11 +73,11 @@ export class P2PHost {
   /** A peer's outbound message (JSON string or binary position frame). */
   onData(link: P2PLink, data: string | Uint8Array): void {
     if (typeof data !== 'string') {
-      if (!isWireFrame(data)) return;
+      if (!isWireFrame(data)) {return;}
       const playerId = this.links.get(link);
-      if (!playerId) return; // binary before join — ignore
+      if (!playerId) {return;} // binary before join — ignore
       const pos = decodePosition(data);
-      if (pos) this.dispatch(playerId, pos);
+      if (pos) {this.dispatch(playerId, pos);}
       return;
     }
 
@@ -88,7 +88,7 @@ export class P2PHost {
     if (!playerId) {
       // First message on a link must be the join handshake
       const msg = raw as { type?: string; playerId?: unknown };
-      if (msg.type === 'join') this.handleJoin(link, msg.playerId);
+      if (msg.type === 'join') {this.handleJoin(link, msg.playerId);}
       return;
     }
     this.dispatch(playerId, raw);
@@ -96,7 +96,7 @@ export class P2PHost {
 
   onClose(link: P2PLink): void {
     const playerId = this.links.get(link);
-    if (!playerId) return;
+    if (!playerId) {return;}
     this.links.delete(link);
     this.byPlayer.delete(playerId);
     // No grace period on P2P — a dead socket is a leave, full stop.
@@ -129,33 +129,33 @@ export class P2PHost {
 
   private dispatch(playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
-    if (!result.success) return;
+    if (!result.success) {return;}
     this.messageHandler.handleMessage(playerId, result.data);
   }
 
   private broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const text = JSON.stringify(msg);
     for (const [link, pid] of this.links) {
-      if (pid === excludePlayerId) continue;
+      if (pid === excludePlayerId) {continue;}
       try { link.send(text); } catch { /* one dead pipe mustn't sink the tick */ }
     }
   }
 
   private sendJSON(playerId: string, msg: ServerMessage): void {
     const link = this.byPlayer.get(playerId);
-    if (!link) return;
+    if (!link) {return;}
     try { link.send(JSON.stringify(msg)); } catch { /* dead pipe */ }
   }
 
   private tick(): void {
-    if (this.byPlayer.size < 2) return;
+    if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
     for (const [recipientId] of players) {
       const link = this.byPlayer.get(recipientId);
-      if (!link) continue;
+      if (!link) {continue;}
       const records: Uint8Array[] = [];
       for (const [pid, p] of players) {
-        if (pid === recipientId) continue;
+        if (pid === recipientId) {continue;}
         records.push(encodeTickPlayer({
           playerId: pid,
           position: p.position,
@@ -167,7 +167,7 @@ export class P2PHost {
           ski: p.skiing,
         }));
       }
-      if (records.length === 0) continue;
+      if (records.length === 0) {continue;}
       // inputAck=0: the P2P host tracks no per-player input seqs — clients
       // ignore 0 (never prune on it).
       try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), this.tickSeq++, 0, records)); } catch { /* dead pipe */ }

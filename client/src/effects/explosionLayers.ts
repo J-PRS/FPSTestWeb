@@ -28,8 +28,8 @@ const shockPool: Shockwave[] = []; // module pool — shared across blasts
 // floor and dispose the rest (each entry owns a MeshBasicMaterial).
 const SHOCK_POOL_KEEP = 16;
 function releaseShock(sw: Shockwave): void {
-  if (shockPool.length >= SHOCK_POOL_KEEP) sw.mat.dispose();
-  else shockPool.push(sw);
+  if (shockPool.length >= SHOCK_POOL_KEEP) {sw.mat.dispose();}
+  else {shockPool.push(sw);}
 }
 
 const _c = new THREE.Color();
@@ -51,14 +51,14 @@ export class ExplosionLayers implements VariantHost {
    *  blast as the fallback. Caller finalizes the spark batch after. */
   spawn(vfx: string | undefined, pos: THREE.Vector3, mult: number,
         directHit: boolean, timeScale: number, terrain?: Terrain): void {
-    if (this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain)) return;
+    if (this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain)) {return;}
 
     this.spawnFlash(pos, mult);
     this.spawnSpikes(pos, mult);
     this.spawnBaseLayers(pos, mult, directHit, vfx === 'concussion');
     this.spawnShockDome(pos, mult);   // every blast, not just direct hits
     this.spawnDebrisSparks(pos, mult); // ground impacts get sparks too
-    if (directHit) this.variants.directHitLayers(pos, timeScale);
+    if (directHit) {this.variants.directHitLayers(pos, timeScale);}
     this.spawnGroundRing(pos, mult, terrain);
   }
 
@@ -66,7 +66,7 @@ export class ExplosionLayers implements VariantHost {
   // The frame-zero flash is what reads as "something violent happened".
   spawnFlash(pos: THREE.Vector3, mult: number): void {
     _c.setHex(0xfff6d8);
-    if (this.hasTint) _c.lerp(this.tint, 0.3);
+    if (this.hasTint) {_c.lerp(this.tint, 0.3);}
     // One batched particle, not a pooled sprite — a flash is a burst of 1.
     blastBurst(pos, {
       count: 1, spdMin: 0, spdMax: 0, vy: 0,
@@ -216,7 +216,7 @@ export class ExplosionLayers implements VariantHost {
       this.scene.add(mesh);
       sw = { mesh, mat, life, elapsed: 0, maxRadius, dead: false };
     }
-    if (typeof color === 'number') sw.mat.color.setHex(color); else sw.mat.color.copy(color);
+    if (typeof color === 'number') {sw.mat.color.setHex(color);} else {sw.mat.color.copy(color);}
     sw.mat.color.multiplyScalar(EMIT_GAIN); // HDR-hot so bloom catches it
     sw.mat.opacity = opacity;
     sw.mesh.position.copy(pos);
@@ -270,14 +270,14 @@ export class ExplosionLayers implements VariantHost {
 
   update(dt: number): number {
     let alive = this.updateShockwaves(dt);
-    for (const r of this.rings) if (r.update(dt)) alive++;
+    for (const r of this.rings) {if (r.update(dt)) alive++;}
     return alive;
   }
 
   private updateShockwaves(dt: number): number {
     let alive = 0;
     for (const sw of this.shockwaves) {
-      if (sw.dead) continue;
+      if (sw.dead) {continue;}
       sw.elapsed += dt;
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
@@ -301,7 +301,7 @@ export class ExplosionLayers implements VariantHost {
         releaseShock(sw);
       }
     }
-    for (const r of this.rings) r.dispose();
+    for (const r of this.rings) {r.dispose();}
     this.shockwaves = [];
     this.rings = [];
   }

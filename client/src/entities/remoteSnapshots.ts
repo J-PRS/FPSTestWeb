@@ -129,7 +129,7 @@ export class SnapshotBuffer {
 
     // Find the pair straddling renderTime
     let i = snaps.length - 2;
-    while (i >= 0 && snaps[i]!.t > renderTime) i--;
+    while (i >= 0 && snaps[i]!.t > renderTime) {i--;}
     if (i < 0) {
       const s = snaps[0]!;
       outPos.set(s.x, s.y, s.z);
@@ -158,7 +158,7 @@ export class SnapshotBuffer {
       const hy = h00 * s0.y + h10 * s0.vy * spanSec + h01 * s1.y + h11 * s1.vy * spanSec;
       const hz = h00 * s0.z + h10 * s0.vz * spanSec + h01 * s1.z + h11 * s1.vz * spanSec;
       const ox = hx - lx, oy = hy - ly, oz = hz - lz;
-      const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+      const dist = Math.hypot(ddx, ddy, ddz);
       // Overshoot tolerance: fraction of segment length (min 0.5m absolute)
       if (ox * ox + oy * oy + oz * oz < (0.5 * dist + 0.5) * (0.5 * dist + 0.5)) {
         outPos.set(hx, hy, hz);

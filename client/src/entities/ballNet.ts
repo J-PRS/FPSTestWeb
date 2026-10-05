@@ -88,7 +88,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     }
     if (bag.netAcc >= 0.5) {
       // Clock-estimate stalls must never freeze the sim.
-      while (bag.netAcc >= 0.05) stepNetLeg(st, bag, host, s);
+      while (bag.netAcc >= 0.05) {stepNetLeg(st, bag, host, s);}
     }
   } else {
     tickNetInert(st, bag, host, dt, s);
@@ -96,7 +96,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   host.enraged = s.enraged;
   host.enrageTimer = s.enrageTimer;
   host.dampNextBounce = s.dampNextBounce;
-  if (s.dead && !host.dead) host.dead = true;
+  if (s.dead && !host.dead) {host.dead = true;}
 }
 
 // Inert leg: gravity-only flight is EXACTLY solvable — stepping adds
@@ -117,7 +117,7 @@ function tickNetInert(st: NetStatics, bag: NetBag, host: NetHost, dt: number, s:
   // off. March the leg for the earliest contact and park T there;
   // the stamped segment arrives with the reflected velocity.
   const tcS = firstStructureContact(st.colliders(), s, T);
-  if (tcS < T) T = tcS;
+  if (tcS < T) {T = tcS;}
   host.pos.set(
     s.x + s.vx * T,
     s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
@@ -132,7 +132,7 @@ function tickNetInert(st: NetStatics, bag: NetBag, host: NetHost, dt: number, s:
   // produce a bounce event imminently — clamp, don't park.
   const field = st.field();
   const gy = field ? hmHeight(field, host.pos.x, host.pos.z) + s.radius : -Infinity;
-  if (host.pos.y >= gy || !field) return;
+  if (host.pos.y >= gy || !field) {return;}
   // March FORWARD on the server's 0.05 grid — the same cells groundContact
   // samples — so the predicted contact lands on the same point authority
   // resolves. (The old backward walk from arbitrary T was off-phase and
@@ -198,9 +198,9 @@ export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
  *  The >20m trail-cut already handles teleport discontinuities. */
 export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   const s = bag.sim;
-  if (!s) return;
+  if (!s) {return;}
   const simT = seg.simT;
-  if (isStaleSeg(bag, simT)) return; // older stamp — never rewind
+  if (isStaleSeg(bag, simT)) {return;} // older stamp — never rewind
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
   s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
   s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
@@ -213,7 +213,7 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   s.dampNextBounce = seg.timers?.damp ?? false;
   // Aim snapshot — the server pulled toward THIS point, so we do too.
   if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
-  else s.tgtValid = false;
+  else {s.tgtValid = false;}
   bag.netTargetId = seg.targetId;
   // Do NOT step the lead age here: a partial-width step leaves the sim
   // cursor off the server's 0.05 grid permanently — every subsequent
@@ -233,7 +233,7 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // stamp is always a rewind to fresher truth — and it makes the step
   // gate replay the whole stamp→now gap on the new leg instead of just
   // the banked-lead cells.
-  if (simT !== undefined) bag.simT = simT;
+  if (simT !== undefined) {bag.simT = simT;}
   bag.parked = false;
   blendSegCorrection(host, s, seg);
 }
@@ -246,13 +246,13 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
 function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
   _rpos.copy(host.pos).add(host.renderOffset);
   _rpos.x -= s.x; _rpos.y -= s.y; _rpos.z -= s.z;
-  if (seg.hard || _rpos.lengthSq() > 3600) host.renderOffset.set(0, 0, 0);
-  else host.renderOffset.copy(_rpos);
+  if (seg.hard || _rpos.lengthSq() > 3600) {host.renderOffset.set(0, 0, 0);}
+  else {host.renderOffset.copy(_rpos);}
   host.pos.set(s.x, s.y, s.z);
   host.vel.set(s.vx, s.vy, s.vz);
   host.enraged = s.enraged;
   host.enrageTimer = 0;
-  if (!seg.enraged) host.emissive.setRGB(0, 0, 0);
+  if (!seg.enraged) {host.emissive.setRGB(0, 0, 0);}
 }
 
 // Segment event applied to a netDriven ball — server truth for the sim
@@ -275,7 +275,7 @@ export interface NetSeg {
  *  so the predictor finds the wall at (≤1 tick behind) the same instant
  *  authority does. Infinity = no contact before T. */
 function firstStructureContact(colliders: readonly StructureCollider[], s: SimBall, T: number): number {
-  if (!colliders.length) return Infinity;
+  if (!colliders.length) {return Infinity;}
   const r = s.radius;
   for (let tt = 0.05; tt <= T; tt += 0.05) {
     const x = s.x + s.vx * tt;
@@ -284,7 +284,7 @@ function firstStructureContact(colliders: readonly StructureCollider[], s: SimBa
     for (const c of colliders) {
       const dx = x - c.cx, dz = z - c.cz;
       const rr = Math.max(c.hx, c.hz) + r + 0.5;
-      if (dx * dx + dz * dz > rr * rr) continue; // cheap xz broadphase
+      if (dx * dx + dz * dz > rr * rr) {continue;} // cheap xz broadphase
       const lx = dx * c.cos + dz * c.sin;
       const lz = -dx * c.sin + dz * c.cos;
       const dy = y - c.cy;
@@ -292,7 +292,7 @@ function firstStructureContact(colliders: readonly StructureCollider[], s: SimBa
       const qy = Math.max(-c.hy, Math.min(c.hy, dy));
       const qz = Math.max(-c.hz, Math.min(c.hz, lz));
       const ex = lx - qx, ey = dy - qy, ez = lz - qz;
-      if (ex * ex + ey * ey + ez * ez < r * r) return tt;
+      if (ex * ex + ey * ey + ez * ez < r * r) {return tt;}
     }
   }
   return Infinity;

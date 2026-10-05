@@ -63,12 +63,12 @@ class SparkBatch {
     for (let i = 0; i < this.free.length; i++) {
       if (this.free[i]!.count >= n) {
         const s = this.free.splice(i, 1)[0]!;
-        if (s.count > n) this.free.push({ start: s.start + n, count: s.count - n });
+        if (s.count > n) {this.free.push({ start: s.start + n, count: s.count - n });}
         this.used += n;
         return s.start;
       }
     }
-    if (this.next + n > MAX_SPARKS) return -1;
+    if (this.next + n > MAX_SPARKS) {return -1;}
     const s = this.next; this.next += n; this.used += n; return s;
   }
 
@@ -92,13 +92,13 @@ class SparkBatch {
   private dirtyLo = Infinity;
   private dirtyHi = 0;
   mark(lo: number, hi: number): void {
-    if (lo < this.dirtyLo) this.dirtyLo = lo;
-    if (hi > this.dirtyHi) this.dirtyHi = hi;
+    if (lo < this.dirtyLo) {this.dirtyLo = lo;}
+    if (hi > this.dirtyHi) {this.dirtyHi = hi;}
   }
   flush(): void {
     const lo = this.dirtyLo, n = this.dirtyHi - lo;
     this.dirtyLo = Infinity; this.dirtyHi = 0;
-    if (n <= 0) return;
+    if (n <= 0) {return;}
     this.posAttr.addUpdateRange(lo, n);
     this.posAttr.needsUpdate = true;
     this.colAttr.addUpdateRange(lo, n);
@@ -119,11 +119,11 @@ function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: n
   let base = -1;
   const batch = acquireBatch(sparkBatches, scene, s => new SparkBatch(s), b => {
     base = b.alloc(n);
-    if (base < 0) return false;
+    if (base < 0) {return false;}
     hit = b;
     return true;
   });
-  if (hit) return { batch: hit, base };
+  if (hit) {return { batch: hit, base };}
   return { batch, base: batch.alloc(n)! };
 }
 
@@ -155,21 +155,21 @@ export class ExplosionSparks {
    *  at the end of the spawn pass. */
   finalize(): void {
     const n = this.sparks.length;
-    if (!n) return;
+    if (!n) {return;}
     const a = sparkAlloc(this.scene, n);
     this.batch = a.batch;
     this.base = a.base;
-    for (let i = 0; i < n; i++) this.sparks[i]!.slice = (this.base + i) * SPARK_FLOATS;
+    for (let i = 0; i < n; i++) {this.sparks[i]!.slice = (this.base + i) * SPARK_FLOATS;}
   }
 
   update(dt: number): number {
     let alive = 0;
     let wrote = false;
-    if (this.base < 0 || !this.batch) return 0;
+    if (this.base < 0 || !this.batch) {return 0;}
     const posArr = this.batch!.posAttr.array as Float32Array;
     const colArr = this.batch!.colAttr.array as Float32Array;
     for (const spark of this.sparks) {
-      if (spark.dead) continue;
+      if (spark.dead) {continue;}
       spark.elapsed += dt;
       if (spark.elapsed >= spark.life) {
         spark.dead = true;
@@ -192,7 +192,7 @@ export class ExplosionSparks {
       const h = spark.trailHead;
       tb[h * 3] = spark.pos.x; tb[h * 3 + 1] = spark.pos.y; tb[h * 3 + 2] = spark.pos.z;
       spark.trailHead = (h + 1) % SPARK_TRAIL;
-      if (spark.trailCount < SPARK_TRAIL) spark.trailCount++;
+      if (spark.trailCount < SPARK_TRAIL) {spark.trailCount++;}
 
       this.writeSlice(spark, posArr, colArr);
     }
@@ -231,7 +231,7 @@ export class ExplosionSparks {
   }
 
   dispose(): void {
-    if (this.base >= 0 && this.batch) sparkRelease(this.batch, this.scene, this.base, this.sparks.length);
+    if (this.base >= 0 && this.batch) {sparkRelease(this.batch, this.scene, this.base, this.sparks.length);}
     this.batch = null;
     this.base = -1;
     this.sparks = [];

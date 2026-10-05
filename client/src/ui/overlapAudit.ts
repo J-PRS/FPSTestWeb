@@ -26,21 +26,21 @@ const EXEMPT = 'canvas, #crosshair, #dmg-dir, #altq-toast, .player-indicator';
 export interface OverlapHit { a: string; b: string; px: number }
 
 function name(el: Element): string {
-  if (el.id) return `#${el.id}`;
+  if (el.id) {return `#${el.id}`;}
   const cls = [...el.classList][0];
-  if (cls) return `${el.tagName.toLowerCase()}.${cls}`;
+  if (cls) {return `${el.tagName.toLowerCase()}.${cls}`;}
   // Anonymous div — a text snippet beats a bare "div" when reading reports.
   const txt = el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 24);
   return `${el.tagName.toLowerCase()}${txt ? `("${txt}")` : ''}`;
 }
 
 function isChrome(el: Element, vw: number, vh: number): boolean {
-  if (el.matches(EXEMPT)) return false;
+  if (el.matches(EXEMPT)) {return false;}
   const cs = getComputedStyle(el);
-  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-  if (parseFloat(cs.opacity) < 0.05) return false; // hidden-by-opacity overlays
-  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-  if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
+  if (cs.display === 'none' || cs.visibility === 'hidden') {return false;}
+  if (parseFloat(cs.opacity) < 0.05) {return false;} // hidden-by-opacity overlays
+  if (cs.display === 'none' || cs.visibility === 'hidden') {return false;}
+  if (cs.position !== 'fixed' && cs.position !== 'absolute') {return false;}
   const r = el.getBoundingClientRect();
   const area = r.width * r.height;
   return area >= MIN_AREA_PX && area <= vw * vh * MAX_AREA_FRAC;
@@ -58,11 +58,11 @@ export function auditHudOverlap(): OverlapHit[] {
     for (let j = i + 1; j < els.length; j++) {
       const b = els[j]!;
       // Ancestor/descendant pairs are containment, not overlap.
-      if (a.contains(b) || b.contains(a)) continue;
+      if (a.contains(b) || b.contains(a)) {continue;}
       const rb = b.getBoundingClientRect();
       const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
       const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-      if (w > 1 && h > 1) hits.push({ a: name(a), b: name(b), px: Math.round(w * h) });
+      if (w > 1 && h > 1) {hits.push({ a: name(a), b: name(b), px: Math.round(w * h) });}
     }
   }
   return hits;

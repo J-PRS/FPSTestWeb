@@ -98,7 +98,7 @@ export class RemotePlayer {
         .catch((e) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(e) }));
       return;
     }
-    if (this._loaded) this.applyClassScale();
+    if (this._loaded) {this.applyClassScale();}
   }
   private applyClassScale(): void {
     this._model.setScale(this._classScale);
@@ -124,8 +124,8 @@ export class RemotePlayer {
       if (this.staleHidden) {
         this._model.setVisible(false);
       }
-      if (this.cloakGhost) setCloakGhost(this, true);
-      if (this._isDead) this._model.setScale(this.corpse.scale);
+      if (this.cloakGhost) {setCloakGhost(this, true);}
+      if (this._isDead) {this._model.setScale(this.corpse.scale);}
   }
 
   teleportTo(pos: THREE.Vector3): void {
@@ -250,8 +250,8 @@ export class RemotePlayer {
 
   /** Non-lethal hit feedback — the model plays the 'No' flinch briefly. */
   flinch(): void {
-    if (!this._isDead) this.anim.hitT = 0.35;
-    if (this._loaded) this._model.damageFlash(); // creature-style white pop
+    if (!this._isDead) {this.anim.hitT = 0.35;}
+    if (this._loaded) {this._model.damageFlash();} // creature-style white pop
     this.auras.flashShield(); // soaked — flare the lattice
   }
 
@@ -309,7 +309,7 @@ export class RemotePlayer {
     this.rotation.roll = 0;
     this.isOnGround = true;
     this.interp.reset(this.position);
-    if (!this.cloakHidden) showRemote(this);
+    if (!this.cloakHidden) {showRemote(this);}
   }
 
   // Staleness gate: hide players whose updates stopped arriving (backgrounded
@@ -357,9 +357,9 @@ export class RemotePlayer {
       this.anim.shootT = Math.max(this.anim.shootT, hold);
     }
     if (this._loaded) {
-      if (weaponType === WeaponType.Melee) this._model.weaponPunch();
-      else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this.playThrow();
-      else this._model.fire(weaponType);
+      if (weaponType === WeaponType.Melee) {this._model.weaponPunch();}
+      else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) {this.playThrow();}
+      else {this._model.fire(weaponType);}
     }
     // Firing decloaks: a cloaked shooter shimmers visible for a beat —
     // the price of shooting from stealth.
@@ -371,8 +371,8 @@ export class RemotePlayer {
    *  the procedural hand-prop dip alone. ~1.3s holds the throw state
    *  through the clip; rigs without it fall back to their old behavior. */
   playThrow(): void {
-    if (!this._isDead) this.anim.throwT = Math.max(this.anim.throwT, 1.3);
-    if (this._loaded) this._model.weaponThrow();
+    if (!this._isDead) {this.anim.throwT = Math.max(this.anim.throwT, 1.3);}
+    if (this._loaded) {this._model.weaponThrow();}
     shootReveal(this); // a throw is a shot — same decloak price
   }
 

@@ -92,7 +92,7 @@ function updateDeadList<T extends { update(dt: number): void; dead: boolean; dis
   }
 }
 
-const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) if (!e.dead) n++; return n; };
+const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) n++;} return n; };
 
 // Live-explosion ceiling — a busy room stacks blasts until particles
 // and draw calls crush the frame (seen: 155 live, 30k particles). Past
@@ -180,10 +180,10 @@ export interface LoopState {
 function tickDemo(deps: GameLoopDeps, dt: number): boolean {
   const demoManager = deps.lazyDemoManager();
   const player = deps.lazyPlayer();
-  if (demoManager) demoManager.update(dt); // zero-overhead when idle
+  if (demoManager) {demoManager.update(dt);} // zero-overhead when idle
   const shouldFreeze = demoManager?.isPlaying ?? false;
-  if (shouldFreeze && !player.inputFrozen) player.freezeInput();
-  else if (!shouldFreeze && player.inputFrozen) player.unfreezeInput();
+  if (shouldFreeze && !player.inputFrozen) {player.freezeInput();}
+  else if (!shouldFreeze && player.inputFrozen) {player.unfreezeInput();}
   return demoManager?.isPaused ?? false;
 }
 
@@ -192,8 +192,8 @@ function tickDemo(deps: GameLoopDeps, dt: number): boolean {
 function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEntities>) {
   let balls = 0, elites = 0;
   for (const b of entities.balls) {
-    if (b.dead || b.disposed) continue;
-    if (b.variant === 3) elites++; else balls++;
+    if (b.dead || b.disposed) {continue;}
+    if (b.variant === 3) {elites++;} else {balls++;}
   }
   return {
     balls, elites,
@@ -222,7 +222,7 @@ function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEn
 // horizon uniform takes the same tint so fogged ground stays seamless.
 function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   const fog = deps.sceneSetup.scene.fog;
-  if (!(fog instanceof THREE.Fog)) return;
+  if (!(fog instanceof THREE.Fog)) {return;}
   _sunDir.copy(deps.sceneSetup.sun.position).normalize();
   const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
   fog.color.copy(tinted);
@@ -245,13 +245,13 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
   // at 5% speed and bots keep slowly fighting — a real pause matches user
   // intent. Online rooms must keep simulating: the server doesn't stop.
-  if (document.hidden && !networkManager.isConnected()) return false;
+  if (document.hidden && !networkManager.isConnected()) {return false;}
   // Player-vs-player contact: remotes + lobby bots all live in this set —
   // corpses don't block. Interpolated positions are a half-RTT stale but
   // the push only has to agree with the shadow's, not be perfect.
   let bodyN = 0;
   for (const rp of deps.world.remotePlayers.values()) {
-    if (rp.isDead) continue;
+    if (rp.isDead) {continue;}
     // Reused pool — fresh 7-field structs per remote per frame were
     // steady GC churn alongside the blip fill below.
     let b = _contactBodies[bodyN];
@@ -289,7 +289,7 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   perf.mark('player');
 
   const demoPaused = tickDemo(deps, dt);
-  if (demoPaused) return true;
+  if (demoPaused) {return true;}
 
   tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false);
   return false;
@@ -309,11 +309,11 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   // Ambient population is an offline feature — connected rooms own
   // their balls/creatures on the wire; the director spawning locals
   // alongside them was the busy double-population on join.
-  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) deps.waveDirector().update(dt);
-  if (!demoPlaying) entities.updateNuggets(dt);
+  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) {deps.waveDirector().update(dt);}
+  if (!demoPlaying) {entities.updateNuggets(dt);}
   deps.teamBots?.()?.update(dt);
   perf.mark('bots');
-  if (!demoPlaying) deps.combat()?.updateProjectiles(dt);
+  if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
   deps.demoLifecycle().updatePlaybackProjectiles(dt);
   perf.mark('proj');
 }
@@ -363,7 +363,7 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
           // Resumable shard budget — one debris can't overdraw the cap.
           d.update(fxDt, 1.5 - (performance.now() - t0));
           if (performance.now() - t0 > 1.5) { i--; break; }
-        } else d.update(fxDt, 0.15); // far: resumable ~1-shard slice —
+        } else {d.update(fxDt, 0.15);} // far: resumable ~1-shard slice —
         // tickAge froze shards mid-air at spawn positions for their
         // whole 6-8s life (same parked-ring bug as Explosion.tickAge)
         if (d.dead) { d.dispose(); list.splice(i, 1); }
@@ -382,15 +382,15 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     }],
     ['explosions', () => {
       const ex = deps.world.explosions;
-      for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) ex[i]!.dead = true;
+      for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) {ex[i]!.dead = true;}
       // Same 260m rule as the vfx sim-pause — a blast past it is sub-pixel,
       // so it ages out without paying the layer/spark buffer writes.
       const cam = deps.camera.position;
       for (let i = ex.length - 1; i >= 0; i--) {
         const e = ex[i]!;
         if (!e.dead) {
-          if (e.pos.distanceToSquared(cam) < VFX_NEAR_SQ) e.update(fxDt);
-          else e.tickAge(fxDt);
+          if (e.pos.distanceToSquared(cam) < VFX_NEAR_SQ) {e.update(fxDt);}
+          else {e.tickAge(fxDt);}
         }
         if (e.dead) { e.dispose(); ex.splice(i, 1); }
       }
@@ -398,7 +398,7 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     ['implosions', () => updateDeadList(deps.world.implosions, fxDt)],
     ['aoegiz', () => updateDeadList(deps.world.aoeGizmos, fxDt)],
   );
-  if (st.fxCursor > 0) st.fxJobs.push(...st.fxJobs.splice(0, st.fxCursor));
+  if (st.fxCursor > 0) {st.fxJobs.push(...st.fxJobs.splice(0, st.fxCursor));}
   st.fxCursor = (st.fxCursor + 1) % st.fxJobs.length;
   budget.each('fxdecay', st.fxJobs, FX_MS_CAP, ([name, run]) => {
     const t0 = performance.now();
@@ -451,19 +451,19 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   deps.world.remotePlayers.forEach((rp, id) => {
     // A fire-revealed cloak (ghostT live) blips like any visible rider —
     // the shimmer window already sold him out to eyes and HUD.
-    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) return;
+    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) {return;}
     const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
     // Reused buffer — a fresh object per remote per frame was ~1.2k
     // throwaway blips/s of pure GC churn.
     let b = _mapBlips[blipN];
     if (!b) { b = { x: 0, z: 0, friendly: false, bot: false }; _mapBlips.push(b); }
     b.x = rp.position.x; b.z = rp.position.z;
-    b.friendly = !!team && team === deps.world.localTeam; b.bot = isBotId(id);
+    b.friendly = Boolean(team) && team === deps.world.localTeam; b.bot = isBotId(id);
     blipN++;
   });
   _mapBlips.length = blipN;
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
-  if (hud.commandMapOpen) hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers);
+  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers);}
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.
@@ -482,7 +482,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
 
   if (st.cpuLevel === 0) {
-    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
+    for (const layer of deps.ambientLayers) {layer.update(fxDt, camera.position, terrain);}
     deps.groundMist().update(fxDt, camera.position);
     deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
   }
@@ -515,7 +515,7 @@ function makeStatsPanels(): Stats[] {
     // --z-br-3: reserved debug row in hud.css — hardcoding an offset here
     // is what parked the charts on top of the entity-counts row.
     dom.style.cssText = `position:fixed;bottom:var(--z-br-3);right:${20 + (2 - i) * 88}px;left:auto;top:auto;z-index:10000;display:none;`;
-    document.body.appendChild(dom);
+    document.body.append(dom);
     return s;
   });
 }
@@ -528,7 +528,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       // info reset lives in perf.begin — counters span every pass of the
       // previous frame (scene+shadow+composer+viewmodel), not just the last.
       draws: deps.rendererSetup.renderer.info.render.calls,
-      trisK: +(deps.rendererSetup.renderer.info.render.triangles / 1000).toFixed(0) });
+      trisK: Number((deps.rendererSetup.renderer.info.render.triangles / 1000).toFixed(0)) });
   // window.__renderScan — staged render breakdown (scene / +shadow / full
   // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
   // renders extra frames on top of the loop.
@@ -570,7 +570,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       setLogOverlayVisible(show);
       // Debug chrome changes the corner stack — audit for collisions the
       // frame after the layout settles.
-      if (show) requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap));
+      if (show) {requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap));}
     }
   });
 }
@@ -585,9 +585,9 @@ function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Ca
     st.interiorEpoch = epoch;
     st.interiorCasters = undefined;
     const g = deps.sceneSetup.scene.getObjectByName('__t2interiors');
-    if (g) st.interiorCasters = g.children as THREE.Mesh[];
+    if (g) {st.interiorCasters = g.children as THREE.Mesh[];}
   }
-  if (!st.interiorCasters) return;
+  if (!st.interiorCasters) {return;}
   for (const m of st.interiorCasters) {
     const bs = m.geometry.boundingSphere!;
     m.castShadow = (m.userData.castR as number) > 0 &&
@@ -600,8 +600,8 @@ function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Ca
 // has landed, compileAsync parallel-compiles every scene material instead
 // of stalling individual draws.
 function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
-  if (st.warmed || ++st.warmN <= 60) return;
-  if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) return;
+  if (st.warmed || ++st.warmN <= 60) {return;}
+  if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) {return;}
   st.warmed = true;
   deps.rendererSetup.warmup();
   // One underground blast fills the burst-spec freelists, so the first
@@ -616,9 +616,9 @@ const _prewarmPos = new THREE.Vector3(0, -500, 0);
 // Carry leftover time so the cap hits its target rate, not stutters.
 function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
   const cap = settings.get('fps-cap');
-  if (cap <= 0) return true;
+  if (cap <= 0) {return true;}
   st.renderAcc += rawElapsed;
-  if (st.renderAcc < 1 / cap) return false;
+  if (st.renderAcc < 1 / cap) {return false;}
   st.renderAcc = Math.min(st.renderAcc - 1 / cap, 1 / cap);
   return true;
 }
@@ -643,7 +643,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     autoqBtn.addEventListener('click', () => {
       const on = !settings.get('fps-autoq');
       settings.set('fps-autoq', on);
-      if (!on) resetAutoQuality(deps, st);
+      if (!on) {resetAutoQuality(deps, st);}
       label();
     });
   }
@@ -677,7 +677,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // Veiled = waiting on gameState — the boot world under the curtain
     // is discarded on restore, so don't sim it, render it, or let input
     // fire into it. Socket events (not this loop) deliver the state.
-    if (isSessionVeiled()) return;
+    if (isSessionVeiled()) {return;}
     perf.begin(deps.rendererSetup.renderer);
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
@@ -701,14 +701,14 @@ export function createGameLoop(deps: GameLoopDeps) {
       };
     }
     const demoPaused = simTick(deps, perf, frame, terrain);
-    if (!demoPaused) fxTick(deps, st, budget, fxDt);
+    if (!demoPaused) {fxTick(deps, st, budget, fxDt);}
     perf.mark('fx');
     deps.remotes().updateScoreboard();
 
     // ?dummy debug remote — pin it in front of the camera and tick it
     const dummy = deps.world.remotePlayers.get('dummy');
     const dummyTick = deps.getDummyTick();
-    if (dummyTick) { dummyTick(dt); if (dummy) dummy.tick(dt); }
+    if (dummyTick) { dummyTick(dt); if (dummy) {dummy.tick(dt);} }
 
     hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
@@ -720,7 +720,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       // real renders or the FPS panel reads the rAF rate under a cap.
       // (Still gated on display — they paint even while hidden.)
       if ((statsPanels[0]!.dom as HTMLElement).style.display !== 'none')
-        for (const s of statsPanels) s.update();
+        {for (const s of statsPanels) s.update();}
       renderElapsed = 0;
       renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     }
@@ -738,7 +738,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // the gun lands in the readPixels buffer and gets dithered too.
     rendererSetup.setOverlayPass(() => {
       const vm = deps.lazyViewModel(), vmc = deps.vmCamera();
-      if (!vm.group.visible) return;
+      if (!vm.group.visible) {return;}
       vmc.aspect = camera.aspect;
       vmc.updateProjectionMatrix();
       vmc.quaternion.copy(camera.quaternion);

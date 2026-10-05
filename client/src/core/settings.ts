@@ -79,7 +79,7 @@ const DEFAULTS: Schema = {
 const parse = {
   boolean: (raw: string | null, def: boolean) => (raw === null ? def : raw === 'true'),
   number: (raw: string | null, def: number) => {
-    if (raw === null) return def;
+    if (raw === null) {return def;}
     const n = parseFloat(raw);
     return Number.isFinite(n) ? n : def;
   },
@@ -92,9 +92,9 @@ export const settings = {
   get<K extends keyof Schema>(key: K): Schema[K] {
     const raw = localStorage.getItem(key);
     const def = DEFAULTS[key];
-    if (LEGACY_TRUE_AS_ONE.has(key) && raw === 'true') return 1 as Schema[K];
+    if (LEGACY_TRUE_AS_ONE.has(key) && raw === 'true') {return 1 as Schema[K];}
     // `as Schema[K]` — parse.* returns the right runtime type per declared type
-    if (typeof def === 'string') return (raw ?? def) as Schema[K];
+    if (typeof def === 'string') {return (raw ?? def) as Schema[K];}
     return (typeof def === 'boolean' ? parse.boolean(raw, def as boolean) : parse.number(raw, def as number)) as Schema[K];
   },
   set<K extends keyof Schema>(key: K, value: Schema[K]): void {

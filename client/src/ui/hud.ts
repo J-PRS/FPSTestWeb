@@ -111,7 +111,7 @@ export class HUD {
   /** Own sheep score under the crosshair — same thresholds/colors as the
    *  bot indicator badges so the number reads identically everywhere. */
   setSheep(shown: number): void {
-    if (shown === this.lastSheepShown) return;
+    if (shown === this.lastSheepShown) {return;}
     this.lastSheepShown = shown;
     if (shown <= 0) { this.sheepReadout.textContent = ''; return; }
     this.sheepReadout.textContent = `${shown}`;
@@ -124,7 +124,7 @@ export class HUD {
    *  split so height↔speed conversion is visible mid-ski. */
   setEnergy(parts: { ke: number; pe: number; mech: number } | undefined): void {
     const shown = parts ? Math.round(Math.sqrt(2 * parts.mech)) : 0;
-    if (shown === this.lastEnergyShown) return;
+    if (shown === this.lastEnergyShown) {return;}
     this.lastEnergyShown = shown;
     if (!parts || shown <= 0) { this.energyReadout.textContent = ''; return; }
     const k = Math.round(Math.sqrt(2 * parts.ke));
@@ -148,7 +148,7 @@ export class HUD {
   /** Run clock — MM:SS, DOM write only when the second rolls over */
   setTimer(seconds: number): void {
     const s = Math.floor(seconds);
-    if (s === this.lastTimerSec) return;
+    if (s === this.lastTimerSec) {return;}
     this.lastTimerSec = s;
     this.timerEl.textContent =
       `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -162,7 +162,7 @@ export class HUD {
 
   /** Live ball count — DOM write only on change */
   setBallCount(n: number): void {
-    if (n === this.lastBallCount) return;
+    if (n === this.lastBallCount) {return;}
     this.lastBallCount = n;
     this.ballCountEl.textContent = String(n);
   }
@@ -181,7 +181,7 @@ export class HUD {
     const hunters = c.crawlers + c.seekers + c.rakks + c.rollers + c.snakes;
     const siegers = c.turrets + c.overlords + c.totems;
     const key = `${c.balls}|${c.elites}|${c.crawlers}|${c.scarabs}|${c.grubs}|${c.snakes}|${c.gnats}|${c.seekers}|${c.rakks}|${c.rollers}|${c.turrets}|${c.overlords}|${c.totems}|${c.mines}|${c.targets}|${c.projectiles}|${c.fx}`;
-    if (key === this.lastCountsKey) return;
+    if (key === this.lastCountsKey) {return;}
     this.lastCountsKey = key;
     this.ballCountEl.innerHTML =
       `<span class="dim">balls</span> ${countSpan(c.balls)}${c.elites ? ` <span class="dim">+elite</span> ${countSpan(c.elites)}` : ''}` +
@@ -195,7 +195,7 @@ export class HUD {
   private lastTeamScore = '';
   setTeamScore(a: number, b: number): void {
     const key = `${a}|${b}`;
-    if (key === this.lastTeamScore) return;
+    if (key === this.lastTeamScore) {return;}
     this.lastTeamScore = key;
     this.teamScore.style.display = 'block';
     this.tsA.textContent = String(a);
@@ -304,7 +304,7 @@ export class HUD {
   setConnDown(down: boolean, reason?: string | null): void {
     const now = performance.now();
     if (down) {
-      if (!this.connDownAt) this.connDownAt = now;
+      if (!this.connDownAt) {this.connDownAt = now;}
       const s = (now - this.connDownAt) / 1000;
       // A reasoned close ('server restarting') names itself; a silent
       // drop keeps the generic label.
@@ -327,8 +327,8 @@ export class HUD {
     }
   }
   private paintConn(txt: string, cls: 'down' | 'up' | 'warn'): void {
-    if (this.connBanner.className !== cls) this.connBanner.className = cls;
-    if (txt === this.connLastTxt) return;
+    if (this.connBanner.className !== cls) {this.connBanner.className = cls;}
+    if (txt === this.connLastTxt) {return;}
     this.connLastTxt = txt;
     this.connBanner.textContent = txt;
     this.connBanner.style.display = 'block';
@@ -386,7 +386,7 @@ export class HUD {
     if (!el) {
       el = document.createElement('div');
       el.className = `beacon-aim ${key}`;
-      this.el.appendChild(el);
+      this.el.append(el);
       this.beaconEls.set(key, el);
     }
     el.classList.toggle('noarc', !reachable);
@@ -430,10 +430,10 @@ export class HUD {
    *  right feed so the timeline reads like a log, not a ticker. */
   logEvent(text: string, cls?: string): void {
     const row = document.createElement('div');
-    row.className = 'log-row' + (cls ? ` ${cls}` : '');
+    row.className = `log-row${  cls ? ` ${cls}` : ''}`;
     row.textContent = feedNames(text);
-    this.playerList.appendChild(row);
-    while (this.playerList.childElementCount > 9) this.playerList.firstElementChild!.remove();
+    this.playerList.append(row);
+    while (this.playerList.childElementCount > 9) {this.playerList.firstElementChild!.remove();}
     setTimeout(() => row.remove(), 9000); // hard cut — see feedKill
   }
 }

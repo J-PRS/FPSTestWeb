@@ -87,7 +87,7 @@ export class RemoteDeployables {
         kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
         hurt: () => {}, // server owns its lifetime — deployGone removes it
         // Remote sentries still scan and aim — pure cosmetics, no firing.
-        update: (dt) => void t.update(dt, this.enemies()),
+        update: (dt) => t.update(dt, this.enemies()),
         dispose: () => t.dispose(this.deps.scene),
         v: t,
       };

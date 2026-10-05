@@ -59,7 +59,7 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   // not extend the cache or the tier never gets retried.
   if (probeWt && !wt) missUntil.wt = Date.now() + MISS_CACHE_MS;
   if (probeRtc && !rtc) missUntil.rtc = Date.now() + MISS_CACHE_MS;
-  if (wt) { wtC.arm(); void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
+  if (wt) { wtC.arm(); rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
   if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
@@ -359,7 +359,7 @@ export class TieredTransport implements GameTransport {
       onMessage: (data) => { if (gen === this.gen) this.config.onMessage?.(data); },
       onBinaryMessage: (data) => { if (gen === this.gen) this.config.onBinaryMessage?.(data); },
     };
-    void connectGameTransport(innerConfig).then((t) => {
+    connectGameTransport(innerConfig).then((t) => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);

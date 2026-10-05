@@ -172,9 +172,9 @@ export class Projectile {
    *  ends pop at the same age; pending local shots seed randomly — their
    *  fuse is cosmetic, the server's destroy edge is authoritative anyway. */
   fuseTtl(): number | undefined {
-    if (this.ttl !== undefined) return this.ttl || undefined;
+    if (this.ttl !== undefined) {return this.ttl || undefined;}
     const ml = this.config.maxLifetime;
-    if (!ml) return undefined;
+    if (!ml) {return undefined;}
     const j = this.config.ttlJitter ?? 0;
     if (!j) { this.ttl = ml; return ml; }
     const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : (Math.random() * 4294967296) >>> 0;
@@ -242,7 +242,7 @@ export class Projectile {
   // free functions so they're testable without a scene-bound projectile.
 
   update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
 
     // First frame: just render at spawn position, don't apply physics yet
     if (this.spawnedThisFrame) {
@@ -251,13 +251,13 @@ export class Projectile {
       return;
     }
 
-    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);
+    if (!this.exploded) {this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);}
 
     this.tickRayBurst();
 
-    if (this.glue.embedded && !this.glue.tickEmbedded(dt)) this.removeProjectileMesh();
-    else if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
-    for (const r of this.ribbons) r.update(dt);
+    if (this.glue.embedded && !this.glue.tickEmbedded(dt)) {this.removeProjectileMesh();}
+    else if (this.exploded && !this.projectileRemoved) {this.removeProjectileMesh();}
+    for (const r of this.ribbons) {r.update(dt);}
     this.trail.update(dt);
 
     // Embedded shells outlive their trails — the planted corpse IS the
@@ -312,12 +312,12 @@ export class Projectile {
     }
 
     // Stuck bomb: planted on a surface, ticking down to fuse.
-    if (this.stuck && this.glue.tickStuck()) return;
+    if (this.stuck && this.glue.tickStuck()) {return;}
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
     this.hitPointValid = false;
-    if (this.config.gravity) this.vel.y += GRAVITY * dt;
+    if (this.config.gravity) {this.vel.y += GRAVITY * dt;}
     this.pos.addScaledVector(this.vel, dt);
 
     // Fuse: auto-explode once the ARMED fuse burns out. Sticky ordnance
@@ -335,7 +335,7 @@ export class Projectile {
     // Remote (server-authoritative/demo) replicas skip all collision —
     // terrain-only behavior lives in tickRemote.
     if (this.isRemote) {
-      if (this.tickRemote(terrain)) return;
+      if (this.tickRemote(terrain)) {return;}
     } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses)) {
       return; // exploded inside checkCollisions
     }
@@ -350,10 +350,10 @@ export class Projectile {
   // slug detonates there. Called from update() so early returns inside
   // updateAlive can't skip it.
   private tickRayBurst(): void {
-    if (!this.rayFired || this.rayDone) return;
+    if (!this.rayFired || this.rayDone) {return;}
     this.rayDone = true;
     this.onRayBurst?.(this.rayFrom, this.hitPointValid ? this.hitPoint : this.pos);
-    if (!this.exploded) this.explode();
+    if (!this.exploded) {this.explode();}
   }
 
   // Remote replicas skip all collision — terrain-only behavior lives
@@ -387,7 +387,7 @@ export class Projectile {
    *  spawn: a lobbed bomb midair is inert (no fuse burn, no armed-light
    *  ramp). -1 = not armed yet; everything else just reads `age`. */
   fuseAge(): number {
-    if (!this.config.sticks) return this.age;
+    if (!this.config.sticks) {return this.age;}
     return this.glue.armAge === undefined ? -1 : this.age - this.glue.armAge;
   }
 
@@ -397,7 +397,7 @@ export class Projectile {
   // treat it exactly like a launcher-attached ribbon.
   private armedFxDone = false;
   private tickArmedFx(): void {
-    if (this.armedFxDone || !this.armed || this.config.armTime === undefined) return;
+    if (this.armedFxDone || !this.armed || this.config.armTime === undefined) {return;}
     this.armedFxDone = true;
     this.ribbons.push(RibbonTrail.acquire(this.scene, {
       color: 0xffbb33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
@@ -407,7 +407,7 @@ export class Projectile {
   // GL/flak shells always bounce; a mortar only bounces while unarmed —
   // once armed it's impact-fused like any other shell.
   get canBounce(): boolean {
-    return !!this.config.bounces && (this.config.armTime === undefined || !this.armed);
+    return Boolean(this.config.bounces) && (this.config.armTime === undefined || !this.armed);
   }
 
   // Contact point along this frame's sweep + its parametric position
@@ -437,7 +437,7 @@ export class Projectile {
   }
 
   removeProjectileMesh(): void {
-    if (this.projectileRemoved) return;
+    if (this.projectileRemoved) {return;}
     releaseProjectileInstance(this.mesh);
     // mat/glowMat are cache-shared — never dispose
     if (this.glowMesh) {
@@ -455,20 +455,20 @@ export class Projectile {
   }
 
   explode(): void {
-    if (this.exploded) return;
+    if (this.exploded) {return;}
     this.exploded = true;
-    for (const r of this.ribbons) r.stop();
+    for (const r of this.ribbons) {r.stop();}
     // Embed-capable shells plant on world hits — no target, a swept
     // contact point to sit at. Fuse pops in mid-air still vanish normally.
-    if (this.glue.tryEmbed()) return;
+    if (this.glue.tryEmbed()) {return;}
     this.removeProjectileMesh();
   }
 
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {return;}
     this.removeProjectileMesh();
     this.driver.release();
-    for (const r of this.ribbons) r.dispose();
+    for (const r of this.ribbons) {r.dispose();}
     this.trail.dispose();
     this.disposed = true;
     // Mark dead so a mass-dispose (demo teardown) can't leave a live object

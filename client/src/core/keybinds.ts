@@ -47,7 +47,7 @@ function parseSaved(raw: string): Partial<Record<BindAction, string>> {
     const [k, v] = pair.split('=');
     // spectate=V predates VGS taking V — drop the stale save so it falls
     // through to the new default instead of colliding with the menu.
-    if (k && v && k in DEFAULTS && !(k === 'spectate' && v === 'KeyV')) out[k as BindAction] = v;
+    if (k && v && k in DEFAULTS && !(k === 'spectate' && v === 'KeyV')) {out[k as BindAction] = v;}
   }
   return out;
 }
@@ -63,15 +63,15 @@ export function codeFor(action: BindAction): string {
  *  reports two codes. */
 export function matchCode(action: BindAction, code: string): boolean {
   const b = binds[action];
-  if (code === b) return true;
-  if (b === 'ShiftLeft' && code === 'ShiftRight') return true;
-  if (b === 'ShiftRight' && code === 'ShiftLeft') return true;
+  if (code === b) {return true;}
+  if (b === 'ShiftLeft' && code === 'ShiftRight') {return true;}
+  if (b === 'ShiftRight' && code === 'ShiftLeft') {return true;}
   return false;
 }
 
 export function isDown(keys: Record<string, boolean>, action: BindAction): boolean {
   const b = binds[action];
-  return !!(keys[b] || (b === 'ShiftLeft' && keys['ShiftRight']) || (b === 'ShiftRight' && keys['ShiftLeft']));
+  return Boolean(keys[b] || (b === 'ShiftLeft' && keys['ShiftRight']) || (b === 'ShiftRight' && keys['ShiftLeft']));
 }
 
 /** Rebind an action. If the code was bound elsewhere the actions swap —
@@ -107,10 +107,10 @@ const KEY_NAMES: Record<string, string> = {
 };
 
 export function codeLabel(code: string): string {
-  if (KEY_NAMES[code]) return KEY_NAMES[code];
-  if (code.startsWith('Key')) return code.slice(3);
-  if (code.startsWith('Digit')) return code.slice(5);
-  if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+  if (KEY_NAMES[code]) {return KEY_NAMES[code];}
+  if (code.startsWith('Key')) {return code.slice(3);}
+  if (code.startsWith('Digit')) {return code.slice(5);}
+  if (code.startsWith('Numpad')) {return `NUM ${code.slice(6)}`;}
   return code.replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase();
 }
 

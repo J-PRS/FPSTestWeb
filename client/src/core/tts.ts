@@ -34,7 +34,7 @@ function samFor(who?: string): SamJs {
   let idx = 0;
   if (who) {
     let h = 0;
-    for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) | 0;
+    for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}
     idx = Math.abs(h) % VOICES.length;
   }
   let s = samCache.get(idx);
@@ -43,8 +43,8 @@ function samFor(who?: string): SamJs {
 }
 
 function speakSystem(text: string, pitch = 0.85): void {
-  if (typeof speechSynthesis === 'undefined') return;
-  if (speechSynthesis.pending || speechSynthesis.speaking) speechSynthesis.cancel();
+  if (typeof speechSynthesis === 'undefined') {return;}
+  if (speechSynthesis.pending || speechSynthesis.speaking) {speechSynthesis.cancel();}
   const u = new SpeechSynthesisUtterance(text.replace(/!/g, ''));
   u.rate = 1.05;
   u.pitch = pitch;
@@ -56,7 +56,7 @@ function speakSystem(text: string, pitch = 0.85): void {
 export function speakVgs(text: string, who?: string): void {
   const bus = audio.uiBus;
   const ctx = bus?.context;
-  if (!bus || !ctx) return;
+  if (!bus || !ctx) {return;}
   let pcm: unknown; // sam-js returns Float32Array | Boolean
   try {
     pcm = samFor(who).buf32(text);
@@ -77,7 +77,7 @@ export function speakVgs(text: string, who?: string): void {
  *  Pitch jitters per speaker so voices differ by who typed. */
 export function speakChat(text: string, who?: string): void {
   let h = 0;
-  if (who) for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) | 0;
+  if (who) {for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) | 0;}
   speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
 }
 
@@ -146,11 +146,11 @@ let _squelch: AudioBuffer | null = null;
 
 /** Tiny white-noise pip, highpassed — press-to-talk squelch. */
 function squelchBuf(ctx: BaseAudioContext): AudioBuffer {
-  if (_squelch) return _squelch;
+  if (_squelch) {return _squelch;}
   const n = Math.floor(ctx.sampleRate * 0.035);
   const b = ctx.createBuffer(1, n, ctx.sampleRate);
   const d = b.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  for (let i = 0; i < n; i++) {d[i] = (Math.random() * 2 - 1) * (1 - i / n);}
   _squelch = b;
   return b;
 }

@@ -29,7 +29,7 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
   function close(): void {
     host.classList.remove('open');
     // A capture live at menu close would eat the next gameplay input.
-    if (isCapturing()) cancelCapture();
+    if (isCapturing()) {cancelCapture();}
   }
 
   function refresh(): void {
@@ -47,24 +47,24 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
     const label = document.createElement('span');
     label.className = 'keys-label';
     label.textContent = d.label;
-    row.appendChild(label);
+    row.append(label);
     const chip = document.createElement('button');
     chip.className = 'keys-chip';
     chip.textContent = codeLabel(codeFor(d.action));
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (chip.classList.contains('capturing')) return;
+      if (chip.classList.contains('capturing')) {return;}
       chip.classList.add('capturing');
       chip.textContent = '···';
       captureNextInput((code) => {
         chip.classList.remove('capturing');
-        if (code) rebind(d.action, code);
+        if (code) {rebind(d.action, code);}
         refresh();
       });
     });
     chips.set(d.action, chip);
-    row.appendChild(chip);
-    grid.appendChild(row);
+    row.append(chip);
+    grid.append(row);
   }
 
   host.querySelector<HTMLElement>('.keys-close')!.addEventListener('click', (e) => {
@@ -74,7 +74,7 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
   // Click on the dim backdrop closes; clicks inside the box don't reach it
   // (overlay's own click handler only fires on e.target === overlay anyway).
   host.addEventListener('click', (e) => {
-    if (e.target === host) close();
+    if (e.target === host) {close();}
   });
   // Esc closes the popup — but not while a capture is live (Esc there means
   // "cancel the rebind" and is already consumed by the capture listener).

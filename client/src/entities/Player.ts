@@ -170,7 +170,7 @@ export class Player {
   // resolved in combat.melee() as a cone + small AOE claim.
   private meleeCooldown = 0.0;
   tryMelee(): void {
-    if (this.meleeCooldown > 0) return;
+    if (this.meleeCooldown > 0) {return;}
     this.meleeCooldown = MELEE_COOLDOWN;
     const dir = this.getAimDir();
     this.vel.addScaledVector(dir, MELEE_LUNGE);
@@ -354,7 +354,7 @@ export class Player {
       this.model.setVisible(false);
       // A cloak running before the GLB arrived never got its ghost —
       // capture it now or the TP body renders opaque while invisible.
-      if (this.status.cloaked) this.model.setGhost(true);
+      if (this.status.cloaked) {this.model.setGhost(true);}
       // Collider gizmo stays armed — the update loop refreshes it so the
       // menu DEBUG toggle shows/hides it like every other remote.
       this.model.setColliderVisible(true);
@@ -371,7 +371,7 @@ export class Player {
   update(dt: number): void {
     // Dying while spectating: death owns the cam now â€” drop the flag so
     // respawn doesn't leave the player stuck flying
-    if (this.isDead) this.status.setCloaked(false); // corpse can't stay hidden
+    if (this.isDead) {this.status.setCloaked(false);} // corpse can't stay hidden
     if (this.status.spectating && this.isDead) {
       this.status.spectating = false;
       this.onSpectate?.(false);
@@ -389,7 +389,7 @@ export class Player {
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
         forward: obInput.forward, right: obInput.right, jumpHeld: obInput.skiHeld,
-        shiftDown: !!(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
+        shiftDown: Boolean(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
       });
       return;
     }
@@ -401,7 +401,7 @@ export class Player {
 
     this.tickTimers(dt);
 
-    if (this.skills.updateBlink(dt)) return;
+    if (this.skills.updateBlink(dt)) {return;}
 
     const input = this.readMoveInput();
     this.stepMovement(dt, input);
@@ -423,7 +423,7 @@ export class Player {
     // flight â€” your corpse shouldn't fly with you). Debug and the middle-
     // mouse orbit cam render the body (+collider under debug) in first
     // person so the mesh can be eyeballed against the capsule.
-    const dbg = !!urlParams.debug;
+    const dbg = Boolean(urlParams.debug);
     this.model?.setVisible((this.thirdPerson || orbiting || dbg) && !this.isDead);
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
@@ -494,7 +494,7 @@ export class Player {
   // Tribes-style tank: drains while burning, recharges only when off the
   // jet; cloak/shield/mend compete for the same tank, never fill it.
   private tickEnergy(dt: number): boolean {
-    if (this.jetLockT > 0) this.jetLockT -= dt;
+    if (this.jetLockT > 0) {this.jetLockT -= dt;}
     const isJetting = this.input.jetPending && this.energy > 0 && this.jetLockT <= 0;
     this.jetting = isJetting;
     if (isJetting) {
@@ -505,7 +505,7 @@ export class Player {
       this.energy = Math.min(this.energyCap, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
-    if (this.energy <= 0) this.jetLockT = ENERGY.jetLockout;
+    if (this.energy <= 0) {this.jetLockT = ENERGY.jetLockout;}
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
     // tick it here so the perk works without a connection.
@@ -562,7 +562,7 @@ export class Player {
   applyPull(to: THREE.Vector3, force: number): void { imp.applyPull(this, to, force); }
 
   getSpeed(): number {
-    return Math.sqrt(this.vel.x * this.vel.x + this.vel.z * this.vel.z);
+    return Math.hypot(this.vel.x, this.vel.z);
   }
 
   getCameraDir(): THREE.Vector3 {

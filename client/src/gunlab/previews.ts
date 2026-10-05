@@ -56,7 +56,7 @@ const LAB_TERRAIN = {
 } as unknown as Terrain;
 
 function ensureSwarms(): void {
-  if (swarmsReady) return;
+  if (swarmsReady) {return;}
   // The full live registry, shrunk to single-specimen buffers — a new
   // species shows up in the lab the moment it's registered, no lab edit.
   const labSpecs = Object.fromEntries(

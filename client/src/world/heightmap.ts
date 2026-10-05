@@ -36,7 +36,7 @@ function cellMax(cx: number, cz: number, texel: number): number {
     const row = (z * hmSize + cx * texel) * 4;
     for (let x = cx * texel; x < xEnd; x++) {
       const v = hmData![row + (x - cx * texel) * 4];
-      if (v > m) m = v;
+      if (v > m) {m = v;}
     }
   }
   return m;
@@ -44,7 +44,7 @@ function cellMax(cx: number, cz: number, texel: number): number {
 
 function buildMaxGrid(): void {
   maxGrid.fill(0);
-  if (!hmData || !hmSize) return;
+  if (!hmData || !hmSize) {return;}
   const texel = Math.max(1, Math.floor(hmSize / MAXGRID));
   for (let cz = 0; cz < MAXGRID; cz++) {
     for (let cx = 0; cx < MAXGRID; cx++) {
@@ -57,7 +57,7 @@ function buildMaxGrid(): void {
  *  (world coords, wrapped like sampleHeight). Returns 0 before data loads —
  *  callers must treat 0 as "unknown", not "flat". */
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
-  if (!hmData || !hmSize) return 0;
+  if (!hmData || !hmSize) {return 0;}
   const toCell = (w: number) => {
     const u = (((w / hmWorldScale) % 1.0) + 1.0) % 1.0;
     return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
@@ -78,7 +78,7 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
     const row = z * MAXGRID;
     for (let ix = 0; ix < nx; ix++) {
       const v = maxGrid[row + (xa + ix) % MAXGRID];
-      if (v > m) m = v;
+      if (v > m) {m = v;}
     }
   }
   return (m / TERRAIN_HEIGHTMAP_DIVISOR) * HSCALE * hmScale;
@@ -89,7 +89,7 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
  *  BallSim/RoomMoveSim parse, so client prediction and server truth sample
  *  the identical field. */
 export function setHeightScale(mult: number): void {
-  if (mult === hmScale) return;
+  if (mult === hmScale) {return;}
   hmScale = mult;
   _hvc.clear(); // visual cache holds scaled world heights — stale otherwise
 }
@@ -99,7 +99,7 @@ export function getHeightScale(): number {
 }
 
 export function setWorldScale(meters: number): void {
-  if (meters === hmWorldScale) return;
+  if (meters === hmWorldScale) {return;}
   hmWorldScale = meters;
   _hvc.clear();
 }
@@ -183,7 +183,7 @@ function sampleHeightmap(wx: number, wz: number): number {
 // clamps: a wrong clamp reads as sim divergence → corrections. The
 // bilinear itself is ~20 ops; the callers' sweep budgets are the lever.
 export function sampleHeight(wx: number, wz: number): number {
-  if (hmData) return sampleHeightmap(wx, wz);
+  if (hmData) {return sampleHeightmap(wx, wz);}
   return 0;
 }
 
@@ -195,7 +195,7 @@ export function sampleHeightVisual(wx: number, wz: number): number {
   const k = (wx | 0) * 131072 + (wz | 0);
   let v = _hvc.get(k);
   if (v === undefined) {
-    if (_hvc.size > 2048) _hvc.clear();
+    if (_hvc.size > 2048) {_hvc.clear();}
     v = sampleHeight(wx, wz);
     _hvc.set(k, v);
   }

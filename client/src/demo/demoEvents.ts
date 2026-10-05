@@ -11,14 +11,14 @@ function checkEventRate(b: DemoRecorder): boolean {
       b.eventCountThisSecond = 0;
       b.lastEventResetTime = b.elapsedTime;
     }
-    if (b.eventCountThisSecond >= MAX_EVENTS_PER_SEC) return false;
+    if (b.eventCountThisSecond >= MAX_EVENTS_PER_SEC) {return false;}
     b.eventCountThisSecond++;
     return true;
   }
 
   // IProjectileEventRecorder
 export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, weaponType: number): number {
-    if (!b.recording || !checkEventRate(b)) return 0;
+    if (!b.recording || !checkEventRate(b)) {return 0;}
     const id = b.nextProjectileId;
     b.nextProjectileId = (b.nextProjectileId % 65535) + 1;
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
@@ -36,7 +36,7 @@ export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, wea
 
 export function recordBounce(b: DemoRecorder, projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
     // 0 = recordFired's rate-limit/not-recording sentinel — no live projectile
-    if (projectileId === 0 || !b.recording || !checkEventRate(b)) return;
+    if (projectileId === 0 || !b.recording || !checkEventRate(b)) {return;}
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Bounce;
     e.timestamp = b.elapsedTime;
@@ -50,7 +50,7 @@ export function recordBounce(b: DemoRecorder, projectileId: number, position: Ve
   }
 
 export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3, targetId: number, weaponType: number): void {
-    if (projectileId === 0 || !b.recording || !checkEventRate(b)) return;
+    if (projectileId === 0 || !b.recording || !checkEventRate(b)) {return;}
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Hit;
     e.timestamp = b.elapsedTime;
@@ -66,7 +66,7 @@ export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3,
   }
 
 export function recordDestroyed(b: DemoRecorder, projectileId: number, position: Vec3): void {
-    if (projectileId === 0 || !b.recording || !checkEventRate(b)) return;
+    if (projectileId === 0 || !b.recording || !checkEventRate(b)) {return;}
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Destroyed;
     e.timestamp = b.elapsedTime;
@@ -81,7 +81,7 @@ export function recordDestroyed(b: DemoRecorder, projectileId: number, position:
 
   // ITargetEventRecorder
 export function recordTargetSpawned(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) return;
+    if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.Spawned;
     e.timestamp = b.elapsedTime;
@@ -94,7 +94,7 @@ export function recordTargetSpawned(b: DemoRecorder, targetId: number, position:
   }
 
 export function recordTargetBounce(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) return;
+    if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.Bounce;
     e.timestamp = b.elapsedTime;
@@ -107,7 +107,7 @@ export function recordTargetBounce(b: DemoRecorder, targetId: number, position: 
   }
 
 export function recordTargetPeak(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) return;
+    if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.StateChanged;
     e.timestamp = b.elapsedTime;
@@ -120,7 +120,7 @@ export function recordTargetPeak(b: DemoRecorder, targetId: number, position: Ve
   }
 
 export function recordTargetHit(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
-    if (!b.recording || !checkEventRate(b)) return;
+    if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.Hit;
     e.timestamp = b.elapsedTime;
@@ -133,7 +133,7 @@ export function recordTargetHit(b: DemoRecorder, targetId: number, position: Vec
   }
 
 export function recordTargetDestroyed(b: DemoRecorder, targetId: number, position: Vec3, targetType: number, health: number = 0): void {
-    if (!b.recording || !checkEventRate(b)) return;
+    if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.Destroyed;
     e.timestamp = b.elapsedTime;

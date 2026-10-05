@@ -73,7 +73,7 @@ export function spawnBall(o: BallOpts, world: LabWorld): SimEntity & { sim: SimB
   const b = makeSimBall(o.id, o.variant ?? 0, o.id % 4,
     { x: o.pos.x, y: o.pos.y, z: o.pos.z },
     o.vel ?? { x: 0, y: 0, z: 0 });
-  if (o.enraged) b.enraged = true;
+  if (o.enraged) {b.enraged = true;}
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(b.radius, 16, 16),
     new THREE.MeshBasicMaterial({ color: BALL_LAB_COLORS[o.id % BALL_LAB_COLORS.length], wireframe: b.enraged }),
@@ -84,11 +84,11 @@ export function spawnBall(o: BallOpts, world: LabWorld): SimEntity & { sim: SimB
   return {
     sim: b, mesh,
     tick(dt, w) {
-      if (b.dead) return;
+      if (b.dead) {return;}
       const sp = Math.hypot(b.vx, b.vy, b.vz);
       if (sp > BALL_OVERSPEED) { const k = BALL_OVERSPEED / sp; b.vx *= k; b.vy *= k; b.vz *= k; }
       const seg = stepBall(b, dt, w.field, w.target, true, { rand });
-      if (seg) o.onSegment?.(seg);
+      if (seg) {o.onSegment?.(seg);}
     },
     sync() { mesh.position.set(b.x, b.y, b.z); },
     dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
@@ -118,7 +118,7 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
     tick(dt, w) {
       commitTarget(c, 'prey', w.target);
       const ev = stepCrawler(c, dt, w.field, w.target, true);
-      if (ev) o.onEvent?.(ev);
+      if (ev) {o.onEvent?.(ev);}
     },
     sync() {
       mesh.position.set(c.x, c.y + 0.8, c.z);
@@ -161,7 +161,7 @@ export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: Si
     tick(dt, w) {
       commitTarget(f, 'prey', w.target);
       const ev = stepFlyer(f, dt, w.field, w.target, true);
-      if (ev) o.onEvent?.(ev);
+      if (ev) {o.onEvent?.(ev);}
     },
     sync() {
       pivot.position.set(f.x, f.y, f.z);
@@ -211,7 +211,7 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
   const self: SimEntity & { sim: SimProjectile; done: boolean } = {
     sim: p, mesh, done: false,
     tick(dt, w) {
-      if (self.done) return;
+      if (self.done) {return;}
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
       let hit = segFieldHit(from, p.pos, w.field);
       if (!hit && o.walls?.some(wall =>
@@ -227,7 +227,7 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
     sync() {
       mesh.position.set(p.pos.x, p.pos.y, p.pos.z);
       history.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
-      if (history.length > BOLT_TRAIL_PTS) history.shift();
+      if (history.length > BOLT_TRAIL_PTS) {history.shift();}
       history.forEach((h, i) => { trailPos[i * 3] = h.x; trailPos[i * 3 + 1] = h.y; trailPos[i * 3 + 2] = h.z; });
       trailGeo.attributes.position!.needsUpdate = true;
       trailGeo.setDrawRange(0, history.length);
@@ -253,7 +253,7 @@ function groundSimSpawn<T extends { x: number; y: number; z: number; yaw: number
   const base = sim.health;
   return {
     sim, mesh,
-    tick(dt, w) { const ev = step(sim, dt, w); if (ev) onEvent?.(ev); },
+    tick(dt, w) { const ev = step(sim, dt, w); if (ev) {onEvent?.(ev);} },
     sync() {
       mesh.position.set(sim.x, sim.y + mesh.scale.y, sim.z);
       mesh.rotation.y = -sim.yaw;
@@ -319,7 +319,7 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
     tick(dt, w) {
       commitTarget(c, 'prey', w.target);
       const ev = stepTotem(c, dt, w.field, w.target, true);
-      if (ev) { o.onEvent?.(ev); if (ev === 'fire') flash = 0.35; }
+      if (ev) { o.onEvent?.(ev); if (ev === 'fire') {flash = 0.35;} }
       flash = Math.max(0, flash - dt);
     },
     sync() {
@@ -378,11 +378,11 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
   let exploded = false;
 
   const impactCheck = (from: { x: number; y: number; z: number }, w: LabWorld): { hit: boolean; direct: boolean } => {
-    if (o.hitTest?.(from, p.pos)) return { hit: true, direct: true };
+    if (o.hitTest?.(from, p.pos)) {return { hit: true, direct: true };}
     const ground = segFieldHit(from, p.pos, w.field);
-    if (ground) pos.set(ground.x, ground.y, ground.z);
-    const hit = !!ground || !!o.walls?.some(wall =>
-      (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at))
+    if (ground) {pos.set(ground.x, ground.y, ground.z);}
+    const hit = Boolean(ground) || Boolean(o.walls?.some(wall =>
+      (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at)))
       || p.age > (o.maxAge ?? config.maxLifetime ?? 30);
     return { hit, direct: false };
   };
@@ -390,7 +390,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
   const self = {
     sim: p, mesh: built.mesh, done: false as boolean,
     detonate(directHit = false) {
-      if (exploded) return;
+      if (exploded) {return;}
       exploded = true;
       releaseProjectileInstance(built.mesh);
       releaseProjectileInstance(built.glowMesh);
@@ -401,7 +401,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
       o.onDone?.({ x: pos.x, y: pos.y, z: pos.z }, directHit);
     },
     tick(dt: number, w: LabWorld) {
-      if (self.done) return;
+      if (self.done) {return;}
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
       pos.set(p.pos.x, p.pos.y, p.pos.z);
       vel.set(p.vel.x, p.vel.y, p.vel.z);
@@ -410,23 +410,23 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
         updateProjectileMesh(built.mesh, built.glowMesh, pos, vel, config, p.age,
           hitRadiusAt(o.weaponType, p.age), tumble, dt);
         const impact = impactCheck(from, w);
-        if (impact.hit) self.detonate(impact.direct);
+        if (impact.hit) {self.detonate(impact.direct);}
       }
-      for (const r of built.ribbons) r.update(dt);
+      for (const r of built.ribbons) {r.update(dt);}
       // Death waits on the visuals: an exploded shell stays until its
       // trail is empty and every ribbon has faded — same rule Projectile
       // uses, so streaks don't cut mid-fade.
-      if (exploded && trail.empty && built.ribbons.every(r => r.done)) self.done = true;
+      if (exploded && trail.empty && built.ribbons.every(r => r.done)) {self.done = true;}
     },
     sync() {
       if (!exploded) {
         syncProjectileInstance(built.mesh);
-        if (built.glowMesh) syncProjectileInstance(built.glowMesh);
+        if (built.glowMesh) {syncProjectileInstance(built.glowMesh);}
       }
     },
     dispose() {
       trail.dispose();
-      for (const r of built.ribbons) r.dispose();
+      for (const r of built.ribbons) {r.dispose();}
       releaseProjectileInstance(built.mesh);
       releaseProjectileInstance(built.glowMesh);
     },

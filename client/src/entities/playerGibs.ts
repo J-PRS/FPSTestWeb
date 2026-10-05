@@ -15,12 +15,12 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
   const out: GibPart[] = [];
   model.traverse((o) => {
     const sk = o as THREE.SkinnedMesh;
-    if (!sk.isSkinnedMesh) return;
+    if (!sk.isSkinnedMesh) {return;}
     const geo = sk.geometry;
     const sIdx = geo.getAttribute('skinIndex');
     const sWt = geo.getAttribute('skinWeight');
     const pos = geo.getAttribute('position');
-    if (!pos || !sIdx || !sWt) return;
+    if (!pos || !sIdx || !sWt) {return;}
     const index = geo.index;
     const triCount = Math.floor((index ? index.count : pos.count) / 3);
     const domBone = (v: number): number => {
@@ -41,7 +41,7 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
       arr.push(a, b, c);
     }
     for (const [bi, indices] of buckets) {
-      if (!sk.skeleton.bones[bi] || indices.length < 9) continue; // a triangle or two isn't a part
+      if (!sk.skeleton.bones[bi] || indices.length < 9) {continue;} // a triangle or two isn't a part
       out.push({ mesh: sk, indices });
     }
   });

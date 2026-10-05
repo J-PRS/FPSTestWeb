@@ -15,12 +15,12 @@ export function getRightXZ(p: Player): THREE.Vector2 {
 export function getInputState(p: Player): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; beltHeld: boolean } {
     const keys = p.input.keys;
     let forward = 0, right = 0;
-    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
-    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
-    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
-    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
+    if (isDown(keys, 'forward') || keys['ArrowUp'])    {forward += 1;}
+    if (isDown(keys, 'back') || keys['ArrowDown'])     {forward -= 1;}
+    if (isDown(keys, 'left') || keys['ArrowLeft'])     {right -= 1;}
+    if (isDown(keys, 'right') || keys['ArrowRight'])   {right += 1;}
 
-    const mlen = Math.sqrt(forward * forward + right * right);
+    const mlen = Math.hypot(forward, right);
     if (mlen > 0) { forward /= mlen; right /= mlen; }
 
     return {
@@ -41,13 +41,13 @@ export function readMoveInput(p: Player): { forward: number; right: number; jump
     const keys = p.input.keys;
 
     let forward = 0, right = 0;
-    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
-    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
-    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
-    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
+    if (isDown(keys, 'forward') || keys['ArrowUp'])    {forward += 1;}
+    if (isDown(keys, 'back') || keys['ArrowDown'])     {forward -= 1;}
+    if (isDown(keys, 'left') || keys['ArrowLeft'])     {right -= 1;}
+    if (isDown(keys, 'right') || keys['ArrowRight'])   {right += 1;}
 
     // Normalize input
-    const mlen = Math.sqrt(forward * forward + right * right);
+    const mlen = Math.hypot(forward, right);
     if (mlen > 0) { forward /= mlen; right /= mlen; }
 
     return {

@@ -90,28 +90,28 @@ export class ProjCollide {
     // passThroughTargets shells (MRV carrier) phase through bodies — a
     // contact pop would turn a timed airburst into a fast mortar. Bolts
     // and fields still intercept: shooting it down stays counterplay.
-    if (h.config.passThroughTargets) return this.checkObstacles(obstacles);
+    if (h.config.passThroughTargets) {return this.checkObstacles(obstacles);}
     // Unarmed shells (mortar pre-armTime) phase through bodies — a
     // point-blank pop is exactly what the arming fuse exists to deny.
     // (GL excepted: bodiesLive=0 — it pops bodies while still bouncing
     // off dirt.) Bolts and shield domes still intercept: shooting it
     // down is counterplay, and a dome shouldn't let a dud inside.
-    if (!h.bodiesLive) return this.checkObstacles(obstacles);
+    if (!h.bodiesLive) {return this.checkObstacles(obstacles);}
     return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers, playerClasses);
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
     const h = this.h;
-    if (!obstacles) return false;
+    if (!obstacles) {return false;}
     let best: SweepObstacle | null = null, bestT = Infinity;
     for (const o of obstacles) {
       // Filtered obstacles (shield domes) decide per-shell; unfiltered
       // ones (turret bolts) never intercept hitscan slugs — the guard
       // moved per-obstacle so a field still eats those.
-      if (o.blocks ? !o.blocks(h as never) : h.config.noExplosion) continue;
+      if (o.blocks ? !o.blocks(h as never) : h.config.noExplosion) {continue;}
       if (sweepObstacle(h, o) && h.hitT < bestT) { best = o; bestT = h.hitT; }
     }
-    if (!best) return false;
+    if (!best) {return false;}
     // Re-run the winning sweep so hitPoint/hitT describe ITS contact, not
     // a later bolt's — hitAt was overwritten by each tested obstacle.
     sweepObstacle(h, best);
@@ -151,11 +151,11 @@ export class ProjCollide {
     // pre-arm) shells bleed off the normal component and slide until the
     // fuse arms them — the T2 mortar bounces off dirt before it can pop.
     if (vn >= -2) {
-      if (h.armed) return false;
+      if (h.armed) {return false;}
       h.vel.addScaledVector(_tNormal, -vn);
       h.pos.copy(h.hitPoint).addScaledVector(_tNormal, depenetrate);
       h.prevPos.copy(h.pos);
-      if (h.config.bounceSfx) sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);
+      if (h.config.bounceSfx) {sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);}
       return true;
     }
     h.vel.addScaledVector(_tNormal, -(1 + (h.config.bounceRestitution ?? 0.5)) * vn);
@@ -175,9 +175,9 @@ export class ProjCollide {
 
   private checkBalls(balls?: Targetable[]): boolean {
     const h = this.h;
-    if (!balls) return false;
+    if (!balls) {return false;}
     for (const ball of balls) {
-      if (ball.dead) continue;
+      if (ball.dead) {continue;}
       if (sweepBall(h, ball)) {
         this.recordHit(h.minHitDist - ball.radius);
         h.hitBall = ball;
@@ -209,7 +209,7 @@ export class ProjCollide {
         return true;
       }
     }
-    if (!remotePlayers) return false;
+    if (!remotePlayers) {return false;}
     for (const [playerId, playerPos] of remotePlayers) {
       if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
         this.recordHit(h.minHitDist - classCapsule(playerClasses?.get(playerId)).radius);
@@ -232,6 +232,6 @@ export class ProjCollide {
     const dx = h.hitX - h.shotOrigin.x;
     const dy = h.hitY - h.shotOrigin.y;
     const dz = h.hitZ - h.shotOrigin.z;
-    h.hitDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    h.hitDistance = Math.hypot(dx, dy, dz);
   }
 }

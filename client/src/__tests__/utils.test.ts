@@ -10,7 +10,7 @@ describe('poissonDisc', () => {
     for (const n of [1, 4, 12, 32]) {
       const pts = poissonDisc(n);
       expect(pts.length).toBe(n);
-      for (const p of pts) expect(p.x * p.x + p.y * p.y).toBeLessThanOrEqual(1 + 1e-9);
+      for (const p of pts) {expect(p.x * p.x + p.y * p.y).toBeLessThanOrEqual(1 + 1e-9);}
     }
   });
 

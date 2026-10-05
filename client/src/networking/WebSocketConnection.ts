@@ -95,7 +95,7 @@ export class WebSocketConnection {
               && now - e.at > WebSocketConnection.STALE_MS) { stale++; continue; }
           this.send(e.data);
         }
-        if (stale > 0) logger.info(`reconnect flush dropped ${stale} stale queued message(s)`);
+        if (stale > 0) {logger.info(`reconnect flush dropped ${stale} stale queued message(s)`);}
       });
 
       this.ws.addEventListener('close', (event) => {
@@ -106,7 +106,7 @@ export class WebSocketConnection {
           this.config.onDisconnect(event.code, event.reason);
         }
 
-        if (this.closedIntentionally) return;
+        if (this.closedIntentionally) {return;}
 
         // Attempt reconnection
         // ?? not || — an explicit 0 means "never reconnect", not "five tries"
@@ -184,7 +184,7 @@ export class WebSocketConnection {
   }
 
   private handleBinaryMessage(data: ArrayBuffer): void {
-    logger.debug('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
+    logger.debug('Received binary message, onBinaryMessage:', Boolean(this.config.onBinaryMessage));
     if (this.config.onBinaryMessage) {
       try {
         this.config.onBinaryMessage(new Uint8Array(data));

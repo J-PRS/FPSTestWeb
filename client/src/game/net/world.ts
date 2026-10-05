@@ -119,10 +119,10 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
-    if (map.terrain || map.heightScale || map.tileSize) void applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);
+    if (map.terrain || map.heightScale || map.tileSize) applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);
     applyMapFog(ctx, map.fog);
-    void applyInteriors(ctx, map.interiors);
-    void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
+    applyInteriors(ctx, map.interiors);
+    resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
     if (!map.silent) chat.add(null, 'map updated by admin');
   };
 
@@ -160,7 +160,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   applyMapSnapshot(ctx, roomInfo.map);
   // Remember this room's map — F5 boots straight into it while the
   // socket round-trips instead of flashing the default field.
-  void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map));
+  resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map));
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
   // An empty/absent list on a room hop must also clear the old room's
   // banners and HUD chips, so fire it either way.
@@ -231,8 +231,8 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   }
   setAmbientCaps(map?.ambient);
   applyMapFog(ctx, map?.fog);
-  void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize);
-  void applyInteriors(ctx, map?.interiors)
+  applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize);
+  applyInteriors(ctx, map?.interiors)
     .catch((e) => ctx.deps.logger.warn(`applyInteriors failed: ${e instanceof Error ? e.message : String(e)}`));
 }
 

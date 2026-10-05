@@ -14,6 +14,6 @@ export function watchDeployVersion(): void {
       if (v !== baseline) location.reload();
     } catch { /* offline/transient — try again next tick */ }
   };
-  void poll();
+  poll();
   setInterval(poll, 60000);
 }

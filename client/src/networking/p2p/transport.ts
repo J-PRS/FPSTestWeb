@@ -34,7 +34,7 @@ export class LoopbackTransport implements GameTransport {
   }
 
   send(data: string | Uint8Array): boolean {
-    if (!this.open) return false;
+    if (!this.open) {return false;}
     this.host.onData(this.link, data);
     return true;
   }
@@ -79,9 +79,9 @@ export class DataChannelTransport implements GameTransport {
   }
 
   send(data: string | Uint8Array): boolean {
-    if (!this.open || this.dc.readyState !== 'open') return false;
-    if (typeof data === 'string') this.dc.send(data);
-    else this.dc.send(new Uint8Array(data));
+    if (!this.open || this.dc.readyState !== 'open') {return false;}
+    if (typeof data === 'string') {this.dc.send(data);}
+    else {this.dc.send(new Uint8Array(data));}
     return true;
   }
 

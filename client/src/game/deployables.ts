@@ -171,10 +171,10 @@ export class Deployables {
   deploy(): void {
     const p = this.deps.lazyPlayer();
     const def = this.selDef;
-    if (p.throwLockT > 0) return; // mid-throw — the gun hand is busy
+    if (p.throwLockT > 0) {return;} // mid-throw — the gun hand is busy
     // Pack gear pays from the belt pool — the server bills handleDeploy
     // the same DEPLOY_COST when the pod seats.
-    if (p.beltCharges < DEPLOY_COST) return;
+    if (p.beltCharges < DEPLOY_COST) {return;}
     // Belt-throw ceremony: weapon lowers, pod releases at THROW_RELEASE.
     p.throwLockT = THROW_TOTAL;
     this.deps.lazyViewModel?.()?.startThrow();
@@ -187,7 +187,7 @@ export class Deployables {
     // Aim captured at release, not at keypress — the wind-up is long
     // enough to swing the throw across the sky.
     setTimeout(() => {
-      if (p.isDead) return; // corpse doesn't release the wind-up
+      if (p.isDead) {return;} // corpse doesn't release the wind-up
       const dir = new THREE.Vector3(
         Math.cos(p.pitch) * Math.sin(p.yaw),
         Math.sin(p.pitch),
@@ -208,10 +208,10 @@ export class Deployables {
     };
     // The item is constructed at release — it flies folded and finishes
     // unfolding mid-air, so touchdown lands a full-size sentry/dome.
-    if (kind === 'turret') pod.turret = new DeployTurret(this.deps.scene, terrain, pos);
-    else if (kind === 'station') pod.station = new DeployStation(this.deps.scene, terrain, pos);
-    else if (kind === 'drone') pod.drone = new DeployDrone(this.deps.scene, terrain, pos);
-    else if (kind === 'shield') pod.shield = new DeployShield(this.deps.scene, terrain, pos);
+    if (kind === 'turret') {pod.turret = new DeployTurret(this.deps.scene, terrain, pos);}
+    else if (kind === 'station') {pod.station = new DeployStation(this.deps.scene, terrain, pos);}
+    else if (kind === 'drone') {pod.drone = new DeployDrone(this.deps.scene, terrain, pos);}
+    else if (kind === 'shield') {pod.shield = new DeployShield(this.deps.scene, terrain, pos);}
     else if (kind === 'nugget') {
       pod.nugget = new THREE.Mesh(NUG_POD_GEO, NUG_POD_MAT);
       pod.nugget.position.copy(pos);
@@ -225,10 +225,10 @@ export class Deployables {
       pod.nugget.add(halo);
       this.deps.scene.add(pod.nugget);
     }
-    else if (kind === 'beacon') pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);
+    else if (kind === 'beacon') {pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);}
     // Server-tracked life: the planted mine lives its wire ttl, not the
     // overlord field's 45s — the server still explodes it either way.
-    else pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);
+    else {pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);}
     this.pods.push(pod);
     sfx.dash();
   }
@@ -364,9 +364,9 @@ export class Deployables {
    *  the player's thrown pod). Per-owner kind caps apply. */
   plantFor(kind: DeployKind, pos: { x: number; y: number; z: number }, owner: DeployOwner): void {
     const def = DEPLOY_DEFS.find(d => d.kind === kind);
-    if (!def) return;
+    if (!def) {return;}
     const live = this.items.filter(i => i.kind === kind && !i.dead && i.owner === owner.id);
-    if (live.length >= def.max) live[0]!.dead = true;
+    if (live.length >= def.max) {live[0]!.dead = true;}
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     if (kind === 'turret') {
@@ -406,16 +406,16 @@ export class Deployables {
   private foesFor(owner?: DeployOwner): Foe[] {
     this._enemies.length = 0;
     for (const c of this.deps.targets) {
-      if (c.dead || c.scoreless) continue;
+      if (c.dead || c.scoreless) {continue;}
       this._enemies.push({ pos: c.pos, vel: c.vel, alive: true });
     }
     if (owner) {
       for (const b of this.deps.botFoes?.(owner.team) ?? []) {
-        if (b.alive) this._enemies.push(b);
+        if (b.alive) {this._enemies.push(b);}
       }
     } else {
       for (const b of this.deps.enemyBots?.() ?? []) {
-        if (b.alive) this._enemies.push(b);
+        if (b.alive) {this._enemies.push(b);}
       }
     }
     return this._enemies;
@@ -454,7 +454,7 @@ export class Deployables {
   repairHit(origin: THREE.Vector3, dir: THREE.Vector3, range: number): { item: Item; t: number } | null {
     let best: Item | null = null;
     let bestT = range;
-    for (const list of [this.items, this.remotes.values()]) for (const i of list) {
+    for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
       if (i.dead) continue;
       _repTo.copy(i.pos).sub(origin);
       _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
@@ -465,7 +465,7 @@ export class Deployables {
       if (perp2 >= r * r) continue;
       const entry = proj - Math.sqrt(r * r - perp2);
       if (entry < bestT) { bestT = Math.max(entry, 0); best = i; }
-    }
+    }}
     return best ? { item: best, t: bestT } : null;
   }
 
@@ -497,8 +497,8 @@ export class Deployables {
     const scan = (list: Iterable<Item>): Item | null => {
       let best: Item | null = null;
       for (const i of list) {
-        if (i.dead || i.v.health >= i.v.maxHealth) continue;
-        if (i.owner !== botId && i.team !== team) continue;
+        if (i.dead || i.v.health >= i.v.maxHealth) {continue;}
+        if (i.owner !== botId && i.team !== team) {continue;}
         const d = Math.hypot(i.pos.x - pos.x, i.pos.z - pos.z);
         if (d < bestD) { bestD = d; best = i; }
       }
@@ -512,11 +512,11 @@ export class Deployables {
    *  the caller can paint the work, null when the item died mid-walk. */
   weld(key: string, n: number): Item | null {
     const find = (list: Iterable<Item>) => {
-      for (const i of list) if (this.keyOf(i) === key && !i.dead) return i;
+      for (const i of list) {if (this.keyOf(i) === key && !i.dead) return i;}
       return null;
     };
     const item = find(this.items) ?? find(this.remotes.values());
-    if (!item) return null;
+    if (!item) {return null;}
     this.healItem(item, n);
     return item;
   }
@@ -574,12 +574,12 @@ export class Deployables {
   private disposeNuggetPod(mesh: THREE.Mesh): void {
     this.deps.scene.remove(mesh);
     for (const c of mesh.children) {
-      if (c instanceof THREE.Sprite) c.material.dispose();
+      if (c instanceof THREE.Sprite) {c.material.dispose();}
     }
   }
 
   private killItem(item: Item): void {
-    if (item.dead) return;
+    if (item.dead) {return;}
     item.dead = true;
     if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
       // Fizzle-pop — smaller than the turret's, still tells you it died.
@@ -610,10 +610,10 @@ export class Deployables {
     const out = this._shieldObs;
     out.length = 0;
     for (const i of this.items) {
-      if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, false));
+      if (!i.dead && i.kind === 'shield') {out.push(this.domeObstacle(i, false));}
     }
     for (const i of this.remotes.values()) {
-      if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, true));
+      if (!i.dead && i.kind === 'shield') {out.push(this.domeObstacle(i, true));}
     }
     return out;
   }
@@ -631,12 +631,12 @@ export class Deployables {
    *  YOUR shells, your dome eats enemy-bot fire. */
   private localShellHostile(i: Item, shooterId: string | null): boolean {
     if (!i.owner) { // the local player's dome — hostile = enemy bots
-      return shooterId != null && !!this.deps.enemyBots?.().some(b => b.playerId === shooterId);
+      return shooterId != null && Boolean(this.deps.enemyBots?.().some(b => b.playerId === shooterId));
     }
     // Bot-owned dome: the bot's foe list names who's hostile; 'local'
     // covers the player's own shells (shooterId null → 'local').
     const shooter = shooterId ?? 'local';
-    return !!this.deps.botFoes?.(i.team ?? '').some(f => f.playerId === shooter);
+    return Boolean(this.deps.botFoes?.(i.team ?? '').some(f => f.playerId === shooter));
   }
 
   /** Remote (server-owned) domes: teammates pass, everyone else eats the
@@ -648,7 +648,7 @@ export class Deployables {
     const shooterTeam = shooterId === null
       ? this.deps.world.localTeam
       : nm.getPlayers().get(shooterId)?.team;
-    if (i.team !== undefined && shooterTeam !== undefined) return shooterTeam !== i.team;
+    if (i.team !== undefined && shooterTeam !== undefined) {return shooterTeam !== i.team;}
     return (shooterId ?? me) !== i.owner;
   }
 
@@ -656,7 +656,7 @@ export class Deployables {
   candidates(): TargetCandidate[] {
     this._candList.length = 0;
     for (const i of this.items) {
-      if (!i.dead) this._candList.push({ id: i.candId, pos: i.pos, vel: this._zeroVel, alive: true });
+      if (!i.dead) {this._candList.push({ id: i.candId, pos: i.pos, vel: this._zeroVel, alive: true });}
     }
     return this._candList;
   }
@@ -664,7 +664,7 @@ export class Deployables {
   get count(): number { return this.items.filter(i => !i.dead).length; }
 
   update(dt: number): void {
-    for (const i of this.items) if (!i.dead) i.update(dt);
+    for (const i of this.items) {if (!i.dead) i.update(dt);}
 
     for (let i = this.pods.length - 1; i >= 0; i--) {
       const pod = this.pods[i]!;
@@ -676,7 +676,7 @@ export class Deployables {
         pod.shield?.dispose(this.deps.scene);
         pod.beacon?.dispose(this.deps.scene);
         pod.mine?.dispose();
-        if (pod.nugget) this.disposeNuggetPod(pod.nugget);
+        if (pod.nugget) {this.disposeNuggetPod(pod.nugget);}
         this.pods.splice(i, 1);
       }
     }
@@ -754,8 +754,8 @@ export class Deployables {
   private reapDeadItems(): void {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const item = this.items[i]!;
-      if (!item.dead) continue;
-      if (item.serverId !== undefined) this.remotes.dropById(item.serverId);
+      if (!item.dead) {continue;}
+      if (item.serverId !== undefined) {this.remotes.dropById(item.serverId);}
       item.dispose();
       this.items.splice(i, 1);
     }

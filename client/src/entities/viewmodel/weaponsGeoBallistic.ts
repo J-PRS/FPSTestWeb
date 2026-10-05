@@ -151,7 +151,7 @@ for (const side of [-1, 1]) {
   const camX = side * 0.07 - (ARM_LEN + 0.02) * Math.sin(theta);
   const camZ = ARM_Z - (ARM_LEN + 0.02) * Math.cos(theta);
   const latch = { x: 0, y: 0.03, z: 0.16 };
-  const dx = latch.x - camX, dy = latch.y - 0, dz = latch.z - camZ;
+  const dx = latch.x - camX, dy = Number(latch.y), dz = latch.z - camZ;
   const len = Math.hypot(dx, dy, dz);
   const rimT = 1 - CAM_R / len;
   const end = { x: camX + dx * rimT, y: dy * rimT, z: camZ + dz * rimT };
@@ -251,7 +251,7 @@ function hexHalf(side: 1 | -1): THREE.Shape {
   for (let i = 0; i < hex.length; i++) {
     const cur = hex[i]!;
     const nxt = hex[(i + 1) % hex.length]!;
-    if (inside(cur)) out.push(cur);
+    if (inside(cur)) {out.push(cur);}
     if (inside(cur) !== inside(nxt)) {
       const t = (side * DISC_SLIT_HALF - cur.y) / (nxt.y - cur.y);
       out.push(new THREE.Vector2(cur.x + (nxt.x - cur.x) * t, side * DISC_SLIT_HALF));
@@ -277,7 +277,7 @@ const fullHex = new THREE.Shape();
 for (let k = 0; k <= 6; k++) {
   const a = (k * Math.PI) / 3 + Math.PI / 6;
   const x = Math.cos(a) * DISC_HEX_R, y = Math.sin(a) * DISC_HEX_R;
-  if (k === 0) fullHex.moveTo(x, y); else fullHex.lineTo(x, y);
+  if (k === 0) {fullHex.moveTo(x, y);} else {fullHex.lineTo(x, y);}
 }
 // Breech overlaps the slit section AND steps IN — the valley where the
 // proud slit-section overhangs lands on the breech's verts, so AO grime

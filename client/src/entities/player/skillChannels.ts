@@ -30,23 +30,23 @@ export class SkillChannels {
 
   toggleCloak(): void {
     if (this.cloaked) { this.setCloak(false); return; }
-    if (!this.ctx.spendEnergy(CLOAK_COST)) return; // can't pay the ante
+    if (!this.ctx.spendEnergy(CLOAK_COST)) {return;} // can't pay the ante
     this.setCloak(true);
   }
 
   private setCloak(on: boolean): void {
-    if (this.cloaked === on) return;
+    if (this.cloaked === on) {return;}
     this.cloaked = on;
     this.ctx.emitCloak(on);
   }
 
   updateCloak(dt: number): void {
-    if (!this.cloaked) return;
+    if (!this.cloaked) {return;}
     // Horizontal speed prices the upkeep: sitting still is nearly free,
     // running full tilt burns ~10x — slower is sneakier.
     const speed = Math.hypot(this.ctx.vel.x, this.ctx.vel.z);
     this.ctx.drainEnergy(cloakDrainPerSec(speed) * dt);
-    if (this.ctx.energy() <= 0) this.setCloak(false); // tank dry — surface
+    if (this.ctx.energy() <= 0) {this.setCloak(false);} // tank dry — surface
   }
 
   // ---- Shield ----
@@ -55,12 +55,12 @@ export class SkillChannels {
 
   toggleShield(): void {
     if (this.shielded) { this.setShield(false); return; }
-    if (!this.ctx.spendEnergy(SHIELD_COST)) return;
+    if (!this.ctx.spendEnergy(SHIELD_COST)) {return;}
     this.setShield(true);
   }
 
   private setShield(on: boolean): void {
-    if (this.shielded === on) return;
+    if (this.shielded === on) {return;}
     this.shielded = on;
     this.ctx.emitShield(on);
   }
@@ -70,9 +70,9 @@ export class SkillChannels {
   forceShieldOff(): void { this.setShield(false); }
 
   updateShield(dt: number): void {
-    if (!this.shielded) return;
+    if (!this.shielded) {return;}
     this.ctx.drainEnergy(SHIELD_DRAIN * dt);
-    if (this.ctx.energy() <= 0) this.setShield(false); // tank dry — pop
+    if (this.ctx.energy() <= 0) {this.setShield(false);} // tank dry — pop
   }
 
   // ---- Medkit ----
@@ -83,18 +83,18 @@ export class SkillChannels {
 
   toggleMend(): void {
     if (this.mending) { this.setMend(false); return; }
-    if (!this.ctx.spendEnergy(MEND_COST)) return;
+    if (!this.ctx.spendEnergy(MEND_COST)) {return;}
     this.setMend(true);
   }
 
   private setMend(on: boolean): void {
-    if (this.mending === on) return;
+    if (this.mending === on) {return;}
     this.mending = on;
     this.ctx.emitMend(on);
   }
 
   updateMend(dt: number): void {
-    if (!this.mending) return;
+    if (!this.mending) {return;}
     this.ctx.drainEnergy(MEND_DRAIN * dt);
     if (this.ctx.energy() <= 0) { this.setMend(false); return; } // tank dry — channel ends
     // Predict the server-side heal rate locally even when net echoes own

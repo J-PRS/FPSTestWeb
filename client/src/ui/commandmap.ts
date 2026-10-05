@@ -35,13 +35,14 @@ export class CommandMap {
 
   constructor(parent: HTMLElement) {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.canvas.height = RES;
+    this.canvas.height = RES;
+    this.canvas.width = this.canvas.height;
     this.canvas.style.cssText = `position: absolute; top: 50%; left: 50%;
       width: min(${DRAW}px, 82vmin); height: min(${DRAW}px, 82vmin);
       transform: translate(-50%, -50%); pointer-events: none; display: none;
       border: 1px solid rgba(255,255,255,0.3); border-radius: 6px;
       background: rgba(6,10,14,0.92);`;
-    parent.appendChild(this.canvas);
+    parent.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
   }
 
@@ -56,11 +57,11 @@ export class CommandMap {
    *  + players + the self arrow in world space. */
   update(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
          flags: Map<TeamId, FlagBlip> | undefined): void {
-    if (!this.open) return;
+    if (!this.open) {return;}
     const W = getWorldScale();
     this.ensureBake();
     const c = this.ctx;
-    if (this.bake) c.drawImage(this.bake, 0, 0); else { c.fillStyle = '#0a0e12'; c.fillRect(0, 0, RES, RES); }
+    if (this.bake) {c.drawImage(this.bake, 0, 0);} else { c.fillStyle = '#0a0e12'; c.fillRect(0, 0, RES, RES); }
     const mx = (wx: number) => (wx / W + 0.5) * RES;
     const my = (wz: number) => (wz / W + 0.5) * RES;
 
@@ -70,7 +71,7 @@ export class CommandMap {
     if (flags) {
       c.lineWidth = 1.5;
       for (const [team, f] of flags) {
-        const col = '#' + (TEAM_COLORS[team] ?? 0xffffff).toString(16).padStart(6, '0');
+        const col = `#${  (TEAM_COLORS[team] ?? 0xffffff).toString(16).padStart(6, '0')}`;
         c.strokeStyle = col;
         if (f.homeKnown) {
           c.beginPath();
@@ -112,7 +113,7 @@ export class CommandMap {
   private ensureBake(): void {
     const hm = getHeightmapData();
     if (!hm) { this.bake = null; return; }
-    if (this.bakedFor === hm.data && this.bake) return;
+    if (this.bakedFor === hm.data && this.bake) {return;}
     this.bakedFor = hm.data;
     const W = getWorldScale();
     const step = W / RES;
@@ -122,8 +123,8 @@ export class CommandMap {
     for (let py = 0; py < RES; py++) {
       for (let px = 0; px < RES; px++) {
         const h = hAt(px, py);
-        if (h < hMin) hMin = h;
-        if (h > hMax) hMax = h;
+        if (h < hMin) {hMin = h;}
+        if (h > hMax) {hMax = h;}
       }
     }
     const range = Math.max(1, hMax - hMin);
@@ -147,7 +148,8 @@ export class CommandMap {
       }
     }
     const b = document.createElement('canvas');
-    b.width = b.height = RES;
+    b.height = RES;
+    b.width = b.height;
     b.getContext('2d')!.putImageData(img, 0, 0);
     this.bake = b;
   }

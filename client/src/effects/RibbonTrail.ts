@@ -148,7 +148,7 @@ export class RibbonTrail {
         life: r.life, bb: r.billboard, done: r.done,
         lit: r.slot >= 0 && slotLit(r.batch, r.slot),
         starved: r.starvedPushes,
-        time: +r.time.toFixed(1),
+        time: Number(r.time.toFixed(1)),
         // First vert actually sitting in the shared buffer — a lit slot
         // whose buffer verts are all zero/NaN is a write-vs-upload break,
         // invisible no matter how healthy the ribbon looks.
@@ -169,10 +169,10 @@ export class RibbonTrail {
  *  {owner:false, lit} verdict proving a lit slot nobody owns. */
   static identify(batch: TrailBatch, slot: number): Record<string, unknown> {
     for (const r of RibbonTrail.liveSet) {
-      if (r.batch !== batch || r.slot !== slot) continue;
+      if (r.batch !== batch || r.slot !== slot) {continue;}
       return {
         slot, owner: r.tag, stopped: r.stopped, done: r.done, bb: r.billboard,
-        life: r.life, count: r.count, time: +r.time.toFixed(1),
+        life: r.life, count: r.count, time: Number(r.time.toFixed(1)),
         head: r.head >= 0
           ? `${r.px[r.head].toFixed(0)},${r.py[r.head].toFixed(0)},${r.pz[r.head].toFixed(0)}` : '-',
         updMs: Math.round(performance.now() - r.lastUpdateAt),
@@ -187,8 +187,8 @@ export class RibbonTrail {
     const slots: number[] = [];
     const rows: Record<string, unknown>[] = [];
     for (const r of RibbonTrail.liveSet) {
-      if (now - r.lastUpdateAt <= staleMs) continue;
-      if (r.slot >= 0) slots.push(r.slot);
+      if (now - r.lastUpdateAt <= staleMs) {continue;}
+      if (r.slot >= 0) {slots.push(r.slot);}
       rows.push({ slot: r.slot, tag: r.tag, bb: r.billboard, count: r.count, stopped: r.stopped, updMs: Math.round(now - r.lastUpdateAt) });
     }
     return { count: rows.length, slots, rows };
@@ -200,7 +200,7 @@ export class RibbonTrail {
   static sweepStale(staleMs = 2000): void {
     const now = performance.now();
     for (const r of RibbonTrail.liveSet) {
-      if (!r.done || now - r.lastUpdateAt <= staleMs) continue;
+      if (!r.done || now - r.lastUpdateAt <= staleMs) {continue;}
       r.dispose();
       RibbonTrail.reapedStale++;
     }
@@ -247,18 +247,18 @@ export class RibbonTrail {
    *  (writing would paint the new owner's verts — the both-trails-killed
    *  sweep bug, now refused at the check instead of healed by sweeps). */
   private slotAlive(): boolean {
-    if (this.slot < 0) return false;
+    if (this.slot < 0) {return false;}
     if (!this.batch.owns(this.slot, this.slotGen)) { this.slot = -1; return false; }
     return true;
   }
 
   private releaseSlot(): void {
     RibbonTrail.liveSet.delete(this);
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     const b = this.batch;
     // owns() gates the free — a stale releaseSlot must not steal the slot
     // back out from under whoever claimed it after us.
-    if (b.owns(this.slot, this.slotGen)) b.release(this.slot);
+    if (b.owns(this.slot, this.slotGen)) {b.release(this.slot);}
     this.slot = -1;
     retireBatchIfOverflow(b);
   }
@@ -307,7 +307,7 @@ export class RibbonTrail {
     // the ring with slot=-1: the census row looked alive, the trail
     // rendered nothing, and nobody could tell which owner lost it.
     if (!this.slotAlive()) { RibbonTrail.zombiePushes++; return; }
-    if (this.stopped) return;
+    if (this.stopped) {return;}
     // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
     // forever: every later sideFor/glueBoundary reuses it and the whole
     // slot's verts go NaN (the "radius is NaN" console spam).
@@ -340,7 +340,7 @@ export class RibbonTrail {
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
       const jump = spd * 0.25 + 12;
-      if (jx * jx + jy * jy + jz * jz > jump * jump) this.clear();
+      if (jx * jx + jy * jy + jz * jz > jump * jump) {this.clear();}
     }
 
     this._ox = ox; this._oy = oy; this._oz = oz;
@@ -350,7 +350,7 @@ export class RibbonTrail {
     this.dx[this.head] = _dir.x; this.dy[this.head] = _dir.y; this.dz[this.head] = _dir.z;
     this.st[this.head] = this.time;
     this.ws[this.head] = wScale;
-    if (this.count < MAX_SAMPLES) this.count++;
+    if (this.count < MAX_SAMPLES) {this.count++;}
     this.pushed++;
   }
 
@@ -386,7 +386,7 @@ export class RibbonTrail {
 
   /** True once the last sample has fully faded — safe to dispose. */
   get done(): boolean {
-    if (this.count === 0) return true;
+    if (this.count === 0) {return true;}
     return this.time - this.st[this.head] > this.life;
   }
 
@@ -400,7 +400,7 @@ export class RibbonTrail {
       this.py[this.head] = this.follow.y + this._oy;
       this.pz[this.head] = this.follow.z + this._oz;
     }
-    if (!this.slotAlive() || this.count < 2) return;
+    if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(camPos);
     const pos = this.batch.pos;
     const base = this.slot * RIBBON_FLOATS_PER_SLOT;
@@ -424,7 +424,7 @@ export class RibbonTrail {
    *  render edge-on. Past 200m the strip is sub-pixel, so skip the
    *  cross-product entirely. */
   private cameraState(camPos?: THREE.Vector3): { camMoved: boolean; rebillboard?: THREE.Vector3 } {
-    if (!camPos) return { camMoved: true };
+    if (!camPos) {return { camMoved: true };}
     const dx = camPos.x - this.px[this.head];
     const dy = camPos.y - this.py[this.head];
     const dz = camPos.z - this.pz[this.head];
@@ -446,7 +446,7 @@ export class RibbonTrail {
       // when no new sample pushed this tick, else the tip vertex sits at
       // last frame's pin while the body moved on.
       if (i >= freshFrom || (this.follow && i === this.count - 1)) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
-      if (this.applyFadeBucket(i, o, fade)) dirty = true;
+      if (this.applyFadeBucket(i, o, fade)) {dirty = true;}
     }
     return dirty;
   }
@@ -456,7 +456,7 @@ export class RibbonTrail {
   // from the head down to world origin. Gluing the boundary verts to the
   // head makes it degenerate instead.
   private glueBoundary(base: number, pos: Float32Array): boolean {
-    if (this.count === 0 || this.count >= MAX_SAMPLES) return false;
+    if (this.count === 0 || this.count >= MAX_SAMPLES) {return false;}
     const o = base + this.count * 6;
     const hx = this.px[this.head], hy = this.py[this.head], hz = this.pz[this.head];
     pos[o] = hx; pos[o + 1] = hy; pos[o + 2] = hz;
@@ -470,8 +470,8 @@ export class RibbonTrail {
    *  dead slots stop costing iterations. */
   private applyFadeBucket(i: number, o: number, fade: number): boolean {
     const fq = (fade * 255) | 0;
-    if (fq === 0 && i === this.liveFrom) this.liveFrom = i + 1;
-    if (this._lf[i] === fq) return false;
+    if (fq === 0 && i === this.liveFrom) {this.liveFrom = i + 1;}
+    if (this._lf[i] === fq) {return false;}
     this._lf[i] = fq;
     const col = this.batch.col;
     const v = EMIT_GAIN * (fq / 255);
@@ -483,8 +483,8 @@ export class RibbonTrail {
   }
 
   private freshFromIndex(camMoved: boolean): number {
-    if (this.billboard && camMoved) return 0;
-    if (this.stopped) return this.count;
+    if (this.billboard && camMoved) {return 0;}
+    if (this.stopped) {return this.count;}
     return this.count - Math.min(this.pushed, this.count);
   }
 
@@ -512,7 +512,7 @@ export class RibbonTrail {
     const sx = this.dy[s] * vz - this.dz[s] * vy;
     const sy = this.dz[s] * vx - this.dx[s] * vz;
     const sz = this.dx[s] * vy - this.dy[s] * vx;
-    const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
+    const len = Math.hypot(sx, sy, sz);
     // isFinite, not just >eps: NaN len passes `<=` comparisons (NaN < x
     // is false), so a NaN cross product used to normalize into NaN verts.
     if (!Number.isFinite(len) || len <= 1e-6) { RibbonTrail.nanSides++; return null; }
@@ -523,7 +523,7 @@ export class RibbonTrail {
 
   /** Release back to the pool — buffers/slot kept for reuse. */
   dispose(): void {
-    if (this.inPool) return;
+    if (this.inPool) {return;}
     this.inPool = true;
     // Truthful corpse: the ring is dead with the slot. Without this a
     // released ribbon still reported count>0 in the census — the
@@ -557,7 +557,7 @@ export class DyingRibbons {
   private list: RibbonTrail[] = [];
 
   fadeAll(set: RibbonTrail[]): void {
-    for (const t of set) t.stop();
+    for (const t of set) {t.stop();}
     this.list.push(...set);
   }
 
@@ -570,7 +570,7 @@ export class DyingRibbons {
   }
 
   disposeAll(): void {
-    for (const t of this.list) t.dispose();
+    for (const t of this.list) {t.dispose();}
     this.list.length = 0;
   }
 }

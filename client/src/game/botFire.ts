@@ -64,11 +64,11 @@ export class BotFire {
   resolveShot(bot: GameBot, targetId: string, aim: THREE.Vector3): void {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const dist = Math.hypot(dx, dy, dz) || 1;
     const wt = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
       bot.skill ? (t) => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
     const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
-    if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) return;
+    if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
     // The claim path exists ONLY for wire-remote targets: a locally
@@ -93,7 +93,7 @@ export class BotFire {
     const interval = WEAPON_FIRE_INTERVAL_S[wt] ?? 0.1;
     const last = this.lastShotAt.get(botId) ?? -interval * 1000;
     const now = performance.now();
-    if (now - last < interval * 1000) return false;
+    if (now - last < interval * 1000) {return false;}
     this.lastShotAt.set(botId, now);
     return true;
   }
@@ -128,10 +128,10 @@ export class BotFire {
 
   /** Live position of a brain hunt target — belt throws arc at it. */
   private targetPos(targetId: string | null): THREE.Vector3 | null {
-    if (!targetId) return null;
+    if (!targetId) {return null;}
     if (targetId === 'local') { const p = this.host.player(); return p.isDead ? null : p.pos; }
     if (targetId.startsWith('creature:')) {
-      const t = this.host.targets.find(x => x.id === +targetId.slice(9));
+      const t = this.host.targets.find(x => x.id === Number(targetId.slice(9)));
       return t && !t.dead ? t.pos : null;
     }
     const rp = this.host.world().remotePlayers.get(targetId);
@@ -144,7 +144,7 @@ export class BotFire {
   throwBelt(bot: GameBot): void {
     bot.wantBelt = false;
     const aim = this.targetPos(bot.huntTargetId);
-    if (aim) this.lobAt(bot, aim);
+    if (aim) {this.lobAt(bot, aim);}
   }
 
   /** Lob the belt weapon at an explicit point — ballistic arc solves
@@ -153,7 +153,7 @@ export class BotFire {
     const wt = bot.loadout?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     const cfg = getProjectileConfig(wt);
-    if (!stats || stats.speed <= 0 || !cfg) return;
+    if (!stats || stats.speed <= 0 || !cfg) {return;}
     const dx = aim.x - bot.position.x, dz = aim.z - bot.position.z;
     const d = Math.hypot(dx, dz) || 1;
     let pitch: number;
@@ -203,13 +203,13 @@ export class BotFire {
    *  never mid-firefight. */
   tryPropel(bot: GameBot, firing: boolean): void {
     const now = performance.now();
-    if (firing || !bot.grounded || bot.propelUntil > now) return;
+    if (firing || !bot.grounded || bot.propelUntil > now) {return;}
     const dx = bot.lastDest.x - bot.position.x, dz = bot.lastDest.z - bot.position.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 35) return;
+    if (dist < 35) {return;}
     const v = bot.vel;
-    if (Math.hypot(v.x, v.z) > 12) return; // already moving — boost is for launches
-    if (bot.energy < 30) return;
+    if (Math.hypot(v.x, v.z) > 12) {return;} // already moving — boost is for launches
+    if (bot.energy < 30) {return;}
     const nx = dx / dist, nz = dz / dist;
     if (getWeaponStats(bot.loadout?.belt)?.forceMode === 'pull') {
       this.lobAt(bot, { x: bot.position.x + nx * 18, y: bot.position.y - 1, z: bot.position.z + nz * 18 });
@@ -249,9 +249,9 @@ export class BotFire {
 /** Pellet fan for flak/shotgun bots — one random cone dir per pellet;
  *  count 1 collapses to a single straight shot. */
 function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Vector3[] {
-  if (count <= 1 || spread <= 0) return [dir.clone()];
+  if (count <= 1 || spread <= 0) {return [dir.clone()];}
   _pelletRight.crossVectors(dir, _pelletUp0);
-  if (_pelletRight.lengthSq() < 1e-8) _pelletRight.set(1, 0, 0); else _pelletRight.normalize();
+  if (_pelletRight.lengthSq() < 1e-8) {_pelletRight.set(1, 0, 0);} else {_pelletRight.normalize();}
   _pelletUp.crossVectors(_pelletRight, dir);
   const rot = Math.random() * Math.PI * 2;
   const cs = Math.cos(rot), sn = Math.sin(rot);

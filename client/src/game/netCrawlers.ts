@@ -31,13 +31,13 @@ type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling | Tot
 
 // Fallback species name when the wire omits one (older servers).
 function speciesOf(c: NetBeing): string {
-  if (c instanceof Rakk) return 'rakk';
-  if (c instanceof Gnat) return 'gnat';
-  if (c instanceof Roller) return 'roller';
-  if (c instanceof Snake) return 'snake';
-  if (c instanceof Baneling) return 'baneling';
-  if (c instanceof Scarab) return 'scarab';
-  if (c instanceof Totem) return 'totem';
+  if (c instanceof Rakk) {return 'rakk';}
+  if (c instanceof Gnat) {return 'gnat';}
+  if (c instanceof Roller) {return 'roller';}
+  if (c instanceof Snake) {return 'snake';}
+  if (c instanceof Baneling) {return 'baneling';}
+  if (c instanceof Scarab) {return 'scarab';}
+  if (c instanceof Totem) {return 'totem';}
   return 'crawler';
 }
 
@@ -85,7 +85,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   };
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
-    if (netCrawlerById.has(m.id)) return;
+    if (netCrawlerById.has(m.id)) {return;}
     const sp = SPECIES[m.species ?? 'crawler'] ?? SPECIES.crawler!;
     const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
     const c = new sp.Klass(deps.scene, deps.lazyTerrain(), pos, m.uber) as NetBeing;
@@ -100,8 +100,8 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
 
   function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
     const c = netCrawlerById.get(m.id);
-    if (!c) return; // event raced ahead of spawn — roster/spawn covers it
-    if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) (c.sim as { state: string }).state = 'windup';
+    if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
+    if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
     c.applyNetEdge({ ...m, kind: m.kind });
     if (m.kind === 'detonate' && c instanceof Baneling) {
       // The pop is an fx edge only — the server's blast funnel already
@@ -115,7 +115,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
 
   function netCrawlDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
     const c = netCrawlerById.get(m.id);
-    if (!c) return;
+    if (!c) {return;}
     netCrawlerById.delete(m.id);
     c.dead = true; // updateSpecies' disposed check sweeps it out
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));

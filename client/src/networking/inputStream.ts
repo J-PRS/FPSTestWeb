@@ -27,12 +27,12 @@ export class InputStream {
 
   private journal(seq: number, input: MoveInput): void {
     this.inputJournal.push({ seq, t: performance.now(), input: { ...input } });
-    if (this.inputJournal.length > InputStream.INPUT_JOURNAL_MAX) this.inputJournal.shift();
+    if (this.inputJournal.length > InputStream.INPUT_JOURNAL_MAX) {this.inputJournal.shift();}
   }
 
   sendMove(input: MoveInput, rotation: MoveRotation, send: (m: ClientMessage) => void): void {
     const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.jet ?? 0},${input.status ?? 0}`;
-    if (key === this.lastSentInput) return;
+    if (key === this.lastSentInput) {return;}
     this.lastSentInput = key;
     // Change-only stream → unordered transports can deliver stale events
     // after fresh ones; the seq lets the server drop them.
@@ -47,7 +47,7 @@ export class InputStream {
    *  behind ours across several reports — an edge died in flight. Re-emit
    *  the current input with a fresh seq so the shadow converges. */
   resend(lastSeq: number, send: (m: ClientMessage) => void, connected: boolean): void {
-    if (!this.lastInputState || !connected) return;
+    if (!this.lastInputState || !connected) {return;}
     const seq = ++this.inputSeq;
     this.journal(seq, this.lastInputState);
     logger.info(`inputSync: re-emitting input at seq ${seq} (server consumed ${lastSeq})`);
@@ -57,7 +57,7 @@ export class InputStream {
   /** Journal entries with seq > `after` — what the server hadn't consumed
    *  when it issued a correction. Also prunes consumed entries. */
   inputsAfter(after: number): { t: number; input: MoveInput }[] {
-    while (this.inputJournal.length && this.inputJournal[0].seq <= after) this.inputJournal.shift();
+    while (this.inputJournal.length && this.inputJournal[0].seq <= after) {this.inputJournal.shift();}
     return this.inputJournal;
   }
 

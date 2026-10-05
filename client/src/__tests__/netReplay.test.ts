@@ -28,13 +28,13 @@ import { PROTOCOL_VERSION, type ServerMessage } from '../../../shared/protocol.j
 // version-negotiation gate (which has its own job: reload real browsers).
 function feedJson(nm: Parameters<typeof feed>[0], payload: string): void {
   const m = JSON.parse(payload) as ServerMessage;
-  if (m.type === 'gameState') m.protocolVersion = PROTOCOL_VERSION;
+  if (m.type === 'gameState') {m.protocolVersion = PROTOCOL_VERSION;}
   feed(nm, m);
 }
 
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);}
   return out;
 }
 
@@ -51,8 +51,8 @@ describe('netReplay — captured wire stream through real handlers', () => {
 
   it('replays the duel capture without throwing', () => {
     for (const ev of loadRec(recText)) {
-      if (ev.kind === 'json') feedJson(h.nm, ev.payload);
-      else feedBin(h.nm, hexToBytes(ev.payload));
+      if (ev.kind === 'json') {feedJson(h.nm, ev.payload);}
+      else {feedBin(h.nm, hexToBytes(ev.payload));}
     }
     // populated remote roster from tickUpdate frames (bots joined before us)
     expect(h.nm.getPlayers().size).toBeGreaterThan(0);
@@ -65,8 +65,8 @@ describe('netReplay — captured wire stream through real handlers', () => {
 
   it('replays the crossfire capture — ticks populate remotes, deploySpawns route', () => {
     for (const ev of loadRec(crossfireRec)) {
-      if (ev.kind === 'json') feedJson(h.nm, ev.payload);
-      else feedBin(h.nm, hexToBytes(ev.payload));
+      if (ev.kind === 'json') {feedJson(h.nm, ev.payload);}
+      else {feedBin(h.nm, hexToBytes(ev.payload));}
     }
     // 3 fleet bots + 4 server bots joined before the recorder did
     expect(h.nm.getPlayers().size).toBeGreaterThan(0);

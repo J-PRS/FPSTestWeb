@@ -16,7 +16,7 @@ import {
 export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: number, clipEnd: number): RemoteFrame[] {
   const lastBefore = new Map<number, RemoteFrame>();
   for (const f of remoteFrames) {
-    if (f.timestamp >= clipStart) break;
+    if (f.timestamp >= clipStart) {break;}
     lastBefore.set(f.rosterIdx, f);
   }
   const inWindow = remoteFrames.filter(
@@ -24,11 +24,11 @@ export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: numb
   );
   const out: RemoteFrame[] = [];
   for (const [, f] of lastBefore) {
-    out.push(Object.assign({}, f, { timestamp: clipStart }));
+    out.push({ ...f, timestamp: clipStart});
   }
   out.push(...inWindow);
   out.sort((a, b) => a.timestamp - b.timestamp);
-  return out.map(f => Object.assign({}, f, { timestamp: f.timestamp - clipStart }));
+  return out.map(f => ({ ...f, timestamp: f.timestamp - clipStart}));
 }
 
 // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at
@@ -38,7 +38,7 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
   // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at clipStart.
   const aliveProjectiles = new Map<number, ProjectileEvent>();
   for (const e of projectileEvents) {
-    if (e.timestamp >= clipStart) break;
+    if (e.timestamp >= clipStart) {break;}
     if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) {
       aliveProjectiles.delete(e.projectileId);
     } else if (e.eventType === ProjectileEventType.Fired) {
@@ -107,7 +107,7 @@ export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: numb
 export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number): Map<number, TargetEvent> {
   const aliveBalls = new Map<number, TargetEvent>();
   for (const e of targetEvents) {
-    if (e.timestamp >= clipStart) break;
+    if (e.timestamp >= clipStart) {break;}
     if (e.eventType === TargetEventType.Destroyed) {
       aliveBalls.delete(e.targetId);
       continue;
@@ -142,7 +142,7 @@ function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<nu
   }
   const additionalSpawned: TargetEvent[] = [];
   for (const [targetId, first] of firstEventByTargetId) {
-    if (aliveBalls.has(targetId) || hasSpawnedInClip.has(targetId)) continue;
+    if (aliveBalls.has(targetId) || hasSpawnedInClip.has(targetId)) {continue;}
     additionalSpawned.push({
       ...first,
       eventType: TargetEventType.Spawned,

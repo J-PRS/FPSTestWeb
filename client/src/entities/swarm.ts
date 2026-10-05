@@ -59,7 +59,7 @@ export class SpeciesSwarm {
         new Float32Array(capacity * per * 3).fill(1), 3,
       );
       mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      if (p.renderOrder !== undefined) mesh.renderOrder = p.renderOrder;
+      if (p.renderOrder !== undefined) {mesh.renderOrder = p.renderOrder;}
       mesh.castShadow = p.castShadow ?? false;
       scene.add(mesh);
       this.meshes.push(mesh);
@@ -105,25 +105,25 @@ export class SpeciesSwarm {
    *  peak memory forever. Dense slots make truncation lossless. */
   checkShrink(now: number): void {
     const cap = this.capGov.shrinkTarget(this.live, this.owners.length, this.initCap, now);
-    if (cap === null) return;
+    if (cap === null) {return;}
     this.resize(cap);
     this.capGov.shrunk(now);
   }
 
   /** Returns a slot index; grows the swarm instead of ever returning -1. */
   alloc(owner: SwarmSlotOwner): number {
-    if (this.live >= this.owners.length) this.grow();
+    if (this.live >= this.owners.length) {this.grow();}
     const slot = this.live++;
     this.owners[slot] = owner;
     owner.swarmSlot = slot;
-    for (let i = 0; i < this.meshes.length; i++) this.meshes[i]!.count = this.live * this.pers[i]!;
+    for (let i = 0; i < this.meshes.length; i++) {this.meshes[i]!.count = this.live * this.pers[i]!;}
     return slot;
   }
 
   /** Swap-remove a slot: the last live owner's data moves into it. */
   free(slot: number): void {
     const last = this.live - 1;
-    if (slot < 0 || slot > last) return;
+    if (slot < 0 || slot > last) {return;}
     if (slot !== last) {
       const moved = this.owners[last]!;
       this.owners[slot] = moved;
@@ -141,14 +141,14 @@ export class SpeciesSwarm {
     }
     this.owners[last] = undefined;
     this.live--;
-    for (let i = 0; i < this.meshes.length; i++) this.meshes[i]!.count = this.live * this.pers[i]!;
+    for (let i = 0; i < this.meshes.length; i++) {this.meshes[i]!.count = this.live * this.pers[i]!;}
     this.dirty = true;
     this.flagDirty();
   }
 
   /** slot is the raw instance index — for `per` parts pass owner.slot*per+i. */
   setMatrix(part: number, slot: number, matrix: THREE.Matrix4): void {
-    if (slot < 0) return; // slot already freed (gib burst) — a dying owner may still tick once
+    if (slot < 0) {return;} // slot already freed (gib burst) — a dying owner may still tick once
     const m = this.meshes[part]!;
     m.setMatrixAt(slot, matrix);
     m.instanceMatrix.addUpdateRange(slot * 16, 16);
@@ -157,7 +157,7 @@ export class SpeciesSwarm {
   }
 
   setColor(part: number, slot: number, r: number, g: number, b: number): void {
-    if (slot < 0) return;
+    if (slot < 0) {return;}
     const m = this.meshes[part]!;
     m.instanceColor!.setXYZ(slot, r, g, b);
     m.instanceColor!.addUpdateRange(slot * 3, 3);
@@ -174,7 +174,7 @@ export class SpeciesSwarm {
    *  nothing moved (setMatrix/setColor flag `dirty`). */
   private dirty = false;
   flagDirty(): void {
-    if (!this.dirty) return;
+    if (!this.dirty) {return;}
     this.dirty = false;
     for (let i = 0; i < this.meshes.length; i++) {
       const m = this.meshes[i]!;
@@ -281,7 +281,7 @@ export class InstancedBlobShadows {
   /** Same idle-shrink contract as SpeciesSwarm — dense slots, lossless. */
   checkShrink(now: number): void {
     const cap = this.capGov.shrinkTarget(this.live, this.owners.length, SHADOW_CAPACITY, now);
-    if (cap === null) return;
+    if (cap === null) {return;}
     this.resize(cap);
     this.capGov.shrunk(now);
   }
@@ -289,7 +289,7 @@ export class InstancedBlobShadows {
   get liveCount(): number { return this.live; }
 
   alloc(owner: SwarmSlotOwner): number {
-    if (this.live >= this.owners.length) this.grow();
+    if (this.live >= this.owners.length) {this.grow();}
     const slot = this.live++;
     this.owners[slot] = owner;
     this.mesh.count = this.live;
@@ -298,7 +298,7 @@ export class InstancedBlobShadows {
 
   free(owner: SwarmSlotOwner): void {
     const slot = owner.shadowSlot;
-    if (slot < 0 || slot > this.live - 1) return;
+    if (slot < 0 || slot > this.live - 1) {return;}
     const last = this.live - 1;
     if (slot !== last) {
       const moved = this.owners[last]!;
@@ -325,7 +325,7 @@ export class InstancedBlobShadows {
   /** Pin under pos; fade with altitude — same curve as BlobShadow. */
   set(owner: SwarmSlotOwner & { shadowSlot: number }, pos: THREE.Vector3, radius: number, baseOpacity: number): void {
     const slot = owner.shadowSlot;
-    if (slot < 0 || slot >= this.live) return;
+    if (slot < 0 || slot >= this.live) {return;}
     const groundY = this.terrain.getHeight(pos.x, pos.z);
     const airHeight = pos.y - groundY;
     const o = airHeight > 3.0 ? Math.max(0, baseOpacity * (1 - (airHeight - 3.0) / 7.0)) : baseOpacity;

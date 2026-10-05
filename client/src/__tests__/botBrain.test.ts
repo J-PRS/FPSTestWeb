@@ -52,7 +52,7 @@ describe('BotBrain senses', () => {
     // Reaction delay: a human doesn't shoot the frame an enemy appears —
     // acquisition stamps a hunt tick and reactTicks (up to 2) must elapse.
     let out: ReturnType<typeof b.think> | undefined;
-    for (let i = 0; i < 5 && !out?.fire; i++) out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));
+    for (let i = 0; i < 5 && !out?.fire; i++) {out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));}
     expect(out?.fire?.targetId).toBe('e1');
   });
 
@@ -105,7 +105,7 @@ describe('BotBrain senses', () => {
     b.markDeath({ x: 0, y: 0, z: 20 }, 0); // died just north, t=0 to match ctx.now
     // Wander goals that land inside the repel radius get re-rolled — run
     // several think cadences; none should settle ~north of the body.
-    for (let i = 0; i < 12; i++) b.think(4, ctx(pos, flat, {}));
+    for (let i = 0; i < 12; i++) {b.think(4, ctx(pos, flat, {}));}
     const goal = (b as unknown as { goalS: { goal: { x: number; z: number } } }).goalS.goal;
     expect(Math.hypot(goal.x, goal.z - 20) > 12 || Math.hypot(goal.x - pos.x, goal.z - pos.z) < 15).toBe(true);
   });
@@ -134,7 +134,7 @@ describe('BotBrain senses', () => {
       // in the next couple seconds.
       let fired = false;
       for (let i = 1; i <= 8 && !fired; i++) {
-        fired = !!b.think(0.35, ctx(pos, flat, { enemies: enemy(20, 0), healthFrac: 0.1, now: 350 + i * 350 })).fire;
+        fired = Boolean(b.think(0.35, ctx(pos, flat, { enemies: enemy(20, 0), healthFrac: 0.1, now: 350 + i * 350 })).fire);
       }
       expect(fired).toBe(true);
     } finally {

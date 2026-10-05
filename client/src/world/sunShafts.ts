@@ -16,7 +16,8 @@ const MAX_OPACITY = 0.35;
 
 function makeShaftTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = TEX_SIZE;
+  canvas.height = TEX_SIZE;
+  canvas.width = canvas.height;
   const ctx = canvas.getContext('2d')!;
   const cx = TEX_SIZE / 2;
 

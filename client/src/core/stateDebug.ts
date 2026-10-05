@@ -68,13 +68,13 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
   });
 
   for (const [id, playerData] of ctx.networkManager.getPlayers()) {
-    if (id === ctx.networkManager.getLocalPlayerId()) continue; // Skip local player
+    if (id === ctx.networkManager.getLocalPlayerId()) {continue;} // Skip local player
     const entry = hashableEntry(ctx.remotePlayers.get(id), playerData);
     // No data = don't hash a FABRICATED player — a phantom (0,0,0)/100hp
     // entry used to hide a genuinely missing replica behind a "server
     // also has them" false match. Omitting the id makes the roster
     // difference itself the signal; the audit reports it verbatim.
-    if (entry) allPlayers.set(id, entry);
+    if (entry) {allPlayers.set(id, entry);}
   }
   return allPlayers;
 }
@@ -84,7 +84,7 @@ function hashableEntry(
   playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
 ): { x: number; y: number; z: number; health: number; isDead: boolean } | null {
   const p = playerData?.position ?? rp?.position;
-  if (!p) return null;
+  if (!p) {return null;}
   return {
     x: p.x, y: p.y, z: p.z,
     health: playerData?.health ?? 100,
@@ -110,7 +110,7 @@ function diffServerSnapshot(
     const sp = serverMap.get(id);
 
     if (!cp || !sp) {
-      if (cp !== sp) diffs.push(`Player ${id} on ${cp ? 'client but not server' : 'server but not client'}`);
+      if (cp !== sp) {diffs.push(`Player ${id} on ${cp ? 'client but not server' : 'server but not client'}`);}
       continue;
     }
 
@@ -276,11 +276,11 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         const player = ctx.getPlayer();
         for (const sp of serverPlayers) {
           if (sp.id === localId) {
-            if (!player.isDead && Math.abs(player.health - sp.health) > 0.5) player.health = sp.health;
+            if (!player.isDead && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
             continue;
           }
           const cp = clientPlayers.get(sp.id);
-          if (cp && Math.abs(cp.health - sp.health) > 0.5) networkManager.healRemoteHealth(sp.id, sp.health);
+          if (cp && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
           // Liveness heal — kill/respawn events muted by a resync gap or
           // dropped elsewhere leave isDead divergent forever (health heals
           // above, the flag itself never did). Server owns liveness; mirror
@@ -288,8 +288,8 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           if (cp && cp.isDead !== sp.isDead) {
             const flip = networkManager.healRemoteLife(sp.id, sp.isDead, sp.health, sp.position);
             const rp = ctx.remotePlayers.get(sp.id);
-            if (flip === 'revived') rp?.respawn(sp.position);
-            else if (flip === 'killed') rp?.playDeath();
+            if (flip === 'revived') {rp?.respawn(sp.position);}
+            else if (flip === 'killed') {rp?.playDeath();}
           }
         }
       } else {
@@ -307,7 +307,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
 }
 
 function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') {return;}
   const { networkManager, logger } = ctx;
 
   window.takeClientSnapshot = () => {

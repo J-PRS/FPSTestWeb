@@ -42,7 +42,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     const geo = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
     const pos = geo?.attributes?.position;
     const arr = pos?.array as ArrayLike<number> | undefined;
-    if (!geo || !arr || !arr.length) return;
+    if (!geo || !arr || !arr.length) {return;}
     o.updateWorldMatrix(true, false);
     const m = o.matrixWorld.elements;
     const X = (v: number) => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
@@ -75,7 +75,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
       const usedSlots = Math.min(nslot, Math.floor(dr / ((SLOT_VERTS / 2 - 1) * 6)) + 1);
       for (let s = 0; s < usedSlots; s++) {
         const base = s * SLOT_VERTS;
-        for (let i = 0; i < SLOT_VERTS / 2 - 1; i++) check(base + i * 2, base + i * 2 + 2);
+        for (let i = 0; i < SLOT_VERTS / 2 - 1; i++) {check(base + i * 2, base + i * 2 + 2);}
       }
     } else if (anyO.isInstancedMesh && anyO.instanceMatrix && anyO.count != null) {
       // Giant or off-field instances — matrix rows give scale+position.
@@ -96,7 +96,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
 
     if ((maxEdge > LIM2 || nan) && out.offenders.length < MAX_OFFENDERS) {
       out.offenders.push({
-        tag: tagOf(o), type: o.type, edge: +Math.sqrt(maxEdge).toFixed(0),
+        tag: tagOf(o), type: o.type, edge: Number(Math.sqrt(maxEdge).toFixed(0)),
         at, verts: arr.length / 3, nan, visible: o.visible,
       });
     }
@@ -106,7 +106,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
 
 registerDiag('visAudit', () => {
   const scene = (window as unknown as { __test?: { scene?: THREE.Scene } }).__test?.scene;
-  if (!scene) return { visAudit: 'no scene' };
+  if (!scene) {return { visAudit: 'no scene' };}
   const r = auditScene(scene);
   return {
     visAudit: r.offenders.length

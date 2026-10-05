@@ -10,6 +10,6 @@ let counter = 1;
 export function nextTargetId(): number {
   const id = counter;
   counter = (counter + 1) % 65536;
-  if (counter === 0) counter = 1;
+  if (counter === 0) {counter = 1;}
   return id;
 }

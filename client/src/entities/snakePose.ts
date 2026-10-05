@@ -32,11 +32,11 @@ export function pushTrail(s: Snake): void {
   const step = STEP * r;
   if (tr.length >= 2) {
     const dx = hx - tr[0], dz = hz - tr[1];
-    if (dx * dx + dz * dz < step * step) return;
+    if (dx * dx + dz * dz < step * step) {return;}
   }
   tr.unshift(hx, hz);
   const maxPts = Math.ceil(BODY_LEN * 1.6 / STEP) * 2;
-  if (tr.length > maxPts) tr.length = maxPts;
+  if (tr.length > maxPts) {tr.length = maxPts;}
 }
 
 // Walk the trail to a point `dist` (radius units) behind the head.
@@ -96,9 +96,9 @@ function segWidth(t: number): number {
 }
 
 export function writeInstances(s: Snake, terrain: Terrain): void {
-    if (!s.hasSlots) return;
+    if (!s.hasSlots) {return;}
     const swarm = getSwarm('snake');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = s.swarmSlot;
     const r = s.radius;
 
@@ -138,13 +138,13 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
       // Windup is an S-coil, not a flagpole: the head third rises AND
       // pulls back over the body along its own tangent — a vertical
       // translation alone just levitated a straight tube.
-      const rearK = coiling * Math.pow(Math.max(0, 1 - t * 3), 2);
+      const rearK = coiling * Math.max(0, 1 - t * 3) ** 2;
       const rear = rearK * 1.6 * r;
       const pull = rearK * 0.9 * r;
       const wx2 = wx - (tx / tl) * pull, wz2 = wz - (tz / tl) * pull;
       // 0.45 ≈ the lobe's true y-radius (geo 0.6 × flat 0.7): seats the
       // belly ON the dirt, not 5cm above it (0.55) or buried (0.35).
-      _segX[i] = wx2; _segY[i] = segGround + w * r * 0.45 + rear + air * Math.pow(1 - t, 1.3); _segZ[i] = wz2;
+      _segX[i] = wx2; _segY[i] = segGround + w * r * 0.45 + rear + air * (1 - t) ** 1.3; _segZ[i] = wz2;
       // Anatomical width + banded viper pattern ride along for pass two.
       _segW[i] = w;
       const band = i % 2 === 0 ? 1.0 : 0.72;

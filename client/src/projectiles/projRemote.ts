@@ -11,7 +11,7 @@ import type { Projectile } from './Projectile.js';
 export function tickRemote(h: Projectile, terrain: Terrain): boolean {
     // A discharged beam still respects terrain — the sweep sets hitPoint
     // so update() pops the slug at contact, not at the range cap.
-    if (h.rayFired) sweepTerrain(h, terrain);
+    if (h.rayFired) {sweepTerrain(h, terrain);}
     if (h.canBounce && sweepTerrain(h, terrain) && !h.collide.bounceOffTerrain(terrain)) {
       h.explode(); // bounce budget/graze exhausted — die like a local shard
       return true;
@@ -20,7 +20,7 @@ export function tickRemote(h: Projectile, terrain: Terrain): boolean {
       h.explode(); // armed mortar shell touching terrain on a remote client
       return true;
     }
-    if (h.config.sticks && sweepTerrain(h, terrain)) h.glue.stickAt(h.hitPoint);
+    if (h.config.sticks && sweepTerrain(h, terrain)) {h.glue.stickAt(h.hitPoint);}
     // Embed-capable shells (javelin) die on contact everywhere — the server
     // never sends a destroy for a dirt hit, so the replica must sense it.
     if (h.config.embeds !== undefined && sweepTerrain(h, terrain)) {

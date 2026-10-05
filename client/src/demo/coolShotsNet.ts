@@ -89,7 +89,7 @@ export async function uploadClipToServer(m: CoolShotManager, clipData: DemoFile)
 
   // Merge the server's demo list with local clips (by filename)
 export async function fetchFromServer(m: CoolShotManager): Promise<void> {
-    if (!m.serverUrl) return;
+    if (!m.serverUrl) {return;}
     try {
       const resp = await fetch(`${m.serverUrl}/demos`);
       if (!resp.ok) {

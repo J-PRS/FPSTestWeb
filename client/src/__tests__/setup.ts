@@ -74,19 +74,19 @@ if (typeof globalThis.document === 'undefined') {
         height: 0,
         _parent: null as { children: unknown[] } | null,
         addEventListener: () => {},
-        append(..._nodes: unknown[]) {},
+        append(...nodes: unknown[]) { for (const n of nodes) { el.children.push(n); if (n && typeof n === 'object') {(n as Record<string, unknown>)._parent = el;} } },
         prepend(n: unknown) { el.children.unshift(n); (n as Record<string, unknown>)._parent = el; },
         appendChild(n: unknown) { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
         remove() {
           const p = el._parent as { children: unknown[] } | null;
-          if (p) { const i = p.children.indexOf(el); if (i >= 0) p.children.splice(i, 1); }
+          if (p) { const i = p.children.indexOf(el); if (i >= 0) {p.children.splice(i, 1);} }
         },
       };
       (globalThis.document as unknown as { _all: unknown[] })._all.push(el);
       return el;
     },
     createTextNode: (s: string) => ({ textContent: s }),
-    body: { appendChild: () => {}, removeChild: () => {} },
+    body: { append: () => {}, appendChild: () => {}, removeChild: () => {} },
     hidden: false,
   };
 }

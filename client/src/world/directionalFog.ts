@@ -21,10 +21,10 @@ export function fogTint(base: THREE.Color, camDir: THREE.Vector3, sunDir: THREE.
   // Only horizontal facing matters — looking straight up at the sun
   // shouldn't turn the ground haze white.
   const fwd = Math.hypot(camDir.x, camDir.z);
-  if (fwd < 1e-6) return out.copy(base);
+  if (fwd < 1e-6) {return out.copy(base);}
   const d = (camDir.x * sunDir.x + camDir.z * sunDir.z) / fwd;
-  out.copy(base).lerp(_sunTint, Math.pow(Math.max(0, d), 2.0) * SUNWARD_STRENGTH);
-  out.lerp(_awayTint, Math.pow(Math.max(0, -d), 2.0) * AWAY_STRENGTH);
+  out.copy(base).lerp(_sunTint, Math.max(0, d) ** 2.0 * SUNWARD_STRENGTH);
+  out.lerp(_awayTint, Math.max(0, -d) ** 2.0 * AWAY_STRENGTH);
   return out;
 }
 
@@ -40,7 +40,7 @@ export function setFogBase(color: THREE.Color): void {
 }
 
 export function updateDirectionalFog(fog: THREE.Fog, camera: THREE.Camera, sunDir: THREE.Vector3): THREE.Color {
-  if (!_base) _base = fog.color.clone();
+  if (!_base) {_base = fog.color.clone();}
   camera.getWorldDirection(_camDir);
   return fogTint(_base, _camDir, sunDir, _tinted);
 }

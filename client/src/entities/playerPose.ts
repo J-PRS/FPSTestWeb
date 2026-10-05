@@ -64,8 +64,8 @@ export function holdChains(): Set<string>[] {
  *  "opens hands, almost T-pose" on each trigger pull). Death clamps at
  *  full weight so its suppression still holds forever. */
 export function oneshotOwnsArms(action: THREE.AnimationAction | null, clipName: string | null): boolean {
-  return !!action?.isRunning() && action.getEffectiveWeight() > 0.5 &&
-    (!!clipName && (ONESHOT_CLIPS.has(clipName) || clipName === 'UAL_Death01'));
+  return action != null && action.isRunning() && action.getEffectiveWeight() > 0.5 &&
+    clipName != null && (ONESHOT_CLIPS.has(clipName) || clipName === 'UAL_Death01');
 }
 
 /** Post-mixer pose corrections: procedural aim pitch, hip-fire hold on
@@ -154,7 +154,7 @@ export class PoseControl {
   debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
     const rads = [upper, lower, hand, lUpper, lLower, lHand].map(e =>
       new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
-    for (const hb of this.holdBones) hb.off.copy(rads[hb.role]!);
+    for (const hb of this.holdBones) {hb.off.copy(rads[hb.role]!);}
   }
 
   // Collects the bones this controller drives. nb = normBone(child.name).
@@ -188,22 +188,22 @@ export class PoseControl {
     const side = child.name === 'FootL' ? 'L' : 'R';
     const shin = model.getObjectByName(`LowerLeg${side}`);
     const tip = model.getObjectByName(`LowerLeg${side}_end`);
-    if (shin && tip) this.footSnaps.push({ foot: child, shin, tip });
+    if (shin && tip) {this.footSnaps.push({ foot: child, shin, tip });}
   }
 
   /** Build the masked aim layer: Pistol_Aim_* clips filtered down to
    *  the arm chain so they pose the weapon hold over any locomotion clip. LoopOnce+clamp — they are static poses, so they
    *  play once and hold at full weight set per frame from aimPitch. */
   buildAimLayer(mixer: THREE.AnimationMixer, animations: Map<string, THREE.AnimationAction>, torso = false): void {
-    if (this.aimNeutral && this.aimUp && this.aimDown) return;
+    if (this.aimNeutral && this.aimUp && this.aimDown) {return;}
     const mask = torso ? new Set([...AIM_BONE_MASK, ...AIM_TORSO_BONES]) : AIM_BONE_MASK;
     const mk = (name: string): THREE.AnimationAction | null => {
       const src = animations.get(name)?.getClip();
-      if (!src) return null;
+      if (!src) {return null;}
       const tracks = src.tracks.filter(t =>
         mask.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-      if (!tracks.length) return null;
-      const clip = new THREE.AnimationClip(name + '.aim', src.duration, tracks);
+      if (!tracks.length) {return null;}
+      const clip = new THREE.AnimationClip(`${name  }.aim`, src.duration, tracks);
       const a = mixer.clipAction(clip);
       a.setLoop(THREE.LoopOnce, 1);
       a.clampWhenFinished = true;
@@ -214,7 +214,7 @@ export class PoseControl {
     this.aimUp = mk('Pistol_Aim_Up') ?? mk('UAL_Pistol_Aim_Up');
     this.aimNeutral = mk('Pistol_Aim_Neutral') ?? mk('UAL_Pistol_Aim_Neutral');
     this.aimDown = mk('Pistol_Aim_Down') ?? mk('UAL_Pistol_Aim_Down');
-    if (!this.aimNeutral) logger.debug('Aim layer unavailable — no Pistol_Aim clips');
+    if (!this.aimNeutral) {logger.debug('Aim layer unavailable — no Pistol_Aim clips');}
   }
 
   /** Reveal that a shot went out — ramps the spine lock. */
@@ -262,16 +262,16 @@ export class PoseControl {
       // transitions don't pop.
       this.holdW += (oneshot ? -6 : 6) * dt;
       this.holdW = Math.min(1, Math.max(0, this.holdW));
-      if (this.holdW > 0) for (const hb of this.holdBones) {
+      if (this.holdW > 0) {for (const hb of this.holdBones) {
         // Slerp toward BIND pose first — composing the fixed raise on top
         // of the animated track means the arm flails with every clip
         // frame (the retargeted tracks are garbage on this rig anyway).
         hb.bone.quaternion.slerp(hb.bind, this.holdW);
         hb.last.identity().slerp(hb.off, this.holdW);
         hb.bone.quaternion.multiply(hb.last);
-      }
+      }}
     }
-    if (procPitch) for (const ab of this.aimBones) {
+    if (procPitch) {for (const ab of this.aimBones) {
       if (root) {
         // Pitch around the model's world-space right axis — bone local X
         // is a yaw axis on some rigs (polyart), where a naive local-X
@@ -286,8 +286,8 @@ export class PoseControl {
         ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
       }
       ab.bone.quaternion.multiply(ab.last);
-    }
-    this.poseApplied = !!procPitch || (this.wantHoldPose && !this.holdBaked && this.holdW > 0);
+    }}
+    this.poseApplied = Boolean(procPitch) || (this.wantHoldPose && !this.holdBaked && this.holdW > 0);
     this.snapFeetToShins(playingUAL);
   }
 
@@ -299,14 +299,14 @@ export class PoseControl {
     this.armedT = Math.max(0, this.armedT - dt);
     this.armed += ((this.armedT > 0 ? 1 : 0) - this.armed) * Math.min(dt * 12, 1);
     if (this.armed > 0.01 && this.wantSpineLock) {
-      for (const sb of this.steadyBones) sb.bone.quaternion.slerp(sb.bind, this.armed);
+      for (const sb of this.steadyBones) {sb.bone.quaternion.slerp(sb.bind, this.armed);}
     }
   }
 
   // Retargeted clips don't drive the robot's IK foot bones — pin each
   // foot to its shin tip and give it the shin's orientation.
   private snapFeetToShins(playingUAL: boolean): void {
-    if (!playingUAL || !this.footSnaps.length) return;
+    if (!playingUAL || !this.footSnaps.length) {return;}
     for (const fs of this.footSnaps) {
       fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
       const parent = fs.foot.parent!;

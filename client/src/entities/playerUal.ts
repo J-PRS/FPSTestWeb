@@ -89,17 +89,17 @@ const UNWIND_NODES = new Set(['defhips', 'hips', 'pelvis', 'bhips']);
 function unwindDirYaw(clip: THREE.AnimationClip, model: THREE.Object3D, target: THREE.SkinnedMesh): void {
   const m = clip.name.match(/_(Forward|Backward|Left|Right|ForwardLeft|ForwardRight|BackwardLeft|BackwardRight)$/);
   const yaw = m ? DIRCLIP_YAW[m[1]!] : undefined;
-  if (yaw === undefined || yaw === 0) return;
+  if (yaw === undefined || yaw === 0) {return;}
   const world = _unwindFix.setFromAxisAngle(_yAxis, -yaw);
   const parentQ = new Map<string, THREE.Quaternion>();
   for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.quaternion')) continue;
+    if (!tr.name.endsWith('.quaternion')) {continue;}
     const node = tr.name.slice(0, tr.name.indexOf('.'));
-    if (!UNWIND_NODES.has(normBone(node))) continue;
+    if (!UNWIND_NODES.has(normBone(node))) {continue;}
     let fixLocal = parentQ.get(node);
     if (!fixLocal) {
       const bone = target.skeleton.getBoneByName(node);
-      if (!bone?.parent) continue;
+      if (!bone?.parent) {continue;}
       // Model-relative parent quat — same convention as the torso
       // rest-pose offsets (model.matrixWorld stripped so its π yaw
       // doesn't bake into the correction).
@@ -130,7 +130,7 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
       const srcBones: THREE.Object3D[] = [];
       src.traverse(o => {
         const n = normBone(o.name);
-        if (n.startsWith(spec.prefix) && (!spec.exclude || !spec.exclude.test(o.name))) srcBones.push(o);
+        if (n.startsWith(spec.prefix) && (!spec.exclude || !spec.exclude.test(o.name))) {srcBones.push(o);}
       });
       (src as unknown as { skeleton: object }).skeleton = {
         bones: srcBones,
@@ -139,7 +139,7 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
       };
       const srcByNorm = new Map(srcBones.map(b => [normBone(b.name), b]));
       const srcHip = srcByNorm.get(spec.hip);
-      if (!srcHip) throw new Error(`UAL rig missing hip ${spec.hip} in ${spec.url}`);
+      if (!srcHip) {throw new Error(`UAL rig missing hip ${spec.hip} in ${spec.url}`);}
       sources.push({ spec, src, srcBones, srcByNorm, srcHip, clips: gltf.animations });
     }
     return sources;
@@ -157,7 +157,7 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
 export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv): Promise<Map<string, THREE.AnimationClip>> {
   const sources = await loadSources(env);
   const cached = bakedByVariant.get(variant);
-  if (cached) return cached;
+  if (cached) {return cached;}
 
   // Target: this model's skinned mesh + its full skeleton. Multi-skin
   // GLBs carry a duplicate skeleton per mesh (class_heavy's head/body/
@@ -168,13 +168,13 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   let target: THREE.SkinnedMesh | undefined;
   let firstSkin: THREE.SkinnedMesh | undefined;
   model.traverse(o => {
-    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) return;
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
     const sm = o as THREE.SkinnedMesh;
     firstSkin ??= sm;
-    if (!target && !/_\d+$/.test(sm.skeleton.bones[0]?.name ?? '')) target = sm;
+    if (!target && !/_\d+$/.test(sm.skeleton.bones[0]?.name ?? '')) {target = sm;}
   });
   target ??= firstSkin;
-  if (!target) throw new Error('no skinned mesh to retarget onto');
+  if (!target) {throw new Error('no skinned mesh to retarget onto');}
   model.updateMatrixWorld(true);
 
   // Snapshot the rest pose once — every bakeSource reads the hip's local
@@ -195,9 +195,9 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   // variant never edits this list, only its RIG_MANIFEST entry.
   const want = new Set(RIG_MANIFEST[variant]?.sources ?? []);
   for (const s of sources) {
-    if (!want.has(s.spec.id)) continue;
+    if (!want.has(s.spec.id)) {continue;}
     restoreRest();
-    for (const [name, clip] of bakeSource(s, target, model, variant)) baked.set(name, clip);
+    for (const [name, clip] of bakeSource(s, target, model, variant)) {baked.set(name, clip);}
   }
   // Leave the skeleton at its authored rest, not the last baked frame.
   restoreRest();
@@ -236,7 +236,7 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
  *  Skeleton is at authored rest when this runs (post-restoreRest), so
  *  bone.quaternion IS the bind local. Returns whether it baked. */
 function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
-  if (CLASS_BODY_SPEC[variant]?.anims) return false;
+  if (CLASS_BODY_SPEC[variant]?.anims) {return false;}
   const chains = holdChains();
   const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
   const roleOf = new Map<string, number>();
@@ -246,19 +246,19 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
       if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
     }
   }
-  if (!roleOf.size) return false;
+  if (!roleOf.size) {return false;}
   const _hold = new THREE.Quaternion();
   const _off = new THREE.Quaternion();
   for (const [name, clip] of baked) {
     // Aim poses feed the masked aim layer — flattening them would pin the
     // pitch blend to a single constant frame.
-    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01' || name.includes('Aim_')) continue;
+    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01' || name.includes('Aim_')) {continue;}
     for (const tr of clip.tracks) {
-      if (!tr.name.endsWith('.quaternion')) continue;
+      if (!tr.name.endsWith('.quaternion')) {continue;}
       const role = roleOf.get(tr.name.slice(0, tr.name.indexOf('.')));
-      if (role === undefined) continue;
+      if (role === undefined) {continue;}
       const bone = target.skeleton.getBoneByName(tr.name.slice(0, tr.name.indexOf('.')));
-      if (!bone) continue;
+      if (!bone) {continue;}
       _hold.copy(bone.quaternion).multiply(_off.set(...quats[role]!));
       tr.times = new Float32Array([0, clip.duration]);
       tr.values = new Float32Array([_hold.x, _hold.y, _hold.z, _hold.w, _hold.x, _hold.y, _hold.z, _hold.w]);
@@ -302,7 +302,7 @@ function bakeSource(
     // skin, so every bone past the first skin arrives renamed.
     const want = boneMap[b.name] ?? boneMap[b.name.replace(/_\d+$/, '')];
     const hit = want && srcByNorm.get(spec.prefix + want);
-    if (hit) names[b.name] = hit.name;
+    if (hit) {names[b.name] = hit.name;}
   }
 
   // Rest-pose correction — the load-bearing trick for mixed rigs.
@@ -331,10 +331,10 @@ function bakeSource(
       : variant === 'mannequin'
       ? /^DEF-(hips|spine001|spine003|neck|head)$/
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
-    if (!TORSO.test(tName.replace(/_\d+$/, ''))) continue;
+    if (!TORSO.test(tName.replace(/_\d+$/, ''))) {continue;}
     const tb = target.skeleton.getBoneByName(tName);
     const sb = srcBones.find(b => b.name === sName);
-    if (!tb || !sb) continue;
+    if (!tb || !sb) {continue;}
     sb.getWorldQuaternion(qs).invert();
     // Rest quat in SKELETON space — retarget runs with
     // target.matrixWorld = identity, so the model group's own π yaw must
@@ -353,8 +353,8 @@ function bakeSource(
   const srcHipWorld = new THREE.Vector3();
   srcHip.getWorldPosition(srcHipWorld);
   const tgtHipWorld = new THREE.Vector3();
-  if (tgtHip) tgtHipWorld.setFromMatrixPosition(
-    _m1.copy(model.matrixWorld).invert().multiply(tgtHip.matrixWorld));
+  if (tgtHip) {tgtHipWorld.setFromMatrixPosition(
+    _m1.copy(model.matrixWorld).invert().multiply(tgtHip.matrixWorld));}
   const scale = tgtHip && srcHipWorld.lengthSq() > 0
     ? tgtHipWorld.length() / srcHipWorld.length() : 1;
 
@@ -370,16 +370,16 @@ function bakeSource(
   const deltaScale = tgtHipBind && srcHipBind.lengthSq() > 0
     ? tgtHipBind.length() / srcHipBind.length() : 1;
   const fixHip = (rt: THREE.AnimationClip, srcClip: THREE.AnimationClip): void => {
-    if (!tgtHip || !tgtHipBind) return;
+    if (!tgtHip || !tgtHipBind) {return;}
     // Every skeleton copy's hip needs the same correction — fanned-out
     // tracks arrive named for their own joint variant.
-    const srcTr = srcClip.tracks.find(t => t.name === srcHip.name + '.position');
+    const srcTr = srcClip.tracks.find(t => t.name === `${srcHip.name  }.position`);
     const interp = srcTr
       ? (srcTr as unknown as { createInterpolant(): { evaluate(t: number): ArrayLike<number> } }).createInterpolant()
       : null;
     const hipNorm = normBone(tgtHip.name);
     for (const hipTr of rt.tracks) {
-      if (normBone(hipTr.name.slice(0, hipTr.name.indexOf('.'))) !== hipNorm || !hipTr.name.endsWith('.position')) continue;
+      if (normBone(hipTr.name.slice(0, hipTr.name.indexOf('.'))) !== hipNorm || !hipTr.name.endsWith('.position')) {continue;}
       if (!interp) { // no source hip motion — pin to bind
         hipTr.times = hipTr.times.slice(0, 1);
         hipTr.values = new Float32Array([tgtHipBind.x, tgtHipBind.y, tgtHipBind.z]);
@@ -400,11 +400,11 @@ function bakeSource(
   // base (dedupe-stripped) → all real node names carrying that bone.
   const altNames = new Map<string, string[]>();
   model.traverse(o => {
-    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) return;
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
     for (const b of (o as THREE.SkinnedMesh).skeleton.bones) {
       const base = b.name.replace(/_\d+$/, '');
       const list = altNames.get(base) ?? [];
-      if (!list.includes(b.name)) list.push(b.name);
+      if (!list.includes(b.name)) {list.push(b.name);}
       altNames.set(base, list);
     }
   });
@@ -413,9 +413,9 @@ function bakeSource(
     for (const t of rt.tracks) {
       const base = t.name.slice(0, t.name.indexOf('.'));
       const alts = altNames.get(base.replace(/_\d+$/, ''));
-      if (!alts || alts.length < 2) continue;
+      if (!alts || alts.length < 2) {continue;}
       for (const alt of alts) {
-        if (alt === base) continue;
+        if (alt === base) {continue;}
         const c = t.clone() as THREE.KeyframeTrack;
         c.name = alt + t.name.slice(base.length);
         extra.push(c);
@@ -438,8 +438,8 @@ function bakeSource(
     // retargetClip emits '.bones[Name].prop' tracks that only bind via a
     // skeleton on the mixer root — our mixer roots at the model group, so
     // rewrite to plain 'Name.prop' like native GLTF tracks.
-    for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
-    rt.name = 'UAL_' + clip.name;
+    for (const t of rt.tracks) {t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');}
+    rt.name = `UAL_${  clip.name}`;
     unwindDirYaw(rt, model, target);
     fanOut(rt);
     fixHip(rt, clip);

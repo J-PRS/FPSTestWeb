@@ -28,7 +28,7 @@ export function wireDeployables(ctx: NetCtx): void {
     mgr().applyDeployHp(id, hp, armor);
     // A heal tick names its welder — draw the beam. The local player's
     // own weld is already rendered first-person by the repair tool.
-    if (src && src !== localId()) mgr().remoteWeld(src, id);
+    if (src && src !== localId()) {mgr().remoteWeld(src, id);}
   };
 }
 
@@ -39,8 +39,8 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
   const live = new Set<number>();
   for (const d of roster ?? []) {
     live.add(d.id);
-    if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });
-    else if (d.hp !== undefined) mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);
+    if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) {mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });}
+    else if (d.hp !== undefined) {mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);}
   }
-  for (const id of mgr.remoteIds()) if (!live.has(id)) mgr.remoteRemove(id);
+  for (const id of mgr.remoteIds()) {if (!live.has(id)) mgr.remoteRemove(id);}
 }

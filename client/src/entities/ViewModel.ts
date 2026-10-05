@@ -147,7 +147,7 @@ export class ViewModel {
   // keeps welding to the LG emitter during the holster dip).
   muzzleViewPos(wt: number, out: THREE.Vector3): boolean {
     const n = this.muzzleNodes.get(wt);
-    if (!n) return false;
+    if (!n) {return false;}
     n.getWorldPosition(out);
     this.vmCam.worldToLocal(out);
     return true;
@@ -166,7 +166,7 @@ export class ViewModel {
     // frame behind the rendered gun. Sync it here to this frame's truth.
     this.vmCam.quaternion.copy(cam.quaternion);
     this.vmCam.updateMatrixWorld();
-    if (!this.muzzleViewPos(wt, out)) return false;
+    if (!this.muzzleViewPos(wt, out)) {return false;}
     out.applyMatrix4(this.vmCam.projectionMatrix); // view space → NDC
     cam.updateMatrixWorld();
     out.unproject(cam); // NDC → world along the main camera's ray
@@ -193,12 +193,12 @@ export class ViewModel {
   // character, not just shove depth (mortar heaves, pistol snaps).
   kick(strength = 1): void {
     kickF(this, strength);
-    if (this.activeWeapon === WeaponType.Chaingun) this.startBarrelKick();
+    if (this.activeWeapon === WeaponType.Chaingun) {this.startBarrelKick();}
     if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.DiscPull) {
       // Spinfusor fake: the chambered disc IS the projectile — it's gone
       // the instant the shot breaks. The NEXT disc slides forward out of
       // the breech into the slit during the refire gap.
-      if (!this.discAmmo) this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;
+      if (!this.discAmmo) {this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;}
       if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
     }
     if (this.activeWeapon === WeaponType.BoltLauncher) {
@@ -208,7 +208,7 @@ export class ViewModel {
       this.initBowParts();
       const p = this.bowParts;
       if (p?.bolt) { p.bolt.visible = false; this.bowT = 0; }
-      if (p?.drum) p.drum.rotation.x += Math.PI / 4; // 8 stations
+      if (p?.drum) {p.drum.rotation.x += Math.PI / 4;} // 8 stations
     }
   }
 
@@ -248,11 +248,11 @@ export class ViewModel {
   private chainSpin = 0; // accumulated spin angle — the euler can't be
                          // read back cleanly once roll is composed in
   private startBarrelKick(): void {
-    if (!this.chainBarrels) return;
+    if (!this.chainBarrels) {return;}
     const phi = -this.chainSpin; // rotateOnAxis runs about local -Z
     let bi = -1, by = -Infinity;
     this.chainBarrels.children.forEach((c, i) => {
-      if (!c.userData.barrel) return;
+      if (!c.userData.barrel) {return;}
       const y = c.position.x * Math.sin(phi) + c.position.y * Math.cos(phi);
       if (y > by) { by = y; bi = i; }
     });
@@ -270,7 +270,7 @@ export class ViewModel {
    *  and add the camera position. False for model-less weapons. */
   getMuzzleOffset(out: THREE.Vector3): boolean {
     const n = this.muzzleNodes.get(this.activeWeapon);
-    if (!n) return false;
+    if (!n) {return false;}
     n.getWorldPosition(out);
     this.vmCam.worldToLocal(out); // strip stale camera rotation → pure offset
     return true;
@@ -287,7 +287,7 @@ export class ViewModel {
    *  tracks the authored geometry instead of the tuned constant. */
   parkMuzzleAt(wt: number, worldPos: THREE.Vector3): boolean {
     const n = this.muzzleNodes.get(wt);
-    if (!n?.parent) return false;
+    if (!n?.parent) {return false;}
     n.parent.updateWorldMatrix(true, false);
     n.position.copy(n.parent.worldToLocal(worldPos.clone()));
     return true;
@@ -299,7 +299,7 @@ export class ViewModel {
    *  off-axis the flash rendered buried inside the body, never visible. */
   muzzleGroupPos(wt: number, out: THREE.Vector3): boolean {
     const n = this.muzzleNodes.get(wt);
-    if (!n) return false;
+    if (!n) {return false;}
     n.updateWorldMatrix(true, false);
     n.getWorldPosition(out);
     this.group.worldToLocal(out); // strip camera — pure group-space point
@@ -460,9 +460,9 @@ export class ViewModel {
       this.chainBarrels.rotateOnAxis(this.spinAxis, this.spinVel * dt);
       this.chainSpin += this.spinVel * dt;
       this.spinVel *= Math.exp(-dt * 4);
-      if (this.spinVel < 0.5) this.spinVel = 0;
+      if (this.spinVel < 0.5) {this.spinVel = 0;}
     }
-    if (this.barrelKickIdx < 0 || !this.chainBarrels) return;
+    if (this.barrelKickIdx < 0 || !this.chainBarrels) {return;}
     const b = this.chainBarrels.children[this.barrelKickIdx];
     if (!b) { this.barrelKickIdx = -1; return; }
     this.barrelKickT = Math.max(0, this.barrelKickT - dt);
@@ -475,9 +475,9 @@ export class ViewModel {
    *  slides forward out of the breech into the slit, spinning — ease-out
    *  cubic so it seats with a snap rather than a drift. */
   private tickDiscAmmo(dt: number): void {
-    if (this.discT < 0 || !this.discAmmo) return;
+    if (this.discT < 0 || !this.discAmmo) {return;}
     this.discT += dt;
-    if (this.discT < ViewModel.DISC_HIDE) return;
+    if (this.discT < ViewModel.DISC_HIDE) {return;}
     this.discAmmo.visible = true;
     const k = Math.min((this.discT - ViewModel.DISC_HIDE) / ViewModel.DISC_SLIDE, 1);
     const e = 1 - (1 - k) * (1 - k) * (1 - k);
@@ -501,7 +501,7 @@ export class ViewModel {
    *  re-cocks it. String legs re-stretch cam→latch every frame so they
    *  stay glued to the rotating arms. */
   private initBowParts(): void {
-    if (this.bowParts) return;
+    if (this.bowParts) {return;}
     const w = this.weapons.get(WeaponType.BoltLauncher);
     this.bowParts = w ? {
       bolt: w.getObjectByName('bowBolt') ?? null,
@@ -520,7 +520,7 @@ export class ViewModel {
     // fire, leaving the cylinders as unit rods through the model.
     this.initBowParts();
     const p = this.bowParts;
-    if (!p) return;
+    if (!p) {return;}
     const flex = this.kickAmount;
     let latchOff = -flex * 0.05;
     if (this.bowT >= 0) {
@@ -535,20 +535,20 @@ export class ViewModel {
       // (θ≈90°); a larger factor swings tips PAST perpendicular and the
       // cam/string line goes wrong. f_min ≈ 1.57/1.9.
       const f = 1 - 0.17 * snap * (1 - draw);
-      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * f;
-      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * f;
+      if (p.armL) {p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * f;}
+      if (p.armR) {p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * f;}
       latchOff = (this.bowParts?.geom ? this.bowParts.geom.firedZ - this.bowParts.geom.latchZ : -0.27) * snap * (1 - draw);
     } else {
-      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * (1 - flex * 0.17);
-      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * (1 - flex * 0.17);
+      if (p.armL) {p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * (1 - flex * 0.17);}
+      if (p.armR) {p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * (1 - flex * 0.17);}
     }
-    if (p.string) p.string.position.z = latchOff;
+    if (p.string) {p.string.position.z = latchOff;}
     // Dynamic string legs: cam breech-side rim → latch vertex, re-solved
     // per frame in bow space so the legs track the rotating arms.
     const g = p.geom;
     if (g) {
       for (const [leg, arm, side] of [[p.strL, p.armL, -1], [p.strR, p.armR, 1]] as const) {
-        if (!leg || !arm) continue;
+        if (!leg || !arm) {continue;}
         const th = arm.rotation.y;
         const cx = side * 0.07 + (-Math.sin(th)) * g.camDist;
         const cz = g.armZ + (-Math.cos(th)) * g.camDist;
@@ -564,16 +564,16 @@ export class ViewModel {
         }
       }
     }
-    if (this.bowT < 0 || !p.bolt) return;
+    if (this.bowT < 0 || !p.bolt) {return;}
     this.bowT += dt;
-    if (this.bowT < ViewModel.BOW_HIDE) return;
+    if (this.bowT < ViewModel.BOW_HIDE) {return;}
     p.bolt.visible = true;
     const k = Math.min((this.bowT - ViewModel.BOW_HIDE) / ViewModel.BOW_SLIDE, 1);
     const e = 1 - (1 - k) * (1 - k) * (1 - k);
     p.bolt.position.z = 0.18 * (1 - e); // slides forward out of the drum feed
-    if (k >= 1) p.bolt.position.z = 0;
+    if (k >= 1) {p.bolt.position.z = 0;}
     // bolt re-chambers before the draw cycle ends — keep bowT counting
     // so the limb/string re-cock finishes instead of popping back.
-    if (this.bowT > 0.08 + ViewModel.BOW_DRAW) this.bowT = -1;
+    if (this.bowT > 0.08 + ViewModel.BOW_DRAW) {this.bowT = -1;}
   }
 }

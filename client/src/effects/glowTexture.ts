@@ -9,7 +9,8 @@ export function getGlowTexture(size = 64, falloff = 0.35, midA = 0.65): THREE.Te
   let tex = cache.get(key);
   if (!tex) {
     const c = document.createElement('canvas');
-    c.width = c.height = size;
+    c.height = size;
+    c.width = c.height;
     const ctx = c.getContext('2d')!;
     const half = size / 2;
     const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
@@ -33,7 +34,8 @@ export function getPuffTexture(size = 128): THREE.Texture {
   let tex = puffCache.get(size);
   if (!tex) {
     const c = document.createElement('canvas');
-    c.width = c.height = size;
+    c.height = size;
+    c.width = c.height;
     const ctx = c.getContext('2d')!;
     const half = size / 2;
     // 7 overlapping blobs at fixed-but-ragged offsets — one draw call per
@@ -65,7 +67,8 @@ export function getMuzzleFlashTexture(size = 128): THREE.Texture {
   let tex = flashCache.get(size);
   if (!tex) {
     const c = document.createElement('canvas');
-    c.width = c.height = size;
+    c.height = size;
+    c.width = c.height;
     const ctx = c.getContext('2d')!;
     const half = size / 2;
     ctx.translate(half, half);

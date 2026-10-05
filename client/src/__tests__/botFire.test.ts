@@ -108,11 +108,11 @@ describe('bot real-weapon fire', () => {
       const lo = BOT_LOADOUTS[i]!;
       for (const [wt, range] of [[lo.near, 12], [lo.mid, 25], [lo.far, 80]] as const) {
         const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;
-        if (!pellets || pellets.count <= 1) continue;
+        if (!pellets || pellets.count <= 1) {continue;}
         const c = ctx();
         c.fire.resolveShot(fakeBot(i), 'e1', aimAt(range, 1.6, 0));
         expect(c.projectiles.length).toBe(pellets.count);
-        for (const p of c.projectiles) expect(p.shooterId).toBe(`bot:T${i}`);
+        for (const p of c.projectiles) {expect(p.shooterId).toBe(`bot:T${i}`);}
         fired = true;
         break;
       }

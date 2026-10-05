@@ -188,13 +188,14 @@ function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Ar
       const i = y * size + x;
       const r = _fbm(u, v, 6, 4), g = _fbm(u, v, 18, 4);
       rawR[i] = r; rawG[i] = g;
-      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
-      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
+      if (r < rMin) {rMin = r;} if (r > rMax) {rMax = r;}
+      if (g < gMin) {gMin = g;} if (g > gMax) {gMax = g;}
     }
   }
   const data = packNoiseTex(size, { rawR, rawG, rMin, rMax, gMin, gMax });
   const tex = new THREE.DataTexture(data, size, size);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapS = tex.wrapT;
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
@@ -204,7 +205,7 @@ function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Ar
   // shader's deck blobs instead of free-floating in clear sky.
   const base = new Float32Array(size * size);
   const rSpan = rMax - rMin;
-  for (let i = 0; i < size * size; i++) base[i] = (rawR[i]! - rMin) / rSpan;
+  for (let i = 0; i < size * size; i++) {base[i] = (rawR[i]! - rMin) / rSpan;}
   return { tex, base };
 }
 

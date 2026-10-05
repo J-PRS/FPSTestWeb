@@ -29,23 +29,23 @@ let _shimmerMat: THREE.MeshBasicMaterial | null = null;
 let _coreMat: THREE.MeshBasicMaterial | null = null;
 
 export function totemParts(): SwarmPart[] {
-  if (!_shaftMat) _shaftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
+  if (!_shaftMat) {_shaftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
     map: getGlowTexture(), color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
-  if (!_beamMat) _beamMat = new THREE.MeshBasicMaterial({
+  });}
+  if (!_beamMat) {_beamMat = new THREE.MeshBasicMaterial({
     color: 0xff3344, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
-  if (!_shimmerMat) _shimmerMat = new THREE.MeshBasicMaterial({
+  });}
+  if (!_shimmerMat) {_shimmerMat = new THREE.MeshBasicMaterial({
     color: 0x8899ff, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false,
-  });
-  if (!_coreMat) _coreMat = new THREE.MeshBasicMaterial({
+  });}
+  if (!_coreMat) {_coreMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: _shaftGeo, material: _shaftMat, castShadow: true },
     { geometry: _capGeo, material: _shaftMat },
@@ -98,9 +98,9 @@ export interface TotemVisHost {
 }
 
 export function writeTotemInstances(t: TotemVisHost): void {
-  if (!t.hasSlots) return;
+  if (!t.hasSlots) {return;}
   const swarm = getSwarm('totem');
-  if (!swarm) return;
+  if (!swarm) {return;}
   const slot = t.swarmSlot;
   const r = t.radius;
   const visible = t.state !== 'blinkIn';

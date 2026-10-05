@@ -34,7 +34,7 @@ export function swingSwipe(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE
   for (const tilt of [SWIPE_TILT, -SWIPE_TILT]) {
     const r = RibbonTrail.acquire(scene, { color, width: 0.45, life: SWIPE_LIFE, billboard: true, tag: 'swipe' });
     _side.crossVectors(dir, _UP);
-    if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0); else _side.normalize();
+    if (_side.lengthSq() < 1e-4) {_side.set(1, 0, 0);} else {_side.normalize();}
     _up.crossVectors(_side, dir).normalize();
     const ct = Math.cos(tilt), st = Math.sin(tilt);
     _dirW.copy(_side).multiplyScalar(ct).addScaledVector(_up, st);
@@ -59,7 +59,7 @@ const SWIPE_LIFE = 0.18;
 
 function traceStroke(r: RibbonTrail, camPos: THREE.Vector3, camDir: THREE.Vector3, tilt: number, lenScale = 1): void {
   _side.crossVectors(camDir, _UP);
-  if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0); else _side.normalize();
+  if (_side.lengthSq() < 1e-4) {_side.set(1, 0, 0);} else {_side.normalize();}
   _up.crossVectors(_side, camDir).normalize();
   const ct = Math.cos(tilt), st = Math.sin(tilt);
   // Stroke direction = side axis rotated ±tilt toward up — the mirrored

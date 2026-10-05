@@ -65,7 +65,7 @@ export const profSuper = (w: number, h: number, n = 6, seg = 32): Ring2 => {
   for (let i = 0; i < seg; i++) {
     const a = (i / seg) * Math.PI * 2;
     const c = Math.cos(a), s = Math.sin(a);
-    pts.push([Math.sign(c) * Math.pow(Math.abs(c), e) * w / 2, Math.sign(s) * Math.pow(Math.abs(s), e) * h / 2]);
+    pts.push([Math.sign(c) * Math.abs(c) ** e * w / 2, Math.sign(s) * Math.abs(s) ** e * h / 2]);
   }
   return pts;
 };
@@ -94,17 +94,17 @@ export const validateRing = (r: Ring2, tag = 'ring'): void => {
   for (let i = 0; i < r.length; i++) {
     const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % r.length]!;
     area += x0 * y1 - x1 * y0;
-    if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) Logger.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);
+    if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) {Logger.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);}
   }
-  if (area < 0) Logger.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);
-  if (r.length < 3) Logger.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);
+  if (area < 0) {Logger.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);}
+  if (r.length < 3) {Logger.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);}
 };
 const validateLoft = (sections: LoftSection[]): void => {
   let n = -1;
   for (const s of sections) {
-    if (!s.ring) continue;
-    if (n < 0) n = s.ring.length;
-    else if (s.ring.length !== n) Logger.warn(`[weaponKit] loft: section count mismatch ${s.ring.length} vs ${n} — resampleRing first`);
+    if (!s.ring) {continue;}
+    if (n < 0) {n = s.ring.length;}
+    else if (s.ring.length !== n) {Logger.warn(`[weaponKit] loft: section count mismatch ${s.ring.length} vs ${n} — resampleRing first`);}
     validateRing(s.ring, 'loft section');
   }
 };
@@ -132,8 +132,8 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true)
   for (let i = 0; i < sections.length - 1; i++) {
     const s0 = sections[i]!, s1 = sections[i + 1]!;
     for (let j = 0; j < seg; j++) {
-      if (s0.point && s1.ring) tri(pt(s0), ring(s1, j), ring(s1, j + 1), j / seg, (j + 1) / seg, s0.z, s1.z);
-      else if (s0.ring && s1.point) tri(pt(s1), ring(s0, j + 1), ring(s0, j), j / seg, (j + 1) / seg, s0.z, s1.z);
+      if (s0.point && s1.ring) {tri(pt(s0), ring(s1, j), ring(s1, j + 1), j / seg, (j + 1) / seg, s0.z, s1.z);}
+      else if (s0.ring && s1.point) {tri(pt(s1), ring(s0, j + 1), ring(s0, j), j / seg, (j + 1) / seg, s0.z, s1.z);}
       else if (s0.ring && s1.ring) {
         const a = ring(s0, j), b = ring(s1, j), c = ring(s1, j + 1), d = ring(s0, j + 1);
         quad(a, b, c, d, j / seg, (j + 1) / seg, s0.z, s1.z);
@@ -142,13 +142,13 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true)
   }
   if (cap) {
     const capEnd = (s: LoftSection, flip: boolean) => {
-      if (!s.ring) return; // point ends are already closed by the fan
+      if (!s.ring) {return;} // point ends are already closed by the fan
       let cx = 0, cy = 0;
       for (const p of s.ring) { cx += p[0]; cy += p[1]; }
       cx = cx / seg + (s.dx ?? 0); cy = cy / seg + (s.dy ?? 0);
       for (let j = 0; j < seg; j++) {
         const a = ring(s, j), b = ring(s, j + 1);
-        if (flip) pos.push(cx, cy, s.z, ...a, ...b); else pos.push(cx, cy, s.z, ...b, ...a);
+        if (flip) {pos.push(cx, cy, s.z, ...a, ...b);} else {pos.push(cx, cy, s.z, ...b, ...a);}
         uv.push(0.5, s.z, (j + 1) / seg, s.z, j / seg, s.z);
       }
     };
@@ -167,7 +167,7 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true)
  *  butt-joint. Rings need equal point counts; resampleRing fixes that.
  *  t=0 returns a, t=1 returns b. */
 export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
-  if (a.length !== b.length) b = resampleRing(b, a.length);
+  if (a.length !== b.length) {b = resampleRing(b, a.length);}
   return a.map(([ax, ay], i) => {
     const [bx, by] = b[i]!;
     return [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number];
@@ -185,7 +185,7 @@ export const morphLoft = (keys: LoftSection[], subdiv = 4): LoftSection[] => {
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i]!, next = keys[i + 1];
     out.push(k);
-    if (!next || !k.ring || !next.ring) continue;
+    if (!next || !k.ring || !next.ring) {continue;}
     const n = Math.max(k.ring.length, next.ring.length);
     const a = resampleRing(k.ring, n), b = resampleRing(next.ring, n);
     for (let s = 1; s <= subdiv; s++) {
@@ -227,7 +227,7 @@ export const mkRevolve = (profile: [number, number][], mat: THREE.Material, seg 
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   // smooth welds the seam — barrels/knobs want averaged normals, not
   // per-face facets (mid-poly rule: chamfers hard, turned parts soft).
-  if (smooth) geo = mergeVertices(geo);
+  if (smooth) {geo = mergeVertices(geo);}
   geo.computeVertexNormals();
   return new THREE.Mesh(geo, mat);
 };
@@ -269,11 +269,11 @@ export const notchRing = (r: Ring2, edge: number, spans: [number, number][], dep
     return [p[0] * (1 - depth / l), p[1] * (1 - depth / l)];
   };
   const out = r.slice(0, edge + 1);
-  for (const [t0, t1] of [...spans].sort((x, y) => x[0] - y[0])) {
+  for (const [t0, t1] of [...spans].toSorted((x, y) => x[0] - y[0])) {
     const s = slope * (t1 - t0);
     out.push(lerp(t0), dip(lerp(t0 + s)), dip(lerp(t1 - s)), lerp(t1));
   }
-  for (let i = edge + 1; i < m; i++) out.push(r[i]!);
+  for (let i = edge + 1; i < m; i++) {out.push(r[i]!);}
   return out;
 };
 
@@ -292,7 +292,7 @@ export const resampleRing = (r: Ring2, n: number): Ring2 => {
   let e = 0;
   for (let i = 0; i < n; i++) {
     const t = (i / n) * total;
-    while (e < m - 1 && lens[e + 1]! < t) e++;
+    while (e < m - 1 && lens[e + 1]! < t) {e++;}
     const f = (t - lens[e]!) / Math.max(lens[e + 1]! - lens[e]!, 1e-9);
     const [x0, y0] = r[e]!, [x1, y1] = r[(e + 1) % m]!;
     out.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]);
@@ -310,8 +310,8 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   // Counts mismatch? Re-sample the inner to the outer's count so e.g. a
   // hex rim can carry a 12-sided bore. Starts must be angle-aligned.
   validateRing(outer, 'annulus outer');
-  if (inner.length !== seg) inner = resampleRing(inner, seg);
-  else validateRing(inner, 'annulus inner');
+  if (inner.length !== seg) {inner = resampleRing(inner, seg);}
+  else {validateRing(inner, 'annulus inner');}
   const pos: number[] = [], uv: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], u0: number, u1: number, v0: number, v1: number) => {
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);
@@ -373,7 +373,7 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
       const p = pts[i]!;
       for (let j = 0; j < seg; j++) {
         const a = ring(i, j), b = ring(i, j + 1);
-        if (flip) pos.push(p[0], p[1], p[2], ...b, ...a); else pos.push(p[0], p[1], p[2], ...a, ...b);
+        if (flip) {pos.push(p[0], p[1], p[2], ...b, ...a);} else {pos.push(p[0], p[1], p[2], ...a, ...b);}
         uv.push(0.5, i, 1, i, 0, i);
       }
     }

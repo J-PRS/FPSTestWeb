@@ -109,7 +109,7 @@ export class ThreatTable {
   /** Forget a candidate entirely (disconnect/leave). */
   forget(id: string): void {
     this.threat.delete(id);
-    if (this.target?.id === id) this.target = null;
+    if (this.target?.id === id) {this.target = null;}
     this.stalking = false; // left the world — not "far away"
   }
 
@@ -124,15 +124,15 @@ export class ThreatTable {
     this.dropInvalidTarget(selfPos, profile);
 
     this.evalT -= dt;
-    if (this.evalT > 0) { if (this.target) this.engagedT += dt; return this.target; }
+    if (this.evalT > 0) { if (this.target) {this.engagedT += dt;} return this.target; }
     this.evalT = profile.evalEvery * (0.8 + Math.random() * 0.4); // jitter — packs don't move in lockstep
 
     const best = this.pickBest(selfPos, candidates, profile);
     const switched = best !== this.target && best?.id !== this.target?.id;
     this.target = best;
-    if (best) this.stalking = false;
-    if (switched) this.engagedT = 0;
-    if (best) this.engagedT += dt;
+    if (best) {this.stalking = false;}
+    if (switched) {this.engagedT = 0;}
+    if (best) {this.engagedT += dt;}
     // Perception snapshot — only refreshes on eval ticks, and eval ticks
     // come slower for distant profiles. The pursuit point is where the
     // target *was*, so juking works.
@@ -146,10 +146,10 @@ export class ThreatTable {
   // Damage threat decays — a burst pulls aggro NOW, not forever.
   private decayThreat(dt: number, profile: TargetProfile): void {
     const d = 1 - Math.min(1, profile.decay * dt * 10);
-    if (d <= 0) return;
+    if (d <= 0) {return;}
     for (const [id, v] of this.threat) {
       const nv = v * d;
-      if (nv < 0.5) this.threat.delete(id); else this.threat.set(id, nv);
+      if (nv < 0.5) {this.threat.delete(id);} else {this.threat.set(id, nv);}
     }
   }
 
@@ -157,9 +157,9 @@ export class ThreatTable {
   // Death = true deaggro; leash-out = stalking — keep lastSeen and
   // wander TOWARD it so distant hunters drift your way, erratically.
   private dropInvalidTarget(selfPos: THREE.Vector3, profile: TargetProfile): void {
-    if (!this.target) return;
+    if (!this.target) {return;}
     if (this.target.alive && (profile.leash <= 0 ||
-        selfPos.distanceToSquared(this.target.pos) <= profile.leash * profile.leash)) return;
+        selfPos.distanceToSquared(this.target.pos) <= profile.leash * profile.leash)) {return;}
     this.stalking = this.target.alive;
     this.target = null;
     this.engagedT = 0;
@@ -170,9 +170,9 @@ export class ThreatTable {
   private pickBest(selfPos: THREE.Vector3, candidates: TargetCandidate[], profile: TargetProfile): TargetCandidate | null {
     let best: TargetCandidate | null = null, bestScore = -Infinity;
     for (const c of candidates) {
-      if (!c.alive) continue;
+      if (!c.alive) {continue;}
       const dist = selfPos.distanceTo(c.pos);
-      if (profile.leash > 0 && dist > profile.leash) continue;
+      if (profile.leash > 0 && dist > profile.leash) {continue;}
       const s =
         profile.wDist / (1 + dist / 40) +
         profile.wDmg * Math.min(1, (this.threat.get(c.id) ?? 0) / 60) +

@@ -50,7 +50,7 @@ export interface RemotesDeps {
 function makeRemoteHooks(deps: RemotesDeps) {
   return {
     create: (id: string, state: WirePlayerState) => {
-      if (state.isDead) return undefined;
+      if (state.isDead) {return undefined;}
       const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain(), state.armorClass);
       rp.setClass(state.armorClass);
       return rp;
@@ -82,19 +82,19 @@ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string
 // invisible skier is a giveaway). A teammate's cloak is different: it
 // stays on screen wearing the ghost shimmer, so only enemies vanish.
 function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
-  const cloaked = !!(status & STATUS.CLOAK);
-  const friendly = cloaked && !!theirTeam && theirTeam === deps.world.localTeam;
+  const cloaked = Boolean(status & STATUS.CLOAK);
+  const friendly = cloaked && Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setCloakHidden(cloaked && !friendly);
   remotePlayer.setCloakGhosted(cloaked && friendly);
-  remotePlayer.setShielded(!!(status & STATUS.SHIELD));
-  remotePlayer.setMending(!!(status & STATUS.MEND));
-  remotePlayer.setRegenAura(!!(status & STATUS.REGEN));
-  remotePlayer.setDdAura(!!(status & STATUS.DD));
-  remotePlayer.setCharged(!!(status & STATUS.CHARGED));
-  if (!cloaked || friendly) return true;
+  remotePlayer.setShielded(Boolean(status & STATUS.SHIELD));
+  remotePlayer.setMending(Boolean(status & STATUS.MEND));
+  remotePlayer.setRegenAura(Boolean(status & STATUS.REGEN));
+  remotePlayer.setDdAura(Boolean(status & STATUS.DD));
+  remotePlayer.setCharged(Boolean(status & STATUS.CHARGED));
+  if (!cloaked || friendly) {return true;}
   // Fire-reveal: his own shot left the shimmer window open — the marker
   // and bar stay up like any visible enemy until ghostT closes it.
-  if (remotePlayer.ghostT > 0) return true;
+  if (remotePlayer.ghostT > 0) {return true;}
   deps.lazyHud().removePlayerIndicator(playerId);
   deps.lazyHealthBarSystem().removeBar(playerId);
   return false;
@@ -106,7 +106,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   const hud = deps.lazyHud();
   // The wire ski bit doubles as the animation claim — tuck when held,
   // run when released, regardless of how much momentum remains.
-  remotePlayer.wireSki = !playerState.isDead && !!playerState.ski;
+  remotePlayer.wireSki = !playerState.isDead && Boolean(playerState.ski);
   let skiing = false;
   if (!playerState.isDead && playerState.ski) {
     const v = remotePlayer.vel;
@@ -121,12 +121,12 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   // apex) is the only honest tell, matching the remote animation. Bots
   // that write wireJet (brain's real jet button) override the guess.
   const jetting = isJetting(remotePlayer, playerState.isDead);
-  if (jetting) deps.lazyEffects().spawnJetpack(remotePlayer.position);
+  if (jetting) {deps.lazyEffects().spawnJetpack(remotePlayer.position);}
   sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel, remotePlayer.armorClass);
   if (!playerState.isDead) {
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
-    const friendly = !!playerState.team && playerState.team === deps.world.localTeam;
+    const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
     hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass });
   } else {
     hud.removePlayerIndicator(playerId);
@@ -136,7 +136,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
 // One jetting verdict for audio + trail: wireJet when a driver knows the
 // real button, else the powered-climb heuristic.
 function isJetting(rp: RemotePlayer, dead: boolean): boolean {
-  if (dead) return false;
+  if (dead) {return false;}
   return rp.wireJet ?? rp.vel.y > 4.5;
 }
 
@@ -156,10 +156,10 @@ function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
 function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
     playerId: string, playerState: WirePlayerState, dt: number): void {
   const nm = deps.lazyNetworkManager();
-  if (playerId === nm.getLocalPlayerId()) return;
+  if (playerId === nm.getLocalPlayerId()) {return;}
 
   const remotePlayer = deps.world.remotePlayers.ensure(playerId, playerState);
-  if (!remotePlayer) return;
+  if (!remotePlayer) {return;}
 
   // Entity liveness mirrors roster truth every frame — the kill/respawn
   // events are just the fast path. A lost event leaves _isDead frozen
@@ -167,8 +167,8 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // the silent invisible-bot desync the hash can't flag because the
   // roster agrees).
   if (playerState.isDead !== remotePlayer.isDead) {
-    if (playerState.isDead) remotePlayer.playDeath();
-    else remotePlayer.respawn(playerState.position);
+    if (playerState.isDead) {remotePlayer.playDeath();}
+    else {remotePlayer.respawn(playerState.position);}
   }
 
   // Hide stale remote players — backgrounded tabs keep the socket open but
@@ -190,12 +190,12 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server — the
   // silhouette must follow the sim's body, not the create-time class.
-  if (remotePlayer.armorClass !== playerState.armorClass) remotePlayer.setClass(playerState.armorClass);
+  if (remotePlayer.armorClass !== playerState.armorClass) {remotePlayer.setClass(playerState.armorClass);}
 
   // A decloak-revealed enemy (ghostT live from his own shot) reads like
   // any visible foe: HUD marker, team tint, ski dust — the cloak only
   // blanks him once the shimmer window closes.
-  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) return;
+  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) {return;}
   applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
 }
@@ -207,9 +207,9 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // Debug hitbox wireframe — friendly green, everyone else red. Runs every
   // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
   // constructor's default green.
-  const friendly = !!theirTeam && theirTeam === deps.world.localTeam;
+  const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setColliderColor(friendly ? 0x00ff00 : ENEMY_RED);
-  if (!theirTeam || theirTeam === lastTintOf.get(playerId)) return;
+  if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
 }
@@ -228,7 +228,7 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
       m.position.set(playerPos.x, playerPos.y + 0.4, playerPos.z);
     } else if (c) {
       const rp = deps.world.remotePlayers.get(c);
-      if (rp) m.position.set(rp.pos.x, rp.pos.y + 0.4, rp.pos.z); // shoulders, not boots
+      if (rp) {m.position.set(rp.pos.x, rp.pos.y + 0.4, rp.pos.z);} // shoulders, not boots
     } else if (m.position.distanceToSquared(marker.wirePos) > 1e-6) {
       m.position.lerp(marker.wirePos, 0.35);
     }
@@ -241,7 +241,7 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
     // it — projecting both from home would leave them ~3m apart on screen.
     if (marker.homeKnown) {
       const home = deps.world.flagStates[team] === 'home';
-      if (!home) _flagAnchor.set(marker.home.x, marker.home.y + FLAG_STAND_TOP + 0.07, marker.home.z);
+      if (!home) {_flagAnchor.set(marker.home.x, marker.home.y + FLAG_STAND_TOP + 0.07, marker.home.z);}
       hud.updateFlagIndicator(`stand:${team}`, _flagAnchor, cam, team, 'stand');
     }
   }
@@ -266,7 +266,7 @@ function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayer
 }
 
 function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string): { scores: Map<string, number>; localScoreId: string } {
-  if (nm.isConnected()) return { scores: deps.world.ffaScores, localScoreId: localId };
+  if (nm.isConnected()) {return { scores: deps.world.ffaScores, localScoreId: localId };}
   const offline = deps.lazyOfflineFfaScores?.();
   return offline
     ? { scores: offline, localScoreId: 'local' }
@@ -290,7 +290,7 @@ function aliveSecs(id: string, dead: boolean, now: number): number | null {
 // Scoreboard rows: local player first, then remotes sorted by frags desc
 function updateScoreboard(deps: RemotesDeps): void {
   const hud = deps.lazyHud();
-  if (!hud.scoreboardVisible) return;
+  if (!hud.scoreboardVisible) {return;}
   const nm = deps.lazyNetworkManager();
   const localId = nm.getLocalPlayerId();
   // Offline combat uses the stable authority id `local`; the generated
@@ -315,7 +315,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
   for (const [id, rp] of deps.world.remotePlayers) {
-    if (nm.getPlayers().has(id)) continue;
+    if (nm.getPlayers().has(id)) {continue;}
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
@@ -327,7 +327,7 @@ function updateScoreboard(deps: RemotesDeps): void {
 }
 
 export function createRemotes(deps: RemotesDeps) {
-  let lastSentPos = { x: 0, y: 0, z: 0 };
+  const lastSentPos = { x: 0, y: 0, z: 0 };
   let lastRemotePosLog = '';
   const lastTintOf = new Map<string, string>();
   let rosterPollT = 0;
@@ -382,7 +382,7 @@ export function createRemotes(deps: RemotesDeps) {
     // entity-keyed (flag:alpha/bravo) have no owner to clean them.
     // Sweep the whole overlay once on the transition or they freeze
     // mid-screen for the life of the session.
-    if (wasConnected && !nm.isConnected()) deps.lazyHud().clearPlayerIndicators();
+    if (wasConnected && !nm.isConnected()) {deps.lazyHud().clearPlayerIndicators();}
     wasConnected = nm.isConnected();
 
     const players = nm.getPlayers();
@@ -411,13 +411,13 @@ export function createRemotes(deps: RemotesDeps) {
     // Local bots ('bot:', 'dummy') aren't in the network roster, so the
     // forEach above never touches them — same red marker as real remotes.
     for (const [id, rp] of deps.world.remotePlayers) {
-      if (players.has(id)) continue;
+      if (players.has(id)) {continue;}
       if (rp.isDead) {
         hud.removePlayerIndicator(id);
       } else {
         // Local bots aren't network remotes — without this they'd jet
         // silently; wireJet carries the brain's real burn.
-        if (isJetting(rp, false)) deps.lazyEffects().spawnJetpack(rp.position);
+        if (isJetting(rp, false)) {deps.lazyEffects().spawnJetpack(rp.position);}
         // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam

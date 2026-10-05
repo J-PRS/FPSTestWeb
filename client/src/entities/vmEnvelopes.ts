@@ -86,11 +86,11 @@ export class VmEnvelopes {
       // model still sits built-hidden, so arming BoltLauncher (wt 0)
       // would leave it invisible until the first real swap.
       const cur = this.h.weapons.get(index);
-      if (cur && !cur.visible) cur.visible = true;
+      if (cur && !cur.visible) {cur.visible = true;}
       return;
     }
     this.pendingWeapon = index;
-    if (this.switchT < 0) this.switchT = 0; // already lowering: just retarget
+    if (this.switchT < 0) {this.switchT = 0;} // already lowering: just retarget
   }
 
   /** Tick all three envelopes, returning their dip scalars for the pose
@@ -105,30 +105,30 @@ export class VmEnvelopes {
 
   // Throw anim: quick lower, hold through release, spring back up
   private updateThrowDip(dt: number): number {
-    if (this.throwT < 0) return 0;
+    if (this.throwT < 0) {return 0;}
     this.throwT += dt;
     const t = this.throwT / this.throwScale; // normalized — release lands at THROW_RELEASE*scale
     if (t >= THROW_TOTAL) {
       this.throwT = -1;
       return 0;
     }
-    if (t < THROW_LOWER_TIME) return t / THROW_LOWER_TIME;
-    if (t < THROW_RELEASE + 0.07) return 1;
+    if (t < THROW_LOWER_TIME) {return t / THROW_LOWER_TIME;}
+    if (t < THROW_RELEASE + 0.07) {return 1;}
     return Math.max(0, 1 - (t - THROW_RELEASE - 0.07) / THROW_RAISE_TIME);
   }
 
   // Weapon switch: lower, swap at the bottom, raise
   private updateSwitchDip(dt: number): number {
-    if (this.switchT < 0) return 0;
+    if (this.switchT < 0) {return 0;}
     this.switchT += dt;
     const t = this.switchT;
-    if (t < SWITCH_LOWER_TIME) return t / SWITCH_LOWER_TIME;
+    if (t < SWITCH_LOWER_TIME) {return t / SWITCH_LOWER_TIME;}
     if (this.pendingWeapon >= 0 && this.pendingWeapon !== this.h.activeWeapon) {
       const prev = this.h.weapons.get(this.h.activeWeapon);
-      if (prev) prev.visible = false;
+      if (prev) {prev.visible = false;}
       this.h.activeWeapon = this.pendingWeapon;
       const next = this.h.weapons.get(this.h.activeWeapon);
-      if (next) next.visible = true;
+      if (next) {next.visible = true;}
       // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
       if (this.h.shieldShells.length) { this.h.setShield(false); this.h.setShield(true, this.h.shellColor); }
       // Park the flash at the muzzle NODE — the old z-only park left the
@@ -150,7 +150,7 @@ export class VmEnvelopes {
   // Punch swing envelope: snap in, brief apex hold, spring back out.
   // Also flies the fist — weapon envelope drives the gun, this moves the glove.
   private updatePunchDip(dt: number): number {
-    if (this.punchT < 0) return 0;
+    if (this.punchT < 0) {return 0;}
     this.punchT += dt;
     const t = this.punchT;
     const hold = this.punchLanded ? PUNCH_HIT_HOLD : PUNCH_HOLD;
@@ -162,9 +162,9 @@ export class VmEnvelopes {
       return 0;
     }
     let env: number;
-    if (t < PUNCH_IN) env = t / PUNCH_IN;
-    else if (t < PUNCH_IN + hold) env = 1;
-    else env = 1 - (t - PUNCH_IN - hold) / PUNCH_OUT;
+    if (t < PUNCH_IN) {env = t / PUNCH_IN;}
+    else if (t < PUNCH_IN + hold) {env = 1;}
+    else {env = 1 - (t - PUNCH_IN - hold) / PUNCH_OUT;}
     // Fist leads: it jabs in on the weapon's way out and snaps back first
     const ft = t < PUNCH_IN ? t / PUNCH_IN : t < PUNCH_IN + hold + 0.05 ? 1 : Math.max(0, 1 - (t - PUNCH_IN - hold - 0.05) / 0.12);
     const ease = 1 - (1 - ft) * (1 - ft); // ease-out — fast launch, lands hard

@@ -64,7 +64,7 @@ export class DemoPlayer {
     this.remotesByIdx.clear();
     for (const f of data.remoteFrames) {
       let arr = this.remotesByIdx.get(f.rosterIdx);
-      if (!arr) this.remotesByIdx.set(f.rosterIdx, arr = []);
+      if (!arr) {this.remotesByIdx.set(f.rosterIdx, arr = []);}
       arr.push(f);
     }
     this.playing = false;
@@ -83,7 +83,7 @@ export class DemoPlayer {
   }
 
   play(): void {
-    if (!this.demoData) return;
+    if (!this.demoData) {return;}
     if (this.currentTime >= this.duration) {
       this.currentTime = 0;
       this.frameIndex = 0;
@@ -108,9 +108,9 @@ export class DemoPlayer {
   }
 
   seek(time: number): void {
-    if (!this.demoData) return;
+    if (!this.demoData) {return;}
     // Guard against NaN/Infinity (e.g. from corrupted slider events)
-    if (!Number.isFinite(time)) time = 0;
+    if (!Number.isFinite(time)) {time = 0;}
     this.currentTime = Math.max(0, Math.min(time, this.duration));
     this.frameIndex = pb.findFrameIndex(this, this.currentTime);
     // Reset event pointers and re-emit all events from the beginning, so
@@ -135,7 +135,7 @@ export class DemoPlayer {
 
   setSpeed(speed: number): void {
     // 0 would freeze playback silently forever; NaN poisons currentTime
-    if (!Number.isFinite(speed) || speed === 0) return;
+    if (!Number.isFinite(speed) || speed === 0) {return;}
     this.playbackSpeed = speed;
   }
 
@@ -143,8 +143,8 @@ export class DemoPlayer {
   // (currentTime, time], unlike seek() which rebuilds the whole world.
   // Offline renderers pump this per output frame; O(new events) not O(all).
   scrubTo(time: number): void {
-    if (!this.demoData) return;
-    if (!Number.isFinite(time)) time = 0;
+    if (!this.demoData) {return;}
+    if (!Number.isFinite(time)) {time = 0;}
     time = Math.max(0, Math.min(time, this.duration));
     if (time < this.currentTime) { this.seek(time); return; }
     this.currentTime = time;
@@ -171,10 +171,10 @@ export class DemoPlayer {
 
   // Called every game frame. dt is real seconds.
   update(dt: number): void {
-    if (!this.playing || !this.demoData) return;
+    if (!this.playing || !this.demoData) {return;}
 
     // Guard against NaN/Infinity dt (e.g. from tab visibility quirks)
-    if (!Number.isFinite(dt) || dt < 0) dt = 0;
+    if (!Number.isFinite(dt) || dt < 0) {dt = 0;}
     this.currentTime += dt * this.playbackSpeed;
 
     if (this.currentTime >= this.duration) { pb.handleEndOfPlayback(this); return; }
@@ -225,14 +225,14 @@ export class DemoPlayer {
   getRemoteStates(): InterpolatedRemote[] {
     const out: InterpolatedRemote[] = [];
     for (const [rosterIdx, frames] of this.remotesByIdx) {
-      if (frames.length === 0) continue;
+      if (frames.length === 0) {continue;}
       const i = pb.findEventIndex(frames, this.currentTime) - 1;
-      if (i < 0) continue; // not spawned yet at this time
+      if (i < 0) {continue;} // not spawned yet at this time
       const f0 = frames[i]!;
       const f1 = i + 1 < frames.length ? frames[i + 1]! : f0;
       let t = 0;
       const range = f1.timestamp - f0.timestamp;
-      if (range > 0) t = Math.max(0, Math.min(1, (this.currentTime - f0.timestamp) / range));
+      if (range > 0) {t = Math.max(0, Math.min(1, (this.currentTime - f0.timestamp) / range));}
       out.push({
         rosterIdx,
         posX: f0.posX + (f1.posX - f0.posX) * t,

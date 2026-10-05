@@ -23,7 +23,7 @@ let dome: THREE.Mesh | null = null;
 
 /** Drop the arena dome — admin hot-reload removed the boundary. */
 export function clearArenaDome(scene: THREE.Scene): void {
-  if (!dome) return;
+  if (!dome) {return;}
   scene.remove(dome);
   dome.geometry.dispose();
   (dome.material as THREE.Material).dispose();
@@ -54,7 +54,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
     const dx = cam.position.x - a.x;
     const dy = cam.position.y - groundY;
     const dz = cam.position.z - a.z;
-    const distToShell = Math.abs(Math.sqrt(dx * dx + dy * dy + dz * dz) - a.radius);
+    const distToShell = Math.abs(Math.hypot(dx, dy, dz) - a.radius);
     mat.opacity = Math.max(0, Math.min(0.35, (1 - distToShell / 80) * 0.35));
     dome!.visible = mat.opacity > 0.004;
   };
@@ -69,10 +69,10 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
 export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void {
   if (built) {
     scene.remove(built);
-    built.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    built.traverse((o) => { if (o instanceof THREE.Mesh) {o.geometry.dispose();} });
     built = null;
   }
-  if (!list.length) return;
+  if (!list.length) {return;}
   built = new THREE.Group();
   built.name = 'mapStructures';
   built.matrixAutoUpdate = false;
@@ -109,7 +109,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
     } else {
       _p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
       _e.set(0, s.rotY ?? 0, 0);
-      if (s.kind === 'ramp') _e.x = -Math.PI / 7;
+      if (s.kind === 'ramp') {_e.x = -Math.PI / 7;}
       _q.setFromEuler(_e);
       _s.set(s.size.x, s.size.y, s.size.z);
       _m.compose(_p, _q, _s);
@@ -119,13 +119,13 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   }
   for (const [key, geos] of byMat) {
     const merged = mergeGeometries(geos, false);
-    if (!merged) continue;
+    if (!merged) {continue;}
     const mesh = new THREE.Mesh(merged, mats[key]);
     mesh.matrixAutoUpdate = false;
     mesh.matrixWorldAutoUpdate = false;
     mesh.updateMatrixWorld(true);
     built.add(mesh);
-    for (const g of geos) g.dispose();
+    for (const g of geos) {g.dispose();}
   }
   built.updateMatrixWorld(true);
   scene.add(built);
@@ -143,7 +143,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
     colliderGizmos = null;
   }
   const colliders = structureColliders(list);
-  if (!colliders.length) return;
+  if (!colliders.length) {return;}
   const unitEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
   const edges: THREE.BufferGeometry[] = [];
@@ -156,9 +156,9 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
     edges.push(unitEdges.clone().applyMatrix4(_m));
   }
   const merged = mergeGeometries(edges, false);
-  for (const g of edges) g.dispose();
+  for (const g of edges) {g.dispose();}
   unitEdges.dispose();
-  if (!merged) return;
+  if (!merged) {return;}
   colliderGizmos = new THREE.LineSegments(
     merged,
     new THREE.LineBasicMaterial({ color: 0x33ff88, transparent: true, opacity: 0.55, depthTest: false }),
@@ -173,5 +173,5 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
 /** The debug toggle is live — menu flips mid-session must reach the
  *  overlay, so visibility re-reads the flag each frame. */
 export function refreshColliderGizmoVisibility(): void {
-  if (colliderGizmos) colliderGizmos.visible = urlParams.debug;
+  if (colliderGizmos) {colliderGizmos.visible = urlParams.debug;}
 }

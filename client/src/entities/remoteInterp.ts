@@ -175,7 +175,7 @@ export class RemoteInterp {
     const dx = p.x - fromPos.x;
     const dy = p.y - fromPos.y;
     const dz = p.z - fromPos.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+    const dist = Math.hypot(dx, dy, dz) || 0.001;
     this.simulatedVelocity.copy(this.h.serverVelocity);
     const s = pull ? -1 : 1;
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;

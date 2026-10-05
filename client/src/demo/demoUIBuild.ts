@@ -47,7 +47,7 @@ if (!document.getElementById('demo-ui-slider-style')) {
       border: 1px solid #2a5a9a;
     }
   `;
-  document.head.appendChild(style);
+  document.head.append(style);
 }
 
 // Marker overlay — inset by half the thumb width on each side so that
@@ -62,8 +62,8 @@ u.markerOverlay.style.cssText = `
 
 u.timelineWrap = document.createElement('div');
 u.timelineWrap.style.cssText = 'position: relative; width: 200px; height: 20px; display: flex; align-items: center;';
-u.timelineWrap.appendChild(u.timeline);
-u.timelineWrap.appendChild(u.markerOverlay);
+u.timelineWrap.append(u.timeline);
+u.timelineWrap.append(u.markerOverlay);
   }
 
 export function initControls(u: DemoUI): void {
@@ -74,7 +74,7 @@ for (const speed of [0.25, 0.5, 1.0, 2.0, 4.0]) {
   const opt = document.createElement('option');
   opt.value = String(speed);
   opt.textContent = `${speed}x`;
-  u.speedSelect.appendChild(opt);
+  u.speedSelect.append(opt);
 }
 u.speedSelect.value = '1';
 u.speedSelect.addEventListener('change', () => {

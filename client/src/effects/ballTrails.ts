@@ -38,7 +38,7 @@ function takeDot(): TrailDot {
   return _dotPool.pop() ?? { pos: new THREE.Vector3(), age: 0, life: 0, haloSz: 0, coreSz: 0, tint: new THREE.Color(), wIdx: -1 };
 }
 function freeDot(d: TrailDot): void { _dotPool.push(d); }
-function trimDotPool(): void { if (_dotPool.length > DOT_POOL_KEEP) _dotPool.length = DOT_POOL_KEEP; }
+function trimDotPool(): void { if (_dotPool.length > DOT_POOL_KEEP) {_dotPool.length = DOT_POOL_KEEP;} }
 
 const _spawn = new THREE.Vector3();
 const _scatter = new THREE.Vector3();
@@ -50,7 +50,8 @@ let _trailTex: THREE.Texture | null = null;
 export function getTrailTex(): THREE.Texture {
   if (!_trailTex) {
     const S = 64, c = document.createElement('canvas');
-    c.width = c.height = S;
+    c.height = S;
+    c.width = c.height;
     const ctx = c.getContext('2d')!;
     const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
     g.addColorStop(0,    'rgba(255,255,255,1)');
@@ -116,7 +117,7 @@ class DotBatch {
   private dirtyHi = 0;
 
   constructor(readonly scene: THREE.Scene) {
-    for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) a.setUsage(THREE.DynamicDrawUsage);
+    for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) {a.setUsage(THREE.DynamicDrawUsage);}
     this.geo.setAttribute('position', this.posAttr);
     this.geo.setAttribute('aSize', this.sizeAttr);
     this.geo.setAttribute('aColor', this.colAttr);
@@ -125,7 +126,7 @@ class DotBatch {
     this.points.frustumCulled = false;
     scene.add(this.points);
     markProbe(this.points, { kind: 'fxMesh', label: 'ballTrailDots' });
-    for (let s = BATCH_TRAILS - 1; s >= 0; s--) this.free.push(s);
+    for (let s = BATCH_TRAILS - 1; s >= 0; s--) {this.free.push(s);}
   }
 
   dispose(): void {
@@ -136,8 +137,8 @@ class DotBatch {
   /** Accumulate a dirty vert range — flush() uploads just the touched
    *  span instead of the whole ~90KB buffer every frame. */
   mark(lo: number, hi: number): void {
-    if (lo < this.dirtyLo) this.dirtyLo = lo;
-    if (hi > this.dirtyHi) this.dirtyHi = hi;
+    if (lo < this.dirtyLo) {this.dirtyLo = lo;}
+    if (hi > this.dirtyHi) {this.dirtyHi = hi;}
   }
 
   // Pending-queue union in VERT units — flush() runs per trail and a
@@ -150,7 +151,7 @@ class DotBatch {
   flush(): void {
     const lo = this.dirtyLo, hi = this.dirtyHi;
     this.dirtyLo = Infinity; this.dirtyHi = 0;
-    if (hi - lo <= 0) return;
+    if (hi - lo <= 0) {return;}
     if (urlParams.fxfull) {
       // Full upload — ?fxfull A/B bypass, see trailBatch.flush.
       this.posAttr.needsUpdate = true;
@@ -201,7 +202,7 @@ registerDiag('ballDots', () => ({
   ballDots: [...dotBatches.values()].flat().map(b => ({
     free: b.free.length,
     visible: b.points.visible,
-    inScene: !!b.points.parent,
+    inScene: Boolean(b.points.parent),
   })),
 }));
 
@@ -230,15 +231,15 @@ export class BallTrailDots {
    *  render pos, radius, and tint (enraged tint swaps handled upstream). */
   emit(dt: number, pos: THREE.Vector3, vel: THREE.Vector3, radius: number, tint: THREE.Color): void {
     this.timer += dt;
-    if (this.timer < this.interval) return;
+    if (this.timer < this.interval) {return;}
     this.timer = 0;
-    if (vel.lengthSq() <= 0.5) return;
+    if (vel.lengthSq() <= 0.5) {return;}
     this.spawn(pos, radius, tint);
   }
 
   /** Dust-burst at takeoff/land — count dots now, timer not involved. */
   burst(count: number, pos: THREE.Vector3, radius: number, tint: THREE.Color): void {
-    for (let i = 0; i < count; i++) this.spawn(pos, radius, tint);
+    for (let i = 0; i < count; i++) {this.spawn(pos, radius, tint);}
   }
 
   get size(): number { return this.dots.length; }
@@ -246,11 +247,11 @@ export class BallTrailDots {
   /** Per-trail state for the Alt+Q dump — emit cadence vs live dots is
    *  the emitting-vs-invisible split (timer runs but dots=0 = spawn starved). */
   dbg(): { slot: number; dots: number; timer: number; lastLive: number; batchFree: number } {
-    return { slot: this.slot, dots: this.dots.length, timer: +this.timer.toFixed(3), lastLive: this._lastLive, batchFree: this.batch.free.length };
+    return { slot: this.slot, dots: this.dots.length, timer: Number(this.timer.toFixed(3)), lastLive: this._lastLive, batchFree: this.batch.free.length };
   }
 
   private spawn(pos: THREE.Vector3, radius: number, tint: THREE.Color): void {
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     const spawn = _spawn.copy(pos).addScaledVector(_scatter.set(
       Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
     ).normalize().multiplyScalar(Math.random() * radius * 0.6), 1);
@@ -260,14 +261,14 @@ export class BallTrailDots {
     d.wIdx = -1; // fresh position — force a pos write on next fade
     d.life = 0.35 + Math.random() * 0.85;
     d.haloSz = radius * (1.8 + Math.random() * 2.0) * this.sizeMul;
-    d.coreSz = radius * (0.9 + Math.random() * 1.0) * this.sizeMul;
+    d.coreSz = radius * (0.9 + Number(Math.random())) * this.sizeMul;
     d.tint.copy(tint);
-    if (this.dots.length >= this.maxDots) freeDot(this.dots.shift()!);
+    if (this.dots.length >= this.maxDots) {freeDot(this.dots.shift()!);}
     this.dots.push(d);
   }
 
   fade(dt: number): void {
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     trimDotPool();
     for (let i = this.dots.length - 1; i >= 0; i--) {
       const d = this.dots[i];
@@ -280,7 +281,7 @@ export class BallTrailDots {
     // Attribute rewrite at ~30Hz — dots live ~1s, so a frame of stale
     // alpha/size is invisible; aging/pruning above still runs full rate.
     this._half = !this._half;
-    if (this._half && this.dots.length > 0) return;
+    if (this._half && this.dots.length > 0) {return;}
     // gl_PointSize is in FRAMEBUFFER px — the buffer is innerHeight/pscale
     // in chunky modes and upscales afterward, so feeding the CSS height
     // made trails render pscale× too big (the chunky-mode fat trails).
@@ -310,11 +311,11 @@ export class BallTrailDots {
     // Zero freed tail slots only when the live count shrank — a stable
     // roster re-zeroes nothing (the tail was already zeroed last shrink).
     if (w < this._lastLive) {
-      for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) this.batch.sizeAttr.setX(s, 0);
+      for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) {this.batch.sizeAttr.setX(s, 0);}
     }
     // Skip the buffer upload when nothing lives — an idle trail was still
     // pushing 3 attribute uploads per ball per frame (~100/frame total).
-    if (w === 0 && this._lastLive === 0) return;
+    if (w === 0 && this._lastLive === 0) {return;}
     this._lastLive = w;
     this.batch.mark(this.base, this.base + this.maxDots * 2);
     this.batch.flush();
@@ -325,13 +326,13 @@ export class BallTrailDots {
   dispose(): void {
     if (this.slot >= 0) {
       // bury the slot's points before handing it back
-      for (let s = this.base; s < this.base + SLOT_VERTS; s++) this.batch.sizeAttr.setX(s, 0);
+      for (let s = this.base; s < this.base + SLOT_VERTS; s++) {this.batch.sizeAttr.setX(s, 0);}
       this.batch.mark(this.base, this.base + SLOT_VERTS);
       this.batch.flush();
       releaseDotSlot(this.scene, this.batch, this.slot);
       this.slot = -1;
     }
-    for (const d of this.dots) freeDot(d);
+    for (const d of this.dots) {freeDot(d);}
     this.dots = [];
   }
 }

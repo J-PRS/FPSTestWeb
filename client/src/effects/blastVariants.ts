@@ -74,7 +74,7 @@ export class BlastVariants {
       this.h.allocShock(pos, 0xffffff, 0.35, 5.0 * mult * 0.8, 0.35);
       this.h.allocShock(pos, this.h.hasTint ? this.h.tint : 0xffcc66, 0.45, 6.5 * mult * 0.8, 0.5);
       this.electricSparks(pos, mult);
-      if (directHit) this.directHitLayers(pos, timeScale);
+      if (directHit) {this.directHitLayers(pos, timeScale);}
       this.h.spawnGroundRing(pos, mult * 1.2, terrain); // wider, brighter — the ring IS the read
       return true;
     }
@@ -101,7 +101,7 @@ export class BlastVariants {
       this.h.spawnFlash(pos, mult * 0.55);
       this.bolt(pos, mult);
       this.electricSparks(pos, mult * 0.7);
-      if (directHit) this.directHitLayers(pos, timeScale * 0.6);
+      if (directHit) {this.directHitLayers(pos, timeScale * 0.6);}
       this.h.spawnGroundRing(pos, mult * 0.7, terrain);
       return true;
     }

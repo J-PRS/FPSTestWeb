@@ -75,9 +75,9 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   const vgs = new Vgs({
     send: (text, team, chord) => networkManager.sendChat(text, team, chord),
     echo: (text, team, chord) => chat.echoSelf(text, team, chord),
-    speak: (text) => void speakVgs(text, networkManager.getLocalPlayerId()),
+    speak: (text) => speakVgs(text, networkManager.getLocalPlayerId()),
   });
-  void vgs; // self-contained like Chat — its key routing lives on window
+  vgs; // self-contained like Chat — its key routing lives on window
 
   // Both first-seen-update and respawn-into-missing end up here.
   const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {
@@ -106,7 +106,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
 
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).
-  void resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
+  resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
     listRooms: async () => {
       const res = await fetch(`${httpUrl}/rooms`);
       if (!res.ok) throw new Error(`rooms ${res.status}`);

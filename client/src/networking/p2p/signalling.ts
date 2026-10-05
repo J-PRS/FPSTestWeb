@@ -24,13 +24,13 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
     let pc: RTCPeerConnection | null = null;
     let isHost = false;
 
-    const send = (m: SignalMsg) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
+    const send = (m: SignalMsg) => { if (ws.readyState === WebSocket.OPEN) {ws.send(JSON.stringify(m));} };
 
     const newPc = (): RTCPeerConnection => {
       const p = new RTCPeerConnection(RTC_CONFIG);
-      p.addEventListener('icecandidate', (e) => { if (e.candidate) send({ t: 'ice', ice: e.candidate.toJSON() }); });
+      p.addEventListener('icecandidate', (e) => { if (e.candidate) {send({ t: 'ice', ice: e.candidate.toJSON() });} });
       p.addEventListener('connectionstatechange', () => {
-        if (p.connectionState === 'failed') fail(new Error('ICE failed — NAT unroutable'));
+        if (p.connectionState === 'failed') {fail(new Error('ICE failed — NAT unroutable'));}
       });
       return p;
     };
@@ -40,18 +40,18 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
     };
 
     ws.addEventListener('error', () => fail(new Error('signalling socket failed')));
-    ws.addEventListener('close', (e) => { if (e.code === 1008) fail(new Error(`room rejected: ${e.reason}`)); });
+    ws.addEventListener('close', (e) => { if (e.code === 1008) {fail(new Error(`room rejected: ${e.reason}`));} });
 
     ws.addEventListener('message', async (ev) => {
       const msg = JSON.parse(ev.data as string) as SignalMsg;
       try {
         switch (msg.t) {
           case 'role':
-            isHost = !!msg.host;
+            isHost = Boolean(msg.host);
             // The host must outwait the guest — a 15s handshake timeout here
             // killed the room's signalling socket for anyone arriving late.
             // Guests keep the deadline: their join either works fast or not.
-            if (isHost) clearTimeout(timeout);
+            if (isHost) {clearTimeout(timeout);}
             break;
           case 'peer': {
             // Second member arrived — host makes the offer

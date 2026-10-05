@@ -111,7 +111,7 @@ export class DeployAdopter {
     const nearest = new THREE.Vector3();
     const item: Item = {
       kind: 'mine', candId: `dep:${m.id}`, pos: m.pos, dead: false,
-      hurt: (dmg) => { void dmg; m.takeDamage(); }, // mines pop on any hit
+      hurt: (dmg) => { dmg; m.takeDamage(); }, // mines pop on any hit
       v: m,
       update: (dt) => {
         // Trigger proxy: the nearest hostile to THIS mine. Mine.update was

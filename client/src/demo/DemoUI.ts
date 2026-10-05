@@ -83,19 +83,19 @@ export class DemoUI {
     this.statusLabel.style.cssText = 'min-width: 60px; color: #aaa;';
 
     // Assemble
-    this.container.appendChild(this.playBtn);
-    this.container.appendChild(this.stopBtn);
-    this.container.appendChild(this.timelineWrap);
-    this.container.appendChild(this.timeLabel);
-    this.container.appendChild(this.speedSelect);
-    this.container.appendChild(this.loopBtn);
-    this.container.appendChild(this.saveBtn);
-    this.container.appendChild(this.videoBtn);
-    this.container.appendChild(loadBtn);
-    this.container.appendChild(this.loadInput);
-    this.container.appendChild(this.statusLabel);
+    this.container.append(this.playBtn);
+    this.container.append(this.stopBtn);
+    this.container.append(this.timelineWrap);
+    this.container.append(this.timeLabel);
+    this.container.append(this.speedSelect);
+    this.container.append(this.loopBtn);
+    this.container.append(this.saveBtn);
+    this.container.append(this.videoBtn);
+    this.container.append(loadBtn);
+    this.container.append(this.loadInput);
+    this.container.append(this.statusLabel);
 
-    document.body.appendChild(this.container);
+    document.body.append(this.container);
   }
 
   private initTimeline(): void { initTimeline(this); }
@@ -140,7 +140,7 @@ export class DemoUI {
       this.timeline.max = String(duration);
       this.lastTimelineDuration = duration;
     }
-    if (!this.timelineDragging) this.timeline.value = String(current);
+    if (!this.timelineDragging) {this.timeline.value = String(current);}
     this.timeLabel.textContent = `${current.toFixed(1)} / ${duration.toFixed(1)}s`;
   }
 
@@ -164,16 +164,16 @@ export class DemoUI {
 
   setMarkers(hitTimes: { t: number; hot: boolean }[], firedTimes: { t: number; hot: boolean }[], duration: number): void {
     this.clearMarkers();
-    if (duration <= 0) return;
+    if (duration <= 0) {return;}
     // Cold = background noise in the clip window — grey, unlit, so the
     // featured shot's markers pop instead of drowning in unrelated fire.
     for (const { t, hot } of hitTimes) {
-      this.markerOverlay.appendChild(hot
+      this.markerOverlay.append(hot
         ? this.createMarker(t, duration, '#ff4444', 'rgba(255,68,68,0.8)')
         : this.createMarker(t, duration, '#555', 'transparent'));
     }
     for (const { t, hot } of firedTimes) {
-      this.markerOverlay.appendChild(hot
+      this.markerOverlay.append(hot
         ? this.createMarker(t, duration, '#4488ff', 'rgba(68,136,255,0.8)')
         : this.createMarker(t, duration, '#444', 'transparent'));
     }

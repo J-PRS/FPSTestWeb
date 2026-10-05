@@ -35,7 +35,7 @@ export function noteMutedClaim(): void {
   const now = performance.now();
   // First muted claim warns immediately; a held beam then folds to one
   // warn/second instead of a line per tic.
-  if (mutedCensus.lastWarnAt !== 0 && now - mutedCensus.lastWarnAt < 1000) return;
+  if (mutedCensus.lastWarnAt !== 0 && now - mutedCensus.lastWarnAt < 1000) {return;}
   mutedCensus.lastWarnAt = now;
   logger.warn(`claim muted during resync replay (${mutedCensus.count} total) — predicted damage has no wire`);
 }
@@ -90,7 +90,7 @@ export class ClaimLedger {
    *  rejected pattern still surfaces. Returns undefined when unsampled
    *  → legacy fire-and-forget, no ack expected. */
   stamp(kind: string, sparse = false): number | undefined {
-    if (sparse && (this.creatureClaimN++ & 3) !== 0) return undefined;
+    if (sparse && (this.creatureClaimN++ & 3) !== 0) {return undefined;}
     const seq = ++this.claimSeq;
     this.pendingClaims.set(seq, { kind, t: performance.now() });
     if (this.pendingClaims.size > 256) {
@@ -113,7 +113,7 @@ export class ClaimLedger {
     // claims racing the same target must not cross-clear). playerHit
     // carries no shotId, so confirm falls back to target — oldest
     // pending entry wins.
-    if (shotId && this.pendingHits.delete(shotId)) return;
+    if (shotId && this.pendingHits.delete(shotId)) {return;}
     for (const [id, h] of this.pendingHits) {
       if (h.targetId === targetId) { this.pendingHits.delete(id); return; }
     }
@@ -130,10 +130,10 @@ export class ClaimLedger {
   }
 
   sweep(now: number, ctx: { pingMs: number; tier: TransportKind | string | undefined }): void {
-    if (now - this.lastPendingSweep < 250) return;
+    if (now - this.lastPendingSweep < 250) {return;}
     this.lastPendingSweep = now;
     for (const [seq, c] of this.pendingClaims) {
-      if (now - c.t < ClaimLedger.HIT_CONFIRM_MS) continue;
+      if (now - c.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}
       this.pendingClaims.delete(seq);
       claimCensus.unconfirmed++;
       const key = `${c.kind}:unconfirmed`;
@@ -142,7 +142,7 @@ export class ClaimLedger {
       logger.warn(`${c.kind} claim never acked — dropped server-side or the ack died`, { seq, ageMs: Math.round(now - c.t) });
     }
     for (const [id, h] of this.pendingHits) {
-      if (now - h.t < ClaimLedger.HIT_CONFIRM_MS) continue;
+      if (now - h.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}
       this.pendingHits.delete(id);
       rejectCensus.total++;
       rejectCensus.byReason.set('unconfirmed', (rejectCensus.byReason.get('unconfirmed') ?? 0) + 1);
@@ -159,7 +159,7 @@ export class ClaimLedger {
    *  socket, so in-flight entries classify as transport-lost, not
    *  unconfirmed. Room switches just void the table (per-room seqs). */
   dropAll(countLost: boolean): void {
-    if (countLost) claimCensus.lost += this.pendingClaims.size;
+    if (countLost) {claimCensus.lost += this.pendingClaims.size;}
     this.pendingClaims.clear();
     this.pendingHits.clear();
   }

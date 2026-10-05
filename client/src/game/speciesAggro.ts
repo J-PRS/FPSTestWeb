@@ -34,16 +34,16 @@ export class AggroKit {
 
   candidates = (): TargetCandidate[]  => {
     const frame = Math.floor(performance.now() / 16);
-    if (frame === this._candFrame) return this._candList;
+    if (frame === this._candFrame) {return this._candList;}
     this._candFrame = frame;
     this.syncLocalCandidate();
     this.syncRemoteCandidates();
     this.pruneCandidates();
     this._candList.length = 0;
-    for (const cand of this._candMap.values()) this._candList.push(cand);
+    for (const cand of this._candMap.values()) {this._candList.push(cand);}
     // Deployables are chewable scenery — a planted turret draws aggro like
     // a player, which is what makes base defense matter.
-    for (const cand of this.deployables?.()?.candidates() ?? []) this._candList.push(cand);
+    for (const cand of this.deployables?.()?.candidates() ?? []) {this._candList.push(cand);}
     return this._candList;
   }
 
@@ -79,9 +79,9 @@ export class AggroKit {
   }
 
   pruneCandidates = (): void  => {
-    if (this._candMap.size <= this.deps.world.remotePlayers.size + 1) return;
+    if (this._candMap.size <= this.deps.world.remotePlayers.size + 1) {return;}
     for (const id of this._candMap.keys()) {
-      if (id !== 'local' && !this.deps.world.remotePlayers.has(id)) this._candMap.delete(id);
+      if (id !== 'local' && !this.deps.world.remotePlayers.has(id)) {this._candMap.delete(id);}
     }
   }
 
@@ -155,7 +155,7 @@ export class AggroKit {
     }
     w.t -= dt;
     if (w.t <= 0 || w.wp.distanceToSquared(selfPos) < 4) {
-      w.t = 0.6 + Math.random() * 1.0; // frantic re-pick, not the lazy wander cadence
+      w.t = 0.6 + Number(Math.random()); // frantic re-pick, not the lazy wander cadence
       const p = this.deps.lazyPlayer().pos;
       if (selfPos.distanceToSquared(p) < this.FRENZY_SCENT * this.FRENZY_SCENT && Math.random() < 0.45) {
         // Close enough to smell the invisible threat — lunge at it
@@ -196,7 +196,7 @@ export class AggroKit {
     // whipped it into a panic. Then stalk (lost a far target) before
     // plain milling. Either way the creature keeps moving.
     if (!t) {
-      if (brain.frenzyT > 0) return this.frenzyFor(owner, selfPos, dt, brain);
+      if (brain.frenzyT > 0) {return this.frenzyFor(owner, selfPos, dt, brain);}
       return brain.stalking ? this.stalkFor(owner, selfPos, dt, brain, profile.leash || 400) : this.wanderFor(owner, selfPos, dt);
     }
 
@@ -233,10 +233,10 @@ export class AggroKit {
     // Cheap O(n) over the shared targets surface, 8m influence radius.
     let sepX = 0, sepZ = 0;
     for (const o of this.targets) {
-      if (o === owner) continue;
+      if (o === owner) {continue;}
       const dx = selfPos.x - o.pos.x, dz = selfPos.z - o.pos.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 64 || d2 < 0.01) continue;
+      if (d2 > 64 || d2 < 0.01) {continue;}
       const d = Math.sqrt(d2);
       const w = (8 - d) / 8 / d;
       sepX += dx * w; sepZ += dz * w;
@@ -261,7 +261,7 @@ export class AggroKit {
     brain.reportDamage(attackerId, amount);
     const p = this.deps.lazyPlayer();
     const from = attackerId === 'local' ? p.pos : this._candMap.get(attackerId)?.pos;
-    if (from) brain.flinch(from);
+    if (from) {brain.flinch(from);}
     // Shot while cloaked — the pack can't see you, it PANICS: the victim
     // plus every creature nearby thrashes at your last-known position.
     // Cloak sniping stays possible but never safe at close range.
@@ -269,7 +269,7 @@ export class AggroKit {
       brain.frenzy(p.pos);
       const ep = (e as Targetable).pos;
       for (const o of this.targets) {
-        if (o === e || o.dead) continue;
+        if (o === e || o.dead) {continue;}
         if (o.pos.distanceToSquared(ep) < this.FRENZY_RADIUS * this.FRENZY_RADIUS) {
           this.targetReg.for(o).frenzy(p.pos);
         }

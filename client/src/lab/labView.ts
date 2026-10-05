@@ -57,7 +57,7 @@ class LabView {
         <div id="lab-blurb"></div>
       </div>
       <div id="lab-dump"></div>`;
-    document.body.appendChild(this.root);
+    document.body.append(this.root);
     this.canvas = this.root.querySelector('#lab-canvas')!;
     this.dumpEl = this.root.querySelector('#lab-dump')!;
     this.blurbEl = this.root.querySelector('#lab-blurb')!;
@@ -70,13 +70,13 @@ class LabView {
       btn.dataset.id = s.id;
       btn.innerHTML = `${s.name}<span class="lab-item-blurb">${s.blurb}</span>`;
       btn.addEventListener('click', () => this.select(s.id));
-      this.listEl.appendChild(btn);
+      this.listEl.append(btn);
     }
 
     this.canvas.addEventListener('pointerdown', () => { this.dragging = true; });
     window.addEventListener('pointerup', () => { this.dragging = false; });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (!this.dragging) return;
+      if (!this.dragging) {return;}
       this.yaw -= e.movementX * 0.006;
       this.pitch = Math.max(0.05, Math.min(1.5, this.pitch + e.movementY * 0.006));
     });
@@ -108,22 +108,22 @@ class LabView {
    *  exists (real quarks/ribbons live there), else a private fallback. */
   private world(): THREE.Scene { return vfxScene() ?? this.fallbackScene; }
 
-  toggle(): void { if (this.open) this.close(); else this.show(); }
+  toggle(): void { if (this.open) {this.close();} else {this.show();} }
 
   show(): void {
     const w = this.world();
-    if (!this.labRoot.parent) w.add(this.labRoot);
+    if (!this.labRoot.parent) {w.add(this.labRoot);}
     // Hide the game world's own objects while the lab is up — the batcher
     // and labRoot stay visible; everything restores on close.
     this.hiddenSiblings = [];
     for (const o of w.children) {
-      if (o === this.labRoot || o === vfxBatcher() || !o.visible) continue;
+      if (o === this.labRoot || o === vfxBatcher() || !o.visible) {continue;}
       o.visible = false;
       this.hiddenSiblings.push(o);
     }
     setVfxCamOverride(this.camera.position);
     this.root.classList.add('open');
-    if (!this.instance) this.select(SCENARIOS[0]!.id);
+    if (!this.instance) {this.select(SCENARIOS[0]!.id);}
     this.lastT = performance.now();
     this.loop();
   }
@@ -132,7 +132,7 @@ class LabView {
     this.root.classList.remove('open');
     cancelAnimationFrame(this.raf);
     setVfxCamOverride(null);
-    for (const o of this.hiddenSiblings) o.visible = true;
+    for (const o of this.hiddenSiblings) {o.visible = true;}
     this.hiddenSiblings = [];
     // labRoot borrows the LIVE scene — leave it attached and the last
     // scenario's objects stay visible in-game after close.
@@ -141,7 +141,7 @@ class LabView {
 
   private select(id: string): void {
     const s = SCENARIOS.find(x => x.id === id);
-    if (!s) return;
+    if (!s) {return;}
     this.instance?.dispose();
     this.instance = null;
     // Drop any strays a scenario leaked rather than letting them pile
@@ -149,7 +149,7 @@ class LabView {
     // children array mutation can't skip an index.
     for (let i = this.labRoot.children.length - 1; i >= 0; i--) {
       const o = this.labRoot.children[i]!;
-      if (!this.statics.has(o)) this.labRoot.remove(o);
+      if (!this.statics.has(o)) {this.labRoot.remove(o);}
     }
     this.activeId = id;
     this.blurbEl.textContent = s.blurb;
@@ -163,7 +163,7 @@ class LabView {
   private statics = new Set<THREE.Object3D>();
 
   private ensureRenderer(): void {
-    if (this.renderer) return;
+    if (this.renderer) {return;}
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
     const grid = new THREE.GridHelper(120, 24, 0x22384f, 0x14202e);
     const light = new THREE.AmbientLight(0xffffff, 1.2);
@@ -179,7 +179,7 @@ class LabView {
     const now = performance.now();
     let frame = (now - this.lastT) / 1000;
     this.lastT = now;
-    if (frame > 0.25) frame = 0.25; // tab-unfreeze clamp, not a sim property
+    if (frame > 0.25) {frame = 0.25;} // tab-unfreeze clamp, not a sim property
     this.acc += frame;
     while (this.acc >= TICK) {
       this.instance?.tick(TICK);
@@ -194,7 +194,7 @@ class LabView {
         const row = document.createElement('div');
         row.className = 'lab-kv';
         row.innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>`;
-        this.dumpEl.appendChild(row);
+        this.dumpEl.append(row);
       }
     }
 
@@ -236,7 +236,7 @@ export function wireLabButton(): void {
   const btn = document.getElementById('lab-open');
   document.getElementById('gunlab-open')?.addEventListener('click', () =>
     window.open('gunlab.html', '_blank'));
-  if (!btn) return;
+  if (!btn) {return;}
   window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);
   btn.addEventListener('click', () => {
     lab ??= new LabView();

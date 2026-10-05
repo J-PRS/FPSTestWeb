@@ -159,9 +159,9 @@ export class Lobby {
     } else {
       this.panel.style.display = 'block';
       document.body.classList.add('lobby-open');
-      void this.refresh();
-      void this.refreshMaps();
-      this.timer = setInterval(() => void this.refresh(), POLL_MS);
+      this.refresh();
+      this.refreshMaps();
+      this.timer = setInterval(() => this.refresh(), POLL_MS);
     }
   }
 

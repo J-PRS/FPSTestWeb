@@ -59,15 +59,15 @@ const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): void {
-  if (deps.inputTracking.isTabHidden()) return;
-  if (deps.lazyDemoManager()?.isPlaying) return;
+  if (deps.inputTracking.isTabHidden()) {return;}
+  if (deps.lazyDemoManager()?.isPlaying) {return;}
 
-  if (!quiet) sfx.shoot(config.weaponType);
+  if (!quiet) {sfx.shoot(config.weaponType);}
   // Decloak-on-fire: bot senses mask this player's cloak for the reveal
   // window, same rule the server applies to its own bots.
   deps.lazyPlayer().lastFireAt = performance.now();
   _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
-  if (deps.lazyPlayer().thirdPerson) _spawnOrigin.y -= SHOULDER_DROP;
+  if (deps.lazyPlayer().thirdPerson) {_spawnOrigin.y -= SHOULDER_DROP;}
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
   const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
   deps.world.projectiles.push(p);
@@ -157,7 +157,7 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   // rule on the spawn claim, this gate just saves the animation/no-op.
   const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
   const cost = beltThrowCost(config.weaponType);
-  if (p.beltCharges < cost) return;
+  if (p.beltCharges < cost) {return;}
   // Some throws are a deliberate plant, not a flick — the anim stretch and
   // the release delay must agree or the bomb leaves the hand early.
   const timeScale = BELT_THROW_TIME[item] ?? 1;
@@ -166,11 +166,11 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   // claims, leaving a local ghost projectile.
   setTimeout(() => {
     const pl = deps.lazyPlayer();
-    if (pl.isDead || pl.beltCharges < cost) return;
+    if (pl.isDead || pl.beltCharges < cost) {return;}
     pl.beltCharges -= cost;
     // The javelin's juice is the THROW — a speedline whip on release so a
     // spear leaving the hand reads as force, not a lob.
-    if (item === 'javelin') deps.lazySpeedLines?.().burst();
+    if (item === 'javelin') {deps.lazySpeedLines?.().burst();}
     spawnProjectile(deps, config, freshFireArgs(deps));
   }, THROW_RELEASE * timeScale * 1000);
 }
@@ -184,7 +184,7 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
   const rot = Math.random() * Math.PI * 2;
   const cs = Math.cos(rot), sn = Math.sin(rot);
   _flakRight.crossVectors(e.dir, _flakUp0);
-  if (_flakRight.lengthSq() < 1e-8) _flakRight.set(1, 0, 0); else _flakRight.normalize();
+  if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
   _flakUp.crossVectors(_flakRight, e.dir);
   for (const pt of pts) {
     const ox = (pt.x * cs - pt.y * sn) * spread;
@@ -207,7 +207,7 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     // Stream jitter: a random cone offset per bolt — same basis math as
     // the fan but a single drifting shot, so the volley reads as a hose.
     _flakRight.crossVectors(e.dir, _flakUp0);
-    if (_flakRight.lengthSq() < 1e-8) _flakRight.set(1, 0, 0); else _flakRight.normalize();
+    if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
     _flakUp.crossVectors(_flakRight, e.dir);
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * def.spread;
     _flakDir.copy(e.dir)
@@ -247,7 +247,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
   ));
   screenShake.blast(fxPos, stats.aoeRadius, player.pos);
   if (groundHit) {
-    if (deps.world.scorches.length >= SCORCH_MAX) deps.world.scorches.shift()!.dispose();
+    if (deps.world.scorches.length >= SCORCH_MAX) {deps.world.scorches.shift()!.dispose();}
     deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), groundHit, 1.4));
     // Dirt spray kicked up off the fist — brown, gravity-bound, short.
     fxPuff(groundHit, {
@@ -281,17 +281,17 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
 
   let connected: THREE.Vector3 | null = null;
   for (const t of deps.targets) {
-    if (t.dead) continue;
+    if (t.dead) {continue;}
     _meleeToT.copy(t.pos).sub(player.pos);
     const dist = _meleeToT.length();
-    if (dist > MELEE_RANGE + (t.hitRadius ?? t.radius)) continue;
+    if (dist > MELEE_RANGE + (t.hitRadius ?? t.radius)) {continue;}
     _meleeToT.divideScalar(dist || 1);
-    if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) continue;
+    if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) {continue;}
     t.applyKnockback(player.pos, stats.knockbackForce);
     deps.lazyDamageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());
     deps.reportTargetDamage?.(t, MELEE_DAMAGE);
-    if (t.takeDamage(MELEE_DAMAGE)) hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);
-    else if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);
+    if (t.takeDamage(MELEE_DAMAGE)) {hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);}
+    else if (!t.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);}
     deps.lazyHud().showHitMarker();
     connected ??= t.pos;
   }

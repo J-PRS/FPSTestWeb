@@ -15,15 +15,15 @@ const SKI_EXIT = 9.0;
 // walk/run even past the old speed heuristic — a grounded non-skiing mover
 // is running, not sliding. undefined falls back to the speed guess.
 export function pickLocomotionAnim(current: AnimationState, speed: number, skiing?: boolean): AnimationState {
-  if (skiing === true) return 'ski';
+  if (skiing === true) {return 'ski';}
   if (skiing !== false) {
     if (current === 'ski') {
-      if (speed > SKI_EXIT) return 'ski';
+      if (speed > SKI_EXIT) {return 'ski';}
     } else if (speed > SKI_ENTER) {
       return 'ski';
     }
   }
-  if (current === 'run') return speed > 6.0 ? 'run' : speed > 1.5 ? 'walk' : 'idle';
-  if (current === 'walk') return speed < 0.8 ? 'idle' : speed > 9.0 ? 'run' : 'walk';
+  if (current === 'run') {return speed > 6.0 ? 'run' : speed > 1.5 ? 'walk' : 'idle';}
+  if (current === 'walk') {return speed < 0.8 ? 'idle' : speed > 9.0 ? 'run' : 'walk';}
   return speed > 1.5 ? (speed > 8.0 ? 'run' : 'walk') : 'idle';
 }

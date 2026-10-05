@@ -9,7 +9,7 @@ export class CircularBuffer<T> {
   private capacity: number;
 
   constructor(capacity: number) {
-    if (capacity <= 0) throw new Error('Capacity must be > 0');
+    if (capacity <= 0) {throw new Error('Capacity must be > 0');}
     this.capacity = capacity;
     this.buffer = Array.from({ length: capacity });
   }
@@ -47,12 +47,12 @@ export class CircularBuffer<T> {
   }
 
   peekNewest(): T {
-    if (this.count === 0) throw new Error('Buffer is empty');
+    if (this.count === 0) {throw new Error('Buffer is empty');}
     return this.buffer[(this.head - 1 + this.capacity) % this.capacity]!;
   }
 
   peekOldest(): T {
-    if (this.count === 0) throw new Error('Buffer is empty');
+    if (this.count === 0) {throw new Error('Buffer is empty');}
     return this.buffer[this.tail]!;
   }
 
@@ -77,7 +77,7 @@ export class CircularBuffer<T> {
   }
 
   extractNewest(count: number): T[] {
-    if (count > this.count) count = this.count;
+    if (count > this.count) {count = this.count;}
     return this.extractRange(this.count - count, count);
   }
 
@@ -90,9 +90,9 @@ export class CircularBuffer<T> {
   // Find index of oldest item newer than given timestamp.
   // Uses binary search since buffer items are timestamp-ordered.
   findIndexAfterTimestamp(timestamp: number, selector: (item: T) => number): number {
-    if (this.count === 0) return -1;
+    if (this.count === 0) {return -1;}
     // Check if newest is still <= timestamp (nothing qualifies)
-    if (selector(this.getUnsafe(this.count - 1)) <= timestamp) return -1;
+    if (selector(this.getUnsafe(this.count - 1)) <= timestamp) {return -1;}
 
     let lo = 0, hi = this.count - 1;
     while (lo < hi) {

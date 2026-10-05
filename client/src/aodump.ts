@@ -14,7 +14,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.4;
-document.body.appendChild(renderer.domElement);
+document.body.append(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x25282e);
@@ -66,7 +66,7 @@ const U = {
 };
 
 function enhance(mat: THREE.Material): void {
-  if (mat.userData['__tuned']) return;
+  if (mat.userData['__tuned']) {return;}
   mat.userData['__tuned'] = true;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
@@ -154,10 +154,10 @@ function enhance(mat: THREE.Material): void {
 function applyTo(group: THREE.Group): void {
   group.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') return;
+    if (!m.isMesh) {return;}
+    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {return;}
     const mats = Array.isArray(m.material) ? m.material : [m.material];
-    for (const mt of mats) enhance(mt);
+    for (const mt of mats) {enhance(mt);}
   });
 }
 
@@ -166,8 +166,8 @@ let aoOn = q.get('ao') !== 'off';
 const bakedGroups = new WeakSet<THREE.Group>();
 function rebake(): void {
   for (const [, g] of vm.weapons) {
-    if (bakedGroups.has(g)) continue; // vertex attrs can't be re-baked cleanly
-    if (!aoOn) continue;
+    if (bakedGroups.has(g)) {continue;} // vertex attrs can't be re-baked cleanly
+    if (!aoOn) {continue;}
     g.visible = true;
     bakeVertexAO(g);
     g.visible = false;
@@ -182,22 +182,22 @@ const wnames = Object.entries(WeaponType).filter(([, v]) => typeof v === 'number
 let currentW = parseInt(q.get('w') ?? '0');
 function show(wt: number): void {
   currentW = wt;
-  for (const [w, g] of vm.weapons) g.visible = w === wt;
+  for (const [w, g] of vm.weapons) {g.visible = w === wt;}
   const g = vm.weapons.get(wt);
-  if (g) applyTo(g);
+  if (g) {applyTo(g);}
 }
 
 // ---- UI ---------------------------------------------------------------------
 const panel = document.getElementById('panel')!;
-const h = (t: string) => { const e = document.createElement('h3'); e.textContent = t; panel.appendChild(e); };
+const h = (t: string) => { const e = document.createElement('h3'); e.textContent = t; panel.append(e); };
 const slider = (label: string, u: { value: number }, lo: number, hi: number, step = 0.01) => {
   const row = document.createElement('div'); row.className = 'row';
   const l = document.createElement('label'); l.textContent = label;
   const inp = document.createElement('input'); inp.type = 'range';
   inp.min = String(lo); inp.max = String(hi); inp.step = String(step); inp.value = String(u.value);
   const val = document.createElement('span'); val.className = 'val'; val.textContent = String(u.value);
-  inp.addEventListener('input', () => { u.value = +inp.value; val.textContent = inp.value; });
-  row.append(l, inp, val); panel.appendChild(row);
+  inp.addEventListener('input', () => { u.value = Number(inp.value); val.textContent = inp.value; });
+  row.append(l, inp, val); panel.append(row);
 };
 
 h('WEAPON');
@@ -205,10 +205,10 @@ const wrow = document.createElement('div'); wrow.id = 'wrow';
 for (const [name, id] of wnames) {
   const b = document.createElement('button');
   b.textContent = name;
-  b.addEventListener('click', () => { show(id); for (const x of wrow.children) (x as HTMLElement).classList.remove('on'); b.classList.add('on'); });
-  wrow.appendChild(b);
+  b.addEventListener('click', () => { show(id); for (const x of wrow.children) {(x as HTMLElement).classList.remove('on');} b.classList.add('on'); });
+  wrow.append(b);
 }
-panel.appendChild(wrow);
+panel.append(wrow);
 
 h('BAKE');
 const aoBtn = document.createElement('button');
@@ -217,14 +217,14 @@ const bakeBtn = document.createElement('button'); bakeBtn.textContent = 'BAKE NO
 aoBtn.addEventListener('click', () => { aoOn = !aoOn; aoBtn.textContent = aoOn ? 'AO ON' : 'AO OFF'; aoBtn.classList.toggle('on', aoOn); });
 bakeBtn.addEventListener('click', rebake);
 panel.append(aoBtn, bakeBtn);
-if (aoOn) aoBtn.classList.add('on');
+if (aoOn) {aoBtn.classList.add('on');}
 
 h('VIEW');
 const views: [string, number][] = [['FINAL', 0], ['AO', 1], ['WEAR ATTR', 2], ['EDGE', 3], ['NORMAL', 4]];
 for (const [label, v] of views) {
   const b = document.createElement('button'); b.textContent = label;
   b.addEventListener('click', () => { U.uView.value = v; });
-  panel.appendChild(b);
+  panel.append(b);
 }
 
 h('GRUNGE');
@@ -263,7 +263,7 @@ slider('cav hi', U.uCavityHi, 0, 1);
 slider('cav floor', U.uCavityFloor, 0.2, 1);
 
 const qv = parseInt(q.get('view') ?? '0');
-if (!isNaN(qv)) U.uView.value = qv;
+if (!isNaN(qv)) {U.uView.value = qv;}
 
 rebake();
 show(currentW);
@@ -277,7 +277,7 @@ addEventListener('resize', () => {
 // The baked-GLB swap is async — meshes arrive AFTER applyTo first ran, so
 // keep re-running it until every lit material carries the tunable patch
 // (the __tuned guard makes it a no-op for already-patched materials).
-setInterval(() => { for (const [, g] of vm.weapons) applyTo(g); }, 400);
+setInterval(() => { for (const [, g] of vm.weapons) {applyTo(g);} }, 400);
 
 renderer.setAnimationLoop(() => {
   controls.update();

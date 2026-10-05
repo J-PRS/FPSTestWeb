@@ -50,7 +50,7 @@ function reportNaN(geo: THREE.BufferGeometry): void {
       }
     });
   } catch (e) {
-    if (e !== STOP) throw e;
+    if (e !== STOP) {throw e;}
   }
   hits.set(geo.uuid, {
     uuid: geo.uuid.slice(0, 8),
@@ -70,13 +70,13 @@ const STOP = new Error('geoNaN-stop');
  *  scene (room rebuild) just re-points the owner walk. */
 export function installGeoNaNWatch(s: THREE.Scene): void {
   scene = s;
-  if (installed) return;
+  if (installed) {return;}
   installed = true;
   const orig = THREE.BufferGeometry.prototype.computeBoundingSphere;
   THREE.BufferGeometry.prototype.computeBoundingSphere = function (this: THREE.BufferGeometry): void {
     orig.call(this);
     const r = this.boundingSphere?.radius;
-    if (r !== undefined && r !== r) reportNaN(this); // NaN only
+    if (r !== undefined && r !== r) {reportNaN(this);} // NaN only
   };
   registerDiag('geoNaN', () => ({ geoNaN: [...hits.values()] }));
 }

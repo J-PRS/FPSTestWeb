@@ -112,7 +112,7 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
     if (b.disposed) {
       d.balls.splice(i, 1);
       const ti = d.targets.indexOf(b);
-      if (ti >= 0) d.targets.splice(ti, 1);
+      if (ti >= 0) {d.targets.splice(ti, 1);}
       d.playbackBallById.delete(b.id);
     }
   }
@@ -128,29 +128,29 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
 
 // Shared cleanup: dispose live + playback transient objects
 function clearTransientObjects(d: DemoLifecycleCtx): void {
-  for (const rp of d.playbackRemotes.values()) rp.dispose();
+  for (const rp of d.playbackRemotes.values()) {rp.dispose();}
   d.playbackRemotes.clear();
-  for (const r of d.playbackProjectiles) r.dispose();
+  for (const r of d.playbackProjectiles) {r.dispose();}
   d.playbackProjectiles.length = 0;
   d.playbackProjectileById.clear();
   d.playbackProjectileOrigin.clear();
   for (const ball of d.playbackBallById.values()) {
     ball.dispose();
     const idx = d.balls.indexOf(ball);
-    if (idx >= 0) d.balls.splice(idx, 1);
+    if (idx >= 0) {d.balls.splice(idx, 1);}
     const ti = d.targets.indexOf(ball);
-    if (ti >= 0) d.targets.splice(ti, 1);
+    if (ti >= 0) {d.targets.splice(ti, 1);}
   }
   d.playbackBallById.clear();
-  for (const e of d.world.debrisList) e.dispose();
+  for (const e of d.world.debrisList) {e.dispose();}
   d.world.debrisList.length = 0;
-  for (const e of d.world.explosions) e.dispose();
+  for (const e of d.world.explosions) {e.dispose();}
   d.world.explosions.length = 0;
-  for (const i of d.world.implosions) i.dispose();
+  for (const i of d.world.implosions) {i.dispose();}
   d.world.implosions.length = 0;
-  for (const g of d.world.aoeGizmos) g.dispose();
+  for (const g of d.world.aoeGizmos) {g.dispose();}
   d.world.aoeGizmos.length = 0;
-  for (const dd of d.world.playerDebrisList) dd.dispose();
+  for (const dd of d.world.playerDebrisList) {dd.dispose();}
   d.world.playerDebrisList.length = 0;
   for (const b of d.playbackWorld.beams) {
     d.lazyScene().remove(b.mesh);
@@ -163,9 +163,9 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
 // starts after balls are already in the scene (they have no Spawned event yet).
 function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?: (ball: Ball) => void): void {
   const dm = d.lazyDemoManager();
-  if (!dm?.isRecording) return;
+  if (!dm?.isRecording) {return;}
   for (const ball of d.balls) {
-    if (ball.dead) continue;
+    if (ball.dead) {continue;}
     dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     onBallRecorded?.(ball);
   }
@@ -185,7 +185,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     const vm = d.lazyViewModel();
     if (vm) {
       for (const e of events.projectiles) {
-        if (e.eventType === ProjectileEventType.Fired) vm.kick();
+        if (e.eventType === ProjectileEventType.Fired) {vm.kick();}
       }
     }
     applyPlaybackEvents(d.playbackWorld, events);
@@ -220,7 +220,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // Re-arm so the next replay re-applies its own weapon instead of
     // inheriting whatever the previous clip left selected.
     d.playbackWid = -1;
-    for (const rp of d.world.remotePlayers.values()) rp.setStaleHidden(false);
+    for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
     clearTransientObjects(d);
     // Show overlay menu so user can replay or pick another clip
     if (document.pointerLockElement === d.rendererCanvas) {
@@ -245,7 +245,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     document.body.classList.remove('menu-open');
     d.rendererCanvas.requestPointerLock();
     // Live remote players would otherwise stand ghosted inside the replay
-    for (const rp of d.world.remotePlayers.values()) rp.setStaleHidden(true);
+    for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
     // Dispose all non-playback balls (live game balls)
     const playbackBallSet = new Set(d.playbackBallById.values());
     for (let i = d.balls.length - 1; i >= 0; i--) {
@@ -254,21 +254,21 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
         b.dispose();
         d.balls.splice(i, 1);
         const ti = d.targets.indexOf(b);
-        if (ti >= 0) d.targets.splice(ti, 1);
+        if (ti >= 0) {d.targets.splice(ti, 1);}
       }
     }
     // Clear live projectiles
-    for (const r of d.world.projectiles) r.dispose();
+    for (const r of d.world.projectiles) {r.dispose();}
     d.world.projectiles.length = 0;
     // All live species are game objects too — dispose so they don't hang
     // frozen in the scene during playback
-    for (const m of d.mines) m.onDetonate = undefined; // teardown isn't a detonation
+    for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
     type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
     for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
       for (const e of list) {
         e.dispose();
         const ti = d.targets.indexOf(e);
-        if (ti >= 0) d.targets.splice(ti, 1);
+        if (ti >= 0) {d.targets.splice(ti, 1);}
       }
       list.length = 0;
     }
@@ -302,7 +302,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // Roster players absent at this time keep their replica but hidden —
     // e.g. they joined after the seek target or hadn't spawned yet.
     for (const [idx, rp] of d.playbackRemotes) {
-      if (!seen.has(idx)) rp.setStaleHidden(true);
+      if (!seen.has(idx)) {rp.setStaleHidden(true);}
     }
   };
 

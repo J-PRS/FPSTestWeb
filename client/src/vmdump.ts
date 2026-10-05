@@ -13,7 +13,7 @@ renderer.setSize(innerWidth, innerHeight);
 // light set — so these shots show what the bake looks like in play.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.4; // TONE_MAPPING_EXPOSURE
-document.body.appendChild(renderer.domElement);
+document.body.append(renderer.domElement);
 document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
@@ -39,7 +39,7 @@ if (q.get('export')) {
     const glow: THREE.Mesh[] = [];
     g.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+      if (!m.isMesh) {return;}
       // Glow parts stay procedural — they're neon-bright, not baked metal.
       if ((m.material as THREE.Material).type === 'MeshBasicMaterial') { glow.push(m); return; }
       const geo = m.geometry as THREE.BufferGeometry;
@@ -47,7 +47,7 @@ if (q.get('export')) {
       // extra color sets export as COLOR_1.. and confuse the bake's pick.
       // Strip every color-ish attribute before writing the part paint.
       for (const name of Object.keys(geo.attributes)) {
-        if (name.startsWith('color')) geo.deleteAttribute(name);
+        if (name.startsWith('color')) {geo.deleteAttribute(name);}
       }
       const col = ((m.material as THREE.MeshLambertMaterial).color ?? new THREE.Color(1, 1, 1)).clone();
       const n = geo.attributes.position.count;
@@ -55,24 +55,24 @@ if (q.get('export')) {
       for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
       geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     });
-    for (const m of glow) m.visible = false;
+    for (const m of glow) {m.visible = false;}
     const glb: ArrayBuffer = await new Promise((res, rej) =>
       exporter.parse(g, (r) => res(r as ArrayBuffer), rej, { binary: true }));
-    for (const m of glow) m.visible = true;
+    for (const m of glow) {m.visible = true;}
     const bytes = new Uint8Array(glb);
     let bin = '';
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i++) {bin += String.fromCharCode(bytes[i]);}
     out[wt] = btoa(bin);
     g.visible = false;
   }
   window.__glb = out;
   window.__ready = true;
 }
-if (q.get('export')) throw 0; // export mode ends above — __ready already set
+if (q.get('export')) {throw 0;} // export mode ends above — __ready already set
 if (!ao) {
   // Unbake: drop the vertex-color attribute so we capture the pre-AO look.
   vm.group.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh) return;
+    if (!(o as THREE.Mesh).isMesh) {return;}
     const m = o as THREE.Mesh;
     m.geometry.deleteAttribute('color');
     const mat = m.material as THREE.Material & { vertexColors?: boolean };
@@ -82,7 +82,7 @@ if (!ao) {
 vm.switchWeapon(w);
 // Skip past the switch dip so the weapon sits at rest for the shot.
 const zeroVel = new THREE.Vector3();
-for (let i = 0; i < 60; i++) vm.update(1 / 60, 0, 0, zeroVel, camera);
+for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
 
 if (q.get('close')) {
   // Detach the active weapon from the viewmodel rig and frame it directly —

@@ -67,8 +67,8 @@ export class RemoteSet<T extends RemoteEntity, S> {
   /** A remote is renderable when its feed is live AND it was heard from
    *  within the stale window. The isLive hook owns kind-specific rules. */
   active(id: string, ent: T | undefined, state: S | undefined): boolean {
-    if (!this.hooks.isLive(id, state)) return false;
-    if (!ent) return true; // not yet instantiated — first record creates it
+    if (!this.hooks.isLive(id, state)) {return false;}
+    if (!ent) {return true;} // not yet instantiated — first record creates it
     return Date.now() - ent.lastUpdateTime <= this.staleMs;
   }
 
@@ -88,7 +88,7 @@ export class RemoteSet<T extends RemoteEntity, S> {
    *  can't be forgotten at the call site. */
   remove(id: string): boolean {
     const ent = this.entities.get(id);
-    if (!ent) return false;
+    if (!ent) {return false;}
     ent.dispose();
     this.entities.delete(id);
     this.hooks.onRemove?.(id, ent, 'gone');
@@ -99,7 +99,7 @@ export class RemoteSet<T extends RemoteEntity, S> {
    *  hooks — it's the same body under a new name. */
   rename(oldId: string, newId: string): void {
     const ent = this.entities.get(oldId);
-    if (!ent) return;
+    if (!ent) {return;}
     this.entities.delete(oldId);
     this.entities.set(newId, ent);
   }
@@ -113,7 +113,7 @@ export class RemoteSet<T extends RemoteEntity, S> {
     for (const [id, ent] of this.entities) {
       const gone = !liveIds(id);
       const shrunkAway = ent.scale === 0 && !(shrinkExempt?.(id));
-      if (!gone && !shrunkAway) continue;
+      if (!gone && !shrunkAway) {continue;}
       ent.dispose();
       this.entities.delete(id);
       this.hooks.onRemove?.(id, ent, gone ? 'gone' : 'shrunk');

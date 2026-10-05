@@ -11,7 +11,7 @@ import { markProbe } from '../core/fxDiag.js';
 
 // Warm the Rajdhani face early — the atlas bakes whatever's loaded at
 // build time, so without this the first batch stamps in the fallback font.
-void document.fonts?.load('700 56px Rajdhani');
+document.fonts?.load('700 56px Rajdhani');
 
 const GLYPHS = '0123456789-!';
 const CELL_W = 52;   // px per glyph cell in the atlas

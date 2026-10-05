@@ -268,7 +268,7 @@ export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationStat
  *  reverse/lean fallbacks off while one drives). */
 export interface ClipCandidate { name: string; dir: boolean }
 export function clipCandidates(variant: string, state: AnimationState, dir: LocoDir): ClipCandidate[] {
-  if (variant === 'knight') return [{ name: KNIGHT_ANIMS[state], dir: false }];
+  if (variant === 'knight') {return [{ name: KNIGHT_ANIMS[state], dir: false }];}
   const spec = CLASS_BODY_SPEC[variant];
   if (spec?.anims) {
     const out: ClipCandidate[] = [];
@@ -278,7 +278,7 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
     if (state === 'walk' && dir !== 'F' && dir !== 'FL' && dir !== 'FR' && spec.walkDirs) {
       const axis = dir === 'L' ? 'L' : dir === 'R' ? 'R' : 'B';
       const n = spec.walkDirs[axis];
-      if (n) out.push({ name: n, dir: true });
+      if (n) {out.push({ name: n, dir: true });}
     }
     if (spec.anims[state]) { out.push({ name: spec.anims[state]!, dir: false }); return out; }
     // States the table lacks (e.g. 'throw') fall through to the generic
@@ -292,7 +292,7 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
       // kevdev forward stride instead of idling through the walk.
       out.push({ name: ANIM_NAMES[state][0], dir: false });
       for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01'])
-        out.push({ name: `UAL_${s}_Forward`, dir: true });
+        {out.push({ name: `UAL_${s}_Forward`, dir: true });}
     } else {
       // The Sprint set only covers the forward hemisphere — back-half
       // run sectors ride the Run clips.
@@ -302,7 +302,7 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
     }
   }
   const ov = VARIANT_CLIP_OVERRIDES[variant]?.[state];
-  for (const n of ov === undefined ? [] : Array.isArray(ov) ? ov : [ov]) out.push({ name: n, dir: false });
+  for (const n of ov === undefined ? [] : Array.isArray(ov) ? ov : [ov]) {out.push({ name: n, dir: false });}
   out.push({ name: ANIM_NAMES[state][0], dir: false }, { name: ANIM_NAMES[state][1], dir: false });
   return out;
 }
@@ -415,9 +415,10 @@ export const CYBER_MANNEQUIN_BONE_MAP: Record<string, string> = {
 // muzzle sprites reuse it
 let _flashTex: THREE.CanvasTexture | null = null;
 export function makeFlashTexture(): THREE.CanvasTexture {
-  if (_flashTex) return _flashTex;
+  if (_flashTex) {return _flashTex;}
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.height = 64;
+  c.width = c.height;
   const ctx = c.getContext('2d')!;
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)');

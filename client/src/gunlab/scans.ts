@@ -26,7 +26,7 @@ function zOverlap2d(a: THREE.Vector2[], b: THREE.Vector2[]): boolean {
       let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
       for (const v of a) { const s = v.x * nx + v.y * ny; aMin = Math.min(aMin, s); aMax = Math.max(aMax, s); }
       for (const v of b) { const s = v.x * nx + v.y * ny; bMin = Math.min(bMin, s); bMax = Math.max(bMax, s); }
-      if (aMax < bMin || bMax < aMin) return false;
+      if (aMax < bMin || bMax < aMin) {return false;}
     }
   }
   return true;
@@ -41,7 +41,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
   let meshId = 0;
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
+    if (!m.isMesh) {return;}
     meshId++;
     names[meshId] = m.name || m.geometry.type;
     const pos = m.geometry.getAttribute('position');
@@ -53,7 +53,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
       B.fromBufferAttribute(pos, ib).applyMatrix4(m.matrixWorld);
       C.fromBufferAttribute(pos, ic).applyMatrix4(m.matrixWorld);
       const n = new THREE.Vector3().subVectors(B, A).cross(EDGE.subVectors(C, A));
-      if (n.lengthSq() < 1e-12) continue;
+      if (n.lengthSq() < 1e-12) {continue;}
       n.normalize();
       tris.push({ n, d: n.dot(A), p: [A.clone(), B.clone(), C.clone()], m: meshId });
     }
@@ -65,17 +65,17 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
       const x = tris[i]!, y = tris[j]!;
       // Cross-mesh only — same-mesh coplanarity is authored tessellation
       // (extrude caps, fan splits), not a fight between two surfaces.
-      if (x.m === y.m) continue;
+      if (x.m === y.m) {continue;}
       // Same-FACING coplanar only: opposite-facing pairs are flush butt
       // joints hidden inside the model — they can't win pixels.
-      if (x.n.dot(y.n) < 0.9999) continue;
-      if (Math.abs(x.d - y.d) > 5e-4) continue;
+      if (x.n.dot(y.n) < 0.9999) {continue;}
+      if (Math.abs(x.d - y.d) > 5e-4) {continue;}
       // Project to the plane's dominant 2D axes for the SAT overlap.
       const an = new THREE.Vector3(Math.abs(x.n.x), Math.abs(x.n.y), Math.abs(x.n.z));
       const drop = an.x > an.y ? (an.x > an.z ? 0 : 2) : (an.y > an.z ? 1 : 2);
       const proj = (v: THREE.Vector3) => drop === 0 ? new THREE.Vector2(v.y, v.z) : drop === 1 ? new THREE.Vector2(v.x, v.z) : new THREE.Vector2(v.x, v.y);
       const xa = x.p.map(proj), ya = y.p.map(proj);
-      if (!zOverlap2d(xa, ya)) continue;
+      if (!zOverlap2d(xa, ya)) {continue;}
       // Clip x's projected tri by y's half-planes — the INTERSECTION is
       // the fighting patch; painting whole tris flags innocent surface.
       let poly = xa;
@@ -88,7 +88,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
         const out: THREE.Vector2[] = [];
         for (let k = 0; k < poly.length; k++) {
           const s = poly[k]!, t = poly[(k + 1) % poly.length]!;
-          if (inside(s)) out.push(s);
+          if (inside(s)) {out.push(s);}
           const sin = inside(s), tin = inside(t);
           if (sin !== tin) {
             const ds = sign * (nx * (s.x - p.x) + ny * (s.y - p.y));
@@ -99,7 +99,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
         }
         poly = out;
       }
-      if (poly.length < 3) continue;
+      if (poly.length < 3) {continue;}
       pairs++;
       // Lift each clipped 2D point back to x's 3D plane via barycentrics
       // of the projected triangle — axis-drop projection is affine.
@@ -119,7 +119,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
       }
       if (at.length < 6) {
         const c = x.p[0].clone().add(x.p[1]).add(x.p[2]).multiplyScalar(1 / 3);
-        at.push(c.toArray().map(v => +v.toFixed(3)));
+        at.push(c.toArray().map(v => Number(v.toFixed(3))));
         who.push(`${names[x.m]}~${names[y.m]}`);
       }
     }
@@ -137,7 +137,7 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   const pk = (v: THREE.Vector3) => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
+    if (!m.isMesh) {return;}
     meshId++;
     names[meshId] = m.name || m.geometry.type;
     const pos = m.geometry.getAttribute('position');
@@ -153,7 +153,7 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
         const ka = pk(pts[u]!), kb = pk(pts[w]!);
         const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
         let l = edges.get(key);
-        if (!l) edges.set(key, l = []);
+        if (!l) {edges.set(key, l = []);}
         l.push({ a: pts[u]!.clone(), b: pts[w]!.clone(), m: meshId });
       }
     }
@@ -161,11 +161,11 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   let holes = 0;
   const at: number[][] = [], who: string[] = [];
   for (const l of edges.values()) {
-    if (l.length !== 1) continue;
+    if (l.length !== 1) {continue;}
     holes++;
     if (at.length < 8) {
       const e = l[0]!;
-      at.push(e.a.clone().add(e.b).multiplyScalar(0.5).toArray().map(v => +v.toFixed(3)));
+      at.push(e.a.clone().add(e.b).multiplyScalar(0.5).toArray().map(v => Number(v.toFixed(3))));
       who.push(names[e.m]!);
     }
   }
@@ -177,7 +177,7 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   const parts: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
+    if (!m.isMesh) {return;}
     m.geometry.computeBoundingBox();
     const box = m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld);
     parts.push({ m, box });
@@ -191,18 +191,18 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   const parent = parts.map((_, i) => i);
   const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
   for (let i = 0; i < parts.length; i++)
-    for (let j = i + 1; j < parts.length; j++)
-      if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);
+    {for (let j = i + 1; j < parts.length; j++)
+      if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);}
   const roots = new Set(parts.map((_, i) => find(i)));
   // Orphan = a cluster of one (not merely a small cluster).
   const size = new Map<number, number>();
-  for (let i = 0; i < parts.length; i++) size.set(find(i), (size.get(find(i)) ?? 0) + 1);
+  for (let i = 0; i < parts.length; i++) {size.set(find(i), (size.get(find(i)) ?? 0) + 1);}
   const orphans: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
-  for (let i = 0; i < parts.length; i++) if (size.get(find(i)) === 1) orphans.push(parts[i]!);
+  for (let i = 0; i < parts.length; i++) {if (size.get(find(i)) === 1) orphans.push(parts[i]!);}
   const who: string[] = [], at: number[][] = [];
   for (const o of orphans.slice(0, 8)) {
     who.push(o.m.name || o.m.geometry.type);
-    at.push(o.box.getCenter(_tmpC).toArray().map(v => +v.toFixed(3)));
+    at.push(o.box.getCenter(_tmpC).toArray().map(v => Number(v.toFixed(3))));
   }
   return { orphans: orphans.length, who, at, clusters: roots.size };
 }
@@ -214,7 +214,7 @@ export function volScan(root: THREE.Object3D): { inverted: number; who: string[]
   const who: string[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
+    if (!m.isMesh) {return;}
     const pos = m.geometry.getAttribute('position');
     const idx = m.geometry.index;
     const triCount = idx ? idx.count / 3 : pos.count / 3;
@@ -232,9 +232,9 @@ export function volScan(root: THREE.Object3D): { inverted: number; who: string[]
     const bb = m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld).getSize(EDGE);
     // Flat meshes (bore discs, glow strips) can't be volume-tested —
     // a near-zero bbox axis explodes the ratio; skip them.
-    if (Math.min(bb.x, bb.y, bb.z) < 0.002) return;
+    if (Math.min(bb.x, bb.y, bb.z) < 0.002) {return;}
     const norm = vol / Math.max(bb.x * bb.y * bb.z, 1e-9);
-    if (norm < -0.02) who.push(`${m.name || m.geometry.type}(${norm.toFixed(2)})`);
+    if (norm < -0.02) {who.push(`${m.name || m.geometry.type}(${norm.toFixed(2)})`);}
   });
   return { inverted: who.length, who };
 }

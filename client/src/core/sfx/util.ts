@@ -11,14 +11,14 @@ export function ctx(): BaseAudioContext | null { return audio.context; }
  *  oldest strictly-lower-priority voice on overflow. */
 export function play(node: AudioNode, dur: number, chain?: GainNode, prio = 0): boolean {
   const c = ctx();
-  if (!c || !audio.takeVoice(prio, node, chain)) return false;
+  if (!c || !audio.takeVoice(prio, node, chain)) {return false;}
   setTimeout(() => {
     audio.releaseVoice(node);
     node.disconnect();
     // Positional calls pass their worldInput node as `chain` — without
     // freeing it the lp/pan tail stays attached to the world bus forever
     // (connected nodes aren't collectable, so every shot would leak).
-    if (chain) audio.freeInput(chain);
+    if (chain) {audio.freeInput(chain);}
   }, dur * 1000 + 100);
   return true;
 }
@@ -52,7 +52,7 @@ export function sample(name: string, dest: AudioNode, gain = 1, rate = 1,
   const [lpf, cutAfter, delay = 0] = opts;
   const c = ctx();
   const buf = audio.sample(name);
-  if (!c || !buf) return false;
+  if (!c || !buf) {return false;}
   const src = c.createBufferSource();
   src.buffer = buf;
   const playRate = rate * audio.emitterPitch * (0.94 + Math.random() * 0.12);
@@ -98,7 +98,7 @@ export function layer(dest: AudioNode,
     // buzz at auto-fire rates; ±5% pitch breaks the loop, reads as machinery
     const jr = (r ?? 1) * (1 + (Math.random() - 0.5) * jitter);
     const jg = g * (1 + (Math.random() - 0.5) * jitter * 0.6);
-    if (sample(n, dest, jg, jr, f, cut, delay)) any = true;
+    if (sample(n, dest, jg, jr, f, cut, delay)) {any = true;}
   }
   return any;
 }
@@ -109,7 +109,7 @@ export function noise(dur: number, peak: number, dest: AudioNode,
   const [f0 = 800, f1 = 200, q = 1] = sweep;
   const c = ctx()!;
   const nb = audio.noise;
-  if (!nb) return;
+  if (!nb) {return;}
   const src = c.createBufferSource();
   src.buffer = nb;
   const filt = c.createBiquadFilter();
@@ -126,9 +126,9 @@ export function noise(dur: number, peak: number, dest: AudioNode,
  *  player for bounce pings, debris hits, etc. */
 export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c || !audio.sample(name)) return;
+  if (!c || !audio.sample(name)) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 1, inNode)) { audio.freeInput(inNode); return; }

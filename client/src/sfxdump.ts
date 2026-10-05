@@ -9,7 +9,7 @@ import { WeaponType } from '../../shared/weapons.js';
 function floatToWav(data: Float32Array, sampleRate: number): ArrayBuffer {
   const buf = new ArrayBuffer(44 + data.length * 2);
   const v = new DataView(buf);
-  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) {v.setUint8(o + i, s.charCodeAt(i));} };
   w(0, 'RIFF'); v.setUint32(4, 36 + data.length * 2, true); w(8, 'WAVEfmt ');
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
@@ -33,7 +33,7 @@ async function render(name: string, secs: number, fn: () => void): Promise<strin
   const wav = floatToWav(pcm, sr);
   let bin = '';
   const bytes = new Uint8Array(wav);
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  for (let i = 0; i < bytes.length; i++) {bin += String.fromCharCode(bytes[i]!);}
   console.log(`rendered ${name} (${pcm.length} samples)`);
   return btoa(bin);
 }
@@ -98,6 +98,6 @@ const jobs: Array<[string, number, () => void]> = [
 
 window.dump = (async () => {
   const out: Record<string, string> = {};
-  for (const [name, secs, fn] of jobs) out[name] = await render(name, secs, fn);
+  for (const [name, secs, fn] of jobs) {out[name] = await render(name, secs, fn);}
   return out;
 })();

@@ -25,7 +25,7 @@ export class WarpBeacon {
   // Q-up teleports the player onto it with momentum preserved.
 
   throwBeacon(): void {
-    if (this.beacon || this.cooldown > 0) return;
+    if (this.beacon || this.cooldown > 0) {return;}
     if (!this.mesh) {
       // Glowing beacon: white-hot octa core + additive halo — it must read
       // as a warp anchor, not a pebble, at 60m against the sand
@@ -60,10 +60,10 @@ export class WarpBeacon {
   releaseBeacon(): void {
     const b = this.beacon;
     this.beacon = null;
-    if (!b) return;
-    if (this.mesh) this.mesh.visible = false;
+    if (!b) {return;}
+    if (this.mesh) {this.mesh.visible = false;}
     // The throw is free — the WARP is what costs: no energy, no teleport.
-    if (!this.ctx.spendEnergy(ENERGY.skillCost)) return;
+    if (!this.ctx.spendEnergy(ENERGY.skillCost)) {return;}
     this.ctx.skillUsed();
     // Land the player just over the beacon — never inside terrain
     const gy = this.ctx.terrain.getHeight(b.pos.x, b.pos.z);
@@ -78,12 +78,12 @@ export class WarpBeacon {
 
   fizzle(): void {
     this.beacon = null;
-    if (this.mesh) this.mesh.visible = false;
+    if (this.mesh) {this.mesh.visible = false;}
   }
 
   updateBeacon(dt: number): void {
     const b = this.beacon;
-    if (!b) return;
+    if (!b) {return;}
     b.age += dt;
     if (b.age > TL_MAX_LIFE) { this.fizzle(); return; }
 

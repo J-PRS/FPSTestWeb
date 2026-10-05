@@ -13,8 +13,8 @@ class FakeLink implements P2PLink {
   bin: Uint8Array[] = [];
   closed = false;
   send(d: string | Uint8Array) {
-    if (typeof d === 'string') this.json.push(JSON.parse(d));
-    else this.bin.push(d);
+    if (typeof d === 'string') {this.json.push(JSON.parse(d));}
+    else {this.bin.push(d);}
   }
   close() { this.closed = true; }
   lastJson(type: string) { return [...this.json].toReversed().find(m => m.type === type); }

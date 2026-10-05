@@ -168,7 +168,7 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, mega = false) {
-    void scene;
+    scene;
     this.id = nextTargetId();
     this.mega = mega;
     // Megaweed: ~2x the ball, tankier, ruddier (an old gnarled root-ball),

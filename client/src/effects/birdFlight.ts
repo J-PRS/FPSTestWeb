@@ -40,7 +40,7 @@ export class BirdFlight {
         this.h.aggroT = 0;
         this.h.departT = 4 + Math.random() * 2;
         for (const b of this.h.birds) {
-          if (b.dead) continue;
+          if (b.dead) {continue;}
           const bp = b.group.position;
           b.heading = Math.atan2(bp.z - playerPos.z, bp.x - playerPos.x)
             + (Math.random() - 0.5) * 1.2;
@@ -49,7 +49,7 @@ export class BirdFlight {
         }
       }
     }
-    if (this.h.departT > 0) this.h.departT -= dt;
+    if (this.h.departT > 0) {this.h.departT -= dt;}
   }
 
   /** Shared wing pose from flapPhase/flapAmp — every flight mode ends here.
@@ -105,7 +105,7 @@ export class BirdFlight {
       // Bird-vs-bird separation: gentle radial repulsion so parallel
       // divers never merge into one silhouette.
       for (const o of this.h.birds) {
-        if (o === b || o.dead) continue;
+        if (o === b || o.dead) {continue;}
         const d2 = bp.distanceToSquared(o.group.position);
         if (d2 < SEP_R2 && d2 > 1e-4) {
           _rep.copy(bp).sub(o.group.position);

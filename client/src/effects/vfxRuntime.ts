@@ -15,7 +15,7 @@ let scene: THREE.Scene | null = null;
 export const live = new Set<ParticleSystem>();
 
 export function initVfx(s: THREE.Scene): void {
-  if (batcher) return;
+  if (batcher) {return;}
   scene = s;
   batcher = new BatchedRenderer();
   batcher.layers.enable(BLOOM_LAYER);
@@ -27,7 +27,7 @@ export function initVfx(s: THREE.Scene): void {
 export function vfxBatcher(): BatchedRenderer | null { return batcher; }
 export function vfxScene(): THREE.Scene | null { return scene; }
 /** initVfx hasn't run — effects no-op rather than leak an orphan system. */
-export function vfxReady(): boolean { return !!batcher && !!scene; }
+export function vfxReady(): boolean { return Boolean(batcher) && Boolean(scene); }
 
 /** Perf-dump visibility: live one-shots in `live`, systems the batcher
  *  still holds, particles across them. A growing `systems` count under
@@ -48,8 +48,8 @@ export function setVfxQualityScale(q: number): void { _qualityScale = q; }
  *  and ~15ms of pure CPU sim. Full detail to 4k, linear to a third at 12k. */
 export function vfxPressure(): number {
   let p = 1;
-  if (_liveParticles > 12000) p = 0.35;
-  else if (_liveParticles > 4000) p = 1 - ((_liveParticles - 4000) / 8000) * 0.65;
+  if (_liveParticles > 12000) {p = 0.35;}
+  else if (_liveParticles > 4000) {p = 1 - ((_liveParticles - 4000) / 8000) * 0.65;}
   return p * _qualityScale;
 }
 
@@ -138,7 +138,7 @@ export function returnSystem(ps: ParticleSystem, key: string): void {
 }
 
 export function attachSystem(ps: ParticleSystem): void {
-  if (attached.has(ps)) return;
+  if (attached.has(ps)) {return;}
   batcher?.addSystem(ps);
   scene?.add(ps.emitter);
   // Aim-probe tag — a crosshair hit on a live Points cloud resolves back
@@ -151,13 +151,13 @@ export function takeSystem(kind: string, build: () => ParticleSystem): ParticleS
   const ps = pools.get(kind)?.pop()?.ps;
   const st = window.__vfxStats;
   if (ps) {
-    if (st) st.hits++; pooled.delete(ps);
+    if (st) {st.hits++;} pooled.delete(ps);
     // Pooled systems can come back parked distance-paused (the flag lives
     // on the system, not in restart()) — a paused reuse emits nothing.
     ps.paused = false;
     return ps;
   }
-  if (st) st.misses++;
+  if (st) {st.misses++;}
   const n = build();
   kindOf.set(n, kind);
   return n;
@@ -198,7 +198,7 @@ export function resyncEmission(ps: IParticleSystem, em: THREE.Object3D): void {
 export function activateSystem(ps: ParticleSystem, pos: THREE.Vector3, quat?: THREE.Quaternion): void {
   ps.paused = false;
   ps.emitter.position.copy(pos);
-  if (quat) ps.emitter.quaternion.copy(quat);
+  if (quat) {ps.emitter.quaternion.copy(quat);}
   attachSystem(ps);
   ps.restart();
   resyncEmission(ps, ps.emitter);
@@ -218,16 +218,16 @@ function reapStarved(ps: IParticleSystem): void {
   // that dispose() pools — every later reuse renders nothing.
   if (activeTrailPs.has(ps as ParticleSystem)) {
     const s = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
-    if (s === STARVE_LIMIT) trailStats.reapedActive++;
-    if (s) starveFrames.set(ps, s); else starveFrames.delete(ps);
+    if (s === STARVE_LIMIT) {trailStats.reapedActive++;}
+    if (s) {starveFrames.set(ps, s);} else {starveFrames.delete(ps);}
     return;
   }
   const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
   if (starved > STARVE_LIMIT) {
     detachSystem(ps as ParticleSystem); // else attachSystem's guard makes re-attach a silent no-op
     starveFrames.delete(ps);
-  } else if (starved) starveFrames.set(ps, starved);
-  else starveFrames.delete(ps);
+  } else if (starved) {starveFrames.set(ps, starved);}
+  else {starveFrames.delete(ps);}
 }
 
 // Sim decimation: the whole batcher sims at 30Hz — every other frame is
@@ -247,7 +247,7 @@ export const buildQueue: (() => void)[] = [];
 // now; empty (or far, where a frame of delay is invisible) = enqueue.
 // The queue cap degrades to immediate builds under sustained spam.
 export function queueIfCold(key: string): boolean {
-  if ((pools.get(key)?.length ?? 0) > 0) return false;
+  if ((pools.get(key)?.length ?? 0) > 0) {return false;}
   return buildQueue.length < 12;
 }
 // Pause/prune bookkeeping runs at 15Hz — a ~66ms lag on distance-pause or
@@ -264,7 +264,7 @@ let prunePhase = 0;
 function tickSuspended(ps: IParticleSystem, em: THREE.Object3D, camPos: THREE.Vector3): void {
   const far = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
   if (!far) {
-    if ((ps as ParticleSystem).paused) resyncEmission(ps, em);
+    if ((ps as ParticleSystem).paused) {resyncEmission(ps, em);}
     (ps as ParticleSystem).paused = false;
     return;
   }
@@ -287,8 +287,8 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
       // while the projectile keeps going — and trails are cheap continuous
       // emitters compared to the multi-layer bursts this pause exists for.
       if (camPos && !activeTrailPs.has(ps as ParticleSystem))
-        tickSuspended(ps, ps.emitter as unknown as THREE.Object3D, camPos);
-      if (live.has(ps as ParticleSystem) || pooled.has(ps as ParticleSystem)) continue;
+        {tickSuspended(ps, ps.emitter as unknown as THREE.Object3D, camPos);}
+      if (live.has(ps as ParticleSystem) || pooled.has(ps as ParticleSystem)) {continue;}
       reapStarved(ps);
     }
   }
@@ -326,14 +326,14 @@ function shrinkPools(now: number): void {
   let total = 0;
   for (const [kind, pool] of pools) {
     for (let i = pool.length - 1; i >= POOL_FLOOR; i--) {
-      if (now - pool[i]!.idleAt <= POOL_IDLE_MS) continue;
+      if (now - pool[i]!.idleAt <= POOL_IDLE_MS) {continue;}
       const ps = pool[i]!.ps;
       pool[i] = pool[pool.length - 1]!;
       pool.pop();
       retirePooled(ps);
     }
-    if (!pool.length) pools.delete(kind);
-    else total += pool.length;
+    if (!pool.length) {pools.delete(kind);}
+    else {total += pool.length;}
   }
   // Global ceiling: evict the oldest idle entries when the pool census
   // exceeds POOL_MAX_TOTAL — a fragmented key space must not convert into
@@ -342,15 +342,15 @@ function shrinkPools(now: number): void {
     type Entry = { ps: ParticleSystem; idleAt: number; pool: { ps: ParticleSystem; idleAt: number }[] };
     const all: Entry[] = [];
     for (const pool of pools.values())
-      for (const e of pool) all.push({ ps: e.ps, idleAt: e.idleAt, pool });
+      {for (const e of pool) all.push({ ps: e.ps, idleAt: e.idleAt, pool });}
     all.sort((a, b) => a.idleAt - b.idleAt);
     for (let i = 0; i < all.length - POOL_MAX_TOTAL; i++) {
       const e = all[i]!;
       const idx = e.pool.findIndex(x => x.ps === e.ps);
-      if (idx >= 0) e.pool.splice(idx, 1);
+      if (idx >= 0) {e.pool.splice(idx, 1);}
       retirePooled(e.ps);
     }
-    for (const [kind, pool] of pools) if (!pool.length) pools.delete(kind);
+    for (const [kind, pool] of pools) {if (!pool.length) pools.delete(kind);}
   }
 }
 
@@ -397,28 +397,28 @@ export class TrailDriver {
     private readonly emitters: DriveLayer[],
     private readonly ribbons: DriveRibbon[] = [],
   ) {
-    for (const r of this.ribbons) r.follow = host.pos;
+    for (const r of this.ribbons) {r.follow = host.pos;}
     drivers.add(this);
   }
   release(): void { drivers.delete(this); }
 
   tick(dt: number): void {
-    if (dt <= 0) return; // paused fx clock — pos is frozen, don't misread a seek as travel
+    if (dt <= 0) {return;} // paused fx clock — pos is frozen, don't misread a seek as travel
     const { pos, vel } = this.host;
     // Same budget the old host-side backstop used: ~3 frames of legit
     // travel + slack — beyond that it's a discontinuity every layer cuts.
     const maxStep = this.host.maxStep?.(dt) ?? vel.length() * dt * 3 + 4;
     const jump = pos.distanceToSquared(this.last) > maxStep * maxStep;
     if (jump) {
-      for (const r of this.ribbons) r.clear();
-      for (const e of this.emitters) e.teleport();
+      for (const r of this.ribbons) {r.clear();}
+      for (const e of this.emitters) {e.teleport();}
     }
-    if (this.shouldEmit(jump)) this.emit();
+    if (this.shouldEmit(jump)) {this.emit();}
     this.last.copy(pos);
   }
 
   private shouldEmit(jump: boolean): boolean {
-    if (!(this.host.emitting?.() ?? true)) return false;
+    if (!(this.host.emitting?.() ?? true)) {return false;}
     // Even on the jump frame layers emit by default — their own skipSeg/
     // jump-cut swallows the deposit; emitOnJump=false covers hosts whose
     // correction sweep IS the motion to hide.
@@ -427,16 +427,16 @@ export class TrailDriver {
 
   private emit(): void {
     const { pos, vel } = this.host;
-    for (const e of this.emitters) e.emitSegment();
+    for (const e of this.emitters) {e.emitSegment();}
     if (this.host.ribbonEmitting?.() ?? true) {
-      for (const r of this.ribbons) r.push(pos, vel);
+      for (const r of this.ribbons) {r.push(pos, vel);}
     }
   }
 }
 
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
-  for (const d of drivers) d.tick(dt);
-  if (buildQueue.length) buildQueue.shift()!();
+  for (const d of drivers) {d.tick(dt);}
+  if (buildQueue.length) {buildQueue.shift()!();}
   if (++prunePhase >= 4) {
     prunePhase = 0;
     runBookkeeping(camOverride ?? camPos);
@@ -451,7 +451,7 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
     for (const ps of batcher.systemToBatchIndex.keys()) {
       const st = (ps as ParticleSystem).emissionState as { previousWorldPos?: THREE.Vector3 };
       const prev = st.previousWorldPos;
-      if (!prev) continue;
+      if (!prev) {continue;}
       const e = (ps as ParticleSystem).emitter.matrixWorld.elements;
       const jx = e[12]! - prev.x, jy = e[13]! - prev.y, jz = e[14]! - prev.z;
       if (jx * jx + jy * jy + jz * jz > EMIT_JUMP_M * EMIT_JUMP_M) {
@@ -485,10 +485,10 @@ export function poolDump(): Record<string, unknown> {
   let paused = 0, pooledN = 0;
   if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {
-      if ((ps as ParticleSystem).paused) paused++;
+      if ((ps as ParticleSystem).paused) {paused++;}
     }
   }
-  for (const v of pools.values()) pooledN += v.length;
+  for (const v of pools.values()) {pooledN += v.length;}
   return {
     batcherSystems: batcher ? batcher.systemToBatchIndex.size : 0,
     live: live.size,

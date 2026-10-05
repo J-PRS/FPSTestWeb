@@ -142,7 +142,7 @@ export class Chat {
       if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) return;
       if (vgs) {
         // Own VGS spoke at send time — the echo back is feed-only.
-        if (!isSelf) void speakVgs(feedNames(text), from);
+        if (!isSelf) speakVgs(feedNames(text), from);
       } else if (chatTtsEnabled()) {
         speakChat(feedNames(text), from); // own lines too — audible send confirmation
       }
