@@ -350,6 +350,10 @@ telemetry lines it greps.
   validity pinned (`sharedData.test.ts`: chord walk — labelled
   leaves, all-chat lines VG-only; plantable⇒cost>0 vs authored
   cap-0; species family/bite/blast sanity + hop fallback).
+  `creatureCore` pinned 2026-10-05 (`creatureCore.test.ts`: carried
+  LCG stream identity, 200-step replay determinism, species-row
+  scaling, commitTarget snapshot semantics, clipMotion face parking,
+  windup→pounce→bite edges, authority-only pendingBite, stun/death).
   Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
   are the strictRng-gated seams themselves; remaining `Math.random`
   defaults (`rollVariant`/`spawnRng`/`deps.rng`) are documented with
