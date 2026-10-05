@@ -42,9 +42,10 @@ journaled event stream with offset-cursor reclaim.
    order-preserving in profiles. The underlying reorder-drop IS a
    real hole on datagram transports (client only max()s the ev
    cursor — no gap heal) — see lane 6.
-4. **Snapshot reseed convergence under chaos** — joiner on a lossy link
-   reseeding from gameState and converging to authority hash (partially
-   covered by joinerBootstrap on clean link).
+4. ~~Snapshot reseed convergence under chaos~~ — DONE (reseedChaos):
+   staged authority simState lands after a 1.5s dark outage + 200ms
+   delivery lag; 2.6m pre-seed residual re-centers to tail p95 3.7m.
+   Proved the drift was real before the seed (residual gate >0.5m).
 5. **Clock-skew tolerance** — client clockHint drift vs server wall;
    reconcile grace windows under skewed reporters.
 6. **Datagram ev-gap heal** — if a datagram transport (WT/RTC) ever

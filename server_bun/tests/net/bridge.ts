@@ -71,6 +71,13 @@ export type BridgeProfile = {
   dropMs?: number;
   outageMs?: number;
   dropEveryMs?: number;
+  /** gameState-snapshot reseed: at reseedAtMs the authority's live sim
+   *  state is staged and applied to the client's prediction
+   *  reseedLagMs later (default 200 — the snapshot's delivery lag).
+   *  The reseedResidual sample is how wrong prediction was at the
+   *  moment the seed landed; post-reseed drift is what the tests gate. */
+  reseedAtMs?: number;
+  reseedLagMs?: number;
   /** Authority-side degradation. `hz` lowers the tick loop below its
    *  30Hz cadence (sustained overload); `stalls` freeze it outright for
    *  a window then let it resume (a GC pause / event-loop block — the
@@ -100,6 +107,11 @@ export type BridgeResult = {
   drops: number;
   /** Per-reclaim audit: {fromSeq, seqs replayed} — soak gap forensics. */
   replays: { fromSeq: number; seqs: number[] }[];
+  /** Reseed cycles (reseedAtMs) — gameState-snapshot convergence audit. */
+  reseeds: number;
+  /** Client sim position the instant each reseed applied vs the
+   *  authority state it was seeded from — 0 is a perfect seed. */
+  reseedResidual: number[];
 };
 
 export type BridgeScript = (tMs: number) => { input: WireInput; yaw: number };
@@ -145,7 +157,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const r: BridgeResult = {
     preErr: [], postErr: [], corrections: 0, snaps: 0,
     reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [], errT: [],
-    durableEvs: [], drops: 0, replays: [],
+    durableEvs: [], drops: 0, replays: [], reseeds: 0, reseedResidual: [],
   };
   let lastEv = 0;
   let dead = false, dropped = false;
@@ -154,6 +166,8 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const outageMs = profile.outageMs ?? 1500;
   let deadSince = 0;
   let dropCount = 0;
+  let staged: MoveState | null = null;
+  let stagedAt = 0;
 
   const start = Date.now();
   const endAt = start + seconds * 1000;
@@ -242,6 +256,26 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
         for (const raw of sws.sentRaw.splice(0)) down.send(raw, now);
         dropAt = dropCycle !== Infinity ? tMs + dropCycle : Infinity;
       }
+    }
+
+    // ---- gameState reseed (joiner/reclaim path): the authority's live
+    // sim state, staged at reseedAtMs and applied to the client's
+    // prediction after reseedLagMs — the snapshot's real delivery lag.
+    if (profile.reseedAtMs !== undefined && tMs >= profile.reseedAtMs && !staged && r.reseeds === 0) {
+      const s = server.simState(PID);
+      if (s) staged = {
+        pos: { ...s.pos }, vel: { ...s.vel },
+        yaw: s.yaw, pitch: s.pitch, onGround: s.onGround,
+      };
+      stagedAt = tMs;
+    }
+    if (staged && tMs >= stagedAt + (profile.reseedLagMs ?? 200)) {
+      const before = client.state;
+      const err = Math.hypot(before.pos.x - staged.pos.x, before.pos.y - staged.pos.y, before.pos.z - staged.pos.z);
+      client.setState({ pos: { ...staged.pos }, vel: { ...staged.vel }, yaw: staged.yaw, pitch: staged.pitch, onGround: staged.onGround });
+      r.reseeds++;
+      r.reseedResidual.push(err);
+      staged = null;
     }
 
     // Live socket traffic rides the downlink too.
