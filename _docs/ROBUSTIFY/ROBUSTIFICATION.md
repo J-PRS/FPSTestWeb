@@ -203,6 +203,11 @@ telemetry lines it greps.
   but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
   multi-record offset drift, truncation bounds, NaN/absurd rejection —
   `wire.test.ts` now kills the survived-mutant classes.
+- **Client ambient draws**: ~50 Math.random sites are all cosmetic —
+  spread cones, splat radii, gib scatter, ambient critter spawn. None
+  feed a field the server computes: replay sims live in shared/ (RNG
+  free), predicted projectiles are visual-only. Client bots are
+  offline-mode, so their draws need no wire integrity.
 - **Wire-boundary coercion**: every client message passes
   validateMessage (per-type finite-number/vec3 validators) →
   reject+metric+throttled-warn before dispatch; NaN/malformed input
