@@ -167,7 +167,11 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
 >    stays under its 32k cap). Still not continuous profiling — a leak
 >    with an unusual shape could hide elsewhere.
 > 4. **Coverage gaps** — the suite proves what's asserted; untested
->    paths are unverified, not clean.
+>    paths are unverified, not clean. Narrowed 2026-10-05: the only two
+>    modules with real guarantees and zero direct coverage — influenceMap
+>    (splat ring, decay, queries, resize) and matchJournal (ring bound,
+>    leaderboard rows) — now carry scenario tests. Remaining untested
+>    files are thin wrappers or covered indirectly via room scenarios.
 > 5. **Known leftovers** — sizeWatch `Room.ts` pin (JP's WIP), lobber
 >    trio numbers (JP ruling), the gradual-deslop oxlint warn backlog.
 >
