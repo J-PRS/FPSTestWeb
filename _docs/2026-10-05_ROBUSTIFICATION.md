@@ -186,6 +186,21 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
   cooldown — same channel as botSpoke replies. netBalls maps clean:
   `netBallById` reconciles on roster; `rbLastWarn`/`rbSuppressed`
   bounded by warn frequency.
+- **Dead-id accumulators** (2026-10-05): `BallSim.retargetAcc`/
+  `resyncAcc` and `CreatureSim.edgeSeq` seed per entity but `kill()`
+  only dropped the body — both fixed. `CombatHandler` evicts all five
+  per-player maps in its teardown; `lastWeaponByPlayer` evicts via the
+  client `onRemove` hook.
+- **Client decode**: `decodeTickFrame` bounds-checks every read and
+  drops malformed frames whole; `?? []`-style defaults are empty-roster
+  handling. `remoteProjectiles`/`projectileRegistry` evict on destroy.
+- **Warn-level noise**: `net/players.ts` warns are real-anomaly
+  detectors (hit-on-corpse moves kill credit; `yourHealth` can only
+  rise through the heal channel — a drop is a real wrong-door write).
+- **Growth caps**: `world.explosions` force-kills past
+  `MAX_LIVE_EXPLOSIONS`; all dead lists reap dispose+splice per frame.
+- **Client bot maps** (`thinkAccum`/`ctxCache`/etc): session-owned —
+  bots only rename or dispose wholesale, no dead-id accumulation.
 
 ---
 
