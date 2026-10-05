@@ -116,6 +116,18 @@ export class TeamCommand {
         continue;
       }
       t.goal = { x: slot.x, y: slot.y, z: slot.z };
+      // Escorts re-lead every pass: the assign-time lead was stale the
+      // moment it was set, and writing the raw slot here reverted every
+      // escort to chasing the carrier's wake (the whole reason carrier
+      // holds ran ~10s with escorts never arriving).
+      if (t.kind === 'escort') {
+        const m = members.find((mm) => mm.id === id);
+        if (m) {
+          const eta = Math.min(10, Math.hypot(m.pos.x - slot.x, m.pos.z - slot.z) / 24);
+          t.goal.x += (slot.vx ?? 0) * eta;
+          t.goal.z += (slot.vz ?? 0) * eta;
+        }
+      }
     }
     const free = members.filter((m) => !m.carrier);
     const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
@@ -132,9 +144,11 @@ export class TeamCommand {
       for (const { m } of pool.slice(0, Math.max(0, want - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the
-        // carrier will be when the escort's own run lands (est ~12m/s).
-        const eta = kind === 'escort' ? Math.min(12, Math.sqrt(
-          (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) / 12) : 0;
+        // carrier will be when the escort's own run lands (est ~24m/s
+        // with committed feet + flatRun; the old 12m/s estimate fired
+        // before the movement batch existed and lands behind the run).
+        const eta = kind === 'escort' ? Math.min(10, Math.sqrt(
+          (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) / 24) : 0;
         this.tasks.set(m.id, { kind, born: now, goal: {
           x: at.x + (at.vx ?? 0) * eta,
           y: at.y,
