@@ -290,7 +290,7 @@ export class GameServer {
     if (!room) return 'no-room';
     // The room's name isn't always its map's (ad-hoc room names, map= pick
     // in /join, post-rotation state) — reload whatever spec it's playing.
-    const spec = this.maps.loadMapSpec(this.maps.mapNameOf(name) ?? name);
+    const spec = this.maps.reloadSpec(this.maps.mapNameOf(name) ?? name);
     if (!spec) return 'no-spec';
     room.mapSrc = this.maps.mapNameOf(name) ?? name;
     room.applySpec(spec);

@@ -32,32 +32,58 @@ export class MapCatalog {
   }
 
   /** maps/<name>.json — a missing or malformed file just means "default
-   *  match rules", not an error. readFileSync keeps callers synchronous:
-   *  map files are tiny and loaded once per room lifetime. Misses are
-   *  negative-cached for 30s — a /join flood of bogus map names would
-   *  otherwise pay a disk read per request (and a newly-added map still
-   *  appears within half a minute). */
+   *  match rules", not an error. readFileSync keeps callers synchronous.
+   *  Misses are negative-cached for 30s — a /join flood of bogus map
+   *  names would otherwise pay a disk read per request (and a
+   *  newly-added map still appears within half a minute). */
   private specMisses = new Map<string, number>();
+  /** Resolved specs — hits were never cached, so every /join and every
+   *  roomFor paid a full read+parse+resolve per request. Hits ride the
+   *  same 30s staleness window as misses so a maps/*.json edit still
+   *  reaches new rooms within half a minute; the admin hot-swap forces
+   *  it sooner through reloadSpec below. */
+  private specs = new Map<string, { at: number; spec: MapSpec }>();
   private static MISS_TTL_MS = 30_000;
 
   loadMapSpec(name: string): MapSpec | undefined {
     if (!name) return undefined;
     const missAt = this.specMisses.get(name);
     if (missAt !== undefined && wallNow() - missAt < MapCatalog.MISS_TTL_MS) return undefined;
+    const hit = this.specs.get(name);
+    if (hit && wallNow() - hit.at < MapCatalog.MISS_TTL_MS) return hit.spec;
     try {
-      const path = `${MAPS_DIR}/${name}.json`;
-      const raw = readFileSync(path, 'utf8');
-      const parsed = JSON.parse(raw);
-      if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
-      const spec = resolveMapSpec(parsed);
+      const spec = this.readSpec(name);
       this.specMisses.delete(name);
-      logger.info('Map spec loaded', { room: name, path });
+      this.specs.set(name, { at: wallNow(), spec });
       return spec;
     } catch {
       this.specMisses.set(name, wallNow());
       if (this.specMisses.size > 512) this.specMisses.clear();
       return undefined;
     }
+  }
+
+  /** Force a fresh disk read — the admin reload path exists to pick up
+   *  an edited maps/*.json, which a cache hit would silently veto. */
+  reloadSpec(name: string): MapSpec | undefined {
+    if (!name) return undefined;
+    try {
+      const spec = this.readSpec(name);
+      this.specMisses.delete(name);
+      this.specs.set(name, { at: wallNow(), spec });
+      return spec;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private readSpec(name: string): MapSpec {
+    const path = `${MAPS_DIR}/${name}.json`;
+    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
+    const spec = resolveMapSpec(parsed);
+    logger.info('Map spec loaded', { room: name, path });
+    return spec;
   }
 
   /** True when maps/<name>.json resolves — route-level validation for
@@ -135,8 +161,19 @@ export class MapCatalog {
 
   /** Playable map list for the menu — name + legal modes + default
    *  bot count, straight from maps/*.json. `mode` stays the spec's own
-   *  default so the picker can label "default ruleset" honestly. */
+   *  default so the picker can label "default ruleset" honestly.
+   *  Cached briefly: the lobby polls this per viewer, and the cost of a
+   *  fresh answer is a directory scan — new maps surface within 30s. */
+  private listCache: { at: number; rows: { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] } | undefined;
   list(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
+    const c = this.listCache;
+    if (c && wallNow() - c.at < MapCatalog.MISS_TTL_MS) return c.rows;
+    const rows = this.buildList();
+    this.listCache = { at: wallNow(), rows };
+    return rows;
+  }
+
+  private buildList(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     try {
       return readdirSync(MAPS_DIR)
         .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
