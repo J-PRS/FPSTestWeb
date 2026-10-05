@@ -1,3 +1,4 @@
+2026-10-01 - BotSteer: gather separation-range bodies once per think instead of scanning ctx.others per slot (O(n) not O(n x slots); identical scores) - steer 2.9ms -> 0.92ms, think 8.4 -> 6.3ms at n=300
 2026-10-01 - creatureGauntlet sweep: one impossible-tier bot, one life per level, ramping species caps (mix or --species) - measures median survival/kills/hp per level; mix knee ~40, rakk deadliest per-cap, snake essentially food
 2026-10-01 - bodiesNear returns candidates in roster order (index cells + sort): contact resolution sequence identical to the flat scan — deterministic under multi-body overlaps
 2026-10-01 - body-collision broad phase: RoomMoveSim builds one 4m-cell capsule grid per tick shared by all shadows (MoveSim.bodiesNear optional query) — collideBodies goes O(shadows x bodies) to O(shadows x nearby); resting check uses the same ring; ~1.5ms/tick at n=300

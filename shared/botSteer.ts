@@ -87,6 +87,17 @@ export class BotSteer {
       (m) => now - m.t < T.steer.memMs && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < T.steer.memRange * T.steer.memRange,
     );
 
+    // Separation bodies are the only others a slot can ever see —
+    // gather them once instead of scanning the full roster per slot.
+    const sep2 = T.steer.sepRange * T.steer.sepRange;
+    let near: BotVec[] | null = null;
+    if (ctx.others) {
+      for (const o of ctx.others) {
+        const od2 = (o.x - pos.x) ** 2 + (o.z - pos.z) ** 2;
+        if (od2 <= sep2 && od2 > 0.0001) (near ??= []).push(o);
+      }
+    }
+
     let bestX = gx, bestZ = gz, bestScore = -1;
     let safeX = gx, safeZ = gz, safeDanger = 2;
     for (let i = 0; i < T.steer.slots; i++) {
@@ -101,7 +112,7 @@ export class BotSteer {
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling
       // off it parked every stand press ~8m short of the flag pickup ring.
-      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange });
+      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange, near });
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -128,8 +139,8 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean }): number {
-    const { g0, now, nearGoal } = probe;
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null }): number {
+    const { g0, now, nearGoal, near } = probe;
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
     const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;
@@ -137,11 +148,11 @@ export class BotSteer {
     if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
     if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
 
-    if (ctx.others) {
-      for (const o of ctx.others) {
+    if (near) {
+      for (const o of near) {
         const ox = o.x - pos.x, oz = o.z - pos.z;
         const od = Math.hypot(ox, oz);
-        if (od > T.steer.sepRange || od < 0.01) continue;
+        if (od < 0.01) continue;
         const toward = dx * (ox / od) + dz * (oz / od);
         if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / T.steer.sepRange));
       }
