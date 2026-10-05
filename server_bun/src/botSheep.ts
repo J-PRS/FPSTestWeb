@@ -4,6 +4,7 @@ import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { appendFileSync } from 'node:fs';
 import { SheepCore, type SheepVec } from '../../shared/botSheep.ts';
+import { isBotId } from '../../shared/botNames.ts';
 
 /** Wire-side sheep adapter — the meter itself lives in
  *  shared/botSheep.ts so wire humans, offline bots, and the local
@@ -47,6 +48,10 @@ export class BotSheepMeter {
       jetting: !!m.out.move?.jet,
       repair: !!m.out.repair,
     });
+    // Humans get metered for the scoreboard but never warned: a parked
+    // human is a playstyle observation, not a broken-agent signal, and
+    // the warn channel is for the latter.
+    if (!isBotId(id)) return;
     if (v.newlyMaxed) this.warnMaxed(id, v.why);
     else if (v.crossedHigh) logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });
   }

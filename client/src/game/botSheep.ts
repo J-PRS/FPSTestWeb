@@ -1,5 +1,6 @@
 import type { Terrain } from '../world/terrain.js';
 import { SheepCore, type SheepVec } from '../../../shared/botSheep.js';
+import { isBotId } from '../../../shared/botNames.js';
 
 /** The meter only reads body state — the same tick runs on bots and on
  *  the local player (playerSheep.ts feeds a Player through this shape). */
@@ -73,7 +74,10 @@ export class SheepMeter {
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
-    if (v.newlyMaxed) {
+    // The meter also runs on the local player for the HUD readout — a
+    // parked human is observation, not an agent fault, so only bot ids
+    // reach the warn channel (same gate the server meter uses).
+    if (v.newlyMaxed && isBotId(bot.playerId)) {
       const w = v.why;
       this.h.warn(
         `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)}) at (${bot.pos.x.toFixed(0)},${bot.pos.y.toFixed(0)},${bot.pos.z.toFixed(0)})`);
