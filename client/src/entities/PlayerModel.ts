@@ -799,10 +799,16 @@ export class PlayerModel {
     if (!this._loaded) { this._queuedAnim = name; return; }
     const base = this.animations.get(name);
     if (!base) {
-      const missKey = `${this.variant}:${name}`;
-      if (!this._warnedAnims.has(missKey)) {
-        this._warnedAnims.add(missKey);
-        logger.warn(`Animation not found: ${name}`, { variant: this.variant });
+      // An EMPTY table is the pre-bake window — zero-native-clip variants
+      // (cybersoldier) resolve every state to a miss until the retarget
+      // lands; warning there is noise. A miss inside a populated set is
+      // the real defect the warn exists for.
+      if (this.animations.size > 0) {
+        const missKey = `${this.variant}:${name}`;
+        if (!this._warnedAnims.has(missKey)) {
+          this._warnedAnims.add(missKey);
+          logger.warn(`Animation not found: ${name} (variant ${this.variant})`);
+        }
       }
       // Zero-native-clip variants (cybersoldier) resolve every state to a
       // missing fallback until the async retarget bake lands — returning
