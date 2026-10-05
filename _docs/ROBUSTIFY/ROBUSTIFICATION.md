@@ -356,6 +356,11 @@ telemetry lines it greps.
   `aliveSince` correctly stay sibling maps — their key domains span
   `'local'` + client fill bots + self, not RemoteSet members; the
   `onRemove` funnel is the right shape for mixed-domain keys.
+- **Client unbounded growth** (2026-10-05): all 44 `new Map/Set` files
+  swept — every site is domain-bounded (scene/team/variant/const key,
+  owner-lifetime, or per-call scope) or evicts (`chainRamp` 32+window,
+  `projectileRegistry` dead-entry sweep each update, FX pools retire
+  when empty, `coolShots` ≤20 filter, registry journal caps).
 - **Ball netcode — end-to-end pinned** (2026-10-05):
   `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
   re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
