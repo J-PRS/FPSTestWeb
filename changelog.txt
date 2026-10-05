@@ -1,3 +1,4 @@
+2026-10-05 - diag: compareState/takeClientSnapshot snapshot real remote health (was hardcoded 100 -> every manual state diff lied about remote hp)
 2026-10-05 - anim: scifisoldier throw state mapped to Fire_1Pistol (no overhand clip ships in class_light.glb; previously fell through to missing Punch -> warn + held pose)
 2026-10-05 - claims: arc validator replays the sim's Euler integrator at 1/120s (analytic arc diverged ~1m on long lobs) + terminal-face grace (a shell detonating ON a wall always self-tripped 'flight blocked')
 2026-10-05 - vm: bow string legs baked at drawn pose for mounts that never tick (3P/gunlab showed vertical placeholder cylinders); FP tickBow still re-solves per frame

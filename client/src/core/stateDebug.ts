@@ -322,10 +322,14 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
     });
 
     for (const [id, rp] of ctx.remotePlayers) {
+      // Health lives in NetworkManager's player map, not on the render
+      // replica — hashing a hardcoded 100 made every compareState report
+      // show remote health as fiction.
+      const data = ctx.networkManager.getPlayers().get(id);
       playerMap.set(id, {
         position: { x: rp.position.x, y: rp.position.y, z: rp.position.z },
         velocity: { x: 0, y: 0, z: 0 },
-        health: 100,
+        health: data?.health ?? 100,
         isDead: rp.isDead || false,
         rotation: { yaw: rp.rotation.yaw, pitch: rp.rotation.pitch }
       });
