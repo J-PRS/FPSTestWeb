@@ -889,6 +889,7 @@ export class ServerBotSenses {
       runner: goal?.runner ?? false,
       wave: goal?.wave ?? false,
       marshal: goal?.marshal ?? false,
+      pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,
       posted: goal?.posted ?? 0,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving. The

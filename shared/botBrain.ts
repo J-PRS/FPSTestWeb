@@ -80,6 +80,10 @@ export interface BrainCtx {
   /** Push-task member: mass-orbits ~110m out until the flood converges
    *  (escorts share wave but never hold off a moving carrier). */
   marshal?: boolean;
+  /** The capper's push call is live — he's committed and inside the ETA
+   *  window. Marshal members release on this so the flood lands WITH
+   *  him instead of trickling in on their own patience clocks. */
+  pushLive?: boolean;
   /** The objective is an enemy-held position this bot is pressing —
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */

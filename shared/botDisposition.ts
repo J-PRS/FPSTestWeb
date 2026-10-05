@@ -78,7 +78,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // push task's own 45s dead-slot lifetime: while the call still
         // lives, so does the hold. The orbit is outside the posted
         // defense leash, so holding is cheap.
-        if (!wave && !wingman && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
+        // Members also release the moment the capper's push call goes
+        // live — he's committed inside the ETA window, and a member
+        // covering ~110m of stage orbit lands just behind him. Waiting
+        // out the patience clock instead is what made the flood trickle.
+        if (!wave && !wingman && !(ctx.marshal && ctx.pushLive) && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
           // Quiet-side orbit center (imapQuietDir(objective)*40 offset)
