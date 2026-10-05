@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botLines` pinned** (2026-10-05): `botLines.test.ts` (13 tests) —
+  steerer close-out rings (plain + runnerDirect), mid-range fan roll,
+  commit-window hold, in-cone goal-drift tolerance, all-sheer veto →
+  empty roll, downhill-pocket bias, stagnation latch → orbit arm →
+  remembered-pass pick → `orbitFails≥2` beeline, runner dive-glide at
+  the objective, flow-field consult on gd>140 legs only, 40-step twin
+  replay. Note: pass-filing calls tick the stagnation meter — a pass
+  banked mid-leg can arm the latch sooner than staleLimit raw rolls.
 - **Edge idempotency** (2026-10-05): wire edges are pure overwrites of
   committed state (`applyNetEdgeSim` writes pos/vel/target verbatim,
   `applyNetEdgeTotem` commits the blink destination) — a duplicated

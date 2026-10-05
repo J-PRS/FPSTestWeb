@@ -1,3 +1,4 @@
+2026-10-05 - test: pin botLines — 13 tests covering close-out rings, commit window, drift tolerance, sheer veto, downhill bias, orbit latch (pass pick then beeline), dive-glide, flow-field consult, twin replay
 2026-10-05 - audit: edge idempotency classified clean — wire edges are pure overwrites of committed state; WS ordering + snapshot restore make duplicates impossible, sole re-triggerable surface is the deliberate onSimFire funnel
 2026-10-05 - test: pin botGraph TerrainFlow + botTuning table — 10 tests covering flat progress, wall circumvention, danger deflection, routeNearGoal, goal bucketing, bounded flood cache, twin replay
 2026-10-05 - audit: edge-vs-snapshot ordering classified clean — every wire edge self-contained (crawlEvt tp/t, ball segments full leg, flagUpdate full snapshot); ordering can never replay against a stale base
