@@ -287,6 +287,14 @@ function aliveSecs(id: string, dead: boolean, now: number): number | null {
   return Math.floor((now - at) / 1000);
 }
 
+/** A leaver who quit alive never trips the death prune — evict ids the
+ *  current pass didn't query or the map holds every departed id forever. */
+function pruneAliveSince(live: Set<string>): void {
+  for (const id of aliveSince.keys()) {
+    if (!live.has(id)) {aliveSince.delete(id);}
+  }
+}
+
 // Scoreboard rows: local player first, then remotes sorted by frags desc
 function updateScoreboard(deps: RemotesDeps): void {
   const hud = deps.lazyHud();
@@ -306,9 +314,11 @@ function updateScoreboard(deps: RemotesDeps): void {
   const now = Date.now();
   const rows = [{ name: localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now) }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
+  const queriedIds = new Set<string>([localId]);
   const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
+      queriedIds.add(id);
       const ps = nm.getPlayers().get(id);
       return { name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now) };
     });
@@ -316,12 +326,14 @@ function updateScoreboard(deps: RemotesDeps): void {
   // they'd be invisible on the scoreboard otherwise.
   for (const [id, rp] of deps.world.remotePlayers) {
     if (nm.getPlayers().has(id)) {continue;}
+    queriedIds.add(id);
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
     remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now) });
   }
   remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
+  pruneAliveSince(queriedIds);
   hud.setScoreboardRows([...rows, ...remoteRows]);
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }
