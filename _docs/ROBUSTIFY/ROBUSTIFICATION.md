@@ -199,6 +199,10 @@ telemetry lines it greps.
 - **Client wire decode**: every `JSON.parse` on a socket is try-wrapped;
   `decodeTickFrame` returns null on truncation. Pooled slots can't leak a
   stale `wireId` across frames (explicitly reset in the string-id branch).
+  Coverage thickened 2026-10-05 after Stryker showed the codec executed
+  but barely asserted (~0.2% score): flag-bit isolation, v3 wireId roster,
+  multi-record offset drift, truncation bounds, NaN/absurd rejection —
+  `wire.test.ts` now kills the survived-mutant classes.
 - **rAF loop**: `requestAnimationFrame(loop)` is scheduled *before* the frame
   body (`gameLoop.ts`) — a throw kills one frame, not the loop, and the
   window error hooks ship it to the Logger.
