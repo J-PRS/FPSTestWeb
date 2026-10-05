@@ -589,6 +589,7 @@ export class ServerBots {
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
         // as a remark rather than spam.
+        this.sense.reportSpots(p, brain.h.seenEnemies, now);
         if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target);
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out, now);

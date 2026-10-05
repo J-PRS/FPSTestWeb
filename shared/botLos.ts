@@ -15,11 +15,13 @@ import { segSolidHit } from './solidWorld.ts';
 // the memoized probe, never sees ground through its own head).
 export const BOT_EYE = 1.8;
 
-// 6m cells + 1s TTL: answers only change when an endpoint crosses a cell.
-// Skiers at 30-45m/s crossed a 3m cell every ~80ms — the memo missed
-// constantly and every miss paid a ~dist/3-probe march. Bot senses are
-// noisy by design; ±3m of endpoint fuzz is well under aim jitter.
-const LOS_CELL = 6;
+// 10m cells + 1s TTL: answers only change when an endpoint crosses a
+// cell. Skiers at 30-45m/s crossed a 3m cell every ~80ms — the memo
+// missed constantly and every miss paid a ~dist/3-probe march. Bot
+// senses are noisy by design; ±5m of endpoint fuzz is well under aim
+// jitter, and a ridge thin enough to slip a 10m step rarely decides a
+// 300m sightline.
+const LOS_CELL = 10;
 const LOS_TTL_MS = 1000;
 const losMemo = new Map<number, { clear: boolean; until: number }>();
 
@@ -61,6 +63,9 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 4) return true; // point-blank: probes are coarser than the gap
+  // The memo key may fuzz endpoints ±5m, but the march itself marches
+  // the true segment at 6m — a ~10m-wide ridge must still be stepped
+  // on, not hopped (a 10m stride literally skipped the tests' wall).
   const steps = Math.ceil(dist / 6);
   const y0 = Math.max(from.y + 0.4, ctx.groundY(from.x, from.z) + BOT_EYE);
   const y1 = Math.max(to.y + 0.4, ctx.groundY(to.x, to.z) + BOT_EYE);

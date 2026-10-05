@@ -56,6 +56,10 @@ const distSq = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 export interface HuntState {
   /** Current target — the one last-seen the senses keep fresh. */
   hunt: BotEnemy | null;
+  /** Every enemy the last scanVisible actually verified — the squad
+   *  spot board's report. Reusing the scan's own LOS work keeps the
+   *  board from paying a second march per enemy per think. */
+  seenEnemies: BotEnemy[];
   lastSeen: BotVec;
   lastSeenVel: BotVec;
   /** The opponent model: a low-pass of the target's observed velocity.
@@ -100,6 +104,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
   const m = skill.mods;
   return {
     hunt: null,
+    seenEnemies: [],
     lastSeen: { ...spawn },
     lastSeenVel: { x: 0, y: 0, z: 0 },
     leadVel: { x: 0, y: 0, z: 0 },
@@ -125,7 +130,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
 /** Nearest visible enemy of each class — no wallhack: only acquire
  *  what the eye line can actually see; an occluded enemy clears the
  *  hunt entirely so breaking LOS shakes pursuit like a human's. */
-export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
+export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number, seenAll?: BotEnemy[]): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
   let player: BotEnemy | null = null, beast: BotEnemy | null = null;
   let playerD = range, beastD = beastRange;
   for (const e of ctx.enemies) {
@@ -135,6 +140,7 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
     // march — it was paying a ~dist/6-probe walk for a guaranteed discard.
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) continue;
     if (!losClear(ctx, pos, e.pos)) continue;
+    seenAll?.push(e);
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
     } else if (d < playerD) { playerD = d; player = e; }
@@ -156,7 +162,9 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const base = Math.max(BOT_FIRE_RANGE, ctx.engageRange ?? 0);
   const range = Math.max(hero ? base * 1.4 : base, SIGHT_M);
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
-  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ctx, pos, range, beastRange);
+  const seenAll: BotEnemy[] = [];
+  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ctx, pos, range, beastRange, seenAll);
+  st.seenEnemies = seenAll;
   // In economy rooms, only an actual nearby player threat outranks
   // the harvest — otherwise the bot keeps farming past a firefight
   // across the map like a human focused on the score. In any mode a

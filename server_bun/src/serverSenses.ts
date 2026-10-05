@@ -894,6 +894,7 @@ export class ServerBotSenses {
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
     const parties = sharedParties ?? this.partiesOf(p);
+    const bp = sharedEnv.thinkProf ? (k: string, t0: number) => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
     const ctx: BrainCtx = {
       id: p.id,
       pos: p.position,
@@ -912,7 +913,7 @@ export class ServerBotSenses {
       // chase is weighed like a player weighs it: only gems in real
       // reach, and a contested gem costs a hurt bot nothing but a death
       // walk — a healthy one fights through for it.
-      pickup: this.pickupFor(p, parties.enemies) ?? undefined,
+      pickup: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),
       // Gem-economy rooms make hunting creatures the actual objective;
       // on any map that spawns real creatures they're threats worth
       // shooting too. Structureless-free: pops is {} where spec doesn't
@@ -976,8 +977,8 @@ export class ServerBotSenses {
       healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
       // Inbound shells feed the dodge sense — bots sidestep rockets
       // like a human reading the arc instead of eating every volley.
-      threats: this.room.projectiles.incomingNear(p.position, 12),
-      sounds: this.room.noisesNear(p.position, 50),
+      threats: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),
+      sounds: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),
       // Influence reads are team-relative: the quiet dir flees toward
       // where THIS side isn't bleeding; the hot cell is shared scent.
       imapQuietDir: (v: BotVec) =>
@@ -989,12 +990,17 @@ export class ServerBotSenses {
       repair: this.repairJob(p),
       now,
     };
-    // Squad spot-report: this bot's own eye line feeds the shared board
-    // before its brain reads it — a spot is as legal as the thief beacon
-    // (you only ever report what you can see; staleness decays it).
-    this.spotBoard.update(ctx, p);
+    // Squad spot-report: reports land via reportSpots() AFTER the bot's
+    // think (they're its verified sightings); here it only reads what
+    // the squad's eyes already banked — as legal as the thief beacon.
     ctx.spots = this.spotBoard.forTeam(p.team, now);
     return ctx;
+  }
+
+  /** Post-think: bank this bot's verified sightings for its squad —
+   *  the scanVisible passers, not a second LOS sweep of its own. */
+  reportSpots(p: { team?: string }, seen: BotEnemy[], now: number): void {
+    this.spotBoard.update(p, seen, now);
   }
 
   /** Which gem to chase: nearest within real reach, unless the bot is so
