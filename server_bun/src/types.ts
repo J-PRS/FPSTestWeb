@@ -24,6 +24,9 @@ export interface WebSocketData {
   /** Seat generation stamped by SessionRegistry — a callback arriving on a
    *  socket whose gen isn't the session's current gen is stale and dies. */
   gen?: number;
+  /** Wall time the send buffer first crossed the drown limit — cleared on
+   *  drain, closed after the hysteresis. */
+  slowSince?: number;
 }
 
 export interface PlayerState {

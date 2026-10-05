@@ -10,6 +10,16 @@ import { wallNow } from './wallClock.ts';
  *  tick hot path is gated; reliable control/ball traffic still queues. */
 const MAX_TICK_BACKLOG = 256 * 1024;
 
+/** Drowned-client drain: tick frames shed at 256KB, but reliable frames
+ *  (joins, kills, chat, handshakes) queue into the transport buffer
+ *  unconditionally — a reader that never drains parks megabytes of
+ *  stale truth per socket with no one watching. Past this mark we start
+ *  the clock; a socket still drowned after SLOW_FOR_MS is closed so the
+ *  client reconnects through grace instead of buffering seconds-old
+ *  state it can never render honestly. */
+const DROWN_BYTES = 4 * 1024 * 1024;
+const SLOW_FOR_MS = 5000;
+
 /** Transient cues — a muzzle flash, a jump, a knockback shove. A reclaiming
  *  socket replays the journal after possibly seconds of grace; a stale cue
  *  replays as a phantom effect, while skipping it costs nothing because the
@@ -46,6 +56,33 @@ export class ConnectionManager {
    *  chat). Counted so an undersized journal is visible, not silent. */
   reclaimGap = 0;
   onReclaimGap?: (playerId: string, missed: number) => void;
+  /** Sockets closed by the drown drain — room health counts each via the
+   *  callback so a pathological client shows up in the counters, not
+   *  just the close log. */
+  onDrowned?: (playerId: string) => void;
+
+  /** Reliable-lane sends all funnel through here on the way to a socket.
+   *  A transient spike (reclaim replay burst) just starts the clock and
+   *  drains under the hysteresis; a dead reader holds the mark and gets
+   *  closed — skip sending into a socket already past the mark so the
+   *  buffered byte count doesn't balloon while the clock runs. */
+  private drownCheck(playerId: string, ws: ServerWebSocket<WebSocketData>): 'ok' | 'drowned' {
+    const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    if (buffered < DROWN_BYTES) {
+      ws.data.slowSince = undefined;
+      return 'ok';
+    }
+    const since = ws.data.slowSince;
+    if (since === undefined) {
+      ws.data.slowSince = wallNow();
+      return 'ok'; // first sighting — could be the reclaim burst
+    }
+    if (wallNow() - since < SLOW_FOR_MS) return 'drowned';
+    logger.warn('closing drowned socket', { playerId, buffered, slowMs: wallNow() - since });
+    this.onDrowned?.(playerId);
+    try { ws.close(1011, 'slow client'); } catch { /* already closing */ }
+    return 'drowned';
+  }
 
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
     const seq = ++this.outSeq;
@@ -103,7 +140,7 @@ export class ConnectionManager {
     // exactly what reclaim replay must find later.
     const data = this.frame(msg, playerId);
     const ws = this.connections.get(playerId);
-    if (ws && ws.readyState === 1) {
+    if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {
       ws.send(data);
     }
   }
@@ -138,7 +175,7 @@ export class ConnectionManager {
     const data = this.frame(msg, undefined, excludePlayerId);
     this.connections.forEach((ws, pid) => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) return;
-      if (ws.readyState === 1) {
+      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
         ws.send(data);
       }
     });

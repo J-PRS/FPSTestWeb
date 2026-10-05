@@ -257,6 +257,9 @@ export class Room {
     // only ways a reconnected client silently loses event history.
     this.connections.onJournalWrap = (n) => this.healthBump('journalWrap', n);
     this.connections.onReclaimGap = (_pid, n) => this.healthBump('reclaimGap', n);
+    // A drowned socket is a client-side or path failure — count each
+    // forced close so it shows in room health, not just the close log.
+    this.connections.onDrowned = () => this.healthBump('drownedSock', 1);
     this.moveSim.attachStructures(this.effStructures());
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
