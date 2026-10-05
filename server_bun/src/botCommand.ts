@@ -40,6 +40,9 @@ export interface CommandMember {
   pos: { x: number; z: number };
   /** Carriers are never reassigned — the run is the job. */
   carrier?: boolean;
+  /** 0..1 — a limping bot bids down on transits: sending it across the
+   *  map is how responders arrive dead. */
+  hpFrac?: number;
 }
 
 /** How many named responders each job earns — the Killzone "optimal
@@ -66,17 +69,32 @@ function median(xs: number[]): number {
   return s[s.length >> 1]!;
 }
 
-/** Which roles volunteer for which job — defenders chase and return,
- *  attackers escort and flood. */
-const WHO: Record<CommandKind, Set<string>> = {
+/** Self-selection: a job is won by BID, not by a role gate naming the
+ *  K nearest members of a whitelist. bid = roleAffinity − distance
+ *  cost − hurt penalty, so the same role table the brains already run
+ *  still steers jobs, but a defender 60m off a thief beats an offense
+ *  a mile out, and a 15%-hp member stops volunteering for transits
+ *  that kill it en route. */
+const AFFINITY: Record<CommandKind, Record<string, number>> = {
   // No 'hof' anywhere — heavy-on-flag never chases and never returns:
   // sitting AT home made him the nearest volunteer every pass, which
   // pulled him off the stand as a named responder. His own goal table
   // still grabs a dropped flag within arm's reach.
-  chase: new Set(['ldefense', 'defense', 'offense']),
-  return: new Set(['ldefense', 'defense', 'offense', 'technician']),
-  escort: new Set(['offense', 'capper', 'medic']),
-  push: new Set(['offense', 'infiltrator', 'bombardier']),
+  chase: { ldefense: 1.0, defense: 1.0, offense: 0.6 },
+  return: { ldefense: 1.0, defense: 1.0, technician: 0.9, offense: 0.6 },
+  escort: { capper: 1.0, offense: 1.0, medic: 0.8 },
+  push: { offense: 1.0, infiltrator: 0.9, bombardier: 0.9 },
+};
+/** Distance cost saturates past this transit — on a 1.5km map a 750m
+ *  job already reads as "the far side". */
+const FAR_M = 750;
+/** How hard a missing-health bar cuts a bid. */
+const HURT_W = 0.5;
+const bidFor = (kind: CommandKind, m: CommandMember, at: BotVec): number => {
+  const a = AFFINITY[kind][m.role] ?? 0;
+  if (a <= 0) return -Infinity;
+  const d = Math.min(FAR_M, Math.hypot(m.pos.x - at.x, m.pos.z - at.z)) / FAR_M;
+  return a - d - (1 - (m.hpFrac ?? 1)) * HURT_W;
 };
 
 export class TeamCommand {
@@ -138,9 +156,10 @@ export class TeamCommand {
             Math.hypot(m.pos.x - at.x, m.pos.z - at.z))) / PUSH_FAR_M))
         : WANT[kind];
       const pool = free
-        .filter((m) => !this.tasks.has(m.id) && WHO[kind].has(m.role))
-        .map((m) => ({ m, d: (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2 }))
-        .sort((a, b) => a.d - b.d);
+        .filter((m) => !this.tasks.has(m.id))
+        .map((m) => ({ m, bid: bidFor(kind, m, at) }))
+        .filter((m) => m.bid > -Infinity)
+        .sort((a, b) => b.bid - a.bid);
       for (const { m } of pool.slice(0, Math.max(0, want - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the

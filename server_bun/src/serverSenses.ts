@@ -373,7 +373,8 @@ export class ServerBotSenses {
     for (const [id, role] of this.roles) {
       const mp = this.room.players.getPlayer(id);
       if (!mp || mp.team !== me) continue;
-      members.push({ id, role, pos: mp.position, carrier: enemy.carrier === id });
+      members.push({ id, role, pos: mp.position, carrier: enemy.carrier === id,
+        hpFrac: mp.maxHealth > 0 ? Math.max(0, mp.health / mp.maxHealth) : 1 });
     }
     // Sizing the flood against defenders posted at the ring tried and
     // reverted: same-seed soak 14g/8c -> 4g/4c. A bigger call pulls
