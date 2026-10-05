@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, mkSoftBox, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -49,11 +49,11 @@ for (const side of [-1, 1]) {
   bow.add(cheek);
 }
 // Scope block on the rail tail — T:A's stubby electronic sight
-const scope = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.12), darkMat);
+const scope = mkSoftBox(0.07, 0.05, 0.12, darkMat, 0.012);
 scope.position.set(0, 0.14, 0.08);
 bow.add(scope);
 const scopeLens = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 10),
-  new THREE.MeshBasicMaterial({ color: 0x66d9ff }));
+  new THREE.MeshBasicMaterial({ color: 0x2e3a38 }));
 scopeLens.rotation.x = Math.PI / 2;
 scopeLens.position.set(0, 0.14, 0.018);
 bow.add(scopeLens);
