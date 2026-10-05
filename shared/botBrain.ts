@@ -289,6 +289,7 @@ export class BotBrain {
   // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
   private readonly escapeS: EscapeState = {
     stuckStreak: 0,
+    orbitStreak: 0,
     escapeJetT: 0,
     detour: null,
     detourT: 0,
@@ -594,10 +595,12 @@ export class BotBrain {
     // A goal the escape senses can't reach after ~4 failures is a bad
     // roll, not a challenge — forfeit the wander waypoint so the next
     // roll picks a new line instead of grinding the same wall forever.
-    // Hunting bots keep their target (a blocked hunt still fights).
-    if (this.escapeS.stuckStreak >= 4 && !this.h.hunt) {
+    // Either streak counts: pinned grind or the orbit treadmill that
+    // displaces without closing. Hunting bots keep their target.
+    if ((this.escapeS.stuckStreak >= 4 || this.escapeS.orbitStreak >= 4) && !this.h.hunt) {
       this.goalS.wanderT = 0;
       this.escapeS.stuckStreak = 0;
+      this.escapeS.orbitStreak = 0;
     }
 
     // --- dodge: sidestep the nearest closing shell ---

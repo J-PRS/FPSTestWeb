@@ -437,6 +437,18 @@ telemetry lines it greps.
   change an answer), `pickups.WEIGHTS` is static-literal order with
   seeded rolls, the rest are keyed lookups with no order-dependent
   writes. Insertion-order divergence can't reach a sim output.
+- **`botEscape` pinned + orbit-streak fix** (2026-10-05):
+  `botEscape.test.ts` (13 tests) — dodge range/step/momentum-side,
+  runner <80m exemption, posted leash clamp + half hop, hero senses;
+  stuckBreak fast-window pinned streak, posted exemption, slow-window
+  orbit detection, escalating jet burst, gain-reset. **Found+fixed**:
+  the slow window incremented `stuckStreak` but the fast window's
+  displacement-reset erased it in the same call — an orbiter's
+  `1.1+streak*0.7` escalation sat at 1.8s forever and the ≥4
+  wander-forfeit never fired (the treadmill the slow window exists
+  to catch). Split `orbitStreak`: pinned streak keeps displacement
+  reset, orbit streak only resets on real goal gain or posted hold;
+  forfeit checks either.
 - **Observability noise** (2026-10-05): every `logger.warn`/`error`
   across client + server audited — all fire on real anomalies with
   throttling: camera spinout 0.5s cooldown, anim misses deduped per

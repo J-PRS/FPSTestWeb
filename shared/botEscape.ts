@@ -19,6 +19,10 @@ export interface EscapeState {
   /** Consecutive no-progress windows — a sidestep that also fails means
    *  a wall pocket, so the streak escalates to a jet escape burst. */
   stuckStreak: number;
+  /** Slow-window no-gain streak — separate from stuckStreak because an
+   *  orbiter displaces real distance every fast window and would erase
+   *  it the same tick it armed (the escalation never escalated). */
+  orbitStreak: number;
   escapeJetT: number;
   detour: BotVec | null;
   detourT: number;
@@ -55,13 +59,13 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     if (s.progressGoalD > 20 && s.progressGoalD - gd < 4
       && !(ctx.posted && ctx.objective
         && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12))) {
-      s.stuckStreak++;
+      s.orbitStreak++;
       // A 1.1s burst buys ~10m of climb — a wall that eats it and stays
       // up is met every 4s with the same sip, which top-dresses the
       // treadmill instead of cresting it (soak: capper cycling y45→81
       // →45 on a ~50m face all match). Consecutive failures escalate
       // the burn so the bot commits real fuel to a real climb.
-      s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.stuckStreak * 0.7, 3.0));
+      s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.orbitStreak * 0.7, 3.0));
       if (s.detourT <= 0) {
         const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
         const gl = Math.hypot(gx, gz) || 1;
@@ -80,6 +84,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
   if (ctx.posted && ctx.objective
     && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12)) {
     s.stuckStreak = 0;
+    s.orbitStreak = 0;
     s.detourT = 0;
     s.progressPos = { ...pos };
     return dest;

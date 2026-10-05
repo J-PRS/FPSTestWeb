@@ -1,3 +1,4 @@
+2026-10-05 - fix: split orbitStreak from stuckStreak in botEscape — the fast window erased the slow windows streak on every displaced tick, so orbiter jet escalation and wander-forfeit never fired; +13 botEscape tests
 2026-10-05 - audit: join/reclaim atomicity classified — token-before-evict + register-before-close + seat generation double-cover; already pinned by reconnect/graceZombie/joinGuard scenarios
 2026-10-05 - audit: wsFight full-suite failure triaged to §4 infra flake — serial netbot tier green (7/7) with the orbitStreak change in-path; engagement window starved under suite load, precondition timeout not property failure
 2026-10-05 - audit: Map/Set iteration-order determinism classified clean — stateHash commutative sum, flagGoals sorted ids, memoized pure lookups, static-literal orders; insertion-order divergence cannot reach a sim output

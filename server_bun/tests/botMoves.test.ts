@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import { BotMoves } from '../../shared/botMoves.ts';
 import { dodge, stuckBreak, type EscapeState } from '../../shared/botEscape.ts';
-import { botRng } from '../../shared/botRand.ts';
+import { botRng, botRngRelease } from '../../shared/botRand.ts';
 import type { BrainCtx } from '../../shared/botBrain.ts';
 
 const flat = (over: Partial<BrainCtx> = {}): BrainCtx => ({
@@ -15,7 +15,7 @@ const flat = (over: Partial<BrainCtx> = {}): BrainCtx => ({
 
 const moves = () => new BotMoves({ escapeJetT: () => 0, huntPos: () => null });
 
-afterEach(() => botRng(Math.random));
+afterEach(() => botRngRelease());
 
 describe('BotMoves.hints', () => {
   it('arrived → all intents off', () => {
@@ -80,7 +80,7 @@ describe('dodge', () => {
 
 describe('stuckBreak', () => {
   const state = (): EscapeState => ({
-    stuckStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
+    stuckStreak: 0, orbitStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
     progressPos: { x: 0, y: 0, z: 0 }, progressT: 0, progressGoalD: Infinity, goalWinT: 0,
     goal: { x: 20, y: 0, z: 0 },
   });
