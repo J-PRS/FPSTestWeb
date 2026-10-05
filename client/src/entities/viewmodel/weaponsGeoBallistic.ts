@@ -34,6 +34,15 @@ bow.add(mkLoft([
   { z: 0.18, ring: profOct(0.10, 0.05, 0.012), dy: 0.095 },
   { z: -0.14, ring: profOct(0.08, 0.045, 0.012), dy: 0.095 },
 ], bodyMat));
+// Rail risers — the top rail can't float on air: side webs tie its
+// underside to the channel floor, flanking the bolt slit.
+for (const side of [-1, 1]) {
+  for (const z of [-0.10, 0.15]) {
+    const riser = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.07, 0.04), darkMat);
+    riser.position.set(side * 0.035, 0.0625, z);
+    bow.add(riser);
+  }
+}
 for (const side of [-1, 1]) {
   const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), darkMat);
   cheek.position.set(side * 0.05, 0.07, -0.24);
@@ -120,7 +129,7 @@ for (const side of [-1, 1]) {
 // the vertex rides bowString's z (drawn-back at rest, snapped to the
 // cam line when fired).
 const CAM_R = 0.065;
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x555a60 });
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const knot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), darkMat);
