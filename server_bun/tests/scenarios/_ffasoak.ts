@@ -14,11 +14,28 @@ const TARGET = 50;      // kills to win the FFA
 let CAP_S = 2400;       // sim-seconds; argv[1] overrides
 const BOTS = 10;
 
+// Every offensive primary — 16 weapons > 10 seats, so each round deals a
+// shuffled subset and coverage builds across seeds.
 const ALL: WeaponType[] = [
   WeaponType.Chaingun, WeaponType.PlasmaGun, WeaponType.Shotgun, WeaponType.Disc,
   WeaponType.BoltLauncher, WeaponType.RocketLauncher, WeaponType.Cannon,
   WeaponType.Mortar, WeaponType.GrenadeLauncher, WeaponType.Railgun,
+  WeaponType.Flak, WeaponType.PlasmaCannon, WeaponType.Lightning,
+  WeaponType.Sticky, WeaponType.MRVLauncher, WeaponType.Sprinkler,
 ];
+
+/** Deal BOTS weapons from the pool — distinct seats, so a round reads as
+ *  a real lobby, not 10 mirrors of the same gun. Seed-keyed shuffle. */
+function deal(pool: WeaponType[], seed: number): WeaponType[] {
+  const deck = [...pool];
+  let s = seed | 0 || 1;
+  for (let i = deck.length - 1; i > 0; i--) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const j = s % (i + 1);
+    [deck[i], deck[j]] = [deck[j]!, deck[i]!];
+  }
+  return deck.slice(0, BOTS);
+}
 
 function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: number; deaths: number }[]; winnerT: number; simS: number; wallS: number } {
   // Arena boundary = contact pressure: without it the 2km field lets
@@ -29,7 +46,7 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
   for (let i = 0; i < bots.length; i++) {
-    const w = weapons[i % weapons.length]!;
+    const w = weapons[i]!;
     ctl.loadouts.set(bots[i]!.id, { perk: 'none', near: w, mid: w, far: w, belt: WeaponType.Grenade, side: WeaponType.Pistol });
     ctl.roster.refitClass(bots[i]!.id);
     // Tight ring: the 2km map lets bots disperse past hunt range and
@@ -39,7 +56,7 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
   }
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
-  const wOf = new Map(bots.map((b, i) => [b.id, weapons[i % weapons.length]!]));
+  const wOf = new Map(bots.map((b, i) => [b.id, weapons[i]!]));
 
   let winnerT = -1, simS = 0;
   const wall0 = Date.now();
@@ -79,14 +96,14 @@ if (argv[1] !== undefined && Number.isFinite(Number(argv[1]))) {
   CAP_S = Number(argv[1]);
   argv.splice(1, 1);
 }
-const wanted = argv.slice(1).length
+const pool = argv.slice(1).length
   ? argv.slice(1).map((w) => WeaponType[w as keyof typeof WeaponType]).filter((w) => w !== undefined)
   : ALL;
 
-console.log(`ffasoak: ${seeds} seeds, ${BOTS} bots, dm to ${TARGET} kills, one weapon per bot (impossible skill)\n`);
+console.log(`ffasoak: ${seeds} seeds, ${BOTS} bots, dm to ${TARGET} kills, ${pool.length}-weapon pool dealt per round (impossible skill)\n`);
 const agg = new Map<string, { kills: number[]; deaths: number[]; wins: number }>();
 for (let seed = 201; seed < 201 + seeds; seed++) {
-  const r = run(wanted, seed);
+  const r = run(deal(pool, seed), seed);
   console.log(`seed=${seed} winner=${r.winnerT < 0 ? `>${CAP_S}s` : r.winnerT.toFixed(0) + 's'} (simulated ${r.simS.toFixed(0)}s in ${r.wallS.toFixed(1)}s, ${(r.simS / r.wallS).toFixed(1)}x)`);
   r.rows.forEach((row, i) => {
     console.log(`  ${(i + 1).toString().padStart(2)}. ${row.w.padEnd(16)} K=${row.kills.toString().padStart(3)} D=${row.deaths.toString().padStart(3)}`);
@@ -97,8 +114,8 @@ for (let seed = 201; seed < 201 + seeds; seed++) {
   });
 }
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-console.log('\nweapon           | avgKills | avgDeaths | K/D   | wins');
+console.log('\nweapon           | rounds | avgKills | avgDeaths | K/D   | wins');
 for (const [w, a] of [...agg.entries()].sort((x, y) => avg(y[1].kills) - avg(x[1].kills))) {
-  console.log(`${w.padEnd(16)} | ${avg(a.kills).toFixed(1).padStart(8)} | ${avg(a.deaths).toFixed(1).padStart(9)} | ${(avg(a.kills) / Math.max(1, avg(a.deaths))).toFixed(2).padStart(5)} | ${a.wins}`);
+  console.log(`${w.padEnd(16)} | ${a.kills.length.toString().padStart(6)} | ${avg(a.kills).toFixed(1).padStart(8)} | ${avg(a.deaths).toFixed(1).padStart(9)} | ${(avg(a.kills) / Math.max(1, avg(a.deaths))).toFixed(2).padStart(5)} | ${a.wins}`);
 }
 process.exit(0);
