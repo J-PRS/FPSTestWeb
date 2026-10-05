@@ -49,6 +49,9 @@ const bases = FIELD === 'default'
       bravo: at((spec as never as { bases: { bravo: { x: number; z: number } } }).bases.bravo.x, (spec as never as { bases: { bravo: { z: number } } }).bases.bravo.z) };
 
 const room = mkRoom({ ...spec, mode: 'ctf', bots: KIND === 'bots' ? 0 : 4, bases }, 'ctf', SEED, false, f);
+// The soak drives the roster itself — an honored botFill would cull every
+// populate() back to the map's fill count once a second.
+room.spec.botFill = 0;
 if (KIND === 'creatures') room.creatureSim.pops = { [CREATURE_KIND]: 0 };
 
 const percentile = (xs: number[], p: number) => {

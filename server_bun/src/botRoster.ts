@@ -292,7 +292,10 @@ export class BotRoster {
     if (!fill || now < this.maintainAt) return;
     this.maintainAt = now + 1000;
     const humans = this.room.playerCount() - this.brains.size;
-    const want = Math.max(0, Math.min(16, fill - humans));
+    // The 16 clamp was a hidden ceiling: a map asking botFill=40 quietly
+    // got 16. Specs are trusted up to a still-sane bound — a runaway fill
+    // is a perf question for capSoak, not a silent override here.
+    const want = Math.max(0, Math.min(128, fill - humans));
     if (this.brains.size < want) {
       this.populate(want - this.brains.size);
       return;
