@@ -1,3 +1,5 @@
+2026-10-01 - Bots: capper orbit-brake rework — the brake now watches a 30m ring and demands 3m of closure per second, so lazy laps that only dip a little nearer each pass trip it instead of resetting (katabatic: 110s of 5-25m orbits); a crawling runner walks the last meters instead of hop-chaining over the 9m deck
+2026-10-01 - Bots: pass-through grab aim is for fast arrivals only (spd>14) — a braked bot hovering 5-9m/s flapped between the pole and a point 40m past the flag and paced the ring forever
 2026-10-01 - Bots: capper dais-mount fix pack — flag-home goal lifted to deck height (goal was inside the solid skirt), slow/close presses aim the pole instead of the pass-through offset, and stand commits hold inside the grab ring (was routing pressers back out to ring probes)
 2026-10-01 - Bots: stall-step mount — a stalled push against a sub-climb face (structure tops read as terrain via groundY) pays a hop + jet tap; crawlers hop hull faces mid-slide, not only when parked
 2026-10-01 - Bots: runner overhead inside the grab ring stops thrusting — hops/taps were ballooning it 10-35m past the grab window; gravity delivers the touch now

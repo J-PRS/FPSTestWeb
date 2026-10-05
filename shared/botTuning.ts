@@ -44,7 +44,7 @@ export const BOT_TUNING = {
     hopSpeed: 6,         // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
     hopRiseFar: 3,       // m — far hops skip steep rises
-    runnerHopGd: 12,     // m — runner keeps hopping inside this
+    runnerHopGd: 28,     // m — hop chains die at the orbit-watch ring: a hop landing on the 9m deck sails over the pole at 10-15m/s; inside this ring the runner touches down and the brake/crawl own the approach
     blockSelfD: 30,      // m — bodyblock hop read radius on post
     blockOd: 80,         // m — bodyblock enemy window
     blockClosing: 8,     // m/s — closing speed that counts as a flyer
@@ -53,7 +53,10 @@ export const BOT_TUNING = {
     destHighRise: 3,     // m — destination rise that arms 'destHigh'
     destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
     grabOrbitGd: 14,     // m — runner orbit-brake ring around the objective (covers the ~2.2m touch + overshoot lap)
-    grabOrbitS: 1.0,     // s — no od progress inside the ring this long = orbit, brake it
+    grabWatchGd: 30,     // m — the wider orbit-detection ring: a lazy lap swinging 15-25m out never arms the 14m brake
+    grabOrbitS: 1.0,     // s — closure-rate window inside the ring
+    grabOrbitMinGain: 3, // m/window — closure slower than this = orbit lap, brake it
+    crawlHopGd: 5,       // m — inside this of the objective a crawler walks (hops overshoot the 9m deck)
   },
   // botLines — meso-scale line picking
   lines: {

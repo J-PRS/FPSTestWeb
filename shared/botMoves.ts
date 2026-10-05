@@ -35,10 +35,16 @@ export class BotMoves {
    *  held forward input pushes him down the whole face each cycle and
    *  a ~70m wall reads as an absolute ceiling (katabatic moat). */
   private breath = false;
-  /** Orbit-brake trackers — best od seen inside the grab ring and the
-   *  seconds since it last improved. */
-  private odBest = Infinity;
+  /** Orbit-brake trackers — od sampled at the last window edge and the
+   *  window clock. Progress is closure RATE, not a per-call dip: hints
+   *  runs many times a second so a per-call threshold only sees the
+   *  fastest movers. An orbit closing <3m/s is a lap; an approach
+   *  closing faster is a run. */
+  private odRef = Infinity;
   private odT = 0;
+  /** One-shot brake demand from the closure-rate window; consumed the
+   *  moment the bot reaches crawl speed. */
+  private brakeNow = false;
   /** Crawl latch — armed after a parked stop inside the grab ring;
    *  keeps the walk key but forbids ski/jet so a downhill stand can't
    *  re-spin the orbit the brake just killed. */
@@ -73,15 +79,30 @@ export class BotMoves {
     // progress: a clean fly-through keeps closing and never trips this;
     // a lap that stops tightening drops every input so ground friction
     // slides the skid onto the pole, then the walk-in earns the touch.
-    if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabOrbitGd) {
-      if (od < this.odBest - 0.5) { this.odBest = od; this.odT = 0; }
-      else this.odT += dt;
-      if (this.odT > T.moves.grabOrbitS) {
+    // The watch ring is wider than the lap ring — an orbit swinging
+    // 15-25m out reset odBest on every exit before (katabatic 9002:
+    // 110s of 5-25m orbits), so the latch arms inside grabWatchGd.
+    if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
+      // Each grabOrbitS window must close grabOrbitMinGain toward the
+      // pole — an orbit that dips a little nearer each lap keeps making
+      // "progress" forever otherwise (katabatic: 110s of improving-miss
+      // laps), while a clean fly-through at 20m/s closes >5m/s easily.
+      // Skipped while crawling: walk-speed closure is slower than the
+      // window gain by design, and re-arming it would thrash park/walk.
+      if (!this.crawl) {
+        this.odT += dt;
+        if (this.odT >= T.moves.grabOrbitS) {
+          if (this.odRef - od < T.moves.grabOrbitMinGain) this.brakeNow = true;
+          this.odRef = od; this.odT = 0;
+        }
+      }
+      if (this.brakeNow) {
         if (spd0 > 1.5) return { ski: false, jet: false, jump: false, park: true };
         // Parked to a stop: switch to crawl — keep the walk key and
         // hops (dais stands need a jet hop to mount) but stay off the
         // skis, or the same downhill that made the orbit re-fires it.
         this.crawl = true;
+        this.brakeNow = false;
       }
       // Parked to a stop OR still sliding along a hull face — hop the
       // lip either way (the deck lip is a free jump, the skirt pays a
@@ -89,8 +110,12 @@ export class BotMoves {
       // ~20s before a hop ever fired. The jet respects the same signed
       // ceiling as wantJet's runner veto — a crawler already overhead
       // falls to the flag on gravity, it doesn't thrust further past.
-      if (this.crawl) return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: spd0 < 1 || rise > T.moves.stepRise };
-    } else { this.odBest = Infinity; this.odT = 0; this.crawl = false; }
+      // Hops are for MOUNTING, not the last meters: a jump arriving
+      // with residual speed clears the whole 9m deck and lands past
+      // the pole again (katabatic: 3-7m misses on every bounce). Close
+      // in, feet on the boards.
+      if (this.crawl) return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: od > T.moves.crawlHopGd && (spd0 < 1 || rise > T.moves.stepRise) };
+    } else { this.odRef = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
     // fast arrivals brake wide to kill the overshoot-orbit; already

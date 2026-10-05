@@ -568,8 +568,11 @@ export class ServerBotSenses {
           // The pass shape is for a runner arriving with speed — a
           // stalled or point-blank presser aiming PAST the flag slides
           // around the dais hull chasing the offset (broadside: ~19s of
-          // ring orbits at 4-15m/s). Slow/close presses aim the pole.
-          goalPos = spd > 8 && dStand > 6
+          // ring orbits at 4-15m/s). Threshold lives above crawl pace:
+          // a braked bot hovering 5-9m/s flapped between the pole and
+          // a point 40m past the flag and paced 10-17m out forever
+          // (katabatic 9002). Slow/close presses aim the pole.
+          goalPos = spd > 14 && dStand > 6
             ? { x: enemyStand.x + mx + px2 - ux * pull,
                 y: enemyFlagY,
                 z: enemyStand.z + mz + pz2 - uz * pull }
