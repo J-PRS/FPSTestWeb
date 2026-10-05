@@ -7,6 +7,7 @@
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
+import { tauntRand } from '../../shared/botRand.ts';
 import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 
@@ -42,6 +43,17 @@ export class KillFeed {
      *  squadmates hear "Defend our flag!". */
     private sendToPlayer?: SendToPlayerFn,
   ) {}
+
+  /** Player fully removed — drop their streak/grudge entries. Both maps
+   *  are keyed by live player ids; a churned roster would otherwise bank
+   *  one entry per player who ever passed through the room. */
+  forget(playerId: string): void {
+    this.lastKiller.delete(playerId);
+    this.deathStreak.delete(playerId);
+    for (const [victim, killer] of this.lastKiller) {
+      if (killer === playerId) this.lastKiller.delete(victim);
+    }
+  }
 
   announce(shooterId: string, targetId: string, weapon?: number, label?: string): void {
     const victim = this.playerManager.getPlayer(targetId);
@@ -138,7 +150,7 @@ export class KillFeed {
    *  — the 'nice shot' compliment is earned, so it's a roll (~45%) on a
    *  qualifying kill, never a routine death response. */
   private hardShot(targetId: string, shooterId: string): boolean {
-    if (Math.random() > 0.45) return false;
+    if (tauntRand() > 0.45) return false;
     const victim = this.playerManager.getPlayer(targetId);
     const shooter = this.playerManager.getPlayer(shooterId);
     if (!victim?.position || !shooter?.position) return false;
@@ -163,7 +175,7 @@ export class KillFeed {
       if (dx * dx + dz * dz < NEAR * NEAR) near.push(id);
     }
     if (!near.length) return;
-    this.say(near[(Math.random() * near.length) | 0]!, 'witness', targetId);
+    this.say(near[(tauntRand() * near.length) | 0]!, 'witness', targetId);
   }
 
   /** Match-end chatter — one rolled outcome line per bot, spread across
@@ -171,14 +183,14 @@ export class KillFeed {
    *  than a chorus. */
   matchEnd(entries: { id: string; line: TauntLine }[]): void {
     const step = entries.length > 1 ? Math.min(5000 / entries.length, 1200) : 0;
-    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + Math.random() * 400));
+    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + tauntRand() * 400));
   }
 
   /** Match-start chatter — the gl-hf opener, tighter spread than the gg
    *  beat since the round is already live. */
   matchStart(entries: { id: string; line: TauntLine }[]): void {
     const step = entries.length > 1 ? Math.min(3000 / entries.length, 900) : 0;
-    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 100 + i * step + Math.random() * 300));
+    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 100 + i * step + tauntRand() * 300));
   }
 
   /** A bot's chat line lands like a typed reply — a beat after the
