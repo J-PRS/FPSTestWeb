@@ -10,6 +10,9 @@ import { CLASS_BODY_VARIANT } from './playerClips.js';
 import type * as THREE from 'three';
 import type { BeltItem } from './Player.js';
 import type { DeployKind } from '../../../shared/deployables.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('PlayerLoadout');
 
 /**
  * PlayerLoadout — the armory: class-tier banking, perk banking, weapon
@@ -142,6 +145,12 @@ export class PlayerLoadout {
         m.setVisible(false);
         m.setColliderVisible(false);
         old.dispose();
+      }).catch((error) => {
+        // load() rejects after 4 retries — revert to the still-alive old
+        // model instead of leaving h.model on a corpse that never loads.
+        this.h.model = old;
+        m.dispose();
+        logger.warn('Class model swap gave up', { class: c, error: String(error) });
       });
     }
   }
