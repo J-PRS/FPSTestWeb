@@ -490,7 +490,9 @@ export class MessageHandler {
       const warnKey = `${playerId}:${msg.type}`;
       const now = wallNow();
       const lastWarn = this.rateLimitWarnings.get(warnKey);
-      this.hb('ratelimit');
+      // Per-type key, not a flat counter — /metrics answers "what was
+      // flooding" without a log dig. Message types are a bounded union.
+      this.hb(`ratelimit:${msg.type}`);
       if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
         this.rateLimitWarnings.set(warnKey, now);
         logger.warn(`Rate limit exceeded`, { playerId, messageType: msg.type });
