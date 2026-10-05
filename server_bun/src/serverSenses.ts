@@ -26,6 +26,7 @@ import { simNow } from './simClock.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
+import { SpotBoard } from './spotBoard.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -37,6 +38,9 @@ export class ServerBotSenses {
      *  ServerBots reads for the sheep charge. */
     private readonly foeNear: Map<string, number>,
   ) {}
+
+  /** Squad spotting board — the team's shared eyes (see spotBoard.ts). */
+  private readonly spotBoard = new SpotBoard(this.room.players);
 
   /** A room event the squad may react to — delivered to each bot on its
    *  OWN think phase (phases are offset across the squad), so reactions
@@ -967,32 +971,9 @@ export class ServerBotSenses {
     // Squad spot-report: this bot's own eye line feeds the shared board
     // before its brain reads it — a spot is as legal as the thief beacon
     // (you only ever report what you can see; staleness decays it).
-    this.updateSpots(ctx, p);
-    ctx.spots = this.spotsFor(p.team, now);
+    this.spotBoard.update(ctx, p);
+    ctx.spots = this.spotBoard.forTeam(p.team, now);
     return ctx;
-  }
-
-  /** Shared spotting board — per enemy: the last team that had real
-   *  eyes on it, where it was, and when. A Tribes sightline is ~300m,
-   *  not the 45m duel band: within SPOT_M a bot spots what it sees for
-   *  the whole squad, and the report decays in a few seconds. */
-  private spots = new Map<string, { e: BotEnemy; team?: string; at: number }>();
-  private static readonly SPOT_M = 320;
-  private static readonly SPOT_MS = 5000;
-
-  private updateSpots(ctx: BrainCtx, p: { team?: string; position: Vec3 }): void {
-    // Cloaking burns your callout — the whole point of the shimmer is
-    // that every eye loses you at once, so a stale spot can't keep
-    // feeding lastSeen to a squad that no longer sees anything.
-    for (const [id, s] of this.spots) {
-      const q = this.room.players.getPlayer(s.e.id.replace(/^p:/, ''));
-      if (q?.status && (q.status & STATUS.CLOAK)) this.spots.delete(id);
-    }
-    for (const e of ctx.enemies) {
-      if (!e.alive || e.id.startsWith('b:') || e.id.startsWith('c:') || dist3(p.position, e.pos) >= ServerBotSenses.SPOT_M) continue;
-      if (!losClear(ctx, p.position, e.pos)) continue;
-      this.spots.set(e.id, { e, team: p.team, at: ctx.now });
-    }
   }
 
   /** Which gem to chase: nearest within real reach, unless the bot is so
@@ -1027,12 +1008,4 @@ export class ServerBotSenses {
     return best;
   }
 
-  private spotsFor(me: string | undefined, now: number): BotEnemy[] {
-    const out: BotEnemy[] = [];
-    for (const [id, s] of this.spots) {
-      if (now - s.at > ServerBotSenses.SPOT_MS) { this.spots.delete(id); continue; }
-      if (s.team === me && s.e.alive) out.push(s.e);
-    }
-    return out;
-  }
 }
