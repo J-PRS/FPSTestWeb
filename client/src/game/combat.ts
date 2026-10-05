@@ -52,7 +52,7 @@ export interface CombatDeps extends GameContext {
   /** Nugget Wars local authority: a hit on a `bot:*` id resolves HERE
    *  (no server to claim to). Returns true when it consumed the hit —
    *  callers then skip the predictDamage/sendShot path. */
-  botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string, weaponType?: number) => boolean;
+  botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string, weaponType?: number, air?: number) => boolean;
   /** A creature died by local hands — DM scoring credits the killer
    *  ('local' when unset; offline bot shells carry their bot id). */
   onCreatureKilled?: (shooterId?: string) => void;
@@ -84,6 +84,12 @@ export interface ExplosionArgs {
   vfx?: 'splash';
   /** Kill attribution — railgun refunds its cooldown. */
   weaponType?: number;
+  /** Shell's flight time — offline kill-feed `[1.3s]` tag. */
+  air?: number;
+  /** Shared-validator pre-flight of this blast's aoeShot claim — false
+   *  means the server will reject it, so nothing the claim pays for
+   *  (remote damage/knockback, self splash, plating) may be predicted. */
+  claimLegal?: boolean;
 }
 
 export interface CombatCtx {

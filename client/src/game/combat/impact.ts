@@ -8,12 +8,14 @@ import { Projectile } from '../../projectiles/Projectile.js';
 import { BOMBLET_CONFIG, computeAccuracy } from '../../projectiles/index.js';
 import { Explosion } from '../../effects/explosion.js';
 import { BallDebris } from '../../effects/debris.js';
+import { SplatDecal } from '../../effects/splat.js';
 import { Nugget } from '../../entities/Nugget.js';
 import { burstGibs } from '../../entities/swarms.js';
 import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
-import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE } from '../../core/config.js';
+import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/config.js';
 import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats } from '../../../../shared/weapons.js';
+import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 import { isBotId } from '../../../../shared/botNames.js';
 import { lgDischarge } from './lightning.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
@@ -23,6 +25,100 @@ const CHAIN_RAMP_CAP = 8;
 const CHAIN_STAGGER_FORCE = 6.0; // juggles the target, doesn't melt it
 
 const _debrisDir = new THREE.Vector3();
+const _ichorCol = new THREE.Color();
+
+/** Pre-flight a claim through the SAME validator the server runs — a
+ *  verdict of !ok means the claim is dead on arrival, so predicting its
+ *  damage (health bars, numbers, remote knockback) would be a ghost hit
+ *  and sending it just spends a reject. The server's `projectile` record
+ *  is rebuilt from the shell's own launch data: ownerId is unused by the
+ *  checks and spawnAt mirrors the spawn-claim stamp on our clock. */
+function claimRecord(c: CombatCtx, p: Projectile): TrackedProjectile {
+  return {
+    ownerId: c.deps.lazyNetworkManager()?.getLocalPlayerId() ?? 'local',
+    weaponType: p.config.weaponType,
+    origin: p.shotOrigin,
+    velocity: p.launchVel,
+    spawnAt: p.spawnedAtMs,
+    clientShotId: p.shotId ?? undefined,
+  };
+}
+
+function shooterVel(c: CombatCtx): { x: number; y: number; z: number } {
+  const v = c.deps.lazyPlayer().vel;
+  return { x: v.x, y: v.y, z: v.z };
+}
+
+function aoeVerdict(c: CombatCtx, p: Projectile, pos: { x: number; y: number; z: number }, airtime: number): HitClaimVerdict {
+  return validateAoeClaim({
+    projectile: claimRecord(c, p), blastPos: pos, airtime,
+    shooterVel: shooterVel(c), now: performance.now(), solids: p.solids(),
+  });
+}
+
+function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number; z: number }, targetPos: { x: number; y: number; z: number }, airtime: number, targetClass?: string): HitClaimVerdict {
+  return validateHitClaim({
+    projectile: claimRecord(c, p), hitPos, targetPos, airtime,
+    shooterVel: shooterVel(c), now: performance.now(), solids: p.solids(),
+    targetClass,
+  });
+}
+
+// Creature hits bleed tinted ichor: a directional droplet spray (rides the
+// pooled debris system) + a projected ground stain. Absent on mechanicals
+// (Turretter) and props (Tumbleweed) — they leave ichor undefined.
+// Droplets paint their own stain where they land (the Wendigo model) —
+// a spray arcing over a ridge stains THAT ground, not the shooter's feet.
+function ichorSpray(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3, scale: number): void {
+  if (ball.ichor === undefined) return;
+  const deps = c.deps;
+  const hex = ball.ichor;
+  deps.world.debrisList.push(new BallDebris(
+    deps.lazyScene(), deps.lazyTerrain(), ball.pos,
+    _ichorCol.setHex(hex), scale,
+    { impulseDir: dir, kind: 'goo', paintBudget: 4,
+      onDropletLand: (x, z, r, dx, dz) => splatAt(c, x, z, r * (4 + Math.random() * 2.5), hex, 0.5, dx, dz) },
+  ));
+}
+
+function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, intensity?: number, dx = 0, dz = 0): void {
+  const deps = c.deps;
+  if (deps.world.splats.length >= SPLAT_MAX) deps.world.splats.shift()!.dispose();
+  _splatPos.set(x, 0, z);
+  // Smear the stain along the droplet's landing velocity — a streaked
+  // splash, not a round dot. Slow drops stay roundish pools.
+  const sp = Math.hypot(dx, dz);
+  const ux = sp > 0.01 ? dx / sp : 0, uz = sp > 0.01 ? dz / sp : 0;
+  const stretch = Math.min(sp * 0.18, 1.6);
+  deps.world.splats.push(new SplatDecal(
+    deps.lazyScene(), deps.lazyTerrain(), _splatPos, r, hex, intensity, ux, uz, stretch,
+  ));
+}
+
+const _splatPos = new THREE.Vector3();
+
+function ichorSplat(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, radius: number): void {
+  splatAt(c, ball.pos.x, ball.pos.z, radius, ball.ichor!);
+}
+
+// Instanced body-part gib burst when the species has one, else the generic
+// shard debris — same visual contract either way.
+function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
+  if (burstGibs(ball, ball.pos, dir, ball.vel)) return;
+  c.deps.world.debrisList.push(new BallDebris(
+    c.deps.lazyScene(), c.deps.lazyTerrain(), ball.pos,
+    ball.color, ball.scale,
+    { bodyRadius: ball.radius, impulseDir: dir, inheritVel: ball.vel, kind: ball.debrisKind, shardGeos: ball.debrisGeos },
+  ));
+}
+
+// The body pops AND the ground keeps the stain — death reads as a wound,
+// not a despawn.
+function ichorDeath(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
+  if (ball.ichor === undefined) return;
+  ichorSpray(c, ball, dir, 0.55);
+  ichorSplat(c, ball, ball.radius * 2.4);
+}
 const _bombDir = new THREE.Vector3(); // cluster bomblet scatter
 const _bombVel = new THREE.Vector3();
 const _coneAxis = new THREE.Vector3();
@@ -112,10 +208,20 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // would just bounce off projectile resolution.
   // Unarmed sticky failsafe pops (never attached — fuseAge -1) claim no
   // blast: the shell was inert, so this explosion is cosmetic only.
-  const sendAOE = (p.config.sticks && p.fuseAge() < 0)
-    || p.config.needsServerTracking === false || (p.serverProjectileId === null && p.shotId === null)
-    // Neither id means the shell predates the connection — a blast claim
-    // can never resolve and only earns a reject warn.
+  const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
+  const airtime = p.hitAge > 0 ? p.hitAge : p.age;
+  const claimable = !(p.config.sticks && p.fuseAge() < 0)
+    && p.config.needsServerTracking !== false
+    && (p.serverProjectileId !== null || p.shotId !== null);
+  // Claim dead on arrival = the server WILL reject — suppressing the
+  // claim alone isn't enough: the blast's predicted damage on remote
+  // players (numbers, bars, knockback) would be ghost feedback for a
+  // blast the authority never applies.
+  const claimLegal = !claimable ? undefined : aoeVerdict(c, p, blastPos, airtime).ok;
+  if (claimable && claimLegal === false) {
+    deps.logger.info(`[Shot] aoe claim suppressed pre-flight: ${p.config.displayName} air=${airtime.toFixed(2)}s`);
+  }
+  const sendAOE = !claimable || claimLegal === false
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
@@ -123,11 +229,12 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
       // hitAge is 0 when the projectile detonated without a swept hit
       // (terrain, fuse) — 0 isn't nullish, so `??` never fell back and
       // claims went out with airtime=0 → reach check rejected them all.
-      projectileId: p.serverProjectileId ?? null, airtime: p.hitAge > 0 ? p.hitAge : p.age,
+      projectileId: p.serverProjectileId ?? null, airtime,
       directHit: p.directHit || undefined, shotId: p.shotId ?? undefined,
     });
   processProjectileExplosion(c, {
-    pos: p.hitPointValid ? p.hitPoint : p.pos,
+    pos: blastPos,
+    claimLegal,
     radius: p.config.aoeRadius * bloom * deps.lazyPlayer().mods.aoeRadius,   // gameplay radius = server truth (incl. perk)
     force: p.force,
     forceMode: p.forceMode,
@@ -143,6 +250,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     vfxRadius: p.explosionRadius * bloom, // VFX dome grows with the damage area
     weaponType,
     shooterId: p.shooterId ?? undefined, // authorship — without it a bot's blast reads as MINE (marker/numbers/self-splash scale)
+    air: p.hitAge > 0 ? p.hitAge : p.age, // same fallback the AOE claim uses
   });
 }
 
@@ -332,8 +440,24 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   // Personal feedback (numbers/marker/score) is for shells I fired — a
   // bot-authored hit isn't my frag. Player shells leave shooterId unset.
   const mine = !p.shooterId;
+  // 'local' is a client sentinel — the server can't resolve it, so the
+  // claim would only earn a reject. Self-damage reports through the
+  // blast's env-damage channel instead (blastForce handles it once).
+  const willClaim = playerId !== 'local'
+    && deps.lazyNetworkManager()
+    && !(p.shooterId && isBotId(p.shooterId));
+  // Same gate as the blast: a hit the shared validator calls illegal is
+  // dead on arrival — predicting its damage (numbers, bars, score) is
+  // the ghost-hit feedback the reject warn complains about.
+  if (mine && willClaim) {
+    const verdict = hitVerdict(c, p, p.pos, hitPos, p.hitAge, targetPlayer?.armorClass);
+    if (!verdict.ok) {
+      deps.logger.info(`[Shot] hit claim suppressed pre-flight: ${verdict.reason}`);
+      return;
+    }
+  }
   if (mine) deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
-  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType)) return; // bot authority: real damage, no claim
+  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) return; // bot authority: real damage, no claim
   if (!mine) return;
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
   const airborne = targetPlayer
@@ -341,14 +465,9 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
     : false;
   logHitScore(c, p, 'player', airborne);
 
-  // 'local' is a client sentinel — the server can't resolve it, so the
-  // claim would only earn a reject. Self-damage reports through the
-  // blast's env-damage channel instead (blastForce handles it once).
   if (playerId === 'local') return;
   const networkManager = deps.lazyNetworkManager();
-  // A bot-authored shell has no business claiming as the local player —
-  // server/P2P authority resolves bot damage on its own end.
-  if (networkManager && !(p.shooterId && isBotId(p.shooterId))) {
+  if (networkManager && willClaim) {
     networkManager.sendShot({
       targetId: playerId,
       position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },

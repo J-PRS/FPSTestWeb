@@ -82,12 +82,14 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-  c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId });
+  if (a.claimLegal !== false) {
+    c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air });
+  }
 
   // Armor grenade: predict the plating the server grants so the HUD armor
   // jumps with the blast, not on the next tick. Enemy plating stays
   // server-side — we never predict another player's armor pool.
-  if (a.weaponType === WeaponType.ArmorGrenade) {
+  if (a.weaponType === WeaponType.ArmorGrenade && a.claimLegal !== false) {
     const player = deps.lazyPlayer();
     if (player.pos.distanceTo(pos) <= radius) {
       player.armor = Math.min(POWERUP.maxArmor, player.armor + ARMORNADE_ARMOR);

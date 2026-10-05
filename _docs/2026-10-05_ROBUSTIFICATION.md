@@ -187,14 +187,23 @@ deterministic ones, all resolved:
   starved and postErr barely sampled. Tail errSeries asserts remain the
   convergence contract.
 
-### 4.2 Shot-rejection parity — structural
+### 4.2 Shot-rejection parity — *partially closed*
 
-`shot rejected — predicted damage never applied`: the client predictor and
-the server claim validator are separate codepaths; divergence is only
-detected *after* the mismatch. Plan: one shared adjudicator in `shared/` —
-both ends call `canApplyBlast(pos, shooter, weapon, targets)` on identical
-inputs; "rejected" becomes impossible modulo the wire. Real gameplay bug —
-users see ghost hits.
+`shot rejected — predicted damage never applied`: the client predicted
+feedback before the claim could be judged. The shared validators
+(`validateAoeClaim`/`validateHitClaim` in `shared/combat.ts`) already
+existed — the fix was making the client run the SAME adjudicator
+pre-flight: `Projectile` keeps `launchVel`/`spawnedAtMs` so the claim
+record is built from identical inputs, `handlePlayerHit` gates
+predictDamage/numbers/score/sendShot on the verdict, and `spawnImpactEffect`
+computes one `claimLegal` that suppresses the claim AND every predicted
+mechanical effect (remote damage/knockback, self splash, plating) when
+the claim is dead on arrival. Ghost hits are impossible modulo the wire.
+
+Residual (by design, not a bug): the server's lag-compensated target
+positions can never be client-predicted — a hit legal on the client's
+view can still fail the rewind view inside the tolerance slack. That
+slack, not code, is what absorbs interpolation.
 
 ### 4.3 Ball segment replay — structural
 

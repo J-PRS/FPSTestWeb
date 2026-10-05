@@ -187,6 +187,13 @@ export class Projectile {
   glowMesh: THREE.Mesh | null = null;
   readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
   readonly shotOrigin: THREE.Vector3;
+  /** Velocity at spawn — the server's claim validator checks claimed
+   *  reach against origin velocity, and gravity/drag mutate `vel`, so
+   *  the launch vector lives separately for the client-side re-check. */
+  readonly launchVel: THREE.Vector3;
+  /** Construction wall-time — mirrors the server's spawnAt for the
+   *  shared claim legality check's age-vs-airtime gate. */
+  readonly spawnedAtMs: number;
 
   // Particle trail — quarks-batched by default; the pooled-mesh path
   // survives only for wakeVisual hosts (no config enables it today).
@@ -207,6 +214,8 @@ export class Projectile {
     this.shotOrigin = origin.clone();
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
+    this.launchVel = this.vel.clone();
+    this.spawnedAtMs = performance.now();
 
     const v = buildProjectileMeshes(scene, config, this.pos);
     this.mesh = v.mesh;
