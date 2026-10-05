@@ -12,13 +12,19 @@ const BANNED: [RegExp, string][] = [
   [/\bBun\./, 'Bun.*'],
   [/\bDate\.now\s*\(/, 'Date.now()'],
   [/\bnew\s+Date\s*\(/, 'new Date()'],
+  // Unseeded dice — a sim rolling Math.random desyncs authority vs
+  // predictor AND breaks scenario reproducibility. botRand.ts is the
+  // one seam (host injects the stream); everything else must take a
+  // required rand argument.
+  [/\bMath\.random\s*\(/, 'Math.random()'],
   [/from\s+['"](node:)?(fs|path|os|net|http)['"]/, 'node:* import'],
   [/\brequire\s*\(/, 'require()'],
 ];
 
 test('shared/ has no host-env reads — all seams go through shared/env.ts', () => {
   const offenders: string[] = [];
-  for (const f of readdirSync(SHARED).filter((f) => f.endsWith('.ts') && f !== 'env.ts')) {
+  const SEAM = new Set(['env.ts', 'botRand.ts']);
+  for (const f of readdirSync(SHARED).filter((f) => f.endsWith('.ts') && !SEAM.has(f))) {
     const src = readFileSync(join(SHARED, f), 'utf-8');
     for (const [re, label] of BANNED) {
       for (const m of src.matchAll(new RegExp(re.source, 'g'))) {

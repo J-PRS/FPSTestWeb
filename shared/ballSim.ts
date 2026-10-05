@@ -15,6 +15,7 @@
  */
 
 import { type Heightfield, hmHeight, hmNormal } from './heightfield.js';
+import { botRand } from './botRand.js';
 import { collideStructures, BALL_BOUNCE, type StructureCollider } from './ballCollide.js';
 export { structureColliders, BALL_BOUNCE, type StructureCollider } from './ballCollide.js';
 
@@ -178,7 +179,7 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
   }
   if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) return undefined;
   b.enraged = false;
-  if (authoritative) return teleportNearTarget(b, field, target, rand);
+  if (authoritative) return teleportNearTarget(b, field, target, rand ?? botRand);
   return null; // predictor: let it fly, the event will snap it
 }
 
@@ -258,7 +259,7 @@ function dashAt(b: SimBall, target: SimVec): void {
   b.vy = vy;
 }
 
-function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number = Math.random): SegmentKind {
+function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number): SegmentKind {
   b.gt = 0;
   const ang = rand() * Math.PI * 2;
   const dist = BALL_TELE_MIN + rand() * (BALL_TELE_MAX - BALL_TELE_MIN);
