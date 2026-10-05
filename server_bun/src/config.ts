@@ -56,7 +56,12 @@ export const CONFIG = {
   idleTimeoutSec: envNum('FPS_IDLE_TIMEOUT_S', 120),
   maxPayloadLength: envNum('FPS_MAX_PAYLOAD', 1024 * 1024),
   hashBroadcastIntervalMs: envNum('FPS_HASH_INTERVAL_MS', 2000),
-  reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 10000),
+  // Reclaim window must exceed the full reconnect chain — close detect
+  // (up to the 4s stall watchdog) + tier reprobe (WT→RTC→WS, ~3s each +
+  // timeouts) + join roundtrip can pass 15s on a flap. A drop that lands
+  // after expiry joins fresh and the player respawns, so this needs real
+  // headroom, not just "F5 is fast" margin.
+  reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 60000),
   idleKickMs: envNum('FPS_IDLE_KICK_MS', 60_000),
 
   // Movement authority flip: when set, the room's shadow sim OWNS player
