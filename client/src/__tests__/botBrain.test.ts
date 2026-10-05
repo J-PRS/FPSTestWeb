@@ -148,6 +148,9 @@ describe('BotBrain senses', () => {
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
     try {
       const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
+      // Trait rolls ride the spawn hash now (Math.random can't reach them);
+      // pin the builder trait directly instead of relying on the roll.
+      b.setBuilder(true);
       const pos = { x: 0, y: 1.6, z: 0 };
       const objective = { x: 3, y: 0, z: 0 }; // parked on the stand
       const out = b.think(40, ctx(pos, flat, { objective, now: 0 }));
