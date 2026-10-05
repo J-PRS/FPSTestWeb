@@ -3,12 +3,12 @@ import { getSwarm } from './swarms.js';
 import type { SwarmPart } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 
-export const PART_SHAFT = 0;
-export const PART_CAP = 1;
-export const PART_EYE = 2;      // glow slit quad near the top
-export const PART_BEAM = 3;     // aim-beam quad — zero-scale when idle
-export const PART_SHIMMER = 4;  // blink-in arrival column — zero-scale when idle
-export const PART_CORE = 5;     // white-hot core of the FIRED ray — zero-scale otherwise
+const PART_SHAFT = 0;
+const PART_CAP = 1;
+const PART_EYE = 2;      // glow slit quad near the top
+const PART_BEAM = 3;     // aim-beam quad — zero-scale when idle
+const PART_SHIMMER = 4;  // blink-in arrival column — zero-scale when idle
+const PART_CORE = 5;     // white-hot core of the FIRED ray — zero-scale otherwise
 
 const _shaftGeo = new THREE.CylinderGeometry(0.35, 0.7, 4.2, 4); // 4-sided obelisk
 const _capGeo = new THREE.ConeGeometry(0.5, 1, 4);

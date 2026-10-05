@@ -15,8 +15,8 @@ export const LIFE_RAND = 2; // Random debris lifetime variation
 // Player capsule geometry lives in shared/constants.ts — the server needs
 // the same numbers to validate hit claims against networked positions.
 export {
-  PLAYER_RADIUS, PLAYER_HEIGHT,
-  CAPSULE_CYLINDER_HEIGHT, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y,
+  PLAYER_RADIUS,
+  CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y,
   EYE_OFFSET,
 } from '../../../shared/constants.js';
 
@@ -191,7 +191,6 @@ export const SNAKE_AGGRO_DIST = 70;
 export const SNAKE_STRIKE_DIST = 5.5;     // coil trigger (3D)
 export const SNAKE_STRIKE_CD = 2.2;
 export const SNAKE_WINDUP = 0.45;         // telegraph — dodge window
-export const SNAKE_LUNGE_TIME = 1.2;      // safety cap — touchdown ends the leap first
 export const SNAKE_LUNGE_SPEED = 14;
 export const SNAKE_LEAP_GRAV = -28;     // leap arc gravity = creatureCore
 export const SNAKE_LEAP_OVERSHOOT = 3.5;  // aim past the target — flies THROUGH
@@ -412,9 +411,6 @@ export const STRIFER_SPAWN_INTERVAL = 11;
 export const STRIFER_SPAWN_MIN = 45;
 export const STRIFER_SPAWN_MAX = 90;
 
-// Renderer constants
-export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)
-
 // Camera constants
 export const CAMERA_FOV = 90; // Field of view in degrees
 export const CAMERA_NEAR = 0.05; // Near clipping plane — small value to prevent terrain clipping at screen corners on steep slopes
@@ -458,7 +454,6 @@ export const HEMI_GROUND_COLOR = 0x66_44_22; // Hemisphere ground color
 export const HEMI_INTENSITY = 0.5; // Hemisphere light intensity
 
 // Network constants
-export const PENDING_ROCKET_TIMEOUT = 3000; // Milliseconds to wait for server projectile ID
 export const FRAG_MESSAGE_DURATION = 2000; // Milliseconds to show frag message
 export const FRAG_MESSAGE_FADE = 500; // Milliseconds for frag message fade transition
 
