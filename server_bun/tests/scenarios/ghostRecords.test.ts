@@ -76,7 +76,7 @@ describe('ghost records', () => {
     const pool = { slots: [] as never[], resolveId: (id: number) => roster.get(id) };
     room.connections.sendBinaryToPlayer = (_id, data) => {
       const tick = decodeTickFrame(data, pool);
-      if (tick?.updates.some((u) => u.playerId === 'late')) mentions++;
+      if (tick && tick.updates.some((u, i) => i < tick.count && u.playerId === 'late')) mentions++;
       return 'sent' as const;
     };
     // A second live human receives the frame containing 'late'.

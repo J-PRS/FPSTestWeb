@@ -23,7 +23,7 @@ function client(name: string): WebSocket {
       const u8 = new Uint8Array(ev.data as ArrayBuffer);
       if (isWireFrame(u8)) {
         const t = decodeTickFrame(u8, wireRoster.pool);
-        if (t) for (const u of t.updates) { totalUpdates++; if (u.playerId in counts) counts[u.playerId]++; }
+        if (t) for (let i = 0; i < t.count; i++) { const u = t.updates[i]!; totalUpdates++; if (u.playerId in counts) counts[u.playerId]++; }
       }
       return;
     }

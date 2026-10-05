@@ -255,7 +255,8 @@ async function spawnBot(room: string, name: string): Promise<void> {
           const f = decodeTickFrame(u8, bot.wireRoster.pool);
           if (f) {
             totalTickFrames++;
-            for (const p of f.updates) {
+            for (let pi = 0; pi < f.count; pi++) {
+              const p = f.updates[pi]!;
               if (!p.playerId || p.playerId === name) continue;
               // Chop vs teleport: a >15m step inside consecutive updates is
               // a respawn/warp (legit, event-driven); 4–15m is the pop a

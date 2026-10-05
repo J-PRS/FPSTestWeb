@@ -20,7 +20,7 @@ function join(name: string) {
       const u8 = new Uint8Array(ev.data as ArrayBuffer);
       if (isWireFrame(u8) && (u8[1] === WIRE_TICK || u8[1] === WIRE_TICK_V3)) {
         const f = decodeTickFrame(u8, wireRoster.pool);
-        if (f) for (const u of f.updates) { if (u.playerId) players.set(u.playerId, Date.now()); }
+        if (f) for (let i = 0; i < (f.count ?? f.updates.length); i++) { const u = f.updates[i]!; if (u.playerId) players.set(u.playerId, Date.now()); }
       }
     }
   };

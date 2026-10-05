@@ -344,7 +344,10 @@ function connect(): Promise<void> {
           tickStats.lastAt = now;
           tickStats.frames++;
           const f = decodeTickFrame(u8, wireRoster.pool);
-          if (f) for (const u of f.updates) {
+          // Pooled slots return the whole array + a live count — past it
+          // are stale entries from earlier, larger frames.
+          if (f) for (let i = 0; i < (f.count ?? f.updates.length); i++) {
+            const u = f.updates[i]!;
             if (!u.playerId) continue;
             if (u.playerId === NAME) { selfEcho = { pos: u.position, at: now }; continue; }
             const o = others.get(u.playerId) ?? { pos: u.position, vel: u.velocity, health: u.health, dead: u.isDead, lastTick: 0 };

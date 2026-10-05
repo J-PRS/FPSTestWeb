@@ -245,7 +245,10 @@ class WireBot {
         this.lastCreatureEvtAt = performance.now();
         if (this.balls.size > 300) this.balls.clear();
       }
-      if (f) for (const u of f.updates) {
+      // Pooled slots: updates[] outlives the frame — past `count` is
+      // stale tail from earlier, larger frames.
+      if (f) for (let ui = 0; ui < f.count; ui++) {
+        const u = f.updates[ui]!;
         if (!u.playerId || u.playerId === this.id) continue;
         // Merge — overwriting drops team/dead fields that only the
         // announce path carries, and would silently re-enable friendly

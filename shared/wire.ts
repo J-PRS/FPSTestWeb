@@ -236,7 +236,7 @@ export interface TickDecodePool {
   resolveId?: (wireId: number) => string | undefined;
 }
 
-export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[] } | null {
+export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[]; count: number } | null {
   if (u8.length < 15 || u8[0] !== MAGIC ||
       (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1 && u8[1] !== WIRE_TICK_V3)) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
@@ -295,8 +295,9 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.status = flags & STATUS_MASK;
     u.sheep = sheep > 0 ? sheep : undefined;
   }
-  const updates = pool ? slots.slice(0, count) : slots;
-  return { ackSeq, tickSeq, inputAck, updates };
+  // No slice: the pooled slots array outlives the frame — consumers loop
+  // to `count` so a fresh updates[] per 30Hz frame stops being an alloc.
+  return { ackSeq, tickSeq, inputAck, updates: slots, count };
 }
 
 /** Receiver-side v3 roster: feed every JSON message through feed() and

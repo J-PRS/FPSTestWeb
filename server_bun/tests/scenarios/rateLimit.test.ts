@@ -18,8 +18,11 @@ describe('scenario: per-type rate limits', () => {
     for (let i = 0; i < 6; i++) {
       room.messages.handleMessage(p.id, { type: 'chat', text: `msg ${i}` }, t0 + i * 10);
     }
-    // Cap is 4/window — the 5th and 6th never reach the room.
-    expect(sent.filter((m) => m.type === 'chat').length).toBe(4);
+    // Cap is 4/window — the 5th and 6th never reach the room. Filter to
+    // the test's own lines: the 4th rapid chat also trips noteChatPace's
+    // 12% 'quiet' reply roll on the ambient taunt stream — an occasional
+    // extra chat here is the feature, not rate-limit leakage.
+    expect(sent.filter((m) => m.type === 'chat' && m.text.startsWith('msg ')).length).toBe(4);
   });
 
   it('declared teleports are honored, not silently dropped — cadence trips count as violations', () => {

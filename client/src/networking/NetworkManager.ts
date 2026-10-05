@@ -586,7 +586,7 @@ export class NetworkManager {
     this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
-  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number; inputAck?: number; tickSeq?: number }): void {
+  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; count?: number; ackSeq?: number; inputAck?: number; tickSeq?: number }): void {
     // Host loopback delivers ticks in per-frame bursts — feeding those to
     // the gap tracker turns frame hitches into fake "packet loss".
     if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
@@ -606,7 +606,11 @@ export class NetworkManager {
     // path itself, which is the rubberband mechanism. The JSON path has
     // no tickSeq and keeps the arrival fallback (host/loopback: jitter≈0).
     const serverMs = data.tickSeq !== undefined ? data.tickSeq * SERVER_TICK_MS : now;
-    for (const u of data.updates) {
+    // Pooled decode hands back its whole slots array + a live count —
+    // entries past it are stale from earlier, larger frames.
+    const n = data.count ?? data.updates.length;
+    for (let i = 0; i < n; i++) {
+      const u = data.updates[i]!;
       // v3 record ahead of its roster — can't build a body without an
       // identity, so it drops; the next record for that id resolves.
       if (!u.playerId) continue;

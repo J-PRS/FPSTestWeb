@@ -28,7 +28,7 @@ for (const line of readFileSync(file, 'utf8').split('\n')) {
   decodeUs += us;
   if (us > maxFrameUs) maxFrameUs = us;
   if (!f) { undecodable++; continue; }
-  records += f.updates.length;
+  records += f.count;
 }
 const wallMs = performance.now() - t0;
 console.log(`${file}: ${frames} tick frames / ${records} records / ${bytes}B / ${jsons} json`);
