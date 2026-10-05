@@ -70,11 +70,15 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // is the best convergence signal this wave produces.
         const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 130);
         const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
-        // 35s patience: the call posts at route start (~75s ETA), and
-        // big-map waves transit 40s+ — 25s still released the capper
-        // before his flood landed. The orbit is outside the posted
+        // 35s patience for the capper, 45s for wave members: the call
+        // posts at route start (~75s ETA), big-map waves transit 40s+ —
+        // 25s still released the capper before his flood landed, and a
+        // member whose clock expires mid-flood presses the ring alone,
+        // feeding instead of flooding. The member window tracks the
+        // push task's own 45s dead-slot lifetime: while the call still
+        // lives, so does the hold. The orbit is outside the posted
         // defense leash, so holding is cheap.
-        if (!wave && !wingman && b.stageT < 35) {
+        if (!wave && !wingman && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
           b.stageT += dt;
           b.orbitA += dt * 0.35;
           const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;
