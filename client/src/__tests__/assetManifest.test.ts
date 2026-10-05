@@ -23,10 +23,9 @@ function* walk(dir: string): Generator<string> {
   }
 }
 
-// Named debt, not silence: the lens-dirt post effect references a texture
-// that was never committed to client/public — the effect silently renders
-// without it. Remove from this set once the asset lands (or the effect dies).
-const KNOWN_MISSING = new Set(['/assets/LensDirt/LensDirt03_1k.avif']);
+// Named debt, not silence: literal paths known to be absent land here with
+// their reason, never silently. Empty while the manifest is clean.
+const KNOWN_MISSING = new Set<string>();
 
 describe('asset manifest', () => {
   const missing: string[] = [];
