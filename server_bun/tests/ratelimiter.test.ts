@@ -19,7 +19,7 @@ describe('RateLimiter', () => {
 
   it('tracks different message types independently', () => {
     const rl = new RateLimiter();
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 40; i++) {
       rl.check('player1', 'shot');
     }
     expect(rl.check('player1', 'shot')).toBe(false);

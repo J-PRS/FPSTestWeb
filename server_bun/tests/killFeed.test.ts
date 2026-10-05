@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { KillFeed } from '../src/killFeed.ts';
-import { botRng } from '../../shared/botRand.ts';
+import { botRng, tauntRng } from '../../shared/botRand.ts';
 import { resetTauntCooldowns, setTauntClock } from '../../shared/botTaunts.ts';
 import type { PlayerManager } from '../src/PlayerManager.ts';
 import type { PlayerState, ServerMessage } from '../src/types.ts';
@@ -25,8 +25,11 @@ const notices = (sent: ServerMessage[]) => sent.filter((m) => m.type === 'matchN
 // sharedNow's unseeded default is epoch-0 — without a clock the 20s
 // cooldown reads as permanent and every taunt stays silent.
 setTauntClock(() => 1_700_000_000_000);
+// Taunts roll on tauntRand (their own stream — see botRand.ts); pin it
+// silent so announce() can't leak a chat into the notice assertions.
+tauntRng(() => 1);
 
-afterEach(() => { botRng(Math.random); resetTauntCooldowns(); });
+afterEach(() => { botRng(Math.random); tauntRng(() => 1); resetTauntCooldowns(); });
 
 describe('KillFeed.announce', () => {
   it('first blood notice on the first kill', () => {
@@ -70,7 +73,7 @@ describe('KillFeed.announce', () => {
   });
 
   it('bot kills speak on the chat wire, dead speakers do not', () => {
-    botRng(() => 0); // under SPEAK_CHANCE — the bot always finds words
+    tauntRng(() => 0); // under SPEAK_CHANCE — the bot always finds words
     const { feed, sent, roster } = rig({ roster: [player('BOT-1'), player('B')] });
     feed.announce('BOT-1', 'B');
     const chats = sent.filter((m) => m.type === 'chat');

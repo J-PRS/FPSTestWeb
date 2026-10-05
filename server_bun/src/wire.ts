@@ -71,7 +71,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   shot: {
-    limit: { maxCount: 20, windowMs: 1000 }, // chaingun fires ~11/s spawn events
+    // Flood gate, not the cadence law (fireWindows owns trigger spacing).
+    // Legal worst case isn't the chaingun (~11/s): fan weapons claim every
+    // pellet per pull — a 0.7s shotgun can land two pulls (2×10) inside one
+    // window, and a stream-weapon swap adds its tail on the same bucket.
+    limit: { maxCount: 40, windowMs: 1000 },
     validate: (obj) => {
       const targetId = obj.targetId;
       if (targetId !== null && typeof targetId !== 'string') {
@@ -100,7 +104,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   },
 
   aoeShot: {
-    limit: { maxCount: 15, windowMs: 1000 }, // all AOE weapons share one bucket — GL spam is the ceiling
+    // All AOE weapons share one bucket — GL spam is the ceiling it guards,
+    // but the floor is the Lightning beam: ~22 on-target ticks/s, so a held
+    // beam + a GL volley legitimately runs ~24/s. 30 leaves the flood gate
+    // in place without eating honest beam ticks.
+    limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
       const pos = validateVec3(obj.position);
       if (!pos.success) return { success: false, error: `position: ${pos.error}` };
