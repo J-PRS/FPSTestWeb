@@ -20,6 +20,7 @@ import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import { TeamCommand, type CommandMember } from './botCommand.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
+import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
@@ -346,7 +347,18 @@ export class ServerBotSenses {
       return { pos: own.home, infiltrating: false, running: true, runner: true };
     }
 
-    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
+    // Home flag sits at the skirt's center inside a solid ~3m dais —
+    // a ground-level goal pins pressers against the hull face. Lift the
+    // goal to deck height so the climb/jet gates mount it; the touch
+    // check still reads the real flag pos. Dropped flags stay at
+    // ground level — they're sitting in the open.
+    const enemyStand = enemy.state === 'home'
+      ? { x: enemy.pos.x, y: enemy.pos.y + FLAG_STAND_LIFT, z: enemy.pos.z }
+      : enemy.state !== 'carried' ? enemy.pos : null;
+    // The touch aim must stay at the flag's real height — the lifted
+    // goal is only the mount target; fly-throughs aimed at the lift
+    // ride ~3m high and graze past outside the 6m grab window.
+    const enemyFlagY = enemy.pos.y;
     const sit: FlagSituation = {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base.
@@ -510,14 +522,18 @@ export class ServerBotSenses {
         // every 8m swell read worse than the beeline they replace
         // (peaks soak: routing dropped near% 3->1). Only a real wall
         // face earns the detour.
-        if (wall < 6 || committed || (waveTask && wall < 20)) {
+        // Inside the grab ring a capper commits to the pole — the wall
+        // probe still reads the dais/apron face there and routing it
+        // back out to ring probes throws away a stand it already owns
+        // (broadside 9002: 90s of probe-churn 8-25m out).
+        if (wall < 6 || committed || (waveTask && wall < 20) || (capper && dStand < 25)) {
           // Two human corrections on the final run:
           // - Altitude pull: a ballistic runner can't dive, so aim the
           //   landing short of the flag and skim through it at grab height.
           // - Track lead: momentum lags yaw, so the velocity ray misses
           //   the pole by meters. Shift the aim point by the measured
           //   miss vector so the converged path crosses the flag.
-          const dy = p.position.y - enemyStand.y;
+          const dy = p.position.y - enemyFlagY;
           const pull = Math.max(0, Math.min(24, (dy - 5) * 1.6));
           const ux = (enemyStand.x - p.position.x) / dStand;
           const uz = (enemyStand.z - p.position.z) / dStand;
@@ -549,9 +565,15 @@ export class ServerBotSenses {
               px2 = cx - enemyStand.x; pz2 = cz - enemyStand.z;
             }
           }
-          goalPos = { x: enemyStand.x + mx + px2 - ux * pull,
-                      y: enemyStand.y,
-                      z: enemyStand.z + mz + pz2 - uz * pull };
+          // The pass shape is for a runner arriving with speed — a
+          // stalled or point-blank presser aiming PAST the flag slides
+          // around the dais hull chasing the offset (broadside: ~19s of
+          // ring orbits at 4-15m/s). Slow/close presses aim the pole.
+          goalPos = spd > 8 && dStand > 6
+            ? { x: enemyStand.x + mx + px2 - ux * pull,
+                y: enemyFlagY,
+                z: enemyStand.z + mz + pz2 - uz * pull }
+            : { ...enemyStand };
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —

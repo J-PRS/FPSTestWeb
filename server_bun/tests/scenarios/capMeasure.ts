@@ -20,6 +20,12 @@ export interface MeasureOpts {
   simBudgetS?: number;  // max sim-seconds to wait for a cap (default 240)
   verbose?: boolean;    // per-beat console telemetry (scenario test = on)
   tag?: string;
+  seed?: number;        // room seed — grabT is one deterministic path per
+                        // seed, so sweeps sample several rather than
+                        // trusting a single trajectory
+  bareFlags?: boolean;  // strip the dais colliders — flag on bare terrain,
+                        // for isolating ring-orbit behavior from the
+                        // ~3m platform hop
 }
 
 /** Run one cap attempt cycle on a given field: spawn a light pull-disc
@@ -33,9 +39,20 @@ export function measureCap(
   const room = mkRoom({
     mode: 'ctf', bots: 6,
     bases,
-  }, 'ctf', 9001, false, fld);
+  }, 'ctf', opts.seed ?? 9001, false, fld);
   const w = watch(room);
   if (!room.flags) throw new Error('ctf room has no flags');
+  if (opts.bareFlags) {
+    // Room merges dais hulls into the sims' structure list — override
+    // with authored-only so the flag stands on bare ground.
+    const authored = room.spec.structures ?? [];
+    const sims = room as unknown as {
+      moveSim: { attachStructures(l: unknown[]): void };
+      projectiles?: { attachStructures(l: unknown[]): void };
+    };
+    sims.moveSim.attachStructures(authored);
+    sims.projectiles?.attachStructures(authored);
+  }
 
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const alpha = bots.find((p) => p.team === 'alpha');
@@ -108,6 +125,15 @@ export function measureCap(
         stat.pathM = 0;
         eSum = 0; eSamples = 0;
         lastPos = null;
+      }
+      if (w.count('matchEnd') > 0) {
+        // A cap that wins the match never flips the flag back 'home'
+        // until the intermission lapses — the matchEnd IS the cap tick.
+        stat.caps = w.count('teamScore');
+        stat.carryT = simT - stat.grabT;
+        stat.avgSpeed = stat.carryT > 0 ? stat.pathM / stat.carryT : 0;
+        stat.avgE = eSamples > 0 ? eSum / eSamples : 0;
+        break;
       }
       if (bravoFlag.state === 'home') {
         stat.caps = w.count('teamScore');

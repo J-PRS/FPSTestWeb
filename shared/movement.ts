@@ -401,8 +401,12 @@ export class MoveSim {
       s.pos.y = groundY;
       // Rising impulses still clipping the surface must not re-ground —
       // but "rising" means away from the surface: vel.y reads walking
-      // up an 80° face as a launch every step.
-      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel;
+      // up an 80° face as a launch every step. A blast driven INTO a
+      // rising face (velDotN negative) while still climbing world-up
+      // is a launch too — grounding it here bleeds the arc that a
+      // pre-gate crest launch kept.
+      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel
+        || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
       s.onGround = !rising;
       this.allowNextJump = !rising;
     } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)) {
@@ -411,9 +415,14 @@ export class MoveSim {
       // frame or two. The launch gate is surface-normal velocity —
       // slope-following speed stays parallel to the face even on an
       // 80° wall, so only a real launch (jump/jet/blast) reads away.
+      // Fast bodies are exempt: snapping a 30 m/s hop into grounded
+      // regime buys it the overspeed bleed + friction a pre-band hop
+      // never paid — walkers get stability, movers keep their arc.
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel) {
+      const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
+      const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;
+      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, ty0, tz0) <= stickSpeed) {
         this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
         if (velDotN < 0) {
           s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;

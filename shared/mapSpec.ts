@@ -348,6 +348,12 @@ export function flagStandSpecs(home: Vec3like, team?: TeamId): StructureSpec[] {
     { kind: 'stand', pos: { x: home.x, y: home.y + 2.2, z: home.z }, size: { x: 9, y: 0.85, z: 9 }, team },
   ];
 }
+
+/** Deck top above the flag's home pos (skirt 2.2 + deck 0.85) — bot
+ *  goals aimed at a home flag are lifted by this so pressers mount the
+ *  dais instead of pinning on the skirt hull. Keep in step with the
+ *  tier sizes above. */
+export const FLAG_STAND_LIFT = 3.05;
 const isVec = (s: unknown): s is Vec3like =>
   !!s && typeof s === 'object' &&
   Number.isFinite((s as Vec3like).x) &&

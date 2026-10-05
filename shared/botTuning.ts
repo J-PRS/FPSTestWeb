@@ -29,6 +29,7 @@ export const BOT_TUNING = {
     comfyEnergy: 24,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
     boostGdMin: 15,      // m — boost only with ground to cover
+    boostEnergyMin: 34,  // energy — boost spends only above this (climb reserve)
     boostRise: 1.5,      // m — boost only on flat/downhill ahead
     runInGdMin: 12,      // m — runner run-in burn inner window
     runInGdMax: 70,      // m — runner run-in burn outer window (sweep: past ~70m the hop chain owns the approach)
@@ -37,6 +38,8 @@ export const BOT_TUNING = {
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
+    stepRise: 0.4,       // m — sub-climb face ahead that walls a stalled push (dais lip ~0.85m, skirt 2.2m)
+    stepJetRise: 1.2,    // m — rise past jump apex that pays a tap alongside the hop
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
     hopSpeed: 6,         // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
@@ -49,6 +52,8 @@ export const BOT_TUNING = {
     preyRise: 6,         // m — prey this far overhead earns a burn
     destHighRise: 3,     // m — destination rise that arms 'destHigh'
     destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
+    grabOrbitGd: 14,     // m — runner orbit-brake ring around the objective (covers the ~2.2m touch + overshoot lap)
+    grabOrbitS: 1.0,     // s — no od progress inside the ring this long = orbit, brake it
   },
   // botLines — meso-scale line picking
   lines: {
@@ -60,6 +65,8 @@ export const BOT_TUNING = {
     commitS: 2.4,        // s — hold a line before re-planning
     arrive: 6,           // m — waypoint reached radius
     minGd: 34,           // m — closer than this, steerer owns it
+    runnerDirectGd: 48,  // m — runner close-out: pockets near the stand only feed the
+                         // orbit, so the last leg aims at the pole itself
     redest: 22,          // m — goal drift forcing a re-roll
     staleLimit: 3,       // dead rolls before the give-up path
     runnerReachK: 2.2,   // runner reach multiplier

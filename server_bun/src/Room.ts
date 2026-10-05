@@ -525,6 +525,7 @@ export class Room {
   private effStructures(): StructureSpec[] {
     const out = [...(this.spec.structures ?? [])];
     if (!this.modeSpec?.flags) return out;
+    if (process.env.FPS_NOSTAND) return out; // soak A/B: measure approach cost of the dais hulls
     if (this.mode === 'rabbit') {
       out.push(...flagStandSpecs(this.rabbitFlagHome()));
       return out;

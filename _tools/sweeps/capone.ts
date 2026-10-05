@@ -1,0 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
+import { measureCap } from '../../server_bun/tests/scenarios/capMeasure.ts';
+const name = process.argv[2]!;
+const seed = process.argv[3] ? Number(process.argv[3]) : undefined;
+const spec = JSON.parse(readFileSync(`${import.meta.dir}/../../maps/${name}.json`, 'utf8'));
+const f = hmParseBin(new Uint8Array(readFileSync(`${import.meta.dir}/../../maps/${spec.terrain}`)));
+const at = (x: number, z: number) => ({ x, y: hmHeight(f, x, z), z });
+const bases = { alpha: at(spec.bases.alpha.x, spec.bases.alpha.z), bravo: at(spec.bases.bravo.x, spec.bases.bravo.z) };
+const flagM = Math.hypot(bases.alpha.x - bases.bravo.x, bases.alpha.z - bases.bravo.z);
+const s = measureCap(f, bases, { simBudgetS: Math.round(150 * Math.min(3, Math.max(1, flagM / 300))), seed });
+console.log(`${name} seed=${seed ?? 9001} flagM=${flagM.toFixed(0)} caps=${s.caps} grab=${s.grabT.toFixed(1)}s carry=${s.carryT.toFixed(1)}s spd=${s.avgSpeed.toFixed(1)} E=${s.avgE.toFixed(0)}`);

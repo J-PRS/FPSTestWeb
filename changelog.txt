@@ -1,3 +1,9 @@
+2026-10-01 - Bots: capper dais-mount fix pack — flag-home goal lifted to deck height (goal was inside the solid skirt), slow/close presses aim the pole instead of the pass-through offset, and stand commits hold inside the grab ring (was routing pressers back out to ring probes)
+2026-10-01 - Bots: stall-step mount — a stalled push against a sub-climb face (structure tops read as terrain via groundY) pays a hop + jet tap; crawlers hop hull faces mid-slide, not only when parked
+2026-10-01 - Bots: runner overhead inside the grab ring stops thrusting — hops/taps were ballooning it 10-35m past the grab window; gravity delivers the touch now
+2026-10-01 - Bots: fly-through aim keeps the flag's real height while the mount goal rides the deck lift (lifted aim grazed 3m over the grab window)
+2026-10-01 - Movement: ground snap band ignores skier-speed flight (fast movers were being glued mid-arc) and a rising launch through a face reads as a launch, not a wall
+2026-10-01 - Tools: capone/capdebug single-map cap-runners + capMeasure seed option — grabT is one chaotic trajectory per seed, sweeps must sample distributions
 2026-10-01 - Lobby: failed /maps fetch now shows server offline in the map picker + warns (was a silent always-empty list)
 2026-10-01 - Perf: aim-pitch un-apply pass now skips when no procedural pose is active (idle bodies no longer pay N quaternion ops per frame)
 2026-10-01 - Observability: reclaim journal wrap and missed-frame gaps now surface as journalWrap/reclaimGap room-health counters

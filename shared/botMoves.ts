@@ -35,6 +35,14 @@ export class BotMoves {
    *  held forward input pushes him down the whole face each cycle and
    *  a ~70m wall reads as an absolute ceiling (katabatic moat). */
   private breath = false;
+  /** Orbit-brake trackers — best od seen inside the grab ring and the
+   *  seconds since it last improved. */
+  private odBest = Infinity;
+  private odT = 0;
+  /** Crawl latch — armed after a parked stop inside the grab ring;
+   *  keeps the walk key but forbids ski/jet so a downhill stand can't
+   *  re-spin the orbit the brake just killed. */
+  private crawl = false;
   holdFor(): number { return this.jetHold; }
 
   hints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
@@ -54,6 +62,35 @@ export class BotMoves {
     // mid-route. The base ring covers the ~10-14m orbit an overshooting
     // anchor falls into; v²/60 adds the slide distance to the pole.
     const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : gd;
+    const nx = dx / gd, nz = dz / gd;
+    const g0 = ctx.groundY(pos.x, pos.z);
+    const rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;
+    const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+    const airborne = pos.y - g0 > 2;
+    // Capper grab-orbit brake: the flag touch ring is ~2.2m and a runner
+    // arriving at 25+ m/s can't turn inside it — soaks show whole seconds
+    // spent lapping the pole at 4-9m radius (katabatic). Track real od
+    // progress: a clean fly-through keeps closing and never trips this;
+    // a lap that stops tightening drops every input so ground friction
+    // slides the skid onto the pole, then the walk-in earns the touch.
+    if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabOrbitGd) {
+      if (od < this.odBest - 0.5) { this.odBest = od; this.odT = 0; }
+      else this.odT += dt;
+      if (this.odT > T.moves.grabOrbitS) {
+        if (spd0 > 1.5) return { ski: false, jet: false, jump: false, park: true };
+        // Parked to a stop: switch to crawl — keep the walk key and
+        // hops (dais stands need a jet hop to mount) but stay off the
+        // skis, or the same downhill that made the orbit re-fires it.
+        this.crawl = true;
+      }
+      // Parked to a stop OR still sliding along a hull face — hop the
+      // lip either way (the deck lip is a free jump, the skirt pays a
+      // tap). spd0<1 alone let a 4-15m/s wall-slide orbit the dais for
+      // ~20s before a hop ever fired. The jet respects the same signed
+      // ceiling as wantJet's runner veto — a crawler already overhead
+      // falls to the flag on gravity, it doesn't thrust further past.
+      if (this.crawl) return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: spd0 < 1 || rise > T.moves.stepRise };
+    } else { this.odBest = Infinity; this.odT = 0; this.crawl = false; }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
     // fast arrivals brake wide to kill the overshoot-orbit; already
@@ -64,11 +101,6 @@ export class BotMoves {
     if (ctx.posted && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
       return { ski: false, jet: false, jump: false, park: true };
     }
-    const nx = dx / gd, nz = dz / gd;
-    const g0 = ctx.groundY(pos.x, pos.z);
-    const rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;
-    const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
-    const airborne = pos.y - g0 > 2;
     // Jet when the way ahead climbs faster than running covers — or the
     // hunt target is clearly airborne and pursuit needs altitude.
     const uphill = rise > T.moves.climbRise;
@@ -93,6 +125,16 @@ export class BotMoves {
     // arrive fast and dry beats arrive slow and tanked.
     const tapFloor = this.jetWhy === 'tap' ? T.moves.tapEnergyMin : T.moves.tankedMin;
     const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
+    // Step mount: a face below climbRise (dais skirt 2.2m, deck lip
+    // 0.85m, any collider top — the probe reads structures through
+    // ctx.groundY) still walls the walk key, and no climb ever arms
+    // for it. A stalled shove pays the free jump; the tap covers only
+    // what jump apex can't. Fires on stall, not on rise alone, so a
+    // moving walker keeps running through gentle grades.
+    if (!ctx.posted && !airborne && rise > T.moves.stepRise && speed < T.moves.jumpUphillSpeed) {
+      this.jetWhy = 'hop';
+      return { ski: false, jet: rise > T.moves.stepJetRise && tanked, jump: true };
+    }
     this.jetHold = Math.max(0, this.jetHold - dt);
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
@@ -213,6 +255,15 @@ export class BotMoves {
     // rise matters, and even that needs a deficit that grows with
     // remaining range so a far wall earns jets but a dip doesn't.
     const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
+    // A runner already overhead inside the grab ring burns to go UP —
+    // every hop/tap balloons it another 10-35m past the grab window
+    // (broadside 9002: 4 minutes of orbits at dy -5..-36). Cutting
+    // thrust lets gravity deliver the touch; below the objective the
+    // mount still needs the burn, so the veto is signed, not absolute.
+    if (ctx.runner && od < T.moves.grabOrbitGd * 1.5 && pos.y - (ctx.objective?.y ?? -Infinity) > 6) {
+      this.jetWhy = '-';
+      return false;
+    }
     const climbY = od < T.moves.destHighNear ? Math.max(dest.y, ctx.objective!.y) : dest.y;
     const destDeficit = climbY - pos.y;
     const destHigh = destDeficit > T.moves.destHighRise + Math.min(30, gd * 0.08);
@@ -232,7 +283,14 @@ export class BotMoves {
     // deck. Burn while facing uphill buys altitude, not speed (the
     // cap run showed a featherjets bot jetting 200m up on spawn);
     // burn already fast in the air just empties the tank.
-    const boost = speed < T.moves.boostSpeedMax && gd > T.moves.boostGdMin && comfy && rise <= T.moves.boostRise && !airborne;
+    // `gd` here is the ~8m steer step — "ground to cover" has to read
+    // the objective distance or the gate is dead code. No objective →
+    // fall back to gd so wander steps still can't trip the burn.
+    // Discretionary speed only spends the TOP of the tank — a boost
+    // that drains to the reserve floor leaves the mid-route climbs
+    // (which are not discretionary) with nothing.
+    const boostTank = ctx.energy === undefined || ctx.energy > T.moves.boostEnergyMin;
+    const boost = speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
     // Run-in burn: a committed runner closing on a near-level objective
     // keeps thrusting to ~26m/s — the human play is arriving through
     // the flag at speed, not floating in at hop-chain pace. Jets add
@@ -244,7 +302,7 @@ export class BotMoves {
     // while its capper now burns at ~20 — escorts and push bodies have
     // to arrive inside the same window or there is no wave. Marshal
     // staging never trips it: the 110m orbit sits past the gd window.
-    const runIn = (ctx.runner === true || ctx.wave === true) && gd > T.moves.runInGdMin && gd < T.moves.runInGdMax &&
+    const runIn = (ctx.runner === true || ctx.wave === true) && od > T.moves.runInGdMin && od < T.moves.runInGdMax &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && comfy;
     // The featherjet: a route-committed runner or wave member on a
     // near-level transit whose tank sits below `comfy` still taps the
