@@ -53,6 +53,11 @@ bow.add(scopeLens);
 // crossbar sits level with the eye plane and vanishes edge-on; forward
 // placement gives it silhouette separation from the receiver.
 const ARM_Z = -0.24;
+// Rail continuing the receiver out to the hub — the arms were pushed
+// forward for first-person readability, leaving the boss to hover.
+const neckRail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.16), darkMat);
+neckRail.position.set(0, 0.01, -0.17);
+bow.add(neckRail);
 const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.15, 6), darkMat);
 hub.rotation.z = Math.PI / 2;
 hub.position.set(0, 0, ARM_Z);
