@@ -130,7 +130,13 @@ export class SessionRegistry {
     const ok = this.transition(playerId, s, 'grace', reason);
     if (ok && graceMs !== undefined && onExpire) {
       this.clearGrace(s);
-      s.graceTimer = setTimeout(onExpire, graceMs);
+      // onExpire runs the full teardown funnel — if it throws, the
+      // player is never reaped (ghost session + leaked slot). Wrap so
+      // the failure logs with the victim instead of going unhandled.
+      s.graceTimer = setTimeout(() => {
+        try { onExpire(); }
+        catch (e) { logger.error('Grace expiry failed', { playerId, err: e instanceof Error ? e.message : String(e) }); }
+      }, graceMs);
     }
     return ok;
   }

@@ -66,6 +66,7 @@ export class RespawnManager {
     const timer = setTimeout(() => {
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
+      try {
       const result = this.playerManager.respawnPlayer(playerId);
       if (!result) return;
 
@@ -91,6 +92,12 @@ export class RespawnManager {
         // the silhouette off this rather than learning it on next join.
         armorClass: result.armorClass,
       });
+      } catch (e) {
+        // A throw here stranded the player dead forever — the process
+        // handler would survive it but nobody would ever re-fire the
+        // respawn. Log with the victim so a stuck-dead report names him.
+        logger.error('Respawn timer failed', { playerId, err: e instanceof Error ? e.message : String(e) });
+      }
     }, CONFIG.respawnDelayMs);
     this.timers.set(playerId, timer);
   }

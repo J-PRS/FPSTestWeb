@@ -7,6 +7,7 @@
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
+import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -205,7 +206,7 @@ export class KillFeed {
       if (inviteReply) this.onBotSpoke?.(id);
     };
     if (delay <= 0) { speak(); return; }
-    const t = setTimeout(() => { this.pending.delete(t); speak(); }, delay);
+    const t = setTimeout(() => { this.pending.delete(t); try { speak(); } catch (e) { logger.error('Bot taunt failed', { playerId: id, err: e instanceof Error ? e.message : String(e) }); } }, delay);
     this.pending.add(t);
   }
 
