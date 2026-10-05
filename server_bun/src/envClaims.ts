@@ -35,8 +35,23 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     // Attacker-tagged claims come from host-simmed sources the server has
     // no creature-range check for (team bots, deployables) — skip the
     // melee-from-afar warn and let a heavier cap cover bot melee (60).
-    const attacker = typeof msg.attacker === 'string' && /^[\w: .-]{1,32}$/.test(msg.attacker)
+    let attacker = typeof msg.attacker === 'string' && /^[\w: .-]{1,32}$/.test(msg.attacker)
       ? msg.attacker : undefined;
+    // Forged-attribution check: a real player id is legal (victim-reported
+    // splash credits the shooter), but only if that player is close
+    // enough to have authored the blast — naming someone across the map
+    // is a killfeed/scoreboard forge, not a bug report. 'bot:*' tags come
+    // from the victim's own host sim, so they skip the range gate (the
+    // server can't position-check a client-side attacker anyway).
+    if (attacker && !attacker.startsWith('bot:')) {
+      const src = h.playerManager.getPlayer(attacker);
+      const near = src && !src.isDead &&
+        Math.hypot(src.position.x - player.position.x, src.position.z - player.position.z) < 60;
+      if (!near) {
+        h.hb('envdmg.attackerFar');
+        attacker = undefined;
+      }
+    }
     if (!attacker) {
       const range = h.deps.envRange?.(playerId);
       if (range !== undefined && range > 15) {

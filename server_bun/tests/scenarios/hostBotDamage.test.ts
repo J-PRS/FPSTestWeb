@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, firstPlayer, pin, watch } from './harness.ts';
+import { mkRoom, firstPlayer, twoPlayers, pin, watch } from './harness.ts';
 import { validateMessage } from '../../src/wire.ts';
 
 // Host-simmed team bots ('bot:*') hurt the local player via the
@@ -52,6 +52,33 @@ describe('scenario: host-bot damage claims', () => {
     expect(kill).toBeDefined();
     expect((kill as { shooterId?: string }).shooterId).toBe('bot:SLATE-A');
     expect(p.isDead).toBe(true);
+  });
+
+  it('a forged attacker id too far away is stripped — no cross-map kill credit', () => {
+    const room = mkRoom({ bots: 2 });
+    const [victim, forged] = twoPlayers(room);
+    const w = watch(room);
+    pin(room, victim.id, { x: 0, y: 31, z: 0 });
+    pin(room, forged.id, { x: 400, y: 31, z: 0 }); // couldn't have splashed the victim
+    victim.health = 30;
+
+    room.messages.handleMessage(victim.id, { type: 'environmentDamage', amount: 60, attacker: forged.id });
+    const kill = w.msgs.find((m) => m.type === 'playerKill');
+    expect(kill).toBeDefined();
+    expect((kill as { shooterId?: string }).shooterId).toBe('environment');
+  });
+
+  it('a real nearby player id keeps its credit — victim-reported splash', () => {
+    const room = mkRoom({ bots: 2 });
+    const [victim, shooter] = twoPlayers(room);
+    const w = watch(room);
+    pin(room, victim.id, { x: 0, y: 31, z: 0 });
+    pin(room, shooter.id, { x: 30, y: 31, z: 0 });
+    victim.health = 50;
+
+    room.messages.handleMessage(victim.id, { type: 'environmentDamage', amount: 60, attacker: shooter.id });
+    const kill = w.msgs.find((m) => m.type === 'playerKill');
+    expect((kill as { shooterId?: string }).shooterId).toBe(shooter.id);
   });
 
   it('untagged claims still clamp at 40 — no smuggling bot damage through the creature lane', () => {
