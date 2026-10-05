@@ -335,7 +335,11 @@ telemetry lines it greps.
   `projContact`/`spawnPicker`/`tickHelpers`/`validation`/`rewind`/
   `roomMatch` — roster/room-keyed or call-local.
 - **`shared/` tree**: `botSheep` evicts all 9 per-id maps in one
-  `forget` path + rekeys on id change; `botLos` memo TTL + 4096-cap;
+  `forget` path + rekeys on id change — meter semantics pinned
+  2026-10-05 (`botSheep.test.ts`: unproven=100, 30/s drain cap, 20s
+  proven grace, dest/excused charge tiers, 5s coverage debit,
+  deadstop bleed, clear/rekey lifecycle, newlyMaxed/crossedHigh
+  edge-only semantics); `botLos` memo TTL + 4096-cap;
   `botGraph` evicts oldest; `botHunt` caps at 6; `solidWorld.cells`
   is spatial-hash geometry; `flagGoals`/`weapons`/`botClasses` are
   static tables. Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
