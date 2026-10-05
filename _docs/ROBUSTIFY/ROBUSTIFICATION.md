@@ -389,6 +389,16 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Timer lifecycle** (2026-10-05): ~55 `setTimeout`/`setInterval`
+  sites both ends classified — server: `respawn` dueAt map cancels on
+  fire/dispose, `killFeed` pending-set drains, `sessionRegistry`
+  graceTimer cleared on every transition, join-deadline + RTC
+  stale-guard are scoped one-shots, `TickLoop` intervals cleared on
+  `stop()`. Client: `stallTimer`/`tickTimer`/`reconnectTimer`/`lobby`
+  poll all `??=`-once singletons or cleared on cancel; the rest are
+  DOM-element life timers (feed rows remove themselves) or dev-tool
+  polls (`posedump`, `renderScan`). No orphaned intervals, no
+  per-id timer maps that could outlive their owner.
 - **Room-hop residue** (2026-10-05): `world`/`remotePlayers` are
   created once in `main.ts`, but a fresh `gameState` is authoritative —
   `dropVolatileWorldFx` purges the volatile layer, `applyMatchMeta`
