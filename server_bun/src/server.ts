@@ -148,6 +148,17 @@ logger.info(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
 logger.info(`Health:    http://localhost:${CONFIG.port}/health`);
 logger.info(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 
+// Last-resort catches: a stray timer callback (killFeed taunts, grace
+// sweeps) or a rejected promise must not drop every player in every room.
+// Room ticks have their own finer quarantine — whatever reaches here
+// bypassed it, so log at error level rather than swallowing silently.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection (process survived)', { err: reason instanceof Error ? reason.stack ?? reason.message : String(reason) });
+});
+process.on('uncaughtException', (e) => {
+  logger.error('Uncaught exception (process survived)', { err: e.stack ?? e.message });
+});
+
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down...');
   gameServer.stop();
