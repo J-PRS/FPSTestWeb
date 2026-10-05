@@ -86,10 +86,15 @@ export class BotGoals {
     // while the feet keep the line — humans run and shoot.
     // A posted anchor's objective is the same kind of commitment the
     // cap route is — nothing midfield outbids the pole.
-    // The committed objective (cap route / posted pole) is exempt from
-    // the scent discount: a hot lane is the ROUTE's problem — the entry
-    // scorer already prices detours — not a license to wander midfield.
-    offer(ctx.objective, ctx.runner || ctx.posted ? 3.5 : 1.0, !!(ctx.runner || ctx.posted));
+    // The committed objective (cap route / posted pole / wave flood) is
+    // exempt from the scent discount: a hot lane is the ROUTE's problem —
+    // the entry scorer already prices detours — not a license to wander
+    // midfield. A named wave member's task slot is the same commitment:
+    // soak showed ~86% of wave ticks holding a goal 60m+ off the flood —
+    // every heard fight outbid the 1.0-weight objective, so the called
+    // push walked in alone.
+    const committed = ctx.runner || ctx.posted || ctx.wave;
+    offer(ctx.objective, committed ? 3.5 : 1.0, !!committed);
     if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
       offer(ctx.pickup, 0.8);
     }
