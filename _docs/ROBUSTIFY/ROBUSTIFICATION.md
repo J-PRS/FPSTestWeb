@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`weapons` derivations pinned** (2026-10-05): `weapons.test.ts`
+  (11 tests) — airtime ramp ±0.5s steps, cap, non-scaled ignore,
+  unknown type 0, directHitAoeBonus launcher-only, beltThrowCost
+  satchel-2/flat fallback, Sticky belt-exempt, MAX_HIT_CLAIM_DMG
+  re-derived from the live table (ceiling must fit the widest legal
+  claim), getWeaponStats fallback, cadence sanity + every keyed
+  weapon existing. The wire-authoritative table's derived ceilings
+  can't drift silently.
 - **Join/reclaim atomicity audited** (2026-10-05): grace reclaim checks
   the session token BEFORE the connected test (a zombie socket can't
   lock out its owner), registers the new socket BEFORE evicting the old
