@@ -110,6 +110,13 @@ export interface WeaponStats {
    *  same numbers so the replica arc matches the authoritative one. */
   bounceRestitution?: number; // normal velocity kept per bounce
   bounceFriction?: number;    // tangential velocity kept per bounce
+  /** T2 glue bomb: contact STOPS the shell instead of detonating — it
+   *  freezes on terrain/walls, glues onto a player it touches (riding
+   *  them until the fuse pops), and only `maxLifetime` triggers the
+   *  blast. A detonation cooks siblings in radius — the stack is the
+   *  weapon. Both ends read this so a stuck bomb looks and kills
+   *  identically. */
+  stick?: boolean;
 }
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
@@ -428,6 +435,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.25, // proxy barely wider than the shell — sticks on real contact, not a 2m wake
     hitGrow: 0.5,
     maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
+    stick: true,
   },
   [WeaponType.ClusterBomb]: {
     // Belt cluster: a fuse bomb whose pop is only the carrier — the real

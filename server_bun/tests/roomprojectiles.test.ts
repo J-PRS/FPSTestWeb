@@ -151,14 +151,16 @@ describe('RoomProjectiles', () => {
       orig(m as Parameters<typeof room.broadcast>[0]);
     }) as typeof room.broadcast;
     room.broadcast = tap;
-    // Bomb 1 drops straight down and pops on contact ~0.13s in. Bomb 2 is
-    // fired nearly straight up: it can't touch terrain or hit its 3s fuse
-    // inside the 1.5s window, so a second blast proves the chain cooked it.
+    // Bomb 1 sticks on landing and its 3s fuse pops it; bomb 2 lands
+    // inside the first blast's radius, sticks, and its own fuse pops
+    // shortly after — or the chain cooks it early. Either way both
+    // shells die inside the window, which only works when stick and
+    // chain are real (a contact-pop used to pop bomb 1 instantly).
     room.projectiles.spawn(shooter.id, WeaponType.Sticky,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0, y: -0.2, z: 0 }, { x: 0, y: 0, z: 0 });
     room.projectiles.spawn(shooter.id, WeaponType.Sticky,
-      { x: 4, y: FLOOR + 1.4, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 30; i++) room.projectiles.tick(0.05);
+      { x: 4, y: FLOOR + 1.4, z: 0 }, { x: 0, y: 0.6, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 160; i++) room.projectiles.tick(0.05);
     expect(pops).toBe(2);
   });
 

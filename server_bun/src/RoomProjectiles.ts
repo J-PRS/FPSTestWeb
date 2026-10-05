@@ -46,6 +46,11 @@ export interface LiveProj {
    *  (flak) pop raggedly. Client replicas derive the same value from the
    *  projectileId, so both ends' pops line up. */
   ttl: number;
+  /** Glue-bomb rest state (stats.stick): set when contact stops the
+   *  shell instead of popping it. `playerId` + `off` ride the body it
+   *  glued to; undefined = frozen at its landing point. The fuse is
+   *  the only trigger left. */
+  stuck?: { playerId?: string; off: Vec3 };
 }
 
 // Player aim height — matches where the client sweeps the capsule center.
@@ -187,8 +192,21 @@ export class RoomProjectiles {
       const stats = proj.stats;
       const p = proj.p;
       const prevAge = p.age;
-      const from = projStep(p, dt, stats.gravity ? GRAVITY : 0);
+      // A glued bomb rides its victim — position follows the player it
+      // stuck to (feet + the contact offset), so the fuse pops wherever
+      // they carried it. Dead victim keeps the last riding point.
+      if (proj.stuck) p.age += dt; // a glued bomb's fuse still burns
+      if (proj.stuck?.playerId) {
+        const t = this.room.players.getPlayer(proj.stuck.playerId);
+        if (t && !t.isDead) {
+          p.pos.x = t.position.x + proj.stuck.off.x;
+          p.pos.y = t.position.y + proj.stuck.off.y;
+          p.pos.z = t.position.z + proj.stuck.off.z;
+        }
+      }
+      const from = proj.stuck ? { ...p.pos } : projStep(p, dt, stats.gravity ? GRAVITY : 0);
       if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
+      if (proj.stuck) continue; // frozen — only the fuse ends it now
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the
       // shell's velocity line into a hitscan beam — the earliest contact
@@ -212,6 +230,19 @@ export class RoomProjectiles {
   /** Fire the shell's hitscan beam along its velocity line. */
   private dischargeRay(proj: LiveProj, range: number): void {
     dischargeRay(this, proj, range);
+  }
+
+  /** Glue a contact-frozen bomb at `at` — on a player it rides them
+   *  (`off` in body space), anywhere else it sits until the fuse. */
+  attach(proj: LiveProj, at: Vec3, playerId?: string): void {
+    if (playerId) {
+      const t = this.room.players.getPlayer(playerId);
+      proj.stuck = { playerId, off: t ? { x: at.x - t.position.x, y: at.y - t.position.y, z: at.z - t.position.z } : { x: 0, y: 0, z: 0 } };
+    } else {
+      proj.stuck = { off: { x: 0, y: 0, z: 0 } };
+    }
+    proj.p.pos.x = at.x; proj.p.pos.y = at.y; proj.p.pos.z = at.z;
+    proj.p.vel.x = 0; proj.p.vel.y = 0; proj.p.vel.z = 0;
   }
 
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {

@@ -2,7 +2,7 @@ import type { Vec3 } from './types.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
-import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
+import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 
@@ -26,7 +26,17 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // diverges cosmetically, never in damage outcome.
     if (r.field && p.age >= proj.terrainAt) {
       const hit = segFieldHit(from, p.pos, r.field);
-      if (hit) { r.detonate(proj, hit); return true; }
+      if (hit) {
+        // Fuse bombs (grenade) bounce off dirt — the fuse is the only
+        // trigger, so contact reflects the shell and stays live.
+        if (stats.terrainBounce) {
+          bounceOffField(p, r.field, stats.bodyRadius, stats.bounceRestitution, stats.bounceFriction);
+          proj.terrainAt = 0; // still hugging the ground — keep sweeping
+          return false;
+        }
+        if (stats.stick) { r.attach(proj, hit); return true; }
+        r.detonate(proj, hit); return true;
+      }
       // Still flying below the ceiling — sweep every tick from here on.
       proj.terrainAt = 0;
     }
@@ -34,18 +44,20 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // detonates there instead of phasing through to someone inside.
     if (r.solids.length) {
       const hit = segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined);
-      if (hit) { r.detonate(proj, hit); return true; }
+      if (hit) { if (stats.stick) { r.attach(proj, hit); return true; } r.detonate(proj, hit); return true; }
     }
     // Shield sweep — an enemy dome eats the shell at the field's edge,
     // before any body inside can be reached. Walls already won if they
     // hit earlier in the frame (sequential order like everything else).
     const st = r.room.deployables.shieldBlock(from, p.pos, proj.ownerId);
     if (st !== null) {
-      r.detonate(proj, {
+      const at = {
         x: from.x + (p.pos.x - from.x) * st,
         y: from.y + (p.pos.y - from.y) * st,
         z: from.z + (p.pos.z - from.z) * st,
-      });
+      };
+      if (stats.stick) { r.attach(proj, at); return true; }
+      r.detonate(proj, at);
       return true;
     }
     // Fuse-only carriers (MRV) phase through bodies — contact pops would
@@ -80,6 +92,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       if (pd <= capsuleReach(target, reach)) {
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
+        if (stats.stick) { r.attach(proj, { ...p.pos }, pid); return true; }
         r.detonate(proj, { ...p.pos }, pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
         return true;
       }
@@ -106,6 +119,7 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
     const bodyDirect = best === bc
       ? (() => { const ball = r.room.ballSim?.ballAt(bc!.id); return !!ball && bc!.d <= ball.radius + stats.bodyRadius; })()
       : best.d <= stats.bodyRadius + 1;
+    if (stats.stick) { r.attach(proj, at); return true; }
     r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);
     return true;
   }
