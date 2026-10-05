@@ -62,6 +62,9 @@ const scopeLens = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012,
 scopeLens.rotation.x = Math.PI / 2;
 scopeLens.position.set(0, 0.14, 0.018);
 bow.add(scopeLens);
+// Flat cap plate over the loft's fan cap — the vertex-AO bake paints
+// each fan vertex differently and the star shows through as noise.
+// Removed: JP's call — bake like the rail, not cover plates.
 // Hex arm hub — the boss the limbs rotate on, split across the nose.
 // ARM_Z pushes the whole bow ahead of the rail nose: at ~100° cant the
 // crossbar sits level with the eye plane and vanishes edge-on; forward
