@@ -171,6 +171,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // exactly how the HoF kept wandering: shell → flee 30m → walk back
     // → shell. He sidesteps inside his leash, not across the field.
     if (fearing) return postedHold(retreatDest(ctx, pos, t));
+    // Hurt-runner health-pack divert tried and reverted: eHp rose
+    // 33->37 but grabs collapsed 14->6 — the mid-run detour cost more
+    // momentum/timing than the HP bought. eHp is a combat-power
+    // problem, not a routing one.
     // A gem chase is a route, not a duel pause: while a pickup sits on
     // the goal line the feet keep walking it — fire and aim stay live
     // elsewhere, so the bot hunts THROUGH the pickup like a player
