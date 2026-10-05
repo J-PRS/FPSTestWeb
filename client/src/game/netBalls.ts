@@ -32,6 +32,17 @@ function rubberbandWarnAt(kind: string, speed: number): number {
   return Math.max(4, speed * 0.5);
 }
 
+/** Roster reconciliation: anything we track that the server's roster no
+ *  longer lists gets netKill'd — a ball that died during a reconnect gap
+ *  (or whose ballDie dropped) would otherwise ghost forever. */
+export function pruneNetBalls(map: Map<number, { netKill(): void }>, liveIds: Set<number>): void {
+  for (const [id, ball] of map) {
+    if (liveIds.has(id)) {continue;}
+    map.delete(id);
+    ball.netKill();
+  }
+}
+
 // ---- Server-owned balls (shared PvE) ---------------------------------
 // Connected = the server sims all ball flight; ballSpawn/ballSegment/
 // ballDie events drive netDriven Ball instances that replay the shared
@@ -41,7 +52,7 @@ function rubberbandWarnAt(kind: string, speed: number): number {
 // estimate "server now" — event AGE = estNow − stamp measures TRUE
 // staleness including packet loss/retransmit delay, which ping÷2 can't
 // see (at 50% loss, events routinely arrive hundreds of ms late).
-function makeBallClock(getPing: () => number) {
+export function makeBallClock(getPing: () => number) {
   // The server's sim clock is setInterval-driven — under load it ticks
   // slower than wall time. Track the sim→wall RATE (Δstamp/Δarrival is
   // an exact rate sample regardless of how events space out) so both the
@@ -390,11 +401,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }[] }): void {
     const live = new Set<number>();
     for (const b of m.balls) { live.add(b.id); netBallSpawn(b); }
-    for (const [id, ball] of netBallById) {
-      if (live.has(id)) {continue;}
-      netBallById.delete(id);
-      ball.netKill();
-    }
+    pruneNetBalls(netBallById, live);
   }
 
   // A netDriven ball pulls toward ITS committed target — resolve the id to
