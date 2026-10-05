@@ -687,8 +687,10 @@ export class NetworkManager {
       position: data.position,
       rotation: data.rotation,
       velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
-      isDead: isNew ? false : undefined,
-      health: isNew ? 100 : undefined,
+      // The announce carries real vitals — a grace rejoiner can return
+      // wounded or dead; fabricating 100/alive was the tick-N desync.
+      isDead: isNew ? (data.isDead ?? false) : undefined,
+      health: isNew ? (data.health ?? 100) : undefined,
       team: data.team,
       transport: data.transport,
       armorClass: data.armorClass,

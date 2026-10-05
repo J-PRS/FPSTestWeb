@@ -454,6 +454,8 @@ export class MessageHandler {
       team: player.team,
       transport: player.transport,
       armorClass: player.armorClass,
+      health: player.health,
+      isDead: player.isDead,
     }, player.id);
   }
 
