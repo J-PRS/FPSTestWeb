@@ -401,6 +401,12 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`creatureFlyer` pinned** (2026-10-05): `creatureFlyer.test.ts`
+  (14 tests) — registry rows + gnat overrides, seeded orbit state,
+  committed-prey gate (raw target without tgtValid never folds),
+  windup→dive→climb→orbit cycle edges, abort clock, authority-only
+  `pendingBite`, seeded cooldown re-roll on land, spawn-home anchor
+  fallback, terrain floor, clipMotion mid-flight, 400-step twin replay.
 - **Disconnect lifecycle — two-phase teardown** (2026-10-05): audited
   every per-player store against socket-close vs full-removal. Disconnect
   reaps per-connection state only (respawn timer, flag carriage,

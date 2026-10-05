@@ -1,3 +1,4 @@
+2026-10-05 - test: pin creatureFlyer — 14 tests covering orbit/dive/climb cycle edges, committed-prey gate, abort clock, seeded cooldown re-roll, authority-only pendingBite, 400-step twin replay
 2026-10-05 - audit: disconnect lifecycle verified — two-phase teardown (socket-close vs removePlayerCompletely) reaps every per-player store; no orphan path found
 2026-10-05 - test: pin creatureRoller — 12 tests covering steer cap/idle throttle, stun coast, contact invuln window (one edge per BITE_CD, authority-only pendingBite), terrain ride, clipMotion parking, 300-step twin replay
 2026-10-05 - audit: wire-ingest gates verified — all 25 message types validate finite vecs/scalars, magnitude bounds on body (no NaN path to sim state), heal/damage amounts clamped downstream
