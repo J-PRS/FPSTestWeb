@@ -346,7 +346,11 @@ telemetry lines it greps.
   private mulberry32 never touches botRand — green under armed
   strictRng — same spawn same matrix, axis clamps, tier/mix
   resolution, weapon-axis map, still/moving blend, form drift
-  bounds + gate). Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
+  bounds + gate). `vgsTree`/`deployItems`/`species` shipped-data
+  validity pinned (`sharedData.test.ts`: chord walk — labelled
+  leaves, all-chat lines VG-only; plantable⇒cost>0 vs authored
+  cap-0; species family/bite/blast sanity + hop fallback).
+  Ambient draws in `botRand`/`env`/`pickups`/`ballSim`
   are the strictRng-gated seams themselves; remaining `Math.random`
   defaults (`rollVariant`/`spawnRng`/`deps.rng`) are documented with
   all callers passing seeded rng.
