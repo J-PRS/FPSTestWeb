@@ -138,6 +138,11 @@ function pruneShots(c: CombatCtx): void {
   for (const [sid, p] of registry.byShotId) {
     if (p.dead) registry.byShotId.delete(sid);
   }
+  // byId normally evicts on the destroy echo — a lost projectileDestroyed
+  // would keep a dead shell's server-id entry forever otherwise.
+  for (const [id, p] of registry.byId) {
+    if (p.dead) registry.byId.delete(id);
+  }
 }
 
 // Mid-air interception: the projectile's sweep tagged a turret shell —

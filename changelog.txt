@@ -1,3 +1,4 @@
+2026-10-05 - projectileRegistry: prune dead shells from byId too — a lost projectileDestroyed echo leaked one entry per shell forever
 2026-10-05 - CreatureSim: evict edgeSeq on kill — same dead-id accumulator class as BallSim
 2026-10-05 - BallSim: evict retargetAcc/resyncAcc on ball death — spawn seeds an entry per ball, kill only dropped the body so dead ids accumulated forever
 2026-10-05 - remotes: evict lastWeaponByPlayer on leaver (third map in the leaver-keyed class; only feeds Alt-W audit but same unbounded growth)
