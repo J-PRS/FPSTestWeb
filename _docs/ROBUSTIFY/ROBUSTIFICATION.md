@@ -393,6 +393,15 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Event-listener lifecycle** (2026-10-05): all ~158
+  `addEventListener` sites classified — global targets
+  (`window`/`document`) live exclusively in boot-once builders
+  (`wireOverlayInput` → `buildKeysMenu`/`wireLoadoutBar`, `vgs`/`chat`/
+  `input` constructors, `Logger`, `renderer`, `InputTracking`); no
+  global listener registers inside a per-open or per-reconnect path.
+  Per-connection listeners ride the `dc`/`pc`/`ws` object itself —
+  GC'd with the socket. Per-element listeners die with rebuilt DOM.
+  Only `keybinds` re-registers, and removes first.
 - **Timer lifecycle** (2026-10-05): ~55 `setTimeout`/`setInterval`
   sites both ends classified — server: `respawn` dueAt map cancels on
   fire/dispose, `killFeed` pending-set drains, `sessionRegistry`
