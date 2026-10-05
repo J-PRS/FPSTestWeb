@@ -1,3 +1,4 @@
+2026-10-01 - tap (featherjet) arms on descent only — rising-arc taps spent the same tank for less speed per the hop-jet sweep
 2026-10-01 - Hop-jet timing sweep (tests/hopjet): descent tap ~43m/s at ~1/10 the held-burn energy/m; BotMoves tail tap rides hop descents gated on skill.movement (tailTapSkill), low-skill pays the flat burn
 2026-10-01 - O(1) human census for Room.empty: getHumanCount scanned every player every room every tick; bots now flag at join time since p.isBot stamps after addPlayer returns
 2026-10-01 - drownCheck skipped sockets with no data slot (test mocks) instead of crashing every broadcast; RTC relay guard for mocks without getBufferedAmount

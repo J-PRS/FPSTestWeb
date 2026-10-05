@@ -370,7 +370,13 @@ export class BotMoves {
     // to the grab ring). Wave members get the same wing — the flood's
     // whole point is arriving with the capper, and ~11m/s med transit
     // was the soak's near0% defect.
-    const tap = (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne && od > T.moves.boostGdMin &&
+    // Arms on the descent only: the standalone sweep shows taps fired
+    // on the rising arc spend the same tank for less speed (34 vs 43m/s
+    // at delay 0 vs ~300ms) — the up-jet during a climb buys airtime
+    // the flat route never converts. The hold latch still bleeds past
+    // landing; this gate only picks when a burn can START.
+    const tap = (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne &&
+      (ctx.vel?.y ?? 0) < 0 && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
     this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
