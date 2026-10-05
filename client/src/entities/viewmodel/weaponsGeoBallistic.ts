@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -82,9 +82,9 @@ for (const side of [-1, 1]) {
     { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);
   arm.add(limb);
-  // Tension cable along the limb's inner face — machine bow, not wood
-  const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.34), darkMat);
-  cable.position.set(side * -0.028, 0, -0.19);
+  // Tension cable running the full limb, hub → cam — machine bow, not wood
+  const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.44), darkMat);
+  cable.position.set(side * -0.028, 0, -0.24);
   arm.add(cable);
   // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
   // Flat (horizontal) wheels: the string wraps their edge in-plane.
@@ -100,24 +100,30 @@ for (const side of [-1, 1]) {
   arm.add(camHub);
   bow.add(arm);
 }
-// String latch where the bolt tail sits — the drawn string's vertex.
-// Two tubePath legs run cam-tip → latch in the bowString group; the
-// group slides in z on fire so the string snaps forward with the shot.
+// String — DYNAMIC legs, not a baked tubePath: the arms rotate on fire
+// so a static string detaches from the cams. Two thin cylinders get
+// re-stretched cam→latch every frame by ViewModel.tickBow. The knot at
+// the vertex rides bowString's z (drawn-back at rest, snapped to the
+// cam line when fired).
+const CAM_R = 0.065;
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
-// String meets the cam's BOTTOM (breech-side) edge — the leg wraps to
-// the near rim of the wheel, not the tip's front face.
-const CAM_R = 0.065;
-const tipX = Math.sin(ARM_SWEEP) * ARM_LEN, tipZ = ARM_Z - Math.cos(ARM_SWEEP) * ARM_LEN - 0.02 + CAM_R;
-for (const side of [-1, 1]) {
-  stringG.add(tubePath([
-    [side * (0.07 + tipX), 0, tipZ, 0.006],
-    [side * 0.05, 0.03, -0.10, 0.006],
-    [0, 0.03, 0.16, 0.006], // string latch at the bolt tail
-  ], 0.006, strutMat, 4));
-}
+const knot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), darkMat);
+knot.position.set(0, 0.03, 0.16);
+stringG.add(knot);
 bow.add(stringG);
+for (const side of [-1, 1]) {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 5), strutMat);
+  leg.name = side < 0 ? 'strLegL' : 'strLegR';
+  bow.add(leg);
+}
+// Geometry constants the tick needs to re-solve the string pose without
+// importing the builder module.
+bow.userData.bowGeom = {
+  armZ: ARM_Z, camDist: ARM_LEN + 0.02, camR: CAM_R,
+  latchZ: 0.16, latchY: 0.03, firedZ: 0.16 - 0.27,
+};
 // Chambered bolt inside the channel — the loaded read. Glowing warhead
 // tip (amber like the muzzle flash), thin shaft back to the latch.
 // Named group: the fire envelope ejects it forward and re-chambers.

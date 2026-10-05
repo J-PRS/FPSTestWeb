@@ -23,6 +23,14 @@ const FALL_MAX = 0.08;
 
 const REST_POS = new THREE.Vector3(0.25, -0.28, -0.45);
 
+/** Builder-baked geometry constants for the bolt bow — kept on the
+ *  weapon group's userData so the tick can re-solve the string pose
+ *  without importing the builder module. */
+interface BowGeom {
+  armZ: number; camDist: number; camR: number;
+  latchZ: number; latchY: number; firedZ: number;
+}
+
 const THROW_DIP_Y = -0.22;
 const THROW_DIP_Z = 0.06;
 const THROW_DIP_ROT = -0.12; // slight muzzle-down tilt, gun stays level-ish
@@ -197,16 +205,7 @@ export class ViewModel {
       // Crossbow fake: the chambered bolt is the projectile — gone the
       // instant the shot breaks; the drum indexes one station and the
       // next bolt feeds up into the channel during the refire gap.
-      if (!this.bowParts) {
-        const w = this.weapons.get(WeaponType.BoltLauncher);
-        this.bowParts = w ? {
-          bolt: w.getObjectByName('bowBolt') ?? null,
-          drum: w.getObjectByName('bowDrum') ?? null,
-          string: w.getObjectByName('bowString') ?? null,
-          armL: w.getObjectByName('armL') ?? null,
-          armR: w.getObjectByName('armR') ?? null,
-        } : null;
-      }
+      this.initBowParts();
       const p = this.bowParts;
       if (p?.bolt) { p.bolt.visible = false; this.bowT = 0; }
       if (p?.drum) p.drum.rotation.x += Math.PI / 4; // 8 stations
@@ -216,11 +215,17 @@ export class ViewModel {
   private bowParts: {
     bolt: THREE.Object3D | null; drum: THREE.Object3D | null;
     string: THREE.Object3D | null; armL: THREE.Object3D | null; armR: THREE.Object3D | null;
+    strL: THREE.Object3D | null; strR: THREE.Object3D | null;
+    geom: BowGeom | null;
   } | null = null;
   private bowT = -1; // <0 idle; >=0 s since the shot ejected the chambered bolt
   private static readonly BOW_HIDE = 0.05;
   private static readonly BOW_SLIDE = 0.4;  // drum→channel feed travel
   private static readonly BOW_DRAW = 1.0;   // slow re-cock after the snap
+  private static readonly UP_Y = new THREE.Vector3(0, 1, 0);
+  private strA = new THREE.Vector3();
+  private strB = new THREE.Vector3();
+  private strD = new THREE.Vector3();
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -479,28 +484,69 @@ export class ViewModel {
   /** Crossbow flex + feed. Limbs ride the whole-gun kick spring for free:
    *  releasing tension closes them ~25% of their sweep then the spring
    *  settles them back — a bow's limbs snap forward on release, not back.
-   *  The string group slides toward the cams with the same envelope.
-   *  Separately the feed envelope re-chambers the next bolt like
-   *  tickDiscAmmo's breech slide. */
+   *  Rest pose holds the string DRAWN at the latch; the shot snaps the
+   *  vertex forward to the neutral cam line, then the reload window
+   *  re-cocks it. String legs re-stretch cam→latch every frame so they
+   *  stay glued to the rotating arms. */
+  private initBowParts(): void {
+    if (this.bowParts) return;
+    const w = this.weapons.get(WeaponType.BoltLauncher);
+    this.bowParts = w ? {
+      bolt: w.getObjectByName('bowBolt') ?? null,
+      drum: w.getObjectByName('bowDrum') ?? null,
+      string: w.getObjectByName('bowString') ?? null,
+      armL: w.getObjectByName('armL') ?? null,
+      armR: w.getObjectByName('armR') ?? null,
+      strL: w.getObjectByName('strLegL') ?? null,
+      strR: w.getObjectByName('strLegR') ?? null,
+      geom: (w.userData.bowGeom as BowGeom | undefined) ?? null,
+    } : null;
+  }
+
   private tickBow(dt: number): void {
+    // Legs must be solved from frame one — init used to happen on first
+    // fire, leaving the cylinders as unit rods through the model.
+    this.initBowParts();
     const p = this.bowParts;
     if (!p) return;
     const flex = this.kickAmount;
+    let latchOff = -flex * 0.05;
     if (this.bowT >= 0) {
       // Draw cycle: release snaps the limb tips forward (~80ms), then the
       // reload window slowly re-cocks them to the drawn pose — reads like
-      // the string being pulled back, not a spring settling. String rides
-      // the same envelope toward the cams and back to the latch.
+      // the string being pulled back, not a spring settling. The string
+      // vertex jumps to the neutral cam line then eases back to the latch.
       const snap = Math.min(this.bowT / 0.08, 1);
       const draw = Math.min(Math.max((this.bowT - 0.08) / ViewModel.BOW_DRAW, 0), 1);
       const f = 1 - 0.3 * snap * (1 - draw);
       if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * f;
       if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * f;
-      if (p.string) p.string.position.z = -0.12 * snap * (1 - draw);
+      latchOff = (this.bowParts?.geom ? this.bowParts.geom.firedZ - this.bowParts.geom.latchZ : -0.27) * snap * (1 - draw);
     } else {
       if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * (1 - flex * 0.25);
       if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * (1 - flex * 0.25);
-      if (p.string) p.string.position.z = -flex * 0.10;
+    }
+    if (p.string) p.string.position.z = latchOff;
+    // Dynamic string legs: cam breech-side rim → latch vertex, re-solved
+    // per frame in bow space so the legs track the rotating arms.
+    const g = p.geom;
+    if (g) {
+      for (const [leg, arm, side] of [[p.strL, p.armL, -1], [p.strR, p.armR, 1]] as const) {
+        if (!leg || !arm) continue;
+        const th = arm.rotation.y;
+        const cx = side * 0.07 + (-Math.sin(th)) * g.camDist;
+        const cz = g.armZ + (-Math.cos(th)) * g.camDist;
+        // attach = cam center pulled camR toward the breech (+z)
+        this.strA.set(cx, 0, cz + g.camR);
+        this.strB.set(0, g.latchY, g.latchZ + latchOff);
+        this.strD.subVectors(this.strB, this.strA);
+        const len = this.strD.length();
+        if (len > 1e-6) {
+          leg.position.copy(this.strA).addScaledVector(this.strD, 0.5);
+          leg.scale.set(1, len, 1);
+          leg.quaternion.setFromUnitVectors(ViewModel.UP_Y, this.strD.multiplyScalar(1 / len));
+        }
+      }
     }
     if (this.bowT < 0 || !p.bolt) return;
     this.bowT += dt;
