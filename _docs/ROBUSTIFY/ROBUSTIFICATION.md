@@ -401,6 +401,14 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Wire-ingest NaN/magnitude gates** (2026-10-05): all 25 client
+  message types in `wire.ts` audited — every vec passes `validateVec3`/
+  `optVec` (finite numbers), `validateBody` adds velocity+position
+  magnitude bounds (1000 m/s / 8192 m — lag-comp history can't be
+  poisoned), every scalar passes `isFiniteNumber`, ids are non-negative
+  integers, `heal`/`environmentDamage` amounts clamped downstream
+  (25 / 80-tagged / 40 plain per claim), every lane rate-limited.
+  NaN cannot reach a sim write.
 - **`creatureSlither` pinned** (2026-10-05): `creatureSlither.test.ts`
   (13 tests) — species registry derivation, uber ×4 health, live LCG
   seed, out-of-aggro speed bleed, weave→coil→leap→bite state machine
