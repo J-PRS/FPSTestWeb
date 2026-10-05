@@ -1,3 +1,4 @@
+2026-10-01 - Bot senses: repairJob weld scan now runs only for brains with the builder trait — every other bot walked every deployable in the room each think for an answer it never reads
 2026-10-01 - Build ships half the weight: public/ doubles as the .old graveyard so ~33MB of dead GLBs/textures/mespeak got copied into dist and served — a build-only vite plugin now strips *.old files+dirs from the output (sources untouched, dev server unchanged); dist 80MB -> 38MB
 2026-10-01 - Drain poison-pill fix: a message that throws inside drainCommands would stay queued and re-throw every tick until the room quarantined — the failed tick now also drops the unprocessed backlog so one bad message costs one tick error, not the room
 2026-10-01 - Command queue backstop: inbound message queue capped at 2000 per room — a flooding client now burns into msgsRejected instead of growing memory and stalling the tick's cmd phase for everyone

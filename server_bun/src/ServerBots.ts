@@ -588,7 +588,7 @@ export class ServerBots {
         const parties = this.sense.partiesOf(p);
         const goal = this.sense.flagGoal(p, brain.dutyLevel, parties);
         prof[0]! += performance.now() - tm; tm = performance.now();
-        const ctx = this.sense.build(id, p, goal, now, brain.skill, parties);
+        const ctx = this.sense.build(id, p, goal, now, brain.skill, parties, brain.builder);
         prof[1]! += performance.now() - tm; tm = performance.now();
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
