@@ -160,9 +160,12 @@ with real `FieldSurface` tests (prior stubs bypassed the bound).
 >    rule (no commit of files I didn't touch). Live-but-uncommitted
 >    hunks (`killFeed.forget`, the Room.ts VGS hookup) are outside every
 >    commit and every green-suite claim.
-> 3. **No measurement** — leaks were found by static pattern, not heap
->    profiling. A growth bug with an unusual shape (array strings, DOM
->    nodes, GPU-side buffers) wouldn't show up.
+> 3. **Limited measurement** — a 10-min 8v8 heap probe (RSS + every
+>    reachable Map/Set size per sim-minute) showed plateau, not climb:
+>    rssMB 90→~270 settles, all per-id series fill to roster size then
+>    flat (`duelStart` fluctuates with the pair window, `groundMemo`
+>    stays under its 32k cap). Still not continuous profiling — a leak
+>    with an unusual shape could hide elsewhere.
 > 4. **Coverage gaps** — the suite proves what's asserted; untested
 >    paths are unverified, not clean.
 > 5. **Known leftovers** — sizeWatch `Room.ts` pin (JP's WIP), lobber
