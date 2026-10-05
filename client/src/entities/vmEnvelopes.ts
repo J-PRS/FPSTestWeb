@@ -80,7 +80,15 @@ export class VmEnvelopes {
 
   // Lower → swap model at the bottom → raise. Cosmetic only; firing isn't gated.
   switchWeapon(index: number): void {
-    if (index === this.h.activeWeapon && this.switchT < 0) return;
+    if (index === this.h.activeWeapon && this.switchT < 0) {
+      // Same-weapon calls skip the dip — but the guard can't assume the
+      // group is already shown: spawn arms activeWeapon=0 while every
+      // model still sits built-hidden, so arming BoltLauncher (wt 0)
+      // would leave it invisible until the first real swap.
+      const cur = this.h.weapons.get(index);
+      if (cur && !cur.visible) cur.visible = true;
+      return;
+    }
     this.pendingWeapon = index;
     if (this.switchT < 0) this.switchT = 0; // already lowering: just retarget
   }
