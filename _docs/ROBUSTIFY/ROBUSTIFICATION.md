@@ -401,6 +401,12 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **`creatureBaneling` pinned** (2026-10-05): `creatureBaneling.test.ts`
+  (13 tests) — blast-required registry rows, uber ×4/×2/×1.7 scaling,
+  TOPSPEED cap + wide-aggro homing, 20% out-of-aggro throttle, stun
+  coast, 3D-fuse `detonate` + dead flag with no `pendingBite`, LIFE_S
+  self-detonate, same-step fuse crossing, distant-no-pop, terrain ride,
+  clipMotion, counterplay lethal damage, 300-step twin replay.
 - **Cross-engine float determinism** (2026-10-05): 162
   `Math.sin/cos/atan2/hypot/exp/pow` calls across `shared/` audited.
   ECMAScript leaves transcendental precision implementation-defined, so
