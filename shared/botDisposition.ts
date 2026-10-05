@@ -64,6 +64,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // plus slack for a member about to land on it — wider releases
         // the capper while the "wave" is still a minute out (katabatic:
         // wave hovers ~170m and the capper's 25s expired alone).
+        // A 2-member requirement regressed hard (4g/1c vs 6g/2c on the
+        // same seed): the flood trickles in one at a time, so waiting
+        // for mass just burns the patience window — a single arrival
+        // is the best convergence signal this wave produces.
         const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 130);
         const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
         // 35s patience: the call posts at route start (~75s ETA), and
