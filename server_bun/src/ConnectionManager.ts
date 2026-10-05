@@ -196,4 +196,16 @@ export class ConnectionManager {
   getConnectionCount(): number {
     return this.connections.size;
   }
+
+  /** Graceful teardown: a real close frame (not a severed socket) tells
+   *  the client WHY the session ended — 1001 'going away' reads as
+   *  'server restarting' on the reconnect banner instead of a mystery
+   *  drop that looks like their own connection died. */
+  closeAll(code: number, reason: string): void {
+    this.connections.forEach((ws) => {
+      if (ws.readyState === 1) {
+        try { ws.close(code, reason); } catch { /* already closing */ }
+      }
+    });
+  }
 }

@@ -163,14 +163,21 @@ process.on('uncaughtException', (e) => {
   logger.error('Uncaught exception (process survived)', { err: e.stack ?? e.message });
 });
 
+// Let the close frames flush before exiting: an immediate process.exit
+// kills the sockets mid-handshake and players see a drop, not 1001.
+// The loop drains on its own once the server socket is down; the
+// fallback timer force-exits if a straggler socket lingers.
+function shutdown(): void {
+  gameServer.stop();
+  setTimeout(() => process.exit(0), 500).unref();
+}
+
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down...');
-  gameServer.stop();
-  process.exit(0);
+  shutdown();
 });
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down...');
-  gameServer.stop();
-  process.exit(0);
+  shutdown();
 });

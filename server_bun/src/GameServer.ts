@@ -330,6 +330,11 @@ export class GameServer {
 
   stop(): void {
     this.tickLoop.stop();
+    // Deliver real close frames first — server.stop(true) severs sockets
+    // mid-flight, so without this every player sees a mystery drop on
+    // both the banner and their logs rather than 'server restarting'.
+    for (const room of this.rooms.values()) room.connections.closeAll(1001, 'server restarting');
+    for (const room of this.specRooms.values()) room.connections.closeAll(1001, 'server restarting');
     if (this.bunServer) {
       this.bunServer.stop(true);
       logger.info('Server stopped');
