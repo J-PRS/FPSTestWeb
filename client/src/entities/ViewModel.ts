@@ -485,9 +485,19 @@ export class ViewModel {
     const p = this.bowParts;
     if (!p) return;
     const flex = this.kickAmount;
-    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 0.42) * (1 - flex * 0.25);
-    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -0.42) * (1 - flex * 0.25);
-    if (p.string) p.string.position.z = -flex * 0.10;
+    if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.15) * (1 - flex * 0.25);
+    if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.15) * (1 - flex * 0.25);
+    // String snap is its own fast envelope, decoupled from the gun-kick
+    // spring: a real release is near-instant, so the string jumps toward
+    // the cams in ~60ms then relaxes back on a slow spring — not the
+    // 200ms drift kickAmount gives it.
+    if (this.bowT >= 0) {
+      const snap = Math.min(this.bowT / 0.06, 1);
+      const relax = Math.max(0, 1 - (this.bowT - 0.06) / 0.5);
+      if (p.string) p.string.position.z = -0.12 * snap * relax;
+    } else if (p.string) {
+      p.string.position.z = -flex * 0.10;
+    }
     if (this.bowT < 0 || !p.bolt) return;
     this.bowT += dt;
     if (this.bowT < ViewModel.BOW_HIDE) return;
