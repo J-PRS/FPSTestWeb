@@ -73,11 +73,11 @@ for (const side of [-1, 1]) {
   arm.rotation.y = -side * ARM_SWEEP;
   arm.position.set(side * 0.07, 0, ARM_Z);
   // Limb — leaf-spring plates, not bars: thin vertically, wide
-  // laterally, bowed outward mid-span for the recurve read, tip knob
-  // carries the cam wheel. T:A's silhouette is the flat blade.
+  // laterally, bowed TOWARD the bolt path mid-span (recurve bows the
+  // belly forward, not the spine). Tip knob carries the cam wheel.
   const limb = mkLoft([
     { z: 0.0, ring: profOct(0.075, 0.018, 0.008) },
-    { z: -0.20, ring: profOct(0.060, 0.014, 0.006), dx: side * 0.03 },
+    { z: -0.20, ring: profOct(0.060, 0.014, 0.006), dx: -side * 0.03 },
     { z: -0.38, ring: profOct(0.048, 0.013, 0.006) },
     { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);

@@ -518,7 +518,10 @@ export class ViewModel {
       // vertex jumps to the neutral cam line then eases back to the latch.
       const snap = Math.min(this.bowT / 0.08, 1);
       const draw = Math.min(Math.max((this.bowT - 0.08) / ViewModel.BOW_DRAW, 0), 1);
-      const f = 1 - 0.3 * snap * (1 - draw);
+      // T is the travel limit: release moves drawn (θ≈100°) → neutral
+      // (θ≈90°); a larger factor swings tips PAST perpendicular and the
+      // cam/string line goes wrong. f_min ≈ 1.57/1.75.
+      const f = 1 - 0.10 * snap * (1 - draw);
       if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * f;
       if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * f;
       latchOff = (this.bowParts?.geom ? this.bowParts.geom.firedZ - this.bowParts.geom.latchZ : -0.27) * snap * (1 - draw);
