@@ -1,3 +1,4 @@
+2026-10-05 - audit: floating promises verified — every fire-and-forget async site ends in a catch or relies on the error-level unhandledRejection backstop (server.ts:155); a rejected promise is loud, never silent
 2026-10-05 - test: pin creatureBaneling — 13 tests covering detonate edge (3D fuse + LIFE_S clock), homing accel/terminal bleed, uber scaling, dead-flag semantics (no pendingBite), counterplay damage, 300-step replay
 2026-10-05 - audit: cross-engine float determinism — 162 transcendental calls in shared/ audited; edge re-anchoring + 1m/4hp hash quanta already tolerate JSC-vs-V8 ulp drift; §4.7 logs the replica-hash coverage gap as optional
 2026-10-05 - test: pin shared/angles — wrap convention is a wire contract (remote interp + demo playback); shortest-arc bounds, pole discontinuity, short-arc lerp across the +-pi seam

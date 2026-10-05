@@ -401,6 +401,14 @@ telemetry lines it greps.
   warns, parked/stale-leg suppressed), `ballClock.test.ts`
   (`makeBallClock` EMA rate/no-rewind/age clamps,
   `pruneNetBalls` ghost eviction).
+- **Floating promises** (2026-10-05): every unawaited `.then(`/`void `
+  async call in `server_bun/src` audited — the fire-and-forget sites
+  (DemoStorage index-reconcile chain, RtcServer `loadNd`/`answerOffer`,
+  BallSim terrain attach, GameServer heightmap) all terminate in a
+  `catch` or rely on the `unhandledRejection` handler at
+  `server.ts:155`, which logs at ERROR level by design ("log rather
+  than swallowing silently"). A rejected promise is loud, never
+  silent — room-tick paths have their own finer quarantine.
 - **`creatureBaneling` pinned** (2026-10-05): `creatureBaneling.test.ts`
   (13 tests) — blast-required registry rows, uber ×4/×2/×1.7 scaling,
   TOPSPEED cap + wide-aggro homing, 20% out-of-aggro throttle, stun
