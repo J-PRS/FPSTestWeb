@@ -213,6 +213,7 @@ export class NetworkManager {
             this.connected = true;
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
+            this.lastDownReason = null;
             // Queued reliable commands ride the live lane after the join
             // (bounded 16 — a dead lane never earns an unbounded backlog).
             for (const q of this.pendingCmds) this.send(q);
@@ -223,6 +224,9 @@ export class NetworkManager {
             // 1008 = server rejected our session — drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
             if (code === 1008) this.resetIdentity(reason);
+            // A reasoned close ('server restarting', 'kicked') reads
+            // differently than a dead pipe — the banner names it.
+            this.lastDownReason = code !== undefined && code >= 1000 && reason ? reason : null;
             logger.info('Disconnected', { code, reason });
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
@@ -296,6 +300,12 @@ export class NetworkManager {
    *  running underneath). False for offline mode and clean shutdowns. */
   connectionDown(): boolean {
     return this.onlineExpected && !this.isConnected();
+  }
+
+  /** Close-frame reason from the last drop, or null for a silent drop. */
+  private lastDownReason: string | null = null;
+  connectionDownReason(): string | null {
+    return this.connectionDown() ? this.lastDownReason : null;
   }
 
   /** Sends that never left the pipe — connected() false or the inner

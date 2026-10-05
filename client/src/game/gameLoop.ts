@@ -404,7 +404,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   const terrain = deps.lazyTerrain();
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-  hud.setConnDown(networkManager.connectionDown());
+  hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());
   const playerSheep = deps.lazyPlayerSheep?.();
   if (playerSheep) {
     playerSheep.tick(dt, player, terrain, deps.world.remotePlayers, deps.world.localTeam);

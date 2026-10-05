@@ -131,9 +131,9 @@ export class HUD {
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
    *  fade, capped at 6 rows; textContent only (names are server strings). */
-  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number,
-    teams?: { shooter?: string; target?: string }, air?: number): void {
-    ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, weapon, teams, air);
+  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean,
+    meta?: { shooter?: string; target?: string; weapon?: number; air?: number }): void {
+    ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, meta);
   }
 
   /** Run clock is only meaningful while the wave director ticks (offline
@@ -298,12 +298,15 @@ export class HUD {
     this.connFlashTxt = text;
     this.connFlashCls = 'warn';
   }
-  setConnDown(down: boolean): void {
+  setConnDown(down: boolean, reason?: string | null): void {
     const now = performance.now();
     if (down) {
       if (!this.connDownAt) this.connDownAt = now;
       const s = (now - this.connDownAt) / 1000;
-      this.paintConn(`CONNECTION LOST — reconnecting ${s.toFixed(1)}s`, 'down');
+      // A reasoned close ('server restarting') names itself; a silent
+      // drop keeps the generic label.
+      const label = reason ? reason.toUpperCase() : 'CONNECTION LOST';
+      this.paintConn(`${label} — reconnecting ${s.toFixed(1)}s`, 'down');
       return;
     }
     if (this.connDownAt) {
@@ -331,6 +334,10 @@ export class HUD {
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds, players);
   }
+
+  /** A frame was presented — feeds the FPS readout. Called only on
+   *  render frames; the loop ticks faster than renders under fps-cap. */
+  markFrame(elapsed: number): void { this.stats.rendered(elapsed); }
 
   update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
     this.stats.tick(dt, player, ping, packetLoss, jitter);
