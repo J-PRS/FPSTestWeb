@@ -93,7 +93,7 @@ for (const side of [-1, 1]) {
   arm.add(tubePath([
     [0, 0.02, 0, 0.008],
     [-side * 0.03, 0.02, -0.20, 0.008],
-    [0, 0.02, -0.44, 0.008],
+    [0, 0.02, -ARM_LEN - 0.02, 0.008],
   ], 0.008, darkMat, 4));
   // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
   // Flat (horizontal) wheels: the string wraps their edge in-plane.
@@ -107,6 +107,11 @@ for (const side of [-1, 1]) {
   const camHub = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.045, 8), brassMat);
   camHub.position.set(0, 0, -ARM_LEN - 0.02);
   arm.add(camHub);
+  // Cable anchor bolt on the cam's outer face — the guard rail must
+  // read as fastened to the wheel it tensions, not a floating line.
+  const anchorNut = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.025, 6), brassMat);
+  anchorNut.position.set(0, 0.028, -ARM_LEN - 0.02);
+  arm.add(anchorNut);
   bow.add(arm);
 }
 // String — DYNAMIC legs, not a baked tubePath: the arms rotate on fire
