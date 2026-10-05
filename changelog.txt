@@ -1,3 +1,4 @@
+2026-10-05 - ball predictAt tests: pinned probe bounds (false without sim, 0.05 grid + ballistic remainder, simNow clamp, simT+8 chase cap, live-sim isolation) — 5 new vitests; ball netcode lane now fully covered
 2026-10-05 - ball tickNet tests: pinned prediction-loop grid discipline (whole 0.05 cells only, simNow gate, 0.5s stall-breaker, 0.5s bank cap, ballistic remainder, parked settle) — 6 new vitests
 2026-10-05 - ball wire-ordering tests: pinned isStaleSeg boundary (equal-stamp segments apply, strictly-older drop, unstamped exempt) and applySeg same-tick re-anchor + simT rewind — 7 new vitests
 2026-10-05 - rubberband watch gate tests: pinned the unreplayed-stamp suppression (simT < t-0.05 silences, replayed-through still warns) plus parked/stale-leg gates — 4 new vitests driving makeRubberbandWatch.check directly (exported for testability)
