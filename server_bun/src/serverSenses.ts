@@ -789,7 +789,10 @@ export class ServerBotSenses {
       // Named chasers get the same committed feet: their job is the
       // carrier intercept, and midfield contacts stole the run identically
       // (soak: defense dies to the midfield war, nobody reaches the thief).
-      wave: task?.kind === 'push' || task?.kind === 'escort' || task?.kind === 'chase',
+      // Returners too: a dropped flag in a kill pocket needs someone
+      // whose feet don't reroute to the nearest contact — same stolen-
+      // run failure, one task kind later.
+      wave: task?.kind === 'push' || task?.kind === 'escort' || task?.kind === 'chase' || task?.kind === 'return',
       // Push-only: the member mass-orbits ~110m out until the flood is
       // actually converging. Escorts share wave's committed feet but
       // must never hold off a moving carrier — that's just losing him.
