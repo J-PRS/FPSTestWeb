@@ -11,3 +11,13 @@
 let rand: (() => number) | null = null;
 export function botRng(r: () => number): void { rand = r; }
 export function botRand(): number { return (rand ?? Math.random)(); }
+
+/** Chat/taunt flavor gets its own stream — the taunt cooldown ring is
+ *  process-global, so when it gates a line the SPEAK rolls still fire on
+ *  whatever room happens to be stepping, and drawing them from the
+ *  behavior stream would let one room's chatter re-sequence every
+ *  downstream decision roll in another (cross-room nondeterminism, plus
+ *  lockstep desyncs in tests). */
+let trand: (() => number) | null = null;
+export function tauntRng(r: () => number): void { trand = r; }
+export function tauntRand(): number { return (trand ?? Math.random)(); }

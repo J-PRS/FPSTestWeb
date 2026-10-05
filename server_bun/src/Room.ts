@@ -32,7 +32,7 @@ import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClas
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
-import { botRand } from '../../shared/botRand.ts';
+import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
 import { RoomScore } from './roomScore.ts';
@@ -369,9 +369,9 @@ export class Room {
     hits.push(now);
     if (hits.length < 4) { this.chatPace.set(id, hits); return; }
     this.chatPace.delete(id); // burst spent — re-arm on the next run
-    if (botRand() >= 0.12) return;
+    if (tauntRand() >= 0.12) return;
     const bots = [...this.players.getAllPlayers().values()].filter((p) => p.id.startsWith('BOT-') && !p.isDead);
-    if (bots.length) this.messages.killFeed.say(bots[(botRand() * bots.length) | 0]!.id, 'quiet', id);
+    if (bots.length) this.messages.killFeed.say(bots[(tauntRand() * bots.length) | 0]!.id, 'quiet', id);
   }
 
   /** Server-authoritative melee species — the crawl* wire events are the

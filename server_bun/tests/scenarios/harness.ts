@@ -1,5 +1,5 @@
 import { Room } from '../../src/Room.ts';
-import { botRng } from '../../../shared/botRand.ts';
+import { botRng, tauntRng } from '../../../shared/botRand.ts';
 import { losMemoReset } from '../../../shared/botLos.ts';
 import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
@@ -29,6 +29,7 @@ export function lcg(seed = 42): () => number {
  *  while this room's step() runs (and during construction), so zombie
  *  timers draw ambient Math.random instead of this room's sequence. */
 const roomStreams = new WeakMap<Room, () => number>();
+const tauntStreams = new WeakMap<Room, () => number>();
 
 export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAuthority = false, field: Heightfield = flat): Room {
   // Squad heuristics (brains/hunts/goals/taunts) share one injectable
@@ -56,6 +57,10 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // balls pop on pinned bots — leaking damage into unrelated scenarios.
   const room = new Room('t', field, mode,
     resolveMapSpec({ balls: { base: 0, perPlayer: 0, max: 0 }, ...spec }), moveAuthority);
+  // Taunt draws ride a parallel stream — flavor must never consume the
+  // behavior sequence (a shared cooldown ring would otherwise let one
+  // room's chatter re-order another room's decision rolls).
+  tauntStreams.set(room, lcg(seed + 7));
   // Wildlife sims register in room.sims — the step helper below owns
   // their cadence deterministically.
   room.ballSim.stop();
@@ -66,6 +71,7 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // Construction draws done — close the window so a stray timer between
   // here and the first step() can't spend this room's dice.
   botRng(Math.random);
+  tauntRng(Math.random);
   return room;
 }
 
@@ -87,6 +93,8 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
 export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string, number>): void {
   const stream = roomStreams.get(room);
   if (stream) botRng(stream);
+  const tstream = tauntStreams.get(room);
+  if (tstream) tauntRng(tstream);
   try {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) {
@@ -102,6 +110,7 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
   }
   } finally {
     if (stream) botRng(Math.random);
+    if (tstream) tauntRng(Math.random);
   }
 }
 

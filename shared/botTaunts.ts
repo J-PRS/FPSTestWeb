@@ -2,7 +2,7 @@
 // wire so it lands in the same feed as player lines. Cooldown + a speak
 // chance keep it a flavor line, not a spam channel.
 
-import { botRand } from './botRand.ts';
+import { tauntRand } from './botRand.ts';
 import { sharedNow } from './env.ts';
 import { TREE, type VgsNode } from './vgsTree.ts';
 
@@ -405,9 +405,9 @@ const END_VGS: Record<EndOutcome, string[]> = {
 /** One match-start line — same once-per-match shape as endTaunt: high
  *  flat participation, no shared cooldown, stamps lastSpoke. */
 export function startTaunt(botId: string): TauntLine | null {
-  if (botRand() > 0.7) return null;
+  if (tauntRand() > 0.7) return null;
   lastSpoke.set(botId, tauntNow());
-  if (botRand() < 0.35) {
+  if (tauntRand() < 0.35) {
     const chord = pick(['VGH', 'VGH', 'VGW']);
     return { text: vgsText(chord), vgs: chord };
   }
@@ -420,10 +420,10 @@ export function startTaunt(botId: string): TauntLine | null {
  *  flat high roll of its own. Still stamps lastSpoke so a bot that got
  *  its line doesn't then double-speak through another path. */
 export function endTaunt(botId: string, outcome: EndOutcome): TauntLine | null {
-  if (botRand() > END_SPEAK_CHANCE) return null;
+  if (tauntRand() > END_SPEAK_CHANCE) return null;
   lastSpoke.set(botId, tauntNow());
   const chords = END_VGS[outcome];
-  if (botRand() < TAUNT_VGS_CHANCE) {
+  if (tauntRand() < TAUNT_VGS_CHANCE) {
     const chord = pick(chords);
     return { text: vgsText(chord), vgs: chord };
   }
@@ -615,7 +615,7 @@ const VGS_CHANCE = 0.4;
 export function chatter(kind: ChatterKind, botId: string, other?: string): { text: string; vgs?: string; team?: boolean } | null {
   return maybe(botId, () => {
     const vgs = VGS_FOR[kind];
-    if (vgs && botRand() < VGS_CHANCE) {
+    if (vgs && tauntRand() < VGS_CHANCE) {
       const chord = pick(vgs);
       return { text: vgsText(chord), vgs: chord, team: vgsTeam(chord) };
     }
@@ -657,7 +657,7 @@ let matchMuted = false;
 export function setMatchMuted(muted: boolean): void { matchMuted = muted; }
 
 const lastSpoke = new Map<string, number>();
-const pick = <T>(arr: readonly T[]): T => arr[(botRand() * arr.length) | 0]!;
+const pick = <T>(arr: readonly T[]): T => arr[(tauntRand() * arr.length) | 0]!;
 // Recently-spoken ring — the biggest tell of canned chatter is the same
 // line landing twice while it's still in short-term memory. One re-roll
 // keeps repeats legal but rare (a dice pick, not a queue).
@@ -676,7 +676,7 @@ export interface TauntLine { text: string; vgs?: string }
  *  {text, vgs} pair. Chord lines are canon text; the feed prints the
  *  [VGS] prefix itself. */
 function tauntPick(pool: string[], chords: string[], fill: (line: string) => string): TauntLine {
-  if (botRand() < TAUNT_VGS_CHANCE) {
+  if (tauntRand() < TAUNT_VGS_CHANCE) {
     const chord = pick(chords);
     return { text: vgsText(chord), vgs: chord };
   }
@@ -741,7 +741,7 @@ function maybe<T>(botId: string, line: () => T): T | null {
   if (matchMuted) return null;
   const now = tauntNow();
   const last = lastSpoke.get(botId) ?? 0;
-  if (now - last < COOLDOWN_MS || botRand() > SPEAK_CHANCE) return null;
+  if (now - last < COOLDOWN_MS || tauntRand() > SPEAK_CHANCE) return null;
   lastSpoke.set(botId, now);
   if (lastSpoke.size > 256) lastSpoke.clear();
   return line();
