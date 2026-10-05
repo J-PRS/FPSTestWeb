@@ -685,6 +685,10 @@ init().then(async () => {
       networkManager, demoManager, rendererSetup,
       chatSink: (await import('./game/chat.js')).chatSink,
     };
+    // .rec captures (gauntlet --record / pvptest record.ts) replay through
+    // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)
+    window.__playRec = async (src, speed) =>
+      (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
   };
   if (import.meta.env.DEV || urlParams.debug) await wireDebugTools();
   // In-game log mirror — subscribes to Logger once so every later line

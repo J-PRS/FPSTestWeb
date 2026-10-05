@@ -8,12 +8,17 @@
  * Usage:
  *   bun _tools/sweeps/creatureGauntlet.ts [--species crawler] [--runs 8]
  *     [--map raindance|--field] [--start 2] [--mult 1.4] [--lvl 60]
- *     [--maxlvl 12] [--seed 7] [--quiet 1]
+ *     [--maxlvl 12] [--seed 7] [--quiet 1] [--record out.rec]
+ *
+ * --record taps the LAST level's run into a .rec wire capture (spectator
+ * view): creatures, shots, kills and tick frames all land, so the file
+ * replays in-game as real gameplay via the dev __playRec hook.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
 import { mkRoom, step } from '../../server_bun/tests/scenarios/harness.ts';
+import { attachRec } from './recSink.ts';
 
 const arg = (k: string, d: string) => {
   const i = process.argv.indexOf(`--${k}`);
@@ -28,6 +33,7 @@ const LVL_S = Number(arg('lvl', 60));      // sim-seconds max per level
 const MAXLVL = Number(arg('maxlvl', 12));
 const SEED = Number(arg('seed', 7));
 const QUIET = arg('quiet', '') === '1';
+const REC = arg('record', '');            // .rec out path — last level only
 
 const MAP = arg('map', 'raindance');
 let f: ReturnType<typeof hmParseBin> | undefined;
@@ -64,7 +70,9 @@ function runLevel(seed: number, lvl: number, capsPerSpecies: number): LevelRow {
 
   const ticks = Math.round(LVL_S / 0.05);
   let t = 0;
-  for (; t < ticks && !bot.isDead; t++) step(room, 1, 0.05);
+  const rec = REC && lvl === MAXLVL ? attachRec(room, REC, () => t * 50) : null;
+  for (; t < ticks && !bot.isDead; t++) { step(room, 1, 0.05); rec?.tick(); }
+  rec?.close();
   return {
     caps: Math.round(capsPerSpecies) * species.length,
     alive: room.creatureSim.roster().length,

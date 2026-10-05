@@ -43,9 +43,14 @@ declare global {
      *  owning modules (vfx pools, ribbons, inst pools, swarms…). Sections
      *  are optional: a section absent means its module never loaded. */
     __trailDump?: () => Record<string, unknown>;
+    /** Render-pipeline census — registered by createRenderer; the Alt+Q
+     *  dump reads it for the pixel-mode/AA/pass-state section. */
+    __renderDump?: () => Record<string, unknown>;
     /** Standalone dump bundles (posedump/vmdump/sfxdump) — screenshot
      *  harnesses read these once ready. */
     __pm?: unknown;
+    /** .rec wire-capture replay through the live pipeline (dev only). */
+    __playRec?: (src: string | File, speed?: number) => Promise<() => void>;
     __clips?: string[];
     __ready?: boolean;
     __glb?: unknown;

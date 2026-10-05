@@ -1,3 +1,8 @@
+2026-10-01 - creature hunt .rec capture: creatureGauntlet --record flag taps
+2026-10-01 - the room wire stream via a fake spectator socket (recSink.ts),
+2026-10-01 - and the client gains __playRec(url|File, speed) dev hook that
+2026-10-01 - replays the capture through the live dispatch as gameplay
+2026-10-01 - (NetworkManager.replayWireMessage + client/dev/recPlayer.ts).
 2026-10-01 - net: tick records quantize positions f32x3 -> i16x3 (4cm over +-1310m, presentation-only - self never rides the record set) - 12B -> 6B, ~16% of the 38B body; frame type bumped to v2, decoder keeps the v1 f32 path so recorded .rec captures keep playing
 2026-10-01 - net: reconnectGraceMs 10s -> 60s - the reclaim window must outlast the full reconnect chain (close detect + tier reprobe + join), not just a fast F5; a late drop was joining fresh and losing the player
 2026-10-01 - snake: leap-through strike replaces the flat dash bite - windup telegraph kept, ballistic arc solved from distance (crawler formula), pass-through bite once mid-flight, lands and resumes circling on strike cooldown; client pose lifts the spine head-weighted over leap clearance so the body follows the airborne head

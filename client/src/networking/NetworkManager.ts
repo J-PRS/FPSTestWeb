@@ -397,6 +397,14 @@ export class NetworkManager {
     return this.recentHealthEvents;
   }
 
+  /** Wire-feed seam for recorded streams (.rec): pushes one message
+   *  through the exact live dispatch path — handlers can't tell the
+   *  difference between a capture and a socket. Dev replay only. */
+  replayWireMessage(data: ServerMessage | Uint8Array): void {
+    if (typeof data === 'object' && !(data instanceof Uint8Array)) this.handleMessage(data);
+    else this.handleBinaryMessage(data as Uint8Array);
+  }
+
   private handleMessage(data: ServerMessage): void {
     this.lastRxAt = Date.now();
     this.rxBytes += JSON.stringify(data).length; // rx approximation — JSON events are sparse
