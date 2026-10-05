@@ -226,6 +226,11 @@ export class ViewModel {
   private strA = new THREE.Vector3();
   private strB = new THREE.Vector3();
   private strD = new THREE.Vector3();
+  /** The kick+punch share of this frame's group transform — public so
+   *  gunlab's inspect anchor (parked outside vm.group) can ride it. */
+  readonly kickDeltaPos = new THREE.Vector3();
+  kickDeltaRotX = 0;
+  kickDeltaRotZ = 0;
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -406,6 +411,13 @@ export class ViewModel {
       REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y + punch * PUNCH_Y,
       REST_POS.z + fallZ + kickZ + dip * THROW_DIP_Z + punch * PUNCH_Z
     );
+    // Kick contribution isolated for inspect consumers: the recoil is
+    // written into vm.group's transform, but gunlab's inspect anchor
+    // parks the weapon OUTSIDE vm.group — copy the delta onto the anchor.
+    this.kickDeltaPos.set(this.kickX * this.kickAmount + punch * PUNCH_X,
+      kickY + punch * PUNCH_Y, kickZ + punch * PUNCH_Z);
+    this.kickDeltaRotX = this.kickAmount * 0.7 * this.kickAmp + punch * PUNCH_ROT;
+    this.kickDeltaRotZ = punch * PUNCH_ROLL + this.kickRoll * this.kickAmount;
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
     // Muzzle rise is the readable half of a kick — pitch up hard
@@ -518,16 +530,16 @@ export class ViewModel {
       // vertex jumps to the neutral cam line then eases back to the latch.
       const snap = Math.min(this.bowT / 0.08, 1);
       const draw = Math.min(Math.max((this.bowT - 0.08) / ViewModel.BOW_DRAW, 0), 1);
-      // T is the travel limit: release moves drawn (θ≈100°) → neutral
+      // T is the travel limit: release moves drawn (θ≈109°) → neutral
       // (θ≈90°); a larger factor swings tips PAST perpendicular and the
-      // cam/string line goes wrong. f_min ≈ 1.57/1.75.
-      const f = 1 - 0.10 * snap * (1 - draw);
-      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * f;
-      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * f;
+      // cam/string line goes wrong. f_min ≈ 1.57/1.9.
+      const f = 1 - 0.17 * snap * (1 - draw);
+      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * f;
+      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * f;
       latchOff = (this.bowParts?.geom ? this.bowParts.geom.firedZ - this.bowParts.geom.latchZ : -0.27) * snap * (1 - draw);
     } else {
-      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.75) * (1 - flex * 0.25);
-      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.75) * (1 - flex * 0.25);
+      if (p.armL) p.armL.rotation.y = (p.armL.userData.baseRot ?? 1.9) * (1 - flex * 0.17);
+      if (p.armR) p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * (1 - flex * 0.17);
     }
     if (p.string) p.string.position.z = latchOff;
     // Dynamic string legs: cam breech-side rim → latch vertex, re-solved

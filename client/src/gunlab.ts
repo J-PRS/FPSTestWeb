@@ -36,7 +36,15 @@ function saveState(): void {
   saveTimer = setTimeout(flushSave, 500);
 }
 function flushSave(): void {
-  localStorage.setItem('gunlab', JSON.stringify(state));
+  // state IS window.__gunlab — probes bolt `scene` and other live objects
+  // onto it, and swarm meshes carry deliberately-circular dbg tags, so
+  // persist an explicit whitelist rather than stringifying the handle.
+  const persist: LabState = {
+    wt: state.wt, inspect: state.inspect, yaw: state.yaw, pitch: state.pitch,
+    cam: state.cam, tgt: state.tgt, fov: state.fov, z: state.z,
+    cat: state.cat, pick: state.pick,
+  };
+  localStorage.setItem('gunlab', JSON.stringify(persist));
 }
 addEventListener('pagehide', flushSave); // a pending debounce dies with the page
 
@@ -323,6 +331,7 @@ function setInspect(on: boolean): void {
   active.userData.home = { p: active.position.clone(), q: active.quaternion.clone() };
   active.position.sub(c);
   active.rotation.set(0, 0, 0);
+  active.userData.inspectPos = active.position.clone(); // kick delta rides THIS, not home
   const dist = Math.max(size * 0.75, 0.25);
   orbit.target.copy(focus.set(0, 0, 0));
   camera.position.copy(focus).addScaledVector(inspectDir, dist);
@@ -933,10 +942,18 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
+  // vm.update always ticks: inspect needs it too — kickAmount, the bow
+  // draw envelope, barrel spins all live on the weapon group's children.
+  vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);
   if (state.inspect && inspectAnchor) {
     orbit.update(); // damping settles between frames — must tick
-  } else {
-    vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);
+    // The anchor is parked in the scene outside vm.group, so the kick
+    // delta never reaches it — apply the exposed kick+punch offset.
+    const ip = inspectAnchor.userData.inspectPos as THREE.Vector3 | undefined;
+    if (ip) {
+      inspectAnchor.position.copy(ip).add(vm.kickDeltaPos);
+      inspectAnchor.rotation.set(vm.kickDeltaRotX, 0, vm.kickDeltaRotZ);
+    }
   }
   previewLive.tick?.(dt); // creature previews tick real species sim (aim/track)
   // Creature anchor: the live body crawls (it aims at the camera), so the

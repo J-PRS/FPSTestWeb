@@ -36,7 +36,7 @@ bow.add(mkLoft([
 ], bodyMat));
 for (const side of [-1, 1]) {
   const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), darkMat);
-  cheek.position.set(side * 0.05, 0.07, -0.16);
+  cheek.position.set(side * 0.05, 0.07, -0.24);
   bow.add(cheek);
 }
 // Scope block on the rail tail — T:A's stubby electronic sight
@@ -61,7 +61,7 @@ bow.add(hub);
 // them. A crossbow reads T, not Y: ~100° cant puts the limb tips level
 // with the breech (slightly back-swept like the T:A prod). Cam wheel
 // at the tip carries the string.
-const ARM_SWEEP = 1.75, ARM_LEN = 0.45;
+const ARM_SWEEP = 1.9, ARM_LEN = 0.45;
 for (const side of [-1, 1]) {
   const arm = new THREE.Group();
   arm.name = side < 0 ? 'armL' : 'armR';
@@ -82,9 +82,10 @@ for (const side of [-1, 1]) {
     { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);
   arm.add(limb);
-  // Tension cable running the full limb, hub → cam — machine bow, not wood
+  // Tension cable riding the limb's OUTER face, hub → cam — a guard
+  // rail in front of the plate, not a line buried inside it.
   const cable = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.44), darkMat);
-  cable.position.set(side * -0.028, 0, -0.24);
+  cable.position.set(0, 0.02, -0.24);
   arm.add(cable);
   // Cam wheel at the tip — the compound-bow read, oversized like T:A's.
   // Flat (horizontal) wheels: the string wraps their edge in-plane.
