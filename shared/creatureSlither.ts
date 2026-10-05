@@ -18,8 +18,10 @@ export const SLITHER_SIM = {
   STRIKE_D2: 5.5 * 5.5,
   STRIKE_CD: 2.2,
   WINDUP_S: 0.45,
-  LUNGE_T: 0.4,
+  LUNGE_T: 1.2,      // safety cap — landing ends the leap long before this
   LUNGE_SPEED: 14.0,
+  GRAVITY: -28.0,    // = creatureCore/ballSim gravity for the leap arc
+  OVERSHOOT: 3.5,    // aim point past the target — the leap goes THROUGH
   BITE_D2: 2.4 * 2.4,
   WEAVE_HZ: 7,       // animT multiplier for the S-weave
   WEAVE_AMP: 0.5,    // radians of heading wobble
@@ -41,6 +43,7 @@ export interface SimSlither extends Omit<SimCrawler, 'state' | 'sp' | 'family'> 
   sp: SlitherTunables;
   animT: number;      // weave phase — sim-owned so the S is deterministic
   strikeCd: number;
+  struck: boolean;    // the leap already spent its one pass-through bite
 }
 
 export function isSlitherSpecies(species: string): boolean {
@@ -66,6 +69,7 @@ export function makeSimSlither(
     uber, dead: false, rng,
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
     animT: (rng % 1000) / 100, strikeCd: ((rng >>> 8) % 1000) / 1000 * sp.STRIKE_CD,
+    struck: false,
   };
 }
 
@@ -84,17 +88,14 @@ export function stepSlither(
   const dx = target ? target.x - c.x : 0;
   const dz = target ? target.z - c.z : 0;
   const dy = target ? target.y - c.y : 0;
-  const geom = { dx, dz, distSq: dx * dx + dz * dz, hitSq: dx * dx + dz * dz + dy * dy };
+  const geom = { dx, dz, dy, ty: target ? target.y : c.y, distSq: dx * dx + dz * dz, hitSq: dx * dx + dz * dz + dy * dy };
 
   // Per-state steppers return the edge to emit, or null to fall through
   // to integration — the event kinds are the wire.
   let ev: CrawlerEvent | null = null;
   switch (c.state) {
     case 'windup': ev = stepCoil(c, dt, geom); break;
-    case 'lunge':
-      c.hopTimer -= dt;
-      if (c.hopTimer <= 0) c.state = 'slither';
-      break;
+    case 'lunge': return stepLeap(c, dt, field, target, authoritative, cols);
     default: ev = stepWeave(c, dt, target, geom); break;
   }
   if (ev !== null) return ev;
@@ -105,13 +106,6 @@ export function stepSlither(
   clipMotion(c, spx, c.y, spz, cols);
   c.y = hmHeight(field, c.x, c.z) + 0.5; // belly rides the terrain
 
-  if (c.state === 'lunge' && target && geom.hitSq < c.sp.BITE_D2) {
-    c.state = 'slither';
-    c.hopTimer = 0;
-    c.strikeCd = c.sp.STRIKE_CD;
-    if (authoritative) c.pendingBite = true;
-    return 'bite';
-  }
   if (c.vx * c.vx + c.vz * c.vz > 0.1) {
     const want = Math.atan2(c.vx, c.vz);
     c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
@@ -119,20 +113,67 @@ export function stepSlither(
   return null;
 }
 
-type SlitherGeom = { dx: number; dz: number; distSq: number; hitSq: number };
+type SlitherGeom = { dx: number; dz: number; dy: number; ty: number; distSq: number; hitSq: number };
 
 /** Coil — stationary telegraph; contact during the coil doesn't bite,
- *  the committed lunge does. */
+ *  the committed leap does. */
 function stepCoil(c: SimSlither, dt: number, g: SlitherGeom): CrawlerEvent | null {
   c.vx = 0; c.vz = 0;
   c.windupTimer -= dt;
   if (c.windupTimer <= 0 && c.stunTimer <= 0) {
     c.state = 'lunge';
-    c.hopTimer = c.sp.LUNGE_T; // reuse hopTimer as the lunge clock
+    c.struck = false;
+    // The leap is ballistic THROUGH the target, not a dash to it: the
+    // aim point rides an OVERSHOOT past the prey, and vy is solved like
+    // the crawler pounce so the arc arrives at the target's own height —
+    // it passes through legs-to-chest and keeps flying.
     const d = Math.sqrt(g.distSq) || 0.001;
-    c.vx = (g.dx / d) * c.sp.LUNGE_SPEED;
-    c.vz = (g.dz / d) * c.sp.LUNGE_SPEED;
+    const ux = g.dx / d, uz = g.dz / d;
+    const t = Math.max(0.2, (d + c.sp.OVERSHOOT) / c.sp.LUNGE_SPEED);
+    c.hopTimer = t + 0.4; // safety clock just past the planned touchdown
+    c.vx = ux * c.sp.LUNGE_SPEED;
+    c.vz = uz * c.sp.LUNGE_SPEED;
+    c.vy = (g.ty - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
     return 'pounce';
+  }
+  return null;
+}
+
+/** Leap leg — airborne arc. One bite on the pass-through; the flight
+ *  keeps going (that's the point) and touchdown ends the strike. */
+function stepLeap(
+  c: SimSlither, dt: number, field: Heightfield,
+  target: SimVec | null, authoritative: boolean,
+  cols?: readonly StructureCollider[],
+): CrawlerEvent | null {
+  c.hopTimer -= dt;
+  const px = c.x, py = c.y, pz = c.z;
+  c.vy += c.sp.GRAVITY * dt;
+  c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+  clipMotion(c, px, py, pz, cols);
+
+  // Pass-through contact — fires once per leap, mid-flight, and the
+  // snake keeps moving. A body already past still counts on the frame.
+  if (target && !c.struck) {
+    const bdx = target.x - c.x, bdz = target.z - c.z, bdy = target.y - c.y;
+    if (bdx * bdx + bdz * bdz + bdy * bdy < c.sp.BITE_D2) {
+      c.struck = true;
+      if (authoritative) c.pendingBite = true;
+      return 'bite';
+    }
+  }
+
+  const gy = hmHeight(field, c.x, c.z) + 0.5;
+  if (c.y <= gy || c.hopTimer <= 0) {
+    c.y = Math.min(c.y, gy); c.vx = 0; c.vy = 0; c.vz = 0;
+    c.state = 'slither';
+    c.strikeCd = c.sp.STRIKE_CD;
+    return null;
+  }
+
+  if (c.vx * c.vx + c.vz * c.vz > 0.1) {
+    const want = Math.atan2(c.vx, c.vz);
+    c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
   }
   return null;
 }

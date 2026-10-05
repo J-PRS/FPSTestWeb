@@ -4,7 +4,8 @@ import { nextTargetId } from './targetIds.js';
 import {
   SNAKE_RADIUS, SNAKE_HEALTH, SNAKE_SPEED,
   SNAKE_AGGRO_DIST, SNAKE_STRIKE_DIST, SNAKE_STRIKE_CD,
-  SNAKE_WINDUP, SNAKE_LUNGE_TIME, SNAKE_LUNGE_SPEED, SNAKE_BITE_DIST,
+  SNAKE_WINDUP, SNAKE_LUNGE_SPEED, SNAKE_BITE_DIST,
+  SNAKE_LEAP_GRAV, SNAKE_LEAP_OVERSHOOT,
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
@@ -12,14 +13,14 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { writeInstances } from './snakePose.js';
+import { writeInstances, pushTrail } from './snakePose.js';
 import { type SimSlither, makeSimSlither, stepSlither } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 
 // Part indices into the snake swarm — order must match snakeParts().
-const SEGS_PER = 8;
+const SEGS_PER = 22; // continuous tube — lobes must overlap, not bead
 const EYES_PER = 2;
 
 // One shared lobe — instanced SEGS_PER× per snake. Head mass and tail
@@ -27,8 +28,8 @@ const EYES_PER = 2;
 let _segGeo: THREE.IcosahedronGeometry | null = null;
 function segGeo(): THREE.BufferGeometry {
   if (!_segGeo) {
-    _segGeo = new THREE.IcosahedronGeometry(0.6, 0);
-    _segGeo.scale(0.85, 0.7, 1.0); // slightly flattened, longer than tall
+    _segGeo = new THREE.IcosahedronGeometry(0.6, 1);
+    _segGeo.scale(0.85, 0.7, 1.0); // slightly flattened belly, longer than tall
   }
   return _segGeo;
 }
@@ -40,7 +41,7 @@ let _eyeMat: THREE.MeshBasicMaterial | null = null;
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function snakeParts(): SwarmPart[] {
   if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, flatShading: true,
+    color: 0xffffff, // smooth — scales read in color bands, not facets
   });
   if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
     map: getGlowTexture(), color: 0x222206, transparent: true, blending: THREE.AdditiveBlending,
@@ -72,6 +73,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
   color = new THREE.Color(0x6d7a3a); // dusty olive — desert viper
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
+  readonly ichor = 0xd8a04a; // amber — desert viper blood
   scale: number;
 
   swarmSlot = -1;
@@ -83,6 +85,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
   flash = 0;
   private strikeCd = 0;
   private stunTimer = 0;
+  private struck = false; // the leap already spent its one pass-through bite
 
   // Strike state machine: 0 = cruising, >0 windup timer, lunging bool
   windup = 0;
@@ -122,7 +125,9 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.windup = s.state === 'windup' ? 1 : 0;
     this.lunge = s.state === 'lunge' ? 1 : 0;
     this.animT += dt; // wave phase — free-running like the sim's
-    this.groundY = this.pos.y - this.radius;
+    // True ground under the anchor — during a leap pos.y is airborne and
+    // the pose needs real terrain to measure the clearance.
+    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.flash > 0) this.flash -= dt;
     updateNetSim(this, dt, terrain, stepSlither);
   }
@@ -135,7 +140,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;
     this.radius = uber ? SNAKE_RADIUS * 2.4 : SNAKE_RADIUS;
-    this.scale = uber ? 3.0 : 0.7;
+    this.scale = uber ? 3.0 : 1.0;
     if (uber) this.color.set(0x8a6a2a); // bronze king serpent
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
@@ -159,17 +164,13 @@ export class Snake implements Targetable, SwarmSlotOwner {
     const hitSq = distSq + dy * dy; // true 3D — a viper can't lunge UP at a flyer
 
     if (this.emergeT > 0) { this.tickEmerge(dt, terrain); return; }
-    this.steer(dt, dx, dz, distSq, hitSq);
+    this.steer(dt, dx, dz, dy, distSq, hitSq);
 
-    this.pos.addScaledVector(this.vel, dt);
-    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-    this.pos.y = this.groundY + this.radius;
-
-    // Bite connects only during the lunge, only on real 3D contact.
-    const biteD = SNAKE_BITE_DIST * MELEE_FAVOR;
-    if (this.lunge > 0 && hitSq < biteD * biteD) {
-      this.lunge = 0; // one bite per lunge — it's a strike, not a grinder
-      this.onStrike?.(this);
+    if (this.lunge > 0) this.tickLeap(dt, terrain, playerPos);
+    else {
+      this.pos.addScaledVector(this.vel, dt);
+      this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+      this.pos.y = this.groundY + this.radius;
     }
 
     if (this.vel.lengthSq() > 0.1) {
@@ -183,6 +184,28 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.writeInstances(terrain);
   }
 
+  /** Leap leg — ballistic arc; no terrain pin until touchdown. The one
+   *  pass-through bite fires mid-flight and the snake keeps going. */
+  private tickLeap(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+    this.vel.y += SNAKE_LEAP_GRAV * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+
+    const biteD = SNAKE_BITE_DIST * MELEE_FAVOR;
+    const bdx = playerPos.x - this.pos.x, bdz = playerPos.z - this.pos.z, bdy = playerPos.y - this.pos.y;
+    if (!this.struck && bdx * bdx + bdz * bdz + bdy * bdy < biteD * biteD) {
+      this.struck = true;
+      this.onStrike?.(this);
+    }
+
+    if (this.pos.y <= this.groundY + this.radius || this.lunge <= 0) {
+      this.pos.y = this.groundY + this.radius;
+      this.vel.set(0, 0, 0);
+      this.lunge = 0;
+      this.strikeCd = SNAKE_STRIKE_CD;
+    }
+  }
+
   private tickEmerge(dt: number, terrain: Terrain): void {
     this.emergeT -= dt;
     const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
@@ -194,17 +217,22 @@ export class Snake implements Targetable, SwarmSlotOwner {
   // Locomotion states: coil telegraph → committed lunge → serpentine
   // approach → idle decay. The committed lunge is the whole design: once
   // it fires, dodge means MOVE, not sidestep-a-curve.
-  private steer(dt: number, dx: number, dz: number, distSq: number, hitSq: number): void {
+  private steer(dt: number, dx: number, dz: number, dy: number, distSq: number, hitSq: number): void {
     if (this.windup > 0) {
       // Coil: nearly stationary, rearing — the telegraph. Cancel nothing;
       // if you run INTO a coiled snake you deserve the bite.
       this.windup -= dt;
       this.vel.set(0, 0, 0);
       if (this.windup <= 0 && this.stunTimer <= 0) {
+        // Leap THROUGH the target — aim point overshoots, vy solved so
+        // the arc passes at the prey's own height (mirrors stepCoil).
         const d = Math.sqrt(distSq) || 0.001;
-        this.vel.set((dx / d) * SNAKE_LUNGE_SPEED, 0, (dz / d) * SNAKE_LUNGE_SPEED);
-        this.lunge = SNAKE_LUNGE_TIME;
-        this.strikeCd = SNAKE_STRIKE_CD;
+        const t = Math.max(0.2, (d + SNAKE_LEAP_OVERSHOOT) / SNAKE_LUNGE_SPEED);
+        this.vel.set((dx / d) * SNAKE_LUNGE_SPEED,
+          (dy + 0.5 * Math.abs(SNAKE_LEAP_GRAV) * t * t) / t,
+          (dz / d) * SNAKE_LUNGE_SPEED);
+        this.lunge = t + 0.4;
+        this.struck = false;
       }
       return;
     }
@@ -225,7 +253,14 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   groundY = 0; // terrain height at center — segment heights are deltas
 
-  writeInstances(terrain: Terrain): void { writeInstances(this, terrain); }
+  // Head breadcrumbs — flat [x,z,...] newest-first. The spine is laid
+  // along this path, so the body follows where the head actually went.
+  trail: number[] = [];
+
+  writeInstances(terrain: Terrain): void {
+    pushTrail(this);
+    writeInstances(this, terrain);
+  }
 
   takeDamage(damage: number): boolean {
     if (this.netDriven) return claimDamageMelee(this, damage, Snake.hitClaim);

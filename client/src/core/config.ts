@@ -197,8 +197,10 @@ export const SNAKE_AGGRO_DIST = 70.0;
 export const SNAKE_STRIKE_DIST = 5.5;     // coil trigger (3D)
 export const SNAKE_STRIKE_CD = 2.2;
 export const SNAKE_WINDUP = 0.45;         // telegraph — dodge window
-export const SNAKE_LUNGE_TIME = 0.4;
+export const SNAKE_LUNGE_TIME = 1.2;      // safety cap — touchdown ends the leap first
 export const SNAKE_LUNGE_SPEED = 14.0;
+export const SNAKE_LEAP_GRAV = -28.0;     // leap arc gravity = creatureCore
+export const SNAKE_LEAP_OVERSHOOT = 3.5;  // aim past the target — flies THROUGH
 export const SNAKE_BITE_DIST = 2.4;       // lunge contact (3D)
 export const SNAKE_BITE_DAMAGE = 14;
 export const SNAKE_BITE_FORCE = 9;
