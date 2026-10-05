@@ -7,14 +7,14 @@
 export const BOT_TUNING = {
   // botMoves — jet/ski/jump intent
   moves: {
-    jetHoldBase: 0.7,    // s — minimum committed burn on arm (sweep: longer holds beat feather-tapping)
-    jetHoldRand: 0.3,    // s — extra randomized burn window
+    jetHoldBase: 0.84,   // s — minimum committed burn on arm (multi-map lap evolution: longer holds beat feather-tapping)
+    jetHoldRand: 0.48,   // s — extra randomized burn window
     breathArm: 12,       // energy below which a dry climber perches
     breathHold: 38,      // energy needed to step off the perch
     breathRise: 3,       // m rise ahead that qualifies as "on the face"
-    tankedMin: 8,        // energy reserve jets won't dip below (sweep: holding a large reserve strangles transit)
-    tapEnergyMin: 4,     // runner airborne-tap floor (featherjet on flats)
-    runwayBase: 45,      // m — dive-runway base before arrival
+    tankedMin: 2.4,      // energy reserve jets won't dip below (evolution: holding a large reserve strangles transit)
+    tapEnergyMin: 24,    // runner airborne-tap floor (featherjet on flats — evolution raised it: taps below ~24 energy cost more climb than they save)
+    runwayBase: 35,      // m — dive-runway base before arrival (evolved: shorter runways, later commit)
     runwayDropK: 2,      // runway growth per m of altitude to shed
     runwaySpeedK: 0.5,   // runway growth per m/s of approach speed
     flatRunDrop: 6,      // m — below this drop a runner keeps burning
@@ -23,10 +23,10 @@ export const BOT_TUNING = {
     parkRingFast: 12,    // m — brake ring cap at speed
     parkRingSlow: 2,     // m — brake ring cap when slow
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch
-    skiVetoRise: 3,      // m — steep-climb grade that releases ski
-    skiVetoSpeed: 8,     // m/s — below this on a steep grade, don't ski
-    ceilingAgl: 18,      // m AGL — held burn above this is ballooning (sweep winner: early brake saves tank for transitions)
-    comfyEnergy: 24,     // energy floor for discretionary burns
+    skiVetoRise: 2.7,    // m — steep-climb grade that releases ski
+    skiVetoSpeed: 7,     // m/s — below this on a steep grade, don't ski
+    ceilingAgl: 35,      // m AGL — held burn above this is ballooning (evolved: bank altitude early, it pays later)
+    comfyEnergy: 35,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
     boostGdMin: 15,      // m — boost only with ground to cover
     boostEnergyMin: 34,  // energy — boost spends only above this (climb reserve)
@@ -40,7 +40,7 @@ export const BOT_TUNING = {
                          // (boost/tap) veto so regen refills the dive; climb/hop still fire
     strikeTapMin: 2,     // energy — tap floor inside the strike window (commit everything)
     runInRise: 4,        // m — run-in only when objective near-level
-    runInSpeed: 40,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
+    runInSpeed: 36,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
     tailTapSpeed: 45,    // m/s — descent tap caps here (standalone sweep: hop+tail-tap plateaus ~43, held burn ~66 at ~10x the energy per meter)
     tailTapSkill: 1.1,   // skill.movement floor — JP's trick is timing: skilled bots ride the hop descent, low-skill ones pay the flat burn
     pursuitR: 90,        // m — REVERTED carrier-shield experiment's ring, kept for reference
@@ -51,7 +51,7 @@ export const BOT_TUNING = {
     stepRise: 0.4,       // m — sub-climb face ahead that walls a stalled push (dais lip ~0.85m, skirt 2.2m)
     stepJetRise: 1.2,    // m — rise past jump apex that pays a tap alongside the hop
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
-    hopSpeed: 6,         // m/s — momentum hop only above this
+    hopSpeed: 6.4,       // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
     hopRiseFar: 3,       // m — far hops skip steep rises
     runnerHopGd: 28,     // m — hop chains die at the orbit-watch ring: a hop landing on the 9m deck sails over the pole at 10-15m/s; inside this ring the runner touches down and the brake/crawl own the approach
@@ -73,9 +73,9 @@ export const BOT_TUNING = {
     rays: 7,             // candidate directions in the fan
     cone: 1.4,           // rad — fan half-angle
     pts: 4,              // probes per ray
-    reach: 58,           // m — farthest landing probe
+    reach: 65,           // m — farthest landing probe (multi-map evolution: mid-horizon beats both tight 25m and lazy 80m)
     near: 15,            // m — nearest landing probe
-    commitS: 2.4,        // s — hold a line before re-planning
+    commitS: 2.0,        // s — hold a line before re-planning (evolved: re-plan a bit sooner so corners stay fresh)
     arrive: 6,           // m — waypoint reached radius
     minGd: 34,           // m — closer than this, steerer owns it
     runnerDirectGd: 48,  // m — runner close-out: pockets near the stand only feed the
@@ -85,10 +85,10 @@ export const BOT_TUNING = {
     runnerReachK: 2.2,   // runner reach multiplier
     farReachGd: 300,     // m — legs longer than this get far eyes
     farReachK: 0.45,     // far-eye reach as a share of remaining leg
-    runnerConeK: 2.0,    // runner fan widening
+    runnerConeK: 2.6,    // runner fan widening (evolved: wider route fan — corners are won by line, not by straightness)
     runnerDropW: 2.0,    // downhill pull for runners
     dropW: 1.4,          // downhill pull for everyone else
-    runnerStraightW: 4,  // straightness tax for runners
+    runnerStraightW: 3.2,// straightness tax for runners (evolved: momentum through the turn beats the straight line)
     straightW: 8,        // straightness tax for everyone else
     sheerVeto: -16,      // m — don't route off a drop sharper than this
     gainedFloor: 0.4,    // fraction of own travel a run must close
@@ -100,9 +100,9 @@ export const BOT_TUNING = {
     apexW: 0.8,          // apex bonus weight — high-arc lines are how a bowl rim (katabatic) gets crested; zeroing it stranded the kata route
     climbTaxRise: 4,     // m — landings above this get taxed
     climbTaxW: 1.8,      // climb tax weight
-    earlyClimbW: 26,     // first-stretch climb penalty weight
+    earlyClimbW: 11,     // first-stretch climb penalty weight (evolved: bank altitude early — the climb pays off down the lap)
     longCommitBonus: 3,  // tiebreak for committing long
-    progressW: 0.9,      // goal-progress weight
+    progressW: 0.85,     // goal-progress weight
     eScoreW: 0.2,        // banked-energy weight (runners)
   },
   // flagGoals hofGoal + serverSenses posted leash — the heavy-on-flag's
@@ -141,14 +141,14 @@ export const BOT_TUNING = {
   },
   // botBrain — think cadence + disposition rolls
   brain: {
-    thinkS: 0.3,       // s — think tick period
+    thinkS: 0.3,       // s — think tick period (0.5 broke beast-awareness and replay determinism)
     fearHp: 0.15,      // healthFrac that breaks contact
     heroChance: 0.3,   // per hurt episode, hero-mode roll
     heroS: 6,          // s — hero window length
     heroThinkK: 0.45,  // think-period multiplier while heroing
     wanderBase: 0.7,   // wanderlust roll base
     wanderRand: 0.6,   // wanderlust roll spread
-    dutyBase: 0.5,     // duty roll base
+    dutyBase: 0.5,     // duty roll base (1.1 broke replay determinism — cadence shift desyncs same-seed rooms)
     dutyRand: 0.9,     // duty roll spread
   },
   // botSteer — context steering slots
@@ -156,12 +156,12 @@ export const BOT_TUNING = {
     slots: 16,           // directions sampled around the circle
     probeA: 4,           // m — near slope probe
     probeB: 9,           // m — far probe catches ridgelines
-    step: 8,             // m — steering lookahead
+    step: 9.7,           // m — steering lookahead (evolved: wider carving over twitchy flicks)
     sepRange: 7,         // m — personal space
     memMs: 4000,         // ms — memory trail lifetime
     memRange: 12,        // m — memory trail radius
-    turnRate: 4.0,       // rad/s — heading turn cap
-    slopeThresh: 0.45,   // rise/run that starts scoring as dangerous
+    turnRate: 2.4,       // rad/s — heading turn cap (evolved: smooth wide arcs — the cap is not the bottleneck when routes are planned wide)
+    slopeThresh: 0.82,   // rise/run that starts scoring as dangerous (evolved: don't dodge gentle rises — the climb is part of the route)
     slopeW: 2,           // slope danger weight
     sheerDrop: -12,      // m — probe drop that reads as a sheer
     sheerDanger: 0.5,    // danger a sheer adds
