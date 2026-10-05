@@ -117,6 +117,27 @@ export class InfluenceMap {
     return { x: bx / len, z: bz / len };
   }
 
+  /** Threat-aware approach: instead of the straight line to `home`,
+   *  return a ring point off it whose corridor from `pos` is quietest
+   *  on `layer`. Used for long exposed runs (flag carrier's home run —
+   *  the direct line is the map's most predictable corridor). `ringR`
+   *  is how far off the target the waypoint orbits; the distance
+   *  wobble keeps unscented runs on the near side instead of picking
+   *  an arbitrary detour. */
+  quietApproach(pos: Vec3, home: Vec3, layer: IMapLayer, ringR: number): { x: number; y: number; z: number } {
+    let best = home, bestScore = Infinity;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const cand = { x: home.x + Math.cos(a) * ringR, y: home.y, z: home.z + Math.sin(a) * ringR };
+      const mid = { x: (cand.x + pos.x) / 2, y: 0, z: (cand.z + pos.z) / 2 };
+      const score = this.value(mid, layer)
+        + 0.5 * this.value(cand, layer)
+        + Math.hypot(cand.x - pos.x, cand.z - pos.z) * 0.001;
+      if (score < bestScore) { bestScore = score; best = cand; }
+    }
+    return best;
+  }
+
   /** Hottest opportunity cell within `cells` of `pos` — the "drift
    *  toward the action" read. Returns null when nothing is scented. */
   hottestNear(pos: Vec3, layer: IMapLayer, cells = 6): { x: number; z: number; v: number } | null {
