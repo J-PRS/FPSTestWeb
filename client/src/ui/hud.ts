@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Minimap } from './minimap.js';
+import { CommandMap } from './commandmap.js';
 import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
@@ -31,6 +32,7 @@ export class HUD {
   private crosshair: HTMLDivElement;
   hitMarker: HTMLDivElement  // public — HudStats family paints it;
   private minimap: Minimap;
+  private cmdmap: CommandMap;
   dmgVignette: HTMLDivElement  // public — HudStats family paints it;
   dmgDir: HTMLDivElement  // public — HudStats family paints it;
   dmgDirArc: HTMLDivElement  // public — HudStats family paints it;
@@ -95,6 +97,7 @@ export class HUD {
     this.energyReadout = d.energyReadout;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
+    this.cmdmap = new CommandMap(this.el);
     this.indicators = new PlayerIndicators(this.el);
   }
 
@@ -333,6 +336,14 @@ export class HUD {
 
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds, players);
+  }
+
+  toggleCommandMap(force?: boolean): void { this.cmdmap.toggle(force); }
+  get commandMapOpen(): boolean { return this.cmdmap.isOpen; }
+
+  updateCommandMap(pos: THREE.Vector3, yaw: number, players: Iterable<import('./minimap.js').MinimapPlayer>,
+                   flags: Map<TeamId, { home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>): void {
+    this.cmdmap.update(pos, yaw, players, flags);
   }
 
   /** A frame was presented — feeds the FPS readout. Called only on

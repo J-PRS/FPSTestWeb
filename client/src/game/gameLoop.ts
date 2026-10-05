@@ -458,6 +458,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   });
   _mapBlips.length = blipN;
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
+  if (hud.commandMapOpen) hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers);
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.

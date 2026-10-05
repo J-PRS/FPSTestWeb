@@ -124,6 +124,10 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
       deps.lazyHud().setScoreboardVisible(true);
       return;
     }
+    if (e.code === 'KeyM' && deps.isGameStarted()) {
+      deps.lazyHud().toggleCommandMap();
+      return;
+    }
     const dm = deps.lazyDemoManager();
     if (dm?.isPlaying && e.code !== 'Escape' && e.code !== 'F6' &&
         e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
