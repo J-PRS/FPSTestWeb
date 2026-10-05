@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom } from './harness.ts';
+import { mkRoom, step } from './harness.ts';
 
 /** Regression: bot counts divisible by THINK_DIV parked the shared
  *  think counter — off-phase brains never thought, never fired; posted
@@ -20,7 +20,7 @@ describe('scenario: defenders fire in a free-running ctf room', () => {
     };
     // ~120 sim-seconds — enough for hunts to acquire and volley.
     for (let i = 0; i < 2400; i++) {
-      for (const s of room.sims) s.tick(0.05);
+      step(room, 1, 0.05);
       room.creatureSim.step(0.05);
       room.ballSim.step(0.05);
     }

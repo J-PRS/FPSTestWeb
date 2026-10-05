@@ -21,13 +21,23 @@ export function lcg(seed = 42): () => number {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
 }
 
+/** Per-room seeded streams — one injectable botRand stream lives
+ *  process-wide, so a seeded room's dice get eaten by ANY concurrent
+ *  consumer: a zombie killFeed taunt or respawn timer from an earlier
+ *  suite firing mid-run shifts every roll downstream and flakes the
+ *  capper scenario only in full-suite order. The stream is bound only
+ *  while this room's step() runs (and during construction), so zombie
+ *  timers draw ambient Math.random instead of this room's sequence. */
+const roomStreams = new WeakMap<Room, () => number>();
+
 export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAuthority = false, field: Heightfield = flat): Room {
   // Squad heuristics (brains/hunts/goals/taunts) share one injectable
   // stream — ambient in production, seeded here so staged shots replay.
   // Seeded BEFORE construction: brain constructor fields (temper, orbit,
   // builder rolls) draw from this stream at `new Room` time, so injecting
   // after would leave them on the previous room's leftovers.
-  botRng(lcg(seed + 3));
+  const stream = lcg(seed + 3);
+  botRng(stream);
   // Sight answers memoize on coordinate cells with a 1s TTL — a prior
   // room's (or map's) LOS results would otherwise read as fresh here.
   losMemoReset();
@@ -52,6 +62,10 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);
+  roomStreams.set(room, stream);
+  // Construction draws done — close the window so a stray timer between
+  // here and the first step() can't spend this room's dice.
+  botRng(Math.random);
   return room;
 }
 
@@ -71,6 +85,9 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
 /** Step the whole room N sim-ticks — ball/creature sims ride room.sims
  *  like in production, so this drives the exact same ordering. */
 export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string, number>): void {
+  const stream = roomStreams.get(room);
+  if (stream) botRng(stream);
+  try {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) {
       if (profile) {
@@ -82,6 +99,9 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
       }
     }
     simNowAdvance(dt * 1000);
+  }
+  } finally {
+    if (stream) botRng(Math.random);
   }
 }
 
