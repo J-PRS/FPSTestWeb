@@ -13,6 +13,10 @@ import type { BotLoadout } from '../../../shared/botLoadouts.ts';
 const TARGET = 50;      // kills to win the FFA
 let CAP_S = 2400;       // sim-seconds; argv[1] overrides
 const BOTS = 10;
+// Arena radius = map footprint. 80m is a cage match (flatters brawl
+// guns); 300m is a plausible DM field — still small enough that wander
+// can't disperse 10 fighters past sight range on open ground.
+const FFASOAK_ARENA = Number(process.env.FFASOAK_ARENA) || 300;
 
 // Every offensive primary — 16 weapons > 10 seats, so each round deals a
 // shuffled subset and coverage builds across seeds.
@@ -42,7 +46,7 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
   // bots disperse past hunt range and the match starves (all action in
   // the first second, then silence). RoomArena shoves rim offenders
   // back in, which is what a real FFA lobby does to itself.
-  const room = mkRoom({ mode: 'dm', bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: 80 } }, 'dm', seed);
+  const room = mkRoom({ mode: 'dm', bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: FFASOAK_ARENA } }, 'dm', seed);
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const ctl = room.bots as unknown as {
     loadouts: Map<string, BotLoadout>;
@@ -62,7 +66,7 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
     // Tight ring: the 2km map lets bots disperse past hunt range and
     // the "match" starves — a real FFA keeps contact pressure.
     const a = (i / bots.length) * Math.PI * 2;
-    pin(room, bots[i]!.id, { x: Math.cos(a) * 30, y: 65, z: Math.sin(a) * 30 });
+    pin(room, bots[i]!.id, { x: Math.cos(a) * (FFASOAK_ARENA * 0.6), y: 65, z: Math.sin(a) * (FFASOAK_ARENA * 0.6) });
   }
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
@@ -86,7 +90,7 @@ function run(weapons: WeaponType[], seed: number): { rows: { w: string; kills: n
           deadSince.delete(p.id);
           room.players.respawnPlayer(p.id);
           const a = (ring++ / bots.length) * Math.PI * 2;
-          pin(room, p.id, { x: Math.cos(a) * 30, y: 65, z: Math.sin(a) * 30 });
+          pin(room, p.id, { x: Math.cos(a) * (FFASOAK_ARENA * 0.6), y: 65, z: Math.sin(a) * (FFASOAK_ARENA * 0.6) });
         }
       } else deadSince.delete(p.id);
     }

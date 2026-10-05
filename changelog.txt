@@ -1,3 +1,4 @@
+2026-10-01 - ffasoak: arena 80m -> 300m (FFASOAK_ARENA env) — realistic DM field; cage-match artifact removed, range guns rise
 2026-10-01 - ffasoak: uniform medium frames by default (weapon-vs-weapon isolation); FFASOAK_CLASSES=1 restores loadout-tier bodies
 2026-10-01 - ffasoak: all 16 offensive primaries in the pool, shuffled 10-weapon deal per round, rounds/weapon in the aggregate table
 2026-10-01 - ballsoak: hitscan weapons (speed:0) no longer score Infinity — midair estimate treats beams as zero airtime
