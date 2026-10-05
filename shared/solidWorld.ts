@@ -171,13 +171,15 @@ export class SolidWorld {
     const px = c.hx + r - Math.abs(lx);
     const pz = c.hz + r - Math.abs(lz);
     if (px <= 0 || pz <= 0) return;              // outside the padded footprint
-    if (feet < bot && s.pos.y > bot) {
-      // Head into the underside — ceiling: drop out, kill upward motion.
-      if (s.pos.y - bot < top - s.pos.y) {
-        s.pos.y = bot - SKIN;
-        if (s.vel.y > 0) s.vel.y = 0;
-        return;
-      }
+    // Underside contact only when the bottom face is the LEAST-penetrated
+    // axis: a flyer rising into a beam's belly drops back out. A walker
+    // whose feet graze a hair below a grade-level box is a side contact —
+    // the old head-vs-top compare dropped him below the wall entirely,
+    // and the next floor clamp teleported him onto its top.
+    if (feet < bot && s.pos.y > bot && s.pos.y - bot < Math.min(px, pz)) {
+      s.pos.y = bot - SKIN;
+      if (s.vel.y > 0) s.vel.y = 0;
+      return;
     }
     this.pushOut(s, c, lx, lz, px, pz);
   }
