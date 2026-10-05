@@ -46,6 +46,10 @@ export class TickLoop {
    *  is quarantined instead of burning log+CPU forever. */
   private tickErrStreak = new Map<string, number>();
   private tickQuarantined = new Set<string>();
+  /** Rooms drained for repeated tick failures — kept for /metrics
+   *  (a quarantined room is deleted, so the gate set alone reports
+   *  nothing); a name here is history, not a block on the name. */
+  private faultedRooms = new Set<string>();
   /** Per-phase EMA ms inside tickRoom — tick lag says the tick ran
    *  late, this says WHAT was slow (sims vs record build vs fanout)
    *  without a profiler attached. */
@@ -63,7 +67,7 @@ export class TickLoop {
   bandwidthWindow() { return this.lastBw; }
   /** Rooms stopped for repeated tick failures — /metrics surfaces this
    *  so a dead room is visible on the status page, not just in logs. */
-  quarantinedRooms() { return [...this.tickQuarantined]; }
+  quarantinedRooms() { return [...this.faultedRooms]; }
 
   private readonly fanout: TickFanout;
 
@@ -114,43 +118,50 @@ export class TickLoop {
         // player — a thrown tick is logged, counted, and a room that
         // throws on ~10 consecutive ticks gets quarantined + drained:
         // a frozen world with live players in it is worse than a kick.
-        if (this.tickQuarantined.has(room.name)) continue;
-        try {
-        room.checkMatchClock(simNow());
-        // Hibernation: nobody watching → freeze ball sim + skip the whole
-        // room tick. Bots alone don't count as an audience — they exist
-        // to serve humans, and a bot-only 'default' would otherwise sim
-        // forever. A rejoining human wakes the room instantly.
-        const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
-        room.ballSim.dormant = !audience;
-        // Same hibernation for creatures — an unwatched room spawning
-        // crawlers forever burns CPU
-        // (and silently grows the crawler population it later dumps on
-        // a rejoining player).
-        room.creatureSim.dormant = !audience;
-        if (!audience) continue;
-        const players = room.players.getAllPlayers();
-        if (players.size === 0) continue;
-        this.errPhase = 'room';
-          this.tickRoom(room, players, now0);
-          this.tickErrStreak.delete(room.name);
-        } catch (e) {
-          // A drain failure leaves the poisoned message queued — it would
-          // re-throw every tick until quarantine. Drop the backlog: the
-          // unprocessed commands were already lost when the drain aborted.
-          room.commands.length = 0;
-          const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
-          this.tickErrStreak.set(room.name, n);
-          this.metrics.tickErrors++;
-          logger.error('Room tick failed', { room: room.name, phase: this.errPhase, streak: n, err: e instanceof Error ? e.stack ?? e.message : String(e) });
-          if (n >= 10) {
-            this.tickQuarantined.add(room.name);
-            logger.error('Room quarantined after repeated tick failures', { room: room.name, phase: this.errPhase });
-            this.drainQuarantined(room);
-          }
-        }
+        this.tickRoomGuarded(room, now0);
       }
     }, tickMs);
+  }
+
+  /** The per-room tick wrapped in containment — the interval body calls
+   *  this; scenario tests can too (tickRoomNow only exercises the raw
+   *  body, not the streak → quarantine → drain path). */
+  tickRoomGuarded(room: Room, now0 = wallNow()): void {
+    if (this.tickQuarantined.has(room.name)) return;
+    try {
+    room.checkMatchClock(simNow());
+    // Hibernation: nobody watching → freeze ball sim + skip the whole
+    // room tick. Bots alone don't count as an audience — they exist
+    // to serve humans, and a bot-only 'default' would otherwise sim
+    // forever. A rejoining human wakes the room instantly.
+    const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
+    room.ballSim.dormant = !audience;
+    // Same hibernation for creatures — an unwatched room spawning
+    // crawlers forever burns CPU
+    // (and silently grows the crawler population it later dumps on
+    // a rejoining player).
+    room.creatureSim.dormant = !audience;
+    if (!audience) return;
+    const players = room.players.getAllPlayers();
+    if (players.size === 0) return;
+    this.errPhase = 'room';
+      this.tickRoom(room, players, now0);
+      this.tickErrStreak.delete(room.name);
+    } catch (e) {
+      // A drain failure leaves the poisoned message queued — it would
+      // re-throw every tick until quarantine. Drop the backlog: the
+      // unprocessed commands were already lost when the drain aborted.
+      room.commands.length = 0;
+      const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
+      this.tickErrStreak.set(room.name, n);
+      this.metrics.tickErrors++;
+      logger.error('Room tick failed', { room: room.name, phase: this.errPhase, streak: n, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+      if (n >= 10) {
+        this.tickQuarantined.add(room.name);
+        logger.error('Room quarantined after repeated tick failures', { room: room.name, phase: this.errPhase });
+        this.drainQuarantined(room);
+      }
+    }
   }
 
   /** A quarantined room stopped simulating — leaving its humans inside
@@ -168,6 +179,11 @@ export class TickLoop {
       }
       room.dispose();
       this.rooms.delete(room.name);
+      // Streak/quarantine are name-keyed — clear them or the NEXT room
+      // instantiated under this name is born frozen.
+      this.tickQuarantined.delete(room.name);
+      this.tickErrStreak.delete(room.name);
+      this.faultedRooms.add(room.name);
       logger.info('Quarantined room drained + disposed', { room: room.name });
     } catch (e) {
       logger.error('Quarantine drain failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });
