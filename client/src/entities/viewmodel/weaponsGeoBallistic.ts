@@ -52,8 +52,8 @@ for (const side of [-1, 1]) {
 // Octagonal cross-section: the chamfered top edge comes free from the
 // profile, no bevel pass needed.
 const scope = mkLoft([
-  { z: -0.06, ring: profOct(0.07, 0.05, 0.018) },
-  { z: 0.06, ring: profOct(0.07, 0.05, 0.018) },
+  { z: 0.06, ring: profOct(0.07, 0.05, 0.012) },
+  { z: -0.06, ring: profOct(0.07, 0.05, 0.012) },
 ], darkMat);
 scope.position.set(0, 0.14, 0.08);
 bow.add(scope);
