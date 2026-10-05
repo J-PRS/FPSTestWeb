@@ -1,3 +1,4 @@
+2026-10-05 - audit: server_bun/src unbounded-growth lane swept clean — all 13 Map/Set files verified lifecycle-evicted or domain-bounded
 2026-10-05 - botRng gate tests: strictRng throws on unmarked ambient draw, injected stream draws, blessed release draws, non-strict falls back, taunt stream is a separate channel — 5 new bun tests
 2026-10-05 - shared/ ambient-draw tripwire: structural test fails on any Math.random/Date.now/performance.now call in shared/ outside the botRand strictRng gate — the "no ambient draws in sim paths" invariant is now enforced, not just audited
 2026-10-05 - audit: client unbounded-growth lane swept clean — all 44 Map/Set files verified domain-bounded or evicting

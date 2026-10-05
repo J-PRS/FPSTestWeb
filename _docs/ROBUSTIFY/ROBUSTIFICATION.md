@@ -361,6 +361,10 @@ telemetry lines it greps.
   owner-lifetime, or per-call scope) or evicts (`chainRamp` 32+window,
   `projectileRegistry` dead-entry sweep each update, FX pools retire
   when empty, `coolShots` ≤20 filter, registry journal caps).
+- **Server unbounded growth** (2026-10-05): all 13 `new Map/Set`
+  files in `server_bun/src` swept — connection/player/ratelimit maps
+  delete on disconnect, roster roles/classes delete on bot removal,
+  everything else is a per-call working set or static constant.
 - **Ball netcode — end-to-end pinned** (2026-10-05):
   `ballStaleSeg.test.ts` (`isStaleSeg` boundary + `applySeg`
   re-anchor/simT rewind), `ballTickNet.test.ts` (0.05-cell stepping,
