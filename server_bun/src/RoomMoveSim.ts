@@ -350,12 +350,39 @@ export class RoomMoveSim {
   tick(dt: number): void {
     this.drainInputs(); // phase 0 — all queued commands land at the boundary
     const bodies = this.bodySource ? [...this.bodySource()] : null;
+    // One shared broad-phase per tick: without it every shadow scans the
+    // whole roster in collideBodies — O(shadows × bodies) at scale. 4m
+    // cells dwarf any contact radius, so the 3x3 ring around a pos
+    // always contains every capsule it could touch.
+    let bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined;
+    if (bodies && bodies.length > 0) {
+      const CELL = 4, BIAS = 512;
+      const grid = new Map<number, BodyCapsule[]>();
+      for (const b of bodies) {
+        const k = ((Math.floor(b.x / CELL) + BIAS) << 16) | (Math.floor(b.z / CELL) + BIAS);
+        const cell = grid.get(k);
+        if (cell) cell.push(b); else grid.set(k, [b]);
+      }
+      const scratch: BodyCapsule[] = [];
+      bodiesNear = (x, z) => {
+        scratch.length = 0;
+        const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+          const cell = grid.get(((cx + dx + BIAS) << 16) | (cz + dz + BIAS));
+          if (cell) for (const b of cell) scratch.push(b);
+        }
+        return scratch;
+      };
+    }
     for (const [pid, sh] of this.shadows) {
       if (bodies) {
         // Shared list for every shadow — collideBodies skips selfId, so
         // rebuilding N-1 copies per tick was pure churn.
         sh.sim.selfId = pid;
         sh.sim.bodies = bodies;
+        sh.sim.bodiesNear = bodiesNear;
+      } else {
+        sh.sim.bodiesNear = undefined; // no source this tick — a stale grid is worse than none
       }
       // Jet economy: thrust only while the modeled tank has fuel, drain
       // while burning, recharge only when off jet AND no toggle skill is
@@ -385,7 +412,7 @@ export class RoomMoveSim {
       const resting = s.onGround && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
         && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
         && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
-        && (!bodies || !bodies.some(b => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
+        && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some(b => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
       if (!resting) {
         // MoveSim.update() sub-steps internally at its own 1/60 quantum —
         // feed it the raw tick delta. Count consumed steps ourselves for

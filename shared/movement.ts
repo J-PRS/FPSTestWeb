@@ -157,6 +157,10 @@ export class MoveSim {
    *  assign the shared list directly; selfId excludes this sim's own
    *  capsule (a zero-distance hit would push it off itself). */
   bodies: BodyCapsule[] = [];
+  /** Optional broad-phase: when the host runs many shadows (server),
+   *  it passes a per-tick spatial query instead of every shadow
+   *  scanning the whole roster — same candidate set, just reachable. */
+  bodiesNear?: (x: number, z: number) => Iterable<BodyCapsule>;
   selfId = '';
 
   setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
@@ -289,9 +293,9 @@ export class MoveSim {
 
   private collideBodies(): void {
     const s = this.state;
-    if (this.bodies.length === 0) return;
+    if (this.bodies.length === 0 && !this.bodiesNear) return;
     const feet = s.pos.y - this.eyeHeight;
-    for (const b of this.bodies) {
+    for (const b of this.bodiesNear ? this.bodiesNear(s.pos.x, s.pos.z) : this.bodies) {
       if (b.id === this.selfId) continue;
       const rr = this.bodyRadius + b.r;
       if (feet >= b.y || s.pos.y <= b.y - b.h) continue;
