@@ -99,7 +99,9 @@ for (const side of [-1, 1]) {
   // belly forward, not the spine). Tip knob carries the cam wheel.
   const limb = mkLoft([
     { z: 0.0, ring: profOct(0.075, 0.018, 0.008) },
+    { z: -0.10, ring: profOct(0.067, 0.016, 0.007), dx: -side * 0.015 },
     { z: -0.20, ring: profOct(0.060, 0.014, 0.006), dx: -side * 0.03 },
+    { z: -0.29, ring: profOct(0.054, 0.013, 0.006), dx: -side * 0.018 },
     { z: -0.38, ring: profOct(0.048, 0.013, 0.006) },
     { z: -ARM_LEN, ring: profOct(0.055, 0.024, 0.008) },
   ], bodyMat);
