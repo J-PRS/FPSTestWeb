@@ -524,12 +524,13 @@ export class ViewModel {
     const flex = this.kickAmount;
     let latchOff = -flex * 0.05;
     if (this.bowT >= 0) {
-      // Draw cycle: release snaps the limb tips forward (~80ms), then the
-      // reload window slowly re-cocks them to the drawn pose — reads like
-      // the string being pulled back, not a spring settling. The string
+      // Draw cycle: release snaps the limb tips forward almost instantly
+      // (~10ms — a released bow jumps, it does not ease), then the reload
+      // window slowly re-cocks them to the drawn pose — reads like the
+      // string being pulled back, not a spring settling. The string
       // vertex jumps to the neutral cam line then eases back to the latch.
-      const snap = Math.min(this.bowT / 0.08, 1);
-      const draw = Math.min(Math.max((this.bowT - 0.08) / ViewModel.BOW_DRAW, 0), 1);
+      const snap = Math.min(this.bowT / 0.01, 1);
+      const draw = Math.min(Math.max((this.bowT - 0.01) / ViewModel.BOW_DRAW, 0), 1);
       // T is the travel limit: release moves drawn (θ≈109°) → neutral
       // (θ≈90°); a larger factor swings tips PAST perpendicular and the
       // cam/string line goes wrong. f_min ≈ 1.57/1.9.

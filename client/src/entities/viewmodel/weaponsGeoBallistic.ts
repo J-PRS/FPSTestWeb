@@ -120,7 +120,7 @@ for (const side of [-1, 1]) {
 // the vertex rides bowString's z (drawn-back at rest, snapped to the
 // cam line when fired).
 const CAM_R = 0.065;
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x181a1c });
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x555a60 });
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const knot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), darkMat);
@@ -183,13 +183,13 @@ drumG.add(drumHub);
 drumG.position.set(0, -0.1, -0.02);
 bow.add(drumG);
 // Skeletal stock + grip — the crossbow's gun reads
-const stockL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.2), darkMat);
+const stockL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.2), bodyMat);
 stockL.position.set(0, 0.02, 0.36);
 bow.add(stockL);
-const stockB = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.05), darkMat);
+const stockB = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.05), bodyMat);
 stockB.position.set(0, -0.02, 0.44);
 bow.add(stockB);
-const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.11, 0.05), darkMat);
+const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.11, 0.05), bodyMat);
 grip.position.set(0, -0.14, 0.08);
 grip.rotation.x = 0.3;
 bow.add(grip);
