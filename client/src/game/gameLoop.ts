@@ -245,11 +245,20 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   // Player-vs-player contact: remotes + lobby bots all live in this set —
   // corpses don't block. Interpolated positions are a half-RTT stale but
   // the push only has to agree with the shadow's, not be perfect.
-  _contactBodies.length = 0;
+  let bodyN = 0;
   for (const rp of deps.world.remotePlayers.values()) {
     if (rp.isDead) continue;
-    _contactBodies.push({ x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, h: classCapsule(rp.armorClass).eye, mass: classMass(rp.armorClass), r: classCapsule(rp.armorClass).radius, vx: rp.vel.x, vz: rp.vel.z });
+    // Reused pool — fresh 7-field structs per remote per frame were
+    // steady GC churn alongside the blip fill below.
+    let b = _contactBodies[bodyN];
+    if (!b) { b = { x: 0, y: 0, z: 0, h: 0, mass: 0, r: 0, vx: 0, vz: 0 }; _contactBodies.push(b); }
+    const caps = classCapsule(rp.armorClass);
+    b.x = rp.pos.x; b.y = rp.pos.y; b.z = rp.pos.z;
+    b.h = caps.eye; b.mass = classMass(rp.armorClass); b.r = caps.radius;
+    b.vx = rp.vel.x; b.vz = rp.vel.z;
+    bodyN++;
   }
+  _contactBodies.length = bodyN;
   player.movement.bodies = _contactBodies;
   player.update(dt);
   if (_posPrimed) {
@@ -432,15 +441,22 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // Player/bot blips — same friend-or-foe rule as the overhead markers:
   // wire team (or GameBot.team) matching localTeam = green, else red.
   // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
-  _mapBlips.length = 0;
   const wirePlayers = networkManager.getPlayers();
-  for (const [id, rp] of deps.world.remotePlayers) {
+  let blipN = 0;
+  deps.world.remotePlayers.forEach((rp, id) => {
     // A fire-revealed cloak (ghostT live) blips like any visible rider —
     // the shimmer window already sold him out to eyes and HUD.
-    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) continue;
+    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) return;
     const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
-    _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam, bot: isBotId(id) });
-  }
+    // Reused buffer — a fresh object per remote per frame was ~1.2k
+    // throwaway blips/s of pure GC churn.
+    let b = _mapBlips[blipN];
+    if (!b) { b = { x: 0, z: 0, friendly: false, bot: false }; _mapBlips.push(b); }
+    b.x = rp.position.x; b.z = rp.position.z;
+    b.friendly = !!team && team === deps.world.localTeam; b.bot = isBotId(id);
+    blipN++;
+  });
+  _mapBlips.length = blipN;
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
