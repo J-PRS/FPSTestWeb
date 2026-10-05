@@ -31,7 +31,9 @@ export function getHealthStatus(g: GameServer) {
     // stopped simulating, or the tick loop is running meaningfully late.
     // A monitor polling /health sees the failure instead of 'running'.
     const quarantined = g.tickLoop.quarantinedRooms();
-    const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 5;
+    // Bun's setInterval fires ~11ms late at baseline — degraded means the
+    // loop is losing a real slice of the 50ms budget, not normal jitter.
+    const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 20;
     const degraded = quarantined.length > 0 || lagBad;
     return {
       status: degraded ? 'degraded' : 'running',
