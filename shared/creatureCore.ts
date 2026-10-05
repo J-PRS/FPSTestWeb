@@ -24,9 +24,10 @@ import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
+import { GRAVITY } from './movement.js';
 
 export const CRAWLER_SIM = {
-  GRAVITY: -28.0,
+  GRAVITY,
   AGGRO_D2: 70 * 70,
   POUNCE_D2: 25 * 25,
   WINDUP_S: 0.35,

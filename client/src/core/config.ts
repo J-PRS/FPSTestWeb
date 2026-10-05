@@ -1,4 +1,6 @@
-export const GRAVITY = -28;
+// World gravity is authored in shared/movement.ts — the server sims the
+// same fall the client predicts; derive, never copy.
+export { GRAVITY } from '../../../shared/movement.js';
 
 // Physics constants for debris and death physics
 export const BOUNCE_Y = 0.35; // Vertical bounce coefficient
