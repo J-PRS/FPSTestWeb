@@ -958,19 +958,23 @@ const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
   VGTB: ['VGS', 'VGS', 'VGY', 'VGTW'],  // "Is that the best— YES." / "— WHEN WILL YOU LEARN?"
   VGTW: ['VGS', 'VGTW', 'VGY'],         // "When will you— SHAZBOT!" / stutter-repeat / "— YES."
   VGTT: ['VGS', 'VGCN'],                // "THAT was— SHAZBOT!" / "— NICE MOVE." undercut
-  VGCG: ['VGS', 'VGTA', 'VGCA'],        // "Good ga— SHAZBOT!" / "— AWWW THAT'S TOO BAD!" / "— AWESOME."
-  VGO:  ['VGS', 'VGW'],                 // "Ooop— SHAZBOT!" / "Ooops— WOOHOO!" celebrating the fail
-  VGS:  ['VGS', 'VGTG'],                // "SHAZ— SHAZBOT!" spam chain / "SHAZBOT— I AM THE GREATEST!"
-  VGCN: ['VGS', 'VGTB'],                // "Nice mo— SHAZBOT!" / "Nice move— ...BEST YOU CAN DO?" soured compliment
+  VGCG: ['VGS', 'VGTA', 'VGCA'],        // "Good— SHAZBOT!" / "Good— AWWW THAT'S TOO BAD!" / "— AWESOME."
+  VGO:  ['VGS', 'VGW'],                 // "Oo— SHAZBOT!" / "Ooops— WOOHOO!" celebrating the fail
+  VGS:  ['VGS', 'VGTG'],                // "SHA— SHAZBOT!" spam chain / "SHAZBOT— I AM THE GREATEST!"
+  VGCN: ['VGS', 'VGTB'],                // "Nice— SHAZBOT!" / "Nice move— ...BEST YOU CAN DO?" soured compliment
   VGCY: ['VGS', 'VGCY'],                // "You— SHAZBOT!" / "You— ROCK!" self-hype
-  VGCA: ['VGS', 'VGY'],                 // "Aweso— SHAZBOT!" / "Awesome— YES."
-  VGCS: ['VGS', 'VGTB'],                // "Great sho— SHAZBOT!" / the compliment that corrects itself
-  VGRA: ['VGS', 'VGN'],                 // "Anyti— SHAZBOT!" / "Anytime— NO." retracted courtesy
+  VGCA: ['VGS', 'VGY'],                 // "Awes— SHAZBOT!" / "Awesome— YES."
+  VGCS: ['VGS', 'VGTB'],                // "Great— SHAZBOT!" / the compliment that corrects itself
+  VGRA: ['VGS', 'VGN'],                 // "Anyt— SHAZBOT!" / "Anytime— NO." retracted courtesy
   VGN:  ['VGY'],                        // "N— YES." — the contradiction gag
   VGY:  ['VGN', 'VGO'],                 // "Ye— NO." / "Yes— OOOPS." instant regret
   VGH:  ['VGB', 'VGS'],                 // "Hi— BYE." drive-by greeting / "Hi— SHAZBOT!" false warmth
   VGW:  ['VGTG', 'VGS'],                // "Wooh— I AM THE GREATEST!" / "Wooh— SHAZBOT!" crash mid-celebration
   VGQ:  ['VGS', 'VGTW'],                // "Qui— SHAZBOT!" / "Quiet— WHEN WILL YOU LEARN?"
+// Note: the chat-line comments show the AUDIO cut — the voice snap lands on
+// the last-word boundary (comboCutDelayMs paces the feed to roughly then), so
+// multi-word lines keep their full head ("Good— SHAZBOT!"), while single-
+// word lines get clipped mid-vowel ("SHA— SHAZBOT!").
 };
 // Combos are the discovered-trick flavor — broad table, still a rare roll
 // so any single one lands as a surprise rather than a tic.
