@@ -418,6 +418,12 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botRand` gate pinned** (2026-10-05): `botRand.test.ts` (6 tests)
+  — strictRng throws on unblessed ambient (`botRng(Math.random)` is
+  the "forgot to seed" case) yet honors `botRngRelease()` (tagged
+  blessed ambient for harness windows); injected stream controls
+  draws; taunt stream is independent of the behavior stream;
+  dist3/distSq agreement.
 - **`species` registry pinned** (2026-10-05): `species.test.ts` (6
   tests) — every row's family resolves to a real SPECIES_FAMILY sim;
   positive health/bite/all overrides (zero stat = ghost or pillow);
