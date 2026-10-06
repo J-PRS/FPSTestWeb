@@ -59,4 +59,17 @@ describe('scenario: grace timer teardown', () => {
     combat.onPlayerRemoved('p1');
     expect(timers.has('p1')).toBe(false);
   });
+
+  it('removal clears a held-corpse flag too — a rejoin re-arms fresh', () => {
+    const pm = new PlayerManager();
+    const combat = new CombatHandler(pm, () => {}, () => {});
+    pm.addPlayer('p1');
+    const respawner = (combat as unknown as {
+      respawner: { hold(id: string): void; isHeld(id: string): boolean };
+    }).respawner;
+    respawner.hold('p1');
+    expect(respawner.isHeld('p1')).toBe(true);
+    combat.onPlayerRemoved('p1');
+    expect(respawner.isHeld('p1')).toBe(false);
+  });
 });

@@ -1,3 +1,4 @@
+2026-10-06 - robustify: held-corpse cancel pin — graceZombie now covers respawner.hold cleared by onPlayerRemoved; timer teardown swept client and server, only the stall watchdog needed the fix
 2026-10-06 - robustify: stall watchdog cleared on disconnect — NetworkManager 1Hz silence watchdog no longer idles forever after intentional teardown; reconnect re-arms via connect
 2026-10-06 - robustify: wireId exhaustion pin — ghostRecords covers the u16-wrap eldest-recycle fallback; churn-keyed map sweep of GameServer/Room verified clean
 2026-10-06 - robustify: invalidWarnAt cleaned on close — per-player throttle keys no longer linger until the 4096 wholesale clear, which was also resetting the spam gate; pinned in invalidWarn.test

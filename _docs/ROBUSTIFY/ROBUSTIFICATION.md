@@ -873,6 +873,14 @@ pinned by `losMemo.test.ts` via a `losMemoSize()` test seam.
   (`room.rng` = seeded `botRand`, `PlayerManager.spawnRng`,
   `CombatHandler.rng`, `rollVariant`) — harnesses seed them; production
   ambient is by design since the server is sole authority.
+- **Client/server timer teardown swept** (2026-10-06): every
+  `setInterval`/`setTimeout` with a lifecycle audited — client reconnect
+  timers (`tiers`, `WebSocketConnection`), session veil, chat fades,
+  throw wind-ups all clear or are app-lifetime singletons; server
+  `killFeed.pending`/`respawn.timers` dispose with their room, and the
+  removal funnel cancels a pending respawn + clears held-corpse state
+  (chain now fully pinned in `graceZombie.test`: timers AND `held`).
+  §2.21 was the only gap found.
 - **`creatureSlither` pinned** (2026-10-05): `creatureSlither.test.ts`
   (13 tests) — species registry derivation, uber ×4 health, live LCG
   seed, out-of-aggro speed bleed, weave→coil→leap→bite state machine
