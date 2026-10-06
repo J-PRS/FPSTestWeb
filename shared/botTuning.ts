@@ -163,6 +163,8 @@ export const BOT_TUNING = {
     turnRate: 2.4,       // rad/s — heading turn cap (evolved: smooth wide arcs — the cap is not the bottleneck when routes are planned wide)
     slopeThresh: 0.82,   // rise/run that starts scoring as dangerous (evolved: don't dodge gentle rises — the climb is part of the route)
     slopeW: 2,           // slope danger weight
+    mountRise: 4,        // m — a bounded rise within hop+jet reach is a step, not a slope (matches pickFightPos' standable band)
+    mountCrest: 1,       // m — far probe may only keep rising this much past the lip for the face to count as a step
     sheerDrop: -12,      // m — probe drop that reads as a sheer
     sheerDanger: 0.5,    // danger a sheer adds
   },

@@ -511,7 +511,14 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
     if (dist3(cand, e.pos) >= BOT_FIRE_RANGE) continue;
     if (losClear(ctx, cand, e.pos)) s -= 0.6; // a second gun covers this spot
   }
-  s -= Math.abs(candGround - ctx.groundY(self.x, self.z)) * 0.05;
+  const selfG = ctx.groundY(self.x, self.z);
+  s -= Math.abs(candGround - selfG) * 0.05;
+  // A spot that only a hop+jet mount can reach costs the climb — pay it
+  // when the target is up there (fighting for the deck you need anyway),
+  // avoid it when the duel could happen on the flat (soak: duel picks
+  // parked bots at the base of a dais lip they could never walk up).
+  const tG = ctx.groundY(t.pos.x, t.pos.z);
+  if (candGround - selfG > 2 && Math.abs(candGround - tG) > 1.5) s -= 1.2;
   return s;
 }
 

@@ -169,6 +169,13 @@ export class BotMoves {
     // moving walker keeps running through gentle grades.
     if (!ctx.posted && !airborne && rise > T.moves.stepRise && speed < T.moves.jumpUphillSpeed) {
       this.jetWhy = 'hop';
+      // A lip above jump apex but below breathRise has no perch — with a
+      // dry tank the hop kept firing anyway and the bot rim-orbited the
+      // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
+      // the shove while the tank refills to the hop's floor, then mount.
+      if (rise > T.moves.stepJetRise && !tanked && ctx.energy !== undefined) {
+        return { ski: false, jet: false, jump: false, park: true };
+      }
       return { ski: false, jet: rise > T.moves.stepJetRise && tanked, jump: true };
     }
     this.jetHold = Math.max(0, this.jetHold - dt);

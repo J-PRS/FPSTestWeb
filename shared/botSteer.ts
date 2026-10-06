@@ -144,7 +144,14 @@ export class BotSteer {
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
     const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;
-    const slope = Math.max(riseA / T.steer.probeA, riseB / T.steer.probeB);
+    // A bounded lip (dais skirt, deck edge, box face) is not a wall: the
+    // legs' step-mount hops+jets straight over it, but masking the slot
+    // steered the step tangent — the mount probe never faced the lip and
+    // the bot rim-orbited the stand forever (soak: HALO/MARA pinned vs
+    // the henge base dais). A face that stops rising within mount range
+    // keeps the slot open; a real slope keeps rising past it.
+    const boundedStep = riseA > 0 && riseA <= T.steer.mountRise && riseB - riseA < T.steer.mountCrest;
+    const slope = Math.max(boundedStep ? 0 : riseA / T.steer.probeA, riseB / T.steer.probeB);
     if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
     if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
 
