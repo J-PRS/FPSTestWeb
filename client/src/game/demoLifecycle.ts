@@ -66,14 +66,6 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
   hmRestore: (() => void) | null;
 }
 
-// Frame weaponType → viewmodel wid. Any weaponType the current build doesn't
-// know (deleted since the clip was recorded) shows the stock rocket launcher
-// rather than breaking playback.
-function widForWeaponType(wt: number): number {
-  const i = SLOT_DEFS.findIndex(d => d.weaponType === wt);
-  return i !== -1 ? i : 0;
-}
-
 function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
   // Fade playback rail beams — pooled alongside the projectiles that spawn them.
   for (let i = d.playbackWorld.beams.length - 1; i >= 0; i--) {
@@ -213,11 +205,13 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       player.vel.set(state.velX, state.velY, state.velZ);
       player.yaw = state.yaw;
       player.pitch = state.pitch;
-      // Mirror the recorded held weapon onto the viewmodel. Unknown ids
-      // (a weapon deleted since recording) show the stock launcher.
+      // Mirror the recorded held weapon onto the viewmodel — switchWeapon
+      // takes the wire weaponType (the same ids frames carry), NOT a
+      // loadout slot. Unknown ids (a weapon deleted since recording)
+      // fall back to the stock launcher.
       const vm = d.lazyViewModel();
       if (vm) {
-        const wid = widForWeaponType(state.weaponType);
+        const wid = SLOT_DEFS.some(d => d.weaponType === state.weaponType) ? state.weaponType : 0;
         if (wid !== d.playbackWid) { d.playbackWid = wid; vm.switchWeapon(wid); }
       }
     }
