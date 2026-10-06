@@ -953,17 +953,17 @@ export interface TauntLine { text: string; vgs?: string }
  *  lines — the contradiction, the self-hype, the stutter, the sore-
  *  loser hijack — not individually cited pairings. */
 const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
-  VGTG: ['VGS', 'VGS', 'VGY', 'VGTG'],  // "I am the— SHAZBOT!" / "— YES." / self-hype stutter
+  VGTG: ['VGS', 'VGS', 'VGY'],  // "I am the— SHAZBOT!" / "I am the— YES." boast undercut
   VGTA: ['VGS', 'VGS', 'VGN', 'VGW'],   // "Awww that's too— SHAZBOT!" / "— NO." / "— WOOHOO!"
   VGTB: ['VGS', 'VGS', 'VGY', 'VGTW'],  // "Is that the best— YES." / "— WHEN WILL YOU LEARN?"
-  VGTW: ['VGS', 'VGTW', 'VGY'],         // "When will you— SHAZBOT!" / stutter-repeat / "— YES."
+  VGTW: ['VGS', 'VGTW'],        // "When will you— SHAZBOT!" / stutter-repeat
   VGTT: ['VGS', 'VGCN'],                // "THAT was— SHAZBOT!" / "— NICE MOVE." undercut
   VGCG: ['VGS', 'VGTA', 'VGCA'],        // "Good— SHAZBOT!" / "Good— AWWW THAT'S TOO BAD!" / "— AWESOME."
   VGO:  ['VGS', 'VGW'],                 // "Oo— SHAZBOT!" / "Ooops— WOOHOO!" celebrating the fail
   VGS:  ['VGS', 'VGTG'],                // "SHA— SHAZBOT!" spam chain / "SHAZBOT— I AM THE GREATEST!"
   VGCN: ['VGS', 'VGTB'],                // "Nice— SHAZBOT!" / "Nice move— ...BEST YOU CAN DO?" soured compliment
   VGCY: ['VGS', 'VGCY'],                // "You— SHAZBOT!" / "You— ROCK!" self-hype
-  VGCA: ['VGS', 'VGY'],                 // "Awes— SHAZBOT!" / "Awesome— YES."
+  VGCA: ['VGS'],                // "Aweso— SHAZBOT!"
   VGCS: ['VGS', 'VGTB'],                // "Great— SHAZBOT!" / the compliment that corrects itself
   VGRA: ['VGS', 'VGN'],                 // "Any— SHAZBOT!" / "Anytime— NO." retracted courtesy
   VGN:  ['VGY'],                        // "N— YES." — the contradiction gag
