@@ -432,8 +432,9 @@ function setupOfflineMode(mode: string): void {
       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
-    // flagrun is a solo lap — no roster at all.
-    mode === 'flagrun' ? { alpha: 0, bravo: 0 } : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+    // flagrun is a solo lap — no roster unless ?bots=N asks for bot
+    // cappers on your team (spectate-and-learn: RMB orbits them).
+    mode === 'flagrun' ? { alpha: urlParams.bots ?? 0, bravo: 0 } : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
     mode as import('../../shared/teams.js').ModeId,
   );
   // Flag Run starts you beside the nearest enemy flag — the ring is

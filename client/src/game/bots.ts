@@ -402,7 +402,7 @@ export class TeamBots {
    *  brains (objective+infiltrating, huntCreatures, hearing, dodge) has
    *  a client-side mirror here. */
   private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
-    const info = this.ctf?.objectiveInfoFor(bot);
+    const info = this.ctf?.objectiveInfoFor(bot) ?? this.flagrun?.objectiveInfoFor(bot);
     let ctx = this.ctxCache.get(bot.playerId);
     if (!ctx) {
       ctx = {

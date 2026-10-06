@@ -375,12 +375,16 @@ export class MoveSim {
     // the launch gate flicked him airborne in cycles. Velocity leaving
     // the surface (positive normal) is ballistic and untouched — blast
     // shoves and landings bleed toward the cap rather than snapping.
+    // …but only for a WALKER: T1 skiing is friction decayed ×0.6/tick —
+    // slope contact stays slippery, so a held ski preserves the slide
+    // (the documented divergence: our grip was slope-agnostic, bleeding
+    // every grounded tick even mid-ski — the hard ceiling on cap speed).
     const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
     const keep = Math.max(vdn, 0);
     const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
     const tSpeed = Math.hypot(tx, ty, tz);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
-    if (tSpeed > maxGround) {
+    if (tSpeed > maxGround && !this.input.skiHeld) {
       const base = Math.max(tSpeedIn, maxGround);
       const want = maxGround + (base - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
       const k = Math.min(1, want / tSpeed);

@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
-import { flagStandSpecs } from '../../../shared/mapSpec.js';
+import { flagStandSpecs, FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
 import { mkFlagMesh } from './ctfFlags.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S,
   bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
@@ -150,23 +150,32 @@ export class FlagRunBridge {
       touchers.push([b.playerId, b.position, prev]);
       prev.copy(b.position);
     }
+    // Carried flags ride whatever body holds them — the local player OR
+    // a bot capper (?bots=N on flagrun puts rostered cappers on the
+    // circuit so a spectator can watch a run).
+    const posOf = (id: string): THREE.Vector3 | null =>
+      id === 'local' ? player.pos : this.w.bots.find(b => b.playerId === id)?.position ?? null;
+    const deadOf = (id: string): boolean =>
+      id === 'local' ? player.isDead : this.w.bots.find(b => b.playerId === id)?.isDead ?? true;
     for (const f of this.flags) {
       if (f.state === 'carried') {
-        // Only the local player carries in flagrun — ride his body.
-        f.pos.copy(player.pos); f.pos.y += 1.2;
-        f.mesh.position.copy(f.pos);
-        if (player.isDead) {
-          f.state = 'dropped'; f.carrier = null;
-          f.pos.y = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z);
-          f.dropT = FLAG_RESET_S;
-          this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
-        } else {
+        const cPos = f.carrier ? posOf(f.carrier) : null;
+        if (cPos && !deadOf(f.carrier!)) {
+          f.pos.copy(cPos); f.pos.y += 1.2;
+          f.mesh.position.copy(f.pos);
           // Cap: any friendly stand within FLAG_HOME_R banks it.
-          for (const home of this.friendlyHomes()) {
+          const cTeam = this.w.teamOf.get(f.carrier!) as TeamId | undefined;
+          for (const home of this.friendlyHomes(cTeam ?? this.w.playerTeam)) {
             if (f.pos.distanceTo(home) >= FLAG_HOME_R + FLAG_STAND_TOP) continue;
             this.cap(f);
             break;
           }
+        } else {
+          this.setBotCarry(f.carrier, false);
+          f.state = 'dropped'; f.carrier = null;
+          f.pos.y = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z);
+          f.dropT = FLAG_RESET_S;
+          this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
         }
         continue;
       }
@@ -178,7 +187,7 @@ export class FlagRunBridge {
       for (const [id, tp, pp] of touchers) {
         const tTeam = this.w.teamOf.get(id);
         if (f.state === 'dropped' && tTeam === f.team) { this.sendHome(f, 'returned'); break; }
-        if (tTeam === f.team || id !== 'local') continue;
+        if (tTeam === f.team) continue;
         const segLen2 = pp.distanceToSquared(tp);
         const t = segLen2 > 0 ? Math.min(1, Math.max(0,
           ((f.pos.x - pp.x) * (tp.x - pp.x) + (f.pos.y - pp.y) * (tp.y - pp.y) + (f.pos.z - pp.z) * (tp.z - pp.z)) / segLen2)) : 0;
@@ -187,11 +196,14 @@ export class FlagRunBridge {
         const dz = pp.z + (tp.z - pp.z) * t - f.pos.z;
         // Server touch rule: |dy|<=6 vertical + planar radius — the deck
         // puts the flag ~3m over your feet, a 3D sphere would miss.
-        if (Math.abs(dy) > 6 || dx * dx + dz * dz > (FLAG_PICKUP_R * (player.mods.pickupRadius ?? 1)) ** 2) continue;
+        const pickupR = FLAG_PICKUP_R * (id === 'local' ? (player.mods.pickupRadius ?? 1) : 1);
+        if (Math.abs(dy) > 6 || dx * dx + dz * dz > pickupR * pickupR) continue;
         f.state = 'carried'; f.carrier = id;
+        this.setBotCarry(id, true);
         this.burst(f.pos, f.team, 1.4);
         sfx.flagCue('taken', false);
-        this.w.onFeed(`YOU took the ${TEAM_LABEL[f.team]} flag!`);
+        this.w.onFeed(id === 'local' ? `YOU took the ${TEAM_LABEL[f.team]} flag!`
+          : `${id.replace('bot:', '')} took the ${TEAM_LABEL[f.team]} flag!`);
         break;
       }
       f.mesh.position.copy(f.pos);
@@ -220,18 +232,50 @@ export class FlagRunBridge {
     return ` — ${this.lap} laps, avg ${speed.toFixed(1)} / max ${this.maxV.toFixed(1)} m/s, avg E ${e.toFixed(0)}${leg ?? ''}${lap ?? ''}`;
   }
 
-  private friendlyHomes(): THREE.Vector3[] {
-    return this.flags.filter(f => f.team === this.w.playerTeam).map(f => f.home);
+  private friendlyHomes(team: TeamId): THREE.Vector3[] {
+    return this.flags.filter(f => f.team === team).map(f => f.home);
+  }
+
+  private setBotCarry(id: string | null, v: boolean): void {
+    const b = id ? this.w.bots.find(x => x.playerId === id) : undefined;
+    if (b) b.carryingFlag = v;
+  }
+
+  /** Bot objective for flagrun — grab the nearest enemy flag, bank it at
+   *  the nearest friendly stand. Same shape CtfBridge feeds brains. */
+  objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean;
+    running?: boolean; thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } } | null {
+    const myTeam: TeamId = bot.team === 'bravo' ? 'bravo' : 'alpha';
+    if (bot.carryingFlag) {
+      let home: THREE.Vector3 | null = null, hd = Infinity;
+      for (const f of this.flags) {
+        if (f.team !== myTeam) continue;
+        const d = f.home.distanceToSquared(bot.position);
+        if (d < hd) { hd = d; home = f.home; }
+      }
+      return home ? { pos: home.clone(), infiltrating: false, running: true } : null;
+    }
+    let best: THREE.Vector3 | null = null, bd = Infinity;
+    for (const f of this.flags) {
+      if (f.team === myTeam || f.state === 'carried') continue;
+      const d = f.pos.distanceToSquared(bot.position);
+      if (d < bd) { bd = d; best = f.pos; }
+    }
+    return best
+      ? { pos: new THREE.Vector3(best.x, best.y + FLAG_STAND_LIFT, best.z), infiltrating: true }
+      : null;
   }
 
   private cap(f: CircuitFlag): void {
     this.caps++;
-    bank(this.w.scores, this.w.playerTeam);
-    this.w.onCapture(this.w.playerTeam);
+    const cTeam = (f.carrier ? this.w.teamOf.get(f.carrier) : null) as TeamId | null ?? this.w.playerTeam;
+    this.setBotCarry(f.carrier, false);
+    bank(this.w.scores, cTeam);
+    this.w.onCapture(cTeam);
     this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s`);
     if (this.capT < this.bestCap) this.bestCap = this.capT;
     sfx.flagCue('captured', true);
-    this.burst(f.home, this.w.playerTeam, 2.4);
+    this.burst(f.home, cTeam, 2.4);
     if (this.caps % LAP_CAPS === 0) {
       this.lap++;
       if (this.lapT < this.bestLap) this.bestLap = this.lapT;
@@ -264,6 +308,7 @@ export class FlagRunBridge {
   dropCarried(carrierId: string, at: THREE.Vector3): void {
     for (const f of this.flags) {
       if (f.carrier !== carrierId) continue;
+      this.setBotCarry(carrierId, false);
       f.carrier = null; f.state = 'dropped';
       f.pos.copy(at);
       f.pos.y = this.deps.lazyTerrain().getHeight(at.x, at.z);
