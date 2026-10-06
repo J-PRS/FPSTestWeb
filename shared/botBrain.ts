@@ -407,6 +407,9 @@ export class BotBrain {
   /** Hold-off repeller the steerer applies this think — pickDest sets
    *  it while a defended objective is being staged onto. */
   standoff: { x: number; z: number; radius: number; strength: number } | null = null;
+  /** Lateral weave drive armed by pickDest — the runner's serpentine,
+   *  applied inside the steering field rather than as a fake waypoint. */
+  weave = 0;
 
   /** Current hunt target — the belt intent carries no aim of its own,
    *  so hosts resolve the throw's arc off this. */
@@ -610,6 +613,7 @@ export class BotBrain {
     // --- context steering: senses score every direction ---
     tp = pf();
     this.steerer.setStandoff(this.standoff);
+    this.steerer.setWeave(this.weave);
     const d2 = this.steerer.steer(dt, ctx, pos, dest);
     dest = d2;
     P('steer', tp);

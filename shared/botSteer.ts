@@ -34,6 +34,13 @@ export class BotSteer {
    *  fading it lets the approach resume gradually, not on a switch. */
   private standoff: { x: number; z: number; radius: number; strength: number } | null = null;
   setStandoff(s: { x: number; z: number; radius: number; strength: number } | null): void { this.standoff = s; }
+  /** Lateral weave drive: a runner crossing open ground wants his line
+   *  to curve — an oscillating side-pull on interest so the carved path
+   *  reads as jinking instead of a laser beeline. Strength is how hard
+   *  it bends; the phase advances inside steer(). */
+  private weave = 0;
+  private weaveT = 0;
+  setWeave(strength: number): void { this.weave = strength; }
   /** Holding a point: humans sway on the spot, never stand a perfect
    *  statue — a slow small orbit around the goal, per-bot phase. */
   private swayT = botRand() * Math.PI * 2;
@@ -63,6 +70,7 @@ export class BotSteer {
     }
     gx /= gd; gz /= gd;
     const g0 = ctx.groundY(pos.x, pos.z);
+    this.weaveT += dt * 1.3;
     // Committed final approach: a runner inside the last stretch aims
     // dead at the objective. Slot scoring deflects it — a defender
     // standing on the flag repels via personal space, and the 4 rad/s
@@ -114,6 +122,11 @@ export class BotSteer {
       let interest = Math.max(0, align);
       interest *= interest; // sharpen: prefer near-goal arcs over drift
       interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
+      // Weave: a side-pull perpendicular to the goal, oscillating so the
+      // carve alternates — the emergent serpentine a runner throws.
+      if (this.weave > 0) {
+        interest += this.weave * Math.sin(this.weaveT) * (dx * -gz + dz * gx);
+      }
 
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling

@@ -17,6 +17,7 @@ const FLINCH_DIST = 8;
 export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean, hero: boolean): BotVec {
     b.holding = false;
     b.standoff = null; // staging re-arms it below when the wave isn't ready
+    b.weave = 0;       // the run-weave rearms inside the committed-route block
     if (b.flinchT > 0) {
       b.flinchT -= dt;
       const fx = pos.x - b.flinchFrom.x, fz = pos.z - b.flinchFrom.z;
@@ -98,16 +99,12 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) {
       // Jink on the run: a committed runner crossing open ground on a
       // laser line is the easiest disc read in the game — humans weave.
-      // The goal point oscillates ±8m perpendicular to the run so the
-      // path curves without giving up forward speed. The last leg stays
-      // pure — jinking inside the grab ring is a missed flag.
-      const gd0 = dist3(pos, ctx.objective);
-      if (gd0 > 60) {
-        b.orbitA += dt * 1.3;
-        const s = Math.sin(b.orbitA) * 8;
-        const px = -(ctx.objective.z - pos.z) / gd0, pz = (ctx.objective.x - pos.x) / gd0;
-        return { x: ctx.objective.x + px * s, y: ctx.objective.y, z: ctx.objective.z + pz * s };
-      }
+      // The weave is a steering-field term: a lateral pull oscillating
+      // around the goal line, so the carve is emergent (turn-limited,
+      // terrain-aware) rather than a fake perpendicular waypoint.
+      // The last leg stays pure — jinking inside the grab ring is a
+      // missed flag.
+      if (dist3(pos, ctx.objective) > 60) b.weave = 0.35;
       return { ...ctx.objective };
     }
     // Last-leg commitment beats self-preservation: inside ~40m of the
@@ -186,35 +183,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const onRoute = d <= b.h.orbitFar && (ptx * pgx + ptz * pgz) / ptd > 0.4;
       if (!onRoute || pd < 12) return { ...ctx.pickup };
     }
-    // Mission commitment — capper-role only: the feet stay on the line
-    // unless an enemy actually sits on the route, at ANY distance —
-    // inside the stand ring a visible defender still only earns feet
-    // when he's on the flag line itself (pressing that blocker runs
-    // through the flag anyway). The old >120m gate let close-in duels
-    // steal the last 10m: soaks showed cappers orbiting ~9m off the
-    // flag with zero grabs (fleet-wide muting is still wrong —
-    // blocking-or-bypass is the rule, not silence).
-    if (ctx.objective) {
-      const gd = dist3(pos, ctx.objective);
-      // Who earns committed feet: cappers anywhere on the route; any bot
-      // whose objective IS the stand once inside ~40m — an opportunistic
-      // grab beats an opportunistic duel at that range (the capper role
-      // existing doesn't mean it's alive, so the last leg can't be
-      // role-gated).
-      const committed = ctx.runner || gd < 40;
-      if (committed) {
-        // Inside the last leg the blocker test flips against you: a
-        // defender planted ON the flag is "blocking" by definition, so
-        // orbiting him concedes the grab. Crash the point — the touch
-        // is instant; surviving the approach is what speed is for.
-        if (gd < 40) return { ...ctx.objective };
-        const gx = (ctx.objective.x - pos.x) / gd, gz = (ctx.objective.z - pos.z) / gd;
-        const tx = t.pos.x - pos.x, tz = t.pos.z - pos.z;
-        const td = Math.hypot(tx, tz) || 1;
-        const blocking = d <= b.h.orbitFar && (tx * gx + tz * gz) / td > 0.4;
-        if (!blocking) return { ...ctx.objective };
-      }
-    }
+    // The committed-route and crash-the-point rules live above the hunt
+    // section (runner/wave always objective; anyone <40m crashes the
+    // point), so a hunt that survives to here is by definition a duel
+    // the objective hasn't claimed — no second gate needed.
     if (ctx.posted && ctx.objective && dist3(t.pos, ctx.objective) > ctx.posted) {
       return { ...ctx.objective };
     }
