@@ -64,6 +64,7 @@ const FLAG_BANNER_GEO = (() => {
   return geo;
 })();
 const FLAG_BAR_GEO = new THREE.CylinderGeometry(0.05, 0.05, 1.7, 6);
+const FLAG_POMMEL_GEO = new THREE.CylinderGeometry(0.02, 0.11, 0.5, 8);
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
@@ -84,7 +85,12 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
     new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
   finial.position.y = 4.15;
-  g.add(pole, bar, banner, finial);
+  // Pommel — a tapered butt cap terminates the pole; reads as the
+  // spear point the socket swallows when the flag seats.
+  const pommel = new THREE.Mesh(FLAG_POMMEL_GEO, FLAG_POLE_MAT);
+  pommel.rotation.x = Math.PI; // taper points DOWN
+  pommel.position.y = -0.2;
+  g.add(pole, bar, banner, finial, pommel);
   return g;
 }
 
