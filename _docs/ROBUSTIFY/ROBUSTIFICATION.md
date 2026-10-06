@@ -215,7 +215,8 @@ stand. Charged to §4.8 rather than silently absorbed.
 Same class as `invalidWarnAt` (§2.24): when `postIps` exceeded 1024
 entries the map did `clear()`, resetting the 60s window for every live
 IP — under address churn that is a throttle amnesty. Now evicts the
-eldest entry instead.
+eldest entry instead. `clientLogThrottle.test` pins the invariant: churn
+must not amnesty a live throttled IP.
 
 ### 2.26 `client.log` grew forever within a server run (2026-10-06)
 
