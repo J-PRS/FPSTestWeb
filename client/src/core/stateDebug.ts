@@ -144,7 +144,7 @@ function hashableEntry(
 function diffServerSnapshot(
   serverPlayers: SnapshotPlayer[],
   clientPlayers: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>,
-): string[] {
+): { diffs: string[]; healthDriftIds: string[] } {
   const serverMap = new Map<string, SnapshotPlayer>();
   for (const p of serverPlayers) {
     serverMap.set(p.id, p);
@@ -152,6 +152,7 @@ function diffServerSnapshot(
 
   const diffs: string[] = [];
   const allIds = new Set([...serverMap.keys(), ...clientPlayers.keys()]);
+  const healthDriftIds: string[] = [];
 
   for (const id of allIds) {
     const cp = clientPlayers.get(id);
@@ -166,15 +167,16 @@ function diffServerSnapshot(
     // (missing on one end) still count; those have no grace story.
     if (youngId(id)) {continue;}
 
-    diffs.push(...diffPlayerFields(id, cp, sp));
+    diffs.push(...diffPlayerFields(id, cp, sp, healthDriftIds));
   }
-  return diffs;
+  return { diffs, healthDriftIds };
 }
 
 function diffPlayerFields(
   id: string,
   cp: { x: number; y: number; z: number; health: number; isDead: boolean },
   sp: { position: { x: number; y: number; z: number }; health: number; isDead: boolean },
+  healthDriftIds: string[],
 ): string[] {
   const diffs: string[] = [];
   const dx = Math.abs(cp.x - sp.position.x);
@@ -190,11 +192,36 @@ function diffPlayerFields(
   // interval (~2hp) when the snapshot lands — real desyncs are >=9hp.
   if (Math.abs(cp.health - sp.health) > HEALTH_TOLERANCE) {
     diffs.push(`[echo] Player ${id} health: client=${cp.health} server=${sp.health}`);
+    healthDriftIds.push(id);
   }
   if (cp.isDead !== sp.isDead) {
     diffs.push(`[edge] Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
   }
   return diffs;
+}
+
+/** Health is an echo field under combat — a remote taking hits mutates
+ *  faster than the ~2Hz echo interval, so in-flight deltas read as
+ *  "desync" on every snapshot while none is. Lag self-resolves; a
+ *  dropped event never does (the diff pass adopts server hp, so a real
+ *  loss keeps diverging next check). Persistence — same id divergent on
+ *  consecutive detailed checks — is the desync signal; a lone sighting
+ *  is in-flight traffic, logged at debug. */
+const healthDriftStreak = new Map<string, number>();
+const DRIFT_STREAK_WARN = 2;
+
+function noteHealthDrift(driftIds: string[]): { persistentIds: Set<string>; transientCount: number } {
+  const drifting = new Set(driftIds);
+  const persistentIds = new Set<string>();
+  for (const id of driftIds) {
+    const streak = (healthDriftStreak.get(id) ?? 0) + 1;
+    healthDriftStreak.set(id, streak);
+    if (streak >= DRIFT_STREAK_WARN) persistentIds.add(id);
+  }
+  for (const id of healthDriftStreak.keys()) {
+    if (!drifting.has(id)) healthDriftStreak.delete(id);
+  }
+  return { persistentIds, transientCount: drifting.size - persistentIds.size };
 }
 
 function logDiffList(logger: ChildLogger, label: string, noneMessage: string, diffs: string[]): void {
@@ -311,7 +338,15 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     networkManager.sendSnapshotRequest();
 
     pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _ts: number) => {
-      const significantDiffs = diffServerSnapshot(serverPlayers, clientPlayers);
+      const { diffs, healthDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
+      const { persistentIds, transientCount } = noteHealthDrift(healthDriftIds);
+      // Transient health sightings stay out of the warn — a first-seen
+      // [echo] diff is expected while combat is in flight. Everything
+      // else (sim/edge diffs, persistent health drift) reports as before.
+      const significantDiffs = diffs.filter(d => {
+        const m = /^\[echo\] Player (\S+) health/.exec(d);
+        return !m || persistentIds.has(m[1]!);
+      });
 
       if (significantDiffs.length > 0) {
         logger.warn(`[StateHash] DESYNC DETECTED tick=${tick} hash=${serverHash} vs ${localHashStr} | ${significantDiffs.join('; ')}`, {
@@ -345,6 +380,8 @@ export function wireStateDebug(ctx: StateDebugContext): void {
             else if (flip === 'killed') {rp?.playDeath();}
           }
         }
+      } else if (transientCount > 0) {
+        logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} in-flight health echo(s), no persistent diffs (combat lag)`);
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);
       }

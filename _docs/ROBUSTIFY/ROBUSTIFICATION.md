@@ -844,6 +844,11 @@ desyncs — sim replayed past the stamp and still off — still warn.
   file has documented engagement-window flake history. Optional: make
   the engagement deadline starvation-aware or shard netbot out of the
   monolithic suite; the property itself is timing-independent.
+- **Ball rubberbands still suppressing 80-300m corrections** — live log
+  showed ~10 `ball rubberbands` warns across 7min, worst 297m, spread
+  across many ball ids (not one bad ball). §4.3 unified the replay onto
+  stepBall but some legs still diverge — investigate which leg phase
+  (bounce transitions? stall?) the corrections cluster on.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server
@@ -853,6 +858,21 @@ desyncs — sim replayed past the stamp and still off — still warn.
   divergence or drift? If intentional, this is verified-divergent-by-design
   and should be commented as such; if drift, deriving client constants
   from SPECIES×family is a mid-size refactor that kills the class.
+
+### 4.4b Echo-channel desync spam — *closed*
+
+Live logs showed `[StateHash] DESYNC` on `[echo] health` at ~96% mismatch
+rate (client=114 vs server=125 etc). Not data loss: `recordSuppressed`
+already force-sends on `p.health !== lastSent.hp`, so every mutation
+echoes — but under sustained combat (playerHit ~2Hz per victim, 14-30hp
+each) the in-flight delta always exceeds the 4hp bucket. An echo field
+cannot be hash-checked mid-flight. Fix is in the diff path
+(`stateDebug.ts`): per-player `healthDriftStreak` — a health divergence
+must persist across consecutive detailed checks (≥5s apart, and past
+the heal-adoption that runs in the same pass) before it warns. Transient
+echoes log at debug and are NOT adopted (adopting an older server echo
+over fresher client data would heal backwards). A genuinely dropped
+event diverges permanently → still warns.
 
 ### 4.5 Video export resolution — *closed*
 
