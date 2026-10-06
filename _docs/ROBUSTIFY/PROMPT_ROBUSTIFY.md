@@ -83,11 +83,29 @@ lane. "The audit lane is clean" is a checkpoint, not a stopping point.
   of truth; §3 and §4 must reflect reality when you finish.
 - Prepend `changelog.txt` (`YYYY-MM-DD - <summary>`, ASCII) when work
   settles.
-- **Never declare victory prematurely.** "Everything I looked at is clean"
-  is not "the game is clean". State exactly what was covered and what
-  remains unexamined. If asked "is the whole game spotless", the honest
-  answer includes coverage limits (uncommitted WIP, pattern-level sweeps,
-  untested paths).
+- **Every round must change something.** No exceptions: each session
+  ends with a code fix, a new or tightened test, a perf fix with
+  numbers, or a structural improvement — never just an audit verdict.
+  A pattern sweep that finds nothing supports the change you ship that
+  round (e.g. "swept X, found nothing — pinned it anyway"); it does
+  not replace it. An audit-only report means you didn't look hard
+  enough.
+- **Lint/typecheck silence is not proof.** oxlint and tsc clean on a large
+  repo proves syntax and shallow patterns, nothing more. Never cite them
+  as evidence of robustness — they are the floor, not the result.
+- **The log is the product.** Run a live bot-populated game (harness soak
+  or real session — `_tools/sweeps/matchSim.ts`, `neutralSoak.ts`, or a
+  room full of GameBots) and READ the output stream. If a human scanning
+  the log can't distinguish anomaly from heartbeat, observability work
+  remains: per-hit/per-tick INFO spam, warns that refire without
+  hysteresis, debug payloads at info tier, unformatted floats in status
+  lines. Noise floods are findings, not atmosphere.
+- **Never declare victory.** There is no "clean enough" — the target is
+  literally bug-free, a state you approach and never declare. Do not
+  report "clean", "classified-clean", or "spotless" as an outcome:
+  report what you CHANGED. If a lane produced nothing fixable, say so
+  in one line and move to the next lane in the same session. State
+  exactly what was covered and what remains unexamined.
 
 ## Verify before you stop
 
@@ -102,7 +120,8 @@ cd client && ./node_modules/.bin/tsc --noEmit
 ## Report back
 
 - What you changed (files + why)
-- What you audited and found clean (moved to §3)
+- What you audited with no fixable findings (recorded in §3 — one line,
+  never the headline)
 - What's now in §4 (new findings + re-ranked queue)
 - What lanes you *didn't* get to — the next session starts there
 - Test/typecheck results
@@ -110,9 +129,7 @@ cd client && ./node_modules/.bin/tsc --noEmit
 
 ## Done state
 
-"Spotless" means ALL of: §4 holds no bugs (only marked optional
-enhancements), every lane in the work loop has been swept recently
-(performance, duplication, structure, testability — not just the six
-classes), suites green, and a fresh audit finds nothing unclassified.
-Even then, say *what was covered*, not "the whole game is clean" — that
-claim is never true at this codebase's size.
+There is no done state. The program runs until the user stops it. The
+target is literally bug-free — every round produces a fix, a tightened
+test, or a structural improvement; when one lane stops producing
+findings you move to the next lane, not to a verdict.
