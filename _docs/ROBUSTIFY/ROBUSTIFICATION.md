@@ -418,6 +418,12 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`status` bitmask pinned** (2026-10-05): `status.test.ts` (5
+  tests) — every bit a unique power of two >=4 (no movement/death
+  collision), STATUS_MASK is exactly the claimed bits,
+  CLIENT_STATUS_MASK keeps toggles but strips server-owned REGEN/DD/
+  CHARGED (the forged-buff seam) without reaching outside the lane,
+  shootRevealed boundary included, mend rate sane.
 - **`perks` table pinned** (2026-10-05): `perks.test.ts` (6 tests) —
   PERK_ORDER covers every PerkId exactly once; every mod a finite
   non-negative number in a sane band (0 or 5× = balance typo);
