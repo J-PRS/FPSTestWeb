@@ -418,6 +418,13 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botBrain` head pinned** (2026-10-05): `botBrain.test.ts` (11
+  tests) — contact/lost chatter edges fire once, fear-vs-hero wound
+  roll, heal re-arms the edge, underfire/bored latches, belt mid-range
+  window + 9s cooldown + knife/far exclusions, utility goal pick
+  (committed runner 3.5-weight holds the objective while an idle bot
+  takes the nearer pickup — the arc belongs to the line planner, the
+  commitment lives in `goalS.goal`), and twin-instance think replay.
 - **Wire field-width wrap + lane parity** (2026-10-05): audited every
   binary field in `shared/wire.ts` — packPos/packVel clamp-and-quantize,
   health/ping/sheep/id lengths clamped, yaw wraps by design, record
