@@ -319,8 +319,14 @@ export class BotMoves {
       // Gate on `od` (distance to the objective), not `gd` — gd is the
       // ~8m steer step, so a gd gate is dead code and the hop chain
       // never fires (the 10-18m/s walk-in every soak autopsy blames).
+      // …but NOT on a real descent: a hop is airtime the slope can't
+      // pump — skiing only converts gravity while grounded, so a hop
+      // chain over a downhill literally leaves free speed on the table
+      // (kata carry probe: descents averaged 23m/s vs 29 on flats —
+      // the bot was hopping over every pump). Humans hold ski and stay
+      // glued; the hop is for flats and climbs.
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
     };
   }
 

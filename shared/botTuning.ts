@@ -58,6 +58,8 @@ export const BOT_TUNING = {
     hopSpeed: 6.4,       // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
     hopRiseFar: 3,       // m — far hops skip steep rises
+    hopDescRise: 0.12,   // rise/m — a descent past this stays glued:
+                         // grounded contact is what pumps gravity into speed
     runnerHopGd: 28,     // m — hop chains die at the orbit-watch ring: a hop landing on the 9m deck sails over the pole at 10-15m/s; inside this ring the runner touches down and the brake/crawl own the approach
     blockSelfD: 30,      // m — bodyblock hop read radius on post
     blockOd: 80,         // m — bodyblock enemy window

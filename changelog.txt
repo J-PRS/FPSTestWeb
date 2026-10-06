@@ -1,3 +1,4 @@
+2026-10-06 - bots: stay glued on descents - momentum hop now vetoes grades past hopDescRise; a hop over a downhill is airtime the slope can't pump (kata carry: descents averaged 23 vs 29 on flats)
 2026-10-06 - docs: capper-craft canon added to tribes reference (routes as hill/angle/jet tuples, entrance vs exit, bowls, jet-early, propel+jets tandem, llama vs e-grab); verified arsenal already rides the shove (propelJetUntil)
 2026-10-06 - bots: burn starts priced against the fuel gauge - no climb/destHigh/hop burn begins below mountE (a 2-8E burn is a sputter that buys nothing; banking ~2s to a full hop is always better); kata grab 105s->88s
 2026-10-06 - bots: REVERTED hill-vs-wall crest gate (climbing 20m 'hills' lost caps to faces it couldn't pay) - constant kept for reference
