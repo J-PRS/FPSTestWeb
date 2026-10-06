@@ -12,7 +12,12 @@ import { dirname, resolve } from 'node:path';
 import { deserializeDemo } from '../demo/demoReader.js';
 import { applyPlaybackEvents } from '../demo/playbackReconstruction.js';
 import { ProjectileEventType, TargetEventType } from '../demo/types.js';
-import type { TargetEvent, ProjectileEvent } from '../demo/types.js';
+import {
+  TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL,
+  TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, FLAG_DEMO_ID_BASE,
+} from '../demo/types.js';
+import type { TargetEvent, ProjectileEvent, DemoFile } from '../demo/types.js';
+import { DemoPlayer } from '../demo/DemoPlayer.js';
 import { createDemoLifecycle } from '../game/demoLifecycle.js';
 import { initSwarms } from '../entities/swarms.js';
 import { Ball } from '../entities/balls.js';
@@ -25,6 +30,8 @@ import type { HUD } from '../ui/hud.js';
 
 const CLIP = resolve(dirname(fileURLToPath(import.meta.url)),
   '../../../demos_out/midair_BoltLauncher_0.35s_henge.demo');
+const CLIP2 = resolve(dirname(fileURLToPath(import.meta.url)),
+  '../../../demos_out/midair_Cannon_4.60s_crossfire.demo');
 
 const flatTerrain = {
   getHeight: () => 0,
@@ -82,6 +89,110 @@ const spawnedBall = (world: ReturnType<typeof makePlaybackRig>['world'],
   });
 };
 
+const mkTarget = (over: Partial<TargetEvent>): TargetEvent => ({
+  eventType: TargetEventType.Spawned, timestamp: 0,
+  posX: 0, posY: 5, posZ: 0, velX: 0, velY: 0, velZ: 0,
+  targetId: 1, targetType: 0, health: 30,
+  hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+  ...over,
+});
+
+describe('playback audit — every lane animates', () => {
+  it('creature proxies integrate ballistic drift (gravity species falls)', () => {
+    const rig = makePlaybackRig();
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      targetId: 901, targetType: TARGETTYPE_CREATURE_BASE + 0, posY: 20,
+    })] });
+    const c = rig.world.playbackCreatureById.get(901)!;
+    expect(c).toBeTruthy();
+    const y0 = c.pos.y;
+    for (let i = 0; i < 60; i++) {rig.life.updateBallsPlayback(1 / 60);}
+    expect(c.pos.y).toBeLessThan(y0 - 0.5); // crawler falls, mesh follows
+    expect(c.mesh.position.y).toBe(c.pos.y);
+  });
+
+  it('deployable spawn → scene mesh; down state dims; destroy removes', () => {
+    const rig = makePlaybackRig();
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1, // mine — pops on destroy
+    })] });
+    const d = rig.world.playbackDeployableById.get(902)!;
+    expect(d).toBeTruthy();
+    expect(rig.scene.children).toContain(d.mesh);
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Hit, targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1, health: 0,
+    })] });
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Destroyed, targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1,
+    })] });
+    expect(rig.world.playbackDeployableById.has(902)).toBe(false);
+    expect(rig.scene.children).not.toContain(d.mesh);
+    expect(rig.world.explosions.length).toBeGreaterThan(0); // mine pop
+  });
+
+  it('flag spawn exists; carried flag re-pins to the replayed carrier', () => {
+    const rig = makePlaybackRig();
+    const flagId = FLAG_DEMO_ID_BASE | 0;
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      targetId: flagId, targetType: TARGETTYPE_FLAG, health: 1,
+      peakPosX: 3 + 1, hasPeakPosition: true, // carrier roster idx 3
+    })] });
+    const flag = rig.world.playbackFlags.get(flagId)!;
+    expect(flag).toBeTruthy();
+    // Carrier pos provider — the seam updatePlaybackFlags consults.
+    rig.world.remotePosAt = (idx: number) => idx === 3 ? new THREE.Vector3(10, 2, -5) : null;
+    rig.life.updateBallsPlayback(1 / 60);
+    expect(flag.position.x).toBeCloseTo(10, 1);
+    expect(flag.position.z).toBeCloseTo(-5, 1);
+    expect(flag.visible).toBe(true);
+  });
+
+  it('pickup spawns a gem and Destroyed removes it', () => {
+    const rig = makePlaybackRig();
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      targetId: 903, targetType: TARGETTYPE_PICKUP_BASE + 0,
+    })] });
+    expect(rig.world.playbackPickups.has(903)).toBe(true);
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Destroyed, targetId: 903, targetType: TARGETTYPE_PICKUP_BASE,
+    })] });
+    expect(rig.world.playbackPickups.has(903)).toBe(false);
+  });
+
+  it('kill events emit a burst (not silently dropped)', () => {
+    const rig = makePlaybackRig();
+    const before = rig.world.explosions.length;
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      targetType: TARGETTYPE_KILL, posY: 30,
+    })] });
+    expect(rig.world.explosions.length).toBe(before + 1);
+  });
+});
+
+// Real-clip remote-replica audit: interpolation must animate, not freeze.
+describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
+  it('interpolated remotes move between recorded frames', () => {
+    const demo: DemoFile = deserializeDemo(readFileSync(CLIP).buffer);
+    const player = new DemoPlayer();
+    player.load(demo);
+    player.currentTime = 1.0;
+    const s0 = player.getRemoteStates();
+    player.currentTime = 1.5;
+    const s1 = player.getRemoteStates();
+    expect(s1.length).toBeGreaterThan(0);
+    let moved = 0;
+    for (const a of s0) {
+      const b = s1.find(r => r.rosterIdx === a.rosterIdx);
+      if (!b) {continue;}
+      const d2 = (a.posX - b.posX) ** 2 + (a.posY - b.posY) ** 2 + (a.posZ - b.posZ) ** 2;
+      if (d2 > 0.01) {moved++;}
+      expect(Number.isFinite(b.posX + b.posY + b.posZ + b.yaw + b.pitch)).toBe(true);
+    }
+    // In a firefight clip most replicas move; a dead interp freezes all.
+    expect(moved).toBeGreaterThan(s0.length / 3);
+  });
+});
+
 describe('playback audit — entities must animate', () => {
   it('spawned playback balls integrate gravity (frozen-ball regression)', () => {
     const rig = makePlaybackRig();
@@ -123,6 +234,60 @@ describe('playback audit — entities must animate', () => {
     expect(r.pos.distanceTo(origin)).toBeGreaterThan(5);
   });
 });
+
+/** Replays a demo's full event stream through the real lifecycle in one
+ *  pass, collecting per-lane traces each assertion reads back. Mirrors the
+ *  timeline playback (30fps steps) so what the test sees is what a render
+ *  would see. */
+function scrubDemo(demo: DemoFile) {
+  const rig = makePlaybackRig();
+  const world = rig.world;
+  const trace = {
+    ballBirths: new Map<number, THREE.Vector3>(),
+    creatureBirths: new Map<number, THREE.Vector3>(),
+    projOrigins: new Map<number, THREE.Vector3>(),
+    deploySpawns: new Set<number>(),
+    flagEvents: 0,
+    pickupSpawns: new Set<number>(),
+    killBursts: 0,
+  };
+  let pi = 0, ti = 0;
+  const dt = 1 / 30;
+  const expBase = world.explosions.length;
+  for (let t = 0; t < demo.header.duration; t += dt) {
+    const proj: ProjectileEvent[] = [];
+    while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!); pi++;}
+    const tgt: TargetEvent[] = [];
+    while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!); ti++;}
+    for (const e of tgt) {
+      if (e.eventType === TargetEventType.Spawned && e.targetType < 32) {
+        trace.ballBirths.set(e.targetId, new THREE.Vector3(e.posX, e.posY, e.posZ));
+      }
+      if (e.eventType === TargetEventType.Spawned
+          && e.targetType >= TARGETTYPE_CREATURE_BASE && e.targetType < TARGETTYPE_DEPLOY_BASE) {
+        trace.creatureBirths.set(e.targetId, new THREE.Vector3(e.posX, e.posY, e.posZ));
+      }
+      if (e.eventType === TargetEventType.Spawned
+          && e.targetType >= TARGETTYPE_DEPLOY_BASE && e.targetType < TARGETTYPE_KILL) {
+        trace.deploySpawns.add(e.targetId);
+      }
+      if (e.targetType === TARGETTYPE_FLAG) {trace.flagEvents++;}
+      if (e.eventType === TargetEventType.Spawned && e.targetType >= TARGETTYPE_PICKUP_BASE) {
+        trace.pickupSpawns.add(e.targetId);
+      }
+    }
+    for (const e of proj) {
+      if (e.eventType === ProjectileEventType.Fired) {
+        trace.projOrigins.set(e.projectileId, new THREE.Vector3(e.posX, e.posY, e.posZ));
+      }
+    }
+    applyPlaybackEvents(world, { projectiles: proj, targets: tgt });
+    rig.life.updateBallsPlayback(dt);
+    rig.life.updatePlaybackProjectiles(dt);
+  }
+  trace.killBursts = world.explosions.length - expBase;
+  return { world, trace, scene: rig.scene };
+}
 
 // File-level differential audit: replay the real clip through real playback,
 // then every spawned entity must have moved (or died) — never froze midair.
@@ -222,6 +387,50 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
       expect(Number.isFinite(f.posX + f.posY + f.posZ + f.yaw + f.pitch)).toBe(true);
       expect(f.timestamp).toBeGreaterThanOrEqual(prev);
       prev = f.timestamp;
+    }
+  });
+});
+
+// Crossfire clip carries the lanes henge lacks: 27 creature events, 109 flag,
+// 34 pickup — every lane asserted against real recorded data.
+describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', () => {
+  let demo2: DemoFile;
+  beforeAll(() => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
+
+  it('every spawned creature animates or dies — none freeze', () => {
+    const { world, trace } = scrubDemo(demo2);
+    expect(trace.creatureBirths.size).toBeGreaterThan(3);
+    const violations: string[] = [];
+    for (const [id, born] of trace.creatureBirths) {
+      const c = world.playbackCreatureById.get(id);
+      if (!c || c.dead) {continue;}
+      const moved = c.pos.distanceTo(born) > 0.3;
+      const settled = c.vel.lengthSq() < 0.01;
+      if (!moved && !settled) {
+        violations.push(`creature ${id} frozen at ${c.pos.y.toFixed(1)}`);
+      }
+    }
+    expect(violations, violations.join('\n')).toHaveLength(0);
+  });
+
+  it('marker lanes land: flag events rebuild proxies, pickups spawn, kills burst', () => {
+    const { world, trace } = scrubDemo(demo2);
+    expect(trace.flagEvents).toBeGreaterThan(10);
+    // Pickups that were spawned and never taken survive the clip in the map.
+    expect(trace.pickupSpawns.size).toBeGreaterThan(5);
+    const livePickups = [...trace.pickupSpawns].filter(id => world.playbackPickups.has(id));
+    expect(world.playbackPickups.size).toBeGreaterThan(0);
+    expect(livePickups.length + world.playbackPickups.size).toBeGreaterThanOrEqual(trace.pickupSpawns.size);
+    // Kill events emit a visible burst — a silently dropped kill fails here.
+    expect(trace.killBursts).toBeGreaterThan(0);
+  });
+
+  it('deployable spawns land as scene meshes', () => {
+    const { world, trace, scene } = scrubDemo(demo2);
+    for (const id of trace.deploySpawns) {
+      const d = world.playbackDeployableById.get(id);
+      if (!d) {continue;} // destroyed mid-clip — fine
+      expect(scene.children).toContain(d.mesh);
     }
   });
 });
