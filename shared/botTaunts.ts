@@ -953,25 +953,28 @@ export interface TauntLine { text: string; vgs?: string }
  *  lines — the contradiction, the self-hype, the stutter, the sore-
  *  loser hijack — not individually cited pairings. */
 const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
-  VGTG: ['VGS', 'VGS', 'VGY'],  // "I am the— SHAZBOT!" / "— YES."
-  VGTA: ['VGS', 'VGS', 'VGN'],  // "Awww that's too— SHAZBOT!" / "— NO."
-  VGTB: ['VGS', 'VGS', 'VGY'],  // "Is that the best— YES." — answers itself
-  VGTW: ['VGS', 'VGTW'],        // "When will you— SHAZBOT!" / stutter-repeat
-  VGTT: ['VGS'],                // "THAT was— SHAZBOT!"
-  VGCG: ['VGS', 'VGTA'],        // "Good ga— SHAZBOT!" / "— AWWW THAT'S TOO BAD!"
-  VGO:  ['VGS'],                // "Ooop— SHAZBOT!"
-  VGS:  ['VGS'],                // "SHAZ— SHAZBOT!" — machine-gun spam chain
-  VGCN: ['VGS'],                // "Nice mo— SHAZBOT!" — the soured compliment
-  VGCY: ['VGS', 'VGCY'],        // "You— SHAZBOT!" / "You— ROCK!" self-hype
-  VGN:  ['VGY'],                // "N— YES." — the contradiction gag
-  VGY:  ['VGN'],                // "Ye— NO."
-  VGH:  ['VGB'],                // "Hi— BYE." — the drive-by greeting
-  VGW:  ['VGTG'],               // "Wooh— I AM THE GREATEST!" celebration upgrade
-  VGQ:  ['VGS'],                // "Qui— SHAZBOT!"
+  VGTG: ['VGS', 'VGS', 'VGY', 'VGTG'],  // "I am the— SHAZBOT!" / "— YES." / self-hype stutter
+  VGTA: ['VGS', 'VGS', 'VGN', 'VGW'],   // "Awww that's too— SHAZBOT!" / "— NO." / "— WOOHOO!"
+  VGTB: ['VGS', 'VGS', 'VGY', 'VGTW'],  // "Is that the best— YES." / "— WHEN WILL YOU LEARN?"
+  VGTW: ['VGS', 'VGTW', 'VGY'],         // "When will you— SHAZBOT!" / stutter-repeat / "— YES."
+  VGTT: ['VGS', 'VGCN'],                // "THAT was— SHAZBOT!" / "— NICE MOVE." undercut
+  VGCG: ['VGS', 'VGTA', 'VGCA'],        // "Good ga— SHAZBOT!" / "— AWWW THAT'S TOO BAD!" / "— AWESOME."
+  VGO:  ['VGS', 'VGW'],                 // "Ooop— SHAZBOT!" / "Ooops— WOOHOO!" celebrating the fail
+  VGS:  ['VGS', 'VGTG'],                // "SHAZ— SHAZBOT!" spam chain / "SHAZBOT— I AM THE GREATEST!"
+  VGCN: ['VGS', 'VGTB'],                // "Nice mo— SHAZBOT!" / "Nice move— ...BEST YOU CAN DO?" soured compliment
+  VGCY: ['VGS', 'VGCY'],                // "You— SHAZBOT!" / "You— ROCK!" self-hype
+  VGCA: ['VGS', 'VGY'],                 // "Aweso— SHAZBOT!" / "Awesome— YES."
+  VGCS: ['VGS', 'VGTB'],                // "Great sho— SHAZBOT!" / the compliment that corrects itself
+  VGRA: ['VGS', 'VGN'],                 // "Anyti— SHAZBOT!" / "Anytime— NO." retracted courtesy
+  VGN:  ['VGY'],                        // "N— YES." — the contradiction gag
+  VGY:  ['VGN', 'VGO'],                 // "Ye— NO." / "Yes— OOOPS." instant regret
+  VGH:  ['VGB', 'VGS'],                 // "Hi— BYE." drive-by greeting / "Hi— SHAZBOT!" false warmth
+  VGW:  ['VGTG', 'VGS'],                // "Wooh— I AM THE GREATEST!" / "Wooh— SHAZBOT!" crash mid-celebration
+  VGQ:  ['VGS', 'VGTW'],                // "Qui— SHAZBOT!" / "Quiet— WHEN WILL YOU LEARN?"
 };
-// Rare on purpose — a combo every kill reads as a bot tic, not a
-// discovered trick. ~1 in 12 spoken chord moments is background rate.
-const COMBO_CHANCE = 0.08;
+// Combos are the discovered-trick flavor — broad table, still a rare roll
+// so any single one lands as a surprise rather than a tic.
+const COMBO_CHANCE = 0.12;
 
 /** The interrupting follow-up chord a speaker might fire after `chord`
  *  lands, or undefined when they let the line finish. Callers speak it
