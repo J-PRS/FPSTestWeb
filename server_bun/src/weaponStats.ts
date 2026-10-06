@@ -74,10 +74,13 @@ interface PickupRow { spawned: number; banked: number; decayed: number; refused:
 const CELL = 10;
 const SPEED_BIN = 5;
 
+// One key per 5 m/s forever is an unbounded keyspace — legit speeds top
+// out near ~150 (jet cap + dive conversion), so anything past that is a
+// physics anomaly that belongs in one 'fast' bucket, not a fresh mint.
 const speedBin = (v: { x: number; y: number; z: number } | null): string => {
   if (!v) return 'unk';
   const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-  return String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
+  return s >= 150 ? '150+' : String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
 };
 
 const FLUSH_MS = 60_000;
