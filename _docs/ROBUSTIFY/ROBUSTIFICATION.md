@@ -892,6 +892,17 @@ desyncs — sim replayed past the stamp and still off — still warn.
   40 clipped the bots' 44 m/s re-blast hops → capper energy-starved and
   wandered on kata (capRun bisected it to commit 9625682). Raised to 50:
   above the bot propel ceiling, still kills the unbounded forward pump.
+- ~~**matchSim drop-cause blindness**~~ — *closed*: the carry ledger now
+  correlates `playerKill` (targetId) within 1.5s before a carried→dropped
+  edge and classifies `died` vs `threw` — "carrier killed on the doorstep"
+  and "carrier tossed it alive" were indistinguishable drops. Printed as
+  `drops=N (died=x threw=y)` and per-grab `→died+1s`. Verified on a 2-min
+  8-bot kata soak: the lone grab read `a@27s→died+1s`.
+- **Sheep idle-max is honest (audit, 2026-10-01)** — the same soak maxed
+  4/8 bots with `idle` dominant (51-72pts). Verified `atPost` (hasDest &&
+  within 14m of the claimed dest → trickle charge) already exempts posted
+  guards; the maxed bots are genuine zombies — same competence finding as
+  §4.7b, not a metering bug.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server

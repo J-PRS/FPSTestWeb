@@ -92,23 +92,33 @@ for (let i = 0; i < simS * 20; i++) {
 // Pair each grab with its outcome: capped (flag home + teamScore) or
 // dropped; hold time is the contested-transit metric that matters.
 let kills = 0, returns = 0;
-const carries: { team: string; grabT: number; endT?: number; result: 'cap' | 'drop' | 'held' }[] = [];
+const carries: { team: string; carrier: string | null; grabT: number; endT?: number; result: 'cap' | 'drop' | 'held'; dropCause?: 'died' | 'threw' }[] = [];
+// Carrier-death correlation — a flagUpdate carries no drop cause, but
+// "threw it" and "died holding it" are different failure modes. A
+// playerKill of the carrier within ~1.5s before the drop lands = died;
+// otherwise the carrier tossed it alive.
+const diedAt = new Map<string, number>();
 const prev: Record<string, { state: string; carrier: string | null }> = {};
 // Where each carry died — drop spot vs the flag's own home stand, so
 // "carriers die deep in enemy territory" and "killed on their own
 // doorstep" read as different failure modes.
 const dropDs: number[] = [];
-for (const m of w.msgs as { type: string; _s?: number; flags?: { team: string; state: string; carrier: string | null; pos?: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number } }[] }[]) {
-  if (m.type === 'playerKill') kills++;
+for (const m of w.msgs as { type: string; _s?: number; targetId?: string; flags?: { team: string; state: string; carrier: string | null; pos?: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number } }[] }[]) {
+  if (m.type === 'playerKill') { kills++; if (m.targetId) diedAt.set(m.targetId, m._s ?? 0); }
   if (m.type !== 'flagUpdate') continue;
   for (const fl of m.flags ?? []) {
     const was = prev[fl.team];
     const now = { state: fl.state, carrier: fl.carrier };
     if (fl.state === 'carried' && was?.state !== 'carried') {
-      carries.push({ team: fl.team, grabT: m._s ?? 0, result: 'held' });
+      carries.push({ team: fl.team, carrier: fl.carrier, grabT: m._s ?? 0, result: 'held' });
     } else if (was?.state === 'carried' && fl.state === 'dropped') {
       const c = carries.findLast((x) => x.team === fl.team && x.result === 'held');
-      if (c) { c.endT = m._s ?? 0; c.result = 'drop'; }
+      if (c) {
+        c.endT = m._s ?? 0;
+        c.result = 'drop';
+        const sinceDeath = c.carrier !== null ? c.endT - (diedAt.get(c.carrier) ?? -Infinity) : Infinity;
+        c.dropCause = sinceDeath >= 0 && sinceDeath <= 1.5 ? 'died' : 'threw';
+      }
       if (fl.pos && fl.home) dropDs.push(Math.hypot(fl.pos.x - fl.home.x, fl.pos.z - fl.home.z));
     } else if (was?.state === 'carried' && fl.state === 'home') {
       // carried→home on the STOLEN flag only happens via cap or return-
@@ -123,13 +133,15 @@ for (const m of w.msgs as { type: string; _s?: number; flags?: { team: string; s
   }
 }
 const done = carries.filter((c) => c.result !== 'held');
+const died = done.filter((c) => c.dropCause === 'died').length;
+const threw = done.filter((c) => c.dropCause === 'threw').length;
 const med = (a: number[]) => a.length ? a.sort((x, y) => x - y)[Math.floor(a.length / 2)]!.toFixed(1) : '-';
 const wallS = (Date.now() - t0) / 1000;
 console.log(`map=${FIELD || MAP} flagM=${flagM}m bots=${BOTS} sim=${MINS}min wall=${wallS.toFixed(0)}s (${(simS / wallS).toFixed(0)}x rt)`);
 console.log(`score alpha=${room.scores.alpha} bravo=${room.scores.bravo}  matchEnd=${w.count('matchEnd')}`);
-console.log(`kills=${kills} grabs=${carries.length} drops=${done.filter((c) => c.result === 'drop').length} caps=${done.filter((c) => c.result === 'cap').length} heldAtEnd=${carries.length - done.length} standReturns=${returns}`);
+console.log(`kills=${kills} grabs=${carries.length} drops=${done.filter((c) => c.result === 'drop').length} (died=${died} threw=${threw}) caps=${done.filter((c) => c.result === 'cap').length} heldAtEnd=${carries.length - done.length} standReturns=${returns}`);
 if (dropDs.length) console.log(`  dropD-from-own-home: ${dropDs.map((d) => d.toFixed(0)).sort((a, b) => +a - +b).join(',')}m`);
 if (done.length) {
   console.log(`carry outcomes: med hold=${med(done.map((c) => (c.endT ?? 0) - c.grabT))}s`);
-  console.log(`  grabs: ${carries.map((c) => `${c.team[0]}@${c.grabT.toFixed(0)}s→${c.result}${c.endT ? `+${(c.endT - c.grabT).toFixed(0)}s` : ''}`).join('  ')}`);
+  console.log(`  grabs: ${carries.map((c) => `${c.team[0]}@${c.grabT.toFixed(0)}s→${c.result === 'drop' ? c.dropCause : c.result}${c.endT ? `+${(c.endT - c.grabT).toFixed(0)}s` : ''}`).join('  ')}`);
 }
