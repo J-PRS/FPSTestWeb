@@ -532,6 +532,18 @@ export class Deployables {
     this.remotes.remove(id);
   }
 
+  /** Wire-id → item pairs across BOTH lanes: remote spawns keyed by the
+   *  map, plus our own plants once ackLocal stamped their serverId.
+   *  Feeds the §4.7 deployable fidelity hash — the server's roster
+   *  covers our plants too. */
+  netEntries(): [number, Item][] {
+    const out: [number, Item][] = [...this.remotes.entries()];
+    for (const i of this.items) {
+      if (i.serverId !== undefined && !i.dead) {out.push([i.serverId, i]);}
+    }
+    return out;
+  }
+
   remoteIds(): ReadonlySet<number> {
     return this.remotes.ids();
   }

@@ -961,7 +961,7 @@ field nor the orbit-escape converts proximity into the mount move.
 Competence bug, not a six-class bug — queued for the gameplay pass JP
 is already working (jet-cap fix landed 2026-10-06 and didn't move it).
 
-### 4.7 Replica-coverage gap in the state hash — *closed (balls + creatures)*
+### 4.7 Replica-coverage gap in the state hash — *closed (balls + creatures + deployables)*
 
 The checksum covered players only; non-player replays had no cross-engine
 desync signal. **Ball fleet now hashed** (2026-10-01): `ballHash` rides
@@ -980,9 +980,15 @@ over (id, species, state, uber, targetId) — every field mirrored from
 spawn or wire edges, so latency can't phantom it. `main.ts` feeds
 `stateDebug` the 8 net-driven species lists via a `netCreatures` ctx
 accessor (`banelings` added to the entities return for reachability);
-same persistence-gated warn. Projectiles remain uncovered — short-lived
-enough that a stranded replica is cosmetic; same pattern applies if ever
-needed.
+same persistence-gated warn.
+
+**Deployables covered too** (2026-10-01): `deployHash` over
+(id, kind, owner, team) — pure spawn edges; hp/armor deliberately
+excluded as echo-channel (deployHp ticks would phantom-fire the check at
+heal cadence). Catches a deploySpawn/deployGone edge that never landed.
+Client `netEntries()` covers both lanes: remote spawns plus our own
+plants once `serverId` arrives. Projectiles remain uncovered —
+short-lived enough that a stranded replica is cosmetic.
 
 ---
 

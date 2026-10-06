@@ -190,7 +190,7 @@ export type ServerMessage =
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
-  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string }
+  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string; deployHash?: string }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
       /** Last inputMove seq the server consumed — the client replays its

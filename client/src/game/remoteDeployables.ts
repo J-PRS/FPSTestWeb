@@ -48,6 +48,9 @@ export class RemoteDeployables {
   /** Access for the repair ray / bot weld / dome-obstacle scans that live
    *  in the local layer — they read remote gear the same as planted. */
   values(): IterableIterator<Item> { return this.remote.values(); }
+  /** Server-id → item pairs — the §4.7 deployable fidelity hash keys
+   *  replicas by their wire id, which only the map holds. */
+  entries(): IterableIterator<[number, Item]> { return this.remote.entries(); }
   get(id: number): Item | undefined { return this.byId.get(id); }
   ids(): ReadonlySet<number> { return new Set(this.remote.keys()); }
 

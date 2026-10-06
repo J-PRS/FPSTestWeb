@@ -6,7 +6,7 @@ import type { ChildLogger } from './Logger.js';
 import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
-import { computeStateHash, computeReplicaHash, computeCreatureHash } from '../../../shared/stateHash.js';
+import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash } from '../../../shared/stateHash.js';
 import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
@@ -31,6 +31,9 @@ export interface StateDebugContext {
   /** Net-driven creature replicas (crawler/scarab/rakk/…) for the
    *  §4.7 fidelity hash — sim carries species/state/targetId. */
   netCreatures?: () => Iterable<{ netId: number; dead: boolean; uber: boolean; sim: { species: string; state: string; targetId: string | null } | null }>;
+  /** Wire-id → deployable pairs (remote spawns + own plants with a
+   *  serverId) for the §4.7 deployable fidelity hash. */
+  netDeployables?: () => Iterable<[number, { kind: string; owner?: string; team?: string; dead: boolean }]>;
   logger: ChildLogger;
 }
 
@@ -315,9 +318,30 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   // replica the ballRoster path never healed (§4.7).
   let ballDriftStreak = 0;
   let creatureDriftStreak = 0;
+  let deployDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string) => {
     hashCheckCount++;
+
+    if (serverDeployHash !== undefined && ctx.netDeployables) {
+      const localId = networkManager.getLocalPlayerId();
+      const local = new Map<number, { kind: string; owner: string; team: string }>();
+      for (const [id, d] of ctx.netDeployables()) {
+        if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? localId ?? '', team: d.team ?? ctx.world?.localTeam ?? '' });}
+      }
+      const localDeployHash = computeDeployHash(local);
+      if (localDeployHash === serverDeployHash) {
+        deployDriftStreak = 0;
+      } else {
+        deployDriftStreak++;
+        const detail = `server=${serverDeployHash} client=${localDeployHash} ids=[${[...local.keys()].join(',')}]`;
+        if (deployDriftStreak >= 2) {
+          logger.warn(`[StateHash] DEPLOY DESYNC tick=${tick} ${detail} (persistent across ${deployDriftStreak} checks — a deploySpawn/deployGone edge never landed)`);
+        } else {
+          logger.debug(`[StateHash] deploy mismatch tick=${tick} ${detail} (transient — spawn/gone edge in flight)`);
+        }
+      }
+    }
 
     if (serverCreatureHash !== undefined && ctx.netCreatures) {
       const local = new Map<number, { species: string; state: string; uber: boolean; targetId: string | null }>();

@@ -126,3 +126,30 @@ export function computeCreatureHash(replicas: Iterable<[number, HashableCreature
   }
   return h.toString(16);
 }
+
+/** Deployables (turrets/stations/shields/mines) hash identity edges only:
+ *  kind/owner/team arrive on spawn edges; hp and armor lag on the echo
+ *  channel (deployHp ticks) so they stay OUT — a phantom-desync at heal
+ *  cadence is exactly the failure this checksum exists to avoid. What
+ *  it catches: a deploySpawn or deployGone edge that never landed. */
+export interface HashableDeploy {
+  kind: string;
+  owner: string;
+  team: string;
+}
+
+export function computeDeployHash(replicas: Iterable<[number, HashableDeploy]>): string {
+  let h = 0;
+  for (const [id, r] of replicas) {
+    let ph = 0x811c9dc5;
+    ph ^= id & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    for (const s of [r.kind, r.owner, r.team]) {
+      for (let i = 0; i < s.length; i++) {
+        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+      }
+      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    h = (h + ph) >>> 0;
+  }
+  return h.toString(16);
+}

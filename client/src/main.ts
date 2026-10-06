@@ -737,6 +737,7 @@ init().then(async () => {
           ...entities.crawlers, ...entities.scarabs, ...entities.rakks, ...entities.rollers,
           ...entities.gnats, ...entities.snakes, ...entities.banelings, ...entities.totems,
         ],
+        netDeployables: () => entities.deployables.netEntries(),
         logger,
       });
     }

@@ -1,6 +1,6 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
-import { computeStateHash, computeReplicaHash, computeCreatureHash } from '../../shared/stateHash.ts';
+import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -359,6 +359,12 @@ export class TickLoop {
     const creatureHash = creatureRoster.length
       ? computeCreatureHash(creatureRoster.map((c) => [c.id, c] as [number, { species: string; state: string; uber: boolean; targetId: string | null }]))
       : undefined;
+    // Deployables too — kind/owner/team are spawn edges; hp/armor are
+    // echo-channel (deployHp ticks) and stay out of the hash on purpose.
+    const deployRoster = room.deployables.snapshot();
+    const deployHash = deployRoster.length
+      ? computeDeployHash(deployRoster.map((d) => [d.id, { kind: d.kind, owner: d.owner, team: d.team ?? '' }] as [number, { kind: string; owner: string; team: string }]))
+      : undefined;
     const timestamp = wallNow();
 
     room.broadcast({
@@ -369,6 +375,7 @@ export class TickLoop {
       timestamp,
       ballHash,
       creatureHash,
+      deployHash,
     });
 
     // Periodic status summary - suppress duplicates, batch with count
