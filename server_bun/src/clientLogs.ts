@@ -60,7 +60,11 @@ export async function clientLogRoute(req: Request, cors: (body: BodyInit | null,
       return cors('Too large', { status: 413 });
     }
     mkdirSync(LOGS_DIR, { recursive: true });
-    appendFileSync(join(LOGS_DIR, 'client.log'), body);
+    // Boot-time rotate leaves a long-lived server with one forever log —
+    // roll it mid-run too. statSync per post is fine: posts are IP-throttled.
+    const logPath = join(LOGS_DIR, 'client.log');
+    if (existsSync(logPath) && statSync(logPath).size > 32 * 1024 * 1024) rotateLog(logPath);
+    appendFileSync(logPath, body);
     const warnLines: string[] = [];
     const errLines: string[] = [];
     for (const line of body.split('\n')) {
