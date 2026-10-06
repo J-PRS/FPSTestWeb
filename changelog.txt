@@ -2,6 +2,7 @@
 =======
 2026-10-06 - stateHash: respawn/kill isDead flips and never-echoed health now re-arm the join grace window — the echo channel re-lags across a revive (server writes 300, client still hashes pre-death/100), and hashing a fabricated 100 before the first record lands fired phantom DESYNC warns every combat cycle
 2026-10-06 - observability: melee-whiff warn folds repeats per species into ×N (3s window) — a swarm besieging a stationary player whiffed every bite at warn tier
+2026-10-05 - test: pin botTaunts — cooldown/chance/mute gates, repeat-victim dominance flip, endTaunt's own roll, VGS canon text, chatKindFor spectrum (10 tests); netchannel reviewed (pure interface, contract lives in wire.ts)
 2026-10-05 - test: pin fieldSurface + vgsTree — structure-top floor fusion, maxTop bound, resolveBody push-out; chord-tree leaf labels + VG* all-chat scoping (8 tests)
 2026-10-05 - test: pin teams/constants/env — mode table sanity + teams-XOR-ffa, pickTeam alternation, bank/winner edges, capsule geometry, sharedEnv merge, sharedNow epoch-0 default (7 tests)
 2026-10-05 - test: pin botRand gate — strictRng rejects unblessed ambient (botRng(Math.random) throws), botRngRelease is the blessed ambient, taunt stream independence (6 tests)

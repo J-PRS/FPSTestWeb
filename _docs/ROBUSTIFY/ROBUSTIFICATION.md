@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botTaunts` pinned + `netchannel` reviewed** (2026-10-05):
+  `botTaunts.test.ts` (10 tests) — per-bot 20s cooldown shared across
+  event kinds, silent rolls don't stamp, repeat-victim 90s window flips
+  to the dominance pool, match-mute kills all gameplay taunts, endTaunt's
+  own high roll bypasses cooldown, VGS chord → canon text, chatKindFor
+  human-spectrum classification (specific beats generic), vgsCommandFor
+  acks request families only. `netchannel` is a pure type interface
+  (25 lines, no logic) — the lane-drop contract is enforced in wire.ts.
 - **`fieldSurface` + `vgsTree` pinned** (2026-10-05):
   `fieldSurface.test.ts` (8 tests) — structure top face wins over
   terrain as floor, `maxTop` bounds deck-overhead claims, flat-up
