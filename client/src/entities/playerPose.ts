@@ -90,6 +90,9 @@ export class PoseControl {
   private holdBones: { bone: THREE.Object3D; role: number; off: THREE.Quaternion; last: THREE.Quaternion; bind: THREE.Quaternion }[] = [];
   private holdQuats: [number, number, number, number][];
   wantHoldPose = false;
+  /** Hold the grip only in idle — rigs with good retargeted arm tracks
+   *  keep them everywhere else; idle just swaps aimed for low-carry. */
+  holdIdle = false;
   /** Clips already carry the grip pose in their arm tracks (the
    *  `__holdbake1` marker on the adopted clip table) — the runtime
    *  compose is for rigs on pre-bake files or native-only clip sets. */
@@ -223,7 +226,7 @@ export class PoseControl {
   update(dt: number, mixer: THREE.AnimationMixer | null,
        currentAction: THREE.AnimationAction | null,
        currentClipName: string | null, playingUAL: boolean,
-       root?: THREE.Object3D): void {
+       root?: THREE.Object3D, state?: string): void {
     // Remove last frame's pitch BEFORE the mixer writes. The mixer skips
     // bones whose track value didn't change, so without this the multiply
     // would accumulate on a stale pitched value and the bone spins.
@@ -254,13 +257,15 @@ export class PoseControl {
       mixer.update(dt);
     }
     this.applySpineLock(dt);
-    if (this.wantHoldPose && !this.holdBaked) {
+    const holdOn = (this.wantHoldPose || (this.holdIdle && state === 'idle')) && !this.holdBaked;
+    if (holdOn || this.holdW > 0) {
       // Full-body oneshots own the arms while weighted in. Everything
       // else keeps the hold: cyber's retargeted clips pose the arm chain
       // wrong on their own (mannequin axis bake lands splayed), so the
       // fixed hip-fire grip IS the correction — blend only so oneshot
-      // transitions don't pop.
-      this.holdW += (oneshot ? -6 : 6) * dt;
+      // transitions don't pop. holdW also decays after holdOn drops
+      // (idle-gated rigs leaving idle) so the pose releases cleanly.
+      this.holdW += (holdOn && !oneshot ? 6 : -6) * dt;
       this.holdW = Math.min(1, Math.max(0, this.holdW));
       if (this.holdW > 0) {for (const hb of this.holdBones) {
         // Slerp toward BIND pose first — composing the fixed raise on top
@@ -287,7 +292,7 @@ export class PoseControl {
       }
       ab.bone.quaternion.multiply(ab.last);
     }}
-    this.poseApplied = Boolean(procPitch) || (this.wantHoldPose && !this.holdBaked && this.holdW > 0);
+    this.poseApplied = Boolean(procPitch) || this.holdW > 0;
     this.snapFeetToShins(playingUAL);
   }
 

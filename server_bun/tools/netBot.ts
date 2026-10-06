@@ -263,6 +263,7 @@ class WireBot {
     switch (m.type) {
       case 'wireIds':
         for (const [id, pid] of Object.entries(m.add as Record<string, string>)) this.wireIds.set(Number(id), pid);
+        for (const id of (m.remove ?? []) as number[]) this.wireIds.delete(id);
         break;
       case 'gameState': {
         // A re-seat (switchRoom hop) replaces the whole room: old-room

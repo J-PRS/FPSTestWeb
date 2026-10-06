@@ -122,6 +122,10 @@ export interface RigManifest {
    *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
    *  target so the whole set unwinds onto the authored forward. */
   clipYawFix?: number;
+  /** Apply the canned hip-fire grip only while idling — for rigs whose
+   *  retargeted clips animate the arms fine but whose idle clip is an
+   *  aimed stance (cyber's UAL idle reads as shouldered, not carried). */
+  idleHold?: boolean;
   /** Directional walk strides the GLB ships natively (polyart's
    *  WalkLeft/WalkRight/WalkBack family). Only pure lateral sectors
    *  snap to the side clips — forward diagonals keep the forward
@@ -151,7 +155,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // Cyber+vexa are 100% retarget bakes — their source hip convention
   // lands facing +Z (toward the third-person camera), so the whole set
   // gets a π unwind onto the rig's -Z forward.
-  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: 0,
+  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: 0, idleHold: true,
                     // Bake ships no overhand clip — Pistol_Shoot's fast
                     // arm extension stands in for the belt throw.
                     anims: { throw: 'UAL_Pistol_Shoot' },

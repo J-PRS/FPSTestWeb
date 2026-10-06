@@ -578,6 +578,7 @@ export class PlayerModel {
     // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
     // need arms posed on top of them.
     this.pose.wantHoldPose = !CLASS_BODY_SPEC[this.variant]?.anims && Boolean(handBone);
+    this.pose.holdIdle = Boolean(RIG_MANIFEST[this.variant]?.idleHold) && Boolean(handBone);
     if (!PlayerModel._gunMat) {
       PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a_2e_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
     }
@@ -1042,7 +1043,7 @@ export class PlayerModel {
       }
       this.forceAnimationState(this.currentState);
     }
-    this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined);
+    this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined, this.currentState);
     if (this.gunMountBone && this.gun && this.model) {
       // Refresh the fx base fields from the bone's live world transform —
       // tickGunFx composes kick/swap/throw deltas on top of these.
