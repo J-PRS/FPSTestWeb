@@ -140,6 +140,8 @@ export const BOT_TUNING = {
                          // Bend-detection alternative REVERTED — shortened wps
                          // on kata's apron re-armed the orbit latch every
                          // ~15m and doubled the grab time.
+    aheadSpeedFree: 15,  // m/s — below this the route lookahead stays corridor-scale
+    aheadSpeedK: 1.2,    // m of lookahead per m/s above the free band (40m/s → ~64m)
     climbTax: 0.09,      // cost k per meter of rise — a 30m climb ~3x flat
     diveCredit: 0.04,    // cost k per meter of drop — downhill is cheap (sustained falls only)
                          // 0.08 REVERTED (2nd time): even chain-guarded, strong dive

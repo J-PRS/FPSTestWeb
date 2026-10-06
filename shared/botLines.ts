@@ -24,6 +24,16 @@ import { sharedEnv } from './env.ts';
        // don't line-plan close work — steerer owns that
        // m — goal drift that forces an early re-roll
 
+/** Lookahead along the flow route scales with speed: at 40 m/s a 34m
+ *  waypoint is under a second of travel, so a fast bot steers into
+ *  terrain the route already priced around. Reading the line further
+ *  out keeps the fast line on the flood's corridor — slow walkers keep
+ *  the corridor-scale 34m the bend-heavy maps need. */
+function aheadFor(ctx: BrainCtx): number {
+  const v = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+  return T.graph.ahead + Math.max(0, v - T.graph.aheadSpeedFree) * T.graph.aheadSpeedK;
+}
+
 export class BotLines {
   private wp: BotVec | null = null;
   private wpGoal: BotVec | null = null;
@@ -160,7 +170,7 @@ export class BotLines {
         // the pass it found. Consult it inside the escape, not just on
         // the happy path (kata outbound: the apron's face dance burned
         // ~100s of ratcheting where the flood knew the way around).
-        wp = ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead);
+        wp = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
         // A route that just re-feeds the face is no escape: only take
         // it when it points meaningfully off the goal line.
         if (wp) {
@@ -248,7 +258,7 @@ export class BotLines {
     tp = prof ? sharedEnv.wallPerf!() : 0;
     let routed: BotVec | null = null;
     if (ctx.route && gd > T.graph.minGd) {
-      routed = ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead);
+      routed = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
       if (prof) { const t1 = sharedEnv.wallPerf!(); prof.set('lines:route', (prof.get('lines:route') ?? 0) + t1 - tp); tp = t1; }
     }
     this.wp = routed ?? this.roll(ctx, pos, dest, gd);
