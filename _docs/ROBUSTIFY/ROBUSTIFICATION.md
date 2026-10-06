@@ -217,7 +217,8 @@ purges `lastDropNotify` keys for the player but skipped
 `lastRejectWarn`, an identical key shape. Each leaver who had ever
 been rejected left a permanent entry; over a long-lived room the map
 grew with cumulative player churn, not live roster. Now cleaned with
-the same prefix sweep.
+the same prefix sweep. Both throttles pinned by
+`rejectWarnCleanup.test.ts`.
 
 ---
 
