@@ -1,3 +1,4 @@
+2026-10-06 - robustify: wireId exhaustion pin — ghostRecords covers the u16-wrap eldest-recycle fallback; churn-keyed map sweep of GameServer/Room verified clean
 2026-10-06 - robustify: invalidWarnAt cleaned on close — per-player throttle keys no longer linger until the 4096 wholesale clear, which was also resetting the spam gate; pinned in invalidWarn.test
 2026-10-06 - robustify: weaponType wire gate pinned — weaponTypeWire.test covers the new optWeaponType check (bogus ids rejected, all 35 WEAPONS keys pass); rest of wire.ts audited, no other isFiniteNumber-only table indexes
 2026-10-06 - robustify: unknown weaponType rejected at the wire — an out-of-table index skipped cadence law and belt costs while getWeaponStats defaulted to BoltLauncher; optWeaponType now requires a real WEAPONS key on shot/aoeShot/shotFired

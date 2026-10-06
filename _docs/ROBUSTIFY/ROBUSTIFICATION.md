@@ -852,6 +852,18 @@ pinned by `losMemo.test.ts` via a `losMemoSize()` test seam.
   `WEAPONS` key (§2.19), `kind` in `DEPLOY_KINDS`, `armorClass` is
   literal light|medium|heavy, `perk` is `isPerkId`; no remaining
   isFiniteNumber-only index claims.
+- **GameServer/Room churn-keyed maps re-swept** (2026-10-06): every
+  playerId/socket-keyed structure on GameServer (`playerRoom`,
+  `specRooms`, `invalidWarnAt` post-§2.20) and Room (`sessionTokens`,
+  `lastSentPositions`, `chatPace`, `wireIds`/`wireIdRetired`) evicts on
+  the removal funnel; `mintWireId` recycles retired ids past a 60s
+  quiet window and fails loud on u16 exhaustion (eldest-recycle pinned
+  in `ghostRecords.test`). Per-tick fanout path (`healthTick` 15s,
+  `unburyTick` 0.5s, tickFlags, buildRecords) allocates nothing
+  unbounded. Server `Math.random` sites are all injectable-rng defaults
+  (`room.rng` = seeded `botRand`, `PlayerManager.spawnRng`,
+  `CombatHandler.rng`, `rollVariant`) — harnesses seed them; production
+  ambient is by design since the server is sole authority.
 - **`creatureSlither` pinned** (2026-10-05): `creatureSlither.test.ts`
   (13 tests) — species registry derivation, uber ×4 health, live LCG
   seed, out-of-aggro speed bleed, weave→coil→leap→bite state machine

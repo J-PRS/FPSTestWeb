@@ -126,4 +126,22 @@ describe('ghost records', () => {
     loop.tickRoomNow(room, Date.now() + 100);
     expect(room.wireIds.get('churn2')).toBe(wid);
   });
+
+  it('u16 space exhaustion recycles the eldest retired id, loud', () => {
+    const room = mkRoom({ bots: 0 });
+    // Burn the counter to the wrap and retire an id inside the quiet
+    // window — quiet-recycle can't help, so the eldest fallback must
+    // fire rather than a silent modulo-wrap aliasing a live binding.
+    room.nextWireId = 0x10000;
+    room.wireIdRetired.set(7, Date.now());
+    room.players.addPlayer('late');
+    const p = room.players.getPlayer('late');
+    if (!p) throw new Error('no late');
+    p.hasReceivedPosition = true;
+    p.lastSeen = Date.now();
+    const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
+    loop.tickRoomNow(room, Date.now());
+    expect(room.wireIds.get('late')).toBe(7);
+    expect(room.wireIdRetired.has(7)).toBe(false);
+  });
 });
