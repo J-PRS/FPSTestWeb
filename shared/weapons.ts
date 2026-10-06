@@ -118,7 +118,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Railgun]: 1.5,
   [WeaponType.Lightning]: 0.05,
   [WeaponType.Shotgun]: 0.7,
-  [WeaponType.Cannon]: 0.55,
+  [WeaponType.Cannon]: 1.25,
   [WeaponType.RocketLauncher]: 2.5,
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,
