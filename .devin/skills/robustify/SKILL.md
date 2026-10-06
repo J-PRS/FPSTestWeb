@@ -1,12 +1,50 @@
 ---
 name: robustify
-description: Continue the project's reliability/observability hardening — read the robustification state doc, work the ranked queue or run a fresh audit, update the doc, verify, repeat. Use when asked to robustify, audit reliability, improve observability, fix determinism/staleness/lifecycle issues, or "work on the robustness backlog". Big architectural changes are in scope when they kill a failure class.
+description: Continue the project's reliability/observability hardening — read the robustification state doc, work the ranked queue or run a fresh audit, update the doc, verify, repeat. Self-evolving: each round may extend the hunting repertoire itself (new failure classes, lanes, invariants). Use when asked to robustify, audit reliability, improve observability, fix determinism/staleness/lifecycle issues, or "work on the robustness backlog". Big architectural changes are in scope when they kill a failure class.
 ---
 
 # Robustify
 
-Long-running hardening program for this codebase. The state lives in docs —
-this skill is the operating procedure around them.
+Long-running, self-evolving hardening program for this codebase. The
+state lives in docs — this skill is the operating procedure around them.
+
+## The bar
+
+**Technically and functionally spotless, tested, impeccable,
+launch-ready.** Concretely, a server that never dies on malformed input
+or a faulted room, sims that replay bit-identical on both ends, zero
+unbounded growth over session lifetime, observability a human can read
+under fire, and headroom in the hot paths. UI polish, content, and game
+design are explicitly OUT of scope — this bar is technical prowess only.
+
+**Performance and running cost are a first-class target,** with
+correctness and smoothness as the hard constraint — a cheaper tick or
+smaller wire is a win ONLY when gameplay stays identical (or better):
+bandwidth per player, CPU per tick, allocations in per-frame paths,
+idle-room cost, and process footprint all count. Every perf change
+needs a measured before/after and a correctness argument (a pin, a
+replay, or a behavior-identical proof), never "should be faster".
+
+## Self-evolution
+
+The program grows its own hunting repertoire. When a round turns up a
+bug class §1 doesn't name, ADD it to §1 of the state doc (and here if
+it's generic). When a lane is exhausted, record it in §3 and invent the
+deeper lane it implies — unit pins → property sweeps → chaos/netbot →
+load. The doc's §4 queue is regenerated, not just drained: finishing
+the queue means writing the next one from what the codebase taught you.
+
+**The skill edits itself.** Between runs — and inside a run when a
+round teaches a better way to hunt — you may rewrite any part of THIS
+file (and its `_docs/ROBUSTIFY/` twin) for maximum impact: sharpen the
+bar, add or retire lanes, reorder the work loop, codify a hunting
+technique a round just proved out (e.g. a divergence pattern, a test
+shape, a probe script worth keeping), tighten rules that produced a
+weak round, or delete instructions that stopped pulling their weight.
+Constraints on self-edits: keep it under ~170 lines (a bloated skill
+dilutes itself), never weaken the §5 invariants or the "every round
+ships a change" rule, and every self-edit must trace to something a
+round actually taught — log it in the changelog like any other change.
 
 ## Read first (in order)
 
@@ -98,6 +136,14 @@ hard enough.
   does not replace it.
 - **Lint/typecheck silence is not proof** — oxlint/tsc clean is the floor,
   not evidence of robustness. Never cite it as a result.
+- **Research liberally.** When a round surfaces a real concern — a
+  hot-path algorithm, a netcode pattern, a containment strategy, a data
+  structure — search the web for how modern engines/servers solve it
+  (Tribes-likes, Source engine, quic/netcode writeups, V8/JSC perf
+  notes) before settling on a fix. Prefer the proven solution over a
+  locally-invented one; cite what you adopted in the changelog. This is
+  not a license to cargo-cult: the change still has to pass the "what
+  failure does this prevent" bar and respect the §5 invariants.
 - **The log is the product.** Run a live bot-populated game
   (`_tools/sweeps/matchSim.ts`, `neutralSoak.ts`, or a real GameBot room)
   and read the output stream. Per-hit/per-tick INFO spam, warns refiring
@@ -127,9 +173,10 @@ cd client && ./node_modules/.bin/tsc --noEmit
 
 ## Done state
 
-There is no "clean enough". The program runs until the user stops it:
-the target is literally bug-free — a state you approach, never declare.
-Every round produces a fix or improvement; "everything I looked at is
-clean" means you should be looking somewhere else. Always report
-coverage honestly: what was examined vs what remains unexamined
-(uncommitted WIP, pattern-level sweeps, untested paths).
+There is no "clean enough". The program runs until the user stops it —
+the bar above is approached, never declared. Every round produces a fix
+or improvement; "everything I looked at is clean" means you should be
+looking somewhere else (and the self-evolution section tells you how to
+pick where). Always report coverage honestly: what was examined vs what
+remains unexamined (uncommitted WIP, pattern-level sweeps, untested
+paths).

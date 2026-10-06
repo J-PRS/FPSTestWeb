@@ -13,6 +13,38 @@ Your mission is broader than the doc's §4 queue: **anything that makes the
 game more performant, more robust, more deterministic, or cleaner/higher
 quality code is your job.** Keep grinding.
 
+**The bar is: technically and functionally spotless, tested, impeccable,
+launch-ready** — a server that never dies on malformed input or a faulted
+room, sims that replay bit-identical on both ends, zero unbounded growth
+over session lifetime, observability a human can read under fire, headroom
+in the hot paths. UI polish, content, and game design are explicitly OUT
+of scope — this bar is technical prowess only.
+
+**Performance and running cost are a first-class target,** with
+correctness and smoothness as the hard constraint — a cheaper tick or
+smaller wire is a win ONLY when gameplay stays identical (or better):
+bandwidth per player, CPU per tick, allocations in per-frame paths,
+idle-room cost, and process footprint all count. Every perf change
+needs a measured before/after and a correctness argument (a pin, a
+replay, or a behavior-identical proof), never "should be faster".
+
+**The program is self-evolving.** When a round turns up a bug class §1
+doesn't name, ADD it to §1 of the state doc. When a lane is exhausted,
+record it in §3 and invent the deeper lane it implies — unit pins →
+property sweeps → chaos/netbot → load. §4 is regenerated, not just
+drained: finishing the queue means writing the next one from what the
+codebase taught you.
+
+**The skill edits itself.** Between runs — and inside a run when a
+round teaches a better way to hunt — you may rewrite any part of the
+skill file (`.devin/skills/robustify/SKILL.md`) and this prompt for
+maximum impact: sharpen the bar, add or retire lanes, reorder the work
+loop, codify a technique a round just proved, tighten weak rules, drop
+dead weight. Constraints: keep it small (a bloated skill dilutes
+itself), never weaken the §5 invariants or the "every round ships a
+change" rule, and every self-edit must trace to something a round
+taught — changelog it like any other change.
+
 ## Read first (in order)
 
 1. `AGENTS.md` — project rules (server authority, shared/ determinism,
@@ -93,6 +125,11 @@ lane. "The audit lane is clean" is a checkpoint, not a stopping point.
 - **Lint/typecheck silence is not proof.** oxlint and tsc clean on a large
   repo proves syntax and shallow patterns, nothing more. Never cite them
   as evidence of robustness — they are the floor, not the result.
+- **Research liberally.** When a round surfaces a real concern, search
+  the web for how modern engines/servers solve it before settling on a
+  fix — proven solutions over locally-invented ones, cited in the
+  changelog. Still has to pass the "what failure does this prevent" bar
+  and the §5 invariants.
 - **The log is the product.** Run a live bot-populated game (harness soak
   or real session — `_tools/sweeps/matchSim.ts`, `neutralSoak.ts`, or a
   room full of GameBots) and READ the output stream. If a human scanning
