@@ -41,9 +41,11 @@ function bodyGeo(): THREE.BufferGeometry {
 let _legGeo: THREE.BufferGeometry | null = null;
 function legGeo(): THREE.BufferGeometry {
   if (!_legGeo) {
-    _legGeo = new THREE.ConeGeometry(0.05, 0.55, 4);
-    _legGeo.rotateZ(Math.atan2(-0.55, -0.35)); // tip down-out
-    _legGeo.translate(0.27, -0.05, 0);
+    _legGeo = new THREE.ConeGeometry(0.05, 0.7, 4);
+    // Short scuttle stubs again — but REACHING now: the root seats 0.55r
+    // low so ground is only −0.45 local; tip lands right on it.
+    _legGeo.rotateZ(Math.atan2(-0.35, -0.55)); // tip down-out
+    _legGeo.translate(0.2, -0.28, 0);
   }
   return _legGeo;
 }
@@ -87,6 +89,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   color = new THREE.Color(0x4a3524); // dark chitin
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
+  readonly ichor = 0x3fc9b0; // teal hemolymph under the dark shell
   scale: number;
   // Uber = "dreadbeetle": telegraphed charge dash — a straight-line ram
   // that reads as a bull rush, not the zigzag skitter.

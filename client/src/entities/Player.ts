@@ -288,9 +288,32 @@ export class Player {
   deadSpectateIdx = -1;
   /** Live teammate anchors for dead-spectate, resolved by main.ts — the
    *  player layer must not know remote rosters/network state. `pos` is
-   *  the networked EYE position; `feetY` grounds the boom anchor. */
-  spectateTargets?: () => { pos: THREE.Vector3; feetY: number; alive: boolean }[];
+   *  the networked EYE position — the orbit boom pivots on center mass. */
+  spectateTargets?: () => { pos: THREE.Vector3; alive: boolean }[];
   private readonly deadSpectateAnchor = new THREE.Vector3();
+
+  /** L while dead — arms after the suicide press so the FIRST dead frame
+   *  opens on a teammate's orbit instead of free-fly. Cleared once it
+   *  engages or a new life starts. */
+  private spectateOnDeath = false;
+  private respawnArmedAt = 0;
+  /** Server is holding our corpse (L's die+spectate) — the auto-respawn
+   *  timer lapses without reviving; a plain dead-state press releases it.
+   *  Clears the moment we're alive again. HUD reads this for the death
+   *  overlay text. */
+  respawnHeld = false;
+
+  /** Die + spectate in one press: alive = the hold-flagged respawn claim
+   *  (server kills us and parks the corpse — no auto-revive), and the
+   *  orbit arms so the corpse cam opens on a teammate; dead = same as
+   *  right-click, advance the orbit. */
+  dieSpectate(): void {
+    if (this.isDead) { this.deadSpectateCycle(); return; }
+    this.spectateOnDeath = true;
+    this.respawnHeld = true;
+    this.respawnArmedAt = performance.now();
+    this.onRespawn?.(true);
+  }
 
   /** Right-click while dead: orbit the next living teammate. */
   deadSpectateCycle(): void {
@@ -329,7 +352,7 @@ export class Player {
   onDeploy: (() => void) | null = null;
   /** Deliberate respawn key → the server's self-kill claim (or the
    *  offline kill path when there's no wire). */
-  onRespawn: (() => void) | null = null;
+  onRespawn: ((hold?: boolean) => void) | null = null;
   onThrowFlag: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
@@ -399,6 +422,20 @@ export class Player {
       this.status.spectating = false;
       this.onSpectate?.(false);
     }
+    // L's armed orbit fires on the first dead frame — the claim round-
+    // tripped, death owns the cam, now point it at a teammate.
+    if (this.spectateOnDeath && this.isDead) {
+      this.spectateOnDeath = false;
+      this.deadSpectateCycle();
+    }
+    if (!this.isDead) {
+      this.respawnHeld = false; // alive again — any hold has served its purpose
+      if (this.spectateOnDeath && this.respawnArmedAt && performance.now() - this.respawnArmedAt > 10_000) {
+        // Suicide claim never landed (dropped/offline) — don't let a stale
+        // arm turn an unrelated future death into an orbit.
+        this.spectateOnDeath = false;
+      }
+    }
     const observing = this.isDead || this.status.spectating;
     if (observing && !this.wasObserving) {
       // Keys held at the moment of death would read as held forever —
@@ -413,10 +450,10 @@ export class Player {
         ? this.spectateTargets?.()[this.deadSpectateIdx]
         : undefined;
       if (spectateTarget?.alive) {
-        // Dead-spectate: same boom as the middle-mouse inspect cam, but the
-        // anchor is the teammate's feet — the networked pos is EYE height,
-        // which would lift the whole boom a head-high.
-        this.deadSpectateAnchor.set(spectateTarget.pos.x, spectateTarget.feetY, spectateTarget.pos.z);
+        // Dead-spectate: same boom as the middle-mouse inspect cam,
+        // anchored at the networked EYE pos — pivoting on the target's
+        // center mass, not their boots.
+        this.deadSpectateAnchor.copy(spectateTarget.pos);
         this.visuals.updateCamera(this.camera, this.terrain, {
           pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
           thirdPerson: true,

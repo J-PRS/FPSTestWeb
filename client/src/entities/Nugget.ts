@@ -4,6 +4,7 @@ import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
+import { metalMat } from './procMetal.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -71,7 +72,7 @@ export class Nugget {
     this.vel.z += (Math.random() - 0.5) * 4;
 
     if (parts) {
-      this.mat = new THREE.MeshStandardMaterial({ color: parts.bodyColor ?? 0x3A4048, roughness: 0.45, metalness: 0.75 });
+      this.mat = metalMat(parts.bodyColor); // procMetal recipe — worn metal via the wear bake
       this.accentMat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
       this.mesh = new THREE.Mesh(parts.body, this.mat);
       const am = new THREE.Mesh(parts.accent, this.accentMat);

@@ -46,12 +46,29 @@ function buildParts(kind: PickupKind): PickupParts | null {
       return { body, accent: band, bodyColor: 0xCFCFC4 };
     }
     case 'armor': {
-      // Hexagonal armor plate standing on an edge — a chunk of plating.
-      const plate = new THREE.CylinderGeometry(0.3, 0.3, 0.12, 6);
-      plate.rotateX(Math.PI / 2);
-      const rim = new THREE.TorusGeometry(0.26, 0.04, 4, 6);
+      // Layered plating — a hex core with stepped face plates and
+      // beveled caps mirrored on both sides: laminate strata read as a
+      // chunk of armor, not a single disc. Accent is the rim band.
+      const back = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 6);
+      back.rotateX(Math.PI / 2);
+      // Stepped face + beveled cap, mirrored to both sides — a laminate
+      // reads the same from either face (and symmetric tumbling).
+      const faceA = new THREE.CylinderGeometry(0.24, 0.27, 0.09, 6);
+      faceA.rotateX(Math.PI / 2);
+      faceA.translate(0, 0, 0.07);
+      const faceB = faceA.clone();
+      faceB.rotateX(Math.PI); // mirror — plain -z translate keeps the taper pointing the wrong way
+      const capA = new THREE.CylinderGeometry(0.15, 0.21, 0.07, 6);
+      capA.rotateX(Math.PI / 2);
+      capA.translate(0, 0, 0.15);
+      const capB = capA.clone();
+      capB.rotateX(Math.PI);
+      const rim = new THREE.TorusGeometry(0.26, 0.035, 4, 6);
       rim.rotateZ(Math.PI / 6); // flat side up like the hex
-      return { body: plate, accent: rim };
+      return {
+        body: mergeGeometries([back, faceA, faceB, capA, capB], false)!,
+        accent: rim,
+      };
     }
     case 'regen': {
       // Energy cell — short canister with glowing end-caps.
@@ -66,16 +83,19 @@ function buildParts(kind: PickupKind): PickupParts | null {
       return { body: can, accent: mergeGeometries([capA, capB], false)! };
     }
     case 'tag': {
-      // Dog-tag plate — flattened rounded box with a chain hole ring.
-      const plate = mergeGeometries([
-        new THREE.BoxGeometry(0.36, 0.05, 0.22),
-      ], false)!;
-      const ring = new THREE.TorusGeometry(0.05, 0.02, 6, 10);
-      ring.rotateX(Math.PI / 2);
-      ring.translate(0, 0.02, -0.07);
-      const stripe = new THREE.BoxGeometry(0.3, 0.056, 0.03);
-      stripe.translate(0, 0, 0.05);
-      return { body: plate, accent: mergeGeometries([ring, stripe], false)! };
+      // Octagonal token — a thick coin standing on an edge, confirm-mark
+      // embossed on both faces. Silhouette reads "kill marker" without
+      // the cassette-plate look the old flattened box had.
+      const coin = new THREE.CylinderGeometry(0.22, 0.22, 0.09, 8);
+      coin.rotateX(Math.PI / 2); // faces → ±z, standing on an edge
+      coin.rotateZ(Math.PI / 8); // flat facet up, not a vertex
+      const faceA = new THREE.TorusGeometry(0.12, 0.022, 6, 8);
+      faceA.translate(0, 0, 0.048);
+      const faceB = faceA.clone();
+      faceB.translate(0, 0, -0.096);
+      const pip = new THREE.CylinderGeometry(0.045, 0.045, 0.1, 8);
+      pip.rotateX(Math.PI / 2);
+      return { body: coin, accent: mergeGeometries([faceA, faceB, pip], false)! };
     }
     case 'dd': {
       // Power core — emissive nucleus held in an open cubic frame.
@@ -88,8 +108,28 @@ function buildParts(kind: PickupKind): PickupParts | null {
         const ry = new THREE.BoxGeometry(T, L, T); ry.translate(a, 0, b); rods.push(ry);
         const rz = new THREE.BoxGeometry(T, T, L); rz.translate(a, b, 0); rods.push(rz);
       }}
-      const core = new THREE.IcosahedronGeometry(0.14, 1);
-      return { body: mergeGeometries(rods, false)!, accent: core };
+      // Violent nucleus — the smooth icosahedron reads dormant; jagged
+      // shards radiating through the cage gaps sell "contained arc".
+      // Deterministic axis set, not random — this geometry is cached.
+      const core = new THREE.IcosahedronGeometry(0.12, 0);
+      const spikes: THREE.BufferGeometry[] = [core];
+      const dirs: [number, number, number][] = [
+        [1, 0.3, 0.2], [-0.8, 0.5, -0.3], [0.2, 1, -0.4], [-0.3, -0.9, 0.6],
+        [0.6, -0.4, -0.9], [-0.5, -0.2, -1], [0.9, 0.7, 0.5], [-0.7, -0.7, 0.4],
+      ];
+      const _d = new THREE.Vector3();
+      const _q = new THREE.Quaternion();
+      const UP = new THREE.Vector3(0, 1, 0);
+      for (const [x, y, z] of dirs) {
+        _d.set(x, y, z).normalize();
+        const len = 0.14 + Math.abs(x * y + z) * 0.1; // varied shard lengths
+        const spike = new THREE.ConeGeometry(0.022, len, 4).toNonIndexed(); // icosahedron is non-indexed; mixed index state fails the merge
+        spike.translate(0, len / 2 + 0.08, 0); // base sits inside the core
+        _q.setFromUnitVectors(UP, _d);
+        spike.applyQuaternion(_q);
+        spikes.push(spike);
+      }
+      return { body: mergeGeometries(rods, false)!, accent: mergeGeometries(spikes, false)! };
     }
     default: {
       return null;

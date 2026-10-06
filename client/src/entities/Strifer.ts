@@ -8,6 +8,7 @@ import {
   STRIFER_BOLT_SPEED, STRIFER_BOLT_LIFE, STRIFER_BOLT_DIST,
   STRIFER_HOVER_T, STRIFER_STUN, MELEE_FAVOR,
 } from '../core/config.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getShadows } from './swarms.js';
@@ -24,31 +25,83 @@ interface StriferCtx { dt: number; terrain: Terrain; playerPos: THREE.Vector3; p
 const WINGS_PER = 2;
 const EYES_PER = 1;
 
+// v2: votive shard / forgotten gun-platform. The hull is a 4-sided
+// tapered spire (same obelisk family as the totem) with a ceremonial
+// collar ring, a swept brow crest and a chin spike — carved relic
+// proportions, not aerodynamics. Blade vanes and an ember core sell
+// "artifact that happens to shoot" instead of "toy plane".
 let _bodyGeo: THREE.BufferGeometry | null = null;
 function bodyGeo(): THREE.BufferGeometry {
   if (!_bodyGeo) {
-    _bodyGeo = new THREE.OctahedronGeometry(1, 0);
-    _bodyGeo.scale(0.5, 0.35, 1.4); // dart fuselage — reads as a drone, not a beast
+    // Keel — diamond-cross-section spire lying nose-forward (+z).
+    const keel = new THREE.CylinderGeometry(0.14, 0.5, 2.2, 4);
+    keel.rotateX(Math.PI / 2);
+    // Brow crest — blade swept back off the top, worn sentinel horn.
+    const crest = new THREE.ConeGeometry(0.16, 0.95, 4);
+    crest.scale(1.7, 1, 0.35);
+    crest.rotateX(-Math.PI / 2.3);
+    crest.translate(0, 0.38, -0.42);
+    // Dorsal ridge — stepped plates rising off the keel spine. The bare
+    // spire's top was one flat facet; a carved ridge gives the side
+    // profile a crown-line and reads "shrine ornament" at range.
+    const ridge: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 3; i++) {
+      const plate = new THREE.ConeGeometry(0.1, 0.5, 4);
+      plate.scale(1.4, 1, 0.3); // thin blade cross-section
+      plate.rotateX(-0.35 - i * 0.18); // tips lean progressively aft
+      plate.translate(0, 0.26 + i * 0.06, 0.55 - i * 0.5); // march down the spine
+      ridge.push(plate);
+    }
+    // Chin spike under the nose — the shard's dangling point.
+    const chin = new THREE.ConeGeometry(0.11, 0.7, 4);
+    chin.rotateX(Math.PI * 0.75);
+    chin.translate(0, -0.32, 0.6);
+    // Collar — square ring around the tail, the "mounted relic" read.
+    const collar = new THREE.TorusGeometry(0.44, 0.06, 4, 4);
+    collar.rotateX(0.78); // tilted like a bronze hoop, not a jet ring
+    collar.translate(0, 0, -0.72);
+    _bodyGeo = mergeGeometries([keel, crest, ...ridge, chin, collar])!;
   }
   return _bodyGeo;
 }
-const _wingGeo = new THREE.BoxGeometry(2.2, 0.06, 0.5); // swept blade fins
-const _eyeGeo = new THREE.PlaneGeometry(1, 1);
+
+// Blade vane — swept-back crescent, flat in plan. Shape space: x = span
+// out, y = fore(+)/aft(−). One geometry instanced per side; the left
+// mirror is handled by a negative-X scale in the pose writer.
+let _wingGeo: THREE.BufferGeometry | null = null;
+function wingGeo(): THREE.BufferGeometry {
+  if (!_wingGeo) {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0.25);                                    // root front
+    s.lineTo(0.55, 0.32);                                 // leading edge out
+    s.quadraticCurveTo(1.5, 0.12, 1.72, -0.72);           // outer arc sweeps to a rear tip
+    s.quadraticCurveTo(1.05, -0.38, 0.45, -0.16);         // inner arc returns
+    s.lineTo(0, -0.1);                                    // root rear
+    s.closePath();
+    _wingGeo = new THREE.ShapeGeometry(s, 8);
+    _wingGeo.rotateX(Math.PI / 2); // +y → +z, flat horizontal
+  }
+  return _wingGeo;
+}
+
+const _eyeGeo = new THREE.PlaneGeometry(1, 1); // glyph slit, scaled in pose
 
 let _bodyMat: THREE.MeshLambertMaterial | null = null;
 let _wingMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 export function striferParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x2e3a4a, side: THREE.DoubleSide });
+  // Same grunge/wear convention as the turretter — carved metal that
+  // catches the sun, not bare plastic.
+  if (!_bodyMat) { _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 }); _bodyMat.userData.__wearInt = 2.2; }
+  if (!_wingMat) { _wingMat = new THREE.MeshLambertMaterial({ color: 0xb8c2cf, side: THREE.DoubleSide, emissive: 0x0a0d12 }); _wingMat.userData.__wearInt = 2.2; }
   if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
     map: getGlowTexture(), color: 0xff8844, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
-    { geometry: _wingGeo, material: _wingMat, per: WINGS_PER },
+    { geometry: wingGeo(), material: _wingMat, per: WINGS_PER },
     { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
   ];
 }
@@ -99,7 +152,9 @@ export class Strifer implements Targetable, SwarmSlotOwner {
 
   readonly bolts: StriferBolt[] = [];
 
-  onBoltHit?: (strifer: Strifer) => void;
+  /** pos = bolt impact point — the strafing run may carry the bolt a
+   *  long way from the drone's current position. */
+  onBoltHit?: (strifer: Strifer, pos: THREE.Vector3) => void;
   onBoltLand?: (pos: THREE.Vector3) => void;
   onFire?: (strifer: Strifer) => void;
 
@@ -216,7 +271,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       b.pos.addScaledVector(b.vel, dt);
       const boltD = STRIFER_BOLT_DIST * MELEE_FAVOR;
       const hitPlayer = b.pos.distanceToSquared(playerPos) < boltD * boltD;
-      if (hitPlayer) this.onBoltHit?.(this);
+      if (hitPlayer) this.onBoltHit?.(this, b.pos);
       if (hitPlayer || b.age > STRIFER_BOLT_LIFE || b.pos.y < terrain.getHeight(b.pos.x, b.pos.z)) {
         if (!hitPlayer) this.onBoltLand?.(b.pos);
         this.bolts.splice(i, 1);

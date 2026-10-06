@@ -14,6 +14,7 @@ import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
+import { RibbonTrail } from '../effects/RibbonTrail.js';
 import { updateAir as balAir, seat as balSeat, launch as balLaunch, solveBolt as balSolve, pathClear as balPath } from './turretBallistics.js';
 export type { Bolt } from './turretBolts.js';
 
@@ -141,6 +142,8 @@ export class Turretter implements Targetable {
   // Live lobbed shells — public so combat can proximity-check them: a
   // player explosive clipping a bolt cooks it off mid-air (detonateBolt).
   readonly bolts: Bolt[] = [];
+  /** Bolt ribbons past their bolt — turretBolts fades+frees them. */
+  readonly deadRibbons: RibbonTrail[] = [];
   // Bolt ember trail — shared Points batch via turretBolts.ts (host-interface pattern).
   readonly trailFx: BallTrailDots;
 
@@ -153,8 +156,8 @@ export class Turretter implements Targetable {
 
   /** Landing shockwave FX hook */
   onLanded?: (pos: THREE.Vector3) => void;
-  /** Bolt hit the player — wire sendEnvironmentDamage in main */
-  onBoltHit?: (t: Turretter) => void;
+  /** Bolt hit the player — wire sendEnvironmentDamage in main. pos = impact. */
+  onBoltHit?: (t: Turretter, pos: THREE.Vector3) => void;
   /** Bolt fizzled on terrain — dust/spark hook */
   onBoltLand?: (pos: THREE.Vector3) => void;
   /** Launch moment — dust kick hook */

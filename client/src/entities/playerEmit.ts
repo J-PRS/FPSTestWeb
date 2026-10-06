@@ -49,11 +49,15 @@ export class PlayerEmit {
     // or micro-airtime at running speed keeps re-arming the tuck pose
     // and the model "slides" while grounded.
     if (h.wasOnGround && !h.onGround) {
-      if (jumpHeld || h.vel.y > 3) {h.jumpAnimTimer = 0.8;}
+      // Same gate as the anim: crests/micro-detach aren't "jumps" — the
+      // wire edge is for remotes to play the hop, and an ungated send
+      // trips the server's 10/s rate limit on rough terrain at speed.
+      const realJump = jumpHeld || h.vel.y > 3;
+      if (realJump) {h.jumpAnimTimer = 0.8;}
       if (jumpHeld && h.onJump) {
         h.onJump(h.pos.clone());
       }
-      h.onNetworkJump?.({ x: h.pos.x, y: h.pos.y, z: h.pos.z });
+      if (realJump) {h.onNetworkJump?.({ x: h.pos.x, y: h.pos.y, z: h.pos.z });}
     }
     h.wasOnGround = h.onGround;
   }

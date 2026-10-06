@@ -3,6 +3,7 @@ import { GRAVITY } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
+import { RibbonTrail } from '../effects/RibbonTrail.js';
 
 let _boltGeo: THREE.SphereGeometry | null = null;
 function boltGeo(): THREE.SphereGeometry {
@@ -26,6 +27,7 @@ export interface Bolt {
   vel: THREE.Vector3;
   life: number;
   trailAcc: number;
+  ribbon: RibbonTrail; // thin ember streak — stops on removal, fades out
 }
 
 /** What the bolt pool needs from the turret — flat fields, no class import. */
@@ -35,8 +37,15 @@ export interface BoltHost<T> {
   /** Shared Points-batch sparkle layer — one draw call for all embers
    *  (a firing turret used to emit ~33 separate dot Meshes per second). */
   trailFx: BallTrailDots;
+  /** Ribbons whose bolt is gone — owner contract: stop() on death, keep
+   *  updating until done, then dispose. updateBolts ticks this list. */
+  deadRibbons: RibbonTrail[];
   pos: THREE.Vector3;
-  onBoltHit?: (t: T) => void;
+  /** pos = the bolt's impact point — damage/knockback must judge from
+   *  HERE, not the shooter: a lobbed shell lands tens of meters from the
+   *  turret that fired it, so a reach check in the shooter's frame
+   *  whiffs every legit hit. */
+  onBoltHit?: (t: T, pos: THREE.Vector3) => void;
   onBoltLand?: (pos: THREE.Vector3) => void;
 }
 
@@ -63,6 +72,11 @@ export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3, muzzle?: THREE.
     life: 10.0, // lobbed shells are slow arks — long fuse so a shot fired
     // at range actually lands instead of fizzing mid-air
     trailAcc: 0,
+    // Toned down on purpose: thin + short-lived — a whiff of ember, not
+    // the fat ribbon player shells carry.
+    ribbon: RibbonTrail.acquire(h.scene, {
+      color: 0xff8830, width: 0.12, life: 0.4, billboard: true, tag: 'tbolt',
+    }),
   });
 }
 
@@ -77,6 +91,8 @@ function removeBolt<T>(h: BoltHost<T>, i: number): void {
   if (!b) return;
   h.scene.remove(b.mesh, b.glow);
   (b.glow.material as THREE.SpriteMaterial).dispose();
+  b.ribbon.stop(); // streak stops emitting; deadRibbons fades+disposes it
+  h.deadRibbons.push(b.ribbon);
   h.bolts.splice(i, 1);
 }
 
@@ -94,18 +110,21 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
     _v.copy(b.vel).normalize();
     b.mesh.lookAt(_v.add(b.pos));
 
-    // Ember trail — one batched point per cadence tick
+    // Ember trail — one batched point per cadence tick + the streak
     b.trailAcc += dt;
     while (b.trailAcc > 0.03) {
       b.trailAcc -= 0.03;
       h.trailFx.burst(1, b.pos, 0.3, EMBER);
     }
+    b.ribbon.follow = b.pos;
+    b.ribbon.push(b.pos, b.vel);
+    b.ribbon.update(dt);
 
     const hitPlayer = b.pos.distanceToSquared(playerPos) < 1.7; // ~1.3m
     const hitGround = b.pos.y < terrain.getHeight(b.pos.x, b.pos.z);
     if (hitPlayer) {
       removeBolt(h, i);
-      h.onBoltHit?.(t);
+      h.onBoltHit?.(t, b.pos);
     } else if (hitGround || b.life <= 0) {
       removeBolt(h, i);
       if (hitGround) h.onBoltLand?.(b.pos);
@@ -113,13 +132,23 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
   }
 
   h.trailFx.fade(dt);
+
+  // Dying streaks fade out over their life window, then free the slot.
+  for (let i = h.deadRibbons.length - 1; i >= 0; i--) {
+    const r = h.deadRibbons[i]!;
+    r.update(dt);
+    if (r.done) { r.dispose(); h.deadRibbons.splice(i, 1); }
+  }
 }
 
 export function disposeBolts<T>(h: BoltHost<T>): void {
   for (const b of h.bolts) {
     h.scene.remove(b.mesh, b.glow);
     (b.glow.material as THREE.SpriteMaterial).dispose();
+    b.ribbon.dispose(); // host is gone — no fade-out, just free the slots
   }
   h.bolts.length = 0;
+  for (const r of h.deadRibbons) r.dispose();
+  h.deadRibbons.length = 0;
   h.trailFx.dispose();
 }

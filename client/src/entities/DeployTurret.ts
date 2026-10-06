@@ -63,7 +63,7 @@ export class DeployTurret {
   // Firing is gated until it finishes.
   private unfoldT = 0;
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, private terrain: Terrain, pos: THREE.Vector3) {
     this.id = nextTargetId();
     this.candId = `dep:${this.id}`;
     this.pos.copy(pos);
@@ -144,6 +144,12 @@ export class DeployTurret {
     // No firing off-bore: a fast jinker earns real dodge time while the
     // head traverses. The cooldown keeps ticking so it's ready on target.
     if (!best || !aimed || this.fireCd > 0) return null;
+
+    // LOS gate — a rocket is a straight-ish missile, not a mortar: when
+    // the muzzle→target line runs into a hill, firing just detonates on
+    // dirt. Hold fire and re-check soon; the head keeps tracking.
+    if (this.blockedTo(best.pos)) { this.fireCd = 0.25; return null; }
+
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
     this.tubeKick[this.nextTube] = 1;
@@ -174,6 +180,23 @@ export class DeployTurret {
     const dp = pitch - this.head.rotation.x;
     this.head.rotation.x += Math.abs(dp) <= step ? dp : Math.sign(dp) * step;
     return Math.abs(dy) <= AIM_TOL && Math.abs(dp) <= AIM_TOL;
+  }
+
+  /** Muzzle→target line-of-sight: march the straight segment, comparing
+   *  terrain height to the line. 8 samples is enough — ridges blocking
+   *  a sentry stand meters tall, not sub-meter lips. Slight −0.15 bias
+   *  so grass-blade bumps don't blind a legit shot. */
+  private blockedTo(target: THREE.Vector3): boolean {
+    this.head.updateWorldMatrix(true, false);
+    _v.copy(MUZZLE).applyMatrix4(this.head.matrixWorld);
+    for (let i = 1; i < 8; i++) {
+      const t = i / 8;
+      const x = _v.x + (target.x - _v.x) * t;
+      const y = _v.y + (target.y - _v.y) * t;
+      const z = _v.z + (target.z - _v.z) * t;
+      if (this.terrain.getHeight(x, z) > y - 0.15) return true;
+    }
+    return false;
   }
 
   /** No target: idle scanning sweep, pitch drifting back to level. */

@@ -69,6 +69,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   radius: number;
   color = new THREE.Color(0x4a8a2a); // swollen green sac
   readonly debrisKind = 'goo' as const; // pops into splat blobs, not shards
+  readonly ichor = 0xe0a03c; // acid-orange sac contents
   scale = 0.9; // small gibs — it's a sac of goo, not a body
 
   swarmSlot = -1;

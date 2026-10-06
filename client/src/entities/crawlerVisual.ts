@@ -64,10 +64,12 @@ function legGeo(): THREE.BufferGeometry {
     const upper = new THREE.ConeGeometry(0.06, 0.85, 4);
     upper.rotateZ(-Math.atan2(0.45, 0.55)); // tip toward (0.45,0.55)
     upper.translate(0.225, 0.275, 0);
-    const lower = new THREE.ConeGeometry(0.05, 0.9, 4);
-    // +Y tip toward (0.5,-0.9): rotateZ(atan2(-dx, dy))
-    lower.rotateZ(Math.atan2(-0.5, -0.9));
-    lower.translate(0.7, 0.1, 0); // knee(0.45,0.55) → midpoint to foot(0.95,-0.35)
+    const lower = new THREE.ConeGeometry(0.05, 1.68, 4);
+    // +Y tip toward knee→foot (0.5,-1.6): rotateZ(atan2(-dx, dy)).
+    // Foot tip lands at local −1.05 — pos.y is seat = ground + r, so the
+    // toe PLANTS instead of the old -0.35 that left the spider hovering.
+    lower.rotateZ(Math.atan2(-0.5, -1.6));
+    lower.translate(0.7, -0.25, 0); // midpoint knee(0.45,0.55) → foot(0.95,-1.05)
     _legGeo = mergeGeometries([upper, lower])!;
   }
   return _legGeo;
@@ -171,7 +173,7 @@ function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSw
     _e.set(0, side < 0 ? Math.PI - fan + wiggle : fan + wiggle, 0);
     _q.setFromEuler(_e);
     _local.compose(
-      _p.set(side * 0.5, 0.1 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
+      _p.set(side * 0.5, 0.0 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
       _q, _s.set(1, 1, 1));
     _world.multiplyMatrices(_root, _local);
     swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);

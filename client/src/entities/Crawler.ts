@@ -41,6 +41,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   color = new THREE.Color(0x8a2f22);
   readonly debrisKind = 'goo' as const; // chitin splat, not rock chunks
   readonly dieCue = 'splat' as const;
+  readonly ichor = 0x3fc9b0; // teal pops hard against the red shell
   scale: number;
 
   swarmSlot = -1;

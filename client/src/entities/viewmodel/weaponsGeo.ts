@@ -52,6 +52,9 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
     // muzzleZ is GROUP-space (the flash parks on it raw) — divide out the
     // model scale so the node lands on the same group-space z.
     mz.position.z = (muzzleZ[wt] ?? -0.35) / g.scale.z;
+    // Chaingun fires from the TOP barrel — the cluster indexes a barrel
+    // to TDC each shot, so the flash rides the top of the cluster.
+    if (wt === WeaponType.Chaingun) mz.position.y = 0.088;
     g.add(mz);
     muzzleNodes.set(wt, mz);
   }

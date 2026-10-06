@@ -37,6 +37,9 @@ export interface PlayerInputHandlers {
   deploy(): void;
   /** Deliberate respawn — a server claim, not a local state flip. */
   respawn(): void;
+  /** Suicide + spectate in one press: alive = respawn claim then the death
+   *  flips to corpse cam; dead = advance the teammate orbit. */
+  dieSpectate(): void;
   /** Hurl the carried flag along the aim — a claim the server resolves. */
   throwFlag(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
@@ -85,6 +88,9 @@ export class PlayerInput {
     if (this.frozen) {return;}
     this.keys[e.code] = true;
     if (matchCode('spectate', e.code) && !e.repeat) {h.toggleSpectator();}
+    // Die+spectate works from the ghost cam too — suicide flips isDead,
+    // which owns the cam and drops the spectating flag on its own.
+    if (matchCode('dieSpectate', e.code) && !e.repeat) {h.dieSpectate();}
     // Spectating: only the spectate toggle and raw movement keys (tracked
     // above for the fly cam) respond — no weapons, skills, camera flips
     if (h.isSpectating()) {return;}
@@ -154,6 +160,7 @@ export class PlayerInput {
       if (matchCode('melee', `Mouse${e.button}`)) {h.melee();}
       if (matchCode('camera', `Mouse${e.button}`)) {h.toggleCamera();}
       if (matchCode('respawn', `Mouse${e.button}`)) {h.respawn();}
+      if (matchCode('dieSpectate', `Mouse${e.button}`)) {h.dieSpectate();}
       if (matchCode('throwFlag', `Mouse${e.button}`)) {h.throwFlag();}
     });
     document.addEventListener('mouseup', (e) => {

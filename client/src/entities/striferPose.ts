@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { getSwarm } from './swarms.js';
 import type { Strifer } from './Strifer.js';
 
-// Per-frame instance pose: body root from yaw/pitch/roll, dipping fins
-// while hovering, muzzle glow that heats up when charging a bolt.
+// Per-frame instance pose: shard root from yaw/pitch/roll, blade vanes
+// canting down while hovering, nose glyph heating up when charging a bolt.
 
 const PART_BODY = 0;
 const PART_WING = 1;
@@ -17,6 +17,8 @@ const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
+const _rot = new THREE.Matrix4();
+const _identQ = new THREE.Quaternion();
 
 export function writeInstances(s: Strifer): void {
     if (!s.hasSlots) return;
@@ -35,25 +37,31 @@ export function writeInstances(s: Strifer): void {
     swarm.setMatrix(PART_BODY, slot, _root);
     swarm.setColor(PART_BODY, slot, cr, cg, cb);
 
+    const hovering = s.state === 'hover';
     for (let i = 0; i < WINGS_PER; i++) {
       const side = i === 0 ? -1 : 1;
-      // fins dip while hovering — reads as the drone planting itself to fire
-      const dip = s.state === 'hover' ? 0.25 : 0;
-      _local.compose(_v.set(side * 0.55, 0.05, -0.15), _q.identity(), _s.setScalar(1));
-      _world.multiplyMatrices(_root, _local);
-      _e.set(0, 0, side * dip, 'XYZ');
+      // Vanes cant down while hovering — the platform braces to fire.
+      // The -X scale mirrors the right vane's geometry for the left;
+      // wingMat is DoubleSide so the flipped winding still shades.
+      const dip = hovering ? 0.3 : 0;
+      _e.set(0, -0.12, 0.12 + dip, 'YXZ');
       _q.setFromEuler(_e);
-      _local.compose(_p.set(0, 0, 0), _q, _s.set(1, 1, 1));
-      _world.multiply(_local);
+      // Mirror OUTSIDE the rotation — compose()'s T·R·S applies the -X
+      // scale before the quaternion, which lands the roll inverted on
+      // the left vane (one tip up, one down). T·M·R mirrors the posed
+      // result instead: symmetric cant, mirrored crescent.
+      _rot.makeRotationFromQuaternion(_q);
+      _local.compose(_v.set(side * 0.42, 0.08, -0.1), _identQ, _s.set(side < 0 ? -1 : 1, 1, 1));
+      _local.multiply(_rot);
+      _world.multiplyMatrices(_root, _local);
       swarm.setMatrix(PART_WING, slot * WINGS_PER + i, _world);
-      swarm.setColor(PART_WING, slot * WINGS_PER + i, cr * 0.8, cg * 0.8, cb * 0.8);
+      swarm.setColor(PART_WING, slot * WINGS_PER + i, cr * 0.75, cg * 0.75, cb * 0.75);
     }
 
-    // muzzle glow: bright while hovering (charging a bolt), dim on orbit
-    const hot = s.state === 'hover' ? 2.2 : 0.8;
-    _local.compose(_v.set(0, 0.05, 1.35), _q.identity(), _s.setScalar(1));
+    // Nose glyph slit — vertical carved line, burns while a bolt charges.
+    const hot = hovering ? 2.2 : 0.8;
+    _local.compose(_v.set(0, 0.02, 1.18), _q.identity(), _s.set(0.3, 0.65, 1));
     _world.multiplyMatrices(_root, _local);
     swarm.setMatrix(PART_EYE, slot, _world);
     swarm.setColor(PART_EYE, slot, hot, hot * 0.55, hot * 0.25);
   }
-

@@ -11,6 +11,7 @@ import { getSwarm, getShadows } from './swarms.js';
 
 const _m = new THREE.Matrix4();
 const _s = new THREE.Vector3();
+const _p = new THREE.Vector3();
 
 // Faceted boulder — vertex-jittered so the silhouette is lumpy rock, not a
 // beach ball. Displacement is a position-hash: shared verts displace
@@ -25,7 +26,9 @@ function rollerGeo(): THREE.BufferGeometry {
     for (let i = 0; i < pos.count; i++) {
       v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
       const n = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719) * 43758.5453;
-      const j = 0.8 + (n - Math.floor(n)) * 0.4; // 0.8..1.2 radial bulge
+      // Tight bulge: at ±20% the bottom face alternately floats 0.2r or
+      // digs 0.2r as the boulder rolls. ±10% reads lumpy, stays honest.
+      const j = 0.9 + (n - Math.floor(n)) * 0.2; // 0.9..1.1 radial bulge
       v.multiplyScalar(j);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
@@ -60,7 +63,10 @@ export function writeRollerInstances(r: RollerVisHost, _terrain?: Terrain): void
   const swarm = getSwarm('roller');
   if (swarm) {
     _s.setScalar(r.radius);
-    _m.compose(r.pos, r.rollQuat, _s);
+    // Seat bias −0.05r (visual only): the ±10% lumps then span
+    // −0.15r..+0.05r at the contact face — dipping reads as a boulder
+    // tamping the dirt; floating reads as a bug.
+    _m.compose(_p.set(r.pos.x, r.pos.y - r.radius * 0.05, r.pos.z), r.rollQuat, _s);
     swarm.setMatrix(0, r.swarmSlot, _m);
     const fr = r.flash > 0 ? 4 : 1;
     swarm.setColor(0, r.swarmSlot, r.color.r * fr * r.tint, r.color.g * fr * r.tint, r.color.b * fr * r.tint);

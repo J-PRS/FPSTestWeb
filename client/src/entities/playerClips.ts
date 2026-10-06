@@ -53,7 +53,7 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
 // zero run/walk: her GLB names them on the ANIM_NAMES fallback slots and
 // kevdev supplies locomotion via VEXA_KEVDEV_BONE_MAP below.
 export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
-  'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
+  'idle': 'Idle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
   'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
   'jet': 'Jump_Rifle', 'hit': 'Hit', 'shoot': 'Fire_SniperRifle',
   // No overhand in the pack — the one-handed pistol arm swing is the
@@ -151,7 +151,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // Cyber+vexa are 100% retarget bakes — their source hip convention
   // lands facing +Z (toward the third-person camera), so the whole set
   // gets a π unwind onto the rig's -Z forward.
-  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: Math.PI,
+  'cybersoldier': { url: '/assets/models/class_cyber.glb',  yaw: 0, fitH: 2.2,  gunLocal: [0.28, 1.35, -0.45], sources: ['kevdev', 'mannequin'], clipYawFix: 0,
                     // Bake ships no overhand clip — Pistol_Shoot's fast
                     // arm extension stands in for the belt throw.
                     anims: { throw: 'UAL_Pistol_Shoot' },

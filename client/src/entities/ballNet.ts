@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
-import { stepBall, type SimBall, type StructureCollider } from '../../../shared/ballSim.js';
+import { stepBall, type SimBall, type SimVec, type StructureCollider } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { Heightfield } from '../../../shared/heightfield.js';
 
@@ -176,6 +176,34 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   if (simT !== undefined) {bag.simT = simT;}
   bag.parked = false;
   blendSegCorrection(host, s, seg);
+}
+
+/** Predicted position at sim-time `t`: clone the live replay sim and step
+ *  it on the same 0.05 grid tickNet uses (ballistic sub-cell remainder,
+ *  same as the render path). The rubberband watch compares this against a
+ *  fresh segment stamp — same anchor, same integrator, same endpoint — so
+ *  only real divergence (integrator/input mismatch) can produce error.
+ *  Comparing host.pos to a stepped copy of the NEW anchor instead reads
+ *  batch spacing as desync: a heartbeat arriving right behind a bounce
+ *  edge finds the sim still parked at the just-applied anchor and errs by
+ *  speed×legAge (~17m every heartbeat). */
+const _probeTgt: SimVec = { x: 0, y: 0, z: 0 };
+export function predictAt(st: NetStatics, bag: NetBag, t: number, out: THREE.Vector3): boolean {
+  const live = bag.sim;
+  if (!live) {return false;}
+  const s = Object.assign({}, live);
+  const tgt = s.tgtValid ? (_probeTgt.x = s.tx, _probeTgt.y = s.ty, _probeTgt.z = s.tz, _probeTgt) : null;
+  const field = st.field();
+  const simNow = st.simNow() ?? Infinity;
+  let cur = bag.simT;
+  const end = Math.min(t, simNow, cur + 8); // stale legs can't chase ∞
+  while (field && cur + 0.05 <= end) {
+    cur += 0.05;
+    stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+  }
+  const rem = Math.max(0, Math.min(0.05, end - cur));
+  out.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);
+  return true;
 }
 
 // Carry the visible error into renderOffset: (old rendered pos) - (new

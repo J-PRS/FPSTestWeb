@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { markProbe } from '../core/fxDiag.js';
-import type { Terrain } from '../world/terrain.js';
+import type { Terrain, FieldRing } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 // Player-deployable recharge pad — the T2 remote-inventory-station role:
@@ -20,26 +20,10 @@ const _geoMast = new THREE.CylinderGeometry(0.1, 0.16, 1.1, 6);
 const _geoCrystal = new THREE.OctahedronGeometry(0.32, 0);
 const _geoStrut = new THREE.BoxGeometry(0.08, 0.7, 0.08);
 
-// Heal-ring texture: soft annulus — bright rim at the envelope edge,
-// faint fill inside, zero at center and outside. Cached module-level.
-let _ringTex: THREE.Texture | null = null;
-function ringTexture(): THREE.Texture {
-  if (_ringTex) return _ringTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const ctx = c.getContext('2d')!;
-  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  g.addColorStop(0.0, 'rgba(85,255,204,0.00)');
-  g.addColorStop(0.55, 'rgba(85,255,204,0.05)');
-  g.addColorStop(0.80, 'rgba(85,255,204,0.16)');
-  g.addColorStop(0.92, 'rgba(120,255,214,0.85)');
-  g.addColorStop(0.97, 'rgba(85,255,204,0.25)');
-  g.addColorStop(1.0, 'rgba(85,255,204,0.00)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 256, 256);
-  _ringTex = new THREE.CanvasTexture(c);
-  return _ringTex;
-}
+// The ground ring is a projected terrain-shader decal (Terrain.addFieldRing)
+// — it conforms to the displaced surface by construction. A draped mesh
+// can't: the clipmap renders 5m chords, so ANY denser grid drowns under
+// terrain bumps between render verts. Same mechanism as scorch marks.
 
 const MOTE_COUNT = 48;
 
@@ -57,9 +41,10 @@ export class DeployStation {
   readonly group = new THREE.Group();
   private crystal = new THREE.Group();
   private glow: THREE.Sprite;
-  // Envelope visuals live in WORLD space (terrain-conforming), not the
-  // normal-aligned group — a tilted parent would shear the ground decal.
-  private decal: THREE.Mesh | null = null;
+  // Envelope visuals: the ground ring is a terrain-shader decal slot,
+  // dome + motes stay world-space meshes (a tilted parent would shear
+  // them, so they never ride the normal-aligned group either).
+  private ring: FieldRing | null = null;
   private dome: THREE.Mesh | null = null;
   private motes: THREE.Points | null = null;
   private moteData: { x: number; z: number; y: number; sp: number }[] = [];
@@ -136,32 +121,16 @@ export class DeployStation {
     this.crystal.position.y = 1.55 + Math.sin(this.animT * 1.8) * 0.08;
     this.glow.material.opacity = 0.5 + this.charge * 0.5;
     this.glow.scale.setScalar(1.1 + this.charge * 0.7 + Math.sin(this.animT * 3) * 0.08);
-    if (!this.decal) this.buildEnvelope();
+    if (!this.ring) this.buildEnvelope();
     this.tickEnvelope(dt);
     return inRange;
   }
 
-  /** Ground ring that hugs the terrain exactly: a radial fan displaced
-   *  onto the heightfield, plus dome bubble and rising heal motes. */
+  /** Ground ring as a shader-projected terrain decal — conforms exactly,
+   *  zero mesh. Plus the dome bubble and rising heal motes. */
   private buildEnvelope(): void {
     const R = DeployStation.RANGE;
-    // Radial fan: center + edge ring — the texture supplies the annulus.
-    const SEG = 48;
-    const geo = new THREE.PlaneGeometry(2, 2, SEG, SEG); // unit square → disc via texture
-    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i) * R;
-      const z = posAttr.getY(i) * R; // plane Y becomes world Z after rotateX
-      posAttr.setXYZ(i, x, this.terrain.getHeight(this.pos.x + x, this.pos.z + z) - this.pos.y + 0.18, z);
-    }
-    geo.computeVertexNormals();
-    this.decal = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      map: ringTexture(), color: 0x55ffcc, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    }));
-    this.decal.position.copy(this.pos);
-    this.decal.renderOrder = 2;
-    this.scene.add(this.decal);
+    this.ring = this.terrain.addFieldRing(this.pos.x, this.pos.z, R, [0.33, 1.0, 0.8]);
 
     // FULL sphere centered on the pad — a hemisphere dome planted at
     // pod height carves a bright rim through any slope it sits on. A
@@ -203,7 +172,7 @@ export class DeployStation {
 
   private tickEnvelope(dt: number): void {
     const pulse = Math.sin(this.animT * 2.4) * 0.5 + 0.5;
-    (this.decal!.material as THREE.MeshBasicMaterial).opacity = 0.45 + this.charge * 0.4 + pulse * 0.1;
+    this.ring!.intensity = 0.45 + this.charge * 0.4 + pulse * 0.1;
     (this.dome!.material as THREE.MeshBasicMaterial).opacity = 0.035 + this.charge * 0.06 + pulse * 0.015;
     const attr = this.motes!.geometry.getAttribute('position') as THREE.BufferAttribute;
     const lift = 1 + this.charge * 1.6; // motes race while someone's charging
@@ -250,8 +219,11 @@ export class DeployStation {
     scene.remove(this.group);
     // Shared materials/geometries intentionally not disposed — module-owned.
     this.glow.material.dispose();
+    // The ring slot is a terrain-uniform lease — release it or the decal
+    // outlives the pad.
+    if (this.ring) { this.terrain.removeFieldRing(this.ring); this.ring = null; }
     // Envelope pieces are per-instance (baked to THIS landing spot).
-    for (const o of [this.decal, this.dome, this.motes]) {
+    for (const o of [this.dome, this.motes]) {
       if (!o) continue;
       this.scene.remove(o);
       o.geometry.dispose();

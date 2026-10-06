@@ -84,7 +84,10 @@ export function fireBeam(t: Totem, playerPos: THREE.Vector3): void {
     // telegraph width. It can't miss a held course; it CAN miss a juke.
     const hitR2 = t.uber ? UBER_TOTEM_HIT_RADIUS * UBER_TOTEM_HIT_RADIUS : 1.7;
     if (proj > 0 && proj < dist && _v2.addScaledVector(_dir, -proj).lengthSq() < hitR2) {
-      t.onBoltHit?.(t);
+      // Impact = the beam point closest to the player — damage/knockback
+      // judge from here, not from the obelisk a whole map away.
+      _v2.copy(_v).addScaledVector(_dir, proj);
+      t.onBoltHit?.(t, _v2);
     } else if (hitGround) {
       _v2.copy(_v).addScaledVector(_dir, dist);
       t.onBoltLand?.(_v2);

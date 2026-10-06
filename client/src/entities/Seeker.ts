@@ -39,6 +39,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   radius: number;
   color = new THREE.Color(0xcfc39a); // bone-pale chitin
   readonly debrisKind = 'goo' as const;
+  readonly ichor = 0x86c8e8; // pale blue, matches the bone chitin
   scale = 0.3;
 
   swarmSlot = -1;

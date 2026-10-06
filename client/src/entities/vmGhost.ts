@@ -20,7 +20,10 @@ export function ghostifyMesh(v: ViewModel, mesh: THREE.Mesh): void {
   }
 
 export function ghostify(v: ViewModel, m: THREE.Material): void {
-
+    // Shared-palette materials (bodyMat/darkMat serve every weapon) may
+    // already be in the set — a second capture would store the faded
+    // 0.3 as the restore value and stick them translucent forever.
+    if (v.ghostMats.some(g => g.m === m)) return;
     v.ghostMats.push({ m, opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite });
     m.opacity = Math.min(m.opacity, m.transparent ? 0.25 : 0.3);
     m.transparent = true;
@@ -31,6 +34,10 @@ export function ghostify(v: ViewModel, m: THREE.Material): void {
   }
 
 export function setGhost(v: ViewModel, on: boolean): void {
+    // Idempotent ON — resyncs/gamestate replays can re-fire onCloak(true)
+    // while already cloaked; re-running the sweep would ghost shells and
+    // re-snapshot faded opacities.
+    if (on && v.ghostMats.length > 0) return;
     if (!on) {
       for (const g of v.ghostMats) {
         g.m.opacity = g.opacity;

@@ -70,6 +70,21 @@ export class PlayerModel {
   // on load instead of warning against an empty map.
   private _queuedAnim: string | null = null;
   private currentAction: THREE.AnimationAction | null = null;
+  /** Manual weight ramps, stepped in update(). three's fadeIn/fadeOut
+   *  hardcode interpolant endpoints 0→1 / 1→0 regardless of live weight,
+   *  so re-firing an action mid-transition snaps its weight to 0 — and a
+   *  sub-1 coverage frame mixes toward bind pose (the T-pose flash on
+   *  spam). These fades ramp from the action's live weight instead. */
+  private fades = new Map<THREE.AnimationAction, {
+    from: number; to: number; t: number; dur: number;
+  }>();
+  private fadeAction(a: THREE.AnimationAction, to: number, dur: number): void {
+    a.stopFading();
+    this.fades.set(a, {
+      from: a.getEffectiveWeight(), to, t: 0,
+      dur: Math.max(dur, 1e-4),
+    });
+  }
   private currentState: AnimationState = 'idle';
   // Facing-frame locomotion direction, quantized to 8 sectors — feeds the
   // KevDev directional clip table when state is 'walk'/'run'.
@@ -299,7 +314,11 @@ export class PlayerModel {
     // Uses same constants as collision detection — single source of truth in config.ts
     // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
     // Model is scaled by 0.5, so divide by scale to get correct world size
-    const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, CAPSULE_CYLINDER_HEIGHT / this.modelScale, 4, 16);
+    const cap = this.colliderCap;
+    const colliderGeo = new THREE.CapsuleGeometry(
+      (cap ? cap.radius : PLAYER_RADIUS) / this.modelScale,
+      (cap ? 2 * cap.half : CAPSULE_CYLINDER_HEIGHT) / this.modelScale,
+      4, 16);
     this.colliderMat = new THREE.MeshBasicMaterial({
       color: this.colliderHex,
       wireframe: true,
@@ -311,11 +330,11 @@ export class PlayerModel {
     // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT).
     // feetOffsetY lifts the whole group for rigs not authored feet-at-origin
     // — the gizmo counteracts it locally so it stays on the logical feet.
-    this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale - this.feetOffsetY;
+    this.colliderGizmo.position.y = (cap ? cap.height / 2 : CAPSULE_CENTER_Y) / this.modelScale - this.feetOffsetY;
     this.colliderGizmo.renderOrder = 999; // Render last (on top)
     // Hitbox visualization is a debug overlay — same flag as the
     // AOE blast wireframes (menu DEBUG toggle / ?debug).
-    this.colliderGizmo.visible = urlParams.debug;
+    this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);
     this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
     logger.debug('COLLIDER GIZMO ADDED to model', { children: this.scene.children.length });
   }
@@ -332,10 +351,14 @@ export class PlayerModel {
   private lodLoadP: Promise<void> | null = null;
   private lod = 0;
 
+  /** Requested capsule — stashed because the gizmo only exists after the
+   *  async load(); applied at creation and on re-request. */
+  private colliderCap: { height: number; half: number; radius: number } | null = null;
   /** Re-size the debug gizmo to the class hit capsule — the gizmo was
    *  built from the generic constants and never matched light/heavy sim
    *  capsules. */
   setColliderCapsule(cap: { height: number; half: number; radius: number }): void {
+    this.colliderCap = cap;
     if (!this.colliderGizmo) {return;}
     this.colliderGizmo.geometry.dispose();
     this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
@@ -836,9 +859,8 @@ export class PlayerModel {
     // both tracked and untracked head bones, including the case where the
     // mixer skips writing because the track value didn't change)
 
-    if (this.currentAction) {
-      this.currentAction.fadeOut(0.2);
-    }
+    const prev = this.currentAction;
+    if (prev && prev !== action) {this.fadeAction(prev, 0, 0.2);}
 
     action.reset();
     // Pistol_Shoot's first ~180ms is a draw wind-up — an arm sweeps wide
@@ -850,7 +872,9 @@ export class PlayerModel {
     // Direction flip mid-stride: enter the new clip at the previous clip's
     // cycle phase so the footfall doesn't restart mid-step.
     else if (startPhase > 0) {action.time = startPhase * action.getClip().duration;}
-    action.fadeIn(isShoot ? 0.06 : 0.2);
+    // From live weight → 1: same-action refire also ramps (a cancelled
+    // fade can park it mid-weight), so coverage never touches 0.
+    this.fadeAction(action, 1, isShoot ? 0.06 : 0.2);
     action.timeScale = 1;
     // Death: play once, clamp the corpse.
     // Jump: Tribes-style fall cycle — ping-pong at ~1/3 speed. LoopRepeat
@@ -992,6 +1016,19 @@ export class PlayerModel {
   }
 
   update(dt: number): void {
+    // Step manual weight fades: ramp effective weight from whatever it
+    // was when scheduled, never a hardcoded 0/1 endpoint. Zero-weight
+    // fades end by stopping the action so its bindings free up.
+    for (const [a, f] of this.fades) {
+      if (!a.enabled && f.to > 0) {this.fades.delete(a); continue;}
+      f.t += dt;
+      const k = Math.min(1, f.t / f.dur);
+      a.setEffectiveWeight(f.from + (f.to - f.from) * k);
+      if (k >= 1) {
+        this.fades.delete(a);
+        if (f.to === 0) {a.stop();}
+      }
+    }
     // Stalled-cover guard: a disabled sole action restores bind pose the
     // next mixer tick. If the current action ever stops running outside
     // death, re-enter the state rather than let the body T-pose. A
@@ -1161,7 +1198,7 @@ export class PlayerModel {
     this.colliderMat?.color.setHex(hex);
     // This runs every frame per remote — piggyback the debug-visibility
     // refresh so the menu DEBUG toggle applies without a reload.
-    if (this.colliderGizmo) {this.colliderGizmo.visible = this.colliderShown && urlParams.debug;}
+    if (this.colliderGizmo) {this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);}
   }
 
   private wireframeMats: THREE.Material[] | null = null;
@@ -1188,10 +1225,15 @@ export class PlayerModel {
   }
 
   private colliderShown = true;
-  setColliderVisible(visible: boolean): void {
+  /** `force` bypasses the ?debug gate — lab/inspect surfaces drive the
+   *  gizmo directly, without flipping the global debug flag. Sticky so
+   *  a gizmo created later (async load) still honors the lab toggle. */
+  private colliderForce = false;
+  setColliderVisible(visible: boolean, force = false): void {
     this.colliderShown = visible;
+    this.colliderForce = force;
     if (this.colliderGizmo) {
-      this.colliderGizmo.visible = visible && urlParams.debug;
+      this.colliderGizmo.visible = visible && (force || urlParams.debug);
     }
   }
 
@@ -1206,7 +1248,7 @@ export class PlayerModel {
   addColliderGizmo(): void {
     if (this.colliderGizmo && this.model && !this.model.children.includes(this.colliderGizmo)) {
       this.model.add(this.colliderGizmo);
-      this.colliderGizmo.visible = urlParams.debug;
+      this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);
       logger.debug('COLLIDER GIZMO RE-ADDED to model');
     }
   }

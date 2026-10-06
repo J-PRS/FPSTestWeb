@@ -38,6 +38,7 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   radius: number;
   color = new THREE.Color(0x54413f); // dusky brown-purple fur
   readonly debrisKind = 'brush' as const; // feathers flutter, not rock
+  readonly ichor = 0xd8843c; // warm orange — still PG, still blood-adjacent
   scale = 0.8;
 
   swarmSlot = -1;

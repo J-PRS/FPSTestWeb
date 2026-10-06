@@ -38,7 +38,12 @@ export function writeInstances(sc: Scarab, terrain: Terrain): void {
       _q.premultiply(_tiltQ);
     }
     _s.setScalar(r);
-    _p.copy(sc.pos);
+    // Seat the VISUAL root low: pos is the hit-capsule center (ground+r),
+    // but a scarab is a low-slung skitterer — shell hugs the dirt, short
+    // legs sweep it along. Not applied while airborne (a pounce carries
+    // the real capsule).
+    const seat = sc.airborne ? 0 : r * 0.55;
+    _p.set(sc.pos.x, sc.pos.y - seat, sc.pos.z);
     _root.compose(_p, _q, _s);
 
     const fr = sc.flash > 0 ? 4 : 1;

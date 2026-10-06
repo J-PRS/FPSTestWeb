@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mkGltfLoader } from '../gltfLoad';
+import { mkGltfLoader } from '../gltfLoad.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
 import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, POLYART_KEVDEV_BONE_MAP, POLYART_UAL2_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
@@ -301,7 +301,10 @@ function bakeSource(
     // multi-skin GLBs like class_heavy list the same joints once per
     // skin, so every bone past the first skin arrives renamed.
     const want = boneMap[b.name] ?? boneMap[b.name.replace(/_\d+$/, '')];
-    const hit = want && srcByNorm.get(spec.prefix + want);
+    // srcByNorm keys are normBone()'d — the lookup key needs the same
+    // normalization or map values with uppercase/underscores (the cyber
+    // limb names like 'upper_armL') resolve nothing: prefix+want is raw.
+    const hit = want && srcByNorm.get(normBone(spec.prefix + want));
     if (hit) {names[b.name] = hit.name;}
   }
 

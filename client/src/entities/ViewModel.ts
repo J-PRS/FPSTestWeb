@@ -231,6 +231,13 @@ export class ViewModel {
   readonly kickDeltaPos = new THREE.Vector3();
   kickDeltaRotX = 0;
   kickDeltaRotZ = 0;
+  /** Full pose delta from rest (sway/bob/fall/kick/dips/punch), measured
+   *  AFTER the group writes — external consumers (gunlab inspect anchor)
+   *  mirror this so detached copies of the weapon do everything the
+   *  viewmodel does, not just recoil. */
+  readonly poseDeltaPos = new THREE.Vector3();
+  poseDeltaRotX = 0;
+  poseDeltaRotZ = 0;
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -425,6 +432,11 @@ export class ViewModel {
     this.group.rotation.x = this.baseRotX + this.kickAmount * 0.7 * this.kickAmp + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT;
     this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
       + this.kickRoll * this.kickAmount;
+    // Post-write truth: lerped position and instant rotations resolve to
+    // the group's actual transform — that delta IS the pose.
+    this.poseDeltaPos.copy(this.group.position).sub(REST_POS);
+    this.poseDeltaRotX = this.group.rotation.x - this.baseRotX;
+    this.poseDeltaRotZ = this.group.rotation.z - this.baseRotZ;
 
     this.tickChainBarrels(dt);
     this.tickDiscAmmo(dt);

@@ -86,6 +86,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   color = new THREE.Color(0x6a5a3a); // dun-brown chitin
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
+  readonly ichor = 0x54c0b0; // teal-cyan gnat juice
   scale: number;
   scoreless = true;  // fodder kills don't pump the kill counter — too trivial
   lootless = true;

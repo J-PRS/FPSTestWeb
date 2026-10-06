@@ -15,7 +15,7 @@ export interface StatusHost {
   vel: THREE.Vector3;
   energy: number;
   scene: THREE.Scene;
-  model: { setVisible(v: boolean): void; object3D: THREE.Object3D | null } | null;
+  model: { setVisible(v: boolean): void; setGhost?(on: boolean): void; object3D: THREE.Object3D | null } | null;
   skills: { forceShieldOff(): void; reset(): void };
   input: { firePending: boolean; jetPending: boolean };
   onCloak: ((on: boolean) => void) | null;
@@ -32,6 +32,9 @@ export class PlayerStatus {
 
   // Third-person bubble — lazily built so a non-shield slot costs nothing.
   shieldBubble: ShieldBubble | null = null;
+  // Mend glow — same aura remotes see (RemoteAuras 'mend'), so healing
+  // reads on your own body in third person, not just to everyone else.
+  mendBubble: ShieldBubble | null = null;
 
   constructor(private h: StatusHost) {}
 
@@ -47,7 +50,12 @@ export class PlayerStatus {
     const h = this.h;
     if (this.cloaked === on) return;
     this.cloaked = on;
-    h.model?.setVisible(h.thirdPerson && !h.isDead && !this.spectating && !on);
+    // Own body never vanishes for its owner — cloak ghosts it like the
+    // FP viewmodel does; invisibility is only what ENEMIES get on the
+    // wire (RemotePlayer cloakHidden path).
+    h.model?.setVisible(h.thirdPerson && !h.isDead && !this.spectating);
+    h.model?.setGhost?.(on);
+    this.syncBubbleVisibility(); // an active mend must not glow an invisible body
     h.onCloak?.(on);
   }
 
@@ -67,19 +75,34 @@ export class PlayerStatus {
 
   syncBubbleVisibility(): void {
     if (this.shieldBubble) this.shieldBubble.mesh.visible = this.shielded && this.h.thirdPerson;
+    if (this.mendBubble) this.mendBubble.mesh.visible = this.mending && this.h.thirdPerson && !this.cloaked;
   }
 
   setMending(on: boolean): void {
     if (this.mending === on) return;
     this.mending = on;
+    if (on && !this.mendBubble) {
+      // Contoured shell — healing should read ON the body like the FP
+      // gun shell does, not as a bubble standing around it. Sphere is
+      // the pre-model-load fallback only.
+      const root = this.h.model?.object3D;
+      this.mendBubble = (root ? makeContouredShield(root, 0x3fdd6f) : null)
+        ?? makeShieldBubble(this.h.scene, 1.6, 0x3fdd6f);
+    }
+    this.syncBubbleVisibility();
     this.h.onMend?.(on);
   }
 
   /** Bubble follows the body and keeps fading while up. */
   tickBubble(dt: number): void {
-    if (!this.shieldBubble) return;
-    this.shieldBubble.update(dt);
-    if (this.shielded) this.shieldBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.6, this.h.pos.z);
+    if (this.shieldBubble) {
+      this.shieldBubble.update(dt);
+      if (this.shielded) this.shieldBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.6, this.h.pos.z);
+    }
+    if (this.mendBubble) {
+      this.mendBubble.update(dt);
+      if (this.mending) this.mendBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.5, this.h.pos.z);
+    }
   }
 
   /** Inbound damage while the bubble is up burns energy (10 dmg = 1 energy)
@@ -109,7 +132,7 @@ export class PlayerStatus {
       h.input.firePending = false;
       h.input.jetPending = false;
     }
-    h.model?.setVisible(!this.spectating && h.thirdPerson && !h.isDead && !this.cloaked);
+    h.model?.setVisible(!this.spectating && h.thirdPerson && !h.isDead);
     h.onSpectate?.(this.spectating);
   }
 }

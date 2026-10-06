@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { ViewModel } from './ViewModel.js';
 
-const SPIN_MAX = 40;   // rad/s at full spin (chaingun spool)
+// Full spin: 3 barrels at 0.09s cadence, one barrel-index per ~3 shots
+// (1/9 rev per shot ≈ 7.8 rad/s). Matching 1-index-per-shot spun the
+// triad ~138°/frame at 60fps — just past its 120° symmetry, strobing as
+// "nearly a full rev per shot". Below the strobe band it reads as spin.
+const SPIN_MAX = (Math.PI * 2 / 9) / 0.09;
 const _flashPark = new THREE.Vector3();
 const FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
 
@@ -38,7 +42,11 @@ const RECOIL: Record<number, { recover: number; jitter: number; amp: number; bac
 // FLASH: color of quad+light, scale of the starburst sprite, life of
 // the pop (×70ms), light scale for intensity/range of the lamp pop.
 const FLASH: Record<number, { color: number; scale: number; life: number; light: number }> = {
-    [WeaponType.BoltLauncher]:    { color: 0xffc866, scale: 1.0,  life: 1.0, light: 1.0 },
+    // Crossbow, not a powder gun: no starburst, no lamp pop — the string
+    // release + limb snap animation IS the fire read. Zeroed scale/light
+    // rides the existing decay math (flashT still ticks, quad scales to
+    // nothing, light intensity 0).
+    [WeaponType.BoltLauncher]:    { color: 0xffc866, scale: 0,    life: 0.5, light: 0 },
     [WeaponType.Disc]:            { color: 0x99ddff, scale: 0.7,  life: 0.7, light: 1.0 },
     [WeaponType.DiscPull]:        { color: 0x99ddff, scale: 0.7,  life: 0.7, light: 1.0 },
     [WeaponType.Chaingun]:        { color: 0xffaa44, scale: 0.9,  life: 0.8, light: 0.15 }, // faint lamp — sprite carries the flash

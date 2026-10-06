@@ -95,6 +95,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
   readonly capsuleEnd = new THREE.Vector3(0, 0, 1.3);
   color = new THREE.Color(0x6e4460); // bruised zerg purple flesh
   readonly debrisKind = 'goo' as const; // gasbag pops into splat
+  readonly ichor = 0xe08a3c; // hot orange under the purple hide
   scale = 2.2;
 
   swarmSlot = -1;

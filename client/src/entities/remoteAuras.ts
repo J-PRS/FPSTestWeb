@@ -26,7 +26,14 @@ export class RemoteAuras {
   private shieldContoured = false;
   // Keyed so a new aura is a table row rather than a fourth copy of the
   // same field/update/hide/show blocks.
-  private statusAuras = new Map<string, { bubble: ShieldBubble; on: boolean }>();
+  private statusAuras = new Map<string, {
+    bubble: ShieldBubble; on: boolean;
+    /** Auras that should hug the body (mend) remember their spec so a
+     *  pre-model-load sphere can be rebuilt contoured in
+     *  upgradeContoured — the shield's two-step, generalized. */
+    wantContoured: boolean; contoured: boolean;
+    radius: number; color: number;
+  }>();
 
   constructor(private h: AuraHost) {}
 
@@ -42,12 +49,26 @@ export class RemoteAuras {
   }
 
   /** Post-load upgrade: a shield raised before the GLB landed sits in the
-   *  sphere fallback — rebuild it contoured once bones exist. */
+   *  sphere fallback — rebuild it contoured once bones exist. Same swap
+   *  for any active aura that wants the body-hugging read. */
   upgradeContoured(): void {
-    if (!this.shielded || this.shieldContoured) return;
-    this.shieldBubble?.dispose();
-    this.buildShield();
-    this.shieldBubble!.mesh.visible = !this.h.staleHidden && !this.h.cloakHidden;
+    if (this.shielded && !this.shieldContoured) {
+      this.shieldBubble?.dispose();
+      this.buildShield();
+      this.shieldBubble!.mesh.visible = !this.h.staleHidden && !this.h.cloakHidden;
+    }
+    const root = this.h.model?.object3D;
+    if (!root) return;
+    for (const a of this.statusAuras.values()) {
+      if (!a.wantContoured || a.contoured) continue;
+      const c = makeContouredShield(root, a.color);
+      if (!c) continue;
+      const vis = a.bubble.mesh.visible;
+      a.bubble.dispose();
+      a.bubble = c;
+      a.contoured = true;
+      c.mesh.visible = vis;
+    }
   }
 
   setShielded(on: boolean): void {
@@ -62,19 +83,25 @@ export class RemoteAuras {
     if (this.shielded) this.shieldBubble?.flash();
   }
 
-  private setAura(key: string, on: boolean, radius: number, color: number): void {
+  private setAura(key: string, on: boolean, radius: number, color: number, wantContoured = false): void {
     let a = this.statusAuras.get(key);
     if ((a?.on ?? false) === on) return;
     if (!a) {
-      a = { bubble: makeShieldBubble(this.h.scene, radius, color), on: false };
+      const root = this.h.model?.object3D;
+      const c = wantContoured && root ? makeContouredShield(root, color) : null;
+      a = {
+        bubble: c ?? makeShieldBubble(this.h.scene, radius, color),
+        on: false, wantContoured, contoured: !!c, radius, color,
+      };
       this.statusAuras.set(key, a);
     }
     a.on = on;
     a.bubble.mesh.visible = on && !this.h.cloakHidden && !this.h.staleHidden;
   }
 
-  // Medkit channel — a tighter green aura inside where the bubble sits.
-  setMending(on: boolean): void { this.setAura('mend', on, 1.6, 0x3fdd6f); }
+  // Medkit channel — green energy hugging the body, same read as the
+  // local third-person mend shell (sphere only before the model loads).
+  setMending(on: boolean): void { this.setAura('mend', on, 1.6, 0x3fdd6f, true); }
   get isMending(): boolean { return this.statusAuras.get('mend')?.on ?? false; }
 
   // Powerup tells — a buffed enemy should be readable at range: regen

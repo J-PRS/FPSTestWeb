@@ -129,7 +129,9 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.chargeGlow = 0;
   }
 
-  onBoltHit?: (t: Totem) => void;
+  /** pos = beam impact point — the sniper sits a map away from where the
+   *  ray lands. */
+  onBoltHit?: (t: Totem, pos: THREE.Vector3) => void;
   onBoltLand?: (pos: THREE.Vector3) => void;
   onBlink?: (pos: THREE.Vector3) => void;
 

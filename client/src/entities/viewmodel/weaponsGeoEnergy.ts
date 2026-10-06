@@ -152,6 +152,7 @@ pg.add(cell);
 const cellGlow = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.052, 0.02), glowMat);
 cellGlow.position.set(0, -0.1, -0.06);
 pg.add(cellGlow);
+pg.scale.setScalar(1.4); // repeater read was too dainty — bulk it up
 pg.visible = false;
 return pg;
 }

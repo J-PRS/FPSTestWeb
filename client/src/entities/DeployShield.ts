@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { makeShieldedMesh, type ShieldBubble } from '../effects/shieldBubble.js';
-import type { Terrain } from '../world/terrain.js';
+import type { Terrain, FieldRing } from '../world/terrain.js';
 
 // Barrier dome pack — plants a field emitter that projects a hex-lattice
 // energy dome. Hostile shells detonate on the face; friendly fire passes
@@ -19,9 +19,11 @@ const _geoMast = new THREE.CylinderGeometry(0.09, 0.14, 1.3, 6);
 const _geoTip = new THREE.OctahedronGeometry(0.22, 0);
 const _geoStrut = new THREE.BoxGeometry(0.08, 0.6, 0.08);
 
-// Field-edge contact — no texture ring: per-vertex alpha is baked from
-// the real sphere-vs-terrain distance, so the glow sits exactly on the
-// dome's ground intersection however the slope lies.
+// Field-edge contact — a shader-projected terrain decal (same slot
+// system the station pad uses). The ring is drawn IN the terrain's own
+// fragment shader, so it conforms to the displaced clipmap surface
+// exactly — a draped mesh can only approximate it between the 5m
+// chords, which is what clipped into bumps before.
 
 export class DeployShield {
   readonly id: number;
@@ -38,7 +40,7 @@ export class DeployShield {
   private tip = new THREE.Group();
   private anchor: THREE.Group | null = null; // world-space dome mount (built post-land)
   private dome: ShieldBubble | null = null;
-  private edge: THREE.Mesh | null = null;
+  private edge: FieldRing | null = null;
   private animT = Math.random() * 10;
   private unfoldT = 0;
   private placed = false;
@@ -98,35 +100,11 @@ export class DeployShield {
     this.dome = makeShieldedMesh(this.anchor, new THREE.SphereGeometry(DeployShield.RADIUS * 0.99, 36, 24), 0x66ccee);
     this.dome.mesh.visible = true;
 
-    // Ground contact glow — a dense sheet displaced onto the heightfield;
-    // alpha is the VERTEX's proximity to the dome's lower shell, so the
-    // bright line lands exactly where the sphere pierces the dirt on any
-    // slope (a fixed-radius ring only matches on flat ground).
-    const R = DeployShield.RADIUS;
-    const SPAN = R * 1.15; // cover past the rim — uphill contact runs wide
-    const geo = new THREE.PlaneGeometry(2, 2, 56, 56);
-    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
-    const col = new Float32Array(posAttr.count * 4);
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i) * SPAN;
-      const z = posAttr.getY(i) * SPAN;
-      const ty = this.terrain.getHeight(this.pos.x + x, this.pos.z + z) - this.pos.y;
-      posAttr.setXYZ(i, x, ty + 0.14, z);
-      const rho = Math.hypot(x, z);
-      // Dome's lower shell height at this radius (relative to pad center).
-      const shellY = rho >= R ? -R : -Math.sqrt(R * R - rho * rho);
-      const d = Math.abs(ty - shellY);
-      const a = rho > R + 0.35 ? 0 : Math.max(0, 1 - d / 0.55);
-      col.set([1, 1, 1, a * a], i * 4); // squared — thin, sharp contact line
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
-    this.edge = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      color: 0x66ccee, transparent: true, vertexColors: true,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    }));
-    this.edge.position.copy(this.pos);
-    this.edge.renderOrder = 2;
-    this.scene.add(this.edge);
+    // Ground contact glow — dome-contact slot: passes the sphere's
+    // center height so the shader traces the TRUE sphere∩terrain
+    // contour (a circle only on flat ground — uphill it bites in,
+    // downhill it runs wide, exactly where the shell pierces dirt).
+    this.edge = this.terrain.addFieldRing(this.pos.x, this.pos.z, DeployShield.RADIUS, [0.4, 0.8, 0.93], this.pos.y);
   }
 
   /** A hostile shell touched the field — flare the lattice. */
@@ -138,7 +116,7 @@ export class DeployShield {
     if (this.placed && !this.dome) this.buildDome();
     this.dome?.update(dt);
     if (this.edge) {
-      (this.edge.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(this.animT * 2.6) * 0.12;
+      this.edge.intensity = 0.5 + Math.sin(this.animT * 2.6) * 0.12;
     }
     // Tip idles a slow spin + glow pulse — the emitter shows it's live.
     this.tip.rotation.y += dt * 2.4;
@@ -177,13 +155,12 @@ export class DeployShield {
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
     this.tipGlow.material.dispose();
-    // Dome + anchor + edge decal are per-instance, baked to THIS landing spot.
+    // Dome + anchor + ring slot are per-instance, baked to THIS landing spot.
     this.dome?.dispose();
     if (this.anchor) this.scene.remove(this.anchor);
     if (this.edge) {
-      this.scene.remove(this.edge);
-      this.edge.geometry.dispose();
-      (this.edge.material as THREE.Material).dispose();
+      this.terrain.removeFieldRing(this.edge);
+      this.edge = null;
     }
   }
 }

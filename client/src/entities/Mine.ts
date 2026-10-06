@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { nextTargetId } from './targetIds.js';
 
 import {
@@ -10,38 +11,52 @@ import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
+
 
 const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 
-const PART_DOME = 0;
-const PART_GLOW = 1; // warning glow quad on the dome top
 
+const PART_DOME = 0;
+
+// Mine body — one merged geo so the swarm still pays one draw call:
+// octagonal charge plate with caps, fuse nubs, and grip-prongs mirrored
+// top and bottom — a thrown pack can land on either face and still read
+// as planted. Silhouette does "dangerous object" before the blink.
 const _domeGeo = (() => {
-  const g = new THREE.IcosahedronGeometry(1, 1);
-  g.scale(1.0, 0.55, 1.0);
+  const plate = new THREE.CylinderGeometry(0.95, 0.95, 0.28, 8);
+  const parts: THREE.BufferGeometry[] = [plate];
+  for (const s of [1, -1]) {
+    // Rotate pieces into the lower face — a -1 scale would flip winding
+    // and bake the bottom half with inward normals.
+    const cap = new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    cap.scale(1, 0.62, 1);
+    if (s < 0) cap.rotateX(Math.PI);
+    cap.translate(0, 0.14 * s, 0);
+    parts.push(cap);
+    const fuse = new THREE.CylinderGeometry(0.12, 0.16, 0.18, 6);
+    if (s < 0) fuse.rotateX(Math.PI);
+    fuse.translate(0, 0.5 * s, 0);
+    parts.push(fuse);
+    for (let i = 0; i < 3; i++) {
+      const a = ((i + (s > 0 ? 0 : 0.5)) / 3) * Math.PI * 2; // staggered lower prongs
+      const leg = new THREE.BoxGeometry(0.1, 0.7, 0.1);
+      leg.rotateZ(0.62); // splay outward…
+      leg.rotateY(-a);
+      leg.translate(Math.cos(a) * 0.62, 0.05, Math.sin(a) * 0.62);
+      if (s < 0) leg.rotateX(Math.PI); // …then flip the whole prong
+      parts.push(leg);
+    }
+  }
+  const g = mergeGeometries(parts, false)!;
+  for (const p of parts) p.dispose();
   return g;
 })();
-const _glowGeo = new THREE.PlaneGeometry(1, 1);
-
 let _domeMat: THREE.MeshLambertMaterial | null = null;
-let _glowMat: THREE.MeshBasicMaterial | null = null;
 
 export function mineParts(): SwarmPart[] {
   if (!_domeMat) _domeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_glowMat) _glowMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xff5522, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  return [
-    { geometry: _domeGeo, material: _domeMat },
-    { geometry: _glowGeo, material: _glowMat },
-  ];
+  return [{ geometry: _domeGeo, material: _domeMat }];
 }
 
 /**
@@ -104,7 +119,9 @@ export class Mine implements Targetable, SwarmSlotOwner {
     this.blastRadius = uber ? MINE_BLAST_RADIUS * 2 : MINE_BLAST_RADIUS;
     this.scale = uber ? 0.4 : 0.2;
     this.pos = pos.clone();
-    this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius * 0.55;
+    // Seat at -0.30 local: prong tips (~-0.26) graze the dirt, the lower
+    // cap buries to its shoulder, and the bottom fuse is fully swallowed.
+    this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius * 0.30;
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     this.hasSlots = allocSlots('mine', this);
     if (!this.hasSlots) this.dead = true;
@@ -146,23 +163,16 @@ export class Mine implements Targetable, SwarmSlotOwner {
 
     _root.compose(this.pos, this.tilt, _s.setScalar(r));
     swarm.setMatrix(PART_DOME, slot, _root);
-    // instanceColor carries the emissive blink — dome brightens orange-hot
+    // instanceColor carries the emissive blink — the shell heats
+    // orange-hot, so the warning IS the body, not a floating light.
     swarm.setColor(PART_DOME, slot,
       this.color.r + bright, this.color.g + bright * 0.25, this.color.b);
-
-    // Warning glow quad on the dome top — pulse scales with urgency
-    const gs = 1.3 + p * 0.4;
-    _local.compose(_p.set(0, 0.9, 0), _q.identity(), _s.setScalar(gs));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_GLOW, slot, _world);
-    const go = this.armed ? 0.5 + p * 0.5 : 0.35;
-    swarm.setColor(PART_GLOW, slot, go, go, go);
   }
 
   /** Re-seat on terrain after a ballistic landing (thrown pack mines) —
    *  re-aligns the dome to the slope under its new resting spot. */
   seatOn(terrain: Terrain): void {
-    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius * 0.55;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius * 0.30;
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(this.pos.x, this.pos.z));
   }
 
