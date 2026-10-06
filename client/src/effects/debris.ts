@@ -84,6 +84,15 @@ export class Debris {
     this.terrain = terrain;
     this.ox = px; this.oy = py; this.oz = pz;
 
+    // Kill events keep arriving at wire speed while the tab is hidden,
+    // but fxTick runs at ~1fps — spawned shards would stack into a sky
+    // full of debris that only ages out after alt-tab. Explosions,
+    // splats and scorches already self-abort on hidden; debris joins.
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.dead = true;
+      return;
+    }
+
     if (opts.shellRadius) this.allocGhost(scene, opts.shellRadius, color, px, py, pz);
 
     this.onDropletLand = opts.onDropletLand;
