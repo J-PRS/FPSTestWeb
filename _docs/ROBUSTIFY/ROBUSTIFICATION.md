@@ -178,6 +178,23 @@ tracked `pending` set with a speaker-gone check; `liveVoice`/
 (repeats traced to dev-watch restarts, not refire); `Position rejected`
 387 m/s is a one-warn-per-streak real anomaly with correction sent.
 
+### 2.10 Sheep-meter bleed mislabeled transit (2026-10-06)
+
+A `matchSim` soak put half the roster at the sheep cap with `bleed`
+200–600pts dominant — and the channel's own comment said "a body
+sliding to a deadstop bleeds once". The gate only tested the drop, not
+the landing: any E loss with no foe charged, so every uphill leg of a
+legit ski route bled. Now requires landing near a deadstop
+(`mech < 12.5` ≈ <5m/s): transit decel reads as routing, not sheeping.
+Post-fix soak: FOX 480→89, VEKTOR 253→1.9; SABLE's residual 435 is
+real repeated deadstops (a stuck bot — the channel now discriminates
+stuck from skiing). Pinned: transit decel above 5m/s can't bleed;
+deadstop still does (`botSheep.test.ts` 13 tests).
+
+Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
+bots, **0 flag grabs** — kills happen (21) but cappers never reach the
+stand. Charged to §4.8 rather than silently absorbed.
+
 ---
 
 ## 3. Verified Clean (no action needed)
@@ -858,13 +875,12 @@ desyncs — sim replayed past the stamp and still off — still warn.
   draws are client-only cosmetics (chatter delay, offline spawn scatter);
   the ambient-draws invariant covers shared sim paths, and these never
   reach one.
-- **netbot `wsFight` load-sensitivity (infra flake)** — under the full
-  `bun test` sweep the 25s engagement `until` starved once (0 shots,
-  25.8s) — a *precondition* timeout, not the claim-resolution property
-  under test. Serial `bun test tests/netbot/` passes in ~6.7s and the
-  file has documented engagement-window flake history. Optional: make
-  the engagement deadline starvation-aware or shard netbot out of the
-  monolithic suite; the property itself is timing-independent.
+- ~~**netbot `wsFight` load-sensitivity (infra flake)**~~ — *closed*: new
+  `untilProgress` in helpers — while the progress metric (shots +
+  gameStates) keeps accruing, the deadline extends 5s/beat up to a
+  38s hard cap; a real stall still fails at the 20s base deadline.
+  Engagement window is now starvation-aware, not wall-rigid; test
+  timeout raised 30→45s to cover the cap.
 - ~~**Ball rubberbands still suppressing 80-300m corrections**~~ — *closed
   as metric bug*: the fleet counter was fed err for teleport/spawn/lunge/
   enrage events, where err measures the correction's own size — a retarget
@@ -916,6 +932,16 @@ Full suite: 822 pass / 1 fail — the sizeWatch grandfather pin on
 `Room.ts` (grown to 1061 vs pin 909×1.15; JP's in-flight edits, not a
 suite regression). Scenario suite alone: 334/334. Net suite: 37/37,
 deterministic. Typechecks clean on both ends.
+
+### 4.7b CTF capper dead-zone — *found by soak, needs gameplay ruling*
+
+`matchSim --mins 3 --bots 12` (katabatic, flags 1060m apart): 21 kills
+but **zero flag grabs** — the elected capper never converts. Sheep
+meters confirm real stall (post-§2.10 bleed gate, residuals are true
+deadstops). Suspects: route-quality on >500m legs (ray-fan ~60-130m
+vision vs TerrainFlow hand-off), stand approach dying to defense, or
+goal-commit churn. This is competence tuning, not a six-class bug —
+queued for a gameplay pass, not silently fixed here.
 
 ### 4.7 Replica-coverage gap in the state hash — *optional*
 

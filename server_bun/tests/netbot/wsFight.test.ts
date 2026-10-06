@@ -2,14 +2,22 @@ import { describe, it, expect } from 'bun:test';
 import { mkNetbots } from './helpers.ts';
 
 describe('netbot — real clients over real sockets', () => {
-  const { spawn, bots, sleep, until } = mkNetbots();
+  const { spawn, bots, sleep, untilProgress } = mkNetbots();
 
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {
     await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }); // heavy jitter: claims race spawns constantly
     const t = () => bots.map((b) => b.nc.tel);
     // Humanized bots close slower — wait on engagement, not a fixed
-    // window, then drain the in-flight claims before asserting.
-    await until(() => t().reduce((a, x) => a + x.hitsDealt, 0) > 0, 25000);
+    // window, then drain the in-flight claims before asserting. The
+    // deadline is starvation-aware: while traffic still flows (shots +
+    // snapshots accruing) a suite-starved start gets more runway; a
+    // real stall still fails at the base deadline.
+    await untilProgress(
+      () => t().reduce((a, x) => a + x.hitsDealt, 0) > 0,
+      () => t().reduce((a, x) => a + x.shots + x.gameStates, 0),
+      20000,
+      { extendMs: 5000, hardCapMs: 38000 },
+    );
     await sleep(400); // let in-flight claims land
 
     const t1 = t();
@@ -41,5 +49,5 @@ describe('netbot — real clients over real sockets', () => {
         expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)).toBeLessThan(8);
       }
     }
-  }, 30000);
+  }, 45000);
 });

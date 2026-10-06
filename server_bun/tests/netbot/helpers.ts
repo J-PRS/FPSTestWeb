@@ -54,6 +54,35 @@ export const until = async (cond: () => boolean, maxMs: number): Promise<boolean
   return cond();
 };
 
+/** Starvation-aware `until`: while `progress()` keeps increasing the
+ *  deadline extends by `extendMs` per check — a suite-starved bot still
+ *  ticks, just slower, and punishing a slow start with a wall deadline
+ *  was the wsFight flake. A genuine stall (no progress for extendMs)
+ *  still fails at the base deadline; `hardCapMs` bounds total wait so a
+ *  live-but-never-converging condition can't run past the test timeout. */
+export const untilProgress = async (
+  cond: () => boolean,
+  progress: () => number,
+  maxMs: number,
+  opts: { extendMs?: number; hardCapMs?: number } = {},
+): Promise<boolean> => {
+  const extendMs = opts.extendMs ?? 4000;
+  const hardCap = Date.now() + (opts.hardCapMs ?? maxMs * 2);
+  const deadline = Date.now() + maxMs;
+  let lastProgress = progress();
+  let extendUntil = 0;
+  while (Date.now() < Math.max(deadline, extendUntil) && Date.now() < hardCap) {
+    if (cond()) return true;
+    const p = progress();
+    if (p > lastProgress) {
+      lastProgress = p;
+      extendUntil = Date.now() + extendMs;
+    }
+    await sleep(250);
+  }
+  return cond();
+};
+
 // node-datachannel resolves from server_bun/node_modules — injected into
 // netbot's RTC transport rather than imported inside tools/.
 export const nd = await import('node-datachannel').then((m) => ((m as { default?: NdModule }).default ?? m) as NdModule).catch(() => null);
@@ -96,5 +125,5 @@ export function mkNetbots() {
   const rejectsOf = () => bots.map((b) => `${b.nc.id}: ${[...b.nc.tel.rejects.entries()].map(([r, n]) => `${r} x${n}`).join(', ') || 'none'}`).join(' | ');
   const totalRejects = () => bots.reduce((a, b) => a + [...b.nc.tel.rejects.values()].reduce((p, q) => p + q, 0), 0);
 
-  return { spawn, bots, rejectsOf, totalRejects, sleep, until };
+  return { spawn, bots, rejectsOf, totalRejects, sleep, until, untilProgress };
 }
