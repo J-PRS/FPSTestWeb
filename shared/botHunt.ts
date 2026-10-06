@@ -79,6 +79,10 @@ export interface HuntState {
   burstLeft: number;
   /** Combat spot from the last replan — null means "hold and shoot". */
   fightPos: BotVec | null;
+  /** Thinks left on the fightPos commitment — a held spot wins outright
+   *  until the window lapses; score margins alone can't stop near-tied
+   *  LOS flips from churning the dest every think. */
+  fightHold: number;
   /** Aim humanization state — reaction delay stamps per target id in
    *  think-ticks (the brain's own cadence, so sim-time harnesses see
    *  the same delay as wall-clock play — 1-2 pickHunt cycles ≈ human
@@ -115,6 +119,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
     fireT: 0,
     burstLeft: 0,
     fightPos: null,
+    fightHold: 0,
     acquiredAt: new Map(),
     huntTick: 0,
     lastHitAt: -1e9,
@@ -246,8 +251,15 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
   // instead of it.
   const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
   if (best && !fearing && dist3(pos, best.pos) <= orbit) {
-    st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
+    if (prevFight && st.fightHold > 0 &&
+        ctx.groundY(prevFight.x, prevFight.z) - ctx.groundY(pos.x, pos.z) <= 4) {
+      st.fightPos = prevFight;
+    } else {
+      st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
+      if (st.fightPos) st.fightHold = 6;
+    }
   }
+  st.fightHold = Math.max(0, st.fightHold - 1);
   if (!best || ctx.runner || ctx.wave) pickGoal(ctx, pos);
 }
 

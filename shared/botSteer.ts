@@ -198,7 +198,10 @@ export class BotSteer {
       }
     }
 
-    if (near) {
+    // Separation and trail memory are transit instincts — a posted body
+    // holds ground: it stacks on the stand with its squad and re-walks
+    // its own patrol arc, so neither applies while posted.
+    if (near && !ctx.posted) {
       for (const o of near) {
         const ox = o.x - pos.x, oz = o.z - pos.z;
         const od = Math.hypot(ox, oz);
@@ -207,7 +210,7 @@ export class BotSteer {
         if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / T.steer.sepRange));
       }
     }
-    for (const m of nearGoal ? [] : this.memory) {
+    for (const m of nearGoal || ctx.posted ? [] : this.memory) {
       const mx = m.x - pos.x, mz = m.z - pos.z;
       const md = Math.hypot(mx, mz);
       if (md > T.steer.memRange || md < 0.5) continue;
