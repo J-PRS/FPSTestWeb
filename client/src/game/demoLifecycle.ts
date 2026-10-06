@@ -100,20 +100,21 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
   const terrain = d.lazyTerrain();
   const player = d.lazyPlayer();
   let frozenCount = 0;
-  for (let i = d.balls.length - 1; i >= 0; i--) {
-    const b = d.balls[i];
-    if (d.playbackBallById.has(b.id)) {
-      b.update(dt, terrain, player.pos);
-      // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
-      if (!b.dead && b.vel.lengthSq() < 0.01) {
-        frozenCount++;
-      }
+  // playbackBallById keys the DEMO's targetId, not the ball's client-side
+  // nextTargetId() — checking has(b.id) matched nothing and every playback
+  // ball froze at its spawn pos. Iterate the map's own instances instead.
+  for (const [demoId, b] of d.playbackBallById) {
+    b.update(dt, terrain, player.pos);
+    // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
+    if (!b.dead && b.vel.lengthSq() < 0.01) {
+      frozenCount++;
     }
     if (b.disposed) {
-      d.balls.splice(i, 1);
+      const bi = d.balls.indexOf(b);
+      if (bi !== -1) {d.balls.splice(bi, 1);}
       const ti = d.targets.indexOf(b);
       if (ti !== -1) {d.targets.splice(ti, 1);}
-      d.playbackBallById.delete(b.id);
+      d.playbackBallById.delete(demoId);
     }
   }
   if (frozenCount > 0) {
