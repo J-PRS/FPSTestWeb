@@ -173,6 +173,10 @@ export class FlagRunBridge {
   private readonly tasStep = 0.15;
   private tasGhost?: THREE.Group;
   private tasMat?: THREE.MeshBasicMaterial;
+  private tasSrc?: CircuitFlag;
+  private tasSpeedCtx?: CanvasRenderingContext2D;
+  private tasSpeedTex?: THREE.CanvasTexture;
+  private tasSpeedTxt = '';
 
   private async loadTasGhost(): Promise<void> {
     const terrain = this.deps.lazyTerrain();
@@ -191,6 +195,25 @@ export class FlagRunBridge {
       new THREE.LineBasicMaterial({ color: 0xffd84d, transparent: true, opacity: 0.7 }));
     this.tasMat = new THREE.MeshBasicMaterial({ color: 0xff4060 });
     const dot = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), this.tasMat);
+    // Carried-flag prop — the leg is a grab→cap flight, so the marker
+    // needs the enemy standard on its back or it reads as a stray spark.
+    const start = this.tasPts[0]!;
+    const src = this.flags.reduce((a, b) => a.home.distanceToSquared(start) < b.home.distanceToSquared(start) ? a : b);
+    this.tasSrc = src;
+    const prop = mkFlagMesh(src.team);
+    prop.scale.setScalar(0.9);
+    prop.position.set(0, -0.4, 0);
+    dot.add(prop);
+    // Speed readout — a sprite that floats over the marker so the film
+    // carries the live m/s through the arc.
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 72;
+    this.tasSpeedCtx = cv.getContext('2d')!;
+    this.tasSpeedTex = new THREE.CanvasTexture(cv);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tasSpeedTex, depthTest: false }));
+    sp.scale.set(14, 3.9, 1);
+    sp.position.set(0, 4.4, 0);
+    dot.add(sp);
     const g = new THREE.Group();
     g.add(line, dot);
     this.tasGhost = g;
@@ -201,12 +224,36 @@ export class FlagRunBridge {
   private tickTasGhost(dt: number): void {
     if (!this.tasPts.length || !this.tasGhost) return;
     this.tasT += dt;
-    const span = this.tasPts.length * this.tasStep;
-    const ft = (this.tasT % span) / this.tasStep;
+    // 1s hold at each end: grab beat on the source stand, cap beat on the
+    // goal stand — the flight is sandwiched so the loop reads as a cap.
+    const HOLD = 1.0;
+    const flight = this.tasPts.length * this.tasStep;
+    const t = this.tasT % (flight + HOLD * 2);
+    const ft = Math.max(0, Math.min(t - HOLD, flight)) / this.tasStep;
     const i = Math.min(this.tasPts.length - 2, Math.floor(ft));
     const dot = this.tasGhost.children[1] as THREE.Mesh;
     dot.position.lerpVectors(this.tasPts[i]!, this.tasPts[i + 1]!, ft - i);
-    (dot.material as THREE.MeshBasicMaterial).color.setHex(this.tasJet[i] ? 0x40ff90 : 0xff4060);
+    const atEnd = t >= flight + HOLD;
+    (dot.material as THREE.MeshBasicMaterial).color.setHex(
+      t < HOLD || atEnd ? 0xffd84d : this.tasJet[i] ? 0x40ff90 : 0xff4060);
+    // The real source flag leaves its stand while the ghost carries it —
+    // otherwise the "grab" shows a copy flying and the original seated.
+    if (this.tasSrc) this.tasSrc.mesh.visible = t < HOLD || atEnd;
+    // Live speed label over the marker (sample-spacing / step duration).
+    const spd = this.tasPts[i + 1]!.distanceTo(this.tasPts[i]!) / this.tasStep;
+    const spdTxt = atEnd ? 'CAP' : t < HOLD ? 'GRAB' : `${spd.toFixed(0)} m/s`;
+    if (spdTxt !== this.tasSpeedTxt && this.tasSpeedCtx && this.tasSpeedTex) {
+      this.tasSpeedTxt = spdTxt;
+      const c = this.tasSpeedCtx;
+      c.clearRect(0, 0, 256, 72);
+      c.font = 'bold 44px monospace';
+      c.textAlign = 'center';
+      c.fillStyle = 'rgba(0,0,0,0.55)';
+      c.fillRect(0, 0, 256, 72);
+      c.fillStyle = '#ffe27a';
+      c.fillText(spdTxt, 128, 52);
+      this.tasSpeedTex.needsUpdate = true;
+    }
     // ?film=1 — chase cam: park the local player on the dot's tail so the
     // ordinary camera pipeline frames the flight (recording aid only).
     if (urlParams.has('film')) {
