@@ -142,6 +142,8 @@ export const BOT_TUNING = {
                          // ~15m and doubled the grab time.
     climbTax: 0.09,      // cost k per meter of rise — a 30m climb ~3x flat
     diveCredit: 0.04,    // cost k per meter of drop — downhill is cheap (sustained falls only)
+                         // 0.08 REVERTED (2nd time): even chain-guarded, strong dive
+                         // credit lures the route into dead basins — kata 0 caps.
     dipTax: 0.06,        // cost k per meter of non-sustained drop — a lone dip is a trap, not a discount
     wallSlope: 0.9,      // rise/run steeper than this needs jets to cross
     wallTax: 10,         // extra cost k per slope past wallSlope — a wall a

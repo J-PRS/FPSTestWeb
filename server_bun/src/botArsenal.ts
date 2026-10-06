@@ -549,7 +549,11 @@ export class BotArsenal implements BeamHost {
     // the pursuit is already lost without the launch, so it may still
     // pay blood. Never enough to outright suicide on the pad.
     const hp = this.room.players.getAllPlayers().get(id)?.health ?? 100;
-    if (hp < 45) {
+    // The wounded gate guards self-splash only — a pull belt's drag costs
+    // no hp at all, so a wounded carrier keeps surfing it even when a
+    // feet blast would be a suicide.
+    const beltPull = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).belt)?.forceMode === 'pull';
+    if (hp < 45 && !(beltPull && carrying)) {
       const me = this.room.players.getAllPlayers().get(id);
       const thief = [...(this.room.flags?.flags.values() ?? [])]
         .map((f) => f.carrier)
@@ -617,7 +621,6 @@ export class BotArsenal implements BeamHost {
     // blast, so a healthy runner pays hp for full-speed launches, then
     // swaps to hp-free pull surfs so the grab still arrives half-alive.
     // A carrier never pays: hp at the flag is the whole game.
-    const beltPull = getWeaponStats(lo.belt)?.forceMode === 'pull';
     const spendHp = goal.runner === true && hp > maxHp * 0.6;
     if (beltPull && (carrying || (goal.runner && !spendHp))) {
       const nx = dx / dist, nz = dz / dist;
