@@ -100,6 +100,47 @@ What the research + soaks converge on:
   check — a foe you can see but can't reach is a marching order, not a
   duel.
 
+## Capper craft (role-guide canon)
+
+From the T2 Capper guide + T:A capper video guides — the vocabulary pro
+cappers actually think in:
+
+- **Route = memorized tuples of (hill, landing angle, jet amount).**
+  Improvisation exists but the fast line is always a rehearsed chain of
+  slopes. For a no-navmesh bot the equivalent is the meso waypoint fan +
+  crest/landing reads we already run — the "route" is what the field
+  picks every think, not a stored path.
+- **Entrance vs exit routes.** Pro routes pick an approach that sets up
+  the *escape*: back-to-front arrives faster home because the exit leg
+  points at your own base. Our flow field optimizes each leg separately;
+  a true entrance→exit coupling is a deeper planner change, parked.
+- **Continuous > setup.** Sitting on a remote perch waiting for a reset
+  flag costs the team a body; running the route through the kill is
+  usually faster net. Our cappers never stage already.
+- **Bowls.** A large concave hill face converts direction at speed —
+  ski into the bowl off-axis, exit aimed elsewhere at full velocity.
+  This is the human answer to "how do I turn without braking": let the
+  terrain do it. Bot equivalent would be scoring landing spots by how
+  much of the required heading change the local curvature absorbs —
+  our landW tangency term captures the speed half, not the turn half.
+- **"Jet earlier rather than later."** A burn taken before the arc
+  starts dying buys altitude *and* preserved speed; the same tank spent
+  at impact is a splat. Our `arcClearsCrest` fires exactly at this
+  decision point.
+- **Propel + jets in tandem.** The nitron/disc impulse is worth ~30%
+  more horizontal speed when jets ride the same window — humans tap
+  thrust as the blast lands. (`propelJetUntil` = 900ms already does it;
+  also: impulse aimed at a *downslope behind you* buys horizontal, not
+  vertical, velocity — our heel-blast geometry matches.)
+- **Start the route on a full tank.** Cappers bank energy before the
+  entrance leg. Our runner `bank` window + `mountE` purchase floors are
+  the same rule at different scales.
+- **Llama grab vs e-grab.** Grabbing slow is worthless (flag off stand,
+  carrier dead 5m out) EXCEPT as an emergency flag-reset when the enemy
+  is about to cap. Our bots already refuse slow grabs via runIn/strike
+  speed gates; a true e-grab policy (grab-at-any-speed when enemy flag
+  is home and threatened) is a small `pickDest` term — parked.
+
 ## What this means for KRIBES bots
 
 - Never script an orbit radius or a waypoint — express the constraint as
