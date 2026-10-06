@@ -353,8 +353,8 @@ export class DemoManager implements demoIO.DemoIOHost {
   }
 
   // Recording event hooks - called by game systems
-  recordProjectileFired(position: Vec3, velocity: Vec3, weaponType: number): number {
-    return this.recorder.recordFired(position, velocity, weaponType);
+  recordProjectileFired(position: Vec3, velocity: Vec3, weaponType: number, shooterId?: string): number {
+    return this.recorder.recordFired(position, velocity, weaponType, shooterId);
   }
 
   recordProjectileBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
@@ -371,8 +371,8 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   /** Other players' shells — recorded so MP demos aren't an empty
    *  firefight. serverId is the wire projectile id (string). */
-  recordRemoteProjectileFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number): void {
-    this.recorder.recordRemoteFired(serverId, position, velocity, weaponType);
+  recordRemoteProjectileFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
+    this.recorder.recordRemoteFired(serverId, position, velocity, weaponType, ownerId);
   }
 
   recordRemoteProjectileDestroyed(serverId: string, position: Vec3): void {

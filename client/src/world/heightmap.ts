@@ -229,7 +229,7 @@ export function snapshotHeightmap(): HeightmapSnapshot {
  *  HMAP). Returns a restore() that hands back the previous field —
  *  callers must also Terrain.reloadHeightmap() on both transitions. */
 export function injectHeightmapBytes(
-  data: Uint8Array, size: number, heightScale: number, worldScale: number
+  data: Uint8Array | Uint8ClampedArray, size: number, heightScale: number, worldScale: number
 ): () => void {
   const prev = snapshotHeightmap();
   const rgba = new Uint8ClampedArray(size * size * 4);

@@ -194,11 +194,13 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     }
     // Muzzle kick rides the same Fired events that spawn the projectiles —
     // the recorded weapon in frame and the shot stay in sync because they
-    // share one timestamp stream.
+    // share one timestamp stream. Only the LOCAL player's shots kick:
+    // remote-owned Fired events carry shooter rosterIdx+1 in targetId, and
+    // kicking for all 19 other guns is an every-shot camera judder.
     const vm = d.lazyViewModel();
     if (vm) {
       for (const e of events.projectiles) {
-        if (e.eventType === ProjectileEventType.Fired) {vm.kick();}
+        if (e.eventType === ProjectileEventType.Fired && e.targetId === 0) {vm.kick();}
       }
     }
     applyPlaybackEvents(d.playbackWorld, events);

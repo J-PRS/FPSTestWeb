@@ -282,8 +282,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   // Event recorders — the rate-limited projectile/target event spool
   // lives in demoEvents.ts; these keep the interface shape.
-  recordFired(position: Vec3, velocity: Vec3, weaponType: number): number {
-    return ev.recordFired(this, position, velocity, weaponType);
+  recordFired(position: Vec3, velocity: Vec3, weaponType: number, shooterId?: string): number {
+    return ev.recordFired(this, position, velocity, weaponType, shooterId);
   }
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
     ev.recordBounce(this, projectileId, position, velocity, surfaceNormal);
@@ -312,8 +312,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   /** Remote-owned shell spawned on the wire — mints and remembers the
    *  demo id so its Destroyed edge pairs with this Fired record. */
-  recordRemoteFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number): void {
-    ev.recordRemoteFired(this, serverId, position, velocity, weaponType);
+  recordRemoteFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
+    ev.recordRemoteFired(this, serverId, position, velocity, weaponType, ownerId);
   }
   recordRemoteDestroyed(serverId: string, position: Vec3): void {
     ev.recordRemoteDestroyed(this, serverId, position);
@@ -378,7 +378,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 }
 
 export interface IProjectileEventRecorder {
-  recordFired(position: Vec3, velocity: Vec3, weaponType: number): number;
+  recordFired(position: Vec3, velocity: Vec3, weaponType: number, shooterId?: string): number;
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void;
   recordHit(projectileId: number, position: Vec3, targetId: number, weaponType: number): void;
   recordDestroyed(projectileId: number, position: Vec3): void;

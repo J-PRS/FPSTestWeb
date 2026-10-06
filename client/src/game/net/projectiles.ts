@@ -128,7 +128,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
       remoteProjectiles.delete(projectileId);
     };
-    deps.lazyDemoManager?.()?.recordRemoteProjectileFired(projectileId, position, velocity, weaponType ?? cfg.weaponType);
+    deps.lazyDemoManager?.()?.recordRemoteProjectileFired(projectileId, position, velocity, weaponType ?? cfg.weaponType, ownerId);
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
     sfx.shotAt(origin, cfg.weaponType, shooterVel);

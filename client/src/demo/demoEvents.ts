@@ -17,7 +17,7 @@ function checkEventRate(b: DemoRecorder): boolean {
   }
 
   // IProjectileEventRecorder
-export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, weaponType: number): number {
+export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, weaponType: number, shooterId?: string): number {
     if (!b.recording || !checkEventRate(b)) {return 0;}
     const id = b.nextProjectileId;
     b.nextProjectileId = (b.nextProjectileId % 65_535) + 1;
@@ -28,7 +28,11 @@ export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, wea
     e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
     e.projectileId = id; e.weaponType = weaponType;
     e.surfaceNormalX = 0; e.surfaceNormalY = 0; e.surfaceNormalZ = 0;
-    e.targetId = 0; e.hasPeakPosition = false;
+    // targetId rides along as shooter rosterIdx+1 — playback needs it to
+    // tell the local player's shots (0, viewmodel kick) from the other 19
+    // guns' tracers, which must never kick the camera.
+    e.targetId = shooterId ? Math.max(0, rosterIdx(b, shooterId)) + 1 : 0;
+    e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
     return id;
@@ -79,8 +83,8 @@ export function recordDestroyed(b: DemoRecorder, projectileId: number, position:
     b.projectileEvents.push(e);
   }
 
-export function recordRemoteFired(b: DemoRecorder, serverId: string, position: Vec3, velocity: Vec3, weaponType: number): void {
-    const id = recordFired(b, position, velocity, weaponType);
+export function recordRemoteFired(b: DemoRecorder, serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
+    const id = recordFired(b, position, velocity, weaponType, ownerId);
     if (id !== 0) {b.remoteProjIdByServerId.set(serverId, id);}
   }
 

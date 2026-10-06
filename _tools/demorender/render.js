@@ -165,7 +165,10 @@ async function findServer() {
     // realtime leaves it playing at 1×.
 
     // Hide every element except the render canvas (and its ancestors).
-    const canvas = document.querySelector('canvas');
+    const canvas = [...document.querySelectorAll('canvas')].filter(c => {
+      try { return c.getContext('webgl2') || c.getContext('webgl'); } catch { return false; }
+    }).reduce((best, c) =>
+      (c.width * c.height > (best?.width ?? 0) * (best?.height ?? 0) ? c : best), null);
     let el = canvas;
     const keep = new Set();
     while (el) { keep.add(el); el = el.parentElement; }
@@ -192,8 +195,11 @@ async function findServer() {
       // still holds the rendered image when we read it.
       const pixels = await new Promise(res => {
         requestAnimationFrame(() => {
-          const canvas = document.querySelector('canvas');
-          const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+          const canvas = [...document.querySelectorAll('canvas')].filter(c => {
+            try { return c.getContext('webgl2') || c.getContext('webgl'); } catch { return false; }
+          }).reduce((best, c) =>
+            (c.width * c.height > (best?.width ?? 0) * (best?.height ?? 0) ? c : best), null);
+          const gl = canvas && (canvas.getContext('webgl2') || canvas.getContext('webgl'));
           if (!gl) return res(null);
           window.__rw = canvas.width; window.__rh = canvas.height;
           const buf = new Uint8Array(canvas.width * canvas.height * 4);

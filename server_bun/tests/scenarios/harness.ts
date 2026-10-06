@@ -130,6 +130,14 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
   }
 }
 
+/** The seeded streams a mkRoom'd room draws from — same objects step()
+ *  injects per call, so a driver that needs code between ticks (demo
+ *  recording, fuse stepping) can keep them injected continuously and get
+ *  the identical draw sequence batch-stepping would produce. */
+export function roomRng(room: Room): { bot?: () => number; taunt?: () => number } {
+  return { bot: roomStreams.get(room), taunt: tauntStreams.get(room) };
+}
+
 /** Freeze a player at a spot. The move shadow is the truth — writing
  *  position alone is stomped by moveSim integration — and wall-clock spawn
  *  protection never lapses when a test runs hundreds of sim-ticks in
