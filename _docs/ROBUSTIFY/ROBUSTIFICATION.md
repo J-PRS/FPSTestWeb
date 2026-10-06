@@ -210,6 +210,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.14 Self-kill debug probes unbounded (2026-10-06)
+
+`selfKillImpactDist/Pos/Prey/FoeDist` are module-global arrays pushed
+once per self-frag with no trim — a long-lived room grows them
+linearly forever (they're soaked-postmortem probes, not live state).
+Now tail-capped at 256 through `probePush`, same shape as
+`recentKills`. Full-server churn/bounds sweep this round verified
+clean: every player/bot-keyed map is purged on `untrack` /
+`onPlayerDisconnected` / `removePlayerCompletely`, or hard-capped
+(`seqStates` 32, `cooldowns`/`invalidWarnAt` 4k, `duelStart` 512 +
+age prune, `spent` swept).
+
 ### 2.13 Malformed-frame warns bypassed the throttle (2026-10-06)
 
 `invalidWarnAt` only gated schema-invalid messages — unparseable JSON

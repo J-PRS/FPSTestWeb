@@ -17,6 +17,13 @@ export const selfKillFoeDist: number[] = [];
 export const selfKillTrades: { trades: number } = { trades: 0 };
 const recentKills: { t: number; shooterId: string }[] = [];
 const TRADE_MS = 300;
+// Debug probes below are module-global — a long-lived room pushes one
+// entry per self-frag forever. Same tail-cap shape as recentKills.
+const PROBE_CAP = 256;
+function probePush<T>(arr: T[], v: T): void {
+  arr.push(v);
+  if (arr.length > PROBE_CAP) arr.splice(0, arr.length - PROBE_CAP);
+}
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
@@ -80,11 +87,11 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, c.deps.influence.dangerLayer(victim.team ?? 'alpha'), 2);
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
-    if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
+    if (shooterId === targetId && impactDist !== undefined) probePush(selfKillImpactDist, impactDist);
     if (shooterId === targetId && impactPos) {
-      selfKillImpactPos.push({ x: impactPos.x, y: impactPos.y, z: impactPos.z });
+      probePush(selfKillImpactPos, { x: impactPos.x, y: impactPos.y, z: impactPos.z });
       const near = c.deps.preyNear?.(impactPos, shooterId);
-      if (near) selfKillPrey.push(near);
+      if (near) probePush(selfKillPrey, near);
     }
     if (shooterId === targetId) {
       const me2 = c.playerManager.getPlayer(shooterId);
@@ -95,7 +102,7 @@ export class HitLedger {
           const d = Math.hypot(o.position.x - me2.position.x, o.position.z - me2.position.z);
           if (d < foeD) foeD = d;
         }
-        selfKillFoeDist.push(foeD);
+        probePush(selfKillFoeDist, foeD);
       }
     }
     // Trade accounting runs both directions of the batch: a self-frag
