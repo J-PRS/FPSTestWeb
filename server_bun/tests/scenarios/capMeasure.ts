@@ -73,6 +73,10 @@ export function measureCap(
   ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
   ctl.roster.refitClass(capper.id);
   ctl.roster.roles.set(capper.id, 'capper');
+  // Same perk pin rebalanceTeam applies in a live roster — the direct
+  // roles.set here skips it otherwise.
+  capper.perk = 'featherjets';
+  room.moveSim.setPerk(capper.id, 'featherjets');
   // Pure route metric: every other body freezes — respawn timers run on
   // wall-clock in scenario steps, so a mid-route death would sideline
   // the runner permanently and pollute the timing with a corpse watch.

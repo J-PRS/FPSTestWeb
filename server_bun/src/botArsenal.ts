@@ -10,6 +10,7 @@ import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
 import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
+import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, pickBotWeaponSafe, type BotLoadout } from '../../shared/botLoadouts.ts';
@@ -577,9 +578,9 @@ export class BotArsenal implements BeamHost {
         urgent = sep || pulling;
       }
       // Even a lost chase doesn't buy a funeral: the feet blast costs
-      // up to SELF_SPLASH_MAX — under that plus a hair, the "launch" is
-      // just a suicide with extra steps.
-      if (!urgent || hp <= SELF_SPLASH_MAX + 5) return;
+      // up to SELF_SPLASH_MAX (halved by lightfoot) — under that plus a
+      // hair, the "launch" is just a suicide with extra steps.
+      if (!urgent || hp <= SELF_SPLASH_MAX * perkMods(me?.perk).selfDamage + 5) return;
     }
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);

@@ -224,7 +224,10 @@ export class BlastRunner {
       // the bar (fully quadratic read sterile — humans self-frag
       // sloppier than ~0.5% of kills).
       const near = Math.max(0, 1 - Math.max(0, dist - 3) / Math.max(1, ctx.radius - 3));
-      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near;
+      // Perk mods reach this path too — lightfoot's selfDamage:0.5 was
+      // client-only, so bots drawing the perk paid full blood for every
+      // propel while the roster pin (capper=lightfoot) did nothing.
+      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near * perkMods(target.perk).selfDamage;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
         this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });

@@ -244,6 +244,9 @@ export class BotRoster {
           // sustained jet burns matter far more than any burst or
           // survival perk, so the slot pins featherjets. The shadow
           // baked its perk mods at track time: setPerk re-applies.
+          // (lightfoot/regenerator REVERTED: losing the 0.7 drain +
+          // 1.5x regen stranded more climbs than the extra blast
+          // budget bought speed — kata/peaks went 0 caps.)
           if (donorP) {
             donorP.perk = 'featherjets';
             this.room.moveSim.setPerk(donor, 'featherjets');
