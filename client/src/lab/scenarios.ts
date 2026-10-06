@@ -875,6 +875,7 @@ const GYM_EXCLUDE = new Set<number>([
   WeaponType.Repair, WeaponType.RemoteRailgun, WeaponType.ClusterBomblet,
   WeaponType.MRVBomblet, WeaponType.Grenade, WeaponType.ClusterBomb,
   WeaponType.ArmorGrenade, WeaponType.Javelin, WeaponType.ImpactGrenade,
+  WeaponType.Concussion,
 ]);
 
 // Low-arc ballistic solve: elevation that lands a shell of speed v on

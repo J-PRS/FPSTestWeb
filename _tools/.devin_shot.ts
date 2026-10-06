@@ -1,0 +1,13 @@
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const puppeteer = require('puppeteer-core');
+const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, args: ['--mute-audio','--no-sandbox','--window-size=1620,980'] });
+const page = await browser.newPage();
+await page.setViewport({ width: 1600, height: 900 });
+page.on('console', m => console.log('[con]', m.text().slice(0,200)));
+page.on('pageerror', e => console.error('[pageerror]', String(e?.message ?? e)));
+await page.goto('http://localhost:5173/?mode=flagrun&tas=0->1&film=1', { waitUntil: 'domcontentloaded', timeout: 30000 });
+await new Promise(r => setTimeout(r, 8000));
+await page.screenshot({ path: '../.devin_menushot.png' });
+console.log('done');
+await browser.close();

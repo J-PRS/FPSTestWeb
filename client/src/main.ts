@@ -362,19 +362,26 @@ function killLocal(source: string): void {
   hud.setDeathOverlay(true);
   fragMessages.show(`YOU DIED\n${source}`);
   setTimeout(() => {
-    player.resetLifeState();
-    const spot = teamBots?.flagrun?.spawnPoint();
-    if (spot) {
-      player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
-    } else {
-      const a = Math.random() * Math.PI * 2;
-      player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
-    }
-    player.syncMovement();
-    player.markTeleport();
-    hud.show();
-    hud.setDeathOverlay(false);
+    // L's die+spectate parks the corpse offline too — the deadline lapses
+    // and the player stays dead until a dead-state respawn press revives.
+    if (!player.respawnHeld) {reviveLocal();}
   }, 3000);
+}
+
+/** Offline revive — the mirror of the server's respawnPlayer path. */
+function reviveLocal(): void {
+  player.resetLifeState();
+  const spot = teamBots?.flagrun?.spawnPoint();
+  if (spot) {
+    player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+  } else {
+    const a = Math.random() * Math.PI * 2;
+    player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+  }
+  player.syncMovement();
+  player.markTeleport();
+  hud.show();
+  hud.setDeathOverlay(false);
 }
 
 // ?mode=<mode> offline-vs-bots roster — no server, so the TeamBots
@@ -559,19 +566,26 @@ function wireNetworkLocal(): void {
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   player.onSkillUse = () => networkManager.sendSkillUse();
-  player.onRespawn = () => networkManager.sendRespawn();
-  player.onThrowFlag = () => networkManager.sendThrowFlag();
+  player.onRespawn = (hold) => networkManager.sendRespawn(hold === true);
+  // G: online it's a wire claim the server resolves; offline the local
+  // flag sims run the identical toss themselves (flagrun + CTF both).
+  player.onThrowFlag = () => {
+    if (networkManager.isConnected()) {networkManager.sendThrowFlag(); return;}
+    teamBots?.flagrun?.throwLocal();
+    teamBots?.ctf?.throwLocal();
+    teamBots?.rabbit?.throwLocal('local', player.pos, player.vel, player.yaw, player.pitch);
+  };
   // Dead-spectate roster: every remote on the local team. Networked
   // players' teams come from the wire roster; offline GameBots carry
   // `team` on the entity itself. FFA leaves localTeam undefined so the
   // right-click simply does nothing there.
   player.spectateTargets = () => {
     if (!world.localTeam) {return [];}
-    const out: { pos: typeof player.pos; feetY: number; alive: boolean }[] = [];
+    const out: { pos: typeof player.pos; alive: boolean }[] = [];
     for (const [id, rp] of world.remotePlayers) {
       const team = (rp as { team?: string }).team ?? networkManager.getPlayers().get(id)?.team;
       if (team !== world.localTeam) {continue;}
-      out.push({ pos: rp.pos, feetY: rp.feetY, alive: !rp.isDead });
+      out.push({ pos: rp.pos, alive: !rp.isDead });
     }
     return out;
   };
@@ -585,7 +599,9 @@ function wireNetworkLocal(): void {
       sfx.playerHurt();
       if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
     },
-    respawn: () => killLocal('respawned'),
+    // Dead press = revive now (releases a die+spectate hold); alive press
+    // = suicide — same dual semantics as the server claim.
+    respawn: () => { if (player.isDead) {reviveLocal();} else {killLocal('respawned');} },
     heal: (amount) => {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },

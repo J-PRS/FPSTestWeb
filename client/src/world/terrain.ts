@@ -18,6 +18,16 @@ export interface FieldRing {
   domeY?: number;
 }
 
+export interface Splat {
+  x: number; z: number; r: number;
+  intensity: number;
+  cr: number; cg: number; cb: number;
+  // Unit smear direction + elongation (0 = round pool): a droplet's
+  // landing velocity smears the stain along its travel, like Source
+  // engine blood painting behind the victim along the shot line.
+  dx: number; dz: number; stretch: number;
+}
+
 interface ClipmapLevel {
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
@@ -81,6 +91,12 @@ export class Terrain {
   private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
   private scorchArr = new Float32Array(16 * 4);
   private scorchEmberArr = new Float32Array(16);
+  // Projected ichor stains — tinted cousin of scorch: creature hits and
+  // deaths drop colored ground stains that linger far longer than char.
+  private splatList: Splat[] = [];
+  private splatArr = new Float32Array(24 * 4);
+  private splatTintArr = new Float32Array(24 * 3);
+  private splatDirArr = new Float32Array(24 * 3);
   // Projected deployable field rings (recharge pad envelope) — shader
   // decal slots like scorch; a mesh ring can't survive the clipmap's
   // 5m chord approximation.
@@ -158,6 +174,9 @@ export class Terrain {
           fogEnd:          { value: 400.0 },
           scorchData:      { value: this.scorchArr },
           scorchEmber:     { value: this.scorchEmberArr },
+          splatData:       { value: this.splatArr },
+          splatTint:       { value: this.splatTintArr },
+          splatDir:        { value: this.splatDirArr },
           fieldRing:       { value: this.fieldRingArr },
           fieldTint:       { value: this.fieldTintArr },
           fieldY:          { value: this.fieldYArr },
@@ -303,6 +322,24 @@ export class Terrain {
       this.fieldTintArr[i * 3 + 1] = s.tint[1];
       this.fieldTintArr[i * 3 + 2] = s.tint[2];
     }
+
+    this.splatArr.fill(0);
+    this.splatTintArr.fill(0);
+    this.splatDirArr.fill(0);
+    for (let i = 0; i < this.splatList.length; i++) {
+      const s = this.splatList[i];
+      const o = i * 4;
+      this.splatArr[o] = s.x;
+      this.splatArr[o + 1] = s.z;
+      this.splatArr[o + 2] = s.r;
+      this.splatArr[o + 3] = s.intensity;
+      this.splatTintArr[i * 3] = s.cr;
+      this.splatTintArr[i * 3 + 1] = s.cg;
+      this.splatTintArr[i * 3 + 2] = s.cb;
+      this.splatDirArr[i * 3] = s.dx;
+      this.splatDirArr[i * 3 + 1] = s.dz;
+      this.splatDirArr[i * 3 + 2] = s.stretch;
+    }
   }
 
   // Register a projected scorch decal. Returns a handle whose `intensity`
@@ -317,6 +354,21 @@ export class Terrain {
   removeScorch(entry: { x: number; z: number; r: number; intensity: number; ember: number }): void {
     const i = this.scorchList.indexOf(entry);
     if (i >= 0) this.scorchList.splice(i, 1);
+  }
+
+  // Projected ichor stain — same handle contract as addScorch. 24 slots,
+  // FIFO evict: in a sustained fight the oldest dried stains vanish first.
+  // dx/dz/stretch smear the stain along a landing direction (0 = round pool).
+  addSplat(x: number, z: number, r: number, cr: number, cg: number, cb: number, dx = 0, dz = 0, stretch = 0): Splat {
+    const entry: Splat = { x, z, r, intensity: 0, cr, cg, cb, dx, dz, stretch };
+    if (this.splatList.length >= 24) this.splatList.shift();
+    this.splatList.push(entry);
+    return entry;
+  }
+
+  removeSplat(entry: Splat): void {
+    const i = this.splatList.indexOf(entry);
+    if (i >= 0) this.splatList.splice(i, 1);
   }
 
   // Projected field-ring decal — same contract as addScorch: mutate the

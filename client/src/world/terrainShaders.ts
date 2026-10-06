@@ -202,6 +202,11 @@ export const terrainFrag = /* glsl */`
 
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
   uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
+  // Creature ichor stains — the tinted cousin of scorch: hit/death splats
+  // paint the ground colored instead of charring it black.
+  uniform vec4 splatData[24];  // x, z, radius, intensity
+  uniform vec3 splatTint[24];  // per-slot ichor color
+  uniform vec3 splatDir[24];   // unit smear dir xz + stretch (z=0: round pool)
   // Deployable field rings (recharge pad envelope): same projected-decal
   // trick as scorch — drawn INTO the terrain fragment, so it conforms to
   // the displaced surface exactly. A draped mesh can't: the clipmap is a
@@ -225,6 +230,46 @@ export const terrainFrag = /* glsl */`
       m = max(m, s.w * (1.0 - smoothstep(edge * 0.4, edge, d)));
     }
     return m;
+  }
+
+  // Ichor stains: later slots paint over earlier (chronological bleed-out),
+  // coverage is the strongest single mask so overlapping pools don't blow
+  // out to pure tint. A stain with a smear dir is elongated along its
+  // landing velocity and throws two small satellite specks trailing it —
+  // a splatter, not a circle. Returns the stain color; writes mix weight.
+  vec3 splatStain(vec2 p, out float m) {
+    vec3 acc = vec3(0.0);
+    m = 0.0;
+    for (int i = 0; i < 24; i++) {
+      vec4 s = splatData[i];
+      if (s.w <= 0.0) continue;
+      vec3 sd = splatDir[i];
+      // Shear the sample frame along the smear dir: distance measured in
+      // squeezed space = ellipse stretched along travel.
+      vec2 off = p - s.xy;
+      vec2 dir = sd.xy;
+      float along = dot(off, dir);
+      vec2 perp = off - dir * along;
+      float axial = along / (1.0 + sd.z);
+      float d = sqrt(axial * axial + dot(perp, perp) * (1.0 + sd.z * 0.6));
+      // Wobblier edge than scorch — a liquid splash, not a blast ring
+      float edge = s.z * (0.8 + 0.35 * noise(p * 1.4 + float(i) * 5.17));
+      float w = s.w * (1.0 - smoothstep(edge * 0.35, edge, d));
+      // Satellite specks trailing the smear — real splashes throw droplets
+      // past the main blot. Slot-hashed offsets, ~0.3r dots.
+      if (sd.z > 0.01) {
+        float fi = float(i);
+        vec2 o1 = dir * s.z * (1.1 + 0.4 * fract(fi * 0.618)) + vec2(-dir.y, dir.x) * s.z * (0.5 * fract(fi * 0.317) - 0.25);
+        vec2 o2 = dir * s.z * (1.6 + 0.5 * fract(fi * 0.754)) - vec2(-dir.y, dir.x) * s.z * (0.6 * fract(fi * 0.483) - 0.3);
+        float s1 = 1.0 - smoothstep(0.0, s.z * 0.35, distance(p, s.xy + o1));
+        float s2 = 1.0 - smoothstep(0.0, s.z * 0.25, distance(p, s.xy + o2));
+        w = max(w, s.w * 0.85 * max(s1, s2));
+      }
+      if (w <= 0.0) continue;
+      acc = mix(acc, splatTint[i], min(w * 2.0, 1.0));
+      m = max(m, w);
+    }
+    return acc;
   }
 
   // Ember rim: additive orange ring at the blast edge, fades in ~1s.
@@ -402,6 +447,7 @@ export const terrainFrag = /* glsl */`
       float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;
       col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       // T2's terrain was baked/vertex-lit for a bright arcade read —
       // the procedural path's diff² curve night-falls a ported albedo,
       // so ported maps take a linear diffuse + lifted ambient instead.
@@ -453,6 +499,7 @@ export const terrainFrag = /* glsl */`
       col = mix(col, slopeCol, slopeBlend);
       col *= 0.86 + 0.28 * detail;
       col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
@@ -534,6 +581,7 @@ export const terrainFrag = /* glsl */`
     // --- micro darkening in concavities via detail ---
     col *= 0.86 + 0.28 * detail;
     col *= 1.0 - scorchMask(vWorldPos.xz);
+    { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
 
     // --- lighting ---
     float diff   = max(dot(vNormal, sunDir), 0.0);
