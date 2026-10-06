@@ -67,18 +67,39 @@ function speakSystem(text: string, pitch = 0.85): void {
 interface LiveVoice { src: AudioBufferSourceNode; carrier: OscillatorNode; startT: number; boundaryS: number }
 const liveVoice = new Map<string, LiveVoice>();
 
-/** Seconds at which `text`'s last word begins in `who`'s voice — the
- *  splice point. Cached per speaker+line: canon lines repeat a lot. */
+/** Seconds at which the splice point lands in `who`'s voice — the last-
+ *  word boundary for multi-word lines, a measured mid-word clip for
+ *  single-word ones. Cached per speaker+line: canon lines repeat a lot. */
 const boundaryCache = new Map<string, number>();
+/** Where a single-word line clips for the combo splice — the syllable
+ *  SAM can't report. Only canon words that actually combo need entries;
+ *  anything else falls back to a mid-string render. */
+const SPLICE_HEADS: Record<string, string> = {
+  anytime: 'any',       // "Any— SHAZBOT"
+  awesome: 'aweso',     // "Aweso— SHAZBOT"
+  woohoo: 'woo',        // "Woo— SHAZBOT" / "Woo— I AM THE GREATEST"
+  ooops: 'oo',          // "Oo— SHAZBOT"
+  shazbot: 'shaz',      // "Shaz— SHAZBOT" machine-gun chain
+  quiet: 'qui',         // "Qui— SHAZBOT"
+  yes: 'ye',            // "Ye— NO"
+  no: 'n',              // "N— YES"
+  hi: 'hi',             // "Hi— BYE" / "Hi— SHAZBOT" (cuts at word end)
+  bye: 'bye',           // "Bye— HI"
+};
 function wordBoundary(text: string, who: string | undefined, fullDurS: number): number {
   const words = text.trim().split(/\s+/);
-  if (words.length < 2) {return fullDurS * 0.45;} // one word → cut mid-syllable
   const cacheKey = `${who ?? ''}|${text}`;
   const hit = boundaryCache.get(cacheKey);
   if (hit !== undefined) {return hit;}
-  let boundary = fullDurS * 0.7; // parse-failure fallback
+  let boundary = words.length < 2 ? fullDurS * 0.45 : fullDurS * 0.7; // parse-failure fallbacks
   try {
-    const head = samFor(who).buf32(words.slice(0, -1).join(' '));
+    // One word → splice mid-word too ("Any— SHAZBOT"): canon lines get an
+    // explicit head to cut after (the syllable SAM can't report), unknown
+    // words fall back to rendering the first half of the string.
+    const word = words[0]!;
+    const headText = words.length < 2 ? SPLICE_HEADS[word.toLowerCase()] ?? word.slice(0, Math.ceil(word.length / 2))
+                                      : words.slice(0, -1).join(' ');
+    const head = samFor(who).buf32(headText);
     if (head instanceof Float32Array && head.length > 0) {boundary = head.length / SAM_RATE;}
   } catch { /* keep fallback */ }
   if (boundaryCache.size > 256) {boundaryCache.clear();}
