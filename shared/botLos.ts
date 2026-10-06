@@ -29,6 +29,9 @@ const losMemo = new Map<number, { clear: boolean; until: number }>();
  *  field, so a different terrain or a fresh harness must flush first. */
 export function losMemoReset(): void { losMemo.clear(); }
 
+/** Test seam: the bound is the only thing a scenario can assert. */
+export function losMemoSize(): number { return losMemo.size; }
+
 function losKey(from: BotVec, to: BotVec): number {
   const ax = Math.round(from.x / LOS_CELL) + 2048;
   const az = Math.round(from.z / LOS_CELL) + 2048;
