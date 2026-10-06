@@ -15,6 +15,7 @@ import { bakeVertexAO, enhanceWeaponMaterial } from './effects/vertexAO.js';
 import { metalMat } from './entities/procMetal.js';
 import { WeaponType } from '../../shared/weaponTable.js';
 import { CREATURES, PICKUPS, ITEMS, CLASSES, previewLive, initPreviews } from './gunlab/previews.js';
+import type { AnimationState } from './entities/playerClips.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string }
@@ -240,6 +241,11 @@ for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // sett
 // leaving it mutated is what stranded the gun off-screen in FPS view.
 let inspectAnchor: THREE.Object3D | null = null;
 const focus = new THREE.Vector3();
+// Live-focus tracking scratches — the loop applies the focus's frame
+// delta so RMB pan's edits to orbit.target survive (see render loop).
+const _camW = new THREE.Vector3();
+const _lastFocus = new THREE.Vector3();
+let liveFocusOn = false;
 // The last orbit direction — weapon swaps and FPS↔inspect toggles keep
 // this angle; only the fit distance changes.
 const inspectDir = new THREE.Vector3(0.45, 0.3, 0.85).normalize();
@@ -272,6 +278,10 @@ const wireSharpMat = new THREE.LineBasicMaterial({
 function applyWire(): void {
   for (const l of wireLines) { l.parent?.remove(l); l.geometry.dispose(); }
   wireLines.length = 0;
+  // Previews that own a hit capsule (class lineup) expose colliderWire —
+  // the ▧ wire toggle shows the sim capsule alongside the tri overlay.
+  const cw = (inspectAnchor ?? archiveGroup)?.userData.colliderWire as ((on: boolean) => void) | undefined;
+  cw?.(wireOn);
   if (!wireOn) {return;}
   const root = inspectAnchor ?? vm.group.children.find(c => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
   if (!root) {return;}
@@ -580,6 +590,45 @@ function metalToggle(): void {
   });
   if (n === 0) {return;}
   metalOn = true;
+}
+
+// --- right rail: anim states, when the preview exposes a driver ----
+// A preview parks `userData.anims = { set(state), dir?(f,side) }` — the
+// classes lineup drives all three bodies in lockstep through it.
+const animRail = document.getElementById('animrail')!;
+const ANIM_STATES: AnimationState[] = ['idle', 'walk', 'run', 'jump', 'ski', 'jet', 'shoot', 'throw', 'hit', 'death'];
+// Facing-frame (fwd, side) — same convention as PlayerModel.setLocomotionVector.
+const DIR_BTNS: [label: string, v: [number, number]][] = [
+  ['FL', [0.7, -0.7]], ['F', [1, 0]], ['FR', [0.7, 0.7]],
+  ['L', [0, -1]], ['·', [0, 0]], ['R', [0, 1]],
+  ['BL', [-0.7, -0.7]], ['B', [-1, 0]], ['BR', [-0.7, 0.7]],
+];
+interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void }
+let animSel: AnimationState | '' = '';
+
+function paintAnimRail(): void {
+  animRail.innerHTML = '';
+  const hook = archiveGroup?.userData.anims as AnimHook | undefined;
+  if (!hook) {animRail.style.display = 'none'; return;}
+  animRail.style.display = '';
+  for (const s of ANIM_STATES) {
+    const b = document.createElement('button');
+    b.textContent = s;
+    if (s === animSel) {b.classList.add('active');}
+    b.addEventListener('click', () => { animSel = s; hook.set(s); paintAnimRail(); });
+    animRail.append(b);
+  }
+  if (!hook.dir) {return;}
+  const drow = document.createElement('div');
+  drow.className = 'dirrow';
+  for (const [label, [f, s]] of DIR_BTNS) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.disabled = label === '·';
+    b.addEventListener('click', () => hook.dir!(f, s));
+    drow.append(b);
+  }
+  animRail.append(drow);
 }
 
 // --- rail UI ---
@@ -892,6 +941,7 @@ function selectArchive(label: string, mk: () => THREE.Group): void {
   if (state.inspect) { setInspect(false); setInspect(true); }
   applyWire();
   paintRail();
+  paintAnimRail();
   flashStatus(`archive: ${label}`);
 }
 
@@ -904,6 +954,7 @@ function select(wt: number): void {
     archiveGroup.parent?.remove(archiveGroup);
     if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
     archiveGroup = null; archiveLabel = '';
+    paintAnimRail(); // weapons expose no anim driver — rail hides
   }
   state.pick = undefined;
   vm.switchWeapon(wt);
@@ -1120,11 +1171,15 @@ renderer.setAnimationLoop(() => {
   const liveFocus = inspectAnchor?.userData.liveFocus as (() => THREE.Vector3) | undefined;
   if (liveFocus && state.inspect) {
     focus.copy(liveFocus()); focus.y += 0.5; // mid-body, not feet
-    const _camW = new THREE.Vector3();
-    _camW.subVectors(camera.position, orbit.target); // keep the user's orbit offset
-    orbit.target.copy(focus);
-    camera.position.copy(focus).add(_camW);
-  }
+    // Apply only the focus's frame DELTA — overwriting orbit.target
+    // clobbered RMB pan (its edits live in target). A crawling creature
+    // still drags the frame along; a static lineup pans normally.
+    if (!liveFocusOn) {_lastFocus.copy(focus); liveFocusOn = true;}
+    _camW.subVectors(focus, _lastFocus);
+    orbit.target.add(_camW);
+    camera.position.add(_camW);
+    _lastFocus.copy(focus);
+  } else {liveFocusOn = false;}
   lookDX = 0; lookDY = 0;
   renderer.render(scene, camera);
 });

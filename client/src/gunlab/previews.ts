@@ -25,8 +25,8 @@ import { mkFlagPlate } from '../game/flagRun.js';
 import { mkFlagMesh } from '../game/ctfFlags.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
 import { PlayerModel, type PlayerModelVariant } from '../entities/PlayerModel.js';
-import { CLASS_BODY_VARIANT } from '../entities/playerClips.js';
-import type { ArmorClass } from '../../../shared/botClasses.js';
+import { CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
+import { classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
 
 // The one live-body tick — whichever preview proxy is parked owns it.
 // gunlab's render loop reads it through this holder so proxy builders
@@ -245,6 +245,9 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     const models: PlayerModel[] = [];
     for (const [cls, x, ly] of CLASS_LINEUP) {
       const pm = new PlayerModel(LAB_SCENE, CLASS_BODY_VARIANT[cls] as PlayerModelVariant);
+      // The gizmo defaults to the generic capsule — without the class
+      // sizes the collider wireframe would lie about light/heavy.
+      pm.setColliderCapsule(classCapsule(cls));
       void pm.load().then(() => {
         if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
         pm.setPosition(x, 0, 0);
@@ -262,6 +265,18 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     bounds.position.set(0.25, 1.7, 0);
     proxy.add(bounds);
     proxy.userData.liveFocus = () => new THREE.Vector3(0.25, 1.4, 0);
+    // Anim rail hook — gunlab's right panel drives all three bodies in
+    // lockstep so a state flaw (ski tuck, strafe stride) shows at once.
+    proxy.userData.anims = {
+      set: (s: AnimationState) => { for (const m of models) {m.forceAnimationState(s);} },
+      dir: (f: number, side: number) => { for (const m of models) {m.setLocomotionVector(f, side);} },
+      cur: () => models[0]?.animationState,
+    };
+    // Wire toggle rides along: gunlab calls this on every ▧ wire flip so
+    // the class hit capsules show exactly while the tri overlay does.
+    proxy.userData.colliderWire = (on: boolean) => {
+      for (const m of models) {m.setColliderVisible(on, true);}
+    };
     proxy.userData.disposeCreature = () => { for (const m of models) {m.dispose();} previewLive.tick = null; };
     previewLive.tick = (dt) => { for (const m of models) {m.update(dt);} };
     return proxy;
