@@ -220,7 +220,7 @@ export class FlagRunBridge {
         } else {
           this.setBotCarry(f.carrier, false);
           f.state = 'dropped'; f.carrier = null;
-          f.pos.y = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z);
+          f.pos.y = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z) + 0.2; // hem clears turf
           f.dropT = FLAG_RESET_S;
           this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
         }
@@ -250,8 +250,8 @@ export class FlagRunBridge {
         this.burst(f.pos, f.team, 1.4);
         sfx.flagCue('taken', false);
         const gv = (this.lastTouchV.get(id) ?? 0).toFixed(0);
-        this.w.onFeed(id === 'local' ? `YOU took the ${TEAM_LABEL[f.team]} flag @ ${gv} m/s!`
-          : `${id.replace('bot:', '')} took the ${TEAM_LABEL[f.team]} flag @ ${gv} m/s!`);
+        this.w.onFeed(id === 'local' ? `YOU took the ${TEAM_LABEL[f.team]} flag AT ${gv} m/s!`
+          : `${id.replace('bot:', '')} took the ${TEAM_LABEL[f.team]} flag AT ${gv} m/s!`);
         break;
       }
       f.mesh.position.copy(f.pos);
@@ -321,7 +321,7 @@ export class FlagRunBridge {
     bank(this.w.scores, cTeam);
     this.w.onCapture(cTeam);
     const cv = (f.carrier ? this.lastTouchV.get(f.carrier) ?? 0 : 0).toFixed(0);
-    this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s @ ${cv} m/s`);
+    this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s AT ${cv} m/s`);
     if (this.capT < this.bestCap) this.bestCap = this.capT;
     sfx.flagCue('captured', true);
     this.burst(f.home, cTeam, 2.4);
