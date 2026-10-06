@@ -402,6 +402,8 @@ await writeFile(path, new Uint8Array(buf));
 console.log(`\n[clip] ${desc}`);
 console.log(`[clip] window [${clipStart.toFixed(1)}s .. ${clipEnd.toFixed(1)}s] (shot ${shotT.toFixed(1)}s, kill ${killT.toFixed(1)}s)`);
 console.log(`[clip] wrote ${path}: ${buf.byteLength} bytes (${clip.frames.length} local, ${clip.remoteFrames.length} remote, ${clip.projectileEvents.length} proj, ${clip.targetEvents.length} tgt, ${clip.killEvents?.length ?? 0} kills)`);
+const pitches = clip.remoteFrames.map((f) => f.pitch);
+console.log(`[clip] remote pitch: nonzero ${pitches.filter((p) => Math.abs(p) > 0.01).length}/${pitches.length}, min ${Math.min(...pitches).toFixed(2)}, max ${Math.max(...pitches).toFixed(2)}`);
 const wallMs = performance.now() - wall0;
 console.log(`[done] ${(simTicks * DT / 3600).toFixed(2)} sim-hours in ${(wallMs / 1000).toFixed(0)}s wall (${(simTicks * DT / (wallMs / 1000)).toFixed(1)}x)`);
 simNowReset();

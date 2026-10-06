@@ -267,6 +267,10 @@ export class GameBot extends RemotePlayer {
     const {dest} = out;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.lastMove = out.move;
+    if (out.fire) {
+      this.lastAim.set(out.fire.aim.x, out.fire.aim.y, out.fire.aim.z);
+      this.lastAimAt = performance.now();
+    }
     this.wantBelt = Boolean(out.belt);
     this.wantDeploy = out.deploy ?? null;
     this.wantRepair = out.repair ?? null;
@@ -295,6 +299,10 @@ export class GameBot extends RemotePlayer {
   }
 
   private lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
+  // Held-fire aim point — the head keeps tracking between 10Hz thinks
+  // and for a beat after the trigger releases.
+  private readonly lastAim = new THREE.Vector3();
+  private lastAimAt = -Infinity;
 
   private applyStatus(claim: number, dt: number): void { en.applyStatus(this, claim, dt); }
   private dropSkill(bit: number): void { en.dropSkill(this, bit); }
@@ -308,7 +316,13 @@ export class GameBot extends RemotePlayer {
     // Wrist-speed turn — same slew the server host applies, so an
     // offline bot carves its view around instead of fly-flicking.
     if (md > 0.01) {this.rotation.yaw = slewYaw(this.rotation.yaw, Math.atan2(dest.x - pos.x, dest.z - pos.z), 5 * dt);}
-    this.rotation.pitch = 0;
+    // Head tracks the last aim point like the server drive does — wire
+    // pitch is negated (positive looks down), and a disengaged bot eases
+    // back to level at the same 5 rad/s slew as the wrist turn.
+    const wantPitch = performance.now() - this.lastAimAt < 1500
+      ? -Math.atan2(this.lastAim.y - pos.y, Math.hypot(this.lastAim.x - pos.x, this.lastAim.z - pos.z))
+      : 0;
+    this.rotation.pitch = slewYaw(this.rotation.pitch, wantPitch, 5 * dt);
     this.rotation.roll = 0; // corpse roll would otherwise stick forever
 
     if (this.appliedSpecList !== botStructureSpec) {
@@ -316,7 +330,7 @@ export class GameBot extends RemotePlayer {
       this.movement.setStructures(botStructureSpec);
     }
     this.moveState.yaw = this.rotation.yaw;
-    this.moveState.pitch = 0;
+    this.moveState.pitch = this.rotation.pitch;
     const jet = (Boolean(move?.jet) || this.propelJetT > 0) && this.energy > 0.5;
     this.movement.setInput({
       forward: md > 0.5 ? 1 : 0,

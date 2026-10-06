@@ -36,7 +36,7 @@ export interface DriveHost {
  *  (heading → yaw, walk = forward key) and let the sim integrate.
  *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
  *  after bots.tick, so this reads the fresh post-step state. */
-export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
+export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
   const { out, sh, dt, now } = frame;
   const dx = out.dest.x - p.position.x;
   const dz = out.dest.z - p.position.z;
@@ -58,6 +58,13 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     h.room.moveSim.faceYaw(id, yaw);
     p.rotation.yaw = yaw;
   }
+  // Head tracks the trigger's live aim point (same 5 rad/s slew as the
+  // wrist turn); wire pitch is negated — positive looks down — and a
+  // disengaged bot relaxes back to level.
+  const aim = h.arsenal.aimPoint(id);
+  const wantPitch = aim ? -Math.atan2(aim.y - p.position.y, Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
+  const dpitch = wantPitch - p.rotation.pitch;
+  p.rotation.pitch += Math.max(-5 * dt, Math.min(5 * dt, dpitch));
   commitMoveInput(h, id, p, out, { moving: dist >= 0.5 }, now);
   // 'trying' needs reach, not intent: out.dest re-rolls each think and
   // can hover a meter off the position (steerer micro-orbit), which

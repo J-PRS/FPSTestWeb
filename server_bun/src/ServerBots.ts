@@ -370,7 +370,7 @@ export class ServerBots {
     if (out.repair) this.room.deployables.repair(id, +out.repair);
   }
 
-  private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number; armorClass: string }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
+  private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; armorClass: string }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
     driveMoveInto(this, id, p, { out, sh, dt, now });
   }
 

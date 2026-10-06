@@ -88,6 +88,13 @@ export class BotArsenal implements BeamHost {
     return this.propelJetUntil.get(id) ?? 0;
   }
 
+  /** The live aim point a held trigger is tracking — the drive reads it
+   *  to pitch the bot's head at its target. */
+  aimPoint(id: string): Vec3 | null {
+    const tr = this.trigger.get(id);
+    return tr && tr.until > this.clock ? tr.aim : null;
+  }
+
   /** Part of a bot's teardown — see ServerBots.untrack. */
   untrack(id: string): void {
     this.trigger.delete(id);
