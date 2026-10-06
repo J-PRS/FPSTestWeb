@@ -1,3 +1,4 @@
+2026-10-06 - bots: burn starts priced against the fuel gauge - no climb/destHigh/hop burn begins below mountE (a 2-8E burn is a sputter that buys nothing; banking ~2s to a full hop is always better); kata grab 105s->88s
 2026-10-06 - bots: REVERTED hill-vs-wall crest gate (climbing 20m 'hills' lost caps to faces it couldn't pay) - constant kept for reference
 2026-10-06 - bots: mount-wait refill floor 2.4->15E + crawl branch joins it (dais mounts stopped sputtering ~25s at the stand rim); escape block consults the flow route before the myopic traverse
 2026-10-06 - bots: orbit latch tied to the goal it armed for - a dest swap (grab flips enemy->home stand) releases it instead of starving the flow-field route for the whole return leg; katabatic capRun now caps (was 0 caps, ~100m/70s crawl)

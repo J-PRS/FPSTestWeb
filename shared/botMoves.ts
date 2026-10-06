@@ -490,7 +490,15 @@ export class BotMoves {
     // massif walk bought altitude that bled straight back — soak warns
     // rose both maps (katabatic 34→40, henge 17→24). The 6m lip probe
     // stays the climb sense.
-    this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
-    return this.jetWhy !== '-';
+    // Fuel-gauge pricing: a burn START is a purchase — below `mountE`
+    // the tank holds less than one hop's worth, so a 2-8E climb or
+    // destHigh burn is a sputter that buys no altitude. Banking (8/s
+    // regen, ~2s to a full hop) is always the better move; mid-burn
+    // latches ride the regen inflow past this floor.
+    const why = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
+    if (why === '-') return false;
+    if (ctx.energy !== undefined && ctx.energy < T.moves.mountE && why !== 'block') { this.jetWhy = '-'; return false; }
+    this.jetWhy = why;
+    return true;
   }
 }
