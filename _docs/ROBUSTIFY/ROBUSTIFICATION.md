@@ -210,6 +210,13 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.22 CoolShots panel repainted behind a closed overlay (2026-10-06)
+
+The 1s "time ago" interval rebuilt ~20 DOM nodes whenever shots existed —
+including while the overlay sat at `display:none`, a 1Hz layout pass
+nobody sees. Now skips when the overlay is hidden or the tab is
+backgrounded.
+
 ### 2.21 Stall watchdog interval idled forever after disconnect (2026-10-06)
 
 `NetworkManager.stallTimer` armed once per page (`??=` in `connect()`) and

@@ -27,8 +27,11 @@ export class CoolShotsPanel {
   private setup(): void {
     this.demoManager.onCoolShotsChanged = (shots) => this.renderCoolShots(shots);
     
-    // Refresh "time ago" labels every second
+    // Refresh "time ago" labels every second — but only while the panel
+    // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
+    // nobody sees. Same skip for a backgrounded tab.
     setInterval(() => {
+      if (document.hidden || this.overlay.style.display === 'none') return;
       if (this.lastCoolShots.length > 0) {
         this.renderCoolShots(this.lastCoolShots);
       }
