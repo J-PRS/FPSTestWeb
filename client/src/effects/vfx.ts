@@ -27,7 +27,6 @@ import {
 } from './vfxRuntime.js';
 export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
 import { EMIT_GAIN, GRAVITY } from '../core/config.js';
-import { litAudit } from './trailBatch.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
 import type { ProjectileConfig } from '../projectiles/types.js';
 
@@ -763,6 +762,8 @@ registerDiag('vfx', () => ({
   stats: trailStats,
   pools: poolDump(),
   drivers: trailDriverCount(),
-  ribbons: litAudit(),
+  // No 'ribbons' key here — the ribbons section emits the row array and
+  // Object.assign merge would let this shadow it with the litAudit
+  // OBJECT (diagDump then crashes on .slice).
   trails: trailDump(),
 }));

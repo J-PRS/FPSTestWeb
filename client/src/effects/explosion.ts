@@ -57,10 +57,19 @@ export class Explosion {
     if (alive === 0) this.dead = true;
   }
 
-  /** Distance-gated tick — far blasts age so they retire on schedule but
-   *  skip the layer/spark buffer writes nobody can see. */
+  /** Distance-gated tick — far blasts skip the spark buffer writes
+   *  nobody can see, but layers still tick: a frozen shock dome/ground
+   *  ring parked at spawn opacity reads as a glowing white circle for
+   *  the full 6s instead of fading in 0.45s. */
   tickAge(dt: number): void {
     this.elapsed += dt;
+    this.layers?.update(dt);
+    // Sparks tick too — they're sub-pixel out here, but a blast that
+    // crosses the gate mid-flight leaves already-written trail slices
+    // parked at full brightness for the 6s sweep. Their life is ≤0.9s,
+    // so one update ages them out and collapses the slices — bounded
+    // cost either way.
+    this.sparks?.update(dt);
     if (this.elapsed > 6) this.dead = true;
   }
 

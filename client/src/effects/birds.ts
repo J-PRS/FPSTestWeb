@@ -104,8 +104,14 @@ export class AmbientBirds {
 
   private flock!: THREE.InstancedMesh;
   private flapAttr!: THREE.InstancedBufferAttribute;
+  private scene: THREE.Scene;
 
-  constructor(scene: THREE.Scene) {
+  /** distScale shrinks the whole world-box (roam rings, altitudes, orbit
+   *  radii) — the gunlab previews a kettle at ~1/12 scale, close enough
+   *  to actually see. */
+  constructor(scene: THREE.Scene, private distScale = 1) {
+    this.scene = scene;
+    for (const k of this.kettles) k.roamDist *= distScale; // field init runs before ctor params land
     const bodyGeo = new THREE.ConeGeometry(0.12, 0.9, 5);
     bodyGeo.rotateX(-Math.PI / 2); // nose along -Z so lookAt aims it
     tagWing(bodyGeo, 0);
@@ -156,12 +162,12 @@ export class AmbientBirds {
         group, slot: i, flapPose: 0,
         // Every 4th bird starts a loner — free-fliers roaming the sky
         kettle: (i + 1) % 4 === 0 ? -1 : i % KETTLE_COUNT,
-        orbitR: 20 + Math.random() * 55,   // wide spread — a loose kettle, not a dot
+        orbitR: (20 + Math.random() * 55) * this.distScale,   // wide spread — a loose kettle, not a dot
         orbitA: Math.random() * Math.PI * 2,
         orbitW: (0.15 + Math.random() * 0.4) * (Math.random() < 0.85 ? 1 : -1), // mostly same-way, a few contrarians
         heading: Math.random() * Math.PI * 2,
         speed: 16 + Math.random() * 10,
-        altOff: Math.random() * (ALT_MAX - ALT_MIN) * 0.5,
+        altOff: Math.random() * (ALT_MAX - ALT_MIN) * 0.5 * this.distScale,
         flapPhase: Math.random() * Math.PI * 2,
         flapAmp: 0,
         bobPhase: Math.random() * Math.PI * 2,
@@ -263,6 +269,15 @@ export class AmbientBirds {
     this.syncFlock();
   }
 
+  /** Lab/debug teardown — game kettles live for the match. */
+  dispose(): void {
+    this.scene.remove(this.flock);
+    this.flock.geometry.dispose();
+    (this.flock.material as THREE.Material).dispose();
+    this.birds.length = 0;
+    this.targets.length = 0;
+  }
+
   /** Push every bird's transform + wing pose into the instanced flock. */
   private syncFlock(): void {
     for (const b of this.birds) {
@@ -291,9 +306,9 @@ export class AmbientBirds {
       if (b.kettle === -1) {
         const a = Math.random() * Math.PI * 2, d = 180 + Math.random() * 200;
         b.group.position.set(
-          playerPos.x + Math.cos(a) * d,
-          terrain.getHeightVisual(playerPos.x + Math.cos(a) * d, playerPos.z + Math.sin(a) * d) + ALT_MIN + b.altOff,
-          playerPos.z + Math.sin(a) * d,
+          playerPos.x + Math.cos(a) * d * this.distScale,
+          terrain.getHeightVisual(playerPos.x + Math.cos(a) * d * this.distScale, playerPos.z + Math.sin(a) * d * this.distScale) + ALT_MIN * this.distScale + b.altOff,
+          playerPos.z + Math.sin(a) * d * this.distScale,
         );
         b.heading = Math.random() * Math.PI * 2;
       }
@@ -316,7 +331,7 @@ export class AmbientBirds {
       if (k.reformTimer <= 0) {
         k.reformTimer = 40 + Math.random() * 80;
         k.roamAngle = Math.random() * Math.PI * 2;
-        k.roamDist = 180 + Math.random() * 220;
+        k.roamDist = (180 + Math.random() * 220) * this.distScale;
         k.roamW = 0.006 + Math.random() * 0.012;
         k.center.set(
           playerPos.x + Math.cos(k.roamAngle) * k.roamDist,
@@ -327,7 +342,7 @@ export class AmbientBirds {
         for (const b of this.birds) {
           if (b.kettle === ki) {
             b.orbitA = Math.random() * Math.PI * 2;
-            b.orbitR = 20 + Math.random() * 55;
+            b.orbitR = (20 + Math.random() * 55) * this.distScale;
           }
         }
       }
@@ -336,9 +351,9 @@ export class AmbientBirds {
         0,
         playerPos.z + Math.sin(k.roamAngle) * k.roamDist,
       );
-      k.center.x += (_target.x - k.center.x) * 0.15 * dt + Math.sin(k.wanderPhase) * DRIFT * dt;
-      k.center.z += (_target.z - k.center.z) * 0.15 * dt + Math.cos(k.wanderPhase * 0.7) * DRIFT * dt;
-      k.center.y = terrain.getHeightVisual(k.center.x, k.center.z) + ALT_MIN;
+      k.center.x += (_target.x - k.center.x) * 0.15 * dt + Math.sin(k.wanderPhase) * DRIFT * this.distScale * dt;
+      k.center.z += (_target.z - k.center.z) * 0.15 * dt + Math.cos(k.wanderPhase * 0.7) * DRIFT * this.distScale * dt;
+      k.center.y = terrain.getHeightVisual(k.center.x, k.center.z) + ALT_MIN * this.distScale;
     }
   }
 

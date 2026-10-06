@@ -28,9 +28,24 @@ export interface DebrisOptions {
    *  centroid (pos is absolute, px/py/pz only seed the outward burst
    *  direction). Owned geometries: disposed when the shard dies. */
   parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[];
+  /** Goo shards that land fire this once — the splat-on-touch model:
+   *  the spray is only a promise, the stain lives where a droplet
+   *  actually hits dirt. */
+  onDropletLand?: (x: number, z: number, dropletR: number, dx: number, dz: number) => void;
+  /** Max droplets per burst that paint (the rest just splat visually) —
+   *  bounds decal churn under chaingun-rate hits. */
+  paintBudget?: number;
+  /** Airborne shards shed a dark smoke wisp on a slow cadence (player
+   *  gib bursts). Cheap: pooled fxPuff, pressure-throttled. */
+  smoke?: boolean;
 }
 
 export type DebrisPart = NonNullable<DebrisOptions['parts']>[number];
+
+// Smoke cadence — slower than the sparkle trail: puffs live ~0.6s so
+// ~7Hz per shard still keeps a continuous wake. Lives here (leaf
+// module) because debris.ts and debrisStep.ts both need it.
+export const SMOKE_INTERVAL = 0.14;
 
 /** Primitive family index for the instanced path — same shapes as the
  *  random branch below, but as a bucket id so shards can share one
@@ -52,8 +67,10 @@ export function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, 
     return new THREE.CylinderGeometry(0.008, 0.014, 0.2 + Math.random() * 0.35, 3);
   }
   if (opts.kind === 'goo') {
-    // Splat blob — organic pop into droplets
-    return new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 4);
+    // Lumpy glob — squashed icosahedron reads as tissue, not a marble
+    const g = new THREE.IcosahedronGeometry(0.05 + Math.random() * 0.08, 0);
+    g.scale(1, 0.5 + Math.random() * 0.4, 0.8 + Math.random() * 0.4);
+    return g;
   }
   const geoType = Math.random();
   const m = Math.max(sw, sh, sd);

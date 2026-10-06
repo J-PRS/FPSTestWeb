@@ -310,6 +310,7 @@ export function buildProjectileMeshes(
         RibbonTrail.acquire(scene, { color: coreColor, width: width * 0.35, life: life * 0.8, vOffset: -width * 0.07, billboard: true, tag }),
       ];
     }
+    if (config.ribbonRampIn) for (const r of ribbons) r.rampIn(config.ribbonRampIn);
   }
   return { mesh, glowMesh, ribbons };
 }
@@ -370,7 +371,12 @@ export function updateProjectileMesh(
         _velDir.copy(vel).normalize();
         glowMesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
       }
-      glowMesh.scale.set(gs, gs, gs * CONE_LEN);
+      // The collar radius IS the wake proxy hitbox — not gs (which
+      // carries glowScale shrink). Coupled here so the visual can never
+      // understate the live hit envelope; glowScale only tunes the
+      // skirt's LENGTH for cone shapes.
+      const cr = Math.max(hitRadius * glowRamp, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
+      glowMesh.scale.set(cr, cr, cr * CONE_LEN * glowMultiplier);
     } else {
       glowMesh.scale.setScalar(gs);
     }

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from '../core/config.js';
 import { markProbe } from '../core/fxDiag.js';
 import { CapGovernor } from '../core/poolPolicy.js';
+import { fxPuff } from './vfx.js';
 import type { Terrain } from '../world/terrain.js';
 import type { SpeciesSwarm } from '../entities/swarm.js';
 
@@ -30,6 +31,11 @@ const GIB_CAP = 192;
 
 const UP_BIAS = 2;
 const IMPULSE_CARRY = 6; // matches Debris — the shot's push travels through
+// Smoke trail: one quarks puff per GIB_PUFF_DT per airborne gib — the
+// batch absorbs it (jet/ski trails ride the same pool), landed gibs shed
+// nothing. Dark wisp, slight up-drift, shed opposite velocity.
+const GIB_PUFF_DT = 0.07;
+const _smoke = new THREE.Vector3();
 
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -53,6 +59,7 @@ class GibMeshPool {
   private age = new Float32Array(GIB_CAP);
   private life = new Float32Array(GIB_CAP);
   private landedAt = new Float32Array(GIB_CAP).fill(-1);
+  private puffT = new Float32Array(GIB_CAP); // next smoke-emit age per slot
   private bodyR = new Float32Array(GIB_CAP); // world-space radius for terrain hits
   live = 0;
   get cap(): number { return this.freeIdx.length + this.live; }
@@ -87,7 +94,7 @@ class GibMeshPool {
     this.sx = growA(this.sx); this.sy = growA(this.sy); this.sz = growA(this.sz);
     this.cr = growA(this.cr); this.cg = growA(this.cg); this.cb = growA(this.cb);
     this.age = growA(this.age); this.life = growA(this.life);
-    this.bodyR = growA(this.bodyR);
+    this.bodyR = growA(this.bodyR); this.puffT = growA(this.puffT);
     const la = new Float32Array(cap).fill(-1); la.set(this.landedAt); this.landedAt = la;
     const oldCap = cap / 2;
     for (let i = cap - 1; i >= oldCap; i--) {this.freeIdx.push(i);}
@@ -127,7 +134,7 @@ class GibMeshPool {
     const nsx = moveA(this.sx); const nsy = moveA(this.sy); const nsz = moveA(this.sz);
     const ncr = moveA(this.cr); const ncg = moveA(this.cg); const ncb = moveA(this.cb);
     const nage = moveA(this.age); const nlife = moveA(this.life);
-    const nbodyR = moveA(this.bodyR);
+    const nbodyR = moveA(this.bodyR); const npuffT = moveA(this.puffT);
     const nla = new Float32Array(target).fill(-1);
     for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) {nla[remap[i]!] = this.landedAt[i]!;}}
     this.px = npx; this.py = npy; this.pz = npz;
@@ -137,7 +144,7 @@ class GibMeshPool {
     this.sx = nsx; this.sy = nsy; this.sz = nsz;
     this.cr = ncr; this.cg = ncg; this.cb = ncb;
     this.age = nage; this.life = nlife; this.bodyR = nbodyR;
-    this.landedAt = nla;
+    this.landedAt = nla; this.puffT = npuffT;
     // Rebuild the mesh buffers at target, remapping each live instance.
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(target * 16), 16);
     const col = new THREE.InstancedBufferAttribute(new Float32Array(target * 3).fill(1), 3);
@@ -176,6 +183,8 @@ class GibMeshPool {
     this.age[i] = 0;
     this.life[i] = LIFE_BASE + Math.random() * LIFE_RAND;
     this.landedAt[i] = -1;
+    // Stagger the first puff so a 24-part burst doesn't emit in lockstep.
+    this.puffT[i] = Math.random() * GIB_PUFF_DT;
     this.bodyR[i] = radius;
     this.mesh.instanceColor!.setXYZ(i, col.r, col.g, col.b);
     this.mesh.count = Math.max(this.mesh.count, i + 1);
@@ -215,6 +224,19 @@ class GibMeshPool {
         this.px[i]! += this.vx[i]! * dt;
         this.py[i]! += this.vy[i]! * dt;
         this.pz[i]! += this.vz[i]! * dt;
+        if (this.age[i]! >= this.puffT[i]!) {
+          this.puffT[i] = this.age[i]! + GIB_PUFF_DT;
+          _smoke.set(this.px[i]!, this.py[i]!, this.pz[i]!);
+          fxPuff(_smoke, {
+            count: 1,
+            velMin: [-0.4, 0.2, -0.4], velMax: [0.4, 0.8, 0.4],
+            shed: [-this.vx[i]! * 0.08, 0, -this.vz[i]! * 0.08],
+            lifeMin: 0.4, lifeMax: 0.7,
+            sizeScale: Math.max(0.3, this.bodyR[i]! * 1.4),
+            colA: [0.22, 0.2, 0.18], colB: [0.3, 0.28, 0.26],
+            gravity: false,
+          });
+        }
         const gy = terrain.getHeight(this.px[i]!, this.pz[i]!);
         if (this.py[i]! - this.bodyR[i]! <= gy) {
           this.py[i] = gy + this.bodyR[i]!;

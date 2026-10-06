@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 
 import { LIFE_BASE, LIFE_RAND, PLAYER_RADIUS } from '../core/config.js';
-import { pickShardGeo, pickShardPrim, shardLaunch, type DebrisOptions, type DebrisPart } from './debrisShards.js';
+import { pickShardGeo, pickShardPrim, shardLaunch, SMOKE_INTERVAL, type DebrisOptions, type DebrisPart } from './debrisShards.js';
 import { markProbe } from '../core/fxDiag.js';
+import type { Terrain } from '../world/terrain.js';
+import { stepShard, greyShard, shrinkLanded } from './debrisStep.js';
 
 type Vec3Like = { x: number; y: number; z: number };
 
@@ -13,9 +15,6 @@ const _tmpE = new THREE.Euler();
 const _tmpP = new THREE.Vector3();
 const _tmpS = new THREE.Vector3();
 const _zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
-
-import { Terrain } from '../world/terrain.js';
-import { stepShard, emitTrail, greyShard, shrinkLanded } from './debrisStep.js';
 
 
 export interface Shard {
@@ -44,6 +43,11 @@ export interface Shard {
   cr: number; cg: number; cb: number;
   dead: boolean;
   trailTimer: number;
+  smokeTimer: number;
+  /** Shared-batch dot trail — a slot per airborne shard; fxPuff-per-
+   *  interval used to cost ONE quarks ParticleSystem per emission
+   *  (300 shards × 33Hz ≈ 10k live systems — the frame tank). */
+  trail?: import('./ballTrails.js').BallTrailDots;
   brush: boolean;
   goo: boolean;
   /** Geometry borrowed from the dying body — never dispose it. */
@@ -82,7 +86,24 @@ export class Debris {
 
     if (opts.shellRadius) this.allocGhost(scene, opts.shellRadius, color, px, py, pz);
 
+    this.onDropletLand = opts.onDropletLand;
+    this.paintBudget = opts.paintBudget ?? 0;
+    this.smoke = !!opts.smoke;
+
     this.spawnShards(px, py, pz, color, opts);
+  }
+
+  onDropletLand?: (x: number, z: number, dropletR: number, dx: number, dz: number) => void;
+  paintBudget = 0;
+  smoke = false; // debrisStep reads this per shard step
+
+  /** A goo droplet's first touchdown — paint a stain where it landed.
+   *  The damped horizontal velocity still points along travel, so the
+   *  stain can smear the way the droplet was going. */
+  paintShard(s: Shard): void {
+    if (!this.onDropletLand || this.paintBudget <= 0) return;
+    this.paintBudget--;
+    this.onDropletLand(s.x, s.z, s.radius, s.vx, s.vz);
   }
 
   /** Icosahedron detail 0 matches the ball's faceted silhouette.
@@ -124,7 +145,7 @@ export class Debris {
     new THREE.DodecahedronGeometry(1, 0),
     new THREE.IcosahedronGeometry(1, 0),
     new THREE.CylinderGeometry(1, 1, 1, 3),  // brush twig — tapered via x/z scale
-    new THREE.SphereGeometry(1, 5, 4),       // goo droplet
+    new THREE.IcosahedronGeometry(1, 0),     // goo glob — faceted tissue chunk, not a marble
   ];
   private static primMat = new THREE.MeshLambertMaterial();
   private instCap = 32;
@@ -172,7 +193,7 @@ export class Debris {
     const { sw, sh, sd, cr, cg, cb } = s;
     if (this.instanced) {
       const a = this.instAlloc(prim);
-      const m = this.insts[prim]!.mesh;
+      const m = this.insts[a.inst]!.mesh;
       m.setColorAt(a.slot, _tmpColor.setRGB(cr, cg, cb));
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
       return { mesh: null, mat: null, inst: a.inst, slot: a.slot,
@@ -198,7 +219,9 @@ export class Debris {
     // same dims the old per-shard geometries baked in.
     const prim = this.instanced ? pickShardPrim(opts) : -1;
     if (prim === 3) [sw, sh, sd] = [0.011, 0.2 + Math.random() * 0.35, 0.011];
-    else if (prim === 4) sw = sh = sd = 0.05 + Math.random() * 0.1;
+    // Goo globs stay lumpy — unequal axes tumble as tissue chunks,
+    // a sphere reads as a marble.
+    else if (prim === 4) [sw, sh, sd] = [0.04 + Math.random() * 0.09, 0.03 + Math.random() * 0.05, 0.04 + Math.random() * 0.09];
 
     const v   = 0.75 + Math.random() * 0.25;
     const cr  = color.r * v;
@@ -226,6 +249,7 @@ export class Debris {
       landed: false, landedAt: 0,
       cr, cg, cb, dead: false,
       trailTimer: 0,
+      smokeTimer: Math.random() * SMOKE_INTERVAL, // desync the burst's puffs
       brush: opts.kind === 'brush',
       goo: opts.kind === 'goo',
       sharedGeo,
@@ -269,20 +293,6 @@ export class Debris {
     if (alive === 0 && performance.now() - t0 <= deadlineMs) this.dead = true;
   }
 
-  /** Distance gate — shards past ~260m are sub-pixel, so they just age
-   *  out instead of paying per-shard physics + instance writes. */
-  tickAge(dt: number): void {
-    if (this.ghost) this.update(dt); // ghost fade is 0.15s, near or far it ends the same
-    let alive = 0;
-    for (const s of this.shards) {
-      if (s.dead) continue;
-      s.elapsed += dt;
-      if (s.elapsed >= s.life) this.removeShard(s);
-      else alive++;
-    }
-    if (alive === 0) this.dead = true;
-  }
-
   /** Instanced shards have no Mesh — pos/tumble/scale fold into the
    *  slot's matrix; color folds into instanceColor. Called every step. */
   writeShard(s: Shard): void {
@@ -310,7 +320,6 @@ export class Debris {
   }
 
   private stepShard(s: Shard, dt: number): boolean { return stepShard(this, s, dt); }
-  private emitTrail(s: Shard, dt: number): void { emitTrail(s, dt); }
   private greyShard(s: Shard): void { greyShard(this, s); }
   private shrinkLanded(s: Shard): boolean { return shrinkLanded(this, s); }
 
@@ -337,6 +346,8 @@ export class Debris {
   }
 
   removeShard(s: Shard): void {
+    s.trail?.dispose();
+    s.trail = undefined;
     if (s.mesh && s.mat) {
       this.scene.remove(s.mesh);
       if (!s.sharedGeo) s.mesh.geometry.dispose();
@@ -384,7 +395,7 @@ export class BallDebris extends Debris {
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
     color: THREE.Color, scale: number = 1.0,
-    opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[] }
+    opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[]; onDropletLand?: (x: number, z: number, dropletR: number, dx: number, dz: number) => void; paintBudget?: number }
   ) {
     const spread = 0.6 * scale;
     super(scene, terrain, pos, color, {
@@ -395,6 +406,8 @@ export class BallDebris extends Debris {
       inheritVel: opts?.inheritVel,
       kind: opts?.kind,
       shardGeos: opts?.shardGeos,
+      onDropletLand: opts?.onDropletLand,
+      paintBudget: opts?.paintBudget,
     });
   }
 }
@@ -419,6 +432,7 @@ export class PlayerDebris extends Debris {
       impulseDir: opts?.impulseDir,
       inheritVel: opts?.inheritVel,
       parts: opts?.parts,
+      smoke: true, // exploded body parts trail smoke wisps
     });
   }
 }

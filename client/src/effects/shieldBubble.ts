@@ -74,11 +74,18 @@ const FRAG = /* glsl */ `
     vec3 V = normalize(cameraPosition - vPosW);
     float fres = pow(1.0 - abs(dot(V, normalize(vNormalW))), 2.5);
 
-    // Hex cells on the sphere via its local normal direction — stable
-    // under motion (the pattern rides the bubble, not the screen).
+    // Hex cells on the sphere via cube-sphere projection — the normal's
+    // dominant axis picks a cube face and the hex grid tiles that face's
+    // planar coords. A lat/long mapping (atan + d.y) collapses every
+    // meridian at the poles into a pinwheel; cube faces have no poles.
+    // Seams on cube edges are the accepted trade of the standard trick.
     vec3 d = normalize(vLocal);
-    vec2 uv = vec2(atan(d.z, d.x) * 2.0, d.y * 3.0) + uTime * 0.05;
-    float cell = hexDist(hexCell(uv * 4.0));
+    vec3 ad = abs(d);
+    vec2 uv;
+    if (ad.x >= ad.y && ad.x >= ad.z) uv = d.zy / ad.x;
+    else if (ad.y >= ad.z)             uv = d.xz / ad.y;
+    else                               uv = d.xy / ad.z;
+    float cell = hexDist(hexCell(uv * 6.0 + uTime * 0.05));
     float hexEdge = smoothstep(0.42, 0.5, cell);
 
     // Slow energy sweep crawling up the shell.

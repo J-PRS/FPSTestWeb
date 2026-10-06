@@ -792,7 +792,7 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
  * vertex AO (vColor) adds wear on exposed surfaces — creases stay dark while
  * plate tops get scuffed-brighter streaks. The baked-Blender look, faked.
  */
-function enhanceWeaponMaterial(mat: THREE.Material): void {
+export function enhanceWeaponMaterial(mat: THREE.Material): void {
   if (mat.userData.__grunge) {return;}
   mat.userData.__grunge = true;
   mat.onBeforeCompile = (sh) => {
