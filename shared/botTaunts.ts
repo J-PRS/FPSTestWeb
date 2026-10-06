@@ -75,6 +75,18 @@ const KILL_LINES = [
   'pwnd',
   'llama {v}',             // slow-cap insult — THE Tribes word
   'camp harder {v}',
+  'MA\'d {v}',               // mid-air callout — the crown jewel frag
+  'BB\'d {v}',               // body block
+  'instagibbed {v}',          // Quake mutator canon
+  'quadded',                  // Quad Damage
+  'rolled {v}',
+  'chaser down',              // the carrier-hunter role, humbled
+  'TM cleared',               // turret monkey / farmer down
+  'farmer got farmed',
+  'ski free {v}',             // SkiFree — same Windows era, same snow
+  'see you at the stand {v}',
+  'spammed {v} from beyond LOS', // mortar spam — T2's dirtiest word
+  'KS? earned',               // kill-steal accusation, refused
 ];
 
 const DEATH_LINES = [
@@ -117,6 +129,13 @@ const DEATH_LINES = [
   'host advantage',
   'pb pls',                // PunkBuster false-kick folklore
   'zounds',                // Thresh-era Quake
+  'LPB wins again',
+  'camper got me',
+  'spawn roulette',
+  'MAMD?? {k} showoff',       // mid-air mine-disc — the unicorn shot
+  'played it like a llama',
+  'HOF\'d into it',          // ran face-first into Heavy on Flag
+  'sick route {k}',           // capper compliment even in death
 ];
 
 const ENV_DEATH_LINES = [
@@ -137,6 +156,11 @@ const ENV_DEATH_LINES = [
   'skied too hard',
   'full send, no landing',
   'shazbot',
+  'SkiFree\'d into the yeti', // same Windows CD, same snow physics
+  'failed the DJ',            // disc-jump — speed at the cost of hull
+  'terrain TK',
+  'disc-jumped into orbit',
+  'crater diff',
 ];
 
 const SPREE_LINES = [
@@ -152,6 +176,13 @@ const SPREE_LINES = [
   'route is clear',
   'snowballing',
   'untouchable today',
+  // UT announcer canon — the spree ladder as self-report
+  'rampage',
+  'dominating',
+  'unstoppable',
+  'godlike',
+  'm-m-monster kill',
+  'wicked sick',
 ];
 
 // ---- Situation pools — brains emit event kinds (BrainOut.say), hosts
@@ -253,6 +284,9 @@ const FLAG_GRAB_LINES = [
   'e-grab!',          // high-speed touch-and-go — T2 vernacular
   'grab and gone',
   'no llama today',   // the slow-cap insult, worn proudly
+  'scooped',
+  'sanic\'d in',             // Ascend-era speed meme, era-adjacent
+  'going home',
 ];
 
 /** The bot capped. */
@@ -262,6 +296,9 @@ const FLAG_CAP_LINES = [
   'one down',
   'that counts',
   'easy route',
+  'CO watch',                 // cap-out/shutout — the stomp callout
+  'shutout brewing',
+  'cap out',
 ];
 
 /** The bot returned a dropped flag by touch. */
@@ -281,6 +318,8 @@ const FLAG_DROP_LINES = [
   'so close',
   'llama\'d it',
   'route diff',      // their route beat my route — capper honesty
+  'HOF\'d',
+  'inb4 return',
 ];
 
 /** A teammate just said something — the low-effort acknowledgment that
@@ -312,6 +351,10 @@ const REPLY_LINES = [
   'truth',
   // 20s — one Discord-native straggler keeps it honest
   'real',
+  // Forum-board culture — the reply is the point
+  'seconded',
+  'sauce?',
+  'thread delivers',
 ];
 
 /** Third death in a row — the tilt is audible now. */
@@ -328,6 +371,8 @@ const TILT_LINES = [
   'i blame the spawns',
   'fkn hitreg',
   'warp city over here',
+  'ff',                        // CS forfeit — the vote of surrender
+  'voteban me pls',
   'votekick {k}',          // era lobby democracy
   'team diff',
   'stacked server',
@@ -343,6 +388,8 @@ const FIST_LINES = [
   'put em up {v}',
   'melee diff',
   'gun? what gun {v}',
+  'HUMILIATION',               // Q3's gauntlet announcer, verbatim
+  'gauntlet\'d {v}',
 ];
 
 /** A human typed gg — bots close the loop. */
@@ -562,6 +609,9 @@ const WITNESS_LINES = [
   'lawn dart',
   'cratered',
   'terrain diff',
+  'SkiFree\'d',
+  'DJ\'d into the void',
+  'crater season',
 ];
 
 /** A human opened with a greeting — the lobby acknowledgment, brief and
@@ -611,6 +661,9 @@ const WHOLESOME_LINES = [
   'the ASE was worth the wait', // the All-Seeing Eye — era's real server browser
   'this is why i still play',
   'tribes never dies',
+  'found it on a PC Gamer demo disc',
+  'still runs on the toaster',
+  'this lobby is why i own a 56k upgrade',
 ];
 
 /** A human is malding in public — the pile-on is the culture, but
@@ -630,6 +683,8 @@ const MALD_LINES = [
   'its just a game',
   'someone call the waaahmbulance', // peak-00s forum slang
   'drama llama',
+  'alt+f4 fixes that',
+  'log off {t}',
 ];
 
 /** A human asked the room a question — helpful where confident,
@@ -646,6 +701,8 @@ const QUESTION_LINES = [
   'the disc is a blue plate — order accordingly',
   'press V like its 1999',
   'check your cl_updaterate',  // CS 1.6 console folklore
+  'rtfm',
+  'read the MOTD',
 ];
 
 /** A human is complaining about lag/ping — commiseration is the
@@ -664,6 +721,9 @@ const LAG_LINES = [
   'interp doing interp things',
   'WON auth is down again',    // Half-Life's auth server — deep cut
   'my 56k is showing',
+  'net_graph 3 says it all',   // CS's built-in lagometer
+  'rate 25000 my ass',
+  'ex_interp 0.01 cope',
 ];
 
 /** A human announced they are leaving — the valediction. Short, no
@@ -1000,10 +1060,10 @@ const CHAT_RULES: ReadonlyArray<readonly [RegExp, ChatterKind]> = [
   // chord for exactly this.
   [/\b(nice|good|sick|clean|great|sweet|filthy|insane|nasty) (shot|hit|snipe|kill|play|cap|grab|route|ski)\b|^(ns|wp|gj|nice one|well played|props)\b/, 'props'],
   [/nice try|noob|camper|camping|tryhard|git gud|scrub|pwned|\bowned\b|lucky (shot|hit|snipe)|luck(ing|er)\b/, 'quiet'],
-  [/^(hi|hello|hey+|yo|sup|o7|greetings|heyo|howdy|gm|morning|evening)\b/, 'hello'],
+  [/^(hi|hello|hey+|yo|sup|o7|greetings|heyo|howdy|gm|morning|evening|wb|welcome back|i'?m back|back)\b/, 'hello'],
   [/\b(thanks|thank you|ty+|thx|appreciated|appreciate it)\b/, 'thanks'],
   [/\b(sorry|sry|my bad|mb|oops|my fault|apologies)\b/, 'sorry'],
-  [/\b(rage|furious|hate this|this game (sucks|is trash|is broken)|uninstall|f this|ragequit|hacker|cheater|aimbot|reported|report him|so unfair|bullshit|\bbs\b|wtf|screw this)\b/, 'mald'],
+  [/\b(rage|furious|hate this|this game (sucks|is trash|is broken)|uninstall|f this|ragequit|hacker|cheater|aimbot|aim ?bot|hax|wallhack|reported|report him|so unfair|bullshit|\bbs\b|wtf|screw this)\b/, 'mald'],
   [/\b(love this|this (game|map|mode|lobby) (is )?(great|fun|awesome|amazing|slaps|rocks|good)|fun game|good lobby|great lobby|enjoying this)\b/, 'wholesome'],
   [/\b(lag|lagging|laggy|ping|latency|rubber ?band|packet loss|desync|stutter)\b/, 'lag'],
   [/^(how (do|to|can|does)|what is|what are|where is|why (do|does|is|can't)|can (i|you|someone)|is there|anyone know|whats)\b|\?\s*$/, 'question'],
