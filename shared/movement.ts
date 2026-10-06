@@ -44,6 +44,11 @@ export const MOVEMENT_CONFIG = {
   // skills.ts economy.
   jetForceUp: 35.0,
   jetForceDir: 10.0,
+  // Horizontal-speed ceiling for jet thrust's velocity-aligned share:
+  // past it only the perpendicular (steering) share applies — jets
+  // steer and lift but can't pump forward speed forever. Ports the
+  // maxForwardAccelSpeed rule from the Unity RB_Controller jetpack.
+  jetMaxFwdAccel: 40.0,
   // Player-vs-player contact: capsule half-width and the elastic share
   // of the bump — a juggernaut eating a capper keeps most of its line,
   // the light one takes the shove (Tribes bodyblock, not a brick wall).
@@ -213,8 +218,18 @@ export class MoveSim {
       const s = this.state;
       const im = dt / this.mass;
       s.vel.y += MOVEMENT_CONFIG.jetForceUp * im;
-      s.vel.x += dir.x * MOVEMENT_CONFIG.jetForceDir * im;
-      s.vel.z += dir.z * MOVEMENT_CONFIG.jetForceDir * im;
+      const hv = Math.hypot(s.vel.x, s.vel.z);
+      let tx = dir.x, tz = dir.z;
+      if (hv >= MOVEMENT_CONFIG.jetMaxFwdAccel && hv > 0) {
+        // Past the cap the velocity-aligned thrust component drops out
+        // (SplitVector + alignedWithVelocity=0 in the Unity original);
+        // the perpendicular steering share still applies.
+        const vx = s.vel.x / hv, vz = s.vel.z / hv;
+        const aligned = tx * vx + tz * vz;
+        tx -= vx * aligned; tz -= vz * aligned;
+      }
+      s.vel.x += tx * MOVEMENT_CONFIG.jetForceDir * im;
+      s.vel.z += tz * MOVEMENT_CONFIG.jetForceDir * im;
       s.onGround = false;
     }
   }
