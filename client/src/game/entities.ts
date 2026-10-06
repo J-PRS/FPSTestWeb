@@ -281,7 +281,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   return {
-    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets,
+    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets, banelings,
     spawnNuggetsAt,
     getNuggetsCollected: () => nuggetsCollected,
     spawnBall,

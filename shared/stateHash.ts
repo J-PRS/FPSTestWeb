@@ -94,3 +94,35 @@ export function computeReplicaHash(replicas: Iterable<[number, HashableReplica]>
   }
   return h.toString(16);
 }
+
+/** Creature replicas hash the same way — identity + mirrored lifecycle:
+ *  species/state/uber/targetId all ride wire edges or the seeded spawn,
+ *  so a stranded or stale-state crawler replica surfaces here while
+ *  position drift stays invisible to the check (the shared sim replays
+ *  it identical by construction). */
+export interface HashableCreature {
+  species: string;
+  state: string;
+  uber: boolean;
+  targetId: string | null;
+}
+
+export function computeCreatureHash(replicas: Iterable<[number, HashableCreature]>): string {
+  let h = 0;
+  for (const [id, r] of replicas) {
+    let ph = 0x811c9dc5;
+    for (const v of [id, r.uber ? 1 : 0]) {
+      ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    // Field separator byte — concatenated strings alone can't tell
+    // ('chase','r') from ('cha','ser').
+    for (const s of [r.species, r.state, r.targetId ?? '']) {
+      for (let i = 0; i < s.length; i++) {
+        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+      }
+      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    h = (h + ph) >>> 0;
+  }
+  return h.toString(16);
+}

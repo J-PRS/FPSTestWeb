@@ -944,17 +944,24 @@ Full suite: 822 pass / 1 fail — the sizeWatch grandfather pin on
 suite regression). Scenario suite alone: 334/334. Net suite: 37/37,
 deterministic. Typechecks clean on both ends.
 
-### 4.7b CTF capper dead-zone — *found by soak, needs gameplay ruling*
+### 4.7b CTF capper last-250m stall — *localized 2026-10-06, needs gameplay ruling*
 
 `matchSim --mins 3 --bots 12` (katabatic, flags 1060m apart): 21 kills
 but **zero flag grabs** — the elected capper never converts. Sheep
 meters confirm real stall (post-§2.10 bleed gate, residuals are true
-deadstops). Suspects: route-quality on >500m legs (ray-fan ~60-130m
-vision vs TerrainFlow hand-off), stand approach dying to defense, or
-goal-commit churn. This is competence tuning, not a six-class bug —
-queued for a gameplay pass, not silently fixed here.
+deadstops). Two seeds identical — systematic, not variance.
 
-### 4.7 Replica-coverage gap in the state hash — *partially closed (balls)*
+`.devin_capdbg.ts` probe (forced capper, 260s sim): flagD closes
+1000→256m fine, then the bot **orbits ~250m out indefinitely** — wp
+thrashing across a ±100m scatter, orbitFails→3 without escape, hp 20
+constant (no combat involvement), flag stays home. Long-leg routing
+works; the failure is the stand APPROACH — the stand sits inside a ~3m
+dais (FLAG_STAND_LIFT mounts via climb/jet gates) and neither the flow
+field nor the orbit-escape converts proximity into the mount move.
+Competence bug, not a six-class bug — queued for the gameplay pass JP
+is already working (jet-cap fix landed 2026-10-06 and didn't move it).
+
+### 4.7 Replica-coverage gap in the state hash — *closed (balls + creatures)*
 
 The checksum covered players only; non-player replays had no cross-engine
 desync signal. **Ball fleet now hashed** (2026-10-01): `ballHash` rides
@@ -966,9 +973,16 @@ the fleet rubberband metric's job and this channel catches what nothing
 else did — a stranded, dropped, duplicated, or stale-lifecycle replica.
 Client-side a `ballDriftStreak` gate (≥2 consecutive mismatches → warn,
 else debug) eats lifecycle edges in flight at the check boundary, same
-shape as the health-echo persistence gate. Creatures and projectiles
-remain uncovered — same extension pattern applies if their replays ever
-need a desync signal.
+shape as the health-echo persistence gate.
+
+**Creatures covered the same way** (2026-10-01, same round): `creatureHash`
+over (id, species, state, uber, targetId) — every field mirrored from
+spawn or wire edges, so latency can't phantom it. `main.ts` feeds
+`stateDebug` the 8 net-driven species lists via a `netCreatures` ctx
+accessor (`banelings` added to the entities return for reachability);
+same persistence-gated warn. Projectiles remain uncovered — short-lived
+enough that a stranded replica is cosmetic; same pattern applies if ever
+needed.
 
 ---
 

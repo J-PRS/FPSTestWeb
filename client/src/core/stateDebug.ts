@@ -6,7 +6,7 @@ import type { ChildLogger } from './Logger.js';
 import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
-import { computeStateHash, computeReplicaHash } from '../../../shared/stateHash.js';
+import { computeStateHash, computeReplicaHash, computeCreatureHash } from '../../../shared/stateHash.js';
 import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
@@ -28,6 +28,9 @@ export interface StateDebugContext {
   /** Scene + view camera for the crosshair aim probe (what's under the reticle). */
   getScene?: () => THREE.Scene | null;
   getCamera?: () => THREE.Camera | null;
+  /** Net-driven creature replicas (crawler/scarab/rakk/…) for the
+   *  §4.7 fidelity hash — sim carries species/state/targetId. */
+  netCreatures?: () => Iterable<{ netId: number; dead: boolean; uber: boolean; sim: { species: string; state: string; targetId: string | null } | null }>;
   logger: ChildLogger;
 }
 
@@ -311,9 +314,29 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   // debug-level; a persistent mismatch means a stranded/lost/stale
   // replica the ballRoster path never healed (§4.7).
   let ballDriftStreak = 0;
+  let creatureDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string) => {
     hashCheckCount++;
+
+    if (serverCreatureHash !== undefined && ctx.netCreatures) {
+      const local = new Map<number, { species: string; state: string; uber: boolean; targetId: string | null }>();
+      for (const c of ctx.netCreatures()) {
+        if (c.netId && !c.dead && c.sim) {local.set(c.netId, { species: c.sim.species, state: c.sim.state, uber: c.uber, targetId: c.sim.targetId });}
+      }
+      const localCreatureHash = computeCreatureHash(local);
+      if (localCreatureHash === serverCreatureHash) {
+        creatureDriftStreak = 0;
+      } else {
+        creatureDriftStreak++;
+        const detail = `server=${serverCreatureHash} client=${localCreatureHash} ids=[${[...local.keys()].join(',')}]`;
+        if (creatureDriftStreak >= 2) {
+          logger.warn(`[StateHash] CREATURE DESYNC tick=${tick} ${detail} (persistent across ${creatureDriftStreak} checks — stranded or stale replica)`);
+        } else {
+          logger.debug(`[StateHash] creature mismatch tick=${tick} ${detail} (transient — lifecycle edge in flight)`);
+        }
+      }
+    }
 
     if (serverBallHash !== undefined) {
       const localBalls = new Map<number, { variant: number; enraged: boolean; targetId: string | null }>();

@@ -733,6 +733,10 @@ init().then(async () => {
         teamBots: () => teamBots,
         getScene: () => scene,
         getCamera: () => player.camera,
+        netCreatures: () => [
+          ...entities.crawlers, ...entities.scarabs, ...entities.rakks, ...entities.rollers,
+          ...entities.gnats, ...entities.snakes, ...entities.banelings, ...entities.totems,
+        ],
         logger,
       });
     }

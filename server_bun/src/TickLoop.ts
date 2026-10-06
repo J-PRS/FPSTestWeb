@@ -1,6 +1,6 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
-import { computeStateHash, computeReplicaHash } from '../../shared/stateHash.ts';
+import { computeStateHash, computeReplicaHash, computeCreatureHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -352,6 +352,13 @@ export class TickLoop {
     const ballHash = roster.length
       ? computeReplicaHash(roster.map((b) => [b.id, b] as [number, { variant: number; enraged: boolean; targetId: string | null }]))
       : undefined;
+    // Same fidelity hash for creatures — species/state/uber/targetId are
+    // the mirrored lifecycle fields; a stranded or stale replica reads
+    // here where nothing else looks (§4.7).
+    const creatureRoster = room.creatureSim.roster();
+    const creatureHash = creatureRoster.length
+      ? computeCreatureHash(creatureRoster.map((c) => [c.id, c] as [number, { species: string; state: string; uber: boolean; targetId: string | null }]))
+      : undefined;
     const timestamp = wallNow();
 
     room.broadcast({
@@ -361,6 +368,7 @@ export class TickLoop {
       playerCount,
       timestamp,
       ballHash,
+      creatureHash,
     });
 
     // Periodic status summary - suppress duplicates, batch with count
