@@ -1,3 +1,4 @@
+2026-10-06 - robustify: stall watchdog cleared on disconnect — NetworkManager 1Hz silence watchdog no longer idles forever after intentional teardown; reconnect re-arms via connect
 2026-10-06 - robustify: wireId exhaustion pin — ghostRecords covers the u16-wrap eldest-recycle fallback; churn-keyed map sweep of GameServer/Room verified clean
 2026-10-06 - robustify: invalidWarnAt cleaned on close — per-player throttle keys no longer linger until the 4096 wholesale clear, which was also resetting the spam gate; pinned in invalidWarn.test
 2026-10-06 - robustify: weaponType wire gate pinned — weaponTypeWire.test covers the new optWeaponType check (bogus ids rejected, all 35 WEAPONS keys pass); rest of wire.ts audited, no other isFiniteNumber-only table indexes

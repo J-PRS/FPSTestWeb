@@ -283,6 +283,9 @@ export class NetworkManager {
   disconnect(): void {
     this.onlineExpected = false;
     this.lastRxAt = 0;
+    // The watchdog has nothing to watch while deliberately offline —
+    // reconnect re-arms it via the ??= in connect().
+    if (this.stallTimer !== null) { clearInterval(this.stallTimer); this.stallTimer = null; }
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
