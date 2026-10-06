@@ -210,6 +210,14 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.29 AOE claim airtime bounds pinned (2026-10-06)
+
+`aoeClaimBounds.test` pins `validateAoeClaim`'s legality window: negative
+airtime, airtime beyond wall-clock age + slack, and a blast beyond
+ballistic reach all reject; an honest in-window claim passes. The
+numeric-claim sweep that prompted it found power already clamped
+(0.2–1.8) and airtime bounded — the gap was coverage, not code.
+
 ### 2.28 `projectileId` accepted unbounded strings (2026-10-06)
 
 `optShotId` caps its nonce at 40 chars but `projectileId` — a
