@@ -194,7 +194,21 @@ export class CombatHandler {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     this.hb('rej');
     this.hb(`rej.${kind}`);
-    logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
+    // The verdict is expected traffic — a spray of out-of-reach claims
+    // from one player is one signal, not N log lines (16-bot soak:
+    // ~200 warns/4min, all stamped by a handful of senders). Throttle
+    // per player+kind like notifyDrop does for the wire side; the exact
+    // counts still land in the rej.* heartbeat keys.
+    const wkey = `${playerId}:${kind}`;
+    const now = wallNow();
+    const w = this.lastRejectWarn.get(wkey);
+    if (w && now - w.at < 2000) {
+      w.n++;
+    } else {
+      const suppressed = w?.n ?? 0;
+      this.lastRejectWarn.set(wkey, { at: now, n: 0 });
+      logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}${suppressed > 0 ? ` (+${suppressed} suppressed)` : ''}`);
+    }
     // Rejected claims can leave predicted self-damage stuck client-side —
     // ship our health value so the shooter resyncs instead of drifting.
     const health = this.playerManager.getPlayer(playerId)?.health;
@@ -207,6 +221,9 @@ export class CombatHandler {
    *  a beam held on a corpse would otherwise spam the channel at tic
    *  rate. Distinct from reject(): no warn, no rej counter — these are
    *  the drops the health map already tallies as drop.*. */
+  /** Per player+kind warn throttle for reject() — see the comment there.
+   *  Keyed like lastDropNotify and cleaned with it on disconnect. */
+  private lastRejectWarn = new Map<string, { at: number; n: number }>();
   private lastDropNotify = new Map<string, number>();
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     const key = `${playerId}:${kind}:${targetId ?? ''}`;
@@ -273,6 +290,9 @@ export class CombatHandler {
     }
     for (const key of this.lastDropNotify.keys()) {
       if (key.startsWith(`${playerId}:`)) this.lastDropNotify.delete(key);
+    }
+    for (const key of this.lastRejectWarn.keys()) {
+      if (key.startsWith(`${playerId}:`)) this.lastRejectWarn.delete(key);
     }
     const held = this.pendingClaims.filter(p => p.playerId === playerId).length;
     if (held) {

@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.12 `lastRejectWarn` hopper entries (2026-10-06)
+
+The reject warn-throttle map was never cleaned — `onPlayerDisconnected`
+purges `lastDropNotify` keys for the player but skipped
+`lastRejectWarn`, an identical key shape. Each leaver who had ever
+been rejected left a permanent entry; over a long-lived room the map
+grew with cumulative player churn, not live roster. Now cleaned with
+the same prefix sweep.
+
 ---
 
 ## 3. Verified Clean (no action needed)
