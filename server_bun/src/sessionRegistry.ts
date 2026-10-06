@@ -100,6 +100,10 @@ export class SessionRegistry {
       if (prior.state === 'grace') {
         this.bumpGrace(prior.room, -1);
       }
+      // And its countdown must die with it: an orphaned timer fires the
+      // old session's onExpire against the NEW session's playerId —
+      // reaping a just-seated player out of their new room.
+      this.clearGrace(prior);
     }
     this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });
   }

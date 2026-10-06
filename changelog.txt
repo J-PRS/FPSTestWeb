@@ -1,3 +1,4 @@
+2026-10-06 - robustify: session re-begin orphaned the prior grace timer — a player rejoining inside the grace window got reaped by the dead sessions countdown; begin now clears it, pinned by sessionRebegin.test
 2026-10-06 - robustify: logger.error gets the warn burst collapse — a hot error path flooded console and disk unthrottled; identical repeats now collapse to every 8th, distinct lines always land
 2026-10-06 - robustify: hitLedger double-record fix — self-frags pushed the shooter into recentKills twice, halving the 256-entry trade-window coverage; collapsed to a single push
 2026-10-06 - robustify: losMemo.test pins the LOS memo bound — a 6000-key flood never exceeds cap+1 and expired entries sweep before the hard clear, via a losMemoSize test seam

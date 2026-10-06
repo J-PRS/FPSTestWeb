@@ -210,6 +210,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.17 Orphaned grace timer on session re-begin (2026-10-06)
+
+`SessionRegistry.begin` replaced a live session record without clearing
+its armed `graceTimer` — the roomGrace count was swept but the countdown
+wasn't. A player who disconnected (grace armed) then re-joined another
+room inside the window got a fresh seat while the dead session's timer
+still fired `removePlayerCompletely` on their playerId — a zombie reap
+of a just-seated player. `begin` now `clearGrace`s the prior record;
+pinned by `sessionRebegin.test.ts` (expiry never fires post-rebegin,
+fires exactly once otherwise).
+
 ### 2.16 Error-level bursts unthrottled (2026-10-06)
 
 `logger.error` had no burst collapse — `warn` suppressed identical
