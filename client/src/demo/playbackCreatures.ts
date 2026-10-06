@@ -81,7 +81,7 @@ function speciesIdxOf(ev: TargetEvent): number {
 /** Seek path — same contract as reconstructSeekTarget: spawn + fast-forward. */
 export function reconstructSeekCreature(world: PlaybackWorld, ev: TargetEvent, deadIds: Set<number>, seekTime: number): void {
   const map = world.playbackCreatureById;
-  if (deadIds.has(ev.targetId)) {return;}
+  if (deadIds.has(ev.targetType * 65_536 + ev.targetId)) {return;}
 
   if (ev.eventType === TargetEventType.Spawned) {
     const c = new PlaybackCreature(world.scene, speciesIdxOf(ev), new THREE.Vector3(ev.posX, ev.posY, ev.posZ), new THREE.Vector3(ev.velX, ev.velY, ev.velZ));

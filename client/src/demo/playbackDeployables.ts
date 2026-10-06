@@ -79,7 +79,7 @@ function boomIfBlast(world: PlaybackWorld, d: PlaybackDeployable, seekTime: numb
 
 export function reconstructSeekDeployable(world: PlaybackWorld, ev: TargetEvent, deadIds: Set<number>, seekTime: number): void {
   const map = world.playbackDeployableById;
-  if (deadIds.has(ev.targetId)) {
+  if (deadIds.has(ev.targetType * 65_536 + ev.targetId)) {
     if (ev.eventType === TargetEventType.Destroyed) {
       const d = map.get(ev.targetId);
       if (d) {boomIfBlast(world, d, seekTime, ev.timestamp);}

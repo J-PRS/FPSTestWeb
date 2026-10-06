@@ -12,7 +12,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
   const { scene, terrain, balls, debrisList, playbackBallById } = world;
   const playerPos = world.getPlayer().pos;
 
-  if (deadBallIds.has(ev.targetId)) {
+  if (deadBallIds.has(ev.targetType * 65_536 + ev.targetId)) {
     // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
     if (ev.eventType === TargetEventType.Destroyed) {
       const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xFFFFFF), 1);
@@ -73,6 +73,17 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
   const playerPos = world.getPlayer().pos;
 
   if (ev.eventType === TargetEventType.Spawned) {
+    const existing = playbackBallById.get(ev.targetId);
+    if (existing && !existing.dead) {
+      // Id reuse (allocator wrap, or a synthetic+real pair straddling a
+      // clip boundary): re-keying the map while pushing a second Ball would
+      // orphan the old one — updated by nothing, frozen in the scene.
+      existing.pos.set(ev.posX, ev.posY, ev.posZ);
+      existing.vel.set(ev.velX, ev.velY, ev.velZ);
+      if (ev.health > 0) {existing.health = ev.health;}
+      existing.update(0, terrain, playerPos);
+      return;
+    }
     const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2 | 3);
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);

@@ -92,7 +92,10 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   const ang = h.rng() * Math.PI * 2;
   const spd = h.rng() * 20;
   const b = makeSimBall(
-    h.nextId++, variant, Math.floor(h.rng() * 8),
+    // Wrap below the demo format's lane base: demo targetIds are u16 and
+    // 0x4000+ belongs to the deployable/creature/flag/pickup namespaces —
+    // an uncapped counter leaks ball ids into those lanes in a long sim.
+    (h.nextId = h.nextId % 0x3fff + 1), variant, Math.floor(h.rng() * 8),
     { x, y, z },
     { x: Math.cos(ang) * spd, y: -2, z: Math.sin(ang) * spd },
   );

@@ -57,7 +57,12 @@ export function demoSpeciesIndex(species: string): number {
   return i < 0 ? 0 : i;
 }
 export function creatureDemoId(netId: number): number {
-  return CREATURE_ID_FLAG | (netId & 0x7fff);
+  // 14-bit mask, not 15: creatures must stay 0x8000–0xbfff. 0x7fff let a
+  // creature netId ≥ 0x4000 wrap into the flag (0xc000+) and pickup
+  // (0xe000+) lanes — cross-lane corruption every 16k spawns. NetIds past
+  // 0x3fff now self-collide within the creature lane only, which the
+  // composite (targetType, targetId) keys keep bounded.
+  return CREATURE_ID_FLAG | (netId & 0x3fff);
 }
 export function isCreatureTargetType(targetType: number): boolean {
   return targetType >= TARGETTYPE_CREATURE_BASE && targetType < TARGETTYPE_DEPLOY_BASE;

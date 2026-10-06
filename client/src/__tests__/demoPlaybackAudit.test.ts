@@ -46,6 +46,7 @@ function makePlaybackRig() {
   const scene = new THREE.Scene();
   const balls: Ball[] = [];
   const targets: Ball[] = [];
+  const viewmodel = { kicks: 0, kick() { this.kicks++; } };
   initSwarms(scene, flatTerrain, {
     ball: { capacity: 512, parts: () => [
       { geometry: new THREE.SphereGeometry(1, 4, 3), material: new THREE.MeshBasicMaterial() },
@@ -54,13 +55,23 @@ function makePlaybackRig() {
   const world = {
     debrisList: [] as never[], explosions: [] as never[], implosions: [] as never[],
   } as unknown as WorldState;
+  // A stub manager carrying the real wireDemoHandlers graft — the kick
+  // path only exists inside onPlaybackEvent, so tests drive events through
+  // it (not applyPlaybackEvents directly) or leaks past it invisible.
+  const mgr = {
+    isPlaying: false, mode: 'playing', currentTime: 0,
+    player: { demoData: null },
+    ui: { setStatus() {}, setPlaying() {} },
+    fetchCoolShotsFromServer() {}, startRecording() {}, setRemoteSource() {},
+    seekReconstructing: { on: false },
+  } as any;
   const life = createDemoLifecycle({
     lazyScene: () => scene,
     lazyTerrain: () => flatTerrain,
     lazyCamera: () => new THREE.PerspectiveCamera(),
     lazyPlayer: () => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
-    lazyDemoManager: () => null,
-    lazyViewModel: () => null,
+    lazyDemoManager: () => mgr,
+    lazyViewModel: () => viewmodel as any,
     damageNumberManager: () => ({ spawn() {} } as unknown as DamageNumberManager),
     fragMessages: () => ({ showScore() {} } as unknown as FragMessages),
     lazyHud: () => ({ showHitMarker() {} } as unknown as HUD),
@@ -72,12 +83,13 @@ function makePlaybackRig() {
     overlay: null as unknown as HTMLElement,
     rendererCanvas: null as unknown as HTMLCanvasElement,
   });
-  return { scene, balls, life, world: life.playbackWorld };
+  life.wireDemoHandlers(mgr, () => {});
+  return { scene, balls, life, mgr, viewmodel, world: life.playbackWorld };
 }
 
 const spawnedBall = (world: ReturnType<typeof makePlaybackRig>['world'],
   demoId: number, pos: THREE.Vector3, vel = new THREE.Vector3(0, -2, 0)): void => {
-  applyPlaybackEvents(world, {
+  applyPlaybackEvents(world, { /* eslint-disable-line */
     projectiles: [],
     targets: [{
       eventType: TargetEventType.Spawned, timestamp: 0,
@@ -87,6 +99,13 @@ const spawnedBall = (world: ReturnType<typeof makePlaybackRig>['world'],
       hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     }],
   });
+};
+
+// Emit events the way demo playback does — through the wired handler so
+// the kick/viewmodel path runs alongside world reconstruction.
+const emit = (rig: ReturnType<typeof makePlaybackRig>,
+  projectiles: ProjectileEvent[], targets: TargetEvent[]): void => {
+  (rig.mgr as { onPlaybackEvent(e: { projectiles: ProjectileEvent[]; targets: TargetEvent[] }): void }).onPlaybackEvent({ projectiles, targets });
 };
 
 const mkTarget = (over: Partial<TargetEvent>): TargetEvent => ({
@@ -157,6 +176,23 @@ describe('playback audit — every lane animates', () => {
       eventType: TargetEventType.Destroyed, targetId: 903, targetType: TARGETTYPE_PICKUP_BASE,
     })] });
     expect(rig.world.playbackPickups.has(903)).toBe(false);
+  });
+
+  it('viewmodel kicks only on local-lane shots (deploy leak regression)', () => {
+    const rig = makePlaybackRig();
+    const mkFired = (targetId: number): ProjectileEvent => ({
+      eventType: ProjectileEventType.Fired, timestamp: 0,
+      posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
+      projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
+      surfaceNormalY: 0, surfaceNormalZ: 0, targetId, hasPeakPosition: false,
+      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+    });
+    // The deploy-shot bug: a turret bolt minted targetId 0 → kicked.
+    emit(rig, [mkFired(5)], []); // remote shooter rosterIdx 4
+    emit(rig, [mkFired(3)], []); // remote shooter rosterIdx 2
+    expect(rig.viewmodel.kicks).toBe(0);
+    emit(rig, [mkFired(0)], []); // the local player's own shot
+    expect(rig.viewmodel.kicks).toBe(1);
   });
 
   it('kill events emit a burst (not silently dropped)', () => {
@@ -281,12 +317,12 @@ function scrubDemo(demo: DemoFile) {
         trace.projOrigins.set(e.projectileId, new THREE.Vector3(e.posX, e.posY, e.posZ));
       }
     }
-    applyPlaybackEvents(world, { projectiles: proj, targets: tgt });
+    emit(rig, proj, tgt);
     rig.life.updateBallsPlayback(dt);
     rig.life.updatePlaybackProjectiles(dt);
   }
   trace.killBursts = world.explosions.length - expBase;
-  return { world, trace, scene: rig.scene };
+  return { world, trace, scene: rig.scene, kicks: rig.viewmodel.kicks };
 }
 
 // File-level differential audit: replay the real clip through real playback,
@@ -367,7 +403,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     expect(origins.size).toBeGreaterThan(100);
   });
 
-  it('kick audit — only the clip POV shots carry targetId 0', () => {
+  it('kick audit — only the clip POV shots kick, nothing else', () => {
     const zeroShots = demo.projectileEvents.filter(
       e => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp > 0.01,
     );
@@ -375,6 +411,11 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     // a foreign-shot leak floods this count (was 18 incl. observer+deploys).
     expect(zeroShots.length).toBeGreaterThan(0);
     expect(zeroShots.length).toBeLessThan(20);
+    // And the runtime agrees: kicks fired exactly once per local-lane shot.
+    const { kicks } = scrubDemo(demo);
+    expect(kicks).toBe(zeroShots.length + demo.projectileEvents.filter(
+      e => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp <= 0.01,
+    ).length);
   });
 
   it('roster refs are in bounds and local frames are finite/monotonic', () => {
@@ -433,4 +474,43 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
       expect(scene.children).toContain(d.mesh);
     }
   });
+});
+
+// Cross-lane u16 id aliasing: nextTargetId() sweeps the full space, so in
+// any long recording a ball's id WILL land on flag/pickup/creature
+// namespaces. The alive table must not let lanes clobber each other.
+describe('cross-lane id aliasing', () => {
+  it('a ball Destroyed at a flag-id does not kill the flag snapshot', async () => {
+    const { findAliveTargets } = await import('../demo/demoClip.js');
+    const flagEv = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: TARGETTYPE_FLAG });
+    const ballSpawn = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: 0 });
+    const ballDie = mkTarget({ eventType: TargetEventType.Destroyed, targetId: FLAG_DEMO_ID_BASE | 1, targetType: 0 });
+    const alive = findAliveTargets([ballSpawn, flagEv, ballDie], 10);
+    const entries = [...alive.values()];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.targetType).toBe(TARGETTYPE_FLAG); // flag survives, ball is gone
+  });
+
+  it('a flag edge does not overwrite a live ball snapshot', async () => {
+    const { findAliveTargets } = await import('../demo/demoClip.js');
+    const ballSpawn = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: 0, posY: 50 });
+    const flagEv = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: TARGETTYPE_FLAG });
+    const alive = findAliveTargets([ballSpawn, flagEv], 10);
+    const entries = [...alive.values()];
+    expect(entries).toHaveLength(2);
+    expect(entries.some(e => e.targetType === 0)).toBe(true);
+    expect(entries.some(e => e.targetType === TARGETTYPE_FLAG)).toBe(true);
+  });
+});
+
+// A re-fired Spawned at a live id (id wrap, or synthetic+real pair at a
+// clip boundary) must re-key the existing ball — not push a second one
+// that nobody updates.
+it('duplicate Spawned at a live id does not orphan a frozen ball', () => {
+  const rig = makePlaybackRig();
+  spawnedBall(rig.world, 777, new THREE.Vector3(0, 30, 0));
+  spawnedBall(rig.world, 777, new THREE.Vector3(10, 40, 0));
+  expect(rig.world.playbackBallById.size).toBe(1);
+  expect(rig.balls.filter(b => (rig.world.playbackBallById as Map<number, Ball>).get(777) === b).length).toBe(1);
+  expect(rig.world.playbackBallById.get(777)!.pos.x).toBe(10); // re-keyed to the latest spawn
 });

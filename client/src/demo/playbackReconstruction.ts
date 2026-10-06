@@ -121,15 +121,19 @@ export function reconstructSeek(world: PlaybackWorld, events: { projectiles: Pro
       deadProjectileIds.add(ev.projectileId);
     }
   }
-  // Pre-scan: a ball is dead if it has a Destroyed event, OR a Hit event that
-  // reduced its health to <= 0 (some recordings emit Hit-with-kill without a
-  // follow-up Destroyed). Treat both as terminal.
+  // Pre-scan: a target is dead if it has a Destroyed event, OR a Hit event
+  // that reduced its health to <= 0 (some recordings emit Hit-with-kill
+  // without a follow-up Destroyed). Treat both as terminal.
+  // Keyed by (targetType, targetId), not raw id: the u16 targetId space is
+  // shared by a wrap-around allocator, so a ball's id eventually lands in
+  // the creature/deployable namespaces — a raw-id set would let one lane's
+  // Destroyed kill a live entity in another.
   const deadBallIds = new Set<number>();
   for (const ev of events.targets) {
     if (ev.eventType === TargetEventType.Destroyed) {
-      deadBallIds.add(ev.targetId);
+      deadBallIds.add(ev.targetType * 65_536 + ev.targetId);
     } else if (ev.eventType === TargetEventType.Hit && ev.health <= 0) {
-      deadBallIds.add(ev.targetId);
+      deadBallIds.add(ev.targetType * 65_536 + ev.targetId);
     }
   }
 

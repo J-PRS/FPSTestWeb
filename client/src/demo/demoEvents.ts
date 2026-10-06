@@ -162,10 +162,12 @@ export function recordDeployShot(b: DemoRecorder, netId: number, target: Vec3): 
     if (!info) {return;} // shot from a deployable that predates the window
     // Deploy bolts replay as plain tracers — a Fired event with the
     // weaponType sentinel; the reader falls back to the bolt config.
+    // Shooter rides as a shared pseudo-id — without it targetId lands 0
+    // (local lane) and every turret bolt kicks the playback viewmodel.
     const speed = 80;
     const dx = target.x - info.x, dy = target.y - info.y, dz = target.z - info.z;
     const len = Math.hypot(dx, dy, dz) || 1;
-    recordFired(b, info, { x: (dx / len) * speed, y: (dy / len) * speed, z: (dz / len) * speed }, DEPLOY_SHOT_WEAPON);
+    recordFired(b, info, { x: (dx / len) * speed, y: (dy / len) * speed, z: (dz / len) * speed }, DEPLOY_SHOT_WEAPON, '[deployable]');
   }
 
 export function recordDeployBoom(b: DemoRecorder, netId: number, position: Vec3): void {

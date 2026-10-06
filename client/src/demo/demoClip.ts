@@ -80,7 +80,7 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
 export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: number, clipEnd: number): TargetEvent[] {
   const aliveBalls = findAliveTargets(targetEvents, clipStart);
 
-  // Create synthetic Spawned events at clipStart for alive balls
+  // Create synthetic Spawned events at clipStart for alive targets
   const snapshotEvents: TargetEvent[] = [];
   for (const [, e] of aliveBalls) {
     snapshotEvents.push({
@@ -102,11 +102,20 @@ export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: numb
   ];
 }
 
-// Replay target events before clipStart to find which balls were alive then.
-// If the Spawned event was pruned, Bounce/StateChanged/Hit events still carry
-// the targetType and position/velocity, so we can create a snapshot from them.
+// Replay target events before clipStart to find which targets were alive
+// then. If the Spawned event was pruned, Bounce/StateChanged/Hit events
+// still carry the targetType and position/velocity, so we can create a
+// snapshot from them.
+//
+// Identity is (targetType, targetId), NOT targetId alone: the u16 id space
+// is shared by a wrap-around allocator, and after enough spawns a ball's
+// raw id WILL land inside the flag/pickup/creature namespaces. A single
+// raw-id table lets a flag edge overwrite a live ball's entry (or a ball's
+// Destroyed remove a live flag's) — the lanes are already separated by
+// targetType, so the key mirrors that split.
 export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number): Map<number, TargetEvent> {
   const aliveBalls = new Map<number, TargetEvent>();
+  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
   for (const e of targetEvents) {
     if (e.timestamp >= clipStart) {break;}
     // Kill markers carry a victim ROSTER INDEX in targetId, not an entity
@@ -114,20 +123,21 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
     // them into the alive table both synthesizes phantom spawns at
     // clipStart and clobbers a same-id ball's snapshot entry.
     if (e.targetType === TARGETTYPE_KILL) {continue;}
+    const k = keyOf(e);
     if (e.eventType === TargetEventType.Destroyed) {
-      aliveBalls.delete(e.targetId);
+      aliveBalls.delete(k);
       continue;
     }
     // Spawned/Bounce/StateChanged/Hit — update or create alive entry
-    const existing = aliveBalls.get(e.targetId);
+    const existing = aliveBalls.get(k);
     if (!existing) {
-      aliveBalls.set(e.targetId, e);
+      aliveBalls.set(k, e);
       continue;
     }
     // Preserve targetType and health if the new event doesn't carry them (legacy 0)
     const targetType = e.targetType === 0 ? existing.targetType : e.targetType;
     const health = e.health === 0 ? existing.health : e.health;
-    aliveBalls.set(e.targetId, { ...e, targetType, health });
+    aliveBalls.set(k, { ...e, targetType, health });
   }
   return aliveBalls;
 }
@@ -135,21 +145,26 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
 // For any targetId that appears inside the clip but has no Spawned event and
 // no alive snapshot, create a synthetic Spawned at clipStart from its first
 // event. This covers Spawned events that were pruned before extractClip ran.
+// Same (targetType, targetId) identity as findAliveTargets — a raw-id
+// check here would skip a needed synthetic spawn the moment an unrelated
+// lane reuses the id.
 function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
-  const firstEventByTargetId = new Map<number, TargetEvent>();
+  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
+  const firstEventByKey = new Map<number, TargetEvent>();
   const hasSpawnedInClip = new Set<number>();
   for (const e of actualTgtEvents) {
     if (e.targetType === TARGETTYPE_KILL) {continue;}
-    if (!firstEventByTargetId.has(e.targetId)) {
-      firstEventByTargetId.set(e.targetId, e);
+    const k = keyOf(e);
+    if (!firstEventByKey.has(k)) {
+      firstEventByKey.set(k, e);
     }
     if (e.eventType === TargetEventType.Spawned) {
-      hasSpawnedInClip.add(e.targetId);
+      hasSpawnedInClip.add(k);
     }
   }
   const additionalSpawned: TargetEvent[] = [];
-  for (const [targetId, first] of firstEventByTargetId) {
-    if (aliveBalls.has(targetId) || hasSpawnedInClip.has(targetId)) {continue;}
+  for (const [k, first] of firstEventByKey) {
+    if (aliveBalls.has(k) || hasSpawnedInClip.has(k)) {continue;}
     additionalSpawned.push({
       ...first,
       eventType: TargetEventType.Spawned,
