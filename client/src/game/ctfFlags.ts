@@ -59,7 +59,11 @@ const FLAG_BANNER_GEO = (() => {
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i);
     const u = (0.95 - y) / 1.9; // bar line -> free hem
-    pos.setZ(i, Math.sin(y * 2.6 + x * 3.0) * 0.13 * u);
+    // Outward-only wave: the pole passes BETWEEN the two panels, so a
+    // ripple that dips inward grazes the shaft. abs() keeps the bulge
+    // strictly away from the pole on both sides (the right panel is
+    // this same geometry mirrored).
+    pos.setZ(i, Math.abs(Math.sin(y * 2.6 + x * 3.0)) * 0.13 * u);
   }
   geo.computeVertexNormals();
   return geo;
@@ -86,6 +90,7 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   const bannerL = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
   bannerL.position.set(0, 2.85, 0.11);
   const bannerR = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
+  bannerR.rotation.y = Math.PI; // mirror so its wave also bulges outward
   bannerR.position.set(0, 2.85, -0.11);
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
     new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
