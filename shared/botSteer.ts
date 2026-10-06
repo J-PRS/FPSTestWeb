@@ -28,6 +28,12 @@ export class BotSteer {
   private heading = { x: 1, z: 0 };
   private memory: { x: number; z: number; t: number }[] = [];
   private memT = 0;
+  /** A point the brain wants approached but NOT closed on yet (a
+   *  defended stand the wave hasn't converged on). Steps toward it cost
+   *  danger inside `radius`; `strength` is how hard the field repels —
+   *  fading it lets the approach resume gradually, not on a switch. */
+  private standoff: { x: number; z: number; radius: number; strength: number } | null = null;
+  setStandoff(s: { x: number; z: number; radius: number; strength: number } | null): void { this.standoff = s; }
   /** Holding a point: humans sway on the spot, never stand a perfect
    *  statue — a slow small orbit around the goal, per-bot phase. */
   private swayT = botRand() * Math.PI * 2;
@@ -112,7 +118,7 @@ export class BotSteer {
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling
       // off it parked every stand press ~8m short of the flag pickup ring.
-      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange, near });
+      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange, near, standoff: this.standoff });
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -139,8 +145,8 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null }): number {
-    const { g0, now, nearGoal, near } = probe;
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null; standoff: { x: number; z: number; radius: number; strength: number } | null }): number {
+    const { g0, now, nearGoal, near, standoff } = probe;
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
     const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;
@@ -154,6 +160,30 @@ export class BotSteer {
     const slope = Math.max(boundedStep ? 0 : riseA / T.steer.probeA, riseB / T.steer.probeB);
     if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
     if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
+
+    // Commitment leash: a posted anchor's field is bounded by its post —
+    // steps that would carry it out of the leash read as danger, so the
+    // feet hold the zone whatever the dest says (fight orbits, fear
+    // retreats, flinch knocks all stop mattering where the leash ends).
+    if (ctx.posted && ctx.objective) {
+      const s = T.steer.probeA;
+      const px = pos.x - ctx.objective.x, pz = pos.z - ctx.objective.z;
+      const fromPost = Math.hypot(px, pz);
+      const out = (px * dx + pz * dz) / Math.max(fromPost, 0.01);
+      if (fromPost + Math.max(0, out) * s > ctx.posted) danger = 1;
+    }
+
+    // Standoff repeller: a defended point the wave isn't ready for.
+    // The hold radius is never written anywhere — the field's own
+    // balance against goal interest decides where the bot circles.
+    if (standoff) {
+      const sx = pos.x - standoff.x, sz = pos.z - standoff.z;
+      const sd = Math.hypot(sx, sz) || 1;
+      const after = sd - ((sx * dx + sz * dz) / sd) * T.steer.probeA;
+      if (after < standoff.radius) {
+        danger = Math.min(1, danger + standoff.strength * (1 - after / standoff.radius));
+      }
+    }
 
     if (near) {
       for (const o of near) {

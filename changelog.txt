@@ -1,3 +1,4 @@
+2026-10-06 - bots field-model pass: posted leash becomes a steering-slot danger term (feet hold the zone, dests say intent) + staging becomes a fading standoff repeller (emergent hold ring, no scripted 110m orbit). docs: tribes-gameplay-movement.md ref doc with the Conway-shaped-AI literature map
 2026-10-06 - bots: commitment-rule fight spots (incumbent holds unless clearly beaten or unreachable), universal mid-range hop-chains, sheep-foe flag gated by weapon reach
 2026-10-06 - fightPos hysteresis: planFight nulled the spot every think and re-scored the whole 12-candidate ring, so near-tied spots flip-flopped and the dest zigzagged +-13m — a watchdog-visible pin that no mount or detour could escape because the GOAL was churning, not the path. The incumbent spot now competes with a +0.6 margin: beat it or keep it. Soak 4242 0.3h: 4 -> 2 stuck warns.
 

@@ -16,23 +16,15 @@ const FLINCH_DIST = 8;
   /** Step destination: flinch knock > hunt press/retreat/orbit > goal. */
 export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean, hero: boolean): BotVec {
     b.holding = false;
+    b.standoff = null; // staging re-arms it below when the wave isn't ready
     if (b.flinchT > 0) {
       b.flinchT -= dt;
       const fx = pos.x - b.flinchFrom.x, fz = pos.z - b.flinchFrom.z;
       const l = Math.hypot(fx, fz) || 1;
-      // An 8m panic knock on a ~3m leash drops the anchor three leashes
-      // out — the flinch shrinks to a sidestep for posted feet, same as
-      // the dodge hop already does.
-      const step = ctx.posted ? FLINCH_DIST * 0.3 : FLINCH_DIST;
-      const dx = pos.x + (fx / l) * step, dz = pos.z + (fz / l) * step;
-      if (ctx.posted && ctx.objective) {
-        const ox = dx - ctx.objective.x, oz = dz - ctx.objective.z;
-        const od = Math.hypot(ox, oz);
-        if (od > ctx.posted) {
-          const k = ctx.posted / od;
-          return { x: ctx.objective.x + ox * k, y: pos.y, z: ctx.objective.z + oz * k };
-        }
-      }
+      // The flinch dest says where it WANTS to knock the bot — the
+      // steering field decides how far feet may actually travel (a
+      // posted leash already masks outward slots).
+      const dx = pos.x + (fx / l) * FLINCH_DIST, dz = pos.z + (fz / l) * FLINCH_DIST;
       return { x: dx, y: pos.y, z: dz };
     }
     // Carrying the objective: the run is the job — engaging whoever the
@@ -86,16 +78,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // waits aged the call and the soak still showed lone entries —
         // a flood that hasn't formed by 35s isn't forming by 55
         // (seed 7 14g/8c->6g/5c, seed 11 9g/2c->5g/2c).
-        if (!wave && !wingman && !(ctx.marshal && ctx.pushLive) && b.stageT < (ctx.marshal && !ctx.runner ? 45 : 35)) {
-          b.stageT += dt;
-          b.orbitA += dt * 0.35;
-          // Quiet-side orbit center (imapQuietDir(objective)*40 offset)
-          // tried and reverted: same-seed soaks flat-to-down (seed 7
-          // 10g->7g, seed 11 7g2c->7g1c) — the fixed ring is not where
-          // the push leaks.
-          const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;
-          const oz = ctx.objective.z + Math.sin(b.orbitA) * 110;
-          return { x: ox, y: ctx.groundY(ox, oz), z: oz };
+        if (!wave && !wingman && !(ctx.marshal && ctx.pushLive)) {
+          const limit = ctx.marshal && !ctx.runner ? 45 : 35;
+          if (b.stageT < limit) {
+            b.stageT += dt;
+            // Hold-off repeller around the defended ring: the dest stays
+            // the objective and the steering field owns the geometry —
+            // where the bot circles emerges from goal-pull vs repel, not
+            // a scripted orbit. Strength fades with patience so the
+            // approach resumes as a drift inward, not a hard release.
+            b.standoff = {
+              x: ctx.objective.x, z: ctx.objective.z, radius: 160,
+              strength: 1 - b.stageT / limit,
+            };
+          }
         }
       } else if (gd >= 160) b.stageT = 0;
     }
@@ -163,18 +159,15 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
     // Posted anchors — a HoF or home defender fires on everything it
-    // can see but only leaves the post for a fight inside its leash,
-    // and even an in-leash duel can't swing him out: orbit/press points
-    // that drift past the leash fold back to the stand. Fire stays
-    // live elsewhere — only feet hold.
-    const postedHold = (dest: BotVec): BotVec =>
-      ctx.posted && ctx.objective && dist3(dest, ctx.objective) > ctx.posted
-        ? { ...ctx.objective } : dest;
+    // can see but only leaves the post for a fight inside its leash.
+    // The leash is a steering-field rule now (out-of-leash slots read as
+    // danger), so dests can say what they mean — a retreat aims away,
+    // the feet still hold the zone.
     // A posted defender under fire still dodges — but the stand is the
     // most-shelled ground on the map, and an unclamped fear retreat is
     // exactly how the HoF kept wandering: shell → flee 30m → walk back
     // → shell. He sidesteps inside his leash, not across the field.
-    if (fearing) return postedHold(retreatDest(ctx, pos, t));
+    if (fearing) return retreatDest(ctx, pos, t);
     // Hurt-runner health-pack divert tried and reverted: eHp rose
     // 33->37 but grabs collapsed 14->6 — the mid-run detour cost more
     // momentum/timing than the HP bought. eHp is a combat-power
@@ -229,7 +222,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // Point-blank or outranged: press straight in either way — inside
       // fist reach the press converts to the punch, outside it to the
       // approach. Holding the orbit at 2m would stare down a barrel.
-      return postedHold({ ...t.pos });
+      return { ...t.pos };
     }
     // fightPos comes from the last replan tick — "hold" used to mean
     // stand still and shoot, which reads (and meters) as sheeping.
@@ -237,7 +230,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // preferred range band, cycling angle so the bot keeps moving
     // between volleys like a real duelist.
     b.holding = b.h.fightPos === null;
-    if (b.h.fightPos) return postedHold(b.h.fightPos);
+    if (b.h.fightPos) return b.h.fightPos;
     b.orbitA += dt * (b.orbitDir * 0.55);
     b.orbitFlipT -= dt;
     if (b.orbitFlipT <= 0) {
@@ -248,7 +241,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const mid = (b.h.orbitFar + b.h.orbitClose) * 0.5 * b.orbitMul;
     const ox = t.pos.x + Math.cos(b.orbitA) * mid;
     const oz = t.pos.z + Math.sin(b.orbitA) * mid;
-    return postedHold({ x: ox, y: ctx.groundY(ox, oz), z: oz });
+    return { x: ox, y: ctx.groundY(ox, oz), z: oz };
   }
 
   /** Fortification pick: planting while a fight rages on the stand is
