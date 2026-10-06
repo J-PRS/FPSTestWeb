@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { GameBot, EYE } from './botBrain.js';
+import { GameBot, EYE, setBotStructureSpecs } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS, botClassForLoadout } from '../../../shared/botLoadouts.js';
@@ -12,12 +12,13 @@ import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '..
 import type { Terrain } from '../world/terrain.js';
 import { CtfBridge } from './botCtf.js';
 import { RabbitBridge } from './botRabbit.js';
+import { FlagRunBridge } from './flagRun.js';
 import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay } from './botKill.js';
 import { chatter } from '../../../shared/botTaunts.js';
-import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLocalTeam } from './botMatch.js';
+import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -59,7 +60,8 @@ interface BotHooks {
   fragBanner?(text: string): void;
   /** A kill happened — CS-style killfeed row in the corner, not the
    *  center banner (that's reserved for YOUR frags/deaths). */
-  killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean): void;
+  killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean,
+    meta?: { shooter?: string; target?: string; weapon?: number; air?: number }): void;
   /** Find nearest nugget to a position. */
   nearestNugget(pos: THREE.Vector3, maxDist: number): Nugget | null;
   /** Nearest hostile creature (targets list entry) for a bot to fight. */
@@ -83,6 +85,7 @@ export class TeamBots {
   readonly teamOf = new Map<string, string>(); // 'local' + bot:names → team key
   /** FFA scores (dm): per playerId. Team modes use `scores`. */
   readonly ffaScores = new Map<string, number>();
+  readonly dmgPool = new Map<string, number>(); // CTF damage-economy remainder
   over: string | null = null;
   readonly spec: (typeof MODES)[ModeId];
 
@@ -91,6 +94,9 @@ export class TeamBots {
   /** Single neutral flag + carrier gate — offline mirror of the
    *  server's rabbit rules (botRabbit.ts owns flag state + scoring). */
   rabbit: RabbitBridge | null = null;
+  /** Solo cap circuit — flagrun's own ruleset (any-stand cap, lap
+   *  timing), not the two-team CtfBridge referee. */
+  flagrun: FlagRunBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
   // Anti-pedestrian meter (idle/ignore/bleed/coverage) lives in
@@ -123,7 +129,7 @@ export class TeamBots {
       logger: this.deps.logger,
       damageCreature: (id, dmg, att) => this.hooks.damageCreature(id, dmg, att),
       creditKill: (id, cr) => this.creditKill(id, cr),
-      botKilled: (k, b) => botKilledF(this, k, b),
+      botKilled: (k, b, weapon) => botKilledF(this, k, b, weapon),
       hurtLocal: (d, fp, src, m, att) => hurtLocal(this, d, fp, att, { src, melee: m }),
     });
     this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
@@ -169,8 +175,9 @@ export class TeamBots {
       mk('bravo', counts.bravo);
     }
     // CtfBridge is a two-team sim — rabbit's single neutral flag has no
-    // offline referee yet, so only team-flag modes wire it.
-    if (this.spec.flags && this.spec.teams) {
+    // offline referee yet, so only team-flag modes wire it. flagrun owns
+    // its flag circuit through FlagRunBridge instead.
+    if (this.spec.flags && this.spec.teams && mode !== 'flagrun') {
       this.ctf = new CtfBridge(deps, {
         bots: this.bots,
         teamOf: this.teamOf,
@@ -179,10 +186,25 @@ export class TeamBots {
         modsFor: (id) => this.modsFor(id),
         onCapture: () => pushScore(this),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
+        onPersonalPoints: (id, n) => awardPersonal(this, id, n),
       });
     }
     if (mode === 'rabbit') {
       this.rabbit = new RabbitBridge(deps, (t) => this.hooks.remoteKillFeed(t));
+    }
+    if (mode === 'flagrun') {
+      this.flagrun = new FlagRunBridge(deps, {
+        playerTeam: this.playerTeam as TeamId,
+        bots: this.bots,
+        teamOf: this.teamOf,
+        scores: this.scores,
+        onFeed: (t) => this.hooks.remoteKillFeed(t),
+        onCapture: () => pushScore(this),
+        applyStandSpecs: (specs) => {
+          deps.lazyPlayer().movement?.setStructures(specs);
+          setBotStructureSpecs(specs);
+        },
+      }, player.pos);
     }
   }
 
@@ -213,6 +235,7 @@ export class TeamBots {
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
     this.rabbit?.update(dt, this.collectors(), (id) => this.posOf(id), (id) => this.holdPoint(id));
+    this.flagrun?.update(dt);
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);
     if (!this.over) {
@@ -221,14 +244,28 @@ export class TeamBots {
         this.over = w;
         this.hooks.remoteKillFeed(winText(this, w));
         sfx.pickup();
+        // Standings window — pin the board unless the player already
+        // had it open, so auto-shown means auto-dismissed only.
+        const hud = this.deps.lazyHud();
+        hud.setScoreboardCountdown?.(10);
+        if (!hud.scoreboardVisible) {
+          hud.setScoreboardVisible?.(true);
+          this.sbAutoShown = true;
+        }
         this.overAt = performance.now();
       }
-    } else if (performance.now() - this.overAt > 8000) {
+    } else if (performance.now() - this.overAt > 10_000) {
+      this.deps.lazyHud().setScoreboardCountdown?.(null);
+      if (this.sbAutoShown) {
+        this.sbAutoShown = false;
+        this.deps.lazyHud().setScoreboardVisible?.(false);
+      }
       resetMatch(this);
     }
   }
 
   overAt = 0; // public — botMatch writes it via the host interface
+  private sbAutoShown = false;
 
   /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
   private tickBots(dt: number, others: THREE.Vector3[], bodies: BodyCapsule[]): void {
@@ -318,19 +355,15 @@ export class TeamBots {
       this.fire.tryPropel(bot, !!shot);
     }
     if (shot) this.sheep.markShot(bot.playerId);
-    this.sheepTick(bot, shot, acc, foes, terrain);
+    this.sheepTick(bot, acc, foes, terrain);
   }
 
-  /** Sheep-meter bookkeeping tail of afterThink — foe-sight, the
-   *  ignoring tell, dest progress, weld-busy. */
-  private sheepTick(bot: GameBot, shot: ReturnType<GameBot['think']>, acc: number,
+  /** Sheep-meter bookkeeping tail of afterThink — foe-sight, dest
+   *  progress, weld-busy. */
+  private sheepTick(bot: GameBot, acc: number,
     foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
-    // "Ignoring" means a sustained refusal to fire — volley cadence
-    // legitimately goes ~2s between bursts, so a mid-fight gap isn't a
-    // tell. Same 3s recency window the server meter uses.
-    const ignoring = !shot && this.sheep.notShooting(bot.playerId);
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheep.tick(bot, acc, terrain, { foe: this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest, busy: bot.wantRepair !== null });
+    this.sheep.tick(bot, acc, terrain, { foe: this.senses.foeSeen(bot, foes, terrain), hasDest, dest: bot.lastDest, busy: bot.wantRepair !== null });
   }
 
   /** Situation chatter edge — same pools + throttle as the wire path,
@@ -475,8 +508,14 @@ export class TeamBots {
    *  back through the spawn ring — teleporting a healthy squad reads
    *  as a glitch, not a new match. */
   /** DM kill credit — a player/bot frag vs a creature frag. */
-  creditKill(id: string, isCreature: boolean): void {
-    creditKill(this, id, isCreature);
+  creditKill(id: string, isCreature: boolean, victimPos?: { x: number; y: number; z: number }): void {
+    creditKill(this, id, isCreature, victimPos);
+  }
+
+  /** CTF damage points — hitF/hurtLocal call after their gates so
+   *  friendly or rabbit-blocked damage never banks. */
+  creditDamage(attackerId: string, victimId: string, dmg: number): void {
+    creditDamage(this, attackerId, victimId, dmg);
   }
 
   /** Builder bots plant — the brain picked kind+spot, the deployables
@@ -511,8 +550,8 @@ export class TeamBots {
   /** Player/explosion damage routed here when the victim is a bot —
    *  combat consults `hit` before predictDamage. A bot shell can also
    *  hit 'local' (sweepLocal) — that resolves through the same funnel. */
-  hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local', weapon?: number): boolean {
-    return hitF(this, playerId, dmg, fromPos, attackerId, weapon);
+  hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local', meta?: { weapon?: number; air?: number }): boolean {
+    return hitF(this, playerId, dmg, fromPos, attackerId, meta);
   }
 
   /** DM: local player's creature kill — combat calls this from
@@ -527,6 +566,7 @@ export class TeamBots {
     const pos = this.deps.lazyPlayer().pos;
     this.ctf?.dropCarried('local', pos);
     this.rabbit?.onDeath('local', pos);
+    this.flagrun?.dropCarried('local', pos);
   }
 
   /** Live position by roster id — 'local' or a bot. */

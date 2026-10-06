@@ -1,4 +1,4 @@
-import { TEAM_COLORS, TEAM_LABEL, MODES, bank, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, MODES, CTF_PTS, CTF_DMG_PER_PTS, CTF_FLAG_ZONE_R, bank, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
@@ -7,6 +7,8 @@ import type { RabbitBridge } from './botRabbit.js';
 export interface MatchHost {
   scores: TeamScores;
   ffaScores: Map<string, number>;
+  /** CTF damage economy accumulator — remainder carries across lives. */
+  dmgPool: Map<string, number>;
   over: string | null;
   overAt: number;
   spec: (typeof MODES)[ModeId];
@@ -14,12 +16,14 @@ export interface MatchHost {
   bots: GameBot[];
   ctf: CtfBridge | null;
   rabbit: RabbitBridge | null;
+  flagrun?: { reset(): void } | null;
   deps: {
     world: { localTeam?: string; remotePlayers: { rename(oldId: string, newId: string): void } };
-    lazyHud(): { setTeamScore?(a: number, b: number): void };
+    lazyHud(): { setTeamScore?(a: number, b: number): void; scoreboardVisible?: boolean; setScoreboardVisible?(v: boolean): void; setScoreboardCountdown?(secLeft: number | null): void };
   };
   hooks: {
-    killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean): void;
+    killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean,
+      meta?: { shooter?: string; target?: string; weapon?: number; air?: number }): void;
     remoteKillFeed(text: string): void;
   };
   respawnBot(bot: GameBot): void;
@@ -62,14 +66,44 @@ export function resetMatch(m: MatchHost): void {
       bot.sheepShown = 100;
     }
   }
+  m.dmgPool.clear();
   m.ctf?.reset();
   m.rabbit?.reset();
+  m.flagrun?.reset();
   pushScore(m);
   m.hooks.remoteKillFeed(`${m.spec.label} — NEW MATCH`);
 }
 
+/** CTF personal board — same ffaScores map the scoreboard reads, but the
+ *  payout is objective-shaped (flag-zone kills earn double). Personal
+ *  points never end a match; only the team bank does. */
+export function awardPersonal(m: MatchHost, id: string, n: number): void {
+  if (m.over) return;
+  m.ffaScores.set(id, (m.ffaScores.get(id) ?? 0) + n);
+}
+
+/** CTF damage economy — mirrors RoomScore.onDamage: every 100 enemy
+ *  damage pays CTF_PTS.dmg, remainder pools across lives. Called from
+ *  the local hit funnels AFTER the friendly/rabbit gates so blocked
+ *  damage can't bank. */
+export function creditDamage(m: MatchHost, attackerId: string, victimId: string, dmg: number): void {
+  if (!(m.spec.flags && m.spec.teams) || attackerId === victimId || m.over) return;
+  const a = m.teamOf.get(attackerId), v = m.teamOf.get(victimId);
+  if (!a || !v || a === v) return;
+  const acc = (m.dmgPool.get(attackerId) ?? 0) + dmg;
+  const pts = Math.floor(acc / CTF_DMG_PER_PTS);
+  m.dmgPool.set(attackerId, acc - pts * CTF_DMG_PER_PTS);
+  if (pts > 0) awardPersonal(m, attackerId, pts * CTF_PTS.dmg);
+}
+
 /** DM kill credit — a player/bot frag vs a creature frag. */
-export function creditKill(m: MatchHost, id: string, isCreature: boolean): void {
+export function creditKill(m: MatchHost, id: string, isCreature: boolean, victimPos?: { x: number; y: number; z: number }): void {
+  // CTF personal PTS: a frag pays 1, doubled when the victim was in a
+  // flag zone (defending your stand or clearing the enemy's).
+  if (m.spec.flags && m.spec.teams && !isCreature) {
+    awardPersonal(m, id, victimPos && m.ctf?.nearStand(victimPos, CTF_FLAG_ZONE_R) ? CTF_PTS.flagZoneKill : CTF_PTS.kill);
+    return;
+  }
   if (!m.spec.ffa || m.over) return;
   const pts = isCreature ? m.spec.ptsCreatureKill : m.spec.ptsPlayerKill;
   m.ffaScores.set(id, (m.ffaScores.get(id) ?? 0) + pts);
@@ -136,6 +170,7 @@ export function syncLocalTeam(m: MatchHost): void {
     b.setGizmoColor(TEAM_COLORS[other]);
     // Defectors flip to the enemy side — recolor the debug hitbox too.
     b.setColliderColor(other === lt ? 0x00ff00 : 0xff3333);
-    m.hooks.killFeed(other === 'alpha' ? 'ALPHA' : 'BRAVO', `${b.playerId.replace('bot:', '')} defects`, false, false);
+    m.hooks.killFeed(other === 'alpha' ? 'ALPHA' : 'BRAVO', `${b.playerId.replace('bot:', '')} defects`, false, false,
+      { shooter: other, target: m.teamOf.get(b.playerId) });
   }
 }

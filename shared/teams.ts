@@ -43,8 +43,19 @@ export function winner(s: TeamScores, winAt = WIN_NUGGETS): TeamId | null {
   return null;
 }
 
+/** CTF personal score (the PTS column) — team bank still wins the match;
+ *  these credit individual objective work. Shared so the offline CTF sim
+ *  pays identical amounts. */
+export const CTF_PTS = { kill: 1, flagZoneKill: 2, cap: 10, flagReturn: 3, dmg: 1 } as const;
+/** Post-mitigation enemy damage per CTF_PTS.dmg payout — chip and
+ *  kills pay the same rate, so pressure is never honor-free. */
+export const CTF_DMG_PER_PTS = 100;
+/** "Close to a flag" = inside this radius of EITHER stand — defense at
+ *  home and escort/offense at the enemy stand both pay the bonus. */
+export const CTF_FLAG_ZONE_R = 15;
+
 // ---- Game modes ----
-export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel';
+export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel' | 'flagrun';
 
 export interface ModeSpec {
   /** HUD label + feed wording. */
@@ -74,6 +85,9 @@ export const MODES: Record<ModeId, ModeSpec> = {
   // target, hold time pays a point a second, kills pay one each.
   rabbit:  { label: 'RABBIT', teams: false, ffa: true, flags: true, winAt: 60, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
   duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  // Flag Run: solo cap circuit — a square of stands alternating teams,
+  // two flags a side; bank any enemy flag at either friendly stand.
+  flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },
 };
 
 /** Flag carry rules — shared client/server. */

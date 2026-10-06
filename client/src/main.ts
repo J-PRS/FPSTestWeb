@@ -225,7 +225,7 @@ async function init(): Promise<void> {
   hud = new HUD();
   // Team-score strip only in team modes — dm painted a permanent
   // ALPHA 0 : 0 BRAVO badge over free-for-all play.
-  if (mode === 'nuggets' || mode === 'ctf') {hud.setTeamScore(0, 0);}
+  if (mode === 'nuggets' || mode === 'ctf' || mode === 'flagrun') {hud.setTeamScore(0, 0);}
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
   profiler.markTime('hudCreated');
@@ -358,8 +358,13 @@ function killLocal(source: string): void {
   fragMessages.show(`YOU DIED\n${source}`);
   setTimeout(() => {
     player.resetLifeState();
-    const a = Math.random() * Math.PI * 2;
-    player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+    const spot = teamBots?.flagrun?.spawnPoint();
+    if (spot) {
+      player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+    } else {
+      const a = Math.random() * Math.PI * 2;
+      player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+    }
     player.syncMovement();
     player.markTeleport();
     hud.show();
@@ -427,9 +432,18 @@ function setupOfflineMode(mode: string): void {
       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
-    spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+    // flagrun is a solo lap — no roster at all.
+    mode === 'flagrun' ? { alpha: 0, bravo: 0 } : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
     mode as import('../../shared/teams.js').ModeId,
   );
+  // Flag Run starts you beside the nearest enemy flag — the ring is
+  // built around your spawn pos, so the first grab is one hop away.
+  const spot = teamBots.flagrun?.spawnPoint();
+  if (spot) {
+    player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+    player.syncMovement();
+    player.markTeleport();
+  }
 }
 
 function makeEntities(): ReturnType<typeof createEntities> {

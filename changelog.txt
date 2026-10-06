@@ -1,3 +1,4 @@
+2026-10-06 - modes: FLAG RUN solo mode (?mode=flagrun) - 4-stand square ring alternating teams, two flags a side, cap at either friendly stand, lap timer in feed
 2026-10-06 - weapons: cannon shot interval 0.55s -> 1.25s
 2026-10-06 - bots steer: eyes scale with speed - slope probes reach reaction distance (speed*0.5s/0.8s, capped 40/70m) so a 68m/s skier sees the wall in time to carve (was: fixed 4-9m probes, face-planted the massif then ground it; katabatic 34->31, henge 17->15)
 2026-10-06 - bots REVERTED sustained-climb deep probe (soak warns rose both maps - jets bought altitude that bled back); constants kept in botTuning for reference

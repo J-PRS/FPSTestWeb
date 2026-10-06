@@ -53,6 +53,19 @@ const FLAG_BANNER_GEO = new THREE.ConeGeometry(0.5, 1.2, 4);
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
+/** The movable piece — pole + banner + finial, group origin at the
+ *  flag's logical pos (flagRun + ctfFlags share the same look). */
+export function mkFlagMesh(team: TeamId): THREE.Group {
+  const g = new THREE.Group();
+  const banner = new THREE.Mesh(FLAG_BANNER_GEO, new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] }));
+  banner.position.set(0.55, 3.4, 0);
+  const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
+  finial.position.y = 4.05;
+  g.add(banner, finial);
+  return g;
+}
+
 /**
  * CTF flag entities — a pole + banner at each base, carried above a head,
  * dropped on death, returned on own-team touch. All mode rules live here;
@@ -79,15 +92,7 @@ export class CtfFlags {
       base.position.y = FLAG_STAND_TOP + 0.07; // gem in the socket well
       stand.add(base);
       stand.position.copy(home);
-      const g = new THREE.Group();
-      const pole = new THREE.Mesh(FLAG_POLE_GEO, FLAG_POLE_MAT);
-      pole.position.y = 2;
-      const banner = new THREE.Mesh(FLAG_BANNER_GEO, new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] }));
-      banner.position.set(0.55, 3.4, 0);
-      const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
-      finial.position.y = 4.05;
-      g.add(banner, finial);
+      const g = mkFlagMesh(team);
       g.position.copy(home);
       g.position.y += FLAG_STAND_TOP; // pole seats on the platform deck
       ctx.lazyScene().add(stand, g);
