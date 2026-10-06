@@ -1,3 +1,4 @@
+2026-10-06 - bots steer: eyes scale with speed - slope probes reach reaction distance (speed*0.5s/0.8s, capped 40/70m) so a 68m/s skier sees the wall in time to carve (was: fixed 4-9m probes, face-planted the massif then ground it; katabatic 34->31, henge 17->15)
 2026-10-06 - bots REVERTED sustained-climb deep probe (soak warns rose both maps - jets bought altitude that bled back); constants kept in botTuning for reference
 2026-10-06 - bots: posted bodies tolerate crowding (separation + trail memory are transit instincts, skipped while posted); fightPos commitment window - a held combat spot wins outright for 6 thinks unless its ground goes illegal (margin alone couldnt stop LOS-flip dest churn; henge warns 26->17)
 2026-10-06 - bots lines: early face sense - goal-line rise probed up front so a wall engages the contour traverse before E bleeds into it (was: only after the stagnation ladder)

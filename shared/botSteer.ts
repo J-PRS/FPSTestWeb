@@ -112,6 +112,15 @@ export class BotSteer {
       }
     }
 
+    // Eyes scale with speed: fixed 4-9m probes are ~0.1s of warning at
+    // ski pace — a 68m/s skier face-plants the massif before the slots
+    // ever see the wall (katabatic bleed autopsy: KE->0 into the face,
+    // then a walking grind). Look ahead by reaction distance instead:
+    // faster legs get deeper eyes, capped so a parked bot isn't blind.
+    const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+    const pa = Math.min(T.steer.probeAMax, Math.max(T.steer.probeA, spd * T.steer.probeNearK));
+    const pb = Math.min(T.steer.probeBMax, Math.max(T.steer.probeB, spd * T.steer.probeFarK));
+
     let bestX = gx, bestZ = gz, bestScore = -1;
     let safeX = gx, safeZ = gz, safeDanger = 2;
     for (let i = 0; i < T.steer.slots; i++) {
@@ -131,7 +140,7 @@ export class BotSteer {
       // Final approach overrides the trail memory: crumbs exist to break
       // local minima, but a goal this close IS the destination — repelling
       // off it parked every stand press ~8m short of the flag pickup ring.
-      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange, near, standoff: this.standoff });
+      const danger = this.slotDanger(ctx, pos, dx, dz, { g0, now, nearGoal: gd < T.steer.memRange, near, standoff: this.standoff, pa, pb });
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -158,11 +167,11 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null; standoff: { x: number; z: number; radius: number; strength: number } | null }): number {
-    const { g0, now, nearGoal, near, standoff } = probe;
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null; standoff: { x: number; z: number; radius: number; strength: number } | null; pa: number; pb: number }): number {
+    const { g0, now, nearGoal, near, standoff, pa, pb } = probe;
     let danger = 0;
-    const riseA = ctx.groundY(pos.x + dx * T.steer.probeA, pos.z + dz * T.steer.probeA) - g0;
-    const riseB = ctx.groundY(pos.x + dx * T.steer.probeB, pos.z + dz * T.steer.probeB) - g0;
+    const riseA = ctx.groundY(pos.x + dx * pa, pos.z + dz * pa) - g0;
+    const riseB = ctx.groundY(pos.x + dx * pb, pos.z + dz * pb) - g0;
     // A bounded lip (dais skirt, deck edge, box face) is not a wall: the
     // legs' step-mount hops+jets straight over it, but masking the slot
     // steered the step tangent — the mount probe never faced the lip and

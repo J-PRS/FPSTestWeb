@@ -160,8 +160,12 @@ export const BOT_TUNING = {
   // botSteer — context steering slots
   steer: {
     slots: 16,           // directions sampled around the circle
-    probeA: 4,           // m — near slope probe
-    probeB: 9,           // m — far probe catches ridgelines
+    probeA: 4,           // m — near slope probe (floor of the speed-scaled reach)
+    probeB: 9,           // m — far probe catches ridgelines (floor)
+    probeNearK: 0.5,     // s — near probe reach = speed*this (reaction distance)
+    probeFarK: 0.8,      // s — far probe reach = speed*this
+    probeAMax: 40,       // m — cap on speed-scaled near reach
+    probeBMax: 70,       // m — cap on speed-scaled far reach
     step: 9.7,           // m — steering lookahead (evolved: wider carving over twitchy flicks)
     sepRange: 7,         // m — personal space
     memMs: 4000,         // ms — memory trail lifetime
