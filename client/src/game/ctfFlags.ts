@@ -6,6 +6,7 @@ import type { GameBot } from './botBrain.js';
 import { roleObjective, ROLE_PRIORITY, STRICT_CLASS } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
+import { wornMetalMat } from '../entities/procMetal.js';
 import { flagStandSpecs, FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
 
 export interface Flag {
@@ -48,7 +49,7 @@ export interface FlagCtx {
 }
 
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
-const FLAG_POLE_MAT = new THREE.MeshBasicMaterial({ color: 0x888888 });
+const FLAG_POLE_MAT = wornMetalMat(0x4A4E55); // gunmetal — the standard is equipment, not plastic
 /** Banner cloth — hangs DOWN from the crossbar like a war standard
  *  (T:A flags are banners, not pennants): a vertical plane pre-rippled
  *  once at build, flat at the bar line, waving at the free bottom. */
