@@ -46,7 +46,9 @@ function postThrottleAllow(ip: string): boolean {
   if (!w || now - w.start >= POST_IP_WINDOW_MS) {
     w = { count: 0, start: now };
     postIps.set(ip, w);
-    if (postIps.size > 1024) postIps.clear();
+    // Wholesale clear() here would reset the window for every live IP —
+    // under a churn attack that's a throttle amnesty. Evict eldest first.
+    if (postIps.size > 1024) postIps.delete(postIps.keys().next().value!);
   }
   return ++w.count <= POST_IP_LIMIT;
 }

@@ -210,6 +210,13 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.27 `postIps` wholesale clear reset every live throttle (2026-10-06)
+
+Same class as `invalidWarnAt` (§2.24): when `postIps` exceeded 1024
+entries the map did `clear()`, resetting the 60s window for every live
+IP — under address churn that is a throttle amnesty. Now evicts the
+eldest entry instead.
+
 ### 2.26 `client.log` grew forever within a server run (2026-10-06)
 
 `rotateLogs()` only ran at boot — a long-lived server accumulated one
