@@ -297,6 +297,9 @@ export class BotBrain {
     progressGoalD: Infinity,
     goalWinT: 0,
     progressT: 0,
+    pinX: 0,
+    pinZ: 0,
+    pinT: 0,
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
   private readonly steerer = new BotSteer();
@@ -427,6 +430,25 @@ export class BotBrain {
 
   /** Perched-by-design (breath/mount staging) for the mobility watchdog. */
   get perched(): boolean { return this.moves.perched; }
+
+  /** Snapshot of the escape/mount internals at warn time — the line that
+   *  says WHY the bot couldn't close (dry tank, perching, detouring). */
+  get stuckDiag(): Record<string, number | boolean> {
+    return {
+      mw: this.moves.mountWait,
+      perched: this.moves.perched,
+      holding: this.holding,
+      ss: this.escapeS.stuckStreak,
+      os: this.escapeS.orbitStreak,
+      det: +this.escapeS.detourT.toFixed(2),
+      ej: +this.escapeS.escapeJetT.toFixed(2),
+      park: this.lastPark,
+      posted: this.lastPosted,
+    };
+  }
+
+  private lastPark = false;
+  private lastPosted = 0;
 
   /** The bot's skill matrix — hosts read it to bias weapon selection
    *  (a phenom draws its good gun) and to build the aimSkill ctx hook. */
@@ -597,6 +619,14 @@ export class BotBrain {
       console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
     }
 
+    // A deliberate stand-still must not arm the treadmill window inside
+    // stuckBreak — a held combat spot or a mount/breath perch is parked
+    // by choice, so re-anchor instead of letting it read as a pin.
+    if (this.holding || this.moves.perched) {
+      this.escapeS.pinT = 0;
+      this.escapeS.pinX = pos.x;
+      this.escapeS.pinZ = pos.z;
+    }
     tp = pf();
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
     // A goal the escape senses can't reach after ~4 failures is a bad
@@ -638,6 +668,8 @@ export class BotBrain {
     tp = pf();
     const move = this.moves.hints(dt, ctx, pos, dest);
     P('moves', tp);
+    this.lastPark = !!move?.park;
+    this.lastPosted = ctx.posted ?? 0;
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
 

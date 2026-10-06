@@ -84,6 +84,7 @@ export class MobilityWatchdog {
         // The destination it can't reach is what separates "parked by
         // choice" from "grinding into a pocket" — log both ends.
         dest: { x: +brain.lastDest.x.toFixed(1), y: +brain.lastDest.y.toFixed(1), z: +brain.lastDest.z.toFixed(1) },
+        diag: brain.stuckDiag,
       });
     }
   }

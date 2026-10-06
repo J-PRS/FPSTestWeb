@@ -82,6 +82,7 @@ describe('stuckBreak', () => {
   const state = (): EscapeState => ({
     stuckStreak: 0, orbitStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
     progressPos: { x: 0, y: 0, z: 0 }, progressT: 0, progressGoalD: Infinity, goalWinT: 0,
+    pinX: 0, pinZ: 0, pinT: 0,
     goal: { x: 20, y: 0, z: 0 },
   });
 
@@ -104,7 +105,8 @@ describe('stuckBreak', () => {
     // Second pinned eval with the detour still committed → jet burst.
     s.detourT = 0.5;
     stuckBreak(s, 2, flat(), pos, { x: 5, y: 0, z: 0 });
-    expect(s.stuckStreak).toBe(2);
+    // the 4s treadmill rollover co-detects the same pin — either counter proves it armed
+    expect(s.stuckStreak).toBeGreaterThanOrEqual(2);
     expect(s.escapeJetT).toBeGreaterThan(1);
   });
 });

@@ -18,7 +18,7 @@ const ctx = (over: Partial<BrainCtx> = {}): BrainCtx =>
 const mkState = (): EscapeState => ({
   stuckStreak: 0, orbitStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
   progressPos: { x: 0, y: 0, z: 0 }, progressT: 0, goalWinT: 0,
-  progressGoalD: 0, goal: { ...dest },
+  progressGoalD: 0, pinX: 0, pinZ: 0, pinT: 0, goal: { ...dest },
 });
 
 afterEach(() => botRngRelease());
@@ -120,12 +120,15 @@ it('pinned through a detour escalates to the jet burst', () => {
   expect(w).not.toBe(dest);
 });
 
-it('a posted anchor parked inside its leash is a hold, not a trap', () => {
+it('a posted anchor parked on its step is a hold, not a trap', () => {
+  // parked-by-choice = standing on the step the brain asked for — the
+  // same "arrived" test the watchdog applies to lastDest.
   const s = mkState();
+  const post = { x: 1, y: 0, z: 0 };
   const c = ctx({ posted: 4, objective: { x: 0, y: 0, z: 0 } });
   for (let i = 0; i < 10; i++) {
-    const w = stuckBreak(s, 1.6, c, origin, dest);
-    expect(w).toBe(dest);
+    const w = stuckBreak(s, 1.6, c, origin, post);
+    expect(w).toBe(post);
   }
   expect(s.stuckStreak).toBe(0);
   expect(s.escapeJetT).toBe(0);

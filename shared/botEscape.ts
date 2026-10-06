@@ -34,6 +34,14 @@ export interface EscapeState {
    *  An orbiting bot covers distance but never closes — displacement-
    *  based stuck tests are beaten by circling, goal-distance isn't. */
   progressGoalD: number;
+  /** Treadmill anchor: a bot that wobbles ±1.5-2m inside a ~2m cell beats
+   *  the per-window displacement check every window — each sample sees
+   *  "moved" while the body never leaves the pocket. Net displacement
+   *  from a 4s anchor is the pin the watchdog counts and the senses
+   *  must too, otherwise the escape never arms on a lip grind. */
+  pinX: number;
+  pinZ: number;
+  pinT: number;
   /** goal is read-only here — the sidestep orbits it. */
   goal: BotVec;
 }
@@ -87,6 +95,34 @@ function pickDetour(s: EscapeState, ctx: BrainCtx, pos: BotVec, dist: number): B
 export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
   s.progressT += dt;
   s.goalWinT += dt;
+  s.pinT += dt;
+  // "On the step" = arrived or holding by choice — posted anchors parked
+  // at their post read this way (the step IS the post), and so does a
+  // combat spot deliberately held. A bot 5m off its step and unmoving
+  // is a real pin even when posted — an anchor that escaped its leash
+  // and can't close the gap needs the escapes, not the exemption. Same
+  // 2.5m test the mobility watchdog applies to "standing on the dest".
+  const arrived = distSq(pos, dest) < 6.25;
+  // Treadmill window: net coverage over ~4s. The fast pinned check below
+  // measures per-window displacement — a 1.8m lip-grind oscillation
+  // satisfies it every window while the bot goes nowhere; the mobility
+  // watchdog counts the same stall by 2m anchor and was the only voice
+  // reporting it.
+  if (s.pinT >= 4) {
+    s.pinT = 0;
+    const net = Math.hypot(pos.x - s.pinX, pos.z - s.pinZ);
+    s.pinX = pos.x;
+    s.pinZ = pos.z;
+    if (net < 2 && !arrived) {
+      s.stuckStreak++;
+      if (s.detourT <= 0) {
+        s.detour = pickDetour(s, ctx, pos, 14);
+        s.detourT = 1.2;
+      }
+      // Pinned through a detour = every sideways probe is a face.
+      if (s.stuckStreak >= 2) s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+    }
+  }
   // Slow window: goal-distance gain over ~4s. Circling in place covers
   // real distance while closing nothing — this catches the orbit the
   // fast window below can't (seen in soaks: steerer tangent orbits).
@@ -97,9 +133,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     // holding inside its leash isn't circling a wall, and the escape
     // burst this streak arms is exactly how a posted hof kept getting
     // flung 60-100m off post (hof-away probe: dest ~82m during home).
-    if (s.progressGoalD > 20 && s.progressGoalD - gd < 4
-      && !(ctx.posted && ctx.objective
-        && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12))) {
+    if (s.progressGoalD > 20 && s.progressGoalD - gd < 4 && !arrived) {
       s.orbitStreak++;
       // A 1.1s burst buys ~10m of climb — a wall that eats it and stays
       // up is met every 4s with the same sip, which top-dresses the
@@ -115,12 +149,10 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     s.progressGoalD = gd;
   }
   if (s.progressT < 1.5) return s.detourT > 0 && s.detour ? s.detour : dest;
-  // A parked anchor reads as "stuck" to the pinned check — zero
-  // displacement is the whole point of the brake, and counting it fires
-  // a detour+jet escape that flings the defender 60-100m off post in a
-  // loop. Stillness on post is a hold, not a trap.
-  if (ctx.posted && ctx.objective
-    && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12)) {
+  // On the step = arrived or a deliberate hold — stillness on post is
+  // a hold, not a trap; counting it fires detour+jet escapes that fling
+  // defenders off post in a loop.
+  if (arrived) {
     s.stuckStreak = 0;
     s.orbitStreak = 0;
     s.detourT = 0;
