@@ -143,7 +143,16 @@ export class BotMoves {
       // with residual speed clears the whole 9m deck and lands past
       // the pole again (katabatic: 3-7m misses on every bounce). Close
       // in, feet on the boards.
-      if (this.crawl) return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: od > T.moves.crawlHopGd && (spd0 < 1 || rise > T.moves.stepRise) };
+      if (this.crawl) {
+        // Same mount-wait as the hop branch: the crawl's raw jet flag
+        // has no tank floor, so a dry crawler sputters against the lip
+        // forever — park and bank a real tap first.
+        if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < T.moves.mountE) {
+          this.mountWait = true;
+          return { ski: false, jet: false, jump: false, park: true };
+        }
+        return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: od > T.moves.crawlHopGd && (spd0 < 1 || rise > T.moves.stepRise) };
+      }
     } else { this.odRef = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
@@ -206,7 +215,7 @@ export class BotMoves {
       // dry tank the hop kept firing anyway and the bot rim-orbited the
       // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
       // the shove while the tank refills to the hop's floor, then mount.
-      if (rise > T.moves.stepJetRise && !tanked && ctx.energy !== undefined) {
+      if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < T.moves.mountE) {
         this.mountWait = true;
         return { ski: false, jet: false, jump: false, park: true };
       }

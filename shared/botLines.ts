@@ -154,6 +154,21 @@ export class BotLines {
       }
       const reach = Math.min(40, gd);
       let wp = bestPass;
+      if (!wp && ctx.route && gd > T.graph.minGd) {
+        // The flood already priced every saddle map-wide — a myopic
+        // traverse guesses at the exit direction while the route walks
+        // the pass it found. Consult it inside the escape, not just on
+        // the happy path (kata outbound: the apron's face dance burned
+        // ~100s of ratcheting where the flood knew the way around).
+        wp = ctx.route(pos.x, pos.z, dest.x, dest.z, T.graph.ahead);
+        // A route that just re-feeds the face is no escape: only take
+        // it when it points meaningfully off the goal line.
+        if (wp) {
+          const wd = Math.hypot(wp.x - pos.x, wp.z - pos.z) || 1;
+          const offLine = ((wp.x - pos.x) / wd) * ((dest.x - pos.x) / gd) + ((wp.z - pos.z) / wd) * ((dest.z - pos.z) / gd) < 0.75;
+          if (!offLine) wp = null;
+        }
+      }
       if (this.orbitFails >= 2) {
         // Two escape picks without release = the trap isn't a wall the
         // traverse can walk, it's a basin. Stop scoring terrain — beeline

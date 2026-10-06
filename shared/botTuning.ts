@@ -53,6 +53,7 @@ export const BOT_TUNING = {
     sustainedSpeed: 12,  // m/s — REVERTED: paired with sustainedGrade
     stepRise: 0.4,       // m — sub-climb face ahead that walls a stalled push (dais lip ~0.85m, skirt 2.2m)
     stepJetRise: 0.7,    // m — lips this tall need a jet tap: jump apex is ~0.87 (7^2/2g) so anything past ~0.7 hops back down the face
+    mountE: 15,          // E — the mount-wait refill target: a dais lip tap costs ~0.5-1s of burn, so parking until tankedMin (2.4) released the shove on a 0.16s sliver — the sputter floor it was meant to fix
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
     hopSpeed: 6.4,       // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
