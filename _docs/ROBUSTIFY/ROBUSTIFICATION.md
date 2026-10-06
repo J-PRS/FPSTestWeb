@@ -191,6 +191,14 @@ real repeated deadstops (a stuck bot — the channel now discriminates
 stuck from skiing). Pinned: transit decel above 5m/s can't bleed;
 deadstop still does (`botSheep.test.ts` 13 tests).
 
+### 2.11 Per-tick flag-carrier allocation storm (2026-10-06)
+
+The heal/plate/propel bot scans ran `[...flags.flags.values()].some()`
+(or `.map().find()`) per *ally* per bot per tick — an array allocation
+plus full flag-map walk for every candidate scored. All three sites now
+use `Room.flagCarriedBy` (early-exit loop, zero allocs) or an equivalent
+plain loop. Same answers, no per-tick GC churn on the bot-think path.
+
 Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.

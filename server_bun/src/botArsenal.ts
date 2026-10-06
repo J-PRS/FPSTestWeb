@@ -556,10 +556,11 @@ export class BotArsenal implements BeamHost {
     const beltPull = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).belt)?.forceMode === 'pull';
     if (hp < 45 && !(beltPull && carrying)) {
       const me = this.room.players.getAllPlayers().get(id);
-      const thief = [...(this.room.flags?.flags.values() ?? [])]
-        .map((f) => f.carrier)
-        .find((cid) => cid && cid !== id &&
-          this.room.players.getAllPlayers().get(cid)?.team !== me?.team);
+      let thief: string | null = null;
+      for (const f of this.room.flags?.flags.values() ?? []) {
+        const cid = f.carrier;
+        if (cid && cid !== id && this.room.players.getAllPlayers().get(cid)?.team !== me?.team) { thief = cid; break; }
+      }
       const carrier = thief ? this.room.players.getAllPlayers().get(thief) : undefined;
       // Carrying IS urgency: a wounded carrier that can't blast dies
       // at the stand inside the approach cooldown and drops the flag

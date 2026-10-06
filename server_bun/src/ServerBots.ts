@@ -448,12 +448,11 @@ export class ServerBots {
     // Scoring: carrier > hurt > nearby — the blast radius coats the
     // cluster around the throw point too, so one nade plates a group.
     let best: { pos: Vec3; vel: Vec3; score: number } | null = null;
-    const flags = this.room.flags;
     for (const [aid, a] of this.room.players.getAllPlayers()) {
       if (aid === id || a.team !== p.team || a.isDead) continue;
       const d = Math.hypot(a.position.x - p.position.x, a.position.z - p.position.z);
       if (d > 45) continue;
-      const carrying = flags ? [...flags.flags.values()].some((f) => f.carrier === aid) : false;
+      const carrying = this.room.flagCarriedBy(aid);
       const hurt = a.health < a.maxHealth * 0.8;
       const score = (carrying ? 60 : 0) + (hurt ? 30 : 0) + (45 - d);
       if (score >= 25 && (!best || score > best.score)) best = { pos: a.position, vel: a.velocity, score };
@@ -492,13 +491,12 @@ export class ServerBots {
     if (energy !== null && energy < floor) return;
     let best: { id: string; a: { position: Vec3; velocity: Vec3; health: number; maxHealth: number }; score: number } | null = null;
     let hurtCount = 0;
-    const flags = this.room.flags;
     for (const [aid, a] of this.room.players.getAllPlayers()) {
       if (aid === id || a.team !== p.team || a.isDead || a.health >= a.maxHealth * 0.85) continue;
       const d = Math.hypot(a.position.x - p.position.x, a.position.y - p.position.y, a.position.z - p.position.z);
       if (d > HEALBEAM_RANGE * 1.4) continue;
       hurtCount++;
-      const carrying = flags ? [...flags.flags.values()].some((f) => f.carrier === aid) : false;
+      const carrying = this.room.flagCarriedBy(aid);
       const missing = a.maxHealth - a.health;
       const score = missing + (carrying ? 40 : 0) - d;
       if (!best || score > best.score) best = { id: aid, a, score };
