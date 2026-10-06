@@ -210,6 +210,14 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.15 `recentKills` double-record (2026-10-06)
+
+`hitLedger.recordKill` pushed the shooter into `recentKills` twice per
+self-frag (once inside the self-branch, once unconditionally). Harmless
+to the `some()` trade check but halved the 256-entry window's effective
+coverage. Collapsed to a single trade-check + push; the dual-direction
+batch semantics are unchanged.
+
 ### 2.14 Self-kill debug probes unbounded (2026-10-06)
 
 `selfKillImpactDist/Pos/Prey/FoeDist` are module-global arrays pushed
