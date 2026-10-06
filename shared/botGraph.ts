@@ -113,10 +113,22 @@ export class TerrainFlow {
             // (capper air-steer lessons: descent-chasing into craters
             // is how routes strand). Fall-through past the next cell
             // is the human "land ON the downslope" read at leg scale.
-            const pu = parent[u]!;
             // Descending INTO the goal is sustained by definition — the
-            // last dive onto the stand is the grab, not a trap.
-            const keepsFalling = u === goal || (pu !== -1 && this.h[pu]! < this.h[u]!);
+            // last dive onto the stand is the grab, not a trap. Elsewhere
+            // a dive pays only when the fall keeps compounding ~3 cells
+            // deep (a ski run worth chaining), not a lone dip — that's
+            // the "land ON the downslope" read at route scale.
+            let keepsFalling = u === goal;
+            if (!keepsFalling) {
+              let cur = u, falling = 0;
+              for (let s = 0; s < 3; s++) {
+                const p = parent[cur]!;
+                if (p === -1 || this.h[p]! >= this.h[cur]!) break;
+                falling++;
+                cur = p;
+              }
+              keepsFalling = falling >= 2;
+            }
             if (keepsFalling) k += rise * T.graph.diveCredit;
             else k -= rise * T.graph.dipTax;
           }
