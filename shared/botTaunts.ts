@@ -960,7 +960,7 @@ const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
   VGTT: ['VGS', 'VGCN'],                // "THAT was— SHAZBOT!" / "— NICE MOVE." undercut
   VGCG: ['VGS', 'VGTA', 'VGCA'],        // "Good— SHAZBOT!" / "Good— AWWW THAT'S TOO BAD!" / "— AWESOME."
   VGO:  ['VGS', 'VGW'],                 // "Oo— SHAZBOT!" / "Ooops— WOOHOO!" celebrating the fail
-  VGS:  ['VGS', 'VGTG'],                // "SHA— SHAZBOT!" spam chain / "SHAZBOT— I AM THE GREATEST!"
+  VGS:  ['VGS'],                        // "SHA— SHAZBOT!" — the machine-gun spam chain
   VGCN: ['VGS', 'VGTB'],                // "Nice— SHAZBOT!" / "Nice move— ...BEST YOU CAN DO?" soured compliment
   VGCY: ['VGS', 'VGCY'],                // "You— SHAZBOT!" / "You— ROCK!" self-hype
   VGCA: ['VGS'],                // "Aweso— SHAZBOT!"
