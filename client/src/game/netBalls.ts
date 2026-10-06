@@ -288,13 +288,17 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
       ? _truthPos.distanceTo(_msgPos.set(m.position.x, m.position.y, m.position.z))
       : b.pos.distanceTo(_truthPos);
     if (gated(b, m, kind, err, speed)) {return;}
-    // Edge kinds (bounce/stall/enrage/lunge/teleport/spawn) aren't desync
-    // probes — they ARE the correction. A burst of stale legs lands each
-    // event ~one flight-leg off the previous snap (pred == anchor in the
-    // dump), so per-ball warns measure event spacing, not divergence.
-    // Only the 'segment' heartbeat compares fresh-anchor prediction to
-    // fresh truth — that's the signal worth a full warn + forensics.
-    // Everything else goes to the fleet counter only.
+    // Discontinuity kinds (teleport/spawn/lunge/enrage) carry NO desync
+    // signal — they reposition or retarget the ball, so err measures the
+    // correction's own size (~legAge×speed), which prediction can never
+    // foresee. Counting them made the fleet warn report event spacing.
+    // Continuation kinds (bounce/stall) keep a path prediction already
+    // knew — divergence there is real — and join 'segment' heartbeats in
+    // the fleet metric.
+    if (kind !== 'segment' && kind !== 'bounce' && kind !== 'stall') {
+      logger.debug(`ball #${m.id} ${kind} correction ${err.toFixed(1)}m (path-changing event)`);
+      return;
+    }
     if (kind !== 'segment') {
       rbFleetNote(m.id, err);
       return;

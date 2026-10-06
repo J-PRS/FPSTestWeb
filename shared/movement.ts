@@ -48,7 +48,7 @@ export const MOVEMENT_CONFIG = {
   // past it only the perpendicular (steering) share applies — jets
   // steer and lift but can't pump forward speed forever. Ports the
   // maxForwardAccelSpeed rule from the Unity RB_Controller jetpack.
-  jetMaxFwdAccel: 40.0,
+  jetMaxFwdAccel: 50.0,
   // Player-vs-player contact: capsule half-width and the elastic share
   // of the bump — a juggernaut eating a capper keeps most of its line,
   // the light one takes the shove (Tribes bodyblock, not a brick wall).

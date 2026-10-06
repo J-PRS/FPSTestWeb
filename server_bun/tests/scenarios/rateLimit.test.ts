@@ -21,8 +21,11 @@ describe('scenario: per-type rate limits', () => {
     // Cap is 4/window — the 5th and 6th never reach the room. Filter to
     // the test's own lines: the 4th rapid chat also trips noteChatPace's
     // 12% 'quiet' reply roll on the ambient taunt stream — an occasional
-    // extra chat here is the feature, not rate-limit leakage.
-    expect(sent.filter((m) => m.type === 'chat' && m.text.startsWith('msg ')).length).toBe(4);
+    // extra chat here is the feature, not rate-limit leakage. Muted
+    // echoes (the grayed copy bounced back to the spammer alone) aren't
+    // relays — exclude them from the count.
+    const relays = sent.filter((m) => m.type === 'chat' && m.text.startsWith('msg ') && !m.muted);
+    expect(relays.length).toBe(4);
   });
 
   it('declared teleports are honored, not silently dropped — cadence trips count as violations', () => {

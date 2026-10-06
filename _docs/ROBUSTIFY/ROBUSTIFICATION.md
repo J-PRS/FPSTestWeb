@@ -157,6 +157,27 @@ unconditionally (a silent boot looks dead; once-per-process can't spam).
 `soakreport.ts` runs `LOG_LEVEL=debug` so its log audit keeps the
 telemetry lines it greps.
 
+### 2.9 Offline-chatter timer lifecycle — `botSay` drain (2026-10-06)
+
+The offline bot's `botSay` ran on bare module-global `setTimeout`s —
+`TeamBots.dispose()` removed the bodies but the 1.2–3s taunt timers
+(plus VGS combo tails) kept firing into whatever feed was live next:
+dead-roster taunts landing in the next match or after menu return.
+Class-2 staleness, same shape the server's `killFeed.pending` +
+`dispose()` already closed. Now mirrored client-side: `sayTimers`
+tracks every queued line, `botSayDrain()` runs first inside
+`TeamBots.dispose()`. Pinned by `client/src/__tests__/botSay.test.ts`
+(head delivery, drain kills pending lines, drain kills the combo tail
+independently, hidden-tab drop).
+
+Same round, audited clean: `killFeed` combo tails already ride the
+tracked `pending` set with a speaker-gone check; `liveVoice`/
+`boundaryCache`/`pendingSelf` are speaker-bounded or capped;
+`RateLimiter` mute state dies in `removePlayer`; the sheep-meter
+`bleed` warns in the live log are per-bot 10-min-cooled real verdicts
+(repeats traced to dev-watch restarts, not refire); `Position rejected`
+387 m/s is a one-warn-per-streak real anomaly with correction sent.
+
 ---
 
 ## 3. Verified Clean (no action needed)
@@ -844,11 +865,17 @@ desyncs — sim replayed past the stamp and still off — still warn.
   file has documented engagement-window flake history. Optional: make
   the engagement deadline starvation-aware or shard netbot out of the
   monolithic suite; the property itself is timing-independent.
-- **Ball rubberbands still suppressing 80-300m corrections** — live log
-  showed ~10 `ball rubberbands` warns across 7min, worst 297m, spread
-  across many ball ids (not one bad ball). §4.3 unified the replay onto
-  stepBall but some legs still diverge — investigate which leg phase
-  (bounce transitions? stall?) the corrections cluster on.
+- ~~**Ball rubberbands still suppressing 80-300m corrections**~~ — *closed
+  as metric bug*: the fleet counter was fed err for teleport/spawn/lunge/
+  enrage events, where err measures the correction's own size — a retarget
+  ~200m away can't be "predicted wrong", it was unforeseeable by design.
+  Metric now counts only path-continuation events (segment/bounce/stall)
+  where prediction could have tracked; path-changing corrections log at
+  debug. If real drift remains, it now surfaces unmasked.
+- **Jet-cap tuning regression (found+fixed, 2026-10-06)** — `jetMaxFwdAccel`
+  40 clipped the bots' 44 m/s re-blast hops → capper energy-starved and
+  wandered on kata (capRun bisected it to commit 9625682). Raised to 50:
+  above the bot propel ceiling, still kills the unbounded forward pump.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server
