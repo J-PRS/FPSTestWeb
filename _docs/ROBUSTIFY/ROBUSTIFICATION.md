@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botClasses` gate pinned** (2026-10-05): `botClasses.test.ts`
+  (7 tests) — light/medium tier locks are EXACT-class, heavy is a
+  floor; unknown class → medium default everywhere (fire gate, mass,
+  capsule); `minClassForWeapon` floor-is-ceiling for light-only; every
+  tier mass < jetForceUp/|gravity| (pack always lifts the chassis);
+  tier ordering (health/radius/mass up, speed down); capsule geometry
+  (center below eye, non-negative half); model scale consistent with
+  eye heights.
 - **`botLoadouts` table + weapon pick pinned** (2026-10-05):
   `botLoadouts.test.ts` (7 tests) — every shipped kit is fireable by
   the class `botClassForLoadout` assigns (classCanFire gate — a bad
