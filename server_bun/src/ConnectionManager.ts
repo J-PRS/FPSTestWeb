@@ -45,6 +45,11 @@ export class ConnectionManager {
   private outSeq = 0;
   private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
   private static readonly JOURNAL_MAX = 1024;
+  /** splice(0,1) per push at saturation memmoves the whole journal every
+   *  frame — evict in chunks so the copy amortizes. Cap is a steady-state
+   *  target, not a hard bound; replay ordering and oldest-seq lookup are
+   *  unchanged. */
+  private static readonly JOURNAL_EVICT_CHUNK = 128;
   /** Frames evicted from the journal before any in-flight reclaim could
    *  replay them — a gap the reclaiming client can never see again, so a
    *  nonzero count means a silent desync happened. The room folds this
@@ -92,7 +97,7 @@ export class ConnectionManager {
     const data = JSON.stringify({ ...(msg as object), ev: seq });
     const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
     this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
-    if (this.journal.length > ConnectionManager.JOURNAL_MAX) {
+    if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
       const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
       this.journal.splice(0, n);
       this.journalDropped += n;
