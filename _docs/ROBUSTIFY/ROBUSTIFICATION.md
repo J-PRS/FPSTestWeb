@@ -418,6 +418,12 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`perks` table pinned** (2026-10-05): `perks.test.ts` (6 tests) —
+  PERK_ORDER covers every PerkId exactly once; every mod a finite
+  non-negative number in a sane band (0 or 5× = balance typo);
+  unknown/absent ids fall back to the ZERO row; perkMods returns a
+  fresh copy (mutation can't corrupt the table); plated's underdog
+  resist only below 80% max; isPerkId case-sensitive wire gate.
 - **`botClasses` gate pinned** (2026-10-05): `botClasses.test.ts`
   (7 tests) — light/medium tier locks are EXACT-class, heavy is a
   floor; unknown class → medium default everywhere (fire gate, mass,
