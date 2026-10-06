@@ -192,7 +192,7 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
 }
 export const ITEMS: [label: string, build: () => THREE.Group][] = [
   // Flag on its floor plate — the flagrun pad + the shared flag mesh,
-  // the in-game pair previewed as one piece.
+  // the in-game pair previewed as one piece — plus each half alone.
   ['flag', () => {
     const g = new THREE.Group();
     g.add(mkFlagPlate(TEAM_COLORS.alpha));
@@ -201,6 +201,8 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
     g.add(flag);
     return g;
   }],
+  ['flag alone', () => mkFlagMesh('alpha')],
+  ['stand',     () => mkFlagPlate(TEAM_COLORS.alpha)],
   ['sentry',  () => itemProxy(() => { const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt) => d.update(dt, []), dispose: (s) => d.dispose(s) }; })],
   ['shield',  () => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
