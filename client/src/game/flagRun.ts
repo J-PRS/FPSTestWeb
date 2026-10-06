@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import { profOct, mkLoft, mkAnnulus } from '../entities/viewmodel/weaponKit';
-import { deckMat } from '../structures/structKit';
+import { deckMat, darkMat } from '../structures/structKit';
 import { mkFlagMesh } from './ctfFlags.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S,
   bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
