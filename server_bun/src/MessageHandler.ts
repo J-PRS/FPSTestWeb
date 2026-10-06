@@ -494,14 +494,27 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
-    if (!this.rateLimiter.check(playerId, msg.type, at)) {
+    const verdict = this.rateLimiter.check(playerId, msg.type, at);
+    if (verdict !== 'ok') {
       const warnKey = `${playerId}:${msg.type}`;
       const now = wallNow();
       const lastWarn = this.rateLimitWarnings.get(warnKey);
       // Per-type key, not a flat counter — /metrics answers "what was
       // flooding" without a log dig. Message types are a bounded union.
       this.hb(`ratelimit:${msg.type}`);
-      if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
+      // Muted chat still echoes back to the sender, flagged — the
+      // client grays the line it already printed so the spammer sees
+      // their words went nowhere, like a censored send.
+      if ((verdict === 'tripped' || verdict === 'muted') && msg.type === 'chat') {
+        this.sendToPlayer(playerId, { type: 'chat', playerId, text: msg.text, vgs: msg.vgs, team: msg.team || undefined, muted: true });
+      }
+      // The trip tells the offender once — T2's flood-control notice;
+      // continued muted drops are logged but silent (canon: the spammer
+      // already knows why they went quiet).
+      if (verdict === 'tripped') {
+        logger.warn(`Flood control tripped`, { playerId, messageType: msg.type });
+        this.sendToPlayer(playerId, { type: 'serverWarn', text: `flood control: ${msg.type} muted` });
+      } else if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
         this.rateLimitWarnings.set(warnKey, now);
         logger.warn(`Rate limit exceeded`, { playerId, messageType: msg.type });
         // Silent drops look like lag to the offender — tell them. Same

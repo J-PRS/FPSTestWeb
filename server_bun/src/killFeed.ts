@@ -6,7 +6,7 @@
  */
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
+import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, comboTailFor, comboCutDelayMs, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
 import { tauntRand } from '../../shared/botRand.ts';
 import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
@@ -216,6 +216,20 @@ export class KillFeed {
         this.broadcast({ type: 'chat', playerId: id, text: line, vgs });
       }
       if (inviteReply) this.onBotSpoke?.(id);
+      // The VGS-combo intent: a rare second chord timed to cut the first
+      // sample mid-word — two real chat lines, the listener's audio
+      // channel produces the splice. VGS tails are all global scope.
+      const tail = vgs ? comboTailFor(vgs) : undefined;
+      if (tail) {
+        const cut = setTimeout(() => {
+          this.pending.delete(cut);
+          try {
+            if (!this.playerManager.getPlayer(id)) return;
+            this.broadcast({ type: 'chat', playerId: id, text: tail.text, vgs: tail.chord });
+          } catch (e) { logger.error('VGS combo tail failed', { playerId: id, err: e instanceof Error ? e.message : String(e) }); }
+        }, comboCutDelayMs(line)); // land just before the last word
+        this.pending.add(cut);
+      }
     };
     if (delay <= 0) { speak(); return; }
     const t = setTimeout(() => { this.pending.delete(t); try { speak(); } catch (e) { logger.error('Bot taunt failed', { playerId: id, err: e instanceof Error ? e.message : String(e) }); } }, delay);

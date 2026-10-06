@@ -14,8 +14,8 @@ const VGS_LOOKUP = new Map<string, { text: string; team: boolean }>();
 (function walk(node: Record<string, VgsNode>, path: string): void {
   for (const [k, n] of Object.entries(node)) {
     const chord = path + k;
-    if ('line' in n) VGS_LOOKUP.set('V' + chord, { text: n.line, team: n.team !== false });
-    else walk(n.children, chord);
+    if ('line' in n) {VGS_LOOKUP.set(`V${chord}`, { text: n.line, team: n.team !== false });}
+    else {walk(n.children, chord);}
   }
 })(TREE, '');
 const vgsText = (chord: string): string => VGS_LOOKUP.get(chord)?.text ?? chord;
@@ -64,6 +64,17 @@ const KILL_LINES = [
   'gg no re {v}',
   'took the scenic route to spawn',
   'caught {v} mid-route',
+  // Era deep cuts — Quake lobby-speak, Tribes jargon, forum culture
+  'LPB diff',              // low-ping-bastard — canonical Quake insult
+  'disc\'d {v}',
+  'gibbed {v}',
+  'blue plate special {v}',// the spinfusor disc's actual community name
+  'ski or die {v}',
+  'schooled {v}',
+  'served {v}',
+  'pwnd',
+  'llama {v}',             // slow-cap insult — THE Tribes word
+  'camp harder {v}',
 ];
 
 const DEATH_LINES = [
@@ -97,6 +108,15 @@ const DEATH_LINES = [
   'full send',
   'my bad',
   'tilted',
+  // Era deep cuts — accusations every 90s/00s lobby ran on
+  'hax',
+  'aimbot much {k}',
+  'wallhack {k}',
+  'interp got me',
+  'warped into it',
+  'host advantage',
+  'pb pls',                // PunkBuster false-kick folklore
+  'zounds',                // Thresh-era Quake
 ];
 
 const ENV_DEATH_LINES = [
@@ -230,6 +250,9 @@ const FLAG_GRAB_LINES = [
   'got it, moving',
   'snatched',
   'im out',
+  'e-grab!',          // high-speed touch-and-go — T2 vernacular
+  'grab and gone',
+  'no llama today',   // the slow-cap insult, worn proudly
 ];
 
 /** The bot capped. */
@@ -256,23 +279,39 @@ const FLAG_DROP_LINES = [
   'shit',
   'flag loose',
   'so close',
+  'llama\'d it',
+  'route diff',      // their route beat my route — capper honesty
 ];
 
 /** A teammate just said something — the low-effort acknowledgment that
- *  turns one bark into a two-bot beat. */
+ *  turns one bark into a two-bot beat. Era mix is deliberate: ~80%
+ *  90s/00s (Quake/UT/CS-lobby + forum-speak), ~15% 10s, ~5% 20s — the
+ *  chat should sound like the server time-traveled from 2002, with a
+ *  couple of stragglers who never left Discord. */
 const REPLY_LINES = [
+  // 90s/00s — IRC, GameSpy, clan servers, forum culture
   'lol',
-  'lmao',
-  'w',
-  'real',
-  'truer',
-  'yeah',
-  '+1',
-  'fax',
-  'fr',
-  'seconded',
+  'rofl',
+  'heh',
+  'hehe',
+  'word',
+  'kk',
+  'yup',
+  'n1',
+  'owned',
+  'qft',          // "quoted for truth" — peak 00s forum
+  'teh truth',    // deliberate 'teh' — same typo family as pwned
+  'no u',
+  'u2',
+  'ditto',
+  'yea',
+  'damn right',
+  // 10s — the "this." forum-to-Twitter bridge
   'this',
-  'true',
+  'same',
+  'truth',
+  // 20s — one Discord-native straggler keeps it honest
+  'real',
 ];
 
 /** Third death in a row — the tilt is audible now. */
@@ -285,10 +324,13 @@ const TILT_LINES = [
   'cool cool cool',
   'report my team',
   'why do i even queue',
-  'new mouse who dis',
   'uninstalling',
   'i blame the spawns',
-  'bro is in my walls {k}',
+  'fkn hitreg',
+  'warp city over here',
+  'votekick {k}',          // era lobby democracy
+  'team diff',
+  'stacked server',
 ];
 
 /** Fist kill — a different flavor of humiliation than a frag. */
@@ -402,10 +444,54 @@ const END_VGS: Record<EndOutcome, string[]> = {
   draw:  ['VGCG', 'VGS'],
 };
 
+const SPEAK_CHANCE = 0.55;
+const COOLDOWN_MS = 20_000;
+// Match-over participation — nearly everyone says something at the horn;
+// the stagger (killFeed) is what keeps it from reading as a chorus.
+const END_SPEAK_CHANCE = 0.8;
+const TAUNT_VGS_CHANCE = 0.45;
+// Set by the match lifecycle (roomMatch.end/startNext): once the horn
+// fires, gameplay chatter (kills, contacts, 'incoming') is dead air —
+// only the outcome-shaped endTaunt beat should land on the scoreboard.
+let matchMuted = false;
+export function setMatchMuted(muted: boolean): void { matchMuted = muted; }
+
+const lastSpoke = new Map<string, number>();
+const pick = <T>(arr: readonly T[]): T => arr[Math.trunc(tauntRand() * arr.length)] as T;
+// Recently-spoken ring — the biggest tell of canned chatter is the same
+// line landing twice while it's still in short-term memory. One re-roll
+// keeps repeats legal but rare (a dice pick, not a queue).
+const recent: string[] = [];
+const pickLine = (pool: string[]): string => {
+  let line = pick(pool);
+  if (pool.length > 1 && recent.includes(line)) {line = pick(pool);}
+  recent.push(line);
+  if (recent.length > 12) {recent.shift();}
+  return line;
+};
+
+/** Chatter cooldown is wall-clock by nature (a pause between lines, not a
+ *  sim step) — injectable so scenario tests can pin time rather than
+ *  flake on real elapsed ms. */
+let tauntNow: () => number = sharedNow;
+export function setTauntClock(now: () => number): void { tauntNow = now; }
+
+// Line production is lazy: a suppressed event draws no RNG and touches
+// no ring — quiet rolls cost nothing and can't starve a replay's seed.
+function maybe<T>(botId: string, line: () => T): T | null {
+  if (matchMuted) {return null;}
+  const now = tauntNow();
+  const last = lastSpoke.get(botId) ?? 0;
+  if (now - last < COOLDOWN_MS || tauntRand() > SPEAK_CHANCE) {return null;}
+  lastSpoke.set(botId, now);
+  if (lastSpoke.size > 256) {lastSpoke.clear();}
+  return line();
+}
+
 /** One match-start line — same once-per-match shape as endTaunt: high
  *  flat participation, no shared cooldown, stamps lastSpoke. */
 export function startTaunt(botId: string): TauntLine | null {
-  if (tauntRand() > 0.7) return null;
+  if (tauntRand() > 0.7) {return null;}
   lastSpoke.set(botId, tauntNow());
   if (tauntRand() < 0.35) {
     const chord = pick(['VGH', 'VGH', 'VGW']);
@@ -420,7 +506,7 @@ export function startTaunt(botId: string): TauntLine | null {
  *  flat high roll of its own. Still stamps lastSpoke so a bot that got
  *  its line doesn't then double-speak through another path. */
 export function endTaunt(botId: string, outcome: EndOutcome): TauntLine | null {
-  if (tauntRand() > END_SPEAK_CHANCE) return null;
+  if (tauntRand() > END_SPEAK_CHANCE) {return null;}
   lastSpoke.set(botId, tauntNow());
   const chords = END_VGS[outcome];
   if (tauntRand() < TAUNT_VGS_CHANCE) {
@@ -473,7 +559,9 @@ const WITNESS_LINES = [
   'rofl',
   'watch and learn {t}',
   'graceful',
-  'clip it {t}',
+  'lawn dart',
+  'cratered',
+  'terrain diff',
 ];
 
 /** A human opened with a greeting — the lobby acknowledgment, brief and
@@ -514,12 +602,15 @@ const SORRY_LINES = [
 const WHOLESOME_LINES = [
   'right?',
   'its a good one',
-  'this map slaps',
   'same honestly',
   'been saying it all day',
   'genuinely fun lobby',
   'agreed',
-  'this is the good stuff',
+  'this server rox',
+  'phat map',
+  'the ASE was worth the wait', // the All-Seeing Eye — era's real server browser
+  'this is why i still play',
+  'tribes never dies',
 ];
 
 /** A human is malding in public — the pile-on is the culture, but
@@ -528,15 +619,17 @@ const WHOLESOME_LINES = [
 const MALD_LINES = [
   'lol',
   'drama',
-  'cope',
+  'qq',                    // crying eyes — Quake/WC2 vintage
+  'qq more',
+  'cry moar',              // 'moar' is 00s forum orthography
+  'u mad?',
+  'take it to IRC',
   'tell us how you really feel',
-  'mald harder',
-  'take a breath {t}',
   'deep breaths',
   'we have all been there {t}',
   'its just a game',
-  'someone clip this',
-  'rage',
+  'someone call the waaahmbulance', // peak-00s forum slang
+  'drama llama',
 ];
 
 /** A human asked the room a question — helpful where confident,
@@ -549,7 +642,10 @@ const QUESTION_LINES = [
   'ask {t}, they know stuff',
   'ski fast, shoot straight',
   'try things till it works',
-  'disc sideways for the midair',
+  'aim where they land not where they are',
+  'the disc is a blue plate — order accordingly',
+  'press V like its 1999',
+  'check your cl_updaterate',  // CS 1.6 console folklore
 ];
 
 /** A human is complaining about lag/ping — commiseration is the
@@ -557,11 +653,17 @@ const QUESTION_LINES = [
 const LAG_LINES = [
   'same boat',
   'the net giveth',
-  'server go brrr',
   'its not you its the wires',
   'packet loss is a personality',
   'playing on a toaster too',
   'relatable',
+  'HPB life',                  // high-ping-bastard — Quake's canonical gripe
+  'welcome to warp city',
+  'choke 99%',
+  'check your rate settings',
+  'interp doing interp things',
+  'WON auth is down again',    // Half-Life's auth server — deep cut
+  'my 56k is showing',
 ];
 
 /** A human announced they are leaving — the valediction. Short, no
@@ -643,6 +745,9 @@ const ALERT_LINES = [
   'someone get the flag',
   'our flag!',
   'grab went unnoticed',
+  'flag thief inbound',
+  'chaser needed',   // the role that hunts carriers
+  'they ran a route on us',
 ];
 
 export type ChatterKind =
@@ -718,7 +823,7 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   fist:       ['VGTT'],
   gg:         ['VGCG'],
   salty:      ['VGTB'],
-  quiet:      ['VGQ', 'VGQ'],
+  quiet:      ['VGQ', 'VGQ', 'VGN'],
   mention:    ['VGY', 'VGRD'],
   revenge:    ['VGTA'],
   witness:    ['VGCN', 'VGTB'],
@@ -758,7 +863,7 @@ export function chatter(kind: ChatterKind, botId: string, other?: string): { tex
 /** Chords the personal taunts (kill/death/spree) speak ~45% of the
  *  time — the loudest moments were the ones missing VGS entirely, which
  *  is why bot chat read as Quake, not Tribes. All VG* (global scope). */
-const KILL_VGS = ['VGTB', 'VGTA', 'VGTT', 'VGCN'];
+const KILL_VGS = ['VGTB', 'VGTA', 'VGTT', 'VGTG', 'VGCN'];
 const DEATH_VGS = ['VGS', 'VGCN', 'VGTB'];
 const ENV_DEATH_VGS = ['VGO', 'VGS', 'VGW'];
 const SPREE_VGS = ['VGTG', 'VGCA', 'VGW'];
@@ -774,34 +879,65 @@ const REPEAT_KILL_LINES = [
   'groundhog day {v}',
 ];
 const REPEAT_KILL_VGS = ['VGTW', 'VGTW', 'VGTB'];
-const TAUNT_VGS_CHANCE = 0.45;
-
-const SPEAK_CHANCE = 0.55;
-const COOLDOWN_MS = 20_000;
-// Match-over participation — nearly everyone says something at the horn;
-// the stagger (killFeed) is what keeps it from reading as a chorus.
-const END_SPEAK_CHANCE = 0.8;
-// Set by the match lifecycle (roomMatch.end/startNext): once the horn
-// fires, gameplay chatter (kills, contacts, 'incoming') is dead air —
-// only the outcome-shaped endTaunt beat should land on the scoreboard.
-let matchMuted = false;
-export function setMatchMuted(muted: boolean): void { matchMuted = muted; }
-
-const lastSpoke = new Map<string, number>();
-const pick = <T>(arr: readonly T[]): T => arr[(tauntRand() * arr.length) | 0]!;
-// Recently-spoken ring — the biggest tell of canned chatter is the same
-// line landing twice while it's still in short-term memory. One re-roll
-// keeps repeats legal but rare (a dice pick, not a queue).
-const recent: string[] = [];
-const pickLine = (pool: string[]): string => {
-  let line = pick(pool);
-  if (pool.length > 1 && recent.includes(line)) line = pick(pool);
-  recent.push(line);
-  if (recent.length > 12) recent.shift();
-  return line;
-};
 
 export interface TauntLine { text: string; vgs?: string }
+
+/** The "VGS combo" era hack — a second chord fired fast enough to hard-
+ *  stop the speaker's in-flight sample ("I am the— SHAZBOT!"). Not a
+ *  real feature back then either: players discovered a fresh VGS cuts
+ *  their own last sample, so the splice lives in the audio channel,
+ *  never the data. Here it's modeled as intent: after speaking a
+ *  combo-able chord the bot rolls a rare chance to fire the cut chord
+ *  a beat later — two ordinary chat lines, the medium does the splice. */
+/** Chord → candidate cut chords (weighted by repetition). Provenance:
+ *  VGTG→VGS is the documented flagship ("I am the Shazbot" is a named
+ *  meme), VGS→VGS machine-gunning is verbatim spam-era behavior, and the
+ *  any-line-into-any-line mechanism is proven by the GO SHAZBOT remix
+ *  genre. The rest are era-plausible reconstructions built from canon
+ *  lines — the contradiction, the self-hype, the stutter, the sore-
+ *  loser hijack — not individually cited pairings. */
+const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
+  VGTG: ['VGS', 'VGS', 'VGY'],  // "I am the— SHAZBOT!" / "— YES."
+  VGTA: ['VGS', 'VGS', 'VGN'],  // "Awww that's too— SHAZBOT!" / "— NO."
+  VGTB: ['VGS', 'VGS', 'VGY'],  // "Is that the best— YES." — answers itself
+  VGTW: ['VGS', 'VGTW'],        // "When will you— SHAZBOT!" / stutter-repeat
+  VGTT: ['VGS'],                // "THAT was— SHAZBOT!"
+  VGCG: ['VGS', 'VGTA'],        // "Good ga— SHAZBOT!" / "— AWWW THAT'S TOO BAD!"
+  VGO:  ['VGS'],                // "Ooop— SHAZBOT!"
+  VGS:  ['VGS'],                // "SHAZ— SHAZBOT!" — machine-gun spam chain
+  VGCN: ['VGS'],                // "Nice mo— SHAZBOT!" — the soured compliment
+  VGCY: ['VGS', 'VGCY'],        // "You— SHAZBOT!" / "You— ROCK!" self-hype
+  VGN:  ['VGY'],                // "N— YES." — the contradiction gag
+  VGY:  ['VGN'],                // "Ye— NO."
+  VGH:  ['VGB'],                // "Hi— BYE." — the drive-by greeting
+  VGW:  ['VGTG'],               // "Wooh— I AM THE GREATEST!" celebration upgrade
+  VGQ:  ['VGS'],                // "Qui— SHAZBOT!"
+};
+// Rare on purpose — a combo every kill reads as a bot tic, not a
+// discovered trick. ~1 in 12 spoken chord moments is background rate.
+const COMBO_CHANCE = 0.08;
+
+/** The interrupting follow-up chord a speaker might fire after `chord`
+ *  lands, or undefined when they let the line finish. Callers speak it
+ *  through the normal chat path ~half a beat later. */
+export function comboTailFor(chord: string): { chord: string; text: string } | undefined {
+  const tails = VGS_COMBOS[chord];
+  if (!tails || tauntRand() >= COMBO_CHANCE) {return undefined;}
+  const tail = tails[Math.trunc(tauntRand() * tails.length)] as string;
+  return { chord: tail, text: vgsText(tail) };
+}
+
+/** How long after the first line to fire the cut chord — this paces the
+ *  CHAT FEED, not the splice: the client's speakVgs snaps the audio cut
+ *  to the live line's measured last-word boundary regardless of when
+ *  the tail lands. Rough last-word pacing just keeps the two feed
+ *  lines reading like a human's quick double-tap. */
+export function comboCutDelayMs(firstText: string): number {
+  const words = firstText.trim().split(/\s+/).length;
+  const estMs = 250 + 190 * words;
+  const cut = words > 1 ? estMs * (words - 1) / words : estMs * 0.5;
+  return Math.max(250, Math.trunc(cut + (tauntRand() - 0.5) * 140));
+}
 
 /** Roll text-vs-chord for a personal taunt — returns the feed-ready
  *  {text, vgs} pair. Chord lines are canon text; the feed prints the
@@ -826,7 +962,7 @@ export function killTaunt(botId: string, victim: string): TauntLine | null {
   const key = `${botId}|${victim}`;
   const repeat = tauntNow() - (lastKillOn.get(key) ?? Number.NEGATIVE_INFINITY) < REPEAT_KILL_MS;
   lastKillOn.set(key, tauntNow());
-  if (lastKillOn.size > 256) lastKillOn.clear();
+  if (lastKillOn.size > 256) {lastKillOn.clear();}
   return maybe(botId, () => repeat
     ? tauntPick(REPEAT_KILL_LINES, REPEAT_KILL_VGS, (l) => l.replace('{v}', victim))
     : tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
@@ -850,31 +986,35 @@ export function spreeTaunt(botId: string): TauntLine | null {
 /** A human chat line → the chatter kind it might trigger, or null.
  *  Patterns stay small and high-confidence on purpose — a false positive
  *  reads as a bot answering nonsense, which is worse than silence. */
-export function chatKindFor(text: string): ChatterKind | null {
-  const t = text.toLowerCase();
-  if (/^gg\b/.test(t) || /\bgg(\s|$)/.test(t)) return 'gg';
-  if (/\bez\b/.test(t)) return 'salty';
-  // The canonical tribes greeting/curse — answering a shazbot is what
-  // makes a lobby feel inhabited. 'reply' keeps it low-key.
-  if (/shazbot/.test(t)) return 'reply';
+// Ordered so specific beats generic (a "thanks gg" still reads gg). The
+// canonical tribes greeting/curse — answering a shazbot is what makes a
+// lobby feel inhabited — sits early so it can't be swallowed by praise
+// patterns. 'lol' alone stays unclassified on purpose: it attaches to
+// half of all chat and would read as a reflex.
+const CHAT_RULES: ReadonlyArray<readonly [RegExp, ChatterKind]> = [
+  [/^gg\b|\bgg(\s|$)/, 'gg'],
+  [/\bez\b/, 'salty'],
+  [/shazbot/, 'reply'],
   // Earnest praise gets reciprocated ('props' lines name the speaker
   // back); snark gets the dismissive 'quiet' answer — VGQ is the canon
-  // chord for exactly this. 'lol' alone stays unclassified on purpose:
-  // it attaches to half of all chat and would read as a reflex.
-  if (/\b(nice|good|sick|clean|great|sweet|filthy|insane|nasty) (shot|hit|snipe|kill|play|cap|grab|route|ski)\b/.test(t)
-    || /^(ns|wp|gj|nice one|well played|props)\b/.test(t)) return 'props';
-  if (/nice try|noob|camper|camping|tryhard|git gud|scrub|pwned|\bowned\b|lucky (shot|hit|snipe)|luck(ing|er)\b/.test(t)) return 'quiet';
-  // The rest of the human spectrum — greetings, gratitude, apologies,
-  // malding, earnest warmth, questions, lag commiseration, goodbyes.
-  // Ordered so specific beats generic (a "thanks gg" still reads gg).
-  if (/^(hi|hello|hey+|yo|sup|o7|greetings|heyo|howdy|gm|morning|evening)\b/.test(t)) return 'hello';
-  if (/\b(thanks|thank you|ty+|thx|appreciated|appreciate it)\b/.test(t)) return 'thanks';
-  if (/\b(sorry|sry|my bad|mb|oops|my fault|apologies)\b/.test(t)) return 'sorry';
-  if (/\b(rage|furious|hate this|this game (sucks|is trash|is broken)|uninstall|f this|ragequit|hacker|cheater|aimbot|reported|report him|so unfair|bullshit|\bbs\b|wtf|screw this)\b/.test(t)) return 'mald';
-  if (/\b(love this|this (game|map|mode|lobby) (is )?(great|fun|awesome|amazing|slaps|rocks|good)|fun game|good lobby|great lobby|enjoying this)\b/.test(t)) return 'wholesome';
-  if (/\b(lag|lagging|laggy|ping|latency|rubber ?band|packet loss|desync|stutter)\b/.test(t)) return 'lag';
-  if (/^(how (do|to|can|does)|what is|what are|where is|why (do|does|is|can't)|can (i|you|someone)|is there|anyone know|whats)\b/.test(t) || /\?\s*$/.test(t)) return 'question';
-  if (/\b(bye|goodbye|gtg|got to go|im out|i'?m out|i'?m off|im done|cya|see ya|later all|gn|good night|gotta run|heading out|last game)\b/.test(t)) return 'bye';
+  // chord for exactly this.
+  [/\b(nice|good|sick|clean|great|sweet|filthy|insane|nasty) (shot|hit|snipe|kill|play|cap|grab|route|ski)\b|^(ns|wp|gj|nice one|well played|props)\b/, 'props'],
+  [/nice try|noob|camper|camping|tryhard|git gud|scrub|pwned|\bowned\b|lucky (shot|hit|snipe)|luck(ing|er)\b/, 'quiet'],
+  [/^(hi|hello|hey+|yo|sup|o7|greetings|heyo|howdy|gm|morning|evening)\b/, 'hello'],
+  [/\b(thanks|thank you|ty+|thx|appreciated|appreciate it)\b/, 'thanks'],
+  [/\b(sorry|sry|my bad|mb|oops|my fault|apologies)\b/, 'sorry'],
+  [/\b(rage|furious|hate this|this game (sucks|is trash|is broken)|uninstall|f this|ragequit|hacker|cheater|aimbot|reported|report him|so unfair|bullshit|\bbs\b|wtf|screw this)\b/, 'mald'],
+  [/\b(love this|this (game|map|mode|lobby) (is )?(great|fun|awesome|amazing|slaps|rocks|good)|fun game|good lobby|great lobby|enjoying this)\b/, 'wholesome'],
+  [/\b(lag|lagging|laggy|ping|latency|rubber ?band|packet loss|desync|stutter)\b/, 'lag'],
+  [/^(how (do|to|can|does)|what is|what are|where is|why (do|does|is|can't)|can (i|you|someone)|is there|anyone know|whats)\b|\?\s*$/, 'question'],
+  [/\b(bye|goodbye|gtg|got to go|im out|i'?m out|i'?m off|im done|cya|see ya|later all|gn|good night|gotta run|heading out|last game)\b/, 'bye'],
+];
+
+export function chatKindFor(text: string): ChatterKind | null {
+  const t = text.toLowerCase();
+  for (const [re, kind] of CHAT_RULES) {
+    if (re.test(t)) {return kind;}
+  }
   return null;
 }
 
@@ -885,24 +1025,6 @@ export function chatKindFor(text: string): ChatterKind | null {
  *  those are requests, so they stay silent here. */
 export function vgsCommandFor(chord: string): ChatterKind | null {
   return /^V[ADFNRTUW]/.test(chord) ? 'ack' : null;
-}
-
-/** Chatter cooldown is wall-clock by nature (a pause between lines, not a
- *  sim step) — injectable so scenario tests can pin time rather than
- *  flake on real elapsed ms. */
-let tauntNow: () => number = sharedNow;
-export function setTauntClock(now: () => number): void { tauntNow = now; }
-
-// Line production is lazy: a suppressed event draws no RNG and touches
-// no ring — quiet rolls cost nothing and can't starve a replay's seed.
-function maybe<T>(botId: string, line: () => T): T | null {
-  if (matchMuted) return null;
-  const now = tauntNow();
-  const last = lastSpoke.get(botId) ?? 0;
-  if (now - last < COOLDOWN_MS || tauntRand() > SPEAK_CHANCE) return null;
-  lastSpoke.set(botId, now);
-  if (lastSpoke.size > 256) lastSpoke.clear();
-  return line();
 }
 
 /** Test hook — cooldown/repeat state is per-process, tests need a clean table. */

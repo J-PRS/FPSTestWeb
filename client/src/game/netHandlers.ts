@@ -71,8 +71,8 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   // "[VGS] SHAZBOT!" (keypaths learnable from chat) and speaks through
   // the robot. Speech/formatting live inside chat.add so wire, host
   // relay, and offline echo paths all behave identically.
-  networkManager.onChat = (playerId, text, team, vgsChord) => {
-    chat.add(playerId, text, team, vgsChord);
+  networkManager.onChat = (playerId, text, team, vgsChord, muted) => {
+    chat.add(playerId, text, team, vgsChord, muted);
   };
   // V rides the same chat wire — tactical lines team-scoped, emotes global.
   const vgs = new Vgs({

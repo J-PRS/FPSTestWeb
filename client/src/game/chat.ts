@@ -26,7 +26,7 @@ const FADE_MS = 12_000;
 /** The one live feed — Chat is constructed once by netHandlers; other
  *  self-contained modules (offline bots) reach it without threading a
  *  deps chain through three layers. */
-export const chatSink: { add?: (from: string | null, text: string, team?: boolean, vgs?: string) => void } = {};
+export const chatSink: { add?: (from: string | null, text: string, team?: boolean, vgs?: string, muted?: boolean) => void } = {};
 
 export class Chat {
   private feed: HTMLDivElement;
@@ -36,9 +36,11 @@ export class Chat {
   private team = false;
   /** Locally-echoed own lines awaiting (or skipping) their wire echo —
    *  keyed by team|vgs|text so the relayed copy dedupes instead of
-   *  printing twice. A line that never echoes just stays shown — like
-   *  Tribes, your own words land the moment you say them. */
-  private pendingSelf = new Map<string, number>();
+   *  printing twice. The element rides along so a `muted` echo back
+   *  (flood control) can gray the line in place. A line that never
+   *  echoes just stays shown — like Tribes, your words land the moment
+   *  you say them. */
+  private pendingSelf = new Map<string, { n: number; el: HTMLDivElement }>();
 
   constructor(deps: ChatDeps) {
     this.deps = deps;
@@ -64,7 +66,7 @@ export class Chat {
 
     // Capture phase: while composing, keys are ours alone.
     window.addEventListener('keydown', (e) => this.onKey(e), true);
-    chatSink.add = (from, text, team, vgs) => this.add(from, text, team, vgs);
+    chatSink.add = (from, text, team, vgs, muted): HTMLDivElement => this.add(from, text, team, vgs, muted);
   }
 
   private get composing(): boolean {
@@ -114,9 +116,10 @@ export class Chat {
    *  copy back gets swallowed. Chat text and VGS chords both route here. */
   echoSelf(text: string, team: boolean, vgs?: string): void {
     const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
-    this.pendingSelf.set(key, (this.pendingSelf.get(key) ?? 0) + 1);
+    const el = this.add(this.deps.localName(), text, team, vgs);
+    const cur = this.pendingSelf.get(key);
+    this.pendingSelf.set(key, { n: (cur?.n ?? 0) + 1, el });
     if (this.pendingSelf.size > 64) {this.pendingSelf.clear();}
-    this.add(this.deps.localName(), text, team, vgs);
   }
 
   /** A line in the feed. `from === null` renders as a system line.
@@ -128,47 +131,76 @@ export class Chat {
   /** The wire copy of a line we already printed locally — consume the
    *  marker, print nothing. If the wire never delivered, the local
    *  echo is on screen anyway (like Tribes: your words always land). */
-  private swallowSelfEcho(from: string, text: string, team: boolean, vgs?: string): boolean {
+  private swallowSelfEcho(from: string, text: string, team: boolean, vgs?: string): HTMLDivElement | null {
     const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
-    const n = this.pendingSelf.get(key) ?? 0;
-    if (!n) {return false;}
-    if (n > 1) {this.pendingSelf.set(key, n - 1);} else {this.pendingSelf.delete(key);}
-    return true;
+    const cur = this.pendingSelf.get(key);
+    if (!cur) {return null;}
+    if (cur.n > 1) {this.pendingSelf.set(key, { n: cur.n - 1, el: cur.el });} else {this.pendingSelf.delete(key);}
+    return cur.el;
   }
 
-  add(from: string | null, text: string, team = false, vgs?: string): void {
-    if (from !== null) {
-      const isSelf = from === this.deps.localName();
-      if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) {return;}
-      if (vgs) {
-        // Own VGS spoke at send time — the echo back is feed-only.
-        if (!isSelf) {speakVgs(feedNames(text), from);}
-      } else if (chatTtsEnabled()) {
-        speakChat(feedNames(text), from); // own lines too — audible send confirmation
-      }
+  /** Flood-controlled send: the words reached only the speaker — the
+   *  line reads gray+italic so a spammer sees what died on the wall. */
+  private static grayMuted(el: HTMLDivElement): void {
+    el.style.opacity = '0.45';
+    el.style.fontStyle = 'italic';
+    el.title = 'muted — flood control';
+  }
+
+  /** Channel voice for a rendered line — VGS always speaks through the
+   *  robot (own VGS spoke at send time, so the echo is feed-only); typed
+   *  chat reads through system TTS only while CHAT TTS is on. */
+  private static speak(from: string, text: string, vgs: string | undefined, isSelf: boolean): void {
+    if (vgs) {
+      if (!isSelf) {speakVgs(feedNames(text), from);}
+    } else if (chatTtsEnabled()) {
+      speakChat(feedNames(text), from); // own lines too — audible send confirmation
     }
+  }
+
+  private static buildLine(from: string | null, text: string, team: boolean, vgs?: string): HTMLDivElement {
     const line = document.createElement('div');
     line.style.cssText = 'text-shadow:1px 1px 0 #000;margin-top:1px;';
     if (from === null) {
       line.style.color = '#9cf';
       line.textContent = feedNames(text);
-    } else {
-      const who = document.createElement('span');
-      who.style.color = team ? '#7d7' : '#fd8';
-      who.textContent = `${team ? '[T] ' : ''}${botDisplayName(from)}: `;
-      const body = document.createElement('span');
-      body.textContent = vgs ? `[${vgs}] ${feedNames(text)}` : feedNames(text);
-      // Whole line tinted for team — name-color alone was easy to miss
-      // mid-fight. A left tick marks the channel too.
-      if (team) {
-        body.style.color = '#9e9';
-        line.style.borderLeft = '2px solid #4a4';
-        line.style.paddingLeft = '5px';
-      }
-      line.append(who, body);
+      return line;
     }
+    const who = document.createElement('span');
+    who.style.color = team ? '#7d7' : '#fd8';
+    who.textContent = `${team ? '[T] ' : ''}${botDisplayName(from)}: `;
+    const body = document.createElement('span');
+    body.textContent = vgs ? `[${vgs}] ${feedNames(text)}` : feedNames(text);
+    // Whole line tinted for team — name-color alone was easy to miss
+    // mid-fight. A left tick marks the channel too.
+    if (team) {
+      body.style.color = '#9e9';
+      line.style.borderLeft = '2px solid #4a4';
+      line.style.paddingLeft = '5px';
+    }
+    line.append(who, body);
+    return line;
+  }
+
+  add(from: string | null, text: string, team = false, vgs?: string, muted = false): HTMLDivElement {
+    if (from !== null) {
+      const isSelf = from === this.deps.localName();
+      if (isSelf) {
+        const el = this.swallowSelfEcho(from, text, team, vgs);
+        if (el) {
+          if (muted) {Chat.grayMuted(el);}
+          return el;
+        }
+      }
+      Chat.speak(from, text, vgs, isSelf);
+    }
+    const line = Chat.buildLine(from, text, team, vgs);
+    // A muted echo that missed its pending match (feed trimmed, relay
+    // path) still renders gray — never as a normal send.
+    if (muted && from !== null) {Chat.grayMuted(line);}
     this.feed.append(line);
     while (this.feed.children.length > MAX_LINES) {this.feed.firstChild?.remove();}
     setTimeout(() => line.remove(), FADE_MS);
+    return line;
   }
 }

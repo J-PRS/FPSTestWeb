@@ -30,6 +30,9 @@ import { wallNow } from './wallClock.ts';
 export interface RateLimit {
   maxCount: number;
   windowMs: number;
+  /** T2-style flood control: exceeding maxCount mutes the type for this
+   *  long — not just drops within the window, a real timeout. */
+  muteMs?: number;
 }
 
 export interface WireEntry<K extends ClientMessage['type']> {
@@ -345,16 +348,17 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id) => { h.hb('snapreq'); h.handleSnapshotRequest(id); },
   },
 
-  // Deliberate respawn — carries no payload; the kill path derives
-  // everything (kill feed, respawn timer, banked loadout) itself.
+  // Deliberate respawn — `hold` (the L bind) parks the corpse for
+  // spectating until a plain dead-state respawn releases it; the kill
+  // path derives everything (kill feed, respawn timer, banked loadout).
   respawn: {
-    // one deliberate press per second is plenty; faster spam is either a
-    // stuck key or abuse of the kill feed.
-    limit: { maxCount: 1, windowMs: 1000 },
-    validate: () => {
-      return { success: true, data: { type: 'respawn' } };
+    // A held-corpse player hits respawn again to revive — L then a quick
+    // click must both land. 3/s still refuses a stuck-key kill-feed flood.
+    limit: { maxCount: 3, windowMs: 1000 },
+    validate: (obj) => {
+      return { success: true, data: { type: 'respawn', hold: obj.hold === true ? true : undefined } };
     },
-    handle: (h, id) => h.combat.respawnRequest(id),
+    handle: (h, id, m) => h.combat.respawnRequest(id, m.hold === true),
   },
 
   // Carried-flag throw: no payload — the arc derives from the shadow's
@@ -429,7 +433,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   // Relay-only content: length cap is the whole validation — the server
   // never interprets the text, clients render it escaped (textContent).
   chat: {
-    limit: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
+    // Tribes 2 flood control verbatim: 4 messages per 5s trips a 10s
+    // mute — canonically enough for a two-chord VGS combo, fatal to
+    // machine-gun shazbotting.
+    limit: { maxCount: 4, windowMs: 5000, muteMs: 10_000 },
     validate: (obj) => {
       if (typeof obj.text !== 'string' || obj.text.length === 0 || obj.text.length > 200) {
         return { success: false, error: 'chat text must be 1-200 chars' };

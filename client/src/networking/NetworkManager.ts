@@ -76,7 +76,7 @@ export class NetworkManager {
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
-  public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined) => void) | null = null;
+  public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined, muted: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
   public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
@@ -497,7 +497,7 @@ export class NetworkManager {
     crawlDie: (data) => this.onCrawlDie?.(data),
     crawlRoster: (data) => this.onCrawlRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
-    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined),
+    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     matchNotice: (data) => this.onMatchNotice?.(data.text),
     serverWarn: (data) => this.onServerWarn?.(data.text),
@@ -1020,14 +1020,15 @@ export class NetworkManager {
   localAuthority: { envDamage(amount: number): void; heal(amount: number): void; respawn?(): void } | null = null;
 
   /** Deliberate respawn (K) — the server owns the kill; offline falls
-   *  back to the local death path. */
-  sendRespawn(): void {
+   *  back to the local death path. `hold` (the L bind) parks the corpse:
+   *  no auto-respawn until a plain dead-state press releases it. */
+  sendRespawn(hold = false): void {
     if (!this.connected) { this.localAuthority?.respawn?.(); return; }
-    this.send({ type: 'respawn' });
+    this.send({ type: 'respawn', hold: hold || undefined });
   }
 
-  /** Flag toss claim (G) — server resolves the arc; offline is a no-op
-   *  since there's no shared objective to throw. */
+  /** Flag toss claim (G) — server resolves the arc. Offline the caller
+   *  routes to the local flag sims (FlagRunBridge/CtfFlags) instead. */
   sendThrowFlag(): void {
     if (!this.connected) {return;}
     this.send({ type: 'throwFlag' });

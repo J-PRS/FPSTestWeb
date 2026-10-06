@@ -102,8 +102,10 @@ export type ClientMessage =
   // Deliberate respawn (the K bind): a self-kill claim that funnels
   // through the normal death path — kill feed, respawn timer, corpse
   // charge — rather than a teleport shortcut, so a pending class/perk
-  // banks exactly like any other death.
-  | { type: 'respawn' }
+  // banks exactly like any other death. `hold` arms the respawn hold:
+  // the kill stays dead until a plain (dead-state) respawn arrives —
+  // the L bind's die-and-spectate.
+  | { type: 'respawn'; hold?: boolean }
   // Tribes flag toss — the carrier hurls the objective along their look
   // dir (teammate hand-off or ditching it away from a collapsing defense).
   | { type: 'throwFlag' }
@@ -226,7 +228,7 @@ export type ServerMessage =
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   | { type: 'pong'; timestamp: number }
-  | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string }
+  | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string; muted?: boolean }
   // --- Match scoreboard (team-mode rooms) --------------------------------
   | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it

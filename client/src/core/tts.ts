@@ -52,11 +52,57 @@ function speakSystem(text: string, pitch = 0.85): void {
   speechSynthesis.speak(u);
 }
 
-/** Speak a VGS line through the C64 robot. `who` picks the throat. */
+/** Speak a VGS line through the C64 robot. `who` picks the throat.
+ *  A fresh line from the same speaker hard-stops their in-flight sample
+ *  — the mechanism under the era's "VGS combo" hack ("I am the—
+ *  SHAZBOT!"): the splice lives in the audio channel, not the text.
+ *
+ *  The cut doesn't fire on arrival — it snaps to the live line's
+ *  last-word boundary, measured exactly by rendering the head text
+ *  through the same voice (sam-js exposes no word timing, so we
+ *  synthesize it: buf32(head).length/SAM_RATE). Arrival-time slop and
+ *  per-voice speed differences stop mattering: "I am the— SHAZBOT!"
+ *  always splices at "the", and a late tail still cuts mid-word like a
+ *  mistimed human combo. */
+interface LiveVoice { src: AudioBufferSourceNode; carrier: OscillatorNode; startT: number; boundaryS: number }
+const liveVoice = new Map<string, LiveVoice>();
+
+/** Seconds at which `text`'s last word begins in `who`'s voice — the
+ *  splice point. Cached per speaker+line: canon lines repeat a lot. */
+const boundaryCache = new Map<string, number>();
+function wordBoundary(text: string, who: string | undefined, fullDurS: number): number {
+  const words = text.trim().split(/\s+/);
+  if (words.length < 2) {return fullDurS * 0.45;} // one word → cut mid-syllable
+  const cacheKey = `${who ?? ''}|${text}`;
+  const hit = boundaryCache.get(cacheKey);
+  if (hit !== undefined) {return hit;}
+  let boundary = fullDurS * 0.7; // parse-failure fallback
+  try {
+    const head = samFor(who).buf32(words.slice(0, -1).join(' '));
+    if (head instanceof Float32Array && head.length > 0) {boundary = head.length / SAM_RATE;}
+  } catch { /* keep fallback */ }
+  if (boundaryCache.size > 256) {boundaryCache.clear();}
+  boundaryCache.set(cacheKey, boundary);
+  return boundary;
+}
+
 export function speakVgs(text: string, who?: string): void {
   const bus = audio.uiBus;
   const ctx = bus?.context;
   if (!bus || !ctx) {return;}
+  const key = who ?? '';
+  const t = ctx.currentTime;
+  let startAt = t;
+  const live = liveVoice.get(key);
+  if (live) {
+    // Snap the kill to the live line's last-word boundary — the "perfect
+    // splice" is measured, not timed. Past the boundary already = a
+    // mistimed combo, which cuts instantly like era spam.
+    const delay = Math.min(Math.max(live.startT + live.boundaryS - t, 0), 1.2);
+    try { live.src.stop(t + delay); live.carrier.stop(t + delay); } catch { /* already ended */ }
+    liveVoice.delete(key);
+    startAt = t + delay;
+  }
   let pcm: unknown; // sam-js returns Float32Array | Boolean
   try {
     pcm = samFor(who).buf32(text);
@@ -69,7 +115,9 @@ export function speakVgs(text: string, who?: string): void {
   if (!(pcm instanceof Float32Array) || pcm.length === 0) { speakSystem(text); return; }
   const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
-  playRadioVoice(ctx, bus, buf);
+  const src = playRadioVoice(ctx, bus, buf, startAt);
+  liveVoice.set(key, { ...src, startT: startAt, boundaryS: wordBoundary(text, who, buf.duration) });
+  src.src.onended = () => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
 }
 
 /** Typed chat read-aloud — deliberately the plain system voice, NOT the
@@ -91,8 +139,8 @@ export function chatTtsEnabled(): boolean {
  *    squelch click → src → soft-clip → ring-mod mix → bandpass → slapback → bus
  *  SAM raw is a dry robot; the metallic ring + squelch is what makes it
  *  sound like a battlesuit comm instead of a C64 demo. */
-function playRadioVoice(ctx: BaseAudioContext, bus: AudioNode, buf: AudioBuffer): void {
-  const t = ctx.currentTime;
+function playRadioVoice(ctx: BaseAudioContext, bus: AudioNode, buf: AudioBuffer, startAt?: number): { src: AudioBufferSourceNode; carrier: OscillatorNode } {
+  const t = startAt ?? ctx.currentTime;
 
   // Soft clip — cheap grit, evens the synth's level swings too.
   const clip = ctx.createWaveShaper();
@@ -139,6 +187,7 @@ function playRadioVoice(ctx: BaseAudioContext, bus: AudioNode, buf: AudioBuffer)
 
   carrier.start(t); sq.start(t); src.start(t);
   carrier.stop(t + buf.duration + 0.3);
+  return { src, carrier };
 }
 
 let _clipCurve: Float32Array<ArrayBuffer> | null = null;
