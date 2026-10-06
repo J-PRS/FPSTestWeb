@@ -24,6 +24,7 @@ import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';
 import { Explosion } from '../effects/explosion.js';
 import { urlParams } from '../core/params.js';
+import { MoveSim, type MoveSurface } from '../../../shared/movement.js';
 
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const _filmDir = new THREE.Vector3();
@@ -190,6 +191,45 @@ export class FlagRunBridge {
     this.tasPts = leg.samples.map((s: { x: number; z: number; agl: number }) =>
       new THREE.Vector3(s.x, terrain.getHeight(s.x, s.z) + s.agl, s.z));
     this.tasJet = leg.samples.map((s: { j: number }) => s.j === 1);
+    // Real-sim proof: replay the recorded input tape (yaw + jetHeld, ski
+    // held, forward) through a fresh MoveSim on the live terrain — the
+    // SAME physics class the player/bot entities run — and fly the
+    // marker on the re-simulated positions, not the recorded ones.
+    const simPts: THREE.Vector3[] = [];
+    const surface: MoveSurface = {
+      getHeight: (x, z) => terrain.getHeight(x, z),
+      getNormal: (x, z, out) => { const n = terrain.getNormal(x, z); out.x = n.x; out.y = n.y; out.z = n.z; return out; },
+    };
+    const start2 = this.tasPts[0]!;
+    const leg2 = leg as { samples: { yaw: number; j: number }[] };
+    const sim = new MoveSim(surface, {
+      pos: { x: start2.x, y: start2.y, z: start2.z },
+      vel: { x: 0, y: 0, z: 0 },
+      yaw: leg2.samples[0]!.yaw, pitch: 0, onGround: true,
+    } as MoveSim['state']);
+    let maxDrift = 0;
+    for (let i = 0; i < this.tasPts.length; i++) {
+      const s = sim.state;
+      simPts.push(new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z));
+      maxDrift = Math.max(maxDrift, Math.hypot(s.pos.x - this.tasPts[i]!.x, s.pos.z - this.tasPts[i]!.z, s.pos.y - this.tasPts[i]!.y));
+      if (i + 1 < this.tasPts.length) {
+        s.yaw = leg2.samples[i + 1]!.yaw;
+        sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: leg2.samples[i + 1]!.j === 1 });
+        for (let k = 0; k < 9; k++) sim.update(1 / 60);
+      }
+    }
+    // The search scored "goal" at ring crossing (≤40m above the stand) —
+    // keep coasting the sim until touchdown so the path visibly lands.
+    sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: false });
+    for (let k = 0; k < 240 && !sim.state.onGround; k++) {
+      sim.update(1 / 60);
+      if (k % 9 === 8) { const s = sim.state; simPts.push(new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z)); }
+    }
+    const goal = this.tasPts[this.tasPts.length - 1]!;
+    const end = simPts[simPts.length - 1]!;
+    const goalMiss = Math.hypot(goal.x - end.x, goal.z - end.z);
+    this.w.onFeed(`TAS replay: in-engine sim drift ${maxDrift.toFixed(1)}m, lands ${goalMiss.toFixed(1)}m from target`);
+    this.tasPts = simPts;
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(this.tasPts),
       new THREE.LineBasicMaterial({ color: 0xffd84d, transparent: true, opacity: 0.7 }));
