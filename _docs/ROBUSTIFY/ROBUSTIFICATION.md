@@ -249,7 +249,8 @@ been rejected left a permanent entry; over a long-lived room the map
 grew with cumulative player churn, not live roster. Now cleaned with
 the same prefix sweep. Both throttles pinned by
 `rejectWarnCleanup.test.ts`; the deferred-claim disconnect drop pinned
-by `deferredClaim.test.ts`.
+by `deferredClaim.test.ts`; the `untrack` funnel (every bot-keyed map
+empties on retire) pinned by `botUntrack.test.ts`.
 
 ---
 
