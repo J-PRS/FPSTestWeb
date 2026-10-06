@@ -965,7 +965,7 @@ const VGS_COMBOS: Readonly<Record<string, readonly string[]>> = {
   VGCY: ['VGS', 'VGCY'],                // "You— SHAZBOT!" / "You— ROCK!" self-hype
   VGCA: ['VGS'],                // "Aweso— SHAZBOT!"
   VGCS: ['VGS', 'VGTB'],                // "Great— SHAZBOT!" / the compliment that corrects itself
-  VGRA: ['VGS', 'VGN'],                 // "Any— SHAZBOT!" / "Anytime— NO." retracted courtesy
+  VGRA: ['VGS'],                        // "Any— SHAZBOT!"
   VGN:  ['VGY'],                        // "N— YES." — the contradiction gag
   VGY:  ['VGN', 'VGO'],                 // "Ye— NO." / "Yes— OOOPS." instant regret
   VGH:  ['VGB', 'VGS'],                 // "Hi— BYE." drive-by greeting / "Hi— SHAZBOT!" false warmth
