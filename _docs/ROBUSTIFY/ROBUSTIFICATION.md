@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`botLoadouts` table + weapon pick pinned** (2026-10-05):
+  `botLoadouts.test.ts` (7 tests) — every shipped kit is fireable by
+  the class `botClassForLoadout` assigns (classCanFire gate — a bad
+  row is a bot dry-pulling a holstered gun forever); resolution order
+  ordnance > exact-lock > perk; range bands; HealBeam never drawn at
+  enemies; nonAoeOnly never returns a launcher; self-blast discount
+  splits cautious vs bold; wounded gate holsters aoe only inside
+  blast reach-back (60m standoff keeps the launcher).
 - **`ballSim` state machine pinned** (2026-10-05): `ballSim.test.ts`
   (10 tests) — variant table derivation, ground settle is not a
   segment, stall-clock wake-up needs a target, drift-past-MAX_DIST

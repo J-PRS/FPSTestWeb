@@ -2,6 +2,7 @@
 =======
 2026-10-06 - stateHash: respawn/kill isDead flips and never-echoed health now re-arm the join grace window — the echo channel re-lags across a revive (server writes 300, client still hashes pre-death/100), and hashing a fabricated 100 before the first record lands fired phantom DESYNC warns every combat cycle
 2026-10-06 - observability: melee-whiff warn folds repeats per species into ×N (3s window) — a swarm besieging a stationary player whiffed every bite at warn tier
+2026-10-05 - test: pin botLoadouts — every shipped kit verified fireable by its resolved class (classCanFire gate), range bands, HealBeam excluded from combat draws, self-splash discount + wounded gate (7 tests)
 2026-10-05 - test: pin ballSim state machine — settle/stall/enrage/teleport triggers, authority-vs-predictor teleport split, bounce + overspeed half elasticity, damage death edge (10 tests)
 2026-10-05 - test: wire contract drift tripwire — compile-time satisfies+Exclude check forces every new ClientMessage type to get a WIRE entry (unmatched types silently dropped); runtime asserts validate/handler presence, join+switchRoom documented exceptions, no orphan keys
 2026-10-05 - test: pin shared MoveSim — cloak drain curve, 60Hz accumulator parity (lumped==split dt), MAX_DT stall cap, jet mass scaling, terminal velocity, overspeed bleed, body-contact momentum/self-skip/y-gate, autoHop (13 tests)
