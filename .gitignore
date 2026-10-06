@@ -18,6 +18,8 @@ logs/
 *.jsonl
 client/nul.old
 client/.animbake-tmp/
+.stryker-tmp/
+client/.stryker-tmp/
 
 # Extracted Tribes 2 assets — local playtest only, do not redistribute
 maps/t2/

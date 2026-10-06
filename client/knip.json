@@ -1,5 +1,6 @@
 {
-  "entry": ["index.html", "posedump.html", "sfxdump.html", "vmdump.html"],
+  "entry": ["index.html", "src/{aodump,gunlab,posedump,sfxdump,vmdump}.ts"],
   "project": ["src/**/*.ts"],
-  "ignoreDependencies": []
+  "ignore": ["src/core/debugGlobals.ts"],
+  "ignoreDependencies": ["puppeteer-core"]
 }
