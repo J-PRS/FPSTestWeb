@@ -116,13 +116,16 @@ export function botSay(id: string, line: string | null, vgs?: string, team?: boo
     if (!line) return;
     const name = id.replace('bot:', '');
     const delay = 1200 + Math.random() * 1800;
-    setTimeout(() => chatSink.add?.(name, line, team, vgs), delay);
+    // Chatter is transient like debris/audio — while hidden the timers
+    // still fire but nothing queues, so alt-tab returns to a live feed,
+    // not a burst of stale taunts (same rule the fx classes follow).
+    setTimeout(() => { if (!document.hidden) chatSink.add?.(name, line, team, vgs); }, delay);
     // VGS-combo intent — a rare second chord timed to hard-cut the first
     // sample mid-word ("I am the— SHAZBOT!"). Tails are global-scope
     // chords, so they land wherever the starter did.
     const tail = vgs ? comboTailFor(vgs) : undefined;
     if (tail) {
-      setTimeout(() => chatSink.add?.(name, tail.text, false, tail.chord), delay + comboCutDelayMs(line));
+      setTimeout(() => { if (!document.hidden) chatSink.add?.(name, tail.text, false, tail.chord); }, delay + comboCutDelayMs(line));
     }
   }
 

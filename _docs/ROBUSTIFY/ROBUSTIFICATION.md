@@ -276,6 +276,13 @@ telemetry lines it greps.
   cooldown — same channel as botSpoke replies. netBalls maps clean:
   `netBallById` reconciles on roster; `rbLastWarn`/`rbSuppressed`
   bounded by warn frequency.
+- **Hidden-tab chatter path** (2026-10-06): `botSay` was the one queue
+  that deferred transient work past a hidden window — its 1.2–3s delay
+  timers (plus combo tails and their TTS) fired and piled into the feed
+  on return. Now drops when `document.hidden`, matching the fx
+  constructor gates (debris/splat/scorch). `pendingSelf` already
+  64-capped; feed rows bounded by MAX_LINES; wire-delivered lines are
+  immediate (no queue) so no counterpart bug online.
 - **Dead-id accumulators** (2026-10-05): `BallSim.retargetAcc`/
   `resyncAcc` and `CreatureSim.edgeSeq` seed per entity but `kill()`
   only dropped the body — both fixed. `CombatHandler` evicts all five
