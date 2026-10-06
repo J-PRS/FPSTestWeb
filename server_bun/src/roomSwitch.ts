@@ -71,6 +71,17 @@ export class RoomSwitcher {
     if (!from) return null;
     if (from.name === name) return null; // already seated — no-op, not an error
 
+    // Dead players can't hop — reseating runs addPlayer, which spawns
+    // alive, so a hop would dodge the whole respawn delay. Check BEFORE
+    // roomFor: a denied hop must not build a room nobody enters (the
+    // cooldown bounds it, but a dead spammer would still churn a fresh
+    // map spec per 1.5s window).
+    const prev = from.players.getPlayer(playerId);
+    if (prev?.isDead) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
+      return null;
+    }
+
     const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
       ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
     const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
@@ -80,13 +91,6 @@ export class RoomSwitcher {
     }
 
     // The kit rides with the player — the hop isn't a loadout reset.
-    const prev = from.players.getPlayer(playerId);
-    // Dead players can't hop — reseating runs addPlayer, which spawns
-    // alive, so a hop would dodge the whole respawn delay.
-    if (prev?.isDead) {
-      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
-      return null;
-    }
     return { from, to, prev: prev ?? undefined };
   }
 

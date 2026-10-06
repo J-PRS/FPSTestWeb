@@ -415,6 +415,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`roomSwitch` audited + ordering fix** (2026-10-05): `switchTarget`
+  built the target room (`roomFor` = full map-spec build) before the
+  dead-player denial — a dead spammer could churn a fresh room every
+  cooldown window. Denials that don't need the room now run first.
+  Rest classified clean: same-room no-op early, cooldown marks attempts
+  (denied paths stay throttled), pending class/perk ride the hop,
+  correctionGrace + markReseated arm the new shadow's drain window,
+  cooldown map capped at 1024.
 - **`envClaims` pinned** (2026-10-05): `envClaims.test.ts` (10 tests,
   fake host) — untagged env damage clamps [1,40], nearby named attacker
   keeps the 80 cap, a distant named attacker is a forge (attribution
