@@ -220,7 +220,14 @@ Now tail-capped at 256 through `probePush`, same shape as
 clean: every player/bot-keyed map is purged on `untrack` /
 `onPlayerDisconnected` / `removePlayerCompletely`, or hard-capped
 (`seqStates` 32, `cooldowns`/`invalidWarnAt` 4k, `duelStart` 512 +
-age prune, `spent` swept).
+age prune, `spent` swept). Cap pinned by `probeCap.test.ts` — 300
+self-frags leave the arrays at exactly 256.
+
+Second sweep (entity ids + memos + caches) also clean: `retargetAcc`/
+`resyncAcc`/`edgeSeq`/`confuseGhosts` all drop on despawn,
+`losMemo` TTL-sweeps + hard-caps, `serverParties` is a per-tick
+rebuild, `getAllPlayers()` returns the live map (no per-tick clone),
+wire validators reject out-of-range rather than silently clamping.
 
 ### 2.13 Malformed-frame warns bypassed the throttle (2026-10-06)
 
