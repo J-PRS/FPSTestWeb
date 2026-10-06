@@ -245,7 +245,12 @@ stand. Charged to §4.8 rather than silently absorbed.
   spread cones, splat radii, gib scatter, ambient critter spawn. None
   feed a field the server computes: replay sims live in shared/ (RNG
   free), predicted projectiles are visual-only. Client bots are
-  offline-mode, so their draws need no wire integrity.
+  offline-mode, so their draws need no wire integrity. Re-audited
+  2026-10-06: the Ball constructor's variant-0 color pick was the one
+  ambient draw inside a replicated entity's construction path — it ran
+  even for `netSpawn` balls before the wire `colorIdx` overwrote it.
+  Now the pick only runs for offline spawns; net-driven balls take the
+  wire colorIdx directly and the redundant post-spawn override is gone.
 - **Wire-boundary coercion**: every client message passes
   validateMessage (per-type finite-number/vec3 validators) →
   reject+metric+throttled-warn before dispatch; NaN/malformed input

@@ -249,7 +249,12 @@ export class Ball {
       this.color = new THREE.Color(0.25, 0.85, 0.25);
     } else {
       this.scale = 1; this.health = 30;
-      this.color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)].clone();
+      // Ambient pick only for an offline spawn — a net-driven ball's color
+      // is the wire's colorIdx (set below); drawing here would be an
+      // ambient draw in a replicated entity's construction (§5 inv 3).
+      this.color = netSpawn
+        ? BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone()
+        : BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)]!.clone();
     }
     this.maxHealth = this.health;
     this.radius = BALL_BASE_RADIUS * this.scale;
@@ -272,7 +277,6 @@ export class Ball {
       this.id = 0x40_00_00_00 + netSpawn.id; // net namespace — can't collide with local targetIds
       this.pos = new THREE.Vector3(netSpawn.x, netSpawn.y, netSpawn.z);
       this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
-      if (variant === 0) {this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();}
       this.netS.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
         { x: netSpawn.x, y: netSpawn.y, z: netSpawn.z },
         { x: netSpawn.vx, y: netSpawn.vy, z: netSpawn.vz });
