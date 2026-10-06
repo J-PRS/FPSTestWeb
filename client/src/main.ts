@@ -540,6 +540,7 @@ function wireNetworkLocal(): void {
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   player.onSkillUse = () => networkManager.sendSkillUse();
   player.onRespawn = () => networkManager.sendRespawn();
+  player.onThrowFlag = () => networkManager.sendThrowFlag();
   networkManager.localAuthority = {
     envDamage: (amount) => {
       const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));

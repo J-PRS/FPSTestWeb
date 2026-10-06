@@ -324,7 +324,7 @@ export class NetworkManager {
    *  stale-claim bug, not a recovery. Bounded like Colyseus
    *  maxEnqueuedMessages so a dead lane can't queue forever. */
   private static readonly QUEUEABLE = new Set([
-    'chat', 'deploy', 'classUpdate', 'perkUpdate', 'respawn',
+    'chat', 'deploy', 'classUpdate', 'perkUpdate', 'respawn', 'throwFlag',
     'switchRoom', 'resync', 'snapshotRequest',
   ]);
   private pendingCmds: ClientMessage[] = [];
@@ -465,7 +465,10 @@ export class NetworkManager {
     tickUpdate: (data) => this.handleTickUpdate(data),
     playerJoined: (data) => this.handlePlayerJoined(data),
     playerLeft: (data) => this.handlePlayerLeft(data),
-    wireIds: (data) => { for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid); },
+    wireIds: (data) => {
+      for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid);
+      for (const id of data.remove ?? []) this.wireIds.delete(id);
+    },
     teamUpdate: (data) => this.upsertRemotePlayer(data.playerId, { team: data.team }),
     playerRespawn: (data) => this.handlePlayerRespawn(data),
     playerHit: (data) => this.handlePlayerHit(data),
@@ -1021,6 +1024,13 @@ export class NetworkManager {
   sendRespawn(): void {
     if (!this.connected) { this.localAuthority?.respawn?.(); return; }
     this.send({ type: 'respawn' });
+  }
+
+  /** Flag toss claim (G) — server resolves the arc; offline is a no-op
+   *  since there's no shared objective to throw. */
+  sendThrowFlag(): void {
+    if (!this.connected) {return;}
+    this.send({ type: 'throwFlag' });
   }
 
   /** Self-inflicted environment damage (crawler pounce, etc.) — the server

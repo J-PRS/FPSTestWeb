@@ -69,9 +69,15 @@ describe('netcode chaos: wire layer', () => {
     cm.onJournalWrap = (d) => { wrapped += d; };
     const ws = new FakeWs('a');
     cm.register('a', asWs(ws));
-    for (let i = 0; i < 1030; i++) cm.broadcast({ type: 'chat', playerId: 'x', text: `${i}` } as ServerMessage);
-    expect(wrapped).toBe(6); // 1030 - 1024
-    expect(cm.journalDropped).toBe(6);
+    // Eviction fires in JOURNAL_EVICT_CHUNK-sized drops once the journal
+    // overshoots MAX+CHUNK — the first wrap sheds CHUNK+1, not a 1-by-1
+    // drip. The counts below ride the constants so a re-tune re-derives
+    // them instead of breaking.
+    const MAX = ConnectionManager.JOURNAL_MAX, CHUNK = ConnectionManager.JOURNAL_EVICT_CHUNK;
+    const dropped = CHUNK + 1;
+    for (let i = 0; i < MAX + CHUNK + 1; i++) cm.broadcast({ type: 'chat', playerId: 'x', text: `${i}` } as ServerMessage);
+    expect(wrapped).toBe(dropped);
+    expect(cm.journalDropped).toBe(dropped);
 
     // A reclaim asking for seq 0 missed frames that no longer exist —
     // the gap must be COUNTED, not silently skipped.
@@ -79,9 +85,9 @@ describe('netcode chaos: wire layer', () => {
     cm.onReclaimGap = (_pid, missed) => { gap = missed; };
     ws.sentRaw.length = 0;
     cm.replayTo('a', asWs(ws), 0);
-    expect(gap).toBe(6);
+    expect(gap).toBe(dropped);
     // ...but every surviving frame still replays.
-    expect(ws.sentRaw.length).toBe(1024);
+    expect(ws.sentRaw.length).toBe(MAX);
   });
 
   it('tick frames shed at backlog while reliable lane still queues', () => {

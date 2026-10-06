@@ -357,6 +357,16 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id) => h.combat.respawnRequest(id),
   },
 
+  // Carried-flag throw: no payload — the arc derives from the shadow's
+  // position/velocity/rotation truth, never a client-claimed direction.
+  throwFlag: {
+    limit: { maxCount: 4, windowMs: 1000 }, // spam-tossing churns flagUpdate for everyone
+    validate: () => {
+      return { success: true, data: { type: 'throwFlag' } };
+    },
+    handle: (h, id) => h.roomInfo.onThrowFlag?.(id),
+  },
+
   resync: {
     // Same cost shape as snapshotRequest (sendWorldState) plus a shadow
     // reseat — a manual desync escape hatch, not a stream.

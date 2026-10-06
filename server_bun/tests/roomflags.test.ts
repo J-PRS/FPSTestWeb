@@ -115,6 +115,59 @@ describe('RoomFlags', () => {
     expect(bravo.state).toBe('home');
   });
 
+  it('carrier throw drops the flag and lobs it along the aim', () => {
+    const room = ctfRoom();
+    const p = addAt(room, 'p1', 'alpha', 70, 0);
+    room.tickFlags(0.05); // grab bravo's flag
+    // Face +x, level pitch — the toss must fly toward +x, not where a
+    // hostile client might claim.
+    p.rotation.yaw = Math.PI / 2; // forward = (sin yaw, ?, cos yaw) = +x
+    p.rotation.pitch = 0;
+    room.flags!.throwFor('p1');
+    const f = [...room.flags!.flags.values()].find((f) => f.team === 'bravo')!;
+    expect(f.state).toBe('dropped');
+    expect(f.carrier).toBeNull();
+    expect(f.vel.x).toBeGreaterThan(15); // ~FLAG_THROW_SPEED along aim
+    expect(Math.abs(f.vel.z)).toBeLessThan(1);
+    // Ballistic tick owns it from here — the arc lands away from the
+    // toss. The thrower stands still inside the ring the whole flight:
+    // airborneBy keeps him from instantly re-catching his own throw.
+    for (let t = 0; t < 1.5; t += 0.05) room.flags!.tick(0.05);
+    expect(f.state).toBe('dropped');
+    // FLAG_THROW_SPEED bleeds off at FLAG_FRICTION — the toss is a
+    // hand-off arc (~4m), not a Hail Mary.
+    expect(f.pos.x).toBeGreaterThan(73);
+    // Settled — the thrower may re-grab it like anyone else.
+    p.position = { x: f.pos.x, y: f.pos.y, z: f.pos.z };
+    room.flags!.tick(0.05);
+    expect(f.state).toBe('carried');
+    expect(f.carrier).toBe('p1');
+  });
+
+  it('pitch aims the toss — looking up lobs, looking down dumps', () => {
+    const room = ctfRoom();
+    const p = addAt(room, 'p1', 'alpha', 70, 0);
+    room.tickFlags(0.05);
+    p.rotation.yaw = 0; // +z
+    p.rotation.pitch = 0.8; // up — same convention as getAimDir (sin(pitch) = +y)
+    room.flags!.throwFor('p1');
+    const f = [...room.flags!.flags.values()].find((f) => f.team === 'bravo')!;
+    expect(f.vel.y).toBeGreaterThan(10); // strong vertical component
+    expect(f.vel.z).toBeGreaterThan(10);
+  });
+
+  it('a non-carrier cannot throw — the claim is a no-op', () => {
+    const room = ctfRoom();
+    const p1 = addAt(room, 'p1', 'alpha', 70, 0);
+    addAt(room, 'p2', 'alpha', 0, 0);
+    room.tickFlags(0.05); // p1 carries
+    room.flags!.throwFor('p2'); // p2 carries nothing
+    const f = [...room.flags!.flags.values()].find((f) => f.team === 'bravo')!;
+    expect(f.state).toBe('carried');
+    expect(f.carrier).toBe('p1');
+    void p1;
+  });
+
   it('resets both flags on match restart', () => {
     const room = ctfRoom();
     const p = addAt(room, 'p1', 'alpha', 70, 0);

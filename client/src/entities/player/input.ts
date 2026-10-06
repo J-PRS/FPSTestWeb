@@ -31,6 +31,8 @@ export interface PlayerInputHandlers {
   deploy(): void;
   /** Deliberate respawn — a server claim, not a local state flip. */
   respawn(): void;
+  /** Hurl the carried flag along the aim — a claim the server resolves. */
+  throwFlag(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
   look(dx: number, dy: number): void;
   /** Mouse deltas while the orbit bind is held — swings the camera, not the aim. */
@@ -89,6 +91,7 @@ export class PlayerInput {
       if (matchCode('skill', e.code)) {h.skillPress();}
       if (matchCode('deploy', e.code)) {h.deploy();}
       if (matchCode('respawn', e.code)) {h.respawn();}
+      if (matchCode('throwFlag', e.code)) {h.throwFlag();}
     }
     const slot = this.slotForCode(e.code);
     if (slot >= 0) {h.selectSlot(slot);}
@@ -138,6 +141,7 @@ export class PlayerInput {
       if (matchCode('melee', `Mouse${e.button}`)) {h.melee();}
       if (matchCode('camera', `Mouse${e.button}`)) {h.toggleCamera();}
       if (matchCode('respawn', `Mouse${e.button}`)) {h.respawn();}
+      if (matchCode('throwFlag', `Mouse${e.button}`)) {h.throwFlag();}
     });
     document.addEventListener('mouseup', (e) => {
       if (this.frozen) {return;}
@@ -168,14 +172,15 @@ export class PlayerInput {
   }
 
   private bindMenuControls(): void {
-    // ESC-menu invert-Y toggle
+    // ESC-menu invert-Y toggle — .tog markup carries the state box;
+    // the label writer flips .on (the box IS the state readout).
     const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;
     if (invertYBtn) {
-      invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
+      invertYBtn.classList.toggle('on', this.invertY);
       invertYBtn.addEventListener('click', () => {
         this.invertY = !this.invertY;
         settings.set('fps-invert-y', this.invertY);
-        invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
+        invertYBtn.classList.toggle('on', this.invertY);
       });
     }
 
@@ -197,12 +202,36 @@ export class PlayerInput {
       sensInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
+    // FOV field — degrees, live-applied to the world camera via the
+    // fps:set event (main.ts listens). Viewmodel cam stays fixed at 55.
+    const fovInput = document.querySelector('#fov-input') as HTMLInputElement | null;
+    if (fovInput) {
+      fovInput.value = String(settings.get('fps-fov'));
+      fovInput.addEventListener('focus', () => fovInput.select());
+      fovInput.addEventListener('input', () => {
+        const v = Number.parseFloat(fovInput.value);
+        if (!isFinite(v)) {return;}
+        settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(v))));
+      });
+      fovInput.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+
     const volInput = document.querySelector('#vol-input') as HTMLInputElement | null;
+    const volVal = document.querySelector('#vol-val');
     if (volInput) {
       volInput.value = audio.getVolume().toString();
+      // Track fill rides --v (webkit needs the gradient; firefox fills
+      // via range-progress); the % readout makes the level unambiguous.
+      const volPaint = (): void => {
+        const pct = Math.round(Number.parseFloat(volInput.value) * 100);
+        volInput.style.setProperty('--v', `${pct}%`);
+        if (volVal) {volVal.textContent = `${pct}%`;}
+      };
+      volPaint();
       volInput.addEventListener('input', () => {
         const v = Number.parseFloat(volInput.value);
         if (isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
+        volPaint();
       });
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
@@ -231,7 +260,7 @@ export class PlayerInput {
 
     const debugBtn = document.querySelector('#debug-toggle') as HTMLButtonElement | null;
     if (debugBtn) {
-      const label = () => { debugBtn.textContent = settings.get('fps-debug') ? 'DEBUG: ON' : 'DEBUG: OFF'; };
+      const label = () => { debugBtn.classList.toggle('on', !!settings.get('fps-debug')); };
       label();
       debugBtn.addEventListener('click', () => {
         settings.set('fps-debug', settings.get('fps-debug') ? 0 : 1);
@@ -244,7 +273,7 @@ export class PlayerInput {
     // Read live per message — no reload needed.
     const ttsBtn = document.querySelector('#tts-chat-toggle') as HTMLButtonElement | null;
     if (ttsBtn) {
-      const label = () => { ttsBtn.textContent = settings.get('fps-tts-chat') ? 'CHAT TTS: ON' : 'CHAT TTS: OFF'; };
+      const label = () => { ttsBtn.classList.toggle('on', !!settings.get('fps-tts-chat')); };
       label();
       ttsBtn.addEventListener('click', () => {
         settings.set('fps-tts-chat', !settings.get('fps-tts-chat'));

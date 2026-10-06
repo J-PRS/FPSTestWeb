@@ -38,11 +38,12 @@ import { EventBus } from './roomEvents.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
-import { chatKindFor } from '../../shared/botTaunts.ts';
+import { chatKindFor, vgsCommandFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { simNow } from './simClock.ts';
+import { wallNow } from './wallClock.ts';
 
 export class Room {
   readonly name: string;
@@ -70,10 +71,15 @@ export class Room {
   /** Watching sockets — no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
   /** Room-scoped u16 record ids for v3 tick frames — minted lazily on a
-   *  player's first record (tickRecords) and never reused; joiners get
-   *  the snapshot inside gameState, everyone else via 'wireIds' deltas
-   *  broadcast before the frames that need them. */
+   *  player's first record (tickRecords); joiners get the snapshot inside
+   *  gameState, everyone else via 'wireIds' deltas broadcast before the
+   *  frames that need them. Ids are finite (u16), so a departing player
+   *  releases theirs into wireIdRetired — after a quiet window the mint
+   *  prefers recycled ids over burning toward the 65536 wrap, where
+   *  setUint16 would silently alias a live teammate's binding. */
   readonly wireIds = new Map<string, number>();
+  /** wireId → wall-ms it was released at. */
+  readonly wireIdRetired = new Map<number, number>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }>();
@@ -305,7 +311,9 @@ export class Room {
         }
         case 'botSpoke': this.bots.notice('reply', e.id, this.players.getPlayer(e.id)?.team); break;
         case 'chat': {
-          const kind = chatKindFor(e.text) ?? (this.bots.nameIn(e.text) ? 'mention' : null);
+          const kind = chatKindFor(e.text)
+            ?? (e.vgs ? vgsCommandFor(e.vgs) : null)
+            ?? (this.bots.nameIn(e.text) ? 'mention' : null);
           if (kind) this.bots.notice(kind, e.id, this.players.getPlayer(e.id)?.team);
           this.noteChatPace(e.id);
           break;
@@ -714,6 +722,7 @@ export class Room {
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.
       onSkillUse: (pid) => this.moveSim.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+      onThrowFlag: (pid) => this.flags?.throwFor(pid),
       energyOf: (pid) => this.moveSim.energyOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy) => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
@@ -1010,6 +1019,16 @@ export class Room {
     // complete when the room is driven directly — the session's armed
     // countdown dies with its transition to reaped.
     this.sessions?.terminate(playerId, reason);
+    // Retire the wire id: the u16 space wraps at 65536 and a monotonic
+    // mint would eventually alias live bindings. Retired ids are reissued
+    // only after a reorder-safe quiet window (tickRecords mint), and the
+    // remove edge lets clients drop the stale binding now.
+    const wid = this.wireIds.get(playerId);
+    if (wid !== undefined) {
+      this.wireIds.delete(playerId);
+      this.wireIdRetired.set(wid, wallNow());
+      this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });
+    }
     this.lastSentPositions.delete(playerId);
     this.chatPace.delete(playerId);
     this.connections.broadcast({ type: 'playerLeft', playerId });

@@ -18,6 +18,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { simNow } from './simClock.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
+import { CTF_PTS } from '../../shared/teams.ts';
 
 // 'unspawned' is server-internal — rabbit's flag doesn't exist until
 // first blood, and it never reaches the wire (snapshot filters it).
@@ -39,6 +40,10 @@ export interface RoomFlag {
   droppedAt: number;
   /** Rabbit hold-time accumulator — each whole second carried pays out. */
   holdAcc: number;
+  /** Whose toss is still airborne — the thrower can't instantly re-grab
+   *  their own throw (the flag never leaves the touch ring in one tick).
+   *  Cleared the moment the flag settles or changes hands. */
+  airborneBy: string | null;
 }
 
 // Dropped-flag ballistics — a nugget-class loose object: pops out of the
@@ -50,6 +55,7 @@ const FLAG_FRICTION = 4.0;    // skid bleed per second
 const FLAG_GRAV = 25;         // matches the nugget tumble
 const FLAG_KNOCK = 0.55;      // fraction of the player-scale blast impulse
 const FLAG_SETTLE = 0.6;      // |vel| below this on the ground = rest
+const FLAG_THROW_SPEED = 18;  // deliberate toss along aim — hand-off range, not a hail mary
 
 export class RoomFlags {
   readonly flags = new Map<TeamId, RoomFlag>();
@@ -79,7 +85,7 @@ export class RoomFlags {
       // Rabbit flags begin unspawned — the FIRST corpse of the match is
       // what brings the flag into the world, exactly like T2.
       const state: FlagState = this.rabbit ? 'unspawned' : 'home';
-      this.flags.set(team, { team, home, pos: { ...home }, vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0 });
+      this.flags.set(team, { team, home, pos: { ...home }, vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0, airborneBy: null });
     }
   }
 
@@ -108,6 +114,7 @@ export class RoomFlags {
       f.carrier = null;
       f.dropT = 0;
       f.holdAcc = 0;
+      f.airborneBy = null;
     }
     this.dirty = true;
   }
@@ -164,6 +171,33 @@ export class RoomFlags {
     }
   }
 
+  /** The carrier hurls the flag along their look — hand it to a teammate
+   *  or ditch it away from a collapsing defense. The arc derives from the
+   *  shadow's position/velocity/rotation truth: a client-claimed dir
+   *  could punt the objective out of the arena from anywhere. */
+  throwFor(playerId: string): void {
+    const p = this.room.players.getPlayer(playerId);
+    if (!p || p.isDead) return;
+    for (const f of this.flags.values()) {
+      if (f.state !== 'carried' || f.carrier !== playerId) continue;
+      const cp = Math.cos(p.rotation.pitch), sp = Math.sin(p.rotation.pitch);
+      f.pos = { ...p.position };
+      f.carrier = null;
+      f.state = 'dropped';
+      f.dropT = FLAG_RESET_S;
+      f.droppedAt = simNow();
+      this.loose(f, p.velocity);
+      f.vel.x += cp * Math.sin(p.rotation.yaw) * FLAG_THROW_SPEED;
+      f.vel.y += sp * FLAG_THROW_SPEED;
+      f.vel.z += cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
+      f.airborneBy = playerId;
+      this.room.messages.killFeed.say(playerId, 'flagdrop');
+      this.room.bots?.notice('flagdrop', playerId, p.team);
+      this.room.influence.splat(f.pos, 'opportunity', 1.2);
+      this.dirty = true;
+    }
+  }
+
   /** Flag goes loose: inherit half the carrier's speed plus a pop so a
    *  drop reads as a fumble, not a teleport to the dirt. The ballistic
    *  tick owns it from here; the rest spot snaps to walkable ground. */
@@ -188,6 +222,16 @@ export class RoomFlags {
       f.vel.y += Math.abs(mag) * 0.4; // pop off the dirt — tumble, not skid
       this.dirty = true;
     }
+  }
+
+  /** CTF flag-zone test for the personal-score bonus — is `pos` inside
+   *  radius of EITHER stand (defending yours or sieging theirs)? */
+  nearStand(pos: Vec3, r: number): boolean {
+    for (const f of this.flags.values()) {
+      const dx = pos.x - f.home.x, dy = pos.y - f.home.y, dz = pos.z - f.home.z;
+      if (dx * dx + dy * dy + dz * dz <= r * r) return true;
+    }
+    return false;
   }
 
   /** One flag rule pass — rides the room's existing 20Hz tick. Returns the
@@ -280,6 +324,7 @@ export class RoomFlags {
       f.carrier = null;
       f.carriedAt = 0;
       this.room.influence.splat(f.home, 'opportunity', 1.2);
+      this.room.scoring.awardPersonal(carrier.id, CTF_PTS.cap);
       this.dirty = true;
       return carrier.team as TeamId;
     }
@@ -325,6 +370,7 @@ export class RoomFlags {
     const sp2 = f.vel.x * f.vel.x + f.vel.y * f.vel.y + f.vel.z * f.vel.z;
     if (sp2 < FLAG_SETTLE * FLAG_SETTLE && f.pos.y <= gy + 0.05) {
       f.vel.x = f.vel.y = f.vel.z = 0;
+      f.airborneBy = null; // settled — anyone, the thrower included, may touch
       if (field) hmSettleWalkable(field, f.pos, FLAG_REST_LIFT);
     }
     this.dirty = true; // flight is stream-worthy — see the doc comment
@@ -348,6 +394,7 @@ export class RoomFlags {
       f.holdAcc = 0;
       this.grabLog.push({ by: t.id, team: f.team, at: simNow() });
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
+      f.airborneBy = null;
       this.dirty = true;
       return;
     }
@@ -357,9 +404,11 @@ export class RoomFlags {
       this.room.bots?.notice('flagreturn', t.id, t.team);
       if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
       this.retLog.push({ by: t.id, team: f.team, at: simNow() });
+      this.room.scoring.awardPersonal(t.id, CTF_PTS.flagReturn);
       f.state = 'home';
       f.pos = { ...f.home };
       f.droppedAt = 0;
+      f.airborneBy = null;
       this.dirty = true;
     } else if (t.team && t.team !== f.team) {
       logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
@@ -367,6 +416,7 @@ export class RoomFlags {
       this.room.bots?.notice('flaggrab', t.id, t.team);
       f.state = 'carried';
       f.carrier = t.id;
+      f.airborneBy = null;
       f.carriedAt = simNow();
       this.grabLog.push({ by: t.id, team: f.team, at: simNow() });
       // A grab is the loudest objective scent — it starts the chase.
@@ -381,6 +431,10 @@ export class RoomFlags {
       // Rabbit is FFA — hunters carry no team, so the !p.team guard
       // would make the flag untouchable; it's a CTF-only filter.
       if (p.isDead || (!this.rabbit && !p.team)) continue;
+      // A thrown flag can't be re-grabbed by its thrower until it
+      // settles — without this a stationary carrier instantly re-catches
+      // their own toss (it never leaves the ring inside one tick).
+      if (p.id === f.airborneBy) continue;
       // Swept capsule: closest point on the player's path segment to the
       // flag, so a full-speed graze can't tunnel through the ring the
       // way a snapshot check does. Planar reach + vertical cap keep a

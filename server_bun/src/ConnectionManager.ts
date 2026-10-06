@@ -44,12 +44,12 @@ export class ConnectionManager {
   // gameState+ballRoster already reseeds ball truth.
   private outSeq = 0;
   private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
-  private static readonly JOURNAL_MAX = 1024;
+  static readonly JOURNAL_MAX = 1024;
   /** splice(0,1) per push at saturation memmoves the whole journal every
    *  frame — evict in chunks so the copy amortizes. Cap is a steady-state
    *  target, not a hard bound; replay ordering and oldest-seq lookup are
    *  unchanged. */
-  private static readonly JOURNAL_EVICT_CHUNK = 128;
+  static readonly JOURNAL_EVICT_CHUNK = 128;
   /** Frames evicted from the journal before any in-flight reclaim could
    *  replay them — a gap the reclaiming client can never see again, so a
    *  nonzero count means a silent desync happened. The room folds this

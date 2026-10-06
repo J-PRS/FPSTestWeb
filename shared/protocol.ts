@@ -104,6 +104,9 @@ export type ClientMessage =
   // charge — rather than a teleport shortcut, so a pending class/perk
   // banks exactly like any other death.
   | { type: 'respawn' }
+  // Tribes flag toss — the carrier hurls the objective along their look
+  // dir (teammate hand-off or ditching it away from a collapsing defense).
+  | { type: 'throwFlag' }
   | { type: 'snapshotRequest' }
   // Catch-up resync — ask for a fresh world-state replay (gameState +
   // rosters) without a room hop or reconnect, e.g. after an alt-tab
@@ -152,7 +155,10 @@ export type ServerMessage =
   | { type: 'playerLeft'; playerId: string }
   /** u16 wire-id roster for v3 tick frames — arrives on this reliable
    *  lane before any binary frame can reference the ids it adds. */
-  | { type: 'wireIds'; add: Record<number, string> }
+  | { type: 'wireIds'; add: Record<number, string>;
+      /** Retired bindings — a departed player's id gets recycled after a
+       *  quiet window; clients drop the stale entry so the recycled id
+       *  can never resolve to the ghost. */remove?: number[] }
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
   | { type: 'teamUpdate'; playerId: string; team: TeamId }

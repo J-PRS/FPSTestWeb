@@ -63,6 +63,7 @@ export function buildInputCtx(p: Player): PlayerInputHandlers {
     secondaryUp: () => p.armory.secondaryUp(),
     deploy: () => { p.model?.weaponThrow(); p.onDeploy?.(); },
     respawn: () => p.onRespawn?.(),
+    throwFlag: () => p.onThrowFlag?.(),
     selectSlot: (i) => p.armory.selectSlot(i),
     cycleWeapon: (step) => p.armory.cycleWeapon(step),
     look: (dx, dy) => {

@@ -98,6 +98,8 @@ export interface RoomInfo {
   influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
   onSkillUse?: (playerId: string) => ClaimVerdict;
+  /** Carried-flag throw claim — RoomFlags.throwFor. */
+  onThrowFlag?: (playerId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
   /** Returns false when the event is stale (seq regression on an

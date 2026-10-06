@@ -309,6 +309,7 @@ export class Player {
   /** Deliberate respawn key → the server's self-kill claim (or the
    *  offline kill path when there's no wire). */
   onRespawn: (() => void) | null = null;
+  onThrowFlag: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
