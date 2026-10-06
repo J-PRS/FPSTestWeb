@@ -48,6 +48,9 @@ export const BOT_TUNING = {
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
+    sustainedProbe: 18,  // m — REVERTED sustained-climb experiment, kept for reference
+    sustainedGrade: 0.3, // rise/m — REVERTED: deep-probe climbs lost E to the face
+    sustainedSpeed: 12,  // m/s — REVERTED: paired with sustainedGrade
     stepRise: 0.4,       // m — sub-climb face ahead that walls a stalled push (dais lip ~0.85m, skirt 2.2m)
     stepJetRise: 0.7,    // m — lips this tall need a jet tap: jump apex is ~0.87 (7^2/2g) so anything past ~0.7 hops back down the face
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this

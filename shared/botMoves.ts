@@ -417,6 +417,10 @@ export class BotMoves {
     const tap = (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne &&
       (ctx.vel?.y ?? 0) < 0 && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
+    // Sustained-climb deep-probe experiment REVERTED: jetting a slow
+    // massif walk bought altitude that bled straight back — soak warns
+    // rose both maps (katabatic 34→40, henge 17→24). The 6m lip probe
+    // stays the climb sense.
     this.jetWhy = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
   }
