@@ -25,7 +25,16 @@ import { DEPLOY_KINDS, type DeployKind } from '../../shared/deployables.ts';
 import { isPerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
+import { WEAPONS } from '../../shared/weapons.ts';
 import { wallNow } from './wallClock.ts';
+
+/** weaponType is a claim the cadence law and belt costs key off — an
+ *  out-of-table index skips every per-weapon gate while getWeaponStats
+ *  silently defaults to BoltLauncher. Unknown ids are malformed, period. */
+const optWeaponType = (v: unknown): { ok: boolean; v?: number } =>
+  v === undefined ? { ok: true }
+    : Number.isInteger(v) && (v as number) in WEAPONS ? { ok: true, v: v as number }
+    : { ok: false };
 
 export interface RateLimit {
   maxCount: number;
@@ -88,6 +97,8 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!position.ok) return { success: false, error: `position: ${position.error}` };
       const velocity = optVec(obj.velocity);
       if (!velocity.ok) return { success: false, error: `velocity: ${velocity.error}` };
+      const wt = optWeaponType(obj.weaponType);
+      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
       return {
         success: true,
         data: {
@@ -97,7 +108,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           velocity: velocity.ok ? velocity.data : undefined,
           timestamp: isFiniteNumber(obj.timestamp) ? obj.timestamp : undefined,
           projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
-          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          weaponType: wt.v,
           airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
           shotId: optShotId(obj.shotId),
         },
@@ -119,12 +130,14 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
         return { success: false, error: 'excludeTargetId must be string or null' };
       }
+      const wt = optWeaponType(obj.weaponType);
+      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
       return {
         success: true,
         data: {
           type: 'aoeShot',
           position: pos.data,
-          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          weaponType: wt.v,
           excludeTargetId: (excludeTargetId as string | null) ?? null,
           projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
           airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
@@ -145,11 +158,13 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => {
       const dir = optVec(obj.dir);
       if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
+      const wt = optWeaponType(obj.weaponType);
+      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
       return {
         success: true,
         data: {
           type: 'shotFired',
-          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          weaponType: wt.v,
           dir: dir.ok ? dir.data : undefined,
         },
       };

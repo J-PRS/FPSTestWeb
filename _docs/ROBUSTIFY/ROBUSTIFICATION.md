@@ -210,6 +210,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.19 Unknown `weaponType` skipped every per-weapon gate (2026-10-06)
+
+Wire validation checked only `isFiniteNumber` on `weaponType`. An
+out-of-table index (`weaponType: 9999`) sailed through validation, then
+`WEAPON_FIRE_INTERVAL_S[9999]` was undefined → **cadence law skipped**,
+`BELT_THROW_WEAPONS.has(9999)` false → **belt cost skipped**, and
+`getWeaponStats` silently defaulted to BoltLauncher stats — a fire-rate
+and cost bypass dressed as a legal claim. `optWeaponType` now requires
+any supplied id to be an integer present in `WEAPONS` (which covers all
+35 enum values — verified); unknown ids fail validation at the boundary.
+
 ### 2.18 `speedBin` unbounded keyspace (2026-10-06)
 
 `weaponStats` kill-speed bins minted one key per 5 m/s with no ceiling —
