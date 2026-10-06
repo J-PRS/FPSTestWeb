@@ -106,17 +106,35 @@ export class TickLoop {
       this.ops.lastTickAt = now0;
 
       for (const room of this.rooms.values()) {
+        // A room that faulted but couldn't be drained (dispose threw
+        // inside drainQuarantined) stays in the map — skip it rather
+        // than retrying a doomed path every tick.
+        if (this.tickQuarantined.has(room.name)) continue;
         // Empty named rooms are teardown: the sim timer + entry would leak
         // per room name otherwise. 'default' is immortal.
         if (room.empty && room.name !== 'default') {
-          room.dispose();
-          this.rooms.delete(room.name);
-          // Streak entries are keyed by room name — a disposed room that
-          // ever threw would hold its count (and any quarantine flag)
-          // for the server's life, then re-arm on a same-named room.
-          this.tickErrStreak.delete(room.name);
-          this.tickQuarantined.delete(room.name);
-          logger.info('Room disposed', { room: room.name });
+          // Outside tickRoomGuarded's containment — a throwing dispose()
+          // would otherwise escape into the interval body uncaught and
+          // kill the process for every room.
+          try {
+            room.dispose();
+            this.rooms.delete(room.name);
+            // Streak entries are keyed by room name — a disposed room that
+            // ever threw would hold its count (and any quarantine flag)
+            // for the server's life, then re-arm on a same-named room.
+            this.tickErrStreak.delete(room.name);
+            this.tickQuarantined.delete(room.name);
+            logger.info('Room disposed', { room: room.name });
+          } catch (e) {
+            const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
+            this.tickErrStreak.set(room.name, n);
+            this.metrics.tickErrors++;
+            logger.error('Room dispose failed', { room: room.name, streak: n, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+            if (n >= 10) {
+              this.tickQuarantined.add(room.name);
+              this.drainQuarantined(room);
+            }
+          }
           continue;
         }
         // One bad room state must not kill the whole process for every
@@ -134,6 +152,10 @@ export class TickLoop {
   tickRoomGuarded(room: Room, now0 = wallNow()): void {
     if (this.tickQuarantined.has(room.name)) return;
     try {
+    // errPhase is module state — a pre-tick throw (match clock,
+    // hibernation check) would otherwise log whichever phase a PREVIOUS
+    // room died at.
+    this.errPhase = 'pre';
     room.checkMatchClock(simNow());
     // Hibernation: nobody watching → freeze ball sim + skip the whole
     // room tick. Bots alone don't count as an audience — they exist

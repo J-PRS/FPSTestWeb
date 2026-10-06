@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **TickLoop containment holes closed** (2026-10-05): empty-room
+  `dispose()` ran outside the per-room guard — a throwing dispose
+  escaped the interval uncaught (process kill for every room) and a
+  permanently un-disposable room retry-looped every tick. Dispose now
+  sits in the same streak → quarantine → drain path, and quarantined
+  names are skipped at the top of the room loop. Also fixed stale
+  `errPhase` misattribution: a pre-tick throw (match clock, hibernation)
+  logged whichever phase a previous room died at — now tagged 'pre'.
 - **`botTaunts` pinned + `netchannel` reviewed** (2026-10-05):
   `botTaunts.test.ts` (10 tests) — per-bot 20s cooldown shared across
   event kinds, silent rolls don't stamp, repeat-victim 90s window flips
