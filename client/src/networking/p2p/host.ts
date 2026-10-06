@@ -35,7 +35,8 @@ export class P2PHost {
   private messageHandler: MessageHandler;
   private links = new Map<P2PLink, string>(); // link → playerId
   private byPlayer = new Map<string, P2PLink>();
-  private tickTimer: ReturnType<typeof setInterval>;
+  private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private tickClock: Worker | null = null;
   private tickSeq = 0;
 
   constructor() {
@@ -47,7 +48,16 @@ export class P2PHost {
     );
     // 20Hz to match the dedicated server's tick cadence. With two players
     // there's no interest management — every frame carries the one peer.
-    this.tickTimer = setInterval(() => this.tick(), 50);
+    // The beat comes from a Worker: window setInterval throttles to ~1Hz
+    // in a hidden tab, which would stall the session for the guest on
+    // every host alt-tab. Worker timers survive; fall back if unavailable.
+    try {
+      this.tickClock = new Worker(new URL('./tickClock.ts', import.meta.url), { type: 'module' });
+      this.tickClock.onmessage = () => this.tick();
+    } catch {
+      logger.warn('Worker clock unavailable — host tick will throttle while the tab is hidden');
+      this.tickTimer = setInterval(() => this.tick(), 50);
+    }
   }
 
   /** Wire a guest's DataChannel in as a link — same treatment as the
@@ -175,6 +185,9 @@ export class P2PHost {
   }
 
   stop(): void {
-    clearInterval(this.tickTimer);
+    if (this.tickTimer !== null) {clearInterval(this.tickTimer);}
+    this.tickClock?.postMessage('stop');
+    this.tickClock?.terminate();
+    this.tickClock = null;
   }
 }

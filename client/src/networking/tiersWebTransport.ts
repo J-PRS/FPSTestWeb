@@ -37,9 +37,21 @@ export class WebTransportGameTransport implements GameTransport {
     // wt.closed REJECTS on abnormal close — an unhandled rejection for
     // every failed probe (the log-spam bug). Rejection = closed.
     wt.closed.then(
-      () => { if (this.open) { this.open = false; this.config.onDisconnect?.(1006, 'webtransport closed'); } },
-      () => { if (this.open) { this.open = false; this.config.onDisconnect?.(1006, 'webtransport closed'); } },
+      () => this.declareDead('webtransport closed'),
+      () => this.declareDead('webtransport closed'),
     );
+  }
+
+  /** The one place a dead lane becomes a disconnect event — EVERY death
+   *  detector (wt.closed, either pump ending, a pathological carry, a
+   *  reset stream) must land here. The old pump path called disconnect()
+   *  directly, which sets open=false WITHOUT onDisconnect — so
+   *  TieredTransport never learned the lane died, never reprobed, and
+   *  the session just black-holed sends forever. */
+  private declareDead(reason: string): void {
+    if (!this.open) return; // first detector wins; deliberate disconnect() leaves open=false
+    this.open = false;
+    this.config.onDisconnect?.(1006, reason);
   }
 
   private async pumpReliable(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
@@ -48,10 +60,15 @@ export class WebTransportGameTransport implements GameTransport {
     try {
       for (;;) {
       const { done, value } = await reader.read();
-      if (done) return;
+      // Reliable lane ended while the session was expected live — same
+      // verdict as wt.closed: dead, reconnect.
+      if (done) { this.declareDead('wt reliable stream ended'); return; }
       carry += this.decoder.decode(value, { stream: true });
-      // Server sending a never-terminated line would grow this forever.
-      if (carry.length > 65536) { this.disconnect(); return; }
+      // Bound a pathological never-terminated line — but 64K was too
+      // tight: a full map gameState (or a 'bin'-wrapped segment burst)
+      // legitimately exceeds it. 4MB keeps the guard without killing
+      // real frames.
+      if (carry.length > 4 * 1024 * 1024) { this.declareDead('wt line overflow'); void this.wt.close(); return; }
       let nl: number;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
@@ -59,7 +76,7 @@ export class WebTransportGameTransport implements GameTransport {
         if (line) this.dispatchLine(line);
       }
       }
-    } catch { /* stream reset on close — expected teardown */ }
+    } catch { this.declareDead('wt reliable stream reset'); }
   }
 
   // One complete JSON frame from the reliable stream. The server wraps
@@ -79,10 +96,10 @@ export class WebTransportGameTransport implements GameTransport {
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) return;
+        if (done) { this.declareDead('wt datagrams ended'); return; }
         this.config.onBinaryMessage?.(value);
       }
-    } catch { /* datagrams drop with the session — expected teardown */ }
+    } catch { this.declareDead('wt datagrams reset'); }
   }
 
   send(data: string | Uint8Array): boolean {
@@ -101,6 +118,9 @@ export class WebTransportGameTransport implements GameTransport {
   }
 
   connected(): boolean { return this.open; }
+  /** Deliberate teardown ONLY — losing probe / NetworkManager shutdown.
+   *  Internal failures must use declareDead() so the tier manager learns
+   *  the lane died and reprobes. */
   disconnect(): void { this.open = false; void this.wt?.close(); }
 }
 
