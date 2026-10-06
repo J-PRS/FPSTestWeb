@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.24 Forged-ownership destroy warns were unthrottled (2026-10-06)
+
+`projectileDestroy rejected` logged per claim — a forged-destroy spammer
+could emit up to the 40/s flood limit of unique warns. The per-player+kind
+2s coalescing throttle was extracted from `reject()` into `rejectWarn()`
+and this path routed through it (`${playerId}:destroy`). No behavior
+change for legit traffic — one warn per 2s per offender, with the
+suppressed count attached.
+
 ### 2.23 Per-reject position warns flooded the log (2026-10-06)
 
 `Position rejected` warned on EVERY rejected report — position claims

@@ -1,3 +1,4 @@
+2026-10-06 - robustify: forged projectileDestroy warns routed through the reject throttle — spam now coalesces to one line per 2s per player instead of 40/s
 2026-10-06 - robustify: position-reject warns fire on streak-start only — a diverging player used to emit ~20 unique warns per second; per-reject detail stays in hb counters
 2026-10-06 - robustify: CoolShots 1Hz repaint gated on overlay visibility and tab visibility — no more DOM rebuilds behind a closed panel
 2026-10-06 - robustify: held-corpse cancel pin — graceZombie now covers respawner.hold cleared by onPlayerRemoved; timer teardown swept client and server, only the stall watchdog needed the fix

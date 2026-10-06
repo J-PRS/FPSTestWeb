@@ -199,16 +199,8 @@ export class CombatHandler {
     // ~200 warns/4min, all stamped by a handful of senders). Throttle
     // per player+kind like notifyDrop does for the wire side; the exact
     // counts still land in the rej.* heartbeat keys.
-    const wkey = `${playerId}:${kind}`;
-    const now = wallNow();
-    const w = this.lastRejectWarn.get(wkey);
-    if (w && now - w.at < 2000) {
-      w.n++;
-    } else {
-      const suppressed = w?.n ?? 0;
-      this.lastRejectWarn.set(wkey, { at: now, n: 0 });
-      logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}${suppressed > 0 ? ` (+${suppressed} suppressed)` : ''}`);
-    }
+    this.rejectWarn(`${playerId}:${kind}`,
+      `${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
     // Rejected claims can leave predicted self-damage stuck client-side —
     // ship our health value so the shooter resyncs instead of drifting.
     const health = this.playerManager.getPlayer(playerId)?.health;
@@ -224,6 +216,19 @@ export class CombatHandler {
   /** Per player+kind warn throttle for reject() — see the comment there.
    *  Keyed like lastDropNotify and cleaned with it on disconnect. */
   private lastRejectWarn = new Map<string, { at: number; n: number }>();
+  /** 2s coalescing warn: repeats inside the window count up and land on
+   *  the next emitted line, so a claim flood is one signal, not N lines. */
+  private rejectWarn(key: string, msg: string): void {
+    const now = wallNow();
+    const w = this.lastRejectWarn.get(key);
+    if (w && now - w.at < 2000) {
+      w.n++;
+    } else {
+      const suppressed = w?.n ?? 0;
+      this.lastRejectWarn.set(key, { at: now, n: 0 });
+      logger.warn(`${msg}${suppressed > 0 ? ` (+${suppressed} suppressed)` : ''}`);
+    }
+  }
   private lastDropNotify = new Map<string, number>();
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     const key = `${playerId}:${kind}:${targetId ?? ''}`;
@@ -411,7 +416,7 @@ export class CombatHandler {
     }
     const owner = this.ledger.ownerOf(pid);
     if (owner !== playerId) {
-      logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${pid}`);
+      this.rejectWarn(`${playerId}:destroy`, `projectileDestroy rejected: ${playerId} doesn't own ${pid}`);
       return;
     }
     this.ledger.destroy(pid);
