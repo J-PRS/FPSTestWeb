@@ -415,6 +415,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **Rate-limiter lane audited + pinned** (2026-10-05): every spam-able
+  wire type has its own bucket or shares the bounded 120/s default —
+  no free lane; `ping` stamping lastSeen is deliberate liveness for
+  non-moving clients (idle-reap targets silence, not low activity).
+  `ratelimiter.test.ts` (5 tests): window rollover, ARRIVAL-time
+  windowing (late-drained backlog doesn't burst), default-bucket
+  sharing across unlisted types, per-player isolation, removePlayer
+  teardown.
 - **`roomSwitch` audited + ordering fix** (2026-10-05): `switchTarget`
   built the target room (`roomFor` = full map-spec build) before the
   dead-player denial — a dead spammer could churn a fresh room every
