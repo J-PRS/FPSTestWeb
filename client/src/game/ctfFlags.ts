@@ -49,20 +49,21 @@ export interface FlagCtx {
 
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
 const FLAG_POLE_MAT = new THREE.MeshBasicMaterial({ color: 0x888888 });
-/** Banner cloth — a plane pre-rippled once at build (static geo: two
- *  lazy sine waves like a flag streaming) so every flag shares one
- *  mesh shape. DoubleSide is set per-flag material. */
+/** Banner cloth — hangs DOWN from the crossbar like a war standard
+ *  (T:A flags are banners, not pennants): a vertical plane pre-rippled
+ *  once at build, flat at the bar line, waving at the free bottom. */
 const FLAG_BANNER_GEO = (() => {
-  const geo = new THREE.PlaneGeometry(1.5, 0.9, 8, 4);
+  const geo = new THREE.PlaneGeometry(1.5, 1.9, 6, 8);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i);
-    const u = (x + 0.75) / 1.5; // hoist -> fly edge
-    pos.setZ(i, Math.sin(u * 5.2 + y * 2.0) * 0.14 * u);
+    const u = (0.95 - y) / 1.9; // bar line -> free hem
+    pos.setZ(i, Math.sin(y * 2.6 + x * 3.0) * 0.13 * u);
   }
   geo.computeVertexNormals();
   return geo;
 })();
+const FLAG_BAR_GEO = new THREE.CylinderGeometry(0.05, 0.05, 1.7, 6);
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
@@ -72,14 +73,18 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   const g = new THREE.Group();
   const pole = new THREE.Mesh(FLAG_POLE_GEO, FLAG_POLE_MAT);
   pole.position.y = 2;
+  // Crossbar the banner hangs from — a standard, not a pennant.
+  const bar = new THREE.Mesh(FLAG_BAR_GEO, FLAG_POLE_MAT);
+  bar.rotation.z = Math.PI / 2;
+  bar.position.y = 3.8;
   const bannerMat = new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] });
   bannerMat.side = THREE.DoubleSide; // cloth reads from either face
   const banner = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
-  banner.position.set(0.82, 3.35, 0);
+  banner.position.set(0, 2.85, 0); // top edge on the bar, hangs to ~1.9
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
     new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
-  finial.position.y = 4.05;
-  g.add(pole, banner, finial);
+  finial.position.y = 4.15;
+  g.add(pole, bar, banner, finial);
   return g;
 }
 
