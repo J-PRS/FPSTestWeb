@@ -680,7 +680,7 @@ export class BotArsenal implements BeamHost {
     // disc-jumps on a tighter cadence and keeps blasting past the usual
     // ceiling — ring entries at ~27m/s die in ~3s where a 45m/s
     // blow-through clears the ring before the defense re-acquires.
-    const movingCap = surge ? (strike ? 50 : 44) : 12;
+    const movingCap = surge ? (strike ? 50 : 55) : 12;
     if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
     // No energy gate here by design: a heel blast costs ammo + hp, NOT
     // jet fuel — gating it on a charged tank stranded every trapped
