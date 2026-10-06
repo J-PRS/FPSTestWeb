@@ -77,8 +77,6 @@ const KILL_LINES = [
   'camp harder {v}',
   'MA\'d {v}',               // mid-air callout — the crown jewel frag
   'BB\'d {v}',               // body block
-  'instagibbed {v}',          // Quake mutator canon
-  'quadded',                  // Quad Damage
   'rolled {v}',
   'chaser down',              // the carrier-hunter role, humbled
   'TM cleared',               // turret monkey / farmer down
@@ -388,8 +386,6 @@ const FIST_LINES = [
   'put em up {v}',
   'melee diff',
   'gun? what gun {v}',
-  'HUMILIATION',               // Q3's gauntlet announcer, verbatim
-  'gauntlet\'d {v}',
 ];
 
 /** A human typed gg — bots close the loop. */
