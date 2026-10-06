@@ -44,6 +44,69 @@ export enum TargetEventType {
   StateChanged = 4,
 }
 
+// v4 target space: targetType 0-63 = ball variants (0-3 used today); 64+
+// is the creature lane, 64 + index into DEMO_SPECIES. Playback splits lanes
+// on this, so creature targetIds only need uniqueness among themselves —
+// CREATURE_ID_FLAG sets the top bit anyway so raw ids never alias ball ids.
+export const TARGETTYPE_CREATURE_BASE = 64;
+export const CREATURE_ID_FLAG = 0x8000;
+// Ordered to match shared/species.ts — keep stable, ids land in the file.
+export const DEMO_SPECIES = ['crawler', 'scarab', 'rakk', 'gnat', 'roller', 'snake', 'baneling', 'totem'] as const;
+export function demoSpeciesIndex(species: string): number {
+  const i = DEMO_SPECIES.indexOf(species as (typeof DEMO_SPECIES)[number]);
+  return i < 0 ? 0 : i;
+}
+export function creatureDemoId(netId: number): number {
+  return CREATURE_ID_FLAG | (netId & 0x7fff);
+}
+export function isCreatureTargetType(targetType: number): boolean {
+  return targetType >= TARGETTYPE_CREATURE_BASE && targetType < TARGETTYPE_DEPLOY_BASE;
+}
+
+// Deployable lane — same shape as creatures: 128 + index into
+// DEMO_DEPLOY_KINDS, top-bit-below demo id so it can't alias ball or
+// creature ids. Ordered to match shared/deployItems.ts — keep stable.
+export const TARGETTYPE_DEPLOY_BASE = 128;
+export const DEPLOY_ID_FLAG = 0x4000;
+export const DEMO_DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'sentry'] as const;
+export function demoDeployKindIndex(kind: string): number {
+  const i = DEMO_DEPLOY_KINDS.indexOf(kind as (typeof DEMO_DEPLOY_KINDS)[number]);
+  return i < 0 ? 0 : i;
+}
+export function deployDemoId(netId: number): number {
+  return DEPLOY_ID_FLAG | (netId & 0x3fff);
+}
+export function isDeployTargetType(targetType: number): boolean {
+  return targetType >= TARGETTYPE_DEPLOY_BASE && targetType < TARGETTYPE_KILL;
+}
+
+// Marker lanes — game-state edges that aren't bodies on the field:
+// 224 kill marker (targetId = victim roster idx, health = weapon,
+//     peakPosX = shooter roster idx + 1),
+// 225 flag (health = state code 0 home/1 carried/2 dropped, peakPosX =
+//     carrier roster idx + 1),
+// 226+ pickup (226 + index into DEMO_PICKUP_KINDS).
+export const TARGETTYPE_KILL = 224;
+export const TARGETTYPE_FLAG = 225;
+export const TARGETTYPE_PICKUP_BASE = 226;
+export const FLAG_DEMO_ID_BASE = 0xc000; // |teamIdx — one flag per team
+export const PICKUP_ID_FLAG = 0xe000;
+// Ordered to match shared/pickups.ts — keep stable, ids land in the file.
+export const DEMO_PICKUP_KINDS = ['gem', 'tag', 'heal', 'armor', 'regen', 'dd'] as const;
+export function demoPickupKindIndex(kind: string): number {
+  const i = DEMO_PICKUP_KINDS.indexOf(kind as (typeof DEMO_PICKUP_KINDS)[number]);
+  return i < 0 ? 0 : i;
+}
+export function flagDemoId(teamIdx: number): number {
+  return FLAG_DEMO_ID_BASE | (teamIdx & 0xf);
+}
+export function pickupDemoId(netId: number): number {
+  return PICKUP_ID_FLAG | (netId & 0x1fff);
+}
+export function isMiscTargetType(targetType: number): boolean {
+  return targetType >= TARGETTYPE_KILL;
+}
+
 // Flat frame structure for efficient recording (~49 bytes)
 export interface DemoFrame {
   frameNumber: number;       // uint16

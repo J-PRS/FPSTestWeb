@@ -17,6 +17,9 @@ import type { WorldState } from './worldState.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { ProjectileEventType } from '../demo/types.js';
+import { updatePlaybackCreatures, clearPlaybackCreatures, type PlaybackCreature } from '../demo/playbackCreatures.js';
+import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playbackDeployables.js';
+import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -124,6 +127,8 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
   } else {
     d.frozenWarn.n = 0;
   }
+  updatePlaybackCreatures(d.playbackWorld, dt);
+  updatePlaybackFlags(d.playbackWorld);
 }
 
 // Shared cleanup: dispose live + playback transient objects
@@ -142,6 +147,9 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
     if (ti !== -1) {d.targets.splice(ti, 1);}
   }
   d.playbackBallById.clear();
+  clearPlaybackCreatures(d.playbackWorld);
+  clearPlaybackDeployables(d.playbackWorld);
+  clearPlaybackMarkers(d.playbackWorld);
   for (const e of d.world.debrisList) {e.dispose();}
   d.world.debrisList.length = 0;
   for (const e of d.world.explosions) {e.dispose();}
@@ -339,6 +347,11 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   const playbackProjectiles: Projectile[] = [];
   const playbackProjectileById = new Map<number, Projectile>();
   const playbackBallById = new Map<number, Ball>();
+  const playbackCreatureById = new Map<number, PlaybackCreature>();
+  const playbackDeployableById = new Map<number, PlaybackDeployable>();
+  const playbackFlags = new Map<number, THREE.Group>();
+  const playbackPickups = new Map<number, { dispose(scene: THREE.Scene): void }>();
+  const playbackRemotesMap = new Map<number, RemotePlayer>();
   const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
 
   const playbackWorld: PlaybackWorld = {
@@ -351,6 +364,11 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     explosions: deps.world.explosions,
     implosions: deps.world.implosions,
     playbackBallById,
+    playbackCreatureById,
+    playbackDeployableById,
+    playbackFlags,
+    playbackPickups,
+    remotePosAt: (rosterIdx) => playbackRemotesMap.get(rosterIdx)?.position ?? null,
     playbackProjectiles,
     playbackProjectileById,
     playbackProjectileOrigin,
@@ -368,7 +386,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackProjectileOrigin,
     // Recorded remote players replayed as real RemotePlayer replicas — their
     // snapshot buffer smooths the 20Hz samples exactly like live net code.
-    playbackRemotes: new Map<number, RemotePlayer>(),
+    playbackRemotes: playbackRemotesMap,
     frozenWarn: { n: 0 },
     seekReconstructing: { on: false },
     playbackWid: -1,

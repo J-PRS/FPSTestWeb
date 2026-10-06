@@ -5,8 +5,11 @@
 
 import * as THREE from 'three';
 import type { ProjectileEvent, TargetEvent } from './types.js';
-import { ProjectileEventType, TargetEventType } from './types.js';
+import { ProjectileEventType, TargetEventType, isCreatureTargetType, isDeployTargetType, isMiscTargetType } from './types.js';
 import type { Ball } from '../entities/balls.js';
+import { reconstructSeekCreature, applyPlaybackCreatureEvent, type PlaybackCreature } from './playbackCreatures.js';
+import { reconstructSeekDeployable, applyPlaybackDeployableEvent, type PlaybackDeployable } from './playbackDeployables.js';
+import { reconstructSeekMarker, applyPlaybackMarkerEvent } from './playbackMarkers.js';
 import type { Player } from '../entities/Player.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig, computeAccuracy } from '../projectiles/index.js';
@@ -44,6 +47,14 @@ export interface PlaybackWorld {
   explosions: Explosion[];
   implosions: Implosion[];
   playbackBallById: Map<number, Ball>;
+  playbackCreatureById: Map<number, PlaybackCreature>;
+  playbackDeployableById: Map<number, PlaybackDeployable>;
+  /** Flag + pickup proxies — keyed by their demo targetIds. */
+  playbackFlags: Map<number, THREE.Group>;
+  playbackPickups: Map<number, { dispose(scene: THREE.Scene): void }>;
+  /** Resolves a roster idx to the replayed remote player's rendered pos —
+   *  wired by the playback lifecycle so a carried flag can ride its carrier. */
+  remotePosAt?: (rosterIdx: number) => THREE.Vector3 | null;
   playbackProjectiles: Projectile[];
   playbackProjectileById: Map<number, Projectile>;
   playbackProjectileOrigin: Map<number, THREE.Vector3>;
@@ -122,9 +133,17 @@ export function reconstructSeek(world: PlaybackWorld, events: { projectiles: Pro
     }
   }
 
-  // Targets first so balls exist before projectile hits reference them
+  // Targets first so balls/creatures exist before projectile hits reference them
   for (const ev of events.targets) {
-    reconstructSeekTarget(world, ev, deadBallIds, seekTime);
+    if (isCreatureTargetType(ev.targetType)) {
+      reconstructSeekCreature(world, ev, deadBallIds, seekTime);
+    } else if (isDeployTargetType(ev.targetType)) {
+      reconstructSeekDeployable(world, ev, deadBallIds, seekTime);
+    } else if (isMiscTargetType(ev.targetType)) {
+      reconstructSeekMarker(world, ev, seekTime);
+    } else {
+      reconstructSeekTarget(world, ev, deadBallIds, seekTime);
+    }
   }
   for (const ev of events.projectiles) {
     reconstructSeekProjectile(world, ev, deadProjectileIds, seekTime);
@@ -192,7 +211,15 @@ function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Pro
 export function applyPlaybackEvents(world: PlaybackWorld, events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }): void {
   // Targets first so balls are spawned/updated before projectile hits reference them
   for (const ev of events.targets) {
-    applyPlaybackTargetEvent(world, ev);
+    if (isCreatureTargetType(ev.targetType)) {
+      applyPlaybackCreatureEvent(world, ev);
+    } else if (isDeployTargetType(ev.targetType)) {
+      applyPlaybackDeployableEvent(world, ev);
+    } else if (isMiscTargetType(ev.targetType)) {
+      applyPlaybackMarkerEvent(world, ev);
+    } else {
+      applyPlaybackTargetEvent(world, ev);
+    }
   }
   for (const ev of events.projectiles) {
     applyPlaybackProjectileEvent(world, ev);

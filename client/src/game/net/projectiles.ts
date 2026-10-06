@@ -121,6 +121,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);
+    deps.lazyDemoManager?.()?.recordRemoteProjectileFired(projectileId, position, velocity, weaponType ?? cfg.weaponType);
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
     sfx.shotAt(origin, cfg.weaponType, shooterVel);
@@ -154,6 +155,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // not this map; keeping dead entries leaks one record per shot ever fired.
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
+      deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
       remoteProjectile.explode();
       remoteProjectiles.delete(projectileId);
     }

@@ -6,6 +6,8 @@ import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
 import { Explosion } from '../../effects/explosion.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
+import { mkFlagStand, FLAG_STAND_TOP } from '../../structures/structures.js';
+import { flagReturnFx } from '../flagFx.js';
 
 const _burstPos = new THREE.Vector3();
 
@@ -18,11 +20,11 @@ export interface FlagVis { flag: THREE.Group; stand: THREE.Group }
  *  the pair reads as one complete flag. */
 function buildFlagVis(team: TeamId): FlagVis {
   const teamColor = team === 'alpha' ? 0x55aaff : 0xff8855;
-  const stand = new THREE.Group();
+  const stand = mkFlagStand(teamColor);
   const base = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.4, 0),
     new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor).multiplyScalar(1.4) }));
-  base.position.y = 0.4;
+  base.position.y = FLAG_STAND_TOP + 0.07; // gem socket in the well
   stand.add(base);
   stand.visible = false; // until the wire's home plants it
   const flag = new THREE.Group();
@@ -66,6 +68,7 @@ function rabbitCallout(
     frag.show('FLAG RETURNED');
     sfx.flagCue('returned', false);
     burst(1.4);
+    flagReturnFx(_burstPos.set(f.pos.x, f.pos.y, f.pos.z), null, undefined);
     log('the flag returned to the stand');
   }
 }
@@ -134,13 +137,16 @@ export function wireFlags(ctx: NetCtx): void {
       deps.lazyScene(), _burstPos.set(pos.x, pos.y + 1.2, pos.z),
       false, 0, deps.lazyTerrain(), scale, TEAM_COLORS[team]));
   };
-  const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }) => {
+  const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }, hush: boolean) => {
     const prev = prevState.get(f.team);
     prevState.set(f.team, f.state);
     const rabbit = deps.world.mode === 'rabbit';
     // Rabbit's flag enters play already 'dropped' — first blood spawns
     // it — so its very first update IS the announce-worthy transition.
     if (prev === f.state || (prev === undefined && !(rabbit && f.state !== 'home'))) return;
+    // Match-reset →home transitions are endCleanup, not a play — the
+    // server's flags.reset() fakes cap/return transitions otherwise.
+    if (hush && f.state === 'home') return;
     const mine = f.team === deps.world.localTeam;
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
@@ -172,6 +178,11 @@ export function wireFlags(ctx: NetCtx): void {
       burst(f, 1.0); // return puff back at the stand
     } else {
       burst(f, 1.4);
+      // wirePos still holds the dropped spot — callout runs before
+      // applyFlagUpdate overwrites it — so the streak can fly the
+      // actual return path the flag just took.
+      const from = deps.world.flagMarkers.get(f.team)?.wirePos ?? null;
+      flagReturnFx(_burstPos.set(f.pos.x, f.pos.y, f.pos.z), f.team, from);
     }
     log(scored ? `${carrierName ?? 'Someone'} captured the ${f.team} flag` : `${f.team} flag returned`);
   };
@@ -200,11 +211,15 @@ export function wireFlags(ctx: NetCtx): void {
       deps.lazyHud().removePlayerIndicator(`stand:${team}`);
       delete deps.world.flagStates[team as TeamId];
     }
-    for (const f of flags) applyFlagUpdate(f);
+    // Post-matchStart broadcast carries the reset transitions — hush
+    // exactly this update, then announce edges normally again.
+    const hush = deps.world.flagHomeHush;
+    deps.world.flagHomeHush = false;
+    for (const f of flags) applyFlagUpdate(f, hush);
   };
 
-  const applyFlagUpdate = (f: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }): void => {
-    callout(f);
+  const applyFlagUpdate = (f: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }, hush = false): void => {
+    callout(f, hush);
     const vis = ensureFlagMesh(f.team);
     let marker = deps.world.flagMarkers.get(f.team);
     if (!marker || marker.mesh !== vis.flag) {
@@ -224,6 +239,9 @@ export function wireFlags(ctx: NetCtx): void {
       vis.stand.position.copy(marker.home);
     }
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
+    // The wire's home is ground level; the pole seats ON the platform
+    // deck — tickFlagMarkers lerps to wirePos, so lift the target.
+    if (f.state === 'home') marker.wirePos.y += FLAG_STAND_TOP;
     // 'dropped' streams 20Hz while the flag flies — don't snap the mesh
     // mid-flight, tickFlagMarkers eases toward wirePos. The drop frame
     // itself and every other state snap as before.
@@ -232,6 +250,7 @@ export function wireFlags(ctx: NetCtx): void {
     }
     if (f.state === 'dropped') wasDropped.add(f.team);
     else wasDropped.delete(f.team);
+    deps.lazyDemoManager?.()?.recordFlagUpdate(f.team, f.state, f.pos, f.carrier);
     marker.carrier = f.state === 'carried' ? f.carrier : null;
     deps.world.flagStates[f.team] = f.state;
     // Per-frame HUD diamond + mesh drive read this — tickFlagMarkers

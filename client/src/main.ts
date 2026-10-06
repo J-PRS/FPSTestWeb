@@ -7,6 +7,7 @@ import {
 } from './core/config.js';
 
 import Logger, { ChildLogger } from './core/Logger.js';
+import { settings } from './core/settings.js';
 import { urlParams } from './core/params.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
@@ -76,7 +77,12 @@ const logger = new ChildLogger('Main');
 const profiler = new LoadProfiler();
 
 // ---- Camera ----
-const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
+const camera = new THREE.PerspectiveCamera(settings.get('fps-fov') || CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
+// Menu FOV field — live via the settings event, no reload needed.
+window.addEventListener('fps:set', (e) => {
+  const { key, value } = (e as CustomEvent).detail;
+  if (key === 'fps-fov') { camera.fov = value; camera.updateProjectionMatrix(); }
+});
 
 // ---- Scene ----
 const sceneSetup = createScene();
@@ -257,6 +263,7 @@ async function init(): Promise<void> {
     lazyEffects: () => effects,
     lazyHud: () => hud,
     lazyHealthBarSystem: () => healthBarSystem,
+    lazyDemoManager: () => demoManager,
     fragMessages,
     explosionTracker,
     logger,

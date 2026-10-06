@@ -365,6 +365,73 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordDestroyed(projectileId, position);
   }
 
+  /** Other players' shells — recorded so MP demos aren't an empty
+   *  firefight. serverId is the wire projectile id (string). */
+  recordRemoteProjectileFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number): void {
+    this.recorder.recordRemoteFired(serverId, position, velocity, weaponType);
+  }
+
+  recordRemoteProjectileDestroyed(serverId: string, position: Vec3): void {
+    this.recorder.recordRemoteDestroyed(serverId, position);
+  }
+
+  /** Creature lifecycle — netId is the server creature id; the demo
+   *  target space namespaces it so it can't alias a ball's id. */
+  recordCreatureSpawned(netId: number, species: string, position: Vec3): void {
+    this.recorder.recordCreatureSpawned(netId, species, position);
+  }
+
+  recordCreatureEdge(netId: number, position: Vec3, velocity: Vec3): void {
+    this.recorder.recordCreatureEdge(netId, position, velocity);
+  }
+
+  recordCreatureRoster(netId: number, species: string, position: Vec3, velocity: Vec3): void {
+    this.recorder.recordCreatureRoster(netId, species, position, velocity);
+  }
+
+  recordCreatureDie(netId: number, position: Vec3): void {
+    this.recorder.recordCreatureDie(netId, position);
+  }
+
+  /** Deployable lifecycle — turrets/mines/stations/drones/shields/beacons
+   *  and base assets ride the deploy lane of targetEvents. */
+  recordDeploySpawned(netId: number, kind: string, position: Vec3): void {
+    this.recorder.recordDeploySpawned(netId, kind, position);
+  }
+
+  recordDeployGone(netId: number): void {
+    this.recorder.recordDeployGone(netId);
+  }
+
+  recordDeployHp(netId: number, hp: number): void {
+    this.recorder.recordDeployHp(netId, hp);
+  }
+
+  recordDeployShot(netId: number, target: Vec3): void {
+    this.recorder.recordDeployShot(netId, target);
+  }
+
+  recordDeployBoom(netId: number, position: Vec3): void {
+    this.recorder.recordDeployBoom(netId, position);
+  }
+
+  /** Game-state edges — kill markers, flag state, pickup lifecycle. */
+  recordKill(shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
+    this.recorder.recordKill(shooterId, targetId, weapon, position);
+  }
+
+  recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
+    this.recorder.recordFlagUpdate(team, state, position, carrier);
+  }
+
+  recordPickupSpawned(netId: number, kind: string, position: Vec3): void {
+    this.recorder.recordPickupSpawned(netId, kind, position);
+  }
+
+  recordPickupGone(netId: number): void {
+    this.recorder.recordPickupGone(netId);
+  }
+
   recordTargetSpawned(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
     this.recorder.recordTargetSpawned(targetId, position, velocity, targetType);
   }

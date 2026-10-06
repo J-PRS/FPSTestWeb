@@ -59,6 +59,25 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   remoteFramePool: RemoteFrame[] = [];
   rosterIdxById = new Map<string, number>();
   roster: DemoRosterEntry[] = [];
+  /** Server projectile id -> minted u16 demo id, for remote-owned shells.
+   *  Local shots mint at fire time via recordFired; remote shots arrive
+   *  as string ids over the wire and need the same dedupe table so their
+   *  Destroyed edge finds the Fired record. */
+  remoteProjIdByServerId = new Map<string, number>();
+  /** Server creature netId -> recorded targetType (64 + species idx).
+   *  Die/evt edges arrive without a species name, so spawn/roster rows
+   *  seed the table and it dies with the creature. */
+  creatureTtByNetId = new Map<number, number>();
+  /** Server deployable netId -> recorded targetType + last known pos —
+   *  gone/down/up/hp edges arrive without a position, so the spawn and
+   *  hp edges keep this table warm until the deployable dies. */
+  deployInfoByNetId = new Map<number, { tt: number; x: number; y: number; z: number }>();
+  /** Server pickup netId -> targetType + rest pos — pickupGone carries
+   *  no position, so spawn seeds the table. */
+  pickupInfoByNetId = new Map<number, { tt: number; x: number; y: number; z: number }>();
+  /** Flag demo ids already Spawned this window — flags live forever, so
+   *  the lane emits one Spawned then only StateChanged keyframes. */
+  flagSeen = new Set<number>();
   remoteSource: (() => Iterable<RemoteSample>) | null = null;
   lastRemoteSampleT = 0;
   /** Last stored sample per roster idx — the dead-reckon comparator.
@@ -111,6 +130,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.remoteFrames = [];
     this.rosterIdxById.clear();
     this.roster = [];
+    this.remoteProjIdByServerId.clear();
+    this.creatureTtByNetId.clear();
+    this.deployInfoByNetId.clear();
+    this.pickupInfoByNetId.clear();
+    this.flagSeen.clear();
     this.lastRemoteSampleT = 0;
     this.lastRemoteByIdx.clear();
     this.frameBuffer.clear();
@@ -272,6 +296,62 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
   recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health: number = 0): void {
     ev.recordTargetDestroyed(this, targetId, position, targetType, health);
+  }
+
+  /** Remote-owned shell spawned on the wire — mints and remembers the
+   *  demo id so its Destroyed edge pairs with this Fired record. */
+  recordRemoteFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number): void {
+    ev.recordRemoteFired(this, serverId, position, velocity, weaponType);
+  }
+  recordRemoteDestroyed(serverId: string, position: Vec3): void {
+    ev.recordRemoteDestroyed(this, serverId, position);
+  }
+
+  /** Creature lifecycle — netId is the server creature id; the demo
+   *  targetId is namespaced (top bit) so it can't alias a ball's id. */
+  recordCreatureSpawned(netId: number, species: string, position: Vec3): void {
+    ev.recordCreatureSpawned(this, netId, species, position);
+  }
+  recordCreatureEdge(netId: number, position: Vec3, velocity: Vec3): void {
+    ev.recordCreatureEdge(this, netId, position, velocity);
+  }
+  recordCreatureRoster(netId: number, species: string, position: Vec3, velocity: Vec3): void {
+    ev.recordCreatureRoster(this, netId, species, position, velocity);
+  }
+  recordCreatureDie(netId: number, position: Vec3): void {
+    ev.recordCreatureDie(this, netId, position);
+  }
+
+  /** Deployable lifecycle — netId is the server deploy id; the demo
+   *  target space namespaces it (0x4000 bit) away from balls/creatures. */
+  recordDeploySpawned(netId: number, kind: string, position: Vec3): void {
+    ev.recordDeploySpawned(this, netId, kind, position);
+  }
+  recordDeployGone(netId: number): void {
+    ev.recordDeployGone(this, netId);
+  }
+  recordDeployHp(netId: number, hp: number): void {
+    ev.recordDeployHp(this, netId, hp);
+  }
+  recordDeployShot(netId: number, target: Vec3): void {
+    ev.recordDeployShot(this, netId, target);
+  }
+  recordDeployBoom(netId: number, position: Vec3): void {
+    ev.recordDeployBoom(this, netId, position);
+  }
+
+  /** Game-state edges — kill markers, flag state, pickup lifecycle. */
+  recordKill(shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
+    ev.recordKill(this, shooterId, targetId, weapon, position);
+  }
+  recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
+    ev.recordFlagUpdate(this, team, state, position, carrier);
+  }
+  recordPickupSpawned(netId: number, kind: string, position: Vec3): void {
+    ev.recordPickupSpawned(this, netId, kind, position);
+  }
+  recordPickupGone(netId: number): void {
+    ev.recordPickupGone(this, netId);
   }
 
   // Extract all recorded data into a DemoFile

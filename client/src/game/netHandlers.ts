@@ -40,6 +40,9 @@ export interface NetDeps {
   lazyEffects(): EffectsManager;
   lazyHud(): HUD;
   lazyHealthBarSystem(): HealthBarSystem;
+  /** Optional until initDemo runs — net handlers record through it when
+   *  present so remote shots/creatures land in the rolling buffer. */
+  lazyDemoManager?(): import('../demo/DemoManager.js').DemoManager | null;
   fragMessages: FragMessages;
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;

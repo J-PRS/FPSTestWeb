@@ -23,6 +23,7 @@ export function wirePickups(ctx: NetCtx): void {
   // collect edges, and rest-spot truth.
   const pickupMeshes = new Map<number, { nugget: Nugget; kind: PickupKind }>();
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
+    deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     // A re-spawn for a live id is a blast-knock rest spot — the server's
     // truth lands where the tumble ended; converge the replica there.
     const live = pickupMeshes.get(id);
@@ -43,6 +44,7 @@ export function wirePickups(ctx: NetCtx): void {
   ctx.reconcilePickups = (liveIds) => {
     for (const [id, e] of pickupMeshes) {
       if (liveIds.has(id)) {continue;}
+      deps.lazyDemoManager?.()?.recordPickupGone(id);
       e.nugget.serverCollect(); // fade; updateNuggets reaps
       pickupMeshes.delete(id);
     }
@@ -55,6 +57,7 @@ export function wirePickups(ctx: NetCtx): void {
   networkManager.onPickupGone = (id, by) => {
     if (deps.world.playbackMode) {return;}
     const e = pickupMeshes.get(id);
+    deps.lazyDemoManager?.()?.recordPickupGone(id);
     if (e) {
       pickupBurst(e.nugget.pos.clone(), e.kind);
       e.nugget.serverCollect();

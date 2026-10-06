@@ -101,6 +101,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     sp.list.push(c);
     targets.push(c);
     netCrawlerById.set(m.id, c);
+    deps.lazyDemoManager()?.recordCreatureSpawned(m.id, m.species ?? speciesOf(c), m.position);
   }
 
   function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
@@ -108,6 +109,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
     if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
     c.applyNetEdge({ ...m, kind: m.kind });
+    deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);
     if (m.kind === 'detonate' && c instanceof Baneling) {
       // The pop is an fx edge only — the server's blast funnel already
       // dealt the damage; crawlDie sweeps the entity right behind it.
@@ -122,6 +124,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;}
     netCrawlerById.delete(m.id);
+    deps.lazyDemoManager()?.recordCreatureDie(m.id, m.position);
     c.dead = true; // updateSpecies' disposed check sweeps it out
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));
   }
@@ -139,11 +142,16 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
       const c = netCrawlerById.get(r.id);
       if (!c) {continue;} // ctor refused (pool not ready) — next roster retries
       c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
+      deps.lazyDemoManager()?.recordCreatureRoster(r.id, r.species ?? speciesOf(c), r.position, r.velocity);
     }
     // Server-truth cull: a crawler we hold that's not on the roster died
     // while our events were in flight.
     for (const [id, c] of netCrawlerById) {
-      if (!live.has(id)) { netCrawlerById.delete(id); c.dead = true; }
+      if (!live.has(id)) {
+        netCrawlerById.delete(id);
+        deps.lazyDemoManager()?.recordCreatureDie(id, c.pos);
+        c.dead = true;
+      }
     }
   }
 

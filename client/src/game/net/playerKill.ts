@@ -29,9 +29,16 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
+  // Demo kill marker — victim pos from the replica (or local body when
+  // the victim is us). Recorded before the early-return branches.
+  const victimPos = deps.world.remotePlayers.get(targetId)?.position
+    ?? (targetId === localId ? deps.lazyPlayer().pos : null);
+  if (victimPos) {
+    deps.lazyDemoManager?.()?.recordKill(shooterId === 'environment' ? null : shooterId, targetId, weapon ?? 0, victimPos);
+  }
   const roster = nm().getPlayers();
-  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId, weapon,
-    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team }, air);
+  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
+    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air });
   if (targetId === localId) {
     logger.info(`Local player killed by ${shooterId}`);
     const player = deps.lazyPlayer();
