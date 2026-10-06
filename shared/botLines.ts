@@ -266,7 +266,6 @@ export class BotLines {
    *  a ramp reads ~0.2-0.4, a bounded lip ~0.5-1, a sheer face >>1.
    *  Same metric botEscape's pickDetour scores candidate routes on. */
   private routeRise(ctx: BrainCtx, pos: BotVec, dest: BotVec, dist: number): number {
-    const g0 = ctx.groundY(pos.x, pos.z);
     const dx = (dest.x - pos.x) / dist, dz = (dest.z - pos.z) / dist;
     let worst = 0;
     for (let d = 3; d <= dist; d += 3) {

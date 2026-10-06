@@ -628,10 +628,15 @@ export class BotArsenal implements BeamHost {
         logger.info('Bot pull surf', { id });
         return;
       }
-      // Dry belt or unsafe arc: a CARRIER just holds — falling through
-      // to the feet/crest blast is the suicide this branch exists to
-      // remove; a runner still pays hp for speed as the fallback.
-      if (carrying) return;
+      // Dry belt or unsafe arc: a carrier still pays hp for speed on the
+      // open leg — real cappers disc-jump through the midfield; the no-pay
+      // rule exists for the STAND (grab re-arm stacked blasts into
+      // one-hit carriers), not for 300m of dry transit where a 5-charge
+      // belt is long since spent (capdbg: 2 pulls then nothing — carry
+      // held ~32m/s on hop-gait alone). Inside the cap zone or low hp,
+      // holding is still correct: a fragile carrier's last blast is the
+      // ring entry, not another burn.
+      if (carrying && (dist < 120 || hp < maxHp * 0.45)) return;
     }
     // A blast doesn't need contact, it needs dirt close enough to pop
     // inside the shove envelope — a hop-gait transit (wave members:

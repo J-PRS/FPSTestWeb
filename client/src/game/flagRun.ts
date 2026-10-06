@@ -32,7 +32,7 @@ export interface FlagRunDeps {
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
-    energy?: number;
+    energy?: number; vel?: THREE.Vector3;
     movement?: { setStructures(l: readonly StructureSpec[] | undefined): void } };
   lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
   world: { explosions: { push(e: Explosion): void } };
@@ -75,6 +75,8 @@ export class FlagRunBridge {
   private liveS = 0;
   private eSum = 0;
   private eN = 0;
+  private maxV = 0;
+  private bestCap = Infinity;
 
   constructor(private deps: FlagRunDeps, private w: FlagRunWiring, around: THREE.Vector3) {
     const terrain = deps.lazyTerrain();
@@ -136,6 +138,8 @@ export class FlagRunBridge {
       this.liveS += dt;
       this.eSum += player.energy ?? 0;
       this.eN++;
+      const v = Math.hypot(player.vel?.x ?? 0, player.vel?.z ?? 0);
+      if (v > this.maxV) this.maxV = v;
       this.lastTouchPos.set('local', (this.lastTouchPos.get('local') ?? new THREE.Vector3()).copy(player.pos));
       touchers.push(['local', player.pos, prev]);
     }
@@ -211,7 +215,9 @@ export class FlagRunBridge {
   statsLine(): string {
     const speed = this.liveS > 0 ? this.pathM / this.liveS : 0;
     const e = this.eN > 0 ? this.eSum / this.eN : 0;
-    return ` — ${this.lap} laps, avg ${speed.toFixed(1)} m/s, avg E ${e.toFixed(0)}`;
+    const leg = this.bestCap === Infinity ? null : `, best leg ${this.bestCap.toFixed(1)}s`;
+    const lap = this.bestLap === Infinity ? null : `, best lap ${this.bestLap.toFixed(1)}s`;
+    return ` — ${this.lap} laps, avg ${speed.toFixed(1)} / max ${this.maxV.toFixed(1)} m/s, avg E ${e.toFixed(0)}${leg ?? ''}${lap ?? ''}`;
   }
 
   private friendlyHomes(): THREE.Vector3[] {
@@ -223,6 +229,7 @@ export class FlagRunBridge {
     bank(this.w.scores, this.w.playerTeam);
     this.w.onCapture(this.w.playerTeam);
     this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s`);
+    if (this.capT < this.bestCap) this.bestCap = this.capT;
     sfx.flagCue('captured', true);
     this.burst(f.home, this.w.playerTeam, 2.4);
     if (this.caps % LAP_CAPS === 0) {
@@ -251,6 +258,7 @@ export class FlagRunBridge {
     for (const f of this.flags) { f.state = 'home'; f.carrier = null; f.pos.copy(f.home); }
     this.caps = 0; this.lap = 0; this.lapT = 0; this.capT = 0;
     this.pathM = 0; this.liveS = 0; this.eSum = 0; this.eN = 0;
+    this.maxV = 0; this.bestCap = Infinity; this.bestLap = Infinity;
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {

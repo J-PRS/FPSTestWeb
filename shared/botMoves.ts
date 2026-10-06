@@ -503,7 +503,7 @@ export class BotMoves {
     // latches ride the regen inflow past this floor.
     const why = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
     if (why === '-') return false;
-    if (ctx.energy !== undefined && ctx.energy < T.moves.mountE && why !== 'block') { this.jetWhy = '-'; return false; }
+    if (ctx.energy !== undefined && ctx.energy < T.moves.mountE) { this.jetWhy = '-'; return false; }
     this.jetWhy = why;
     return true;
   }
