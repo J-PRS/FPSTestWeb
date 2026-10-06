@@ -418,6 +418,13 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **Wire contract drift tripwire** (2026-10-05): `protocol.test.ts` —
+  a `satisfies`+`Exclude` compile-time check fails tsc the moment the
+  `ClientMessage` union grows without a WIRE entry (silent-drop class:
+  unmatched types fall to the 'unhandled' heartbeat only); runtime
+  asserts every type validates, every entry except join (sessions-owned
+  handshake) and switchRoom (GameServer-intercepted) carries a room
+  handler, and no orphan WIRE keys exist outside the union.
 - **`movement` sim pinned** (2026-10-05): `movement.test.ts` (13
   tests) — cloak-drain curve + clamps, fixed-step accumulator parity
   (0.1s lumped == 10×0.01s split, sub-step remainder carries),
