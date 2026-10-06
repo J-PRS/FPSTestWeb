@@ -34,6 +34,9 @@ describe('match clock', () => {
     clock.tick(t0 + 600_000 + 1);         // horn past, alpha leads
     const end = sent.find((m) => m.type === 'matchEnd');
     expect(end && (end as { winner: string }).winner).toBe('alpha');
+    // The intermission holds the standings — no reset until it lapses.
+    expect(sent.some((m) => m.type === 'matchStart')).toBe(false);
+    clock.tick(t0 + 600_000 + 10_002);
     expect(sent.some((m) => m.type === 'matchStart')).toBe(true);
   });
 

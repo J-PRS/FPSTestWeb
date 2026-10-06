@@ -261,7 +261,7 @@ export function createEntities(deps: EntitiesDeps) {
           player.grantJetBoost();
           player.heal(0.2); // 20% max hp per nugget
           deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth — clamped 25/call
-          sfx.pickup();
+          sfx.powerup('gem'); // same crystal chime server-owned gems play on collect
           logger.info(`Nugget collected (${nuggetsCollected} total)`);
         }
         deps.onNuggetCollect?.(magnetId);

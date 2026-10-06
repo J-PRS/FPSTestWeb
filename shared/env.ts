@@ -19,6 +19,10 @@ export interface SharedEnv {
   /** think-stage cost accumulator (FPS_THINK_PROF) — presence enables
    *  the per-stage sampling in BotBrain.think. */
   thinkProf?: Map<string, number>;
+  /** Set by deterministic harnesses: botRand() MUST have an injected
+   *  stream — ambient Math.random under this flag throws instead of
+   *  silently producing an unreproducible trajectory. */
+  strictRng?: boolean;
 }
 
 export const sharedEnv: SharedEnv = {};

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES } from '../../shared/teams.ts';
+import { simNow } from '../src/simClock.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 
 // Map rotation: at the horn the room asks GameServer for the next spec
@@ -30,6 +31,7 @@ describe('Map rotation', () => {
     room.onRotate = () => next;
     endDmMatch(room);
     expect(sent.some(m => m.type === 'ffaMatchEnd')).toBe(true);
+    room.checkMatchClock(simNow() + 10_001); // intermission → startNext rotates
     expect(sent.some(m => m.type === 'mapUpdate')).toBe(true);
     expect(room.spec.structures?.length).toBe(1);
   });
@@ -41,6 +43,7 @@ describe('Map rotation', () => {
     room.onRotate = () => null;
     endDmMatch(room);
     expect(sent.some(m => m.type === 'ffaMatchEnd')).toBe(true);
+    room.checkMatchClock(simNow() + 10_001); // intermission → startNext replays
     expect(sent.some(m => m.type === 'mapUpdate')).toBe(false);
   });
 });

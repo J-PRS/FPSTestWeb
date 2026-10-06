@@ -82,6 +82,11 @@ export class MapCatalog {
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
     if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
     const spec = resolveMapSpec(parsed);
+    // Fail loud on coerced/dropped fields — a typo in the JSON shouldn't
+    // silently play as a different map than the author wrote.
+    if (spec.warnings?.length) {
+      logger.warn('Map spec parse warnings', { room: name, warnings: spec.warnings });
+    }
     logger.info('Map spec loaded', { room: name, path });
     return spec;
   }

@@ -12,7 +12,7 @@
 //    journals, hint timestamps — none influence future sim state.
 //  - Floats serialize via toPrecision(17) — bit-exact, round-trip safe.
 //  - Anything not serialized is a blind spot: keep the skip list narrow.
-import { botRng, tauntRng } from '../../../shared/botRand.ts';
+import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import type { Room } from '../../src/Room.ts';
 
@@ -133,7 +133,7 @@ function tickRoom(r: Room, dt: number, rng: () => number, trng: () => number, on
   const i0 = one >= 0 ? one : 0;
   for (let k = 0; k < n; k++) {
     botRng(rng); tauntRng(trng);
-    try { r.sims[i0 + k]!.tick(dt); } finally { botRng(Math.random); tauntRng(Math.random); }
+    try { r.sims[i0 + k]!.tick(dt); } finally { botRngRelease(); tauntRng(Math.random); }
   }
 }
 

@@ -9,6 +9,10 @@ import { CtfFlags } from './ctfFlags.js';
 import { Explosion } from '../effects/explosion.js';
 import { FLAG_PICKUP_R, TEAM_COLORS, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
+import { setBotStructureSpecs } from './botBrain.js';
+import type { StructureSpec } from '../../../shared/mapSpec.js';
+import { flagReturnFx } from './flagFx.js';
+import { FLAG_STAND_TOP } from '../structures/structures.js';
 import * as sfx from '../core/sfx.js';
 
 const _flagBurst = new THREE.Vector3();
@@ -18,7 +22,9 @@ export interface CtfBridgeDeps {
   lazyTerrain(): import('../world/terrain.js').Terrain;
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
-  lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number } };
+  lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
+    vel?: THREE.Vector3; yaw: number; pitch: number;
+    movement?: { setStructures(l: readonly StructureSpec[] | undefined): void } };
   lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
   world: {
     remotePlayers: Map<string, { pos: THREE.Vector3; isDead: boolean }>;
@@ -34,6 +40,8 @@ export interface CtfBridgeWiring {
   modsFor(id: string): { pickupRadius: number } | undefined;
   onCapture(team: TeamId): void;
   onFeed(t: string): void;
+  /** Personal-score payout — botMatch's awardPersonal. */
+  onPersonalPoints?(id: string, pts: number): void;
 }
 
 export class CtfBridge {
@@ -51,8 +59,19 @@ export class CtfBridge {
       scores: w.scores,
       onCapture: (t) => w.onCapture(t),
       onFeed: (t) => w.onFeed(t),
+      onPersonalPoints: (id, pts) => w.onPersonalPoints?.(id, pts),
+      // Offline has no wire echo — push the dais hulls into the local
+      // player's and bots' move sims the same way a gameState does.
+      applyStandSpecs: (specs) => {
+        deps.lazyPlayer().movement?.setStructures(specs);
+        setBotStructureSpecs(specs);
+      },
       onFlagEvent: (kind, team, at) => {
         sfx.flagCue(kind, team === w.playerTeam);
+        // 'at' is the stand on a return — same converge ceremony as the
+        // online path; no streak, the offline room doesn't keep a
+        // dropped-pos marker to fly it from.
+        if (kind === 'returned') flagReturnFx(at, team, null);
         deps.world.explosions.push(new Explosion(
           deps.lazyScene(), _flagBurst.copy(at).setY(at.y + 1.2), false, 0,
           deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1.0 : 1.4,
@@ -64,6 +83,11 @@ export class CtfBridge {
   /** Objective data the per-bot ctx asks for. */
   objectiveInfoFor(bot: GameBot) { return this.ctf.objectiveInfoFor(bot); }
 
+  /** Flag-zone test — botMatch's CTF_PTS.flagZoneKill bonus reads it. */
+  nearStand(pos: { x: number; y: number; z: number }, r: number): boolean {
+    return this.ctf.nearStand(pos, r);
+  }
+
   update(dt: number): void {
     this.ctf.update(dt);
     // Flag markers ride the player-indicator overlay — a DOM element
@@ -72,15 +96,22 @@ export class CtfBridge {
     const hud = this.deps.lazyHud();
     for (const m of this.ctf.markers()) {
       // +3.4 → the indicator's own +1.0 puts the diamond at the 4m
-      // pole tip instead of at the base's feet.
-      m.pos.y += 3.4;
+      // pole tip instead of at the base's feet; a home flag also sits
+      // one dais-height up (the pole seats on the platform deck).
+      const lift = m.state === 'home' ? FLAG_STAND_TOP : 0;
+      m.pos.y += 3.4 + lift;
       hud.updateFlagIndicator(`flag:${m.team}`, m.pos, cam, m.team);
-      m.pos.y -= 3.4;
-      // The stand's hollow socket sits at gem height — flag home reads
-      // as a flag-over-stand pin stack, flag away leaves the socket.
-      m.home.y += 0.5;
-      hud.updateFlagIndicator(`stand:${m.team}`, m.home, cam, m.team, 'stand');
-      m.home.y -= 0.5;
+      // Home flag: the hollow socket nests inside the flag diamond — one
+      // complete glyph, same as the wire path. Away: the bare socket
+      // marks the empty stand at deck height.
+      if (m.state === 'home') {
+        hud.updateFlagIndicator(`stand:${m.team}`, m.pos, cam, m.team, 'stand');
+      } else {
+        m.home.y += FLAG_STAND_TOP + 0.07;
+        hud.updateFlagIndicator(`stand:${m.team}`, m.home, cam, m.team, 'stand');
+        m.home.y -= FLAG_STAND_TOP + 0.07;
+      }
+      m.pos.y -= 3.4 + lift;
     }
   }
 
@@ -88,6 +119,14 @@ export class CtfBridge {
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
     this.ctf.dropCarried(carrierId, at);
+  }
+
+  /** Offline G-press — the bridge feeds the local player's aim since
+   *  CtfFlags only knows positions, not look direction. */
+  throwLocal(): void {
+    const p = this.deps.lazyPlayer();
+    if (p.isDead) return;
+    this.ctf.throwLocal('local', p.pos, p.vel ?? _flagBurst.set(0, 0, 0), p.yaw, p.pitch);
   }
 
   private carrierPos(id: string): THREE.Vector3 | null {

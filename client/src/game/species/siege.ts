@@ -113,15 +113,15 @@ function spawnTotemImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   if (deps.lazyDemoManager()?.isPlaying) return;
   const cap = uber ? UBER_TOTEM_MAX : capFor('totem', TOTEM_MAX);
   if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) return;
-  const player = deps.lazyPlayer();
   const bolt = uber
     ? { scale: 0.6, color: 0xffaa33, popDur: 3.0, force: 14, dmg: UBER_TOTEM_BOLT_DAMAGE, text: 'sniped by the grand totem' }
     : { scale: 0.35, color: 0xff5566, popDur: 2.0, force: 8, dmg: TOTEM_BOLT_DAMAGE, text: 'struck down by a totem' };
   const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX), uber);
   t.onBoltLand = (pos) => boltPop(pos, bolt.scale, bolt.color, bolt.popDur);
-  t.onBoltHit = () => {
-    boltPop(player.pos.clone(), bolt.scale, bolt.color, bolt.popDur);
-    hurtPlayer(t.pos, bolt.force, bolt.dmg, bolt.text, undefined, t);
+  t.onBoltHit = (_x, pos) => {
+    if (hurtPlayer(pos, bolt.force, bolt.dmg, bolt.text, 3, t)) {
+      boltPop(pos.clone(), bolt.scale, bolt.color, bolt.popDur);
+    }
   };
   t.onBlink = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); }; // departure puff at the old spot
   totems.push(t);
@@ -135,7 +135,7 @@ function spawnTotemImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
 export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
   const {
-    removeTarget, ringPos, hurtPlayer, bite, blastAtPlayer,
+    removeTarget, ringPos, hurtPlayer, blastAtPlayer,
     aggroFor, aggroVelFor, boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail, atCap,
   } = kit;
 
@@ -151,14 +151,18 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   function spawnTurretter(uber?: boolean): void {
     if (atCap(turrets, capFor('turret', TURRET_MAX))) return;
     const u = uber ?? rollUber();
-    const player = deps.lazyPlayer();
     const t = new Turretter(scene, deps.lazyTerrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX), u);
     t.onLanded = (pos) => boltPop(pos, 0.4, 0xff8844, 2.4);
     t.onLaunch = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'launch'); };
     t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xffaa44, 1.8);
-    t.onBoltHit = () => {
-      boltPop(player.pos.clone(), 0.3, 0xffaa44, 1.8);
-      bite(t, 6, TURRET_BOLT_DAMAGE, 'shelled by a turretter', { force: 1, dmg: 1.5, text: 'shelled by a siege engine' });
+    t.onBoltHit = (x, pos) => {
+      // Damage judges from the IMPACT point — the shell lands tens of
+      // meters from the turret, so reach in the shooter's frame whiffs
+      // every legit hit (was: explosion VFX in your face, zero damage).
+      if (hurtPlayer(pos, 6, TURRET_BOLT_DAMAGE * (x.uber ? 1.5 : 1),
+        x.uber ? 'shelled by a siege engine' : 'shelled by a turretter', 3, x)) {
+        boltPop(pos.clone(), 0.3, 0xffaa44, 1.8);
+      }
     };
     turrets.push(t);
     targets.push(t);

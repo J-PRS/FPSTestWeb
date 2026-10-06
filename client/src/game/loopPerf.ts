@@ -155,7 +155,7 @@ function gpuLevelTarget(st: LoopState, dir: number, base: { p: number; m: number
     (base.p > 1 && base.m === 3);
   const baselineLevel = pixelPinned ? 0 : tierOf(base.p, base.m);
   const cap = pixelPinned ? 1 : 5;
-  const floor = Math.max(baselineLevel, (!settings.get('fps-shadows') && dir > 0) ? 1 : 0);
+  const floor = baselineLevel;
   const next = Math.min(cap, Math.max(floor, st.gpuLevel - dir));
   return next === st.gpuLevel ? null : { next, baselineLevel };
 }
@@ -170,10 +170,13 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const target = gpuLevelTarget(st, dir, base);
   if (!target) return;
   const { next, baselineLevel } = target;
-  // A pixelated baseline shouldn't imply shadows off: at the resting
-  // level, shadows follow the user's own fps-shadows pick.
-  const wantShadows = next === 0 ||
-    (baselineLevel > 0 && next === baselineLevel && settings.get('fps-shadows'));
+  // Shadows shed with the pixel tier under pressure and restore on
+  // recovery, but only while the USER's fps-shadows pick stays on —
+  // setShadows must not overwrite it or a degrade would persist
+  // shadow-off forever (and the old floor clause then trapped the
+  // ladder at level 1, so it never came back).
+  const wantShadows = settings.get('fps-shadows') &&
+    (next === 0 || (baselineLevel > 0 && next === baselineLevel));
   if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
   applyResTier(deps, st, next, base, baselineLevel);
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
@@ -277,5 +280,6 @@ function setShadows(deps: GameLoopDeps, on: boolean): void {
     const m = (o as THREE.Mesh).material;
     if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });
   });
-  settings.set('fps-shadows', on);
+  // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
+  // the ladder only owns the runtime flag (see wantShadows above).
 }

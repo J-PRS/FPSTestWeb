@@ -47,8 +47,13 @@ export const BOLT_CONFIG: ProjectileConfig = {
   meshType: 'rocket',
   glowShell: true,
   glowColor: 0xff4400,
-  glowOpacity: 0.18,
+  // Vapor-cone collar like the disc — the collar radius IS the wake
+  // hitbox (coupled in projectileVisuals); glowScale only sizes the
+  // skirt's trailing length. Opacity runs hotter than the old sphere:
+  // the filament map eats most of the additive fill.
+  glowOpacity: 0.6,
   glowScale: 0.8,
+  glowShape: 'cone',
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.2,

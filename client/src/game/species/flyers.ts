@@ -144,8 +144,8 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(strifers, capFor('strifer', STRIFER_MAX))) return;
     const u = uber ?? rollUber();
     const st = new Strifer(scene, deps.lazyTerrain(), ringPos(STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX), u);
-    st.onBoltHit = (x) => bite(x, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),
-      x.uber ? 'raked by an elder strifer' : 'shot down by a strifer');
+    st.onBoltHit = (x, pos) => hurtPlayer(pos, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),
+      x.uber ? 'raked by an elder strifer' : 'shot down by a strifer', 3, x);
     st.onBoltLand = (pos) => deps.lazyEffects().spawnImpact(pos, new THREE.Vector3(0, 1, 0));
     st.onFire = (x) => sfx.enemyCue(x.pos, 'zap');
     strifers.push(st);

@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
 import type { ArmorClass } from '../../../../shared/botClasses.js';
+import { weaponDef } from '../../weapons.js';
+import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import type { NetCtx } from './ctx.js';
@@ -64,10 +66,21 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's
   // value so state-hash health checks stop screaming desync.
-  networkManager.onShotRejected = (_reason, _targetId, _weaponType, health) => {
-    if (deps.world.playbackMode || health === undefined) return;
+  networkManager.onShotRejected = (reason, _targetId, weaponType, health) => {
+    if (deps.world.playbackMode) return;
     const player = deps.lazyPlayer();
-    if (!player.isDead) player.health = health;
+    // The authority says this pick is class-locked — a stale slot keeps
+    // spam-rejecting every pull for the rest of the life. Unshoulder it
+    // to the class fallback once and the next pull fires something legal.
+    if (reason === 'class-locked weapon' && weaponType !== undefined) {
+      for (let i = 0; i < player.loadout.length; i++) {
+        if (weaponDef(player.loadout[i]).weaponType === weaponType) {
+          player.armory.setLoadoutSlot(i, PlayerLoadout.fallbackWid(player.appliedClass, player.loadout));
+          break;
+        }
+      }
+    }
+    if (health !== undefined && !player.isDead) player.health = health;
   };
 
   // Server-healed hp (regen perk, mend channel, regen powerup) — arrives
@@ -188,7 +201,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     void velocity; // next tick record carries it — no need to touch internals
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId, weapon) => onPlayerKill(ctx, shooterId, targetId, weapon);
+  networkManager.onPlayerKill = (shooterId, targetId, weapon, air) => onPlayerKill(ctx, shooterId, targetId, weapon, air);
 }
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */

@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 
 import { TERRAIN_HEIGHT_SCALE } from '../core/config.js';
+import { getHeightScale } from '../world/heightmap.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import { maxHeightInRect } from '../world/heightmap.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -53,10 +54,10 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   // the shallow offset is fine (the ball never visually sits there).
   const offset = Math.max(p.config.terrainOffset,
     p.canBounce ? p.config.bodyRadius : 0);
-  // Whole field tops out at TERRAIN_HEIGHT_SCALE — a segment whose lowest
-  // endpoint clears it can never intersect. Skips the ~96-getHeight loop
-  // for every high-altitude shell (most of them mid-flight).
-  if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE + offset) return false;
+  // Whole field tops out at TERRAIN_HEIGHT_SCALE × the map's height gain —
+  // a segment whose lowest endpoint clears it can never intersect. Skips
+  // the ~96-getHeight loop for every high-altitude shell (most mid-flight).
+  if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE * getHeightScale() + offset) return false;
   // Coarse reject: the tallest heightmap cell under the segment's XZ rect
   // can't be under-reported, so clearing it skips the ~96-sample loop for
   // every shell cruising over low ground (the common case).

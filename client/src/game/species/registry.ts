@@ -2,39 +2,48 @@
 // one table. Adding an enemy = one entry here + its species block, instead
 // of touching main.ts/config/gameLoop by hand. Parts come from each entity
 // module; capacity is the instanced-mesh ceiling (visible cap, not pop cap).
+// `spawn` feeds the gunlab's creature preview — omit it when the entity
+// doesn't fit the shared (scene, terrain, pos) constructor (Ball takes a
+// variant, deployables take ttls).
 import type { SwarmSpec } from '../../entities/swarms.js';
-import { crawlerParts } from '../../entities/Crawler.js';
-import { scarabParts } from '../../entities/Scarab.js';
-import { grubParts } from '../../entities/Grub.js';
-import { snakeParts } from '../../entities/Snake.js';
-import { gnatParts } from '../../entities/Gnat.js';
-import { rollerParts } from '../../entities/Roller.js';
-import { seekerParts } from '../../entities/Seeker.js';
-import { rakkParts } from '../../entities/Rakk.js';
-import { striferParts } from '../../entities/Strifer.js';
-import { mineParts } from '../../entities/Mine.js';
-import { overlordParts } from '../../entities/Overlord.js';
-import { banelingParts } from '../../entities/Baneling.js';
-import { totemParts } from '../../entities/Totem.js';
-import { turretterParts } from '../../entities/Turretter.js';
+import { Crawler, crawlerParts } from '../../entities/Crawler.js';
+import { Scarab, scarabParts } from '../../entities/Scarab.js';
+import { Grub, grubParts } from '../../entities/Grub.js';
+import { Snake, snakeParts } from '../../entities/Snake.js';
+import { Gnat, gnatParts } from '../../entities/Gnat.js';
+import { Roller, rollerParts } from '../../entities/Roller.js';
+import { Seeker, seekerParts } from '../../entities/Seeker.js';
+import { Rakk, rakkParts } from '../../entities/Rakk.js';
+import { Strifer, striferParts } from '../../entities/Strifer.js';
+import { Mine, mineParts } from '../../entities/Mine.js';
+import { Overlord, overlordParts } from '../../entities/Overlord.js';
+import { Baneling, banelingParts } from '../../entities/Baneling.js';
+import { Totem, totemParts } from '../../entities/Totem.js';
+import { Turretter, turretterParts } from '../../entities/Turretter.js';
 import { ballParts } from '../../entities/balls.js';
-import { weedParts } from '../../entities/Tumbleweed.js';
+import { Tumbleweed, weedParts } from '../../entities/Tumbleweed.js';
 
 export const SWARM_SPECS: Record<string, SwarmSpec> = {
-  crawler:   { parts: crawlerParts,   capacity: 512 },
-  scarab:    { parts: scarabParts,    capacity: 512 },
-  grub:      { parts: grubParts,      capacity: 256 },
-  snake:     { parts: snakeParts,     capacity: 256 },
-  gnat:      { parts: gnatParts,      capacity: 256 },
-  roller:    { parts: rollerParts,    capacity: 256 },
-  seeker:    { parts: seekerParts,    capacity: 256 },
-  rakk:      { parts: rakkParts,      capacity: 256 },
-  strifer:   { parts: striferParts,   capacity: 128 },
-  mine:      { parts: mineParts,      capacity: 512 },
-  overlord:  { parts: overlordParts,  capacity: 64 },
-  baneling:  { parts: banelingParts,  capacity: 128 },
-  totem:     { parts: totemParts,     capacity: 64 },
-  turretter: { parts: turretterParts, capacity: 64 },
+  crawler:   { parts: crawlerParts,   capacity: 512, spawn: (s, t, p) => new Crawler(s, t, p) },
+  scarab:    { parts: scarabParts,    capacity: 512, spawn: (s, t, p) => new Scarab(s, t, p) },
+  grub:      { parts: grubParts,      capacity: 256, spawn: (s, t, p) => new Grub(s, t, p) },
+  snake:     { parts: snakeParts,     capacity: 256, spawn: (s, t, p) => new Snake(s, t, p) },
+  gnat:      { parts: gnatParts,      capacity: 256, spawn: (s, t, p) => new Gnat(s, t, p) },
+  roller:    { parts: rollerParts,    capacity: 256, spawn: (s, t, p) => new Roller(s, t, p) },
+  seeker:    { parts: seekerParts,    capacity: 256, spawn: (s, t, p) => new Seeker(s, t, p) },
+  rakk:      { parts: rakkParts,      capacity: 256, spawn: (s, t, p) => new Rakk(s, t, p) },
+  strifer:   { parts: striferParts,   capacity: 128, spawn: (s, t, p) => new Strifer(s, t, p) },
+  mine:      { parts: mineParts,      capacity: 512, bake: true, // steel shell — gunmetal bake like the turretter
+               spawn: (s, t, p) => { // update(dt, playerPos) — no terrain arg, adapt it
+                 const m = new Mine(s, t, p);
+                 return { pos: m.pos, radius: m.radius,
+                   update: (dt, _t, pp) => m.update(dt, pp), dispose: () => m.dispose() };
+               } },
+  overlord:  { parts: overlordParts,  capacity: 64,  spawn: (s, t, p) => new Overlord(s, t, p) },
+  baneling:  { parts: banelingParts,  capacity: 128, spawn: (s, t, p) => new Baneling(s, t, p) },
+  totem:     { parts: totemParts,     capacity: 64,  spawn: (s, t, p) => new Totem(s, t, p) },
+  turretter: { parts: turretterParts, capacity: 64, bake: true, // gunmetal — same pipeline as viewmodel weapons
+               spawn: (s, t, p) => new Turretter(s, t, p) },
   ball:      { parts: ballParts,      capacity: 512 },
-  tumbleweed:{ parts: weedParts,      capacity: 64 },
+  tumbleweed:{ parts: weedParts,      capacity: 64,  spawn: (s, t, p) => new Tumbleweed(s, t, p) },
 };

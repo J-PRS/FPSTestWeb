@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { BotGoals, type GoalState } from '../../shared/botGoals.ts';
-import { botRng } from '../../shared/botRand.ts';
+import { botRng, botRngRelease } from '../../shared/botRand.ts';
 import type { BrainCtx } from '../../shared/botBrain.ts';
 
 const flat = (over: Partial<BrainCtx> = {}): BrainCtx => ({
@@ -27,7 +27,7 @@ const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; ne
   return { s, g };
 };
 
-afterEach(() => botRng(Math.random));
+afterEach(() => botRngRelease());
 
 describe('BotGoals.pick — priority ladder', () => {
   const pos = { x: 0, y: 0, z: 0 };

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
 import { pickDest, pickDeploy, pickRepair, statusIntent } from '../../shared/botDisposition.ts';
-import { botRng } from '../../shared/botRand.ts';
+import { botRng, botRngRelease } from '../../shared/botRand.ts';
 import { STATUS } from '../../shared/status.ts';
 import { ENERGY } from '../../shared/movement.ts';
 
@@ -21,7 +21,7 @@ const ctx = (over: Partial<BrainCtx> = {}): BrainCtx => ({
 
 const brain = () => new BotBrain({ x: 0, y: 0, z: 0 });
 
-afterEach(() => botRng(Math.random));
+afterEach(() => botRngRelease());
 
 describe('pickDest', () => {
   it('flinch overrides everything — flees from the hit', () => {

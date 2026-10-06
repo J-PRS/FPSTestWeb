@@ -246,6 +246,7 @@ export class CombatHandler {
    *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
   onPlayerRemoved(playerId: string): void {
     this.ledger.removePlayer(playerId);
+    this.killFeed.forget(playerId);
     // A pending respawn is part of the player's teardown too — removal
     // paths that skip onPlayerDisconnected (kick, room hop, admin reload)
     // would otherwise leave a zombie timer firing into a gone player.
@@ -443,7 +444,16 @@ export class CombatHandler {
    *  respawn timer, and any pending class/perk all behave identically.
    *  Damage is far over the kill line on purpose: shield/regen buffs
    *  shouldn't half-eat a player's own respawn request. */
-  respawnRequest(id: string): void {
+  respawnRequest(id: string, hold = false): void {
+    const p = this.playerManager.getPlayer(id);
+    if (p?.isDead) {
+      // Dead press = "respawn me now" — releases a die-and-spectate hold
+      // or just skips the remaining countdown.
+      this.respawner.respawnNow(id);
+      return;
+    }
+    // Arm BEFORE the kill so the timer the death schedules inherits it.
+    if (hold) this.respawner.hold(id);
     this.serverHit(id, id, 99999, 'Respawn', { hb: 'respawn.req' });
   }
 

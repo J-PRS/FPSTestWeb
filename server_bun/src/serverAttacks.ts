@@ -57,6 +57,6 @@ export function botAttack(h: CombatHandler, shooterId: string, targetId: string,
       const victim = h.playerManager.getPlayer(targetId);
       if (victim && !victim.isDead && !h.friendly(shooterId, targetId)) h.chargeBank.bank(victim, h.chargeBank.withheldFor(n));
     }
-    h.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType, shotId });
+    h.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType, shotId, air: airtime });
   }
 

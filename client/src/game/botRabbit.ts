@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { FLAG_PICKUP_R } from '../../../shared/teams.js';
+import { GRAVITY } from '../core/config.js';
 
 /**
  * Offline rabbit referee — the no-server mirror of the server's RoomFlags
@@ -17,6 +18,12 @@ export class RabbitBridge {
   /** Loose-flag spot — also the mesh's home while dropped. */
   readonly pos = new THREE.Vector3();
   private holdAcc = 0;
+  /** Loose-flag ballistic velocity (RoomFlags.vel parity) — nonzero
+   *  means the flag is tumbling, not resting. */
+  private flyVel = new THREE.Vector3();
+  /** Whose toss is still airborne — the rabbit can't instantly re-grab
+   *  its own throw, same guard the server applies. */
+  private airborneBy: string | null = null;
   private readonly group = new THREE.Group();
 
   constructor(
@@ -71,8 +78,29 @@ export class RabbitBridge {
     this.state = 'dropped';
     this.carrier = null;
     this.pos.set(pos.x, this.d.lazyTerrain().getHeight(pos.x, pos.z), pos.z);
+    this.flyVel.set(0, 3, 0); // same tumble pop RoomFlags.loose gives
     this.group.position.copy(this.pos);
     this.group.visible = true;
+  }
+
+  /** Local G-press flag toss — the same claim RoomFlags.throwFor
+   *  resolves online: FULL carrier speed inherited, deliberate lob
+   *  along aim, airborneBy re-grab guard. */
+  throwLocal(carrierId: string, pos: THREE.Vector3, vel: THREE.Vector3,
+    yaw: number, pitch: number): void {
+    if (this.carrier !== carrierId) {return;}
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    this.state = 'dropped';
+    this.carrier = null;
+    this.pos.copy(pos);
+    this.flyVel.set(
+      vel.x + cp * Math.sin(yaw) * 20,
+      vel.y + 3 + sp * 20,
+      vel.z + cp * Math.cos(yaw) * 20);
+    this.airborneBy = carrierId;
+    this.group.position.copy(this.pos);
+    this.group.visible = true;
+    this.announce('FLAG THROWN');
   }
 
   /** Frame tick: touch → rabbit, carry follow, +1/sec hold scoring. */
@@ -96,12 +124,32 @@ export class RabbitBridge {
       }
       return;
     }
+    // Dropped: the flag tumbles loose (RoomFlags.tickBallistic parity —
+    // world gravity, 0.3 bounce, 4/s skid bleed, settles below 0.6 m/s).
+    if (this.flyVel.x || this.flyVel.y || this.flyVel.z) {
+      this.flyVel.y += GRAVITY * dt;
+      this.pos.addScaledVector(this.flyVel, dt);
+      const gy = this.d.lazyTerrain().getHeight(this.pos.x, this.pos.z);
+      if (this.pos.y <= gy) {
+        this.pos.y = gy;
+        this.flyVel.y = this.flyVel.y < -2 ? -this.flyVel.y * 0.3 : 0;
+        const bleed = Math.max(0, 1 - 4 * dt);
+        this.flyVel.x *= bleed;
+        this.flyVel.z *= bleed;
+      }
+      if (this.flyVel.lengthSq() < 0.36 && this.pos.y <= gy + 0.05) {
+        this.flyVel.set(0, 0, 0);
+        this.airborneBy = null;
+      }
+      this.group.position.copy(this.pos);
+    }
     for (const c of candidates) {
-      if (!c.alive) {continue;}
+      if (!c.alive || c.id === this.airborneBy) {continue;}
       const r = FLAG_PICKUP_R * c.pickupScale;
       if (c.pos.distanceToSquared(this.pos) > r * r) {continue;}
       this.state = 'carried';
       this.carrier = c.id;
+      this.airborneBy = null; this.flyVel.set(0, 0, 0);
       this.holdAcc = 0;
       this.announce(c.id === 'local' ? 'YOU ARE THE RABBIT' : `${c.id.replace('bot:', '')} IS THE RABBIT`);
       return;
@@ -120,6 +168,8 @@ export class RabbitBridge {
     this.state = 'unspawned';
     this.carrier = null;
     this.holdAcc = 0;
+    this.flyVel.set(0, 0, 0);
+    this.airborneBy = null;
     this.group.visible = false;
   }
 

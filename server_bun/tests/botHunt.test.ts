@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { newHuntState, pickHunt, pickFire, scanVisible, retreatDest } from '../../shared/botHunt.ts';
-import { botRng } from '../../shared/botRand.ts';
+import { botRng, botRngRelease } from '../../shared/botRand.ts';
 import type { BotEnemy, BrainCtx } from '../../shared/botBrain.ts';
 
 const foe = (x: number, z: number, id = 'p:1'): BotEnemy => ({
@@ -20,7 +20,7 @@ const flat = (over: Partial<BrainCtx> = {}): BrainCtx => ({
 const mood = { hero: false, fearing: false };
 const P = { x: 0, y: 0, z: 0 };
 
-afterEach(() => botRng(Math.random));
+afterEach(() => botRngRelease());
 
 describe('scanVisible', () => {
   it('dead and occluded candidates are skipped', () => {

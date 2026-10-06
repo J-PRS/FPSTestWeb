@@ -26,6 +26,8 @@ describe('match clock', () => {
     room.scores.bravo = 3;
     room.checkMatchClock(t0 + MODES.nuggets.timeLimitS * 1000 + 1);
     expect(endedWinner).toBe('alpha');
+    expect(room.scores.alpha).toBe(5); // standings stay up for the intermission
+    room.checkMatchClock(t0 + MODES.nuggets.timeLimitS * 1000 + 10_002); // intermission over
     expect(room.scores.alpha).toBe(0); // reset for the next match
   });
 
@@ -76,6 +78,7 @@ describe('match clock', () => {
     room.checkMatchClock(horn + 1);
     room.ffaScores.set('h1', 1);
     room.checkMatchClock(horn + 2);
+    room.checkMatchClock(horn + 2 + 10_001); // intermission → startNext re-arms
     expect(warnedOf()).toBe(false);
   });
 

@@ -7,6 +7,7 @@ import { roleObjective, ROLE_PRIORITY, STRICT_CLASS } from '../../../shared/flag
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
 import { wornMetalMat } from '../entities/procMetal.js';
+import { GRAVITY } from '../core/config.js';
 import { flagStandSpecs, FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
 
 export interface Flag {
@@ -20,6 +21,12 @@ export interface Flag {
   /** Carrier's measured velocity — the flag rides the body, so the
    *  banner's own displacement IS the thief's velocity for aim lead. */
   vel: THREE.Vector3;
+  /** Loose-flag ballistic velocity (RoomFlags.vel parity) — nonzero
+   *  means the flag is tumbling, not resting. */
+  flyVel: THREE.Vector3;
+  /** Whose toss is still airborne — the thrower can't instantly
+   *  re-grab their own throw, same guard the server applies. */
+  airborneBy: string | null;
 }
 
 export interface FlagCtx {
@@ -134,7 +141,7 @@ export class CtfFlags {
       g.position.copy(home);
       g.position.y += FLAG_STAND_TOP; // pole seats on the platform deck
       ctx.lazyScene().add(stand, g);
-      this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3() });
+      this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3(), flyVel: new THREE.Vector3(), airborneBy: null });
     }
     ctx.applyStandSpecs?.(standSpecs);
   }
@@ -269,6 +276,50 @@ export class CtfFlags {
       ? { id: own.carrier, pos: thief, vel: own.vel } : undefined;
   }
 
+  /** Local G-press flag toss — the same claim RoomFlags.throwFor
+   *  resolves online: FULL carrier speed inherited, deliberate lob
+   *  along aim. Same constants both ends so the offline arc reads
+   *  identical to the wire replay. */
+  throwLocal(carrierId: string, pos: THREE.Vector3, vel: THREE.Vector3,
+    yaw: number, pitch: number): void {
+    for (const [team, f] of this.flags) {
+      if (f.carrier !== carrierId) continue;
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      f.carrier = null;
+      f.state = 'dropped';
+      f.pos.copy(pos);
+      f.flyVel.set(
+        vel.x + cp * Math.sin(yaw) * 20,
+        vel.y + 3 + sp * 20,
+        vel.z + cp * Math.cos(yaw) * 20);
+      f.airborneBy = carrierId;
+      f.dropT = FLAG_RESET_S;
+      const bot = this.ctx.bots.find(b => b.playerId === carrierId);
+      if (bot) bot.carryingFlag = false;
+      this.ctx.onFlagEvent?.('dropped', team, f.pos);
+    }
+  }
+
+  /** Loose-flag tumble — mirrors RoomFlags.tickBallistic (world
+   *  gravity, 0.3 bounce, 4/s skid bleed, 0.6 settle). */
+  private tickBallistic(f: Flag, dt: number): void {
+    if (f.flyVel.x === 0 && f.flyVel.y === 0 && f.flyVel.z === 0) return;
+    f.flyVel.y += GRAVITY * dt;
+    f.pos.addScaledVector(f.flyVel, dt);
+    const gy = this.ctx.lazyTerrain().getHeight(f.pos.x, f.pos.z) + 0.5;
+    if (f.pos.y <= gy) {
+      f.pos.y = gy;
+      f.flyVel.y = f.flyVel.y < -2 ? -f.flyVel.y * 0.3 : 0;
+      const bleed = Math.max(0, 1 - 4 * dt);
+      f.flyVel.x *= bleed;
+      f.flyVel.z *= bleed;
+    }
+    if (f.flyVel.lengthSq() < 0.36 && f.pos.y <= gy + 0.05) {
+      f.flyVel.set(0, 0, 0);
+      f.airborneBy = null; // settled — the thrower may grab it again
+    }
+  }
+
   dropCarried(carrierId: string, at: THREE.Vector3): void {
     for (const [team, f] of this.flags) {
       if (f.carrier !== carrierId) continue;
@@ -276,6 +327,7 @@ export class CtfFlags {
       f.state = 'dropped';
       f.pos.copy(at);
       f.pos.y = this.ctx.lazyTerrain().getHeight(at.x, at.z);
+      f.flyVel.set(0, 0, 0); f.airborneBy = null;
       f.dropT = FLAG_RESET_S;
       const bot = this.ctx.bots.find(b => b.playerId === carrierId);
       if (bot) bot.carryingFlag = false;
@@ -286,7 +338,8 @@ export class CtfFlags {
   /** Match reset — every flag home, nobody carrying. */
   reset(): void {
     for (const f of this.flags.values()) {
-      f.state = 'home'; f.carrier = null; f.pos.copy(f.home); this.seatFlag(f);
+      f.state = 'home'; f.carrier = null; f.pos.copy(f.home);
+      f.flyVel.set(0, 0, 0); f.airborneBy = null; this.seatFlag(f);
     }
   }
 
@@ -303,6 +356,7 @@ export class CtfFlags {
       const px = f.pos.x, py = f.pos.y, pz = f.pos.z;
       if (f.state === 'carried') this.tickCarried(team, f);
       else if (f.state === 'dropped') {
+        this.tickBallistic(f, dt);
         f.dropT -= dt;
         // Timeout walks itself home — the wire path announces this same
         // transition (dropped→home), so the cue/VFX must fire here too
@@ -332,6 +386,7 @@ export class CtfFlags {
     // drops funnel through dropCarried, this edge owns its own event.
     if (!cp) {
       f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S;
+      f.flyVel.set(0, 3, 0); // same tumble pop RoomFlags.loose gives
       ctx.onFlagEvent?.('dropped', team, f.pos);
       return;
     }
@@ -349,6 +404,7 @@ export class CtfFlags {
     const bot = ctx.bots.find(b => b.playerId === f.carrier);
     if (bot) bot.carryingFlag = false;
     f.carrier = null; f.state = 'home'; f.pos.copy(f.home);
+    f.flyVel.set(0, 0, 0); f.airborneBy = null;
   }
 
   /** Flag-zone test for the personal-score kill bonus — `pos` inside
@@ -364,6 +420,7 @@ export class CtfFlags {
   private tickTouch(team: TeamId, f: Flag): void {
     const ctx = this.ctx;
     for (const [id, tp, pp] of ctx.touchers()) {
+      if (id === f.airborneBy) continue; // thrower can't re-grab mid-flight
       const tTeam = ctx.teamOf(id);
       // Swept grab: the reach is tested against the whole frame's travel
       // (prev→cur), so a 60m/s fly-by can't tunnel between samples.
@@ -378,6 +435,7 @@ export class CtfFlags {
       if (dx * dx + dy * dy + dz * dz > this.ctx.pickupRadiusOf(id) ** 2) continue;
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
+        f.flyVel.set(0, 0, 0); f.airborneBy = null;
         ctx.onPersonalPoints?.(id, CTF_PTS.flagReturn);
         ctx.onFlagEvent?.('returned', team, f.pos);
         return;
@@ -385,6 +443,7 @@ export class CtfFlags {
       if (tTeam !== team) {
         ctx.onFlagEvent?.('taken', team, f.pos);
         f.state = 'carried'; f.carrier = id;
+        f.flyVel.set(0, 0, 0); f.airborneBy = null;
         const bot = ctx.bots.find(b => b.playerId === id);
         if (bot) bot.carryingFlag = true;
         ctx.onFeed(`${id === 'local' ? 'YOU' : id.replace('bot:', '')} took the ${TEAM_LABEL[team]} flag!`);

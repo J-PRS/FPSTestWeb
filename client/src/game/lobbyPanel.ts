@@ -88,11 +88,18 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
   // flex child sizes to the image's natural pixels and overflows.
   thumb.style.cssText = 'display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;border-radius:4px;margin-top:4px;';
   thumb.alt = 'map preview';
-  const update = () => {
-    const name = select.value;
-    const url = name && h.deps.mapThumbUrl ? h.deps.mapThumbUrl(name) : '';
-    thumb.style.display = url ? 'block' : 'none';
-    if (url) thumb.src = url;
+  // Thumbs are optional — mapthumbs.ts only renders them on demand. An
+  // <img> 404 spams the console, so probe with fetch first: a missing
+  // thumb quietly hides, a present one loads from cache.
+  let probe = 0;
+  const update = async () => {
+    const url = select.value && h.deps.mapThumbUrl ? h.deps.mapThumbUrl(select.value) : '';
+    const gen = ++probe;
+    if (!url) { thumb.style.display = 'none'; return; }
+    const ok = await fetch(url).then((r) => r.ok).catch(() => false);
+    if (gen !== probe) return; // selection moved on while probing
+    thumb.style.display = ok ? 'block' : 'none';
+    if (ok) thumb.src = url;
   };
   thumb.addEventListener('error', () => { thumb.style.display = 'none'; });
   select.addEventListener('change', update);

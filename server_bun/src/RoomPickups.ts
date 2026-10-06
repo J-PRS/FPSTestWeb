@@ -14,6 +14,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
 const PICKUP_TTL_S = 60; // dropped loot decays — no infinite accumulation
@@ -123,7 +124,7 @@ export class RoomPickups {
       if (p.vel.x !== 0 || p.vel.z !== 0 || p.vel.y !== 0) {
         const bleed = Math.max(0, 1 - NUG_FRICTION * dt);
         p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
-        p.pos.y += p.vel.y * dt; p.vel.y -= 25 * dt;
+        p.pos.y += p.vel.y * dt; p.vel.y += GRAVITY * dt; // world gravity — no soft loose-object fork
         const gy = this.room.field ? hmHeight(this.room.field, p.pos.x, p.pos.z) + 0.5 : p.pos.y;
         if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
         p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;

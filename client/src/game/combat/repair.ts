@@ -82,6 +82,7 @@ export function createRepair(deps: CombatDeps) {
       const nm = deps.lazyNetworkManager();
       if (hit.item.serverId !== undefined && nm?.isConnected()) nm.sendRepair(hit.item.serverId);
       deps.lazyDamageNumbers().spawn(hit.item.pos, REPAIR_HEAL_PER_TICK, '#7dffb8', cam);
+      deps.lazyHealthBarSystem().showRepair(hit.item);
     }
     muzzle(cam);
     st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null, hit.item !== null);

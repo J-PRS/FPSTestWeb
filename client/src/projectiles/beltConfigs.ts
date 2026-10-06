@@ -71,7 +71,7 @@ export const CLUSTER_CONFIG: ProjectileConfig = beltBall(19, 0x3d4a2a, 0x99ff44,
   displayName: 'Cluster Bomb',
   damageColor: '#aaff66',
   glowColor: 0x88ff33,
-  cluster: { count: 5, spread: 0.9, fuse: 1.1 },
+  cluster: { count: 5, spread: 1.2, fuse: 1.1 },
 });
 
 // Bomblet — spawned by the carrier's detonation, never fired. speed is

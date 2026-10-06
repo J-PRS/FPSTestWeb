@@ -8,9 +8,24 @@
  */
 // Read Math.random lazily so tests can still spyOn(Math,'random') when no
 // stream is injected — only an explicit botRng() call overrides it.
+import { sharedEnv } from './env.ts';
+
+// Ambient release gets a tagged wrapper: harnesses/tests restore ambient
+// dice BETWEEN seeded windows on purpose (zombie timers from another
+// room must not eat this room's sequence). strictRng therefore rejects
+// only UNMARKED ambient — `rand === Math.random` identity or a never-
+// bound stream — so "forgot to seed" throws while a blessed release
+// still draws silently.
+const AMBIENT: () => number = () => Math.random();
 let rand: (() => number) | null = null;
 export function botRng(r: () => number): void { rand = r; }
-export function botRand(): number { return (rand ?? Math.random)(); }
+export function botRngRelease(): void { rand = AMBIENT; }
+export function botRand(): number {
+  if (sharedEnv.strictRng && (rand === null || rand === Math.random)) {
+    throw new Error('botRand drew ambient Math.random under strictRng — inject botRng(lcg) or release with botRngRelease()');
+  }
+  return (rand ?? Math.random)();
+}
 
 /** Chat/taunt flavor gets its own stream — the taunt cooldown ring is
  *  process-global, so when it gates a line the SPEAK rolls still fire on

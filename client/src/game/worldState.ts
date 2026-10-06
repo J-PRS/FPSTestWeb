@@ -33,6 +33,7 @@ export interface WorldState {
   playerDebrisList: PlayerDebris[];
   explosions: Explosion[];
   scorches: ScorchDecal[];
+  splats: import('../effects/splat.js').SplatDecal[];
   implosions: Implosion[];
   aoeGizmos: AoeGizmo[]; // ?debug blast-radius wireframes
   // Match meta from the wire — scoreboard needs mode/team/scores to group
@@ -48,6 +49,11 @@ export interface WorldState {
   respawnMs: number;
   /** CTF flag status per team — HUD chips (home/carried/dropped). */
   flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
+  /** Set by matchStart: the server's endCleanup resets flags to 'home',
+   *  which broadcasts fake carried/dropped→home transitions on the next
+   *  flagUpdate — flags.ts swallows announcements on that one update so
+   *  a reset never plays a CAPTURED/RETURNED ceremony. */
+  flagHomeHush: boolean;
   /** Wire CTF flag meshes + carrier ids — the per-frame loop projects
    *  these into HUD diamonds; flags.ts owns the entries (set on
    *  flagUpdate, deleted on roster prune). `mesh` is the flag alone;
@@ -84,6 +90,7 @@ export function createWorldState(): WorldState {
     playerDebrisList: [],
     explosions: [],
     scorches: [],
+    splats: [],
     implosions: [],
     aoeGizmos: [],
     ffaScores: new Map(),
@@ -91,6 +98,7 @@ export function createWorldState(): WorldState {
     matchEndsAt: null,
     respawnMs: 3000,
     flagStates: {},
+    flagHomeHush: false,
     flagMarkers: new Map(),
     playbackMode: false,
     selfBlastStamps: [],

@@ -89,4 +89,41 @@ describe('ghost records', () => {
     loop.tickRoomNow(room, Date.now());
     expect(mentions).toBeGreaterThan(0);
   });
+
+  it('a departed player releases its wireId and the roster broadcasts the remove', () => {
+    const room = mkRoom({ bots: 0 });
+    room.players.addPlayer('churn');
+    const p = room.players.getPlayer('churn');
+    if (!p) throw new Error('no churn');
+    p.hasReceivedPosition = true;
+    p.lastSeen = Date.now();
+    room.players.addPlayer('observer');
+    const obs = room.players.getPlayer('observer');
+    if (!obs) throw new Error('no observer');
+    obs.hasReceivedPosition = true;
+    obs.lastSeen = Date.now();
+    const removes: number[] = [];
+    room.connections.broadcast = (msg) => {
+      const m = msg as { type?: string; remove?: number[] };
+      if (m.type === 'wireIds' && m.remove) removes.push(...m.remove);
+    };
+    const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
+    loop.tickRoomNow(room, Date.now()); // mints churn's wireId
+    const wid = room.wireIds.get('churn');
+    expect(wid).toBeDefined();
+    room.removePlayerCompletely('churn', 'test', () => {});
+    expect(room.wireIds.has('churn')).toBe(false);
+    expect(room.wireIdRetired.get(wid!)).toBeDefined();
+    expect(removes).toContain(wid!);
+    // Backdate the retirement past the quiet window — the next mint must
+    // prefer the recycled id over burning toward the u16 wrap.
+    room.wireIdRetired.set(wid!, 1);
+    room.players.addPlayer('churn2');
+    const p2 = room.players.getPlayer('churn2');
+    if (!p2) throw new Error('no churn2');
+    p2.hasReceivedPosition = true;
+    p2.lastSeen = Date.now();
+    loop.tickRoomNow(room, Date.now() + 100);
+    expect(room.wireIds.get('churn2')).toBe(wid);
+  });
 });

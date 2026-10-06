@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { KillFeed } from '../src/killFeed.ts';
-import { botRng, tauntRng } from '../../shared/botRand.ts';
+import { botRngRelease, tauntRng } from '../../shared/botRand.ts';
 import { resetTauntCooldowns, setTauntClock } from '../../shared/botTaunts.ts';
 import type { PlayerManager } from '../src/PlayerManager.ts';
 import type { PlayerState, ServerMessage } from '../src/types.ts';
@@ -29,7 +29,7 @@ setTauntClock(() => 1_700_000_000_000);
 // silent so announce() can't leak a chat into the notice assertions.
 tauntRng(() => 1);
 
-afterEach(() => { botRng(Math.random); tauntRng(() => 1); resetTauntCooldowns(); });
+afterEach(() => { botRngRelease(); tauntRng(() => 1); resetTauntCooldowns(); });
 
 describe('KillFeed.announce', () => {
   it('first blood notice on the first kill', () => {

@@ -25,7 +25,6 @@ function mkHost(humans: { n: number }) {
 }
 // simNow() stamp — tick() takes sim-clock time, and wall time diverges
 // once another suite's harness has warped the clock.
-const t0 = simNow();
 
 describe('scenario: match clock in an empty room', () => {
   it('stays disarmed after a force-end with no humans', () => {
@@ -42,7 +41,7 @@ describe('scenario: match clock in an empty room', () => {
     const clock = new MatchClock(host);
     clock.forceEnd();
     humans.n = 1;
-    clock.tick(t0);
+    clock.tick(simNow() + 10_001); // intermission lapses → startNext sees the human
     expect(clock.timeLeftMs()).toBeGreaterThan(590_000);
   });
 
@@ -51,6 +50,7 @@ describe('scenario: match clock in an empty room', () => {
     const { host } = mkHost(humans);
     const clock = new MatchClock(host);
     clock.forceEnd();
+    clock.tick(simNow() + 10_001); // past the intermission → startNext re-arms
     expect(clock.timeLeftMs()).toBeGreaterThan(590_000);
   });
 });

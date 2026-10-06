@@ -102,7 +102,7 @@ export class SessionManager {
     const playerIdResult = validatePlayerId(handshake.playerId);
     if (!playerIdResult.success) {
       logger.warn('Invalid playerId rejected', { error: playerIdResult.error });
-      ws.close(1008, 'Invalid playerId');
+      SessionManager.rejectIdentity(ws, 'Invalid playerId');
       return;
     }
 
@@ -154,7 +154,7 @@ export class SessionManager {
     // and the claimant get rejected — no stealing by knowing the id.
     const idToken = this.identityToken(playerId);
     if (!this.claimIdentity(playerId, token, idToken)) {
-      ws.close(1008, 'Player ID claimed');
+      SessionManager.rejectIdentity(ws, 'Player ID claimed');
       return;
     }
 
@@ -187,7 +187,7 @@ export class SessionManager {
     const existingPlayer = room.players.getPlayer(playerId);
     if (!existingPlayer) {
       logger.warn('Reclaim rejected: no player state', { playerId });
-      ws.close(1008, 'Invalid session token');
+      SessionManager.rejectIdentity(ws, 'Invalid session token');
       return;
     }
     // Session reclaim requires the server-issued token — bare playerId
@@ -199,7 +199,7 @@ export class SessionManager {
     // lost entirely on a flap), looping the client forever.
     if (token !== room.sessionTokens.get(playerId)) {
       logger.warn('Reconnect rejected: bad session token', { playerId });
-      ws.close(1008, 'Invalid session token');
+      SessionManager.rejectIdentity(ws, 'Invalid session token');
       return;
     }
     // The armed grace timer clears inside registry.reclaim's transition —
@@ -228,6 +228,17 @@ export class SessionManager {
     room.messages.onPlayerReconnected(playerId);
 
     logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
+  }
+
+  /** Identity rejections (bad token, claimed id, malformed id): tell the
+   *  client to drop its stored session, THEN close. The 1008 close code
+   *  never reaches clients on the WT/RTC tiers — without the message a
+   *  stale-token client reprobes and rejoins in a loop, spinning up a
+   *  fresh room on every attempt. The small delay lets the reliable lane
+   *  flush before the socket tears down. */
+  private static rejectIdentity(ws: ServerWebSocket<WebSocketData>, reason: string): void {
+    try { ws.send(JSON.stringify({ type: 'sessionRejected', reason })); } catch { /* half-dead lane */ }
+    setTimeout(() => { try { ws.close(1008, reason); } catch { /* gone */ } }, 25);
   }
 
   /** Spectator seating: broadcasts + tick stream only, no player slot. */

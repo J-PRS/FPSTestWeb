@@ -15,8 +15,38 @@ import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
+import { wallNow } from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
+
+/** A retired wireId is reissued only after this much dead time — any
+ *  plausible cross-lane reorder window (reliable roster edge vs binary
+ *  frames) is sub-second; 60s is paranoia, not measurement. */
+const WIRE_ID_QUIET_MS = 60_000;
+
+/** Mint a u16 record id: prefer a retired id that's been quiet long
+ *  enough, else extend the counter. The naive `nextWireId++` walked into
+ *  the u16 wrap at 65536 total mints — setUint16 mods silently and the
+ *  new player's records would resolve to a *live teammate's* binding. */
+function mintWireId(room: Room): number {
+  const now = wallNow();
+  for (const [id, at] of room.wireIdRetired) {
+    if (now - at >= WIRE_ID_QUIET_MS) { room.wireIdRetired.delete(id); return id; }
+  }
+  if (room.nextWireId <= 0xffff) return room.nextWireId++;
+  // Space exhausted with nothing quiet enough — take the eldest retired
+  // id anyway; strictly better than a silent modulo-wrap.
+  const eldest = room.wireIdRetired.keys().next().value;
+  if (eldest !== undefined) {
+    logger.error('wireId space full — recycling before the quiet window', { room: room.name, id: eldest });
+    room.wireIdRetired.delete(eldest);
+    return eldest;
+  }
+  // 65536 simultaneously-bound ids — the room has bigger problems than
+  // this collision, but fail loud rather than aliasing silently.
+  logger.error('wireId space exhausted — live collision', { room: room.name });
+  return (room.nextWireId++ % 0xffff) + 1;
+}
 
 /** Counters the loop's metrics rollup reads — shared object so a second
  *  writer (this family) lands in the same rollup window. */
@@ -90,7 +120,7 @@ export class TickFanout {
 
       let wireId = room.wireIds.get(playerId);
       if (wireId === undefined) {
-        wireId = room.nextWireId++;
+        wireId = mintWireId(room);
         room.wireIds.set(playerId, wireId);
         roster[wireId] = playerId;
         rosterDirty = true;

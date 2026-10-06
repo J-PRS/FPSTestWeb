@@ -69,6 +69,9 @@ class SpeciesKitImpl {
   readonly ENGAGE_GRACE: number;
   readonly FRENZY_SCENT: number;
   readonly FRENZY_RADIUS: number;
+  // Whiff-warn folding: deathText → last warn + suppressed count.
+  private readonly whiffFold = new Map<string, { at: number; count: number }>();
+  readonly WHIFF_FOLD_MS = 3000;
 
   constructor(
     private deps: EntitiesDeps,
@@ -151,13 +154,24 @@ class SpeciesKitImpl {
         // Ski-speed whiffs are earned dodges, not bugs — the strike fired on
         // a lastSeen snapshot and a fast mover is already gone. Only a whiff
         // against a slow/stationary player means the reach math lied.
+        // A swarm besieging a stationary player whiffs EVERY bite, so the
+        // warn folds repeats per species into ×N — a siege reads as one
+        // line, not a scroll.
         const moving = p.vel.lengthSq() > 30 * 30;
-        const log = moving ? this.deps.logger.debug : this.deps.logger.warn;
-        log.call(this.deps.logger, `melee whiff beyond reach: ${deathText}`, {
-          dist: Number(d.toFixed(2)), reach: Number(reach.toFixed(2)),
-          from: { x: Number(fromPos.x.toFixed(1)), y: Number(fromPos.y.toFixed(1)), z: Number(fromPos.z.toFixed(1)) },
-          player: { x: Number(p.pos.x.toFixed(1)), y: Number(p.pos.y.toFixed(1)), z: Number(p.pos.z.toFixed(1)) },
-        });
+        const now = performance.now();
+        const fold = this.whiffFold.get(deathText);
+        if (fold && now - fold.at < this.WHIFF_FOLD_MS) {
+          fold.count++;
+        } else {
+          const suppressed = fold ? fold.count : 0;
+          this.whiffFold.set(deathText, { at: now, count: 0 });
+          const log = moving ? this.deps.logger.debug : this.deps.logger.warn;
+          log.call(this.deps.logger, `melee whiff beyond reach: ${deathText}${suppressed ? ` (×${suppressed + 1})` : ''}`, {
+            dist: Number(d.toFixed(2)), reach: Number(reach.toFixed(2)),
+            from: { x: Number(fromPos.x.toFixed(1)), y: Number(fromPos.y.toFixed(1)), z: Number(fromPos.z.toFixed(1)) },
+            player: { x: Number(p.pos.x.toFixed(1)), y: Number(p.pos.y.toFixed(1)), z: Number(p.pos.z.toFixed(1)) },
+          });
+        }
         return false;
       }
     }

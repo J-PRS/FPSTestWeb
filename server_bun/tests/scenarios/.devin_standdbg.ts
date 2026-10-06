@@ -1,0 +1,13 @@
+import { mkRoom, watch } from './harness.ts';
+import type { Heightfield } from '../../../shared/heightfield.ts';
+const H = (v: number): Heightfield => ({ size: 4, data: new Uint8Array(16).fill(v), stride: 1 });
+const room = mkRoom({ mode: 'ctf', bases: { alpha: { x: -70, y: 0, z: 0 }, bravo: { x: 70, y: 0, z: 0 } } }, 'ctf', 7, false, H(60));
+const w = watch(room);
+const before = JSON.stringify((room as any).effStructures().filter((s: any) => s.kind === 'stand'));
+room.field = H(120);
+room.refreshFlagHomes();
+const after = JSON.stringify((room as any).effStructures().filter((s: any) => s.kind === 'stand'));
+console.log('changed:', before !== after, 'msgs:', w.msgs.map(m => m.type).join(','));
+console.log('before:', before.slice(0, 200));
+console.log('after :', after.slice(0, 200));
+process.exit(0);

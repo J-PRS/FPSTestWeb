@@ -61,5 +61,8 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   ribbonLanes: 1,
   ribbonWidth: 0.22,
   ribbonLife: 0.08,
+  // Streak grows in behind the slug — same 10%→full ramp as the bolt
+  // mesh, applied to both width and trail length.
+  ribbonRampIn: 0.2,
   ribbonColor: 0xffd850,
 };

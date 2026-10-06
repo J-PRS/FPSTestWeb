@@ -6,6 +6,7 @@
  * so "where to go" and "how to get there" each read on their own.
  */
 import { botRand } from './botRand.ts';
+import { GRAVITY } from './movement.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import type { BotVec, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -344,7 +345,7 @@ export class BotMoves {
     const hSpeed = Math.hypot(vx, vz);
     if (hSpeed < 4) return false; // no arc worth predicting — the climb sense owns this
     const nx = vx / hSpeed, nz = vz / hSpeed;
-    const dtS = 0.12, G = -28;
+    const dtS = 0.12, G = GRAVITY; // same fall the sim sells — a dead-reckoned arc must pay world gravity
     let x = pos.x, y = pos.y, z = pos.z, vy_ = vy;
     for (let s = 0; s < 24; s++) {
       x += vx * dtS; z += vz * dtS;

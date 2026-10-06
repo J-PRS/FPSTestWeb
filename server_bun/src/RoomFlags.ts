@@ -18,6 +18,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { simNow } from './simClock.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 import { CTF_PTS } from '../../shared/teams.ts';
 
 // 'unspawned' is server-internal — rabbit's flag doesn't exist until
@@ -52,10 +53,10 @@ export interface RoomFlag {
 const FLAG_REST_LIFT = 0.5;   // sphere rest height above terrain
 const FLAG_BOUNCE = 0.3;      // vertical restitution
 const FLAG_FRICTION = 4.0;    // skid bleed per second
-const FLAG_GRAV = 25;         // matches the nugget tumble
+const FLAG_GRAV = -GRAVITY;   // loose objects fall at world gravity — one constant, no soft-tumble fork
 const FLAG_KNOCK = 0.55;      // fraction of the player-scale blast impulse
 const FLAG_SETTLE = 0.6;      // |vel| below this on the ground = rest
-const FLAG_THROW_SPEED = 18;  // deliberate toss along aim — hand-off range, not a hail mary
+const FLAG_THROW_SPEED = 20;  // deliberate toss along aim — hand-off range, not a hail mary
 
 export class RoomFlags {
   readonly flags = new Map<TeamId, RoomFlag>();
@@ -186,10 +187,11 @@ export class RoomFlags {
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
       f.droppedAt = simNow();
-      this.loose(f, p.velocity);
-      f.vel.x += cp * Math.sin(p.rotation.yaw) * FLAG_THROW_SPEED;
-      f.vel.y += sp * FLAG_THROW_SPEED;
-      f.vel.z += cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
+      // Deliberate throw rides FULL carrier speed — ski-speed hucks
+      // carry; drops keep loose()'s half-vel fumble instead.
+      f.vel.x = p.velocity.x + cp * Math.sin(p.rotation.yaw) * FLAG_THROW_SPEED;
+      f.vel.y = p.velocity.y + 3 + sp * FLAG_THROW_SPEED;
+      f.vel.z = p.velocity.z + cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
       f.airborneBy = playerId;
       this.room.messages.killFeed.say(playerId, 'flagdrop');
       this.room.bots?.notice('flagdrop', playerId, p.team);

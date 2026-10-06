@@ -7,7 +7,7 @@
 // catches sim-code nondeterminism before it ever reaches the wire.
 import { test, expect } from 'bun:test';
 import { mkRoom, flat } from './harness.ts';
-import { botRng, tauntRng } from '../../../shared/botRand.ts';
+import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { computeStateHash } from '../../../shared/stateHash.ts';
 import type { Room } from '../../src/Room.ts';
@@ -42,7 +42,7 @@ function lockstep(a: Room, b: Room, ticks: number, dt = 0.05): { divergedAt: num
     for (const room of [a, b]) {
       botRng(streams.get(room)!);
       tauntRng(tstreams.get(room)!);
-      try { for (const s of room.sims) s.tick(dt); } finally { botRng(Math.random); tauntRng(Math.random); }
+      try { for (const s of room.sims) s.tick(dt); } finally { botRngRelease(); tauntRng(Math.random); }
     }
     simNowAdvance(dt * 1000);
     hashA = hashOf(a); hashB = hashOf(b);
@@ -88,7 +88,7 @@ test('replay determinism > a different stream diverges (sanity: the check actual
     for (const room of [a, b]) {
       botRng(streams.get(room)!);
       tauntRng(tstreams.get(room)!);
-      try { for (const s of room.sims) s.tick(0.05); } finally { botRng(Math.random); tauntRng(Math.random); }
+      try { for (const s of room.sims) s.tick(0.05); } finally { botRngRelease(); tauntRng(Math.random); }
     }
     simNowAdvance(50);
     if (divergedAt < 0 && hashOf(a) !== hashOf(b)) divergedAt = i;

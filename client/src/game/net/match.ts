@@ -3,6 +3,7 @@
 
 import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
+import { MODES, type ModeId } from '../../../../shared/teams.js';
 
 export function wireMatchEvents(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
@@ -34,8 +35,12 @@ export function wireMatchEvents(ctx: NetCtx): void {
     const mine = scores[me] ?? 0;
     let lead = 0; for (const v of Object.values(scores)) if (v > lead) lead = v;
     // Only announce when the lead changes hands or YOU score — a per-kill
-    // feed line for every bot frag would drown the chat.
-    if ((scores[me] ?? 0) > 0) chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
+    // feed line for every bot frag would drown the chat. Team modes reuse
+    // the same channel for the personal PTS column — silent there, the
+    // win is the team bank, not a personal race to winAt.
+    if (MODES[deps.world.mode as ModeId]?.ffa && (scores[me] ?? 0) > 0) {
+      chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
+    }
   };
   networkManager.onFfaMatchEnd = (winner, scores) => {
     const me = nm().getLocalPlayerId();
@@ -45,6 +50,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
       : `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
     deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner} WINS`);
     sfx.matchHorn(iWon ? 'win' : 'end');
+    deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
   };
   networkManager.onMatchEnd = (winner, scores) => {
@@ -54,10 +60,15 @@ export function wireMatchEvents(ctx: NetCtx): void {
       : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
     deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`);
     sfx.matchHorn(iWon ? 'win' : 'end');
+    deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
   };
   networkManager.onMatchStart = (mode) => {
+    deps.lazyHud().setScoreboardCountdown?.(null);
     releaseScoreboard();
+    // endCleanup reset the flags to 'home' just before this broadcast —
+    // the next flagUpdate's →home transitions are a reset, not a play.
+    deps.world.flagHomeHush = true;
     // New match = new life record — a streak banked last round must not
     // roll over or the first frag of the round reads as a spree.
     deps.world.killStreak = 0;

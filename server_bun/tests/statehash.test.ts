@@ -22,12 +22,29 @@ describe('computeStateHash', () => {
     expect(a).toBe(b);
   });
 
+  test('echo-channel lag cannot trip the hash', () => {
+    // Health is server-owned and echoed at ~2Hz — the client's value is
+    // always up to one interval stale while a heal channel runs. The
+    // contract: lag inside a bucket is invisible, a dropped hit is not.
+    const base: [string, { x: number; y: number; z: number; health: number; isDead: boolean }][] =
+      [['p', { x: 0, y: 0, z: 0, health: 50, isDead: false }]];
+    const h = computeStateHash(base);
+    // ±1hp of heal-echo lag — the same 4hp bucket as 50 (48..51).
+    for (const lagged of [48, 49, 51]) {
+      expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: lagged, isDead: false }]])).toBe(h);
+    }
+    // A real hit (>=4hp swing) crosses a bucket and MUST differ.
+    expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: 45, isDead: false }]])).not.toBe(h);
+  });
+
   test('distinguishes state changes it claims to watch', () => {
     const base: [string, { x: number; y: number; z: number; health: number; isDead: boolean }][] =
       [['p', { x: 0, y: 0, z: 0, health: 50, isDead: false }]];
     const h = computeStateHash(base);
     expect(computeStateHash([['p', { x: 1, y: 0, z: 0, health: 50, isDead: false }]])).not.toBe(h);
-    expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: 49, isDead: false }]])).not.toBe(h);
+    // Health is hashed in ~4hp buckets (heal channels lag the wire) —
+    // 50->46 crosses a bucket boundary like a dropped hit does.
+    expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: 45, isDead: false }]])).not.toBe(h);
     expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: 50, isDead: true }]])).not.toBe(h);
     expect(computeStateHash([['q', { x: 0, y: 0, z: 0, health: 50, isDead: false }]])).not.toBe(h);
     expect(computeStateHash([])).not.toBe(h); // membership counts

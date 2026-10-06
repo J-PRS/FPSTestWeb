@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, step, pin, watch } from './harness.ts';
+import { simNow } from '../../src/simClock.ts';
 
 describe('scenario: flag capture at winAt ends the match', () => {
   it('the 5th cap runs the funnel: capture point, matchEnd, reset, matchStart', () => {
@@ -29,6 +30,12 @@ describe('scenario: flag capture at winAt ends the match', () => {
     step(room, 5);
     const end = w.msgs.find((m) => m.type === 'matchEnd') as { winner?: string } | undefined;
     expect(end?.winner).toBe('alpha');
+    // Standings window: the board resets only after the 10s intermission.
+    expect(room.scores.alpha).toBe(5);
+    expect(w.count('matchStart')).toBe(0);
+    // The match clock rides TickLoop, not room.sims — step() can't
+    // reach it; jump the sim clock past the intermission directly.
+    room.checkMatchClock(simNow() + 10_001);
     expect(room.scores.alpha).toBe(0);
     expect(w.count('matchStart')).toBe(1);
   });

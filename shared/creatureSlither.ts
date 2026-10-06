@@ -11,6 +11,7 @@ import { wrapAngleDelta } from './angles.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
+import { GRAVITY } from './movement.js';
 
 export const SLITHER_SIM = {
   SPEED: 6.5,
@@ -20,7 +21,7 @@ export const SLITHER_SIM = {
   WINDUP_S: 0.45,
   LUNGE_T: 1.2,      // safety cap — landing ends the leap long before this
   LUNGE_SPEED: 14.0,
-  GRAVITY: -28.0,    // = creatureCore/ballSim gravity for the leap arc
+  GRAVITY,           // the leap arc pays world gravity — one source in movement.ts
   OVERSHOOT: 3.5,    // aim point past the target — the leap goes THROUGH
   BITE_D2: 2.4 * 2.4,
   WEAVE_HZ: 7,       // animT multiplier for the S-weave

@@ -1,0 +1,11 @@
+import { mkRoom, watch } from './harness.ts';
+import type { Heightfield } from '../../../shared/heightfield.ts';
+const H = (v: number): Heightfield => ({ size: 4, data: new Uint8Array(16).fill(v), stride: 1 });
+const room = mkRoom({ mode: 'ctf', bases: { alpha: { x: -70, y: 0, z: 0 }, bravo: { x: 70, y: 0, z: 0 } } }, 'ctf', 7, false, H(60));
+const w = watch(room);
+(room as any).broadcast({ type: 'mapUpdate', structures: [] });
+console.log('direct:', w.msgs.length);
+room.field = H(120);
+(room as any).pushStructureUpdate('[]');
+console.log('after push:', w.msgs.length, w.msgs.map((m: any) => m.type).join(','));
+process.exit(0);

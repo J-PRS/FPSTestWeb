@@ -19,6 +19,10 @@ export class RespawnManager {
    *  sim-time outruns real time. In live mode the wall timer still fires
    *  first; tick is a no-op shadow then. */
   private dueAt: Map<string, number> = new Map();
+  /** Die-and-spectate holds — the respawn claim's `hold` flag parks the
+   *  corpse: the timer fires and leaves the player dead until a plain
+   *  dead-state respawn releases it. */
+  private held = new Set<string>();
 
   constructor(
     private playerManager: PlayerManager,
@@ -32,12 +36,56 @@ export class RespawnManager {
    *  would fire on a rejoining player's new session (or double-respawn
    *  if they died again after reconnecting). */
   cancel(playerId: string): void {
+    this.held.delete(playerId); // a disconnect/removal ends any hold — a rejoin re-arms fresh
     const pending = this.timers.get(playerId);
     if (pending) {
       clearTimeout(pending);
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
     }
+  }
+
+  /** L-bind respawn hold: mark BEFORE the kill so the timer the death
+   *  schedules inherits it. */
+  hold(playerId: string): void { this.held.add(playerId); }
+  isHeld(playerId: string): boolean { return this.held.has(playerId); }
+
+  /** Dead-state respawn press — release the hold (if any) and respawn
+   *  immediately rather than waiting out the timer. */
+  respawnNow(playerId: string): void {
+    this.held.delete(playerId);
+    const pending = this.timers.get(playerId);
+    if (pending) { clearTimeout(pending); this.timers.delete(playerId); }
+    this.dueAt.delete(playerId);
+    this.fire(playerId, wallNow());
+  }
+
+  /** The shared revive tail — timer, sim-tick, and respawnNow all land
+   *  here so grace + broadcast can't drift between paths. `graceClock`
+   *  is the caller's domain (sim-time drivers arm sim-time grace). */
+  private fire(playerId: string, graceClock: number): void {
+    const result = this.playerManager.respawnPlayer(playerId);
+    if (!result) return;
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player) return;
+    logger.info('Player respawned', { playerId, position: result.position });
+    this.moveResync?.(playerId, result.position, result.rotation.yaw, true);
+    // The respawn broadcast and the honest post-snap report are both
+    // in flight — the client's snap to spawn (and any straggler
+    // reports from the corpse spot) read as impossible speed/
+    // divergence against the reseated anchors. Same drain window a
+    // correction gets.
+    player.correctionGraceUntil = graceClock + CONFIG.reportGraceMs;
+    this.broadcast({
+      type: 'playerRespawn',
+      playerId,
+      internalId: player.internalId,
+      position: result.position,
+      rotation: result.rotation,
+      // A banked classUpdate may have just applied — remotes rebuild
+      // the silhouette off this rather than learning it on next join.
+      armorClass: result.armorClass,
+    });
   }
 
   /** Reconnect restores state verbatim — including isDead. If the
@@ -66,32 +114,11 @@ export class RespawnManager {
     const timer = setTimeout(() => {
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
+      // Held corpse (die-and-spectate) — the deadline lapses silently;
+      // a dead-state respawn claim is what revives them.
+      if (this.held.has(playerId)) return;
       try {
-      const result = this.playerManager.respawnPlayer(playerId);
-      if (!result) return;
-
-      const player = this.playerManager.getPlayer(playerId);
-      if (!player) return;
-
-      logger.info('Player respawned', { playerId, position: result.position });
-      this.moveResync?.(playerId, result.position, result.rotation.yaw, true);
-      // The respawn broadcast and the honest post-snap report are both
-      // in flight — the client's snap to spawn (and any straggler
-      // reports from the corpse spot) read as impossible speed/
-      // divergence against the reseated anchors. Same drain window a
-      // correction gets.
-      player.correctionGraceUntil = wallNow() + CONFIG.reportGraceMs;
-
-      this.broadcast({
-        type: 'playerRespawn',
-        playerId,
-        internalId: player.internalId,
-        position: result.position,
-        rotation: result.rotation,
-        // A banked classUpdate may have just applied — remotes rebuild
-        // the silhouette off this rather than learning it on next join.
-        armorClass: result.armorClass,
-      });
+      this.fire(playerId, wallNow());
       } catch (e) {
         // A throw here stranded the player dead forever — the process
         // handler would survive it but nobody would ever re-fire the
@@ -110,19 +137,8 @@ export class RespawnManager {
       if (now < at) continue;
       this.timers.delete(id);
       this.dueAt.delete(id);
-      this.playerManager.respawnPlayer(id);
-      const player = this.playerManager.getPlayer(id);
-      if (player) {
-        player.correctionGraceUntil = simNow() + CONFIG.reportGraceMs;
-        this.broadcast({
-          type: 'playerRespawn',
-          playerId: id,
-          internalId: player.internalId,
-          position: player.position,
-          rotation: player.rotation,
-          armorClass: player.armorClass,
-        });
-      }
+      if (this.held.has(id)) continue; // held corpse — same gate as the wall timer
+      this.fire(id, now);
     }
   }
 
@@ -132,5 +148,6 @@ export class RespawnManager {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     this.dueAt.clear();
+    this.held.clear();
   }
 }

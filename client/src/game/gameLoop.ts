@@ -439,7 +439,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
     deps.world.flagStates,
   );
-  hud.updateDeathCountdown(deps.world.respawnMs);
+  hud.updateDeathCountdown(deps.world.respawnMs, player.respawnHeld);
   // Every frame — a rotating radar at the 25Hz sweep cadence reads as
   // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
   deps.ambientBirds.positions(_birdPosBuf);
@@ -638,7 +638,7 @@ export function createGameLoop(deps: GameLoopDeps) {
   // never picked. No reload — ladders gate on the setting live.
   const autoqBtn = document.querySelector('#autoq-toggle') as HTMLButtonElement | null;
   if (autoqBtn) {
-    const label = () => { autoqBtn.textContent = settings.get('fps-autoq') ? 'AUTO QUALITY: ON' : 'AUTO QUALITY: OFF'; };
+    const label = () => { autoqBtn.classList.toggle('on', !!settings.get('fps-autoq')); };
     label();
     autoqBtn.addEventListener('click', () => {
       const on = !settings.get('fps-autoq');
