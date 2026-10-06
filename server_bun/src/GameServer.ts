@@ -172,7 +172,7 @@ export class GameServer {
         }
         return;
       }
-      logger.warn('Unknown binary frame rejected', { playerId: ws.data.playerId });
+      this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
       return;
     }
     const text = message;
@@ -180,7 +180,7 @@ export class GameServer {
     try {
       raw = JSON.parse(text);
     } catch {
-      logger.warn('Failed to parse JSON', { playerId: ws.data.playerId });
+      this.invalidWarn(ws.data.playerId, 'Failed to parse JSON');
       return;
     }
 
@@ -351,16 +351,24 @@ export class GameServer {
   private readonly invalidWarnAt = new Map<string, number>();
   private static readonly INVALID_WARN_GAP_MS = 5000;
 
+  /** One warn per sender per window for every garbage-frame path —
+   *  parse/binary rejects arrive before validation, so they share this
+   *  throttle or a malformed flood bypasses the bound entirely. */
+  private invalidWarn(playerId: string | undefined, msg: string, data?: Record<string, unknown>): void {
+    const key = playerId ?? 'prejoin';
+    const now = wallNow();
+    if (now - (this.invalidWarnAt.get(key) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
+      this.invalidWarnAt.set(key, now);
+      if (this.invalidWarnAt.size > 4096) this.invalidWarnAt.clear();
+      logger.warn(msg, { playerId, ...data });
+    }
+  }
+
   private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
       this.ops.msgsRejected++;
-      const now = wallNow();
-      if (now - (this.invalidWarnAt.get(playerId) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
-        this.invalidWarnAt.set(playerId, now);
-        if (this.invalidWarnAt.size > 4096) this.invalidWarnAt.clear();
-        logger.warn('Invalid message rejected', { playerId, room: room.name, error: result.error });
-      }
+      this.invalidWarn(playerId, 'Invalid message rejected', { room: room.name, error: result.error });
       return;
     }
 

@@ -210,6 +210,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.13 Malformed-frame warns bypassed the throttle (2026-10-06)
+
+`invalidWarnAt` only gated schema-invalid messages — unparseable JSON
+and unknown binary frames each warned per frame, so a malformed-flood
+client skipped the bound that exists specifically for garbage floods.
+Both paths now route through a shared `invalidWarn` (same 5s-per-sender
+gap + 4096 cap); pre-join floods key on `'prejoin'` instead of
+`undefined`. Churn-map sweep this round verified clean end to end:
+`seqStates` bounded at 32, `cooldowns`/`invalidWarnAt` capped, every
+bot subsystem's maps covered by `untrack`.
+
 ### 2.12 `lastRejectWarn` hopper entries (2026-10-06)
 
 The reject warn-throttle map was never cleaned — `onPlayerDisconnected`

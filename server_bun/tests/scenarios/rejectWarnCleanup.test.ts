@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer } from './harness.ts';
-import type { CombatHandler } from '../../src/CombatHandler.ts';
 
 interface ThrottlePeek {
+  reject(playerId: string, kind: string, reason: string): void;
+  notifyDrop(playerId: string, kind: string, reason: string): void;
+  onPlayerDisconnected(playerId: string): void;
   lastRejectWarn: Map<string, unknown>;
   lastDropNotify: Map<string, unknown>;
 }
@@ -14,7 +16,7 @@ describe('scenario: reject/drop warn throttles clear on departure', () => {
   it('disconnect purges both throttle maps for the leaver', () => {
     const room = mkRoom({ bots: 2 });
     const p = firstPlayer(room);
-    const combat = room.messages.combat as CombatHandler & ThrottlePeek;
+    const combat = room.messages.combat as unknown as ThrottlePeek;
 
     combat.reject(p.id, 'shot', 'test reject');
     combat.notifyDrop(p.id, 'shot', 'test drop');
