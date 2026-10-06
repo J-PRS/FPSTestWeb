@@ -89,9 +89,15 @@ room.projectiles.detonate = (proj: { id: string; ownerId: string; weaponType: nu
 };
 
 // ── Demo recorder wiring — observer routing, offline source ────────────
-// Local "camera" = first bot (arbitrary — the cool-shot lane doesn't care
-// whose eyes recorded, only that every actor's frames+events land).
-const localBot = [...room.players.getAllPlayers().keys()][0]!;
+// Local "camera": --shooter <name> pins it to a known killer (two-pass
+// workflow — pass 1 --norec prints the leaderboard, pass 2 reruns with
+// the winner's shooter so the clip rides the shooter's eyes). Default is
+// the first bot, which makes a spectator clip but a boring POV.
+const localBot = String(args.shooter ?? '') || [...room.players.getAllPlayers().keys()][0]!;
+if (!room.players.getPlayer(localBot)) {
+  console.error(`[midairclip] --shooter "${localBot}" not a player in this room`);
+  simNowReset(); process.exit(1);
+}
 const rec = new DemoRecorder(HOURS * 3600 + 60, 60);
 const remoteProjSim = new Map<string, { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; age: number; ttl: number; gravity: boolean }>();
 const ballVariants = new Map<number, number>();
@@ -317,15 +323,23 @@ rec.stop();
 
 // Pick the winner: longest non-AOE midair kill (a direct hit reads as
 // "the shot", an aoe splash reads as "the blast" — JP's pick was direct).
-const pool = kills.filter((k) => !k.blast);
+// --minalt N filters to airborne shooters (N meters above ground) — a
+// stationary artillery bot's POV is authentic but reads as a frozen cam.
+const MINALT = Number(args.minalt ?? '0');
+const pool = kills.filter((k) => !k.blast && k.shooterAlt >= MINALT);
 pool.sort((a, b) => b.airtime - a.airtime);
 console.log(`\n${totalKills} kills: ${kills.length} midair (${pool.length} direct), ${instant} instant, ${unclaimed} unattributed`);
 console.log(`top 10 direct midair:`);
 for (const [i, k] of pool.slice(0, 10).entries()) {
   console.log(`  ${i + 1}. ${k.airtime.toFixed(2)}s ${wname(k.weapon)} ${k.dist.toFixed(0)}m v+${k.victimAlt.toFixed(0)} s+${k.shooterAlt.toFixed(0)} ${k.shooter} -> ${k.victim} @${(k.t / 60).toFixed(1)}m`);
 }
-const best = pool[0];
+const PICK = Number(args.pick ?? '1') - 1;
+const best = pool[PICK] ?? pool[0];
 if (!best) { console.log('no direct midair kill — nothing to clip'); simNowReset(); process.exit(0); }
+if (NOREC) {
+  console.log(`[norec] pick #${PICK + 1}: ${wname(best.weapon)} ${best.airtime.toFixed(2)}s — shooter ${best.shooter} (pass 2: --shooter ${best.shooter})`);
+  simNowReset(); process.exit(0);
+}
 
 // shotTime = killTime − airtime; clip = PRE before the shot → POST after
 // the kill. Times are recorder elapsedTime = simTicks*DT — same domain.
@@ -337,9 +351,50 @@ console.log(`[dbg] buffers: local ${rec.frameBuffer.Count}, remote ${rec.remoteF
 console.log(`[dbg] remote ts range ${rec.remoteFrames[0]?.timestamp.toFixed(1)} .. ${rec.remoteFrames[rec.remoteFrames.length - 1]?.timestamp.toFixed(1)}`);
 console.log(`[dbg] killRoute seen=${killRouteSeen} nullVictim=${killRouteNull}; rec.targetEvents with kill type=${rec.targetEvents.filter((e) => e.targetType === 224).length}`);
 console.log(`[dbg] kills in clip window: ${rec.targetEvents.filter((e) => e.targetType === 224 && e.timestamp >= clipStart && e.timestamp <= clipEnd).length}, kill event ts near killT: ${rec.targetEvents.filter((e) => e.targetType === 224 && Math.abs(e.timestamp - killT) < 10).map((e) => e.timestamp.toFixed(2)).join(',') || 'none'}`);
-console.log(`[dbg] local buf span: ${rec.frameBuffer.peekOldest().timestamp.toFixed(1)} .. ${rec.frameBuffer.peekNewest().timestamp.toFixed(1)}`);
+console.log(`[dbg] local buf span: ${rec.frameBuffer.Count ? rec.frameBuffer.peekOldest().timestamp.toFixed(1) : '-'} .. ${rec.frameBuffer.Count ? rec.frameBuffer.peekNewest().timestamp.toFixed(1) : '-'}`);
 const clip = extractClip(rec, clipStart, clipEnd, desc, best.airtime);
 if (!clip) { console.log('extractClip returned null (buffer window missed the shot)'); simNowReset(); process.exit(1); }
+
+// POV swap: the recording "local" is an arbitrary observer bot — reseat
+// the clip's local lane on the WINNING shooter by promoting his own
+// remote samples to local frames (his recorded pos/vel/yaw at 20Hz —
+// plenty for a camera track). His remote replicas and shooter-stamped
+// Fired events get re-read as local too: no body glued to the camera,
+// and the viewmodel kicks on HIS shots.
+if (best.shooter !== localBot) {
+  const shooterIdx = rec.rosterIdxById.get(best.shooter);
+  if (shooterIdx === undefined) { console.log(`shooter ${best.shooter} never entered roster — keeping observer POV`); }
+  else {
+    const sFrames = rec.remoteFrames.filter((f) => f.rosterIdx === shooterIdx && f.timestamp >= clipStart && f.timestamp <= clipEnd);
+    if (sFrames.length === 0) { console.log('shooter has no remote samples in window — keeping observer POV'); }
+    else {
+      // His fired weapons by time — remote-fired events stamped
+      // targetId=shooterIdx+1 carry the weapon id.
+      const shots = clip.projectileEvents.filter((e) => e.eventType === 0 && e.targetId === shooterIdx + 1)
+        .sort((a, b) => a.timestamp - b.timestamp);
+      let si = 0, curW = 0;
+      clip.frames = sFrames.map((f, n) => {
+        while (si < shots.length && shots[si]!.timestamp <= f.timestamp) { curW = shots[si]!.weaponType; si++; }
+        return {
+          frameNumber: n % 65_536, timestamp: f.timestamp - clipStart,
+          posX: f.posX, posY: f.posY, posZ: f.posZ, velX: f.velX, velY: f.velY, velZ: f.velZ,
+          yaw: f.yaw, pitch: f.pitch,
+          inputFlags: 0, mouseDeltaX: 0, mouseDeltaY: 0, jetpackFlags: 0, jetpackFuel: 0,
+          weaponType: curW,
+        };
+      });
+      clip.remoteFrames = clip.remoteFrames.filter((f) => f.rosterIdx !== shooterIdx);
+      for (const e of clip.projectileEvents) { if (e.eventType === 0 && e.targetId === shooterIdx + 1) e.targetId = 0; }
+      clip.header.playerName = best.shooter;
+      const f0 = clip.frames[0]!;
+      clip.header.startPosX = f0.posX; clip.header.startPosY = f0.posY; clip.header.startPosZ = f0.posZ;
+      clip.header.startYaw = f0.yaw; clip.header.startPitch = f0.pitch;
+      clip.header.startVelX = f0.velX; clip.header.startVelY = f0.velY; clip.header.startVelZ = f0.velZ;
+      clip.header.totalFrames = clip.frames.length;
+      console.log(`[clip] POV reseated on shooter ${best.shooter} (${sFrames.length} promoted frames)`);
+    }
+  }
+}
 const buf = serializeDemo(clip);
 await mkdir(OUT, { recursive: true });
 const path = join(OUT, `midair_${wname(best.weapon)}_${best.airtime.toFixed(2)}s_${MAP}.demo`);
