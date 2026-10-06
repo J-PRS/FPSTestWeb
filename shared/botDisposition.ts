@@ -105,6 +105,24 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // The last leg stays pure — jinking inside the grab ring is a
       // missed flag.
       if (dist3(pos, ctx.objective) > 60) b.weave = 0.35;
+      // Drop lead: an airborne runner steering at the flag overshoots
+      // the 2.2m touch ring every pass — the arc keeps flying while the
+      // aim point says "here". Aim short by the arc's own overshoot so
+      // the descent lands ON the stand (flagprobe: 120s orbits at planar
+      // 4.7-50, dy 8-21, never touched). Pure ballistics, no tuning.
+      const dy = pos.y - ctx.objective.y;
+      if (dy > 4 && ctx.vel) {
+        const spd = Math.hypot(ctx.vel.x, ctx.vel.z);
+        if (spd > 1) {
+          const fall = Math.sqrt(2 * dy / 28);
+          const od = Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) || 1;
+          const pull = spd * fall - od;
+          if (pull > 0) {
+            const ux = (ctx.objective.x - pos.x) / od, uz = (ctx.objective.z - pos.z) / od;
+            return { x: ctx.objective.x - ux * pull, y: ctx.objective.y, z: ctx.objective.z - uz * pull };
+          }
+        }
+      }
       return { ...ctx.objective };
     }
     // Last-leg commitment beats self-preservation: inside ~40m of the

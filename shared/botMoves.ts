@@ -96,6 +96,12 @@ export class BotMoves {
     }
     const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     const airborne = pos.y - g0 > 2;
+    // Altitude above the objective — hops and burns are cut while a
+    // runner is overhead inside its glide window, because every one
+    // balloons it past the touch ring (flagprobe: capper orbited dy
+    // 8-21, planar 10-46, never touched).
+    const dyAbove = ctx.objective ? pos.y - ctx.objective.y : -Infinity;
+    const hopRing = Math.max(T.moves.runnerHopGd, dyAbove > 6 ? dyAbove * T.lines.diveGlideK : 0);
     // Capper grab-orbit brake: the flag touch ring is ~2.2m and a runner
     // arriving at 25+ m/s can't turn inside it — soaks show whole seconds
     // spent lapping the pole at 4-9m radius (katabatic). Track real od
@@ -263,7 +269,15 @@ export class BotMoves {
       odTap > T.moves.boostGdMin && (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise &&
       speed < T.moves.tailTapSpeed && rise <= T.moves.boostRise && agl <= T.moves.ceilingAgl && enTap;
     if (tail) this.jetWhy = 'tail';
-    const jet = !diveRun && (((this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked) || tail);
+    // The hold latch and the escape ladder both bleed past the wantJet
+    // veto: a burn armed outside the glide window keeps thrusting through
+    // the touch ring (~20-30m of carry at approach speed), and the orbit
+    // trap's own escape jets balloon the runner right back up — the trap
+    // feeds the altitude that keeps it armed (flagprobe: capper sustained
+    // dy 8-20, orbits forever). Same window, same cut for both.
+    const inGlide = ctx.runner && dyAbove > 6 && od < Math.max(T.moves.grabOrbitGd * 1.5, dyAbove * T.lines.diveGlideK);
+    if (inGlide) this.jetHold = 0;
+    const jet = !diveRun && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -297,7 +311,7 @@ export class BotMoves {
       // ~8m steer step, so a gd gate is dead code and the hop chain
       // never fires (the 10-18m/s walk-in every soak autopsy blames).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > T.moves.runnerHopGd)),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
     };
   }
 
@@ -355,9 +369,16 @@ export class BotMoves {
     // (broadside 9002: 4 minutes of orbits at dy -5..-36). Cutting
     // thrust lets gravity deliver the touch; below the objective the
     // mount still needs the burn, so the veto is signed, not absolute.
-    if (ctx.runner && od < T.moves.grabOrbitGd * 1.5 && pos.y - (ctx.objective?.y ?? -Infinity) > 6) {
-      this.jetWhy = '-';
-      return false;
+    // The ring is the whole glide window, not just the pole: at 25m/s
+    // a bot 15m up needs ~20m of planar travel to land, so runIn/tap
+    // fired out to 45m kept feeding speed into every overshoot
+    // (flagprobe: capper orbited dy 8-21, planar 10-46, never touched).
+    {
+      const dy = pos.y - (ctx.objective?.y ?? -Infinity);
+      if (ctx.runner && dy > 6 && od < Math.max(T.moves.grabOrbitGd * 1.5, dy * T.lines.diveGlideK)) {
+        this.jetWhy = '-';
+        return false;
+      }
     }
     const climbY = od < T.moves.destHighNear ? Math.max(dest.y, ctx.objective!.y) : dest.y;
     const destDeficit = climbY - pos.y;
