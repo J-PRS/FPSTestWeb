@@ -315,6 +315,41 @@ export class BotMoves {
     };
   }
 
+  /** Dead-reckon the no-thrust ballistic arc: march vel + gravity and
+   *  watch clearance over the terrain. True when the arc reaches a
+   *  downslope entry (skims ground where the surface falls away along
+   *  travel) or stays airborne past the local crest — the free arc
+   *  delivers the route, no burn required. False when the arc would
+   *  smack a rising face first. ~30 groundY probes, called only while
+   *  an altitude deficit is in play. */
+  private arcClearsCrest(ctx: BrainCtx, pos: BotVec): boolean {
+    const v = ctx.vel;
+    if (!v) return false;
+    const vx = v.x, vy = v.y ?? 0, vz = v.z;
+    const hSpeed = Math.hypot(vx, vz);
+    if (hSpeed < 4) return false; // no arc worth predicting — the climb sense owns this
+    const nx = vx / hSpeed, nz = vz / hSpeed;
+    const dtS = 0.12, G = -28;
+    let x = pos.x, y = pos.y, z = pos.z, vy_ = vy;
+    for (let s = 0; s < 24; s++) {
+      x += vx * dtS; z += vz * dtS;
+      y += vy_ * dtS; vy_ += G * dtS;
+      const g = ctx.groundY(x, z);
+      const clearance = y - g;
+      if (clearance <= 1.2) {
+        // Touchdown on a rising face = the burn is needed, no matter
+        // how high the arc hung earlier; a falling entry means the
+        // descent skis free.
+        const ahead = ctx.groundY(x + nx * 6, z + nz * 6);
+        return ahead < g - 0.5;
+      }
+    }
+    // Still airborne at ~3s: only counts as cleared if the far ground
+    // sits at-or-below the start point — an arc still rising toward a
+    // high face (e.g. mid-burn ascent) must not veto its own thrust.
+    return ctx.groundY(x, z) < pos.y + 4;
+  }
+
   /** Whether the situation calls for a burn: genuine climbs, airborne
    *  prey, a high destination — or discretionary speed plays when the
    *  tank is comfortable. */
@@ -382,7 +417,11 @@ export class BotMoves {
     }
     const climbY = od < T.moves.destHighNear ? Math.max(dest.y, ctx.objective!.y) : dest.y;
     const destDeficit = climbY - pos.y;
-    const destHigh = destDeficit > T.moves.destHighRise + Math.min(30, gd * 0.08);
+    // Crest discipline: jets buy the lip, gravity skis the descent.
+    // A dead-reckoned free arc that reaches a downslope entry needs
+    // no altitude burn — only an arc smacking a rising face earns one.
+    const destHigh = destDeficit > T.moves.destHighRise + Math.min(30, gd * 0.08)
+      && !this.arcClearsCrest(ctx, pos);
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
     // High prey still earns altitude; everything else glides back down.
