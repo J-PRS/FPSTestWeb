@@ -418,6 +418,12 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`species` registry pinned** (2026-10-05): `species.test.ts` (6
+  tests) — every row's family resolves to a real SPECIES_FAMILY sim;
+  positive health/bite/all overrides (zero stat = ghost or pillow);
+  blast required exactly on baneling-family rows; totem sessile (no
+  speed); orbit params only on fly; unknown names → 'hop' fallback,
+  case-sensitive.
 - **`status` bitmask pinned** (2026-10-05): `status.test.ts` (5
   tests) — every bit a unique power of two >=4 (no movement/death
   collision), STATUS_MASK is exactly the claimed bits,
