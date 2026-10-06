@@ -26,26 +26,48 @@ import { Explosion } from '../effects/explosion.js';
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const RING_SIDE = 800;        // lap square edge — matches the lapMeasure circuit
 const LAP_CAPS = 2;           // grab-corner → cap-corner twice = one circuit
-// The flag spot is a flat floor plate — a readable landmark that stays
-// out of the skiing line (no collider: a capper banks THROUGH the pad,
-// not off it).
-const STAND_TOP = 0.38;   // plate top — the flag pole seats here
-const STAND_LIFT = 0.5;   // bot aim lift for the plate spot
+// The flag spot is a piece of equipment — the socket the pole inserts
+// into — kept flush with the skiing line (no collider: a capper banks
+// THROUGH the pad).
+const STAND_TOP = 0.46;   // socket mouth — the flag pole inserts here
+const STAND_LIFT = 0.6;   // bot aim lift for the socket spot
 
-/** Thin octagonal pad + team-glow rim — the "flag lives here" marker. */
+/** Flag socket — a piece of EQUIPMENT, not a platform: the weighted
+ *  octagonal base you slam the pole back into. Low enough to ski
+ *  through (no collider): a capper banks THROUGH the pad.
+ *  Reads diegetic like T1/T2's: base skirt → socket collar → dark well
+ *  the pole actually inserts into. */
 export function mkFlagPlate(teamGlow: number): THREE.Group {
   const g = new THREE.Group();
-  const plate = mkLoft([
-    { z: 0.32, ring: profOct(2.9, 2.9, 0.3) },
-    { z: 0, ring: profOct(3.0, 3.0, 0.3) },
+  // Weighted base — wide foot, slight taper, like field equipment bolted down.
+  const base = mkLoft([
+    { z: 0.26, ring: profOct(3.0, 3.0, 0.3) },
+    { z: 0, ring: profOct(3.3, 3.3, 0.3) },
   ], deckMat);
-  plate.rotation.x = -Math.PI / 2;
-  g.add(plate);
+  base.rotation.x = -Math.PI / 2;
+  g.add(base);
+  // Socket collar — the raised ring the pole threads into.
+  const collar = mkLoft([
+    { z: 0.24, ring: profOct(0.62, 0.62, 0.15) },
+    { z: 0, ring: profOct(0.78, 0.78, 0.15) },
+  ], darkMat);
+  collar.rotation.x = -Math.PI / 2;
+  collar.position.y = 0.26;
+  g.add(collar);
+  // Well — recessed dark hole inside the collar.
+  const well = mkLoft([
+    { z: 0.05, ring: profOct(0.42, 0.42, 0.1) },
+    { z: 0, ring: profOct(0.36, 0.36, 0.1) },
+  ], darkMat);
+  well.rotation.x = -Math.PI / 2;
+  well.position.y = 0.46;
+  g.add(well);
+  // Team-glow rim on the base edge — whose socket this is, at a glance.
   const glow = new THREE.MeshBasicMaterial({ color: teamGlow });
   glow.side = THREE.DoubleSide;
-  const rim = mkAnnulus(profOct(3.0, 3.0, 0.3), profOct(2.86, 2.86, 0.3), 0.1, 0.26, glow);
+  const rim = mkAnnulus(profOct(3.12, 3.12, 0.3), profOct(2.98, 2.98, 0.3), 0.08, 0.2, glow);
   rim.rotation.x = -Math.PI / 2;
-  rim.position.y = 0.06;
+  rim.position.y = 0.05;
   g.add(rim);
   return g;
 }

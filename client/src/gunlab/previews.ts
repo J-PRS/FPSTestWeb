@@ -197,7 +197,7 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
     const g = new THREE.Group();
     g.add(mkFlagPlate(TEAM_COLORS.alpha));
     const flag = mkFlagMesh('alpha');
-    flag.position.y = 0.38; // pole seats on the plate top
+    flag.position.y = 0.46; // pole inserts into the socket mouth
     g.add(flag);
     return g;
   }],
