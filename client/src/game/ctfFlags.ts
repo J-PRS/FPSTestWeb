@@ -49,7 +49,20 @@ export interface FlagCtx {
 
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
 const FLAG_POLE_MAT = new THREE.MeshBasicMaterial({ color: 0x888888 });
-const FLAG_BANNER_GEO = new THREE.ConeGeometry(0.5, 1.2, 4);
+/** Banner cloth — a plane pre-rippled once at build (static geo: two
+ *  lazy sine waves like a flag streaming) so every flag shares one
+ *  mesh shape. DoubleSide is set per-flag material. */
+const FLAG_BANNER_GEO = (() => {
+  const geo = new THREE.PlaneGeometry(1.5, 0.9, 8, 4);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    const u = (x + 0.75) / 1.5; // hoist -> fly edge
+    pos.setZ(i, Math.sin(u * 5.2 + y * 2.0) * 0.14 * u);
+  }
+  geo.computeVertexNormals();
+  return geo;
+})();
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
@@ -57,12 +70,16 @@ const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
  *  flag's logical pos (flagRun + ctfFlags share the same look). */
 export function mkFlagMesh(team: TeamId): THREE.Group {
   const g = new THREE.Group();
-  const banner = new THREE.Mesh(FLAG_BANNER_GEO, new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] }));
-  banner.position.set(0.55, 3.4, 0);
+  const pole = new THREE.Mesh(FLAG_POLE_GEO, FLAG_POLE_MAT);
+  pole.position.y = 2;
+  const bannerMat = new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] });
+  bannerMat.side = THREE.DoubleSide; // cloth reads from either face
+  const banner = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
+  banner.position.set(0.82, 3.35, 0);
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
     new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
   finial.position.y = 4.05;
-  g.add(banner, finial);
+  g.add(pole, banner, finial);
   return g;
 }
 
