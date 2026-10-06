@@ -216,7 +216,8 @@ stand. Charged to §4.8 rather than silently absorbed.
 every other table in the file folds overflow ('other', 'far', 512-cell,
 MAX_MODES/MAX_SOURCES) but `r.shooter`/`r.victim` accepted arbitrary
 magnitude keys forever. Now folds to `'150+'` past the legit envelope
-(jet cap + dive conversion top out near ~150).
+(jet cap + dive conversion top out near ~150); pinned by
+`speedBin.test.ts`.
 
 ### 2.17 Orphaned grace timer on session re-begin (2026-10-06)
 

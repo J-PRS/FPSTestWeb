@@ -1,3 +1,4 @@
+2026-10-06 - robustify: speedBin.test pins the 150+ fold — absurd velocities mint one bucket not unbounded keys; mint-key sweep of server maps verified clean
 2026-10-06 - robustify: weaponStats speedBin capped — arbitrary velocity magnitudes minted unbounded bin keys; folds to 150+ past the legit envelope
 2026-10-06 - robustify: session re-begin orphaned the prior grace timer — a player rejoining inside the grace window got reaped by the dead sessions countdown; begin now clears it, pinned by sessionRebegin.test
 2026-10-06 - robustify: logger.error gets the warn burst collapse — a hot error path flooded console and disk unthrottled; identical repeats now collapse to every 8th, distinct lines always land
