@@ -121,6 +121,13 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);
+    // Wire destroy only covers server-simmed shells — claim-path replicas
+    // die locally on fuse/terrain, so record the death wherever it happens
+    // and release the map entry either way.
+    remoteProjectile.onExploded = () => {
+      deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
+      remoteProjectiles.delete(projectileId);
+    };
     deps.lazyDemoManager?.()?.recordRemoteProjectileFired(projectileId, position, velocity, weaponType ?? cfg.weaponType);
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
@@ -155,9 +162,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // not this map; keeping dead entries leaks one record per shot ever fired.
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
-      deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
-      remoteProjectile.explode();
-      remoteProjectiles.delete(projectileId);
+      remoteProjectile.explode(); // onExploded records + unmaps
     }
     // Kill local projectile if server says it's gone — explode to let
     // trails fade. The shotId covers destroys for shells whose server-id

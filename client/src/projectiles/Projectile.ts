@@ -134,6 +134,9 @@ export class Projectile {
   private readonly rayFrom = new THREE.Vector3();
   /** Visual/sfx hook — fired once at discharge with (beam origin, end). */
   onRayBurst: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;
+  /** One-shot death edge — fires on the first explode() call, including
+   *  local fuse/terrain deaths the server never announces. */
+  onExploded: (() => void) | null = null;
 
   readonly config: ProjectileConfig;
   /** This shot's effective fuse — config.maxLifetime spread by ttlJitter,
@@ -466,6 +469,9 @@ export class Projectile {
   explode(): void {
     if (this.exploded) {return;}
     this.exploded = true;
+    const hook = this.onExploded;
+    this.onExploded = null;
+    hook?.();
     for (const r of this.ribbons) {r.stop();}
     // Embed-capable shells plant on world hits — no target, a swept
     // contact point to sit at. Fuse pops in mid-air still vanish normally.
