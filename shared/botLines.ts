@@ -259,6 +259,20 @@ export class BotLines {
     let routed: BotVec | null = null;
     if (ctx.route && gd > T.graph.minGd) {
       routed = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
+      // Inside the homing band a bending polyline overshoots: the route
+      // aim rides the flood's terrain-following bend PAST the goal and
+      // the bot spends the next 20s climbing back. When the goal ray
+      // itself is clear, cut to it — the human line is nearly straight
+      // in close, jets absorb the small stuff.
+      if (routed && gd < 150 && !faceAhead) {
+        const rd = Math.hypot(routed.x - pos.x, routed.z - pos.z) || 1;
+        const offLine = ((routed.x - pos.x) / rd) * ((dest.x - pos.x) / gd)
+          + ((routed.z - pos.z) / rd) * ((dest.z - pos.z) / gd);
+        if (offLine < 0.92) {
+          const reach = Math.min(40, gd);
+          routed = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+        }
+      }
       if (prof) { const t1 = sharedEnv.wallPerf!(); prof.set('lines:route', (prof.get('lines:route') ?? 0) + t1 - tp); tp = t1; }
     }
     this.wp = routed ?? this.roll(ctx, pos, dest, gd);
