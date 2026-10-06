@@ -84,7 +84,10 @@ export function recordDestroyed(b: DemoRecorder, projectileId: number, position:
   }
 
 export function recordRemoteFired(b: DemoRecorder, serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
-    const id = recordFired(b, position, velocity, weaponType, ownerId);
+    // Missing ownerId must NOT mint targetId 0 — that bit is reserved for
+    // the local player's gun (viewmodel kick). Unknown remote shooters get
+    // their own roster entry so every kick check sees them as remote.
+    const id = recordFired(b, position, velocity, weaponType, ownerId ?? '[unknown]');
     if (id !== 0) {b.remoteProjIdByServerId.set(serverId, id);}
   }
 

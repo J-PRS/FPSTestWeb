@@ -384,7 +384,16 @@ if (best.shooter !== localBot) {
         };
       });
       clip.remoteFrames = clip.remoteFrames.filter((f) => f.rosterIdx !== shooterIdx);
-      for (const e of clip.projectileEvents) { if (e.eventType === 0 && e.targetId === shooterIdx + 1) e.targetId = 0; }
+      // The displaced observer's own shots were minted targetId=0 (local
+      // lane) — hand them back to remote so they stop kicking the swapped
+      // viewmodel, THEN the shooter's shots claim the 0 bit.
+      let obsIdx = rec.rosterIdxById.get(localBot);
+      if (obsIdx === undefined) { obsIdx = rec.roster.length; rec.rosterIdxById.set(localBot, obsIdx); rec.roster.push({ name: localBot }); }
+      for (const e of clip.projectileEvents) {
+        if (e.eventType !== 0) continue;
+        if (e.targetId === 0) e.targetId = obsIdx + 1;
+        else if (e.targetId === shooterIdx + 1) e.targetId = 0;
+      }
       clip.header.playerName = best.shooter;
       const f0 = clip.frames[0]!;
       clip.header.startPosX = f0.posX; clip.header.startPosY = f0.posY; clip.header.startPosZ = f0.posZ;
