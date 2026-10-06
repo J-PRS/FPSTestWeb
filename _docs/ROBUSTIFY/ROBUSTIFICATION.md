@@ -418,6 +418,13 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`ballSim` state machine pinned** (2026-10-05): `ballSim.test.ts`
+  (10 tests) — variant table derivation, ground settle is not a
+  segment, stall-clock wake-up needs a target, drift-past-MAX_DIST
+  enrage spring, enrage pull accel, enrage timeout → teleport
+  authority-only (predictor lets it fly and waits for the segment),
+  bounce elasticity, overspeed half-elasticity thud, applySimDamage
+  death edge + impulse. ballCaps already pins the speed ceilings.
 - **Wire contract drift tripwire** (2026-10-05): `protocol.test.ts` —
   a `satisfies`+`Exclude` compile-time check fails tsc the moment the
   `ClientMessage` union grows without a WIRE entry (silent-drop class:
