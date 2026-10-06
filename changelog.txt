@@ -1,3 +1,4 @@
+2026-10-06 - robustify: projectileId capped at 64 chars — an unbounded ledger key let a 1MB frame plant fat keys in capped maps
 2026-10-06 - robustify: postIps throttle evicts eldest instead of clear — wholesale clear reset the 60s window for every live IP under address churn
 2026-10-06 - robustify: client.log now rolls at 32MB mid-run — boot-time-only rotation left long-lived servers with one forever-growing log
 2026-10-06 - robustify: datachannels per RTC peer capped at 4 — the 64-peer offer cap bounded connections but a single peer could spam unlimited channels; legit flow uses exactly 2

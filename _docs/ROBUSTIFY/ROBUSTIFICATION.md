@@ -210,6 +210,14 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.28 `projectileId` accepted unbounded strings (2026-10-06)
+
+`optShotId` caps its nonce at 40 chars but `projectileId` — a
+ledger/record map key — took any string the 1MB frame could carry:
+512 capped ledger entries × ~1MB keys is ~half a GB of attacker-shaped
+key memory. `optProjId` (≤64) now validates it at all three sites
+(shot, aoeShot, projectileDestroy); oversized rejects outright.
+
 ### 2.27 `postIps` wholesale clear reset every live throttle (2026-10-06)
 
 Same class as `invalidWarnAt` (§2.24): when `postIps` exceeded 1024

@@ -77,6 +77,17 @@ export function optShotId(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 && v.length <= 40 ? v : undefined;
 }
 
+/** Wire projectile id — a ledger/record key, so it must be bounded: a 1MB
+ *  frame's id would otherwise sit in capped-but-fat maps. Rejects outright —
+ *  an oversized id is never a live projectile. */
+export function optProjId(v: unknown): { ok: boolean; v?: string } {
+  if (typeof v !== 'string' || v.length === 0 || v.length > 64) return { ok: false };
+  return { ok: true, v };
+}
+export function optProjIdOpt(v: unknown): { ok: boolean; v?: string } {
+  return v === undefined ? { ok: true } : optProjId(v);
+}
+
 /** Claim verdict cursor — the seq the client wants a claimAck for. */
 export function optClaimSeq(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffffffff ? v : undefined;

@@ -16,6 +16,8 @@ import {
   validateRotation,
   validateBody,
   optVec,
+  optProjId,
+  optProjIdOpt,
   optShotId,
   optClaimSeq,
 } from './validation.ts';
@@ -99,6 +101,8 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!velocity.ok) return { success: false, error: `velocity: ${velocity.error}` };
       const wt = optWeaponType(obj.weaponType);
       if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
+      const pid = optProjIdOpt(obj.projectileId);
+      if (!pid.ok) return { success: false, error: 'projectileId: oversized' };
       return {
         success: true,
         data: {
@@ -107,7 +111,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           position: position.ok ? position.data : undefined,
           velocity: velocity.ok ? velocity.data : undefined,
           timestamp: isFiniteNumber(obj.timestamp) ? obj.timestamp : undefined,
-          projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          projectileId: pid.v,
           weaponType: wt.v,
           airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
           shotId: optShotId(obj.shotId),
@@ -132,6 +136,8 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       const wt = optWeaponType(obj.weaponType);
       if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
+      const pid = optProjIdOpt(obj.projectileId);
+      if (!pid.ok) return { success: false, error: 'projectileId: oversized' };
       return {
         success: true,
         data: {
@@ -139,7 +145,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           position: pos.data,
           weaponType: wt.v,
           excludeTargetId: (excludeTargetId as string | null) ?? null,
-          projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          projectileId: pid.v,
           airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
           power: isFiniteNumber(obj.power) ? obj.power : undefined,
           directHit: obj.directHit === true ? true : undefined,
@@ -231,10 +237,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   projectileDestroy: {
     limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
-      if (typeof obj.projectileId !== 'string') {
-        return { success: false, error: 'projectileId must be a string' };
+      const pid = optProjId(obj.projectileId);
+      if (!pid.ok) {
+        return { success: false, error: 'projectileId: invalid or oversized' };
       }
-      return { success: true, data: { type: 'projectileDestroy', projectileId: obj.projectileId, shotId: optShotId(obj.shotId) } };
+      return { success: true, data: { type: 'projectileDestroy', projectileId: pid.v!, shotId: optShotId(obj.shotId) } };
     },
     handle: (h, id, m) => h.combat.handleProjectileDestroy(id, m),
   },
