@@ -89,6 +89,7 @@ export const BOT_TUNING = {
     faceProbeMin: 40,    // m — legs shorter than this skip the early face probe
     faceRise: 0.8,       // rise/m — goal-line slope that counts as a face,
                          // engaging traverse before E bleeds into it
+    faceCrest: 20,       // m — REVERTED hill-vs-wall crest read: climbing ~20m hills blindly lost caps to the faces it couldn't pay
     runnerReachK: 2.2,   // runner reach multiplier
     farReachGd: 300,     // m — legs longer than this get far eyes
     farReachK: 0.45,     // far-eye reach as a share of remaining leg
