@@ -26,6 +26,8 @@ import { Explosion } from '../effects/explosion.js';
 import { urlParams } from '../core/params.js';
 
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
+const _filmDir = new THREE.Vector3();
+const _filmUp = new THREE.Vector3(0, 9, 0);
 const RING_SIDE = 800;        // lap square edge — matches the lapMeasure circuit
 const LAP_CAPS = 2;           // grab-corner → cap-corner twice = one circuit
 // The flag spot is a piece of equipment — the socket the pole inserts
@@ -205,6 +207,21 @@ export class FlagRunBridge {
     const dot = this.tasGhost.children[1] as THREE.Mesh;
     dot.position.lerpVectors(this.tasPts[i]!, this.tasPts[i + 1]!, ft - i);
     (dot.material as THREE.MeshBasicMaterial).color.setHex(this.tasJet[i] ? 0x40ff90 : 0xff4060);
+    // ?film=1 — chase cam: park the local player on the dot's tail so the
+    // ordinary camera pipeline frames the flight (recording aid only).
+    if (urlParams.has('film')) {
+      const p = this.deps.lazyPlayer();
+      if (!p.isDead) {
+        const dir = _filmDir.subVectors(this.tasPts[Math.min(i + 1, this.tasPts.length - 1)]!, this.tasPts[i]!);
+        if (dir.lengthSq() > 0.001) {
+          dir.normalize();
+          p.pos.copy(dot.position).addScaledVector(dir, -28).add(_filmUp);
+          p.vel?.set(0, 0, 0);
+          p.yaw = Math.atan2(dir.x, dir.z);
+          p.pitch = Math.atan2(dir.y, Math.hypot(dir.x, dir.z));
+        }
+      }
+    }
   }
 
   /** Spawn/respawn anchor — beside the nearest live enemy flag. */
