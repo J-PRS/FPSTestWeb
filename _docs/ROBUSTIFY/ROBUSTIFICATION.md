@@ -162,6 +162,7 @@ inside a 5s window collapse to every 8th with a `×N` count — a hot
 fault path (claim rejections, unconfirmed predictions under sustained
 packet loss) emitted one line per event, a flood not a signal.
 Distinct messages always land; alternating messages unaffected.
+Pinned by `warnBurst.test.ts`.
 
 ### 2.9 Offline-chatter timer lifecycle — `botSay` drain (2026-10-06)
 
