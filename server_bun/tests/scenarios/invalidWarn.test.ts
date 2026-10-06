@@ -41,4 +41,19 @@ describe('scenario: pre-join malformed frames share the throttle', () => {
       (logger as unknown as { warn: typeof orig }).warn = orig;
     }
   });
+
+  it('onClose evicts the playerId throttle entry', () => {
+    const gs = new GameServer();
+    (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
+    const map = (gs as unknown as { invalidWarnAt: Map<string, number> }).invalidWarnAt;
+
+    const ws = fakeWs();
+    ws.data.playerId = 'p-leaver';
+    gs.onOpen(asWs(ws));
+    gs.onMessage(asWs(ws), 'garbage {');
+    expect(map.has('p-leaver')).toBe(true);
+
+    gs.onClose(asWs(ws));
+    expect(map.has('p-leaver')).toBe(false);
+  });
 });

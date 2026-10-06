@@ -210,6 +210,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.20 `invalidWarnAt` throttle entries outlived their socket (2026-10-06)
+
+The malformed-frame throttle minted a `playerId` key on first garbage
+and never cleaned it — `onClose` had no eviction. Entries lingered until
+the map's 4096 wholesale `clear()`, which also resets the gap for live
+spammers (mute reset as a side effect of garbage churn). `onClose` now
+deletes the entry on every teardown path. Pinned: `invalidWarn.test`
+asserts the key exists after a seated garbage frame and is gone after
+`onClose`.
+
 ### 2.19 Unknown `weaponType` skipped every per-weapon gate (2026-10-06)
 
 Wire validation checked only `isFiniteNumber` on `weaponType`. An

@@ -218,6 +218,10 @@ export class GameServer {
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     const playerId = ws.data.playerId;
     if (!playerId) return;
+    // Throttle entries keyed by playerId must die with the socket —
+    // otherwise they linger until the 4096 wholesale clear, which also
+    // resets the gate for live spammers.
+    this.invalidWarnAt.delete(playerId);
     const specRoom = this.specRooms.get(playerId);
     if (specRoom) {
       specRoom.spectators.delete(playerId);
