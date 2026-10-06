@@ -59,6 +59,8 @@ if (typeof globalThis.document === 'undefined') {
           createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
           getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
           putImageData: () => {},
+          createRadialGradient: () => ({ addColorStop: () => {} }),
+          createLinearGradient: () => ({ addColorStop: () => {} }),
           fillRect: () => {},
           clearRect: () => {},
           drawImage: () => {},
