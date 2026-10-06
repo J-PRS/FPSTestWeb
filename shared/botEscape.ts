@@ -5,7 +5,6 @@
  * brain.ts keeps hunting/firing; this file owns "the straight line is
  * wrong". State rides on the brain's flat fields via EscapeState.
  */
-import { botRand } from './botRand.ts';
 import type { BrainCtx } from './botBrain.ts';
 import { BOT_EYE } from './botHunt.ts';
 
@@ -39,6 +38,48 @@ export interface EscapeState {
   goal: BotVec;
 }
 
+/** How walkable a heading is: the worst local rise-per-meter inside the
+ *  first `dist` meters. A ramp reads ~0.2-0.4, a hop lip ~0.5-1, a
+ *  sheer face >>1 — the bot can't see shapes, but groundY along a ray
+ *  IS the ramp sense: the walkable approach is the heading whose ground
+ *  rises gently instead of jumping. */
+function routeSlope(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, dist: number): number {
+  let worst = 0;
+  let prevAt = 0;
+  let prev = ctx.groundY(pos.x, pos.z);
+  for (let f = 3; f <= dist; f += 3) {
+    const g = ctx.groundY(pos.x + dx * f, pos.z + dz * f);
+    worst = Math.max(worst, (g - prev) / (f - prevAt));
+    prev = g;
+    prevAt = f;
+  }
+  return worst;
+}
+
+/** Escape heading by route cost, not a blind perpendicular: a fan of
+ *  headings centered on the goal, scored walkable-first / goal-aligned-
+ *  second. A wall pocket sends the bot down the side where the ground
+ *  stays climbable — the ramp or the low rim — which is how a player
+ *  routes onto a structure instead of jetting the nearest face. */
+function pickDetour(s: EscapeState, ctx: BrainCtx, pos: BotVec, dist: number): BotVec {
+  const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
+  const gl = Math.hypot(gx, gz) || 1;
+  const gdx = gx / gl, gdz = gz / gl;
+  let best: BotVec | null = null;
+  let bestScore = Infinity;
+  for (let a = -5; a <= 5; a++) {
+    const ang = a * (Math.PI / 6);
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    const dx = gdx * c - gdz * sn, dz = gdx * sn + gdz * c;
+    const score = routeSlope(ctx, pos, dx, dz, dist) * 2 - c;
+    if (score < bestScore) {
+      bestScore = score;
+      best = { x: pos.x + dx * dist, y: ctx.groundY(pos.x + dx * dist, pos.z + dz * dist) + BOT_EYE, z: pos.z + dz * dist };
+    }
+  }
+  return best ?? s.goal;
+}
+
 /** Stuck break — no progress for 1.5s means the straight line is
  *  blocked (structure, cliff, another bot). Sidestep perpendicular to
  *  the goal for a beat; random side per incident keeps herds from
@@ -67,10 +108,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
       // the burn so the bot commits real fuel to a real climb.
       s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.orbitStreak * 0.7, 3.0));
       if (s.detourT <= 0) {
-        const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
-        const gl = Math.hypot(gx, gz) || 1;
-        const side = botRand() < 0.5 ? -1 : 1;
-        s.detour = { x: pos.x + (-gz / gl) * side * 20, y: ctx.groundY(pos.x, pos.z) + BOT_EYE, z: pos.z + (gx / gl) * side * 20 };
+        s.detour = pickDetour(s, ctx, pos, 20);
         s.detourT = 2.0;
       }
     }
@@ -92,11 +130,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
   if (distSq(pos, s.progressPos) < 2.25) {
     s.stuckStreak++;
     if (s.detourT <= 0) {
-      const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
-      const gl = Math.hypot(gx, gz) || 1;
-      const side = botRand() < 0.5 ? -1 : 1;
-      const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
-      s.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
+      s.detour = pickDetour(s, ctx, pos, 14);
       s.detourT = 1.2;
     }
     // Pinned through a detour = a wall pocket every sideways probe

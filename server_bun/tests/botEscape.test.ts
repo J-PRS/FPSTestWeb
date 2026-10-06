@@ -84,18 +84,30 @@ it('progress keeps the straight line — no streak, no detour', () => {
   expect(s.stuckStreak).toBe(0);
 });
 
-it('parked past the 1.5s window earns a streak + a perpendicular detour', () => {
-  botRng(() => 0.2); // side = -1 deterministic
+it('parked past the 1.5s window earns a streak + a walkable-route detour', () => {
   const s = mkState();
   const w = stuckBreak(s, 1.6, ctx(), origin, dest);
   expect(s.stuckStreak).toBe(1);
   expect(s.detour).not.toBeNull();
   expect(w).toBe(s.detour!);
-  // detour is ~14m perpendicular to the goal direction
+  // flat ground every heading walks the same → the fan keeps the goal line
   const d = Math.hypot(w.x - origin.x, w.z - origin.z);
   expect(d).toBeCloseTo(14, 6);
-  expect(w.x).toBeCloseTo(0, 6);   // perpendicular → z carries the step
-  expect(Math.abs(w.z)).toBeCloseTo(14, 6);
+  expect(w.x).toBeCloseTo(14, 6);
+  expect(Math.abs(w.z)).toBeLessThan(0.001);
+});
+
+it('a wall dead ahead sends the detour down the walkable side — the ramp sense', () => {
+  // +x is a sheer face (g jumps to 8 within 3m); every other heading is flat
+  const wall = (x: number, _z: number) => (x > 2 ? 8 : 0);
+  const s = mkState();
+  const w = stuckBreak(s, 1.6, ctx({ groundY: wall }), origin, dest);
+  expect(s.detour).not.toBeNull();
+  expect(w).toBe(s.detour!);
+  const d = Math.hypot(w.x - origin.x, w.z - origin.z);
+  expect(d).toBeCloseTo(14, 6);
+  // the route with no face wins — lateral detour, not into the wall
+  expect(Math.abs(w.z)).toBeGreaterThan(7);
 });
 
 it('pinned through a detour escalates to the jet burst', () => {

@@ -99,7 +99,8 @@ describe('stuckBreak', () => {
     const pos = { x: 0, y: 0, z: 0 };
     const d1 = stuckBreak(s, 2, flat(), pos, { x: 5, y: 0, z: 0 });
     expect(s.stuckStreak).toBe(1);
-    expect(Math.abs(d1.z)).toBeGreaterThan(0); // sidestep off the goal line
+    // flat ground: no face anywhere → the scored fan walks the goal line
+    expect(Math.hypot(d1.x - pos.x, d1.z - pos.z)).toBeCloseTo(14, 6);
     // Second pinned eval with the detour still committed → jet burst.
     s.detourT = 0.5;
     stuckBreak(s, 2, flat(), pos, { x: 5, y: 0, z: 0 });
