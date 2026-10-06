@@ -45,7 +45,7 @@ const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0
 
 export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<PerkMods> }> = {
   none:        { name: 'No Perk',     blurb: '', mods: {} },
-  featherjets: { name: 'Featherjets', blurb: 'Jets burn 30% less, recharge 50% faster', mods: { jetDrain: 0.7, jetRegen: 1.5 } },
+  featherjets: { name: 'Featherjets', blurb: 'Jets burn 20% less', mods: { jetDrain: 0.8 } },
   plated:      { name: 'Plated',      blurb: 'Take 25% less damage below 80% health', mods: { damageResist: 0.25 } },
   vitality:    { name: 'Vitality',    blurb: '+50 max health', mods: { maxHealth: 50 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate 4 hp/s', mods: { regen: 4 } },

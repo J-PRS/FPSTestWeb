@@ -21,7 +21,9 @@ import type { Terrain } from '../world/terrain.js';
 import type { GameBot } from './botBrain.js';
 import { flagReturnFx } from './flagFx.js';
 import * as sfx from '../core/sfx.js';
+import { GRAVITY } from '../core/config.js';
 import { Explosion } from '../effects/explosion.js';
+import { urlParams } from '../core/params.js';
 
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const RING_SIDE = 800;        // lap square edge — matches the lapMeasure circuit
@@ -78,7 +80,7 @@ export interface FlagRunDeps {
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
-    energy?: number; vel?: THREE.Vector3;
+    energy?: number; vel?: THREE.Vector3; yaw: number; pitch: number;
     movement?: { setStructures(l: readonly StructureSpec[] | undefined): void } };
   lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
   world: { explosions: { push(e: Explosion): void } };
@@ -93,6 +95,12 @@ interface CircuitFlag {
   team: TeamId;              // whose flag this is — enemy of the carrier
   carrier: string | null;
   dropT: number;
+  /** Loose-flag ballistic velocity — mirrors RoomFlags.vel: nonzero
+   *  means the flag is tumbling, not resting. */
+  flyVel: THREE.Vector3;
+  /** Whose toss is still airborne — same re-grab guard the server
+   *  applies so you can't instantly re-catch your own throw. */
+  airborneBy: string | null;
 }
 
 export interface FlagRunWiring {
@@ -148,9 +156,55 @@ export class FlagRunBridge {
       mesh.position.copy(home);
       mesh.position.y += STAND_TOP;
       deps.lazyScene().add(stand, mesh);
-      this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0 });
+      this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0, flyVel: new THREE.Vector3(), airborneBy: null });
     });
     w.onFeed(`FLAG RUN — grab an enemy flag, bank it at any ${TEAM_LABEL[w.playerTeam]} stand.`);
+    if (urlParams.has('tas')) this.loadTasGhost();
+  }
+
+  /** TAS ghost — replays a searched optimal leg trajectory (the yellow
+   *  ribbon + flying marker) so the arc is watchable in-engine.
+   *  ?tas=0->1 picks a leg; ?tas=1 plays the first found. */
+  private tasPts: THREE.Vector3[] = [];
+  private tasJet: boolean[] = [];
+  private tasT = 0;
+  private readonly tasStep = 0.15;
+  private tasGhost?: THREE.Group;
+  private tasMat?: THREE.MeshBasicMaterial;
+
+  private async loadTasGhost(): Promise<void> {
+    const terrain = this.deps.lazyTerrain();
+    const scene = this.deps.lazyScene();
+    const data = await fetch('/assets/tas_paths.json').then(r => r.json()).catch(() => null);
+    if (!data) { this.w.onFeed('TAS ghost: no tas_paths.json — run .devin_tas.ts first.'); return; }
+    const want = urlParams.get('tas');
+    const key = want && want.includes('->') ? want : Object.keys(data)[0]!;
+    const leg = data[key];
+    if (!leg) { this.w.onFeed(`TAS ghost: no leg ${key} — have: ${Object.keys(data).join(' ')}`); return; }
+    this.tasPts = leg.samples.map((s: { x: number; z: number; agl: number }) =>
+      new THREE.Vector3(s.x, terrain.getHeight(s.x, s.z) + s.agl, s.z));
+    this.tasJet = leg.samples.map((s: { j: number }) => s.j === 1);
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(this.tasPts),
+      new THREE.LineBasicMaterial({ color: 0xffd84d, transparent: true, opacity: 0.7 }));
+    this.tasMat = new THREE.MeshBasicMaterial({ color: 0xff4060 });
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), this.tasMat);
+    const g = new THREE.Group();
+    g.add(line, dot);
+    this.tasGhost = g;
+    scene.add(g);
+    this.w.onFeed(`TAS ghost: leg ${key} — ${leg.t.toFixed(1)}s optimal${leg.miss ? ` (miss ${leg.miss.toFixed(0)}m)` : ''}`);
+  }
+
+  private tickTasGhost(dt: number): void {
+    if (!this.tasPts.length || !this.tasGhost) return;
+    this.tasT += dt;
+    const span = this.tasPts.length * this.tasStep;
+    const ft = (this.tasT % span) / this.tasStep;
+    const i = Math.min(this.tasPts.length - 2, Math.floor(ft));
+    const dot = this.tasGhost.children[1] as THREE.Mesh;
+    dot.position.lerpVectors(this.tasPts[i]!, this.tasPts[i + 1]!, ft - i);
+    (dot.material as THREE.MeshBasicMaterial).color.setHex(this.tasJet[i] ? 0x40ff90 : 0xff4060);
   }
 
   /** Spawn/respawn anchor — beside the nearest live enemy flag. */
@@ -172,6 +226,7 @@ export class FlagRunBridge {
   private lastTouchV = new Map<string, number>();
 
   update(dt: number): void {
+    this.tickTasGhost(dt);
     this.lapT += dt;
     this.capT += dt;
     const player = this.deps.lazyPlayer();
@@ -220,18 +275,22 @@ export class FlagRunBridge {
         } else {
           this.setBotCarry(f.carrier, false);
           f.state = 'dropped'; f.carrier = null;
-          f.pos.y = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z) + 0.2; // hem clears turf
+          // Same tumble pop the server gives a dead carrier's flag
+          // (loose(): +3 up) — the ballistic tick owns it from here.
+          f.flyVel.set(0, 3, 0);
           f.dropT = FLAG_RESET_S;
           this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
         }
         continue;
       }
       if (f.state === 'dropped') {
+        this.tickBallistic(f, dt);
         f.dropT -= dt;
         if (f.dropT <= 0) this.sendHome(f, 'returned');
       }
       // home/dropped both accept touches — swept capsule like CtfFlags.
       for (const [id, tp, pp] of touchers) {
+        if (id === f.airborneBy) continue; // thrower can't re-grab mid-flight
         const tTeam = this.w.teamOf.get(id);
         if (f.state === 'dropped' && tTeam === f.team) { this.sendHome(f, 'returned'); break; }
         if (tTeam === f.team) continue;
@@ -246,6 +305,7 @@ export class FlagRunBridge {
         const pickupR = FLAG_PICKUP_R * (id === 'local' ? (player.mods.pickupRadius ?? 1) : 1);
         if (Math.abs(dy) > 6 || dx * dx + dz * dz > pickupR * pickupR) continue;
         f.state = 'carried'; f.carrier = id;
+        f.airborneBy = null; f.flyVel.set(0, 0, 0);
         this.setBotCarry(id, true);
         this.burst(f.pos, f.team, 1.4);
         sfx.flagCue('taken', false);
@@ -264,10 +324,17 @@ export class FlagRunBridge {
       const lift = f.state === 'home' ? STAND_TOP : 0;
       f.pos.y += 3.4 + lift;
       hud.updateFlagIndicator(`fr:${f.home.x}:${f.home.z}`, f.pos, cam, f.team);
+      // Home flag: socket nests INSIDE the flag diamond — one complete
+      // glyph, same as the wire path. Away: the bare socket marks the
+      // empty stand at deck height.
+      if (f.state === 'home') {
+        hud.updateFlagIndicator(`frs:${f.home.x}:${f.home.z}`, f.pos, cam, f.team, 'stand');
+      } else {
+        f.home.y += STAND_TOP + 0.07;
+        hud.updateFlagIndicator(`frs:${f.home.x}:${f.home.z}`, f.home, cam, f.team, 'stand');
+        f.home.y -= STAND_TOP + 0.07;
+      }
       f.pos.y -= 3.4 + lift;
-      f.home.y += STAND_TOP + 0.07;
-      hud.updateFlagIndicator(`frs:${f.home.x}:${f.home.z}`, f.home, cam, f.team, 'stand');
-      f.home.y -= STAND_TOP + 0.07;
     }
   }
 
@@ -337,6 +404,7 @@ export class FlagRunBridge {
 
   private sendHome(f: CircuitFlag, kind: 'returned' | 'captured'): void {
     f.state = 'home'; f.carrier = null; f.pos.copy(f.home);
+    f.flyVel.set(0, 0, 0); f.airborneBy = null;
     if (kind === 'returned') { sfx.flagCue('returned', f.team === this.w.playerTeam); flagReturnFx(f.pos, f.team, null); }
     this.burst(f.pos, f.team, kind === 'captured' ? 2.4 : 1.4);
   }
@@ -348,7 +416,7 @@ export class FlagRunBridge {
   }
 
   reset(): void {
-    for (const f of this.flags) { f.state = 'home'; f.carrier = null; f.pos.copy(f.home); }
+    for (const f of this.flags) { f.state = 'home'; f.carrier = null; f.pos.copy(f.home); f.flyVel.set(0, 0, 0); f.airborneBy = null; }
     this.caps = 0; this.lap = 0; this.lapT = 0; this.capT = 0;
     this.pathM = 0; this.liveS = 0; this.eSum = 0; this.eN = 0;
     this.maxV = 0; this.bestCap = Infinity; this.bestLap = Infinity;
@@ -361,8 +429,52 @@ export class FlagRunBridge {
       f.carrier = null; f.state = 'dropped';
       f.pos.copy(at);
       f.pos.y = this.deps.lazyTerrain().getHeight(at.x, at.z);
+      f.flyVel.set(0, 0, 0); f.airborneBy = null;
       f.dropT = FLAG_RESET_S;
       this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
+    }
+  }
+
+  /** Local G-press flag toss — same claim the server resolves online
+   *  (RoomFlags.throwFor): FULL carrier speed inherited plus a
+   *  deliberate lob along aim. Same constants both ends so the offline
+   *  arc reads identical to the wire replay. */
+  throwLocal(): void {
+    const player = this.deps.lazyPlayer();
+    if (player.isDead) return;
+    for (const f of this.flags) {
+      if (f.carrier !== 'local') continue;
+      const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
+      this.setBotCarry('local', false);
+      f.carrier = null; f.state = 'dropped';
+      f.pos.copy(player.pos);
+      f.flyVel.set(
+        (player.vel?.x ?? 0) + cp * Math.sin(player.yaw) * 20,
+        (player.vel?.y ?? 0) + 3 + sp * 20,
+        (player.vel?.z ?? 0) + cp * Math.cos(player.yaw) * 20);
+      f.airborneBy = 'local';
+      f.dropT = FLAG_RESET_S;
+      this.w.onFeed(`${TEAM_LABEL[f.team]} flag thrown!`);
+    }
+  }
+
+  /** Loose-flag tumble — mirrors RoomFlags.tickBallistic (world
+   *  gravity, 0.3 bounce, 4/s skid bleed, 0.6 settle). */
+  private tickBallistic(f: CircuitFlag, dt: number): void {
+    if (f.flyVel.x === 0 && f.flyVel.y === 0 && f.flyVel.z === 0) return;
+    f.flyVel.y += GRAVITY * dt;
+    f.pos.addScaledVector(f.flyVel, dt);
+    const gy = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z) + 0.2;
+    if (f.pos.y <= gy) {
+      f.pos.y = gy;
+      f.flyVel.y = f.flyVel.y < -2 ? -f.flyVel.y * 0.3 : 0;
+      const bleed = Math.max(0, 1 - 4 * dt);
+      f.flyVel.x *= bleed;
+      f.flyVel.z *= bleed;
+    }
+    if (f.flyVel.lengthSq() < 0.36 && f.pos.y <= gy + 0.05) {
+      f.flyVel.set(0, 0, 0);
+      f.airborneBy = null; // settled — the thrower may grab it again
     }
   }
 }
