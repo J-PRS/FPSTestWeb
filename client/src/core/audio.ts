@@ -36,6 +36,7 @@ const WORLD_MAX_DIST = 260;     // beyond this, don't spawn the node at all
 const AIR_ABSORB_M = 45;
 const airAbsorbHz = (d: number): number =>
   Math.max(400, Math.min(20_000, 18_000 * Math.exp(-d / AIR_ABSORB_M)));
+const noopKill = (): void => undefined;
 
 export class AudioEngine {
   ctx: BaseAudioContext | null = null;
@@ -67,7 +68,7 @@ export class AudioEngine {
 
   /** Must be called from a user gesture (pointer lock click qualifies). */
   unlock(): void {
-    if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
+    if (this.ctx) { (this.ctx as AudioContext).resume().catch(() => undefined); return; }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) {return;}
     this.wire(new AC());
@@ -79,8 +80,9 @@ export class AudioEngine {
 
   /** Fetch + decode the /sfx/*.ogg bank once. Failures stay silent —
    *  the synth fallbacks in sfx.ts cover every slot a sample misses. */
-  private async loadSamples(): Promise<void> {
-    if (this.samplesRequested || !this.ctx) {return;}
+  private loadSamples(): Promise<void> {
+    const { ctx } = this;
+    if (this.samplesRequested || !ctx) {return Promise.resolve();}
     this.samplesRequested = true;
     const names = [
       'explosion1', 'explosion2', 'explosion_small',
@@ -94,23 +96,26 @@ export class AudioEngine {
       'robot_die', 'equip', 'reload', 'ski_scrape', 'thud_big', 'cryst_bang',
       'ricochet1', 'ricochet2', 'ricochet3', 'whistle',
       'hg_throw', 'hg_clang', 'hg_tick',
+      // Bolt launcher voice — original Audiogen filenames kept so the
+      // source batch is greppable. Extension-qualified entries fetch
+      // verbatim; bare names fetch <name>.ogg. Bank key = file stem.
+      'g_loud-powerful-ballista-crossbow-shot_2_5865d',
+      'g_powerful-deep-scifi-weapon-shot-game-sound_1_2fa9a',
     ];
-    await Promise.all(names.map(async n => {
-      try {
-        const res = await fetch(`/sfx/${n}.ogg`);
-        if (!res.ok) {return;}
-        const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
-        this.buffers.set(n, buf);
-      } catch { /* synth fallback covers it */ }
-    }));
+    return Promise.all(names.map(n => fetch(`/sfx/${n.includes('.') ? n : `${n}.ogg`}`)
+      .then(res => res.ok ? res.arrayBuffer() : undefined)
+      .then(ab => ab === undefined ? undefined : ctx.decodeAudioData(ab))
+      .then(buf => buf ? this.buffers.set(n.replace(/\.[^.]+$/, ''), buf) : undefined)
+      .catch(() => undefined), // synth fallback covers it
+    )).then(() => undefined);
   }
 
   /** Offline-rendering hook for the WAV dump pipeline — attaches a
    *  pre-made OfflineAudioContext instead of creating a live one.
    *  Resolves once the sample bank is decoded so renders use real clips. */
-  async attachOffline(ctx: BaseAudioContext): Promise<void> {
+  attachOffline(ctx: BaseAudioContext): Promise<void> {
     this.wire(ctx);
-    await this.loadSamples();
+    return this.loadSamples();
   }
 
   private wire(ctx: BaseAudioContext): void {
@@ -131,7 +136,7 @@ export class AudioEngine {
     const len = ctx.sampleRate * 2;
     this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
-    for (let i = 0; i < len; i++) {d[i] = Math.random() * 2 - 1;}
+    for (let i = 0; i < len; i += 1) {d[i] = Math.random() * 2 - 1;}
   }
 
   get ready(): boolean { return this.ctx !== null && (this.ctx.state === 'running' || 'startRendering' in this.ctx); }
@@ -179,18 +184,24 @@ export class AudioEngine {
    *  same-or-higher prio is the only refusal — the stinger tier
    *  effectively can't starve. */
   takeVoice(prio: number, node: AudioNode, chain?: GainNode): boolean {
-    if (this.voiceTab.length >= MAX_VOICES) {
-      let victim = -1;
-      for (let i = 0; i < this.voiceTab.length; i++) {
-        const v = this.voiceTab[i]!;
-        if (v.prio < prio && (victim < 0 || v.at < this.voiceTab[victim]!.at)) {victim = i;}
-      }
-      if (victim < 0) {return false;}
-      const [v] = this.voiceTab.splice(victim, 1);
-      try { v!.node.disconnect(); } catch { /* already detached */ }
-      if (v!.chain) {this.freeInput(v!.chain);}
-    }
+    if (this.voiceTab.length >= MAX_VOICES && !this.evictLowerPrio(prio)) {return false;}
     this.voiceTab.push({ prio, at: Date.now(), node, chain });
+    return true;
+  }
+
+  /** Free a slot by silencing the oldest strictly-lower-priority voice.
+   *  False when nothing on the table is quieter than the newcomer. */
+  private evictLowerPrio(prio: number): boolean {
+    let victim = -1;
+    for (let i = 0; i < this.voiceTab.length; i += 1) {
+      const v = this.voiceTab[i];
+      if (v && v.prio < prio && (victim < 0 || v.at < (this.voiceTab[victim]?.at ?? Infinity))) {victim = i;}
+    }
+    const v = victim >= 0 ? this.voiceTab[victim] : undefined;
+    if (!v) {return false;}
+    this.voiceTab.splice(victim, 1);
+    try { v.node.disconnect(); } catch { /* already detached */ }
+    if (v.chain) {this.freeInput(v.chain);}
     return true;
   }
   releaseVoice(node: AudioNode): void {
@@ -207,7 +218,8 @@ export class AudioEngine {
    */
   noiseLoop(type: BiquadFilterType, freq: number): LoopHandle | null {
     if (!this.ctx || !this.noiseBuf) {return null;}
-    const src = this.ctx.createBufferSource();
+    const c = this.ctx;
+    const src = c.createBufferSource();
     src.buffer = this.noiseBuf;
     src.loop = true;
     const filt = this.ctx.createBiquadFilter();
@@ -218,7 +230,7 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08);} },
+      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
       stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); filt.disconnect(); g.disconnect(); } },
     };
   }
@@ -227,7 +239,8 @@ export class AudioEngine {
   sampleLoop(name: string, rate = 1): LoopHandle | null {
     const buf = this.buffers.get(name);
     if (!this.ctx || !buf) {return null;}
-    const src = this.ctx.createBufferSource();
+    const c = this.ctx;
+    const src = c.createBufferSource();
     src.buffer = buf; src.loop = true;
     src.playbackRate.value = rate;
     const g = this.ctx.createGain();
@@ -236,7 +249,7 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08);} },
+      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
       stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); g.disconnect(); } },
     };
   }
@@ -253,8 +266,8 @@ export class AudioEngine {
     const lp2 = c.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 20_000;
     const pan = c.createStereoPanner();
     inten.connect(dist).connect(lp).connect(lp2).connect(pan).connect(this.world);
-    let kill: () => void;
-    let pitch: AudioParam | undefined;
+    let kill: () => void = noopKill;
+    let pitch: AudioParam | undefined = undefined;
     let pitchBase = 1;
     if (kind === 'sample') {
       const buf = this.buffers.get(arg as string);
@@ -263,7 +276,7 @@ export class AudioEngine {
       src.buffer = buf; src.loop = true;
       if (opt) {src.playbackRate.value = opt;}
       src.connect(inten); src.start();
-      kill = () => src.stop();
+      kill = (): void => src.stop();
       pitch = src.playbackRate; pitchBase = opt ?? 1;
     } else if (kind === 'noise') {
       if (!this.noiseBuf) { inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); return null; }
@@ -272,20 +285,20 @@ export class AudioEngine {
       const f = c.createBiquadFilter();
       f.type = arg as BiquadFilterType; f.frequency.value = opt ?? 1000;
       src.connect(f).connect(inten); src.start();
-      kill = () => { src.stop(); f.disconnect(); };
+      kill = (): void => { src.stop(); f.disconnect(); };
       pitch = f.frequency; pitchBase = opt ?? 1000;
     } else {
       const o = c.createOscillator();
       o.type = arg as OscillatorType; o.frequency.value = opt ?? 90;
       o.connect(inten); o.start();
-      kill = () => o.stop();
+      kill = (): void => o.stop();
       pitch = o.frequency; pitchBase = opt ?? 90;
     }
     const setPos = (pos: THREE.Vector3, emitVel?: THREE.Vector3): void => {
       const dx = pos.x - this.listenerPos.x;
       const dy = pos.y - this.listenerPos.y;
       const dz = pos.z - this.listenerPos.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const d = Math.hypot(dx, dy, dz);
       dist.gain.setTargetAtTime(d > WORLD_MAX_DIST ? 0 : 1 / (1 + d / WORLD_REF_DIST), c.currentTime, 0.08);
       const fc = airAbsorbHz(d);
       lp.frequency.setTargetAtTime(fc, c.currentTime, 0.08);
@@ -306,9 +319,10 @@ export class AudioEngine {
   /** Oscillator loop (jetpack hum etc.) — set() drives gain + pitch bend. */
   oscLoop(type: OscillatorType, freq: number): LoopHandle | null {
     if (!this.ctx) {return null;}
-    const o = this.ctx.createOscillator();
+    const c = this.ctx;
+    const o = c.createOscillator();
     o.type = type; o.frequency.value = freq;
-    const g = this.ctx.createGain();
+    const g = c.createGain();
     g.gain.value = 0;
     o.connect(g).connect(this.sfx);
     o.start();
@@ -316,8 +330,8 @@ export class AudioEngine {
     return {
       set: (v) => {
         if (!alive) {return;}
-        g.gain.setTargetAtTime(v * 0.3, this.ctx!.currentTime, 0.06);
-        o.frequency.setTargetAtTime(freq * (1 + v * 0.8), this.ctx!.currentTime, 0.06);
+        g.gain.setTargetAtTime(v * 0.3, c.currentTime, 0.06);
+        o.frequency.setTargetAtTime(freq * (1 + v * 0.8), c.currentTime, 0.06);
       },
       stop: () => { if (alive) { alive = false; o.stop(); o.disconnect(); g.disconnect(); } },
     };

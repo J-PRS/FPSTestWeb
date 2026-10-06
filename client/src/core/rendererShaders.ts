@@ -112,30 +112,35 @@ export const XBR_GLSL = /* glsl */ `
       float S = xbrScale;
       vec4 delta = vec4(1.0/S), delta_l = vec4(0.5/S, 1.0/S, 0.5/S, 1.0/S);
       vec4 delta_u = delta_l.yxwz;
-      vec4 A1v = texture2D(inputBuffer, uv + vec2(-dx, -2.0*dy));
-      vec4 B1v = texture2D(inputBuffer, uv + vec2(0.0, -2.0*dy));
-      vec4 C1v = texture2D(inputBuffer, uv + vec2(dx, -2.0*dy));
-      vec4 Av  = texture2D(inputBuffer, uv + vec2(-dx, -dy));
-      vec4 Bv  = texture2D(inputBuffer, uv + vec2(0.0, -dy));
-      vec4 Cv  = texture2D(inputBuffer, uv + vec2(dx, -dy));
-      vec4 Dv  = texture2D(inputBuffer, uv + vec2(-dx, 0.0));
-      vec4 Fv  = texture2D(inputBuffer, uv + vec2(dx, 0.0));
-      vec4 Gv  = texture2D(inputBuffer, uv + vec2(-dx, dy));
-      vec4 Hv  = texture2D(inputBuffer, uv + vec2(0.0, dy));
-      vec4 Iv  = texture2D(inputBuffer, uv + vec2(dx, dy));
-      vec4 G5v = texture2D(inputBuffer, uv + vec2(-dx, 2.0*dy));
-      vec4 H5v = texture2D(inputBuffer, uv + vec2(0.0, 2.0*dy));
-      vec4 I5v = texture2D(inputBuffer, uv + vec2(dx, 2.0*dy));
-      vec4 A0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, -dy));
-      vec4 D0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, 0.0));
-      vec4 G0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, dy));
-      vec4 C4v = texture2D(inputBuffer, uv + vec2(2.0*dx, -dy));
-      vec4 F4v = texture2D(inputBuffer, uv + vec2(2.0*dx, 0.0));
-      vec4 I4v = texture2D(inputBuffer, uv + vec2(2.0*dx, dy));
+      // inputBuffer is LINEAR-filtered — upstream samples a nearest source,
+      // so every tap snaps to the texel center under the output fragment or
+      // the eq/neq edge rules compare bilinear blur instead of source art.
+      vec2 base = (floor(uv / inv) + 0.5) * inv;
+      vec4 A1v = texture2D(inputBuffer, base + vec2(-dx, -2.0*dy));
+      vec4 B1v = texture2D(inputBuffer, base + vec2(0.0, -2.0*dy));
+      vec4 C1v = texture2D(inputBuffer, base + vec2(dx, -2.0*dy));
+      vec4 Av  = texture2D(inputBuffer, base + vec2(-dx, -dy));
+      vec4 Bv  = texture2D(inputBuffer, base + vec2(0.0, -dy));
+      vec4 Cv  = texture2D(inputBuffer, base + vec2(dx, -dy));
+      vec4 Dv  = texture2D(inputBuffer, base + vec2(-dx, 0.0));
+      vec4 Ev  = texture2D(inputBuffer, base);
+      vec4 Fv  = texture2D(inputBuffer, base + vec2(dx, 0.0));
+      vec4 Gv  = texture2D(inputBuffer, base + vec2(-dx, dy));
+      vec4 Hv  = texture2D(inputBuffer, base + vec2(0.0, dy));
+      vec4 Iv  = texture2D(inputBuffer, base + vec2(dx, dy));
+      vec4 G5v = texture2D(inputBuffer, base + vec2(-dx, 2.0*dy));
+      vec4 H5v = texture2D(inputBuffer, base + vec2(0.0, 2.0*dy));
+      vec4 I5v = texture2D(inputBuffer, base + vec2(dx, 2.0*dy));
+      vec4 A0v = texture2D(inputBuffer, base + vec2(-2.0*dx, -dy));
+      vec4 D0v = texture2D(inputBuffer, base + vec2(-2.0*dx, 0.0));
+      vec4 G0v = texture2D(inputBuffer, base + vec2(-2.0*dx, dy));
+      vec4 C4v = texture2D(inputBuffer, base + vec2(2.0*dx, -dy));
+      vec4 F4v = texture2D(inputBuffer, base + vec2(2.0*dx, 0.0));
+      vec4 I4v = texture2D(inputBuffer, base + vec2(2.0*dx, dy));
       // Luma on a 0-255 scale — the threshold constants assume byte range.
       vec3 A1=A1v.rgb*255.0,B1=B1v.rgb*255.0,C1=C1v.rgb*255.0;
       vec3 A=Av.rgb*255.0,B=Bv.rgb*255.0,C=Cv.rgb*255.0;
-      vec3 D=Dv.rgb*255.0,E=inputColor.rgb*255.0,F=Fv.rgb*255.0;
+      vec3 D=Dv.rgb*255.0,E=Ev.rgb*255.0,F=Fv.rgb*255.0;
       vec3 G=Gv.rgb*255.0,H=Hv.rgb*255.0,I=Iv.rgb*255.0;
       vec3 G5=G5v.rgb*255.0,H5=H5v.rgb*255.0,I5=I5v.rgb*255.0;
       vec3 A0=A0v.rgb*255.0,D0=D0v.rgb*255.0,G0=G0v.rgb*255.0;
@@ -164,8 +169,10 @@ export const XBR_GLSL = /* glsl */ `
         eq(e,g) + eq(e,c));
       vec4 irlv2l = diff(e,g) * diff(d,g);
       vec4 irlv2u = diff(e,c) * diff(b,c);
+      // Upstream: only fx45i carries the -Ci (0.25) bias — fx45 without it
+      // was the dead rule that left the output ≈nearest.
       vec4 fx45i = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5) - vec4(0.25)) / (2.0*delta), 0.0, 1.0);
-      vec4 fx45 = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5) - vec4(0.25)) / (2.0*delta), 0.0, 1.0);
+      vec4 fx45 = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5)) / (2.0*delta), 0.0, 1.0);
       vec4 fx30 = clamp((fx_l + delta_l - vec4(1.0,1.0,-0.5,0.0)) / (2.0*delta_l), 0.0, 1.0);
       vec4 fx60 = clamp((fx_u + delta_u - vec4(2.0,0.0,-1.0,0.5)) / (2.0*delta_u), 0.0, 1.0);
       vec4 wd1 = wd(e,c,g,i,h5,f4,h,f);

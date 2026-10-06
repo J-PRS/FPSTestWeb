@@ -32,6 +32,15 @@ export function shotAt(pos: THREE.Vector3, weaponType: number, emitVel?: THREE.V
 // deep boom + sparks tail (a shell fan going off, not a shotgun pump).
 const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: number, lpf?: number, cutAfter?: number, delay?: number][]>> = {
   [WeaponType.Flak]: [['shot_cannon', 0.9, 0.8], ['sparks', 0.45, 1.3, undefined, 0.3]],
+  // Bolt launcher: crossbow TWANG + deep sci-fi thump played together,
+  // each shot pitched 1.5–2.0 (base 1.75, ±0.25 jitter) — the ballista
+  // snap is the attack, the scifi layer is the body. Recipe from the
+  // FPS_Test project; old voice (shot_rocket sample) is noted in
+  // _docs/OLD/reference.md.
+  [WeaponType.BoltLauncher]: [
+    ['g_loud-powerful-ballista-crossbow-shot_2_5865d', 0.85, 1.75],
+    ['g_powerful-deep-scifi-weapon-shot-game-sound_1_2fa9a', 0.8, 1.75],
+  ],
   // Chaingun: the raw sample has a burst tail — at 0.09s per shot the tail
   // overlaps the next crack and reads as a fake 2x fire rate. Hard-cut at
   // 80ms, slight pitch-up, so every trigger is exactly one crack. Under it:
@@ -117,15 +126,16 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   ],
   // Chaingun @ ~11/s: voice is the authentic T2 fire crack (bright
   // high-band snap — 60% of its energy sits >2kHz, vs the old sample's
-  // mid-heavy body that stacked into sputter). Low-mid layers are lean:
-  // one bolt thump for oomph, no thud_big (the stacked sub-thumps were
-  // the "fart"). Cut stays tight so every trigger is one crack.
+  // mid-heavy body that stacked into sputter). Punch lives in ONE
+  // low-mid slam under the crack — a single deep bolt-thump, not the
+  // old stacked sub-thumps that read as a fart. Cut stays tight so
+  // every trigger is one crack.
   [WeaponType.Chaingun]: [
-    ['shot_chaingun', 0.85, 1.0, undefined, 0.08],
-    ['punch', 0.5, 0.65, 700, 0.06],
+    ['shot_chaingun', 0.9, 1.0, undefined, 0.075],
+    ['punch', 0.7, 0.55, 550, 0.09],
     // Faint bolt tick for mechanical detail — quiet enough to read as
     // texture under sustained fire, not a second transient.
-    ['hg_tick', 0.15, 1.6, 3000, 0.03],
+    ['hg_tick', 0.18, 1.6, 3000, 0.03],
   ],
 };
 
@@ -164,8 +174,13 @@ function shootInto(g: GainNode, weaponType: number): void {
   const layered = SHOT_LAYERS[weaponType];
   // Chaingun gets the widest jitter — at 11 shots/s it's the recipe where
   // the identical-waveform buzz is most audible; ±15% pitch + gain spread
-  // keeps successive cracks from phasing into a drone.
-  if (layered && layer(g, layered, weaponType === WeaponType.Chaingun ? 0.3 : 0.1)) return;
+  // keeps successive cracks from phasing into a drone. Bolt launcher's
+  // 0.29 isn't drift-jitter: it's the authored 1.5–2.0 pitch randomization
+  // around the 1.75 base rate.
+  const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
+    : weaponType === WeaponType.BoltLauncher ? 0.29
+    : 0.1;
+  if (layered && layer(g, layered, layerJitter)) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1], s[2])) return;
   (SYNTH_SHOTS[weaponType] ?? synthDefault)(g);
@@ -173,12 +188,12 @@ function shootInto(g: GainNode, weaponType: number): void {
 
 // Synth fallbacks — only reached when no sample is loaded for the weapon.
 function synthChaingun(g: GainNode): void {
-  // Dark crack band + bolt thump — centered lower than it used to be so
-  // sustained fire rasps less; wide jitter so a held trigger never phases.
+  // Snap band + single bolt-slam — short bright burst on top, one deep
+  // thump under it. The punch is a fast pitch-drop sine (the classic
+  // kick-drum body), not a square — a buzz there reads as sputter.
   const j = 1 + (Math.random() - 0.5) * 0.3;
-  noise(0.05, 0.26, g, 'bandpass', 1900 * j, 900 * j, 2);
-  osc('square', 340 * j, 170, 0.05, 0.14, g);
-  osc('sine', 130, 85, 0.05, 0.14, g);
+  noise(0.04, 0.24, g, 'bandpass', 2100 * j, 1100 * j, 2);
+  osc('sine', 220 * j, 70, 0.07, 0.2, g);
 }
 function synthPlasmaGun(g: GainNode): void {
   // Quick zap — jittered like chaingun so the volley doesn't phase

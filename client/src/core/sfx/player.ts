@@ -108,7 +108,9 @@ export function powerup(kind: string): void {
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 0.6, undefined, 2)) return;
   if (sample(`powerup_${kind}`, g, 0.5)) return;
-  if (sample('powerup', g, 0.45)) { powerupTail(kind, g); return; }
+  // gem/tag carry authored synth identities — the generic 'powerup'
+  // sample would drown them, so it only covers kinds with no own voice.
+  if (kind !== 'gem' && kind !== 'tag' && sample('powerup', g, 0.45)) { powerupTail(kind, g); return; }
   switch (kind) {
     case 'heal':
       osc('sine', 520, 1040, 0.16, 0.3, g);
@@ -130,9 +132,12 @@ export function powerup(kind: string): void {
       noise(0.2, 0.15, g, 'lowpass', 900, 300);
       break;
     case 'gem':
-      // Crystal chime — the nugget economy's coin-drop.
+      // Crystal chime (the coin-drop) layered over a gentle energy swell —
+      // the warm riser says "banked", the chime says "gold".
       osc('sine', 1040, 1560, 0.09, 0.25, g);
       osc('sine', 1560, 2080, 0.14, 0.15, g);
+      osc('sine', 320, 960, 0.28, 0.12, g);
+      noise(0.2, 0.05, g, 'highpass', 3000, 7000, 1);
       break;
     case 'tag':
       // Metallic clink — dog-tag confirm, drier than the gem chime.
@@ -152,7 +157,7 @@ function powerupTail(kind: string, g: GainNode): void {
     case 'armor': noise(0.1, 0.12, g, 'bandpass', 3000, 2000, 2); break;
     case 'regen': osc('sine', 500, 1500, 0.3, 0.1, g); break;
     case 'dd': osc('sawtooth', 180, 100, 0.25, 0.18, g); break;
-    case 'gem': osc('sine', 1560, 2080, 0.12, 0.1, g); break;
+    case 'gem': osc('sine', 1560, 2080, 0.12, 0.1, g); osc('sine', 320, 960, 0.2, 0.06, g); break;
     case 'tag': noise(0.05, 0.1, g, 'bandpass', 4200, 2600, 3); break;
   }
 }
@@ -240,7 +245,13 @@ export function flagCue(kind: 'taken' | 'dropped' | 'returned' | 'captured', min
   } else if (kind === 'dropped') {
     note(200, 0, 0.12, 0.2, 'sine'); noise(0.08, 0.12, g, 'lowpass', 500, 150);
   } else if (kind === 'returned') {
-    note(520, 0, 0.09, 0.16); note(780, 0.09, 0.15, 0.14);
+    // Snap-home: socket click, air shimmer on the converge, then a
+    // rising triad — warm resolve when OUR flag was saved, a flatter
+    // minor-ish shape when the enemy salvaged theirs.
+    noise(0.05, 0.16, g, 'highpass', 2600);
+    noise(0.28, 0.08, g, 'bandpass', 1400, 4200, 1.6);
+    if (mine) { note(392, 0.03, 0.1, 0.15); note(523, 0.11, 0.12, 0.16); note(784, 0.21, 0.26, 0.18); }
+    else { note(330, 0.03, 0.1, 0.13); note(415, 0.11, 0.12, 0.14); note(660, 0.21, 0.22, 0.15); }
   } else { // captured
     if (mine) { note(210, 0, 0.35, 0.3, 'sine'); note(140, 0.12, 0.4, 0.28, 'sine'); } // they scored — heavy toll
     else { for (const [f, dt] of [[523, 0], [659, 0.08], [784, 0.16], [1047, 0.26]] as const) note(f, dt, 0.2, 0.16); }

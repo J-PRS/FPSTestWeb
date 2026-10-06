@@ -12,11 +12,23 @@ let loops: { wind: LoopHandle | null; ski: LoopHandle | null; skiTex: LoopHandle
 let samplesSwapped = false;
 const _right = new THREE.Vector3();
 
+// Pack pitch tracks chassis: light frames whine a touch brighter, heavy
+// burns low. Rates double as osc-freq multipliers for the synth fallback.
+const JET_RATE: Record<string, number> = { light: 1.05, medium: 1.0, heavy: 0.95 };
+let jetCls = 'medium';
+
+function jetLoop(cls: string): LoopHandle | null {
+  const r = JET_RATE[cls] ?? 1;
+  return audio.sampleLoop('jet_loop', r) ?? audio.oscLoop('sawtooth', 90 * r);
+}
+
 /** Structural player shape — avoids importing Player (cycle). */
 interface LoopPlayer {
   vel: THREE.Vector3;
   jetting: boolean;
   skiing: boolean;
+  /** Tier actually simming — a banked class swap only takes on respawn. */
+  appliedClass?: string;
 }
 
 function ensureLoops(): NonNullable<typeof loops> {
@@ -30,7 +42,7 @@ function ensureLoops(): NonNullable<typeof loops> {
       // looped on its own just ticks — never reads as sliding).
       ski: audio.noiseLoop('bandpass', 900),
       skiTex: audio.sampleLoop('ski_scrape', 2.6),
-      jet: audio.sampleLoop('jet_loop') ?? audio.oscLoop('sawtooth', 90),
+      jet: jetLoop(jetCls),
     };
   }
   return loops;
@@ -41,7 +53,7 @@ function ensureLoops(): NonNullable<typeof loops> {
 function swapToRealSamples(): void {
   if (samplesSwapped || !(audio.sample('jet_loop') || audio.sample('snow_amb') || audio.sample('ski_scrape'))) return;
   samplesSwapped = true;
-  const jetBuf = audio.sample('jet_loop') && audio.sampleLoop('jet_loop');
+  const jetBuf = audio.sample('jet_loop') && audio.sampleLoop('jet_loop', JET_RATE[jetCls] ?? 1);
   const windBuf = audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
   // ski_scrape is a snow-footstep sample — looped ~2.6x it reads as
   // crunching granular texture under the noise scrape, better than
@@ -65,6 +77,14 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
   _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
   audio.updateListener(camera.position, _right, player.vel);
 
+  // Respawn can land a banked class swap — rebuild the jet loop at the
+  // new pitch (loops carry no live rate control, so swap the handle).
+  const cls = player.appliedClass ?? 'medium';
+  if (cls !== jetCls) {
+    jetCls = cls;
+    loops?.jet?.stop();
+    if (loops) loops.jet = jetLoop(cls);
+  }
   const l = ensureLoops();
   swapToRealSamples();
 
@@ -123,7 +143,7 @@ export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
 // The wire carries ski but no jet bit — jetting is inferred from a powered
 // climb (vel.y past walking jump apex), same read as the remote animation.
 // Callers gate on cloak/death upstream, so a cloaked jetter stays silent.
-interface RemoteLoops { jet: PositionalLoop | null; ski: PositionalLoop | null; busy: boolean; }
+interface RemoteLoops { jet: PositionalLoop | null; ski: PositionalLoop | null; busy: boolean; cls: string; }
 const remoteLoops = new Map<string, RemoteLoops>();
 const REMOTE_LOOP_CAP = 6;
 
@@ -134,25 +154,29 @@ export function remoteMoveAudioGone(id: string): void {
   remoteLoops.delete(id);
 }
 
-function acquireRemoteLoops(id: string): RemoteLoops | null {
+function acquireRemoteLoops(id: string, cls: string): RemoteLoops | null {
   if (remoteLoops.size >= REMOTE_LOOP_CAP) {
     for (const [k, v] of remoteLoops) {
       if (!v.busy) { remoteMoveAudioGone(k); break; }
     }
     if (remoteLoops.size >= REMOTE_LOOP_CAP) return null;
   }
+  const r = JET_RATE[cls] ?? 1;
   const l: RemoteLoops = {
-    jet: audio.worldLoop('sample', 'jet_loop') ?? audio.worldLoop('osc', 'sawtooth', 90),
+    jet: audio.worldLoop('sample', 'jet_loop', r) ?? audio.worldLoop('osc', 'sawtooth', 90 * r),
     ski: audio.worldLoop('sample', 'ski_scrape', 1.3) ?? audio.worldLoop('noise', 'bandpass', 2400),
     busy: false,
+    cls,
   };
   remoteLoops.set(id, l);
   return l;
 }
 
-export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean, vel?: THREE.Vector3): void {
+export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean, vel?: THREE.Vector3, cls = 'medium'): void {
   if (!audio.ready) return;
-  const l = remoteLoops.get(id) ?? ((jetting || skiing) ? acquireRemoteLoops(id) : null);
+  let l = remoteLoops.get(id) ?? ((jetting || skiing) ? acquireRemoteLoops(id, cls) : null);
+  // Respawned into a new tier — the pack pitch follows the chassis.
+  if (l && l.cls !== cls) { remoteMoveAudioGone(id); l = (jetting || skiing) ? acquireRemoteLoops(id, cls) : null; }
   if (!l) return;
   l.busy = jetting || skiing;
   l.jet?.setPos(pos, vel); l.jet?.set(jetting ? 0.45 : 0);

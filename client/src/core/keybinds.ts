@@ -10,7 +10,7 @@ import { settings } from './settings.js';
 
 export type BindAction =
   | 'forward' | 'back' | 'left' | 'right'
-  | 'jump' | 'ski' | 'belt' | 'melee' | 'camera' | 'skill' | 'spectate' | 'respawn' | 'throwFlag'
+  | 'jump' | 'ski' | 'belt' | 'melee' | 'camera' | 'skill' | 'spectate' | 'respawn' | 'throwFlag' | 'dieSpectate'
   | 'sidearm'
   | 'deploy'
   | 'slot0' | 'slot1' | 'slot2' | 'slot3';
@@ -33,6 +33,7 @@ export const BIND_DEFS: BindDef[] = [
   { action: 'sidearm',     label: 'Sidearm (hold)',   def: 'KeyF' },
   { action: 'deploy',      label: 'Deploy pack item', def: 'KeyX' },
   { action: 'respawn',     label: 'Respawn',          def: 'KeyK' },
+  { action: 'dieSpectate', label: 'Die + spectate',   def: 'KeyL' },
   { action: 'throwFlag',   label: 'Throw flag',       def: 'KeyG' },
   { action: 'slot0',   label: 'Weapon slot 1', def: 'Digit1' },
   { action: 'slot1',   label: 'Weapon slot 2', def: 'Digit2' },

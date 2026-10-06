@@ -1,6 +1,7 @@
 // World gravity is authored in shared/movement.ts — the server sims the
 // same fall the client predicts; derive, never copy.
-export { GRAVITY } from '../../../shared/movement.js';
+import { GRAVITY } from '../../../shared/movement.js';
+export { GRAVITY };
 
 // Physics constants for debris and death physics
 export const BOUNCE_Y = 0.35; // Vertical bounce coefficient
@@ -192,7 +193,7 @@ export const SNAKE_STRIKE_DIST = 5.5;     // coil trigger (3D)
 export const SNAKE_STRIKE_CD = 2.2;
 export const SNAKE_WINDUP = 0.45;         // telegraph — dodge window
 export const SNAKE_LUNGE_SPEED = 14;
-export const SNAKE_LEAP_GRAV = -28;     // leap arc gravity = creatureCore
+export const SNAKE_LEAP_GRAV = GRAVITY; // leap arc pays world gravity — derives, never copies
 export const SNAKE_LEAP_OVERSHOOT = 3.5;  // aim past the target — flies THROUGH
 export const SNAKE_BITE_DIST = 2.4;       // lunge contact (3D)
 export const SNAKE_BITE_DAMAGE = 14;

@@ -75,7 +75,10 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
     // entry used to hide a genuinely missing replica behind a "server
     // also has them" false match. Omitting the id makes the roster
     // difference itself the signal; the audit reports it verbatim.
-    if (entry) {allPlayers.set(id, entry);}
+    if (entry) {
+      allPlayers.set(id, entry);
+      noteEchoRace(id, entry.isDead, playerData?.health, Date.now());
+    }
   }
   return allPlayers;
 }
@@ -86,6 +89,13 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
 // first-seen wall time; ids younger than the window aren't diffed.
 const firstSeenAt = new Map<string, number>();
 const JOIN_GRACE_MS = 1500;
+// Respawn is a second join race for the echo channel: a dead→alive flip
+// restarts the health echo (server writes 300, client still holds the
+// pre-death or fabricated value until the next record lands). And a
+// player whose records never carried health yet hashes the fabricated
+// 100 — young until the first real echo arrives.
+const deadState = new Map<string, boolean>();
+const healthSeen = new Set<string>();
 
 function noteSeenIds(ids: Iterable<string>): void {
   const now = Date.now();
@@ -94,7 +104,21 @@ function noteSeenIds(ids: Iterable<string>): void {
     if (!firstSeenAt.has(id)) {firstSeenAt.set(id, now);}
   }
   for (const id of firstSeenAt.keys()) {
-    if (!live.has(id)) {firstSeenAt.delete(id);}
+    if (!live.has(id)) {firstSeenAt.delete(id); deadState.delete(id); healthSeen.delete(id);}
+  }
+}
+
+/** Echo-channel grace events observed per player while building the map:
+ *  dead flips and "health still fabricated" both re-arm the join window. */
+function noteEchoRace(id: string, isDead: boolean, health: number | undefined, now: number): void {
+  if (deadState.get(id) !== isDead) {
+    deadState.set(id, isDead);
+    firstSeenAt.set(id, now);
+  }
+  if (health === undefined && !healthSeen.has(id)) {
+    firstSeenAt.set(id, now);
+  } else if (health !== undefined) {
+    healthSeen.add(id);
   }
 }
 

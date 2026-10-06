@@ -43,6 +43,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
   pushWorld(lines, ctx.world);
+  pushRender(lines);
   pushAimProbe(lines, ctx);
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
   for (const [id, ps] of wire) {
@@ -91,6 +92,20 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
     lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
   }
   if (ribbonWarns) lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);
+}
+
+// Render pipeline census — pixel modes/AA live in settings + closure
+// state, so the renderer self-registers __renderDump rather than the
+// dump reaching in. buffer vs canvas size exposes the low-res demote
+// case (mid-chain pass output landing below display res).
+function pushRender(lines: string[]): void {
+  const rd = window.__renderDump?.();
+  if (!rd) return;
+  const pm = ['RAW', 'SMOOTH', 'BAYER', 'ATKINSON'];
+  lines.push(`render: pmode=${pm[rd['pmodeEff'] as number] ?? rd['pmodeEff']} (pick ${pm[rd['pmode'] as number]}) pscale=${rd['pscale']} res=${(rd['resScale'] as number).toFixed(2)}`);
+  lines.push(`  aa=${rd['aaEff']} (pick ${rd['aa']}) msaa=${rd['msaa']} bloom=${rd['bloom']} postpro=${rd['postpro']} composer=${rd['composerOn']}`);
+  lines.push(`  buffer=${rd['buffer']} canvas=${rd['canvas']} tone=${rd['toneMapping']} exp=${rd['exposure']}`);
+  lines.push(`  passes: ${(rd['passes'] as string[]).join(' ')}`);
 }
 
 // Crosshair probe near the top — the point of the dump is usually "what
@@ -147,7 +162,7 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
-  const rs = (td.ribbons ?? []).toSorted((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  const rs = (td.ribbons ?? []).slice().sort((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
   for (const r of rs) lines.push(`  rib ${JSON.stringify(r)}`);
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
@@ -182,7 +197,7 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
 // early; the offWorld count catches shells that escaped the sane-bounds
 // box (a garbage trail census usually traces back to one of these).
 function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
-  const aged = ctx.projectiles.toSorted((a, b) => b.age - a.age).slice(0, 5);
+  const aged = ctx.projectiles.slice().sort((a, b) => b.age - a.age).slice(0, 5);
   if (aged.length) {
     lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
   }
