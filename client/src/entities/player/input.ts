@@ -13,6 +13,12 @@ import { audio } from '../../core/audio.js';
 /** Actions a press can trigger — Player supplies the implementations. */
 export interface PlayerInputHandlers {
   isSpectating(): boolean;
+  /** Dead body — clicks mean spectate/respawn, not weapons or jets. */
+  isDead(): boolean;
+  /** Corpse-cam is orbiting a teammate — mouse steers the boom, not the aim. */
+  isDeadSpectating(): boolean;
+  /** Right-click while dead: enter teammate orbit / advance to the next one. */
+  deadSpectateCycle(): void;
   toggleSpectator(): void;
   melee(): void;
   toggleCamera(): void;
@@ -130,6 +136,13 @@ export class PlayerInput {
       if (this.frozen) {return;}
       if (!document.pointerLockElement) {return;} // ignore clicks that lock the cursor
       this.keys[`Mouse${e.button}`] = true;
+      if (h.isDead()) {
+        // Corpse clicks are spectate/respawn — queuing fire/jet here would
+        // fire a shot or burn fuel the first frame back alive.
+        if (e.button === 0) {h.respawn();}
+        if (e.button === 2) {h.deadSpectateCycle(); e.preventDefault();}
+        return;
+      }
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
       if (e.button === 1) { this.midHeld = !this.midHeld; e.preventDefault(); }
       if (e.button === 2) { this.jetPending = true; }
@@ -167,7 +180,7 @@ export class PlayerInput {
       if (performance.now() < this.lockSettleUntil) {return;}
       const mx = Math.max(-800, Math.min(800, e.movementX));
       const my = Math.max(-800, Math.min(800, e.movementY));
-      if (this.midHeld) {h.orbitLook(mx, my);} else {h.look(mx, my);}
+      if (this.midHeld || h.isDeadSpectating()) {h.orbitLook(mx, my);} else {h.look(mx, my);}
     });
   }
 

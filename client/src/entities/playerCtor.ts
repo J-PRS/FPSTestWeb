@@ -47,6 +47,9 @@ export function buildSkillsCtx(p: Player, terrain: Terrain, scene: THREE.Scene):
 export function buildInputCtx(p: Player): PlayerInputHandlers {
   return {
     isSpectating: () => p.status.spectating,
+    isDead: () => p.isDead,
+    isDeadSpectating: () => p.deadSpectateIdx >= 0,
+    deadSpectateCycle: () => p.deadSpectateCycle(),
     toggleSpectator: () => p.toggleSpectator(),
     melee: () => p.tryMelee(),
     toggleCamera: () => {

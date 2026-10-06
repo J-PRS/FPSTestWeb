@@ -280,6 +280,27 @@ export class Player {
    *  yaw/pitch so orbiting never moves the aim. Seeded from yaw/pitch each
    *  time the orbit engages so the cam starts where you were looking. */
   readonly orbit = { yaw: 0, pitch: 0 };
+
+  /** Dead-spectate target index into spectateTargets() — -1 = ghost
+   *  free-fly. Right-click while dead enters orbit then advances; a
+   *  target that dies or leaves drops the cam back to free-fly until
+   *  the next click. Reset when a new life starts. */
+  deadSpectateIdx = -1;
+  /** Live teammate anchors for dead-spectate, resolved by main.ts — the
+   *  player layer must not know remote rosters/network state. `pos` is
+   *  the networked EYE position; `feetY` grounds the boom anchor. */
+  spectateTargets?: () => { pos: THREE.Vector3; feetY: number; alive: boolean }[];
+  private readonly deadSpectateAnchor = new THREE.Vector3();
+
+  /** Right-click while dead: orbit the next living teammate. */
+  deadSpectateCycle(): void {
+    const ts = this.spectateTargets?.() ?? [];
+    const aliveIdx = ts.map((t, i) => (t.alive ? i : -1)).filter((i) => i >= 0);
+    if (!aliveIdx.length) { this.deadSpectateIdx = -1; return; }
+    const next = aliveIdx.find((i) => i > this.deadSpectateIdx) ?? aliveIdx[0]!;
+    if (this.deadSpectateIdx < 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
+    this.deadSpectateIdx = next;
+  }
   private wasMidHeld = false;
   /** Body-model barrel tip in world space — the beam/tracer anchor when
    *  the viewmodel is hidden (third person / spectating). */
@@ -387,6 +408,22 @@ export class Player {
     }
     this.wasObserving = observing;
     if (observing) {
+      if (!this.isDead) { this.deadSpectateIdx = -1; }
+      const spectateTarget = this.deadSpectateIdx >= 0
+        ? this.spectateTargets?.()[this.deadSpectateIdx]
+        : undefined;
+      if (spectateTarget?.alive) {
+        // Dead-spectate: same boom as the middle-mouse inspect cam, but the
+        // anchor is the teammate's feet — the networked pos is EYE height,
+        // which would lift the whole boom a head-high.
+        this.deadSpectateAnchor.set(spectateTarget.pos.x, spectateTarget.feetY, spectateTarget.pos.z);
+        this.visuals.updateCamera(this.camera, this.terrain, {
+          pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
+          thirdPerson: true,
+          orbit: this.orbit,
+        });
+        return;
+      }
       const obInput = this.readMoveInput();
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
@@ -395,6 +432,7 @@ export class Player {
       });
       return;
     }
+    this.deadSpectateIdx = -1; // alive again — a fresh death re-opens the cycle
     if (this.input.frozen) {
       // still update camera for demo playback
       this.visuals.updateFrozenCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);

@@ -541,6 +541,20 @@ function wireNetworkLocal(): void {
   player.onSkillUse = () => networkManager.sendSkillUse();
   player.onRespawn = () => networkManager.sendRespawn();
   player.onThrowFlag = () => networkManager.sendThrowFlag();
+  // Dead-spectate roster: every remote on the local team. Networked
+  // players' teams come from the wire roster; offline GameBots carry
+  // `team` on the entity itself. FFA leaves localTeam undefined so the
+  // right-click simply does nothing there.
+  player.spectateTargets = () => {
+    if (!world.localTeam) {return [];}
+    const out: { pos: typeof player.pos; feetY: number; alive: boolean }[] = [];
+    for (const [id, rp] of world.remotePlayers) {
+      const team = (rp as { team?: string }).team ?? networkManager.getPlayers().get(id)?.team;
+      if (team !== world.localTeam) {continue;}
+      out.push({ pos: rp.pos, feetY: rp.feetY, alive: !rp.isDead });
+    }
+    return out;
+  };
   networkManager.localAuthority = {
     envDamage: (amount) => {
       const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));
