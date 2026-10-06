@@ -26,6 +26,13 @@ import { Explosion } from '../effects/explosion.js';
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const RING_SIDE = 800;        // lap square edge — matches the lapMeasure circuit
 const LAP_CAPS = 2;           // grab-corner → cap-corner twice = one circuit
+// Flagrun stands are monuments, not plinths — you read them across the
+// map and bank off the talus, so the circuit scales the shared stand
+// bigger AND taller (~19m wide, ~6m deck top vs CTF's 9×3).
+const STAND_XZ = 1.6;
+const STAND_Y = 2.0;
+const STAND_TOP = FLAG_STAND_TOP * STAND_Y;
+const STAND_LIFT = FLAG_STAND_LIFT * STAND_Y;
 
 export interface FlagRunDeps {
   lazyTerrain(): Terrain;
@@ -93,16 +100,17 @@ export class FlagRunBridge {
       const team: TeamId = i % 2 === 0 ? 'alpha' : 'bravo';
       const home = new THREE.Vector3(p.x, terrain.getHeight(p.x, p.z), p.z);
       this.corners.push(home);
-      specs.push(...flagStandSpecs(home, team));
+      specs.push(...flagStandSpecs(home, team, STAND_XZ, STAND_Y));
       const stand = mkFlagStand(TEAM_COLORS[team]);
+      stand.scale.set(STAND_XZ, STAND_Y, STAND_XZ);
       const base = new THREE.Mesh(FLAG_BASE_GEO,
         new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
-      base.position.y = FLAG_STAND_TOP + 0.07;
+      base.position.y = STAND_TOP + 0.07;
       stand.add(base);
       stand.position.copy(home);
       const mesh = mkFlagMesh(team);
       mesh.position.copy(home);
-      mesh.position.y += FLAG_STAND_TOP;
+      mesh.position.y += STAND_TOP;
       deps.lazyScene().add(stand, mesh);
       this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0 });
     });
@@ -166,7 +174,7 @@ export class FlagRunBridge {
           // Cap: any friendly stand within FLAG_HOME_R banks it.
           const cTeam = this.w.teamOf.get(f.carrier!) as TeamId | undefined;
           for (const home of this.friendlyHomes(cTeam ?? this.w.playerTeam)) {
-            if (f.pos.distanceTo(home) >= FLAG_HOME_R + FLAG_STAND_TOP) continue;
+            if (f.pos.distanceTo(home) >= FLAG_HOME_R + STAND_TOP) continue;
             this.cap(f);
             break;
           }
@@ -207,19 +215,19 @@ export class FlagRunBridge {
         break;
       }
       f.mesh.position.copy(f.pos);
-      if (f.state === 'home') f.mesh.position.y += FLAG_STAND_TOP;
+      if (f.state === 'home') f.mesh.position.y += STAND_TOP;
     }
     // Markers: one pin per stand, lifted to deck height.
     const cam = this.deps.lazyCamera();
     const hud = this.deps.lazyHud();
     for (const f of this.flags) {
-      const lift = f.state === 'home' ? FLAG_STAND_TOP : 0;
+      const lift = f.state === 'home' ? STAND_TOP : 0;
       f.pos.y += 3.4 + lift;
       hud.updateFlagIndicator(`fr:${f.home.x}:${f.home.z}`, f.pos, cam, f.team);
       f.pos.y -= 3.4 + lift;
-      f.home.y += FLAG_STAND_TOP + 0.07;
+      f.home.y += STAND_TOP + 0.07;
       hud.updateFlagIndicator(`frs:${f.home.x}:${f.home.z}`, f.home, cam, f.team, 'stand');
-      f.home.y -= FLAG_STAND_TOP + 0.07;
+      f.home.y -= STAND_TOP + 0.07;
     }
   }
 
@@ -262,7 +270,7 @@ export class FlagRunBridge {
       if (d < bd) { bd = d; best = f.pos; }
     }
     return best
-      ? { pos: new THREE.Vector3(best.x, best.y + FLAG_STAND_LIFT, best.z), infiltrating: true }
+      ? { pos: new THREE.Vector3(best.x, best.y + STAND_LIFT, best.z), infiltrating: true }
       : null;
   }
 
