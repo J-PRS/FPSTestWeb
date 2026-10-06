@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import type { ProjectileEvent, TargetEvent } from './types.js';
-import { ProjectileEventType, TargetEventType, isCreatureTargetType, isDeployTargetType, isMiscTargetType } from './types.js';
+import { ProjectileEventType, TargetEventType, isCreatureTargetType, isDeployTargetType, isMiscTargetType, TARGETTYPE_CREATURE_BASE } from './types.js';
 import type { Ball } from '../entities/balls.js';
 import { reconstructSeekCreature, applyPlaybackCreatureEvent, type PlaybackCreature } from './playbackCreatures.js';
 import { reconstructSeekDeployable, applyPlaybackDeployableEvent, type PlaybackDeployable } from './playbackDeployables.js';
@@ -261,8 +261,12 @@ function applyPlaybackProjectileEvent(world: PlaybackWorld, ev: ProjectileEvent)
 function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r: Projectile): void {
   const { scene, terrain, explosions, implosions } = world;
 
-  // Compute accuracy using the recorded target position when available
-  const ball = ev.targetId && ev.targetId !== 0xFF_FF ? world.playbackBallById.get(ev.targetId) : undefined;
+  // Compute accuracy using the recorded target position when available.
+  // v6 targetType tells us the victim's lane — without it a creature/
+  // deployable id aliasing a live ball would mis-score the frag. Files
+  // before v6 read targetType 0 (ball lane), which their data was anyway.
+  const ball = ev.targetId && ev.targetId !== 0xFF_FF && ev.targetType < TARGETTYPE_CREATURE_BASE
+    ? world.playbackBallById.get(ev.targetId) : undefined;
   let directHit = false;
   let accRaw = 0;
   if (ball) {

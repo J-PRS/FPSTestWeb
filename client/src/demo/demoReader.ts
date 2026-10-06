@@ -31,6 +31,10 @@ import type { DemoHeightmap } from './types.js';
 //       (player names) and remoteFrames sections after targetEvents
 //   v4: appended weaponType (u8) to each frame record — older files read
 //       at the 48-byte record size and default weaponType to 0
+//   v5: tagged trailer sections (embedded heightmap)
+//   v6: appended targetType (u8) to each projectileEvent record (older
+//       files read at 59 bytes, default 0 = ball lane) and appended
+//       tableHash (u32) at end of header
 // ---------------------------------------------------------------------------
 
 // Reader half of the demo codec — bounds-checked cursor + record readers
@@ -116,6 +120,9 @@ function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
   const mode = formatVersion >= 3 ? r.str() : '';
   const playerName = formatVersion >= 3 ? r.str() : '';
 
+  // v6: content-table fingerprint; 0 on older files (nothing to compare)
+  const tableHash = formatVersion >= 6 ? r.u32() : 0;
+
   // Verify checksum
   const checksumOffset = 1 + 4 + 2 + new TextEncoder().encode(gameVersion).length + 8 + 4 + 4 + 4 + 4;
   const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
@@ -128,7 +135,7 @@ function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
     totalFrames, projectileEventCount, targetEventCount, checksum, description,
     startPosX, startPosY, startPosZ, startYaw, startPitch,
     startVelX, startVelY, startVelZ, projectileLifetime,
-    room, mode, playerName,
+    room, mode, playerName, tableHash,
   };
 }
 
@@ -165,8 +172,10 @@ function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
   return frames;
 }
 
-function readProjectileEvents(r: Reader): ProjectileEvent[] {
-  const count = readRecordCount(r, 'projectile event', PROJECTILE_EVENT_SIZE, 100_000);
+function readProjectileEvents(r: Reader, hasTargetType: boolean): ProjectileEvent[] {
+  // v6 appended targetType to the record; older files read at 59 bytes.
+  const recSize = hasTargetType ? PROJECTILE_EVENT_SIZE : PROJECTILE_EVENT_SIZE - 1;
+  const count = readRecordCount(r, 'projectile event', recSize, 100_000);
   const events: ProjectileEvent[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     const eventTypeVal = r.u8();
@@ -182,6 +191,7 @@ function readProjectileEvents(r: Reader): ProjectileEvent[] {
       weaponType: r.u8(),
       surfaceNormalX: r.f32(), surfaceNormalY: r.f32(), surfaceNormalZ: r.f32(),
       targetId: r.u16(),
+      targetType: hasTargetType ? r.u8() : 0,
       hasPeakPosition: r.u8() !== 0,
       peakPosX: r.f32(), peakPosY: r.f32(), peakPosZ: r.f32(),
     };
@@ -295,7 +305,7 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
     const r = new Reader(buffer);
     const header = readDemoHeader(r, buffer);
     const frames = readFrames(r, header.formatVersion >= 4);
-    const projectileEvents = readProjectileEvents(r);
+    const projectileEvents = readProjectileEvents(r, header.formatVersion >= 6);
     const targetEvents = readTargetEvents(r);
     const roster = header.formatVersion >= 3 ? readRoster(r) : [];
     const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length) : [];

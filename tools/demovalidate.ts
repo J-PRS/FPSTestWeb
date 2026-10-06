@@ -11,12 +11,15 @@ import { DemoPlayer } from '../client/src/demo/DemoPlayer.ts';
 import {
   TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE,
   TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE,
-  ProjectileEventType,
+  ProjectileEventType, HIT_TARGET_NONE,
 } from '../client/src/demo/types.ts';
 import type { DemoFile } from '../client/src/demo/types.ts';
+import { demoTableHash } from '../client/src/demo/demoTables.ts';
 
 const failures: string[] = [];
 let checks = 0;
+const warnings: string[] = [];
+function warn(what: string): void { warnings.push(what); }
 function fail(what: string): void { failures.push(what); }
 function check(cond: boolean, what: string): void {
   checks++;
@@ -67,6 +70,28 @@ function validateFile(path: string, file: DemoFile): void {
   // Remote frames reference real roster entries
   for (const f of file.remoteFrames) {
     check(f.rosterIdx < file.roster.length, `${tag} remoteFrame rosterIdx ${f.rosterIdx} >= roster ${file.roster.length}`);
+  }
+
+  // v6 content-table fingerprint: the file's enum-index references were
+  // minted against the tables of its build. A mismatch means species/
+  // deploy/pickup/ball tables changed since — playback may remap, warn
+  // loudly rather than silently (v5 and older carry no stamp).
+  if (file.header.formatVersion >= 6) {
+    check(file.header.tableHash !== 0, `${tag} v6 file has zero tableHash — recorder did not stamp`);
+    if (file.header.tableHash !== 0 && file.header.tableHash !== demoTableHash()) {
+      warn(`${tag} tableHash ${file.header.tableHash} != current ${demoTableHash()} — content tables changed since recording; species/kind indices may remap`);
+    }
+  }
+
+  // Shot attribution: Fired targetId is shooter rosterIdx+1 (0 = local POV)
+  for (const e of file.projectileEvents) {
+    if (e.eventType === ProjectileEventType.Fired) {
+      check(e.targetId <= file.roster.length, `${tag} Fired shooter ${e.targetId} > roster ${file.roster.length}`);
+    }
+    if (e.eventType === ProjectileEventType.Hit) {
+      check(e.targetType === HIT_TARGET_NONE || e.targetType < TARGETTYPE_CREATURE_BASE,
+        `${tag} Hit targetType ${e.targetType} outside ball/none lanes`);
+    }
   }
 
   // Lane invariants on targetIds
@@ -169,6 +194,7 @@ for (const path of paths) {
   }
 }
 
-console.log(`\n${checks} checks, ${failures.length} failures`);
+console.log(`\n${checks} checks, ${failures.length} failures, ${warnings.length} warnings`);
 for (const f of failures) console.log(`  FAIL ${f}`);
+for (const w of warnings) console.log(`  WARN ${w}`);
 process.exit(failures.length === 0 ? 0 : 1);

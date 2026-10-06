@@ -1,7 +1,7 @@
 // Demo system data types - binary-efficient structures for recording/replay
 
 export const DEMO_MAGIC = 0x44; // 'D'
-export const DEMO_FORMAT_VERSION = 5;
+export const DEMO_FORMAT_VERSION = 6;
 
 // Remote-frame flag bitmasks
 export const RemoteFrameFlags = {
@@ -139,9 +139,16 @@ export interface ProjectileEvent {
   weaponType: number;             // uint8
   surfaceNormalX: number; surfaceNormalY: number; surfaceNormalZ: number;
   targetId: number;               // uint16
+  // v6: which demo lane targetId addresses on Hit — the ball variant
+  // (0-63) for ball hits, HIT_TARGET_NONE for terrain/player hits.
+  // Without it a non-ball id aliasing a live ball mis-scores the frag.
+  targetType: number;             // uint8
   hasPeakPosition: boolean;
   peakPosX: number; peakPosY: number; peakPosZ: number;
 }
+
+// Projectile Hit events: targetType when targetId is not a ball reference.
+export const HIT_TARGET_NONE = 255;
 
 export interface TargetEvent {
   eventType: TargetEventType;      // uint8
@@ -176,6 +183,10 @@ export interface DemoHeader {
   room: string;               // variable length string
   mode: string;               // variable length string
   playerName: string;         // variable length string
+  // v6: crc32 of the persisted enum tables (species/deploy/pickup kinds,
+  // ball variants) at record time — a later table reorder flags old clips
+  // instead of silently remapping them. See demoTables.ts.
+  tableHash: number;            // uint32
 }
 
 // v3: every other player in the room, sampled at ~20Hz so an MP demo isn't
@@ -254,5 +265,6 @@ export function createHeader(): DemoHeader {
     room: '',
     mode: '',
     playerName: '',
+    tableHash: 0,
   };
 }

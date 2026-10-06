@@ -32,7 +32,7 @@ export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, wea
     // tell the local player's shots (0, viewmodel kick) from the other 19
     // guns' tracers, which must never kick the camera.
     e.targetId = shooterId ? Math.max(0, rosterIdx(b, shooterId)) + 1 : 0;
-    e.hasPeakPosition = false;
+    e.targetType = 0; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
     return id;
@@ -48,12 +48,12 @@ export function recordBounce(b: DemoRecorder, projectileId: number, position: Ve
     e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
     e.projectileId = projectileId; e.weaponType = 0;
     e.surfaceNormalX = surfaceNormal.x; e.surfaceNormalY = surfaceNormal.y; e.surfaceNormalZ = surfaceNormal.z;
-    e.targetId = 0; e.hasPeakPosition = false;
+    e.targetId = 0; e.targetType = 0; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
   }
 
-export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3, targetId: number, weaponType: number): void {
+export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3, targetId: number, weaponType: number, targetType: number): void {
     if (projectileId === 0 || !b.recording || !checkEventRate(b)) {return;}
     const e = b.projectileEventPool.pop() ?? ({} as ProjectileEvent);
     e.eventType = ProjectileEventType.Hit;
@@ -64,7 +64,7 @@ export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3,
     // shell itself is already gone, so the Hit must carry its own config id.
     e.projectileId = projectileId; e.weaponType = weaponType;
     e.surfaceNormalX = 0; e.surfaceNormalY = 0; e.surfaceNormalZ = 0;
-    e.targetId = targetId; e.hasPeakPosition = false;
+    e.targetId = targetId; e.targetType = targetType; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
   }
@@ -78,7 +78,7 @@ export function recordDestroyed(b: DemoRecorder, projectileId: number, position:
     e.velX = 0; e.velY = 0; e.velZ = 0;
     e.projectileId = projectileId; e.weaponType = 0;
     e.surfaceNormalX = 0; e.surfaceNormalY = 0; e.surfaceNormalZ = 0;
-    e.targetId = 0; e.hasPeakPosition = false;
+    e.targetId = 0; e.targetType = 0; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
   }

@@ -25,7 +25,7 @@ positive int is almost certainly a demo of this game.
 | Field              | Type | Notes |
 |--------------------|------|-------|
 | magic              | u8   | 0x44  |
-| formatVersion      | i32  | 1..5  |
+| formatVersion      | i32  | 1..6  |
 | gameVersion        | str  | e.g. "1.0.0" |
 | timestamp          | f64  | ms since Unix epoch (recording wall clock) |
 | duration           | f32  | seconds |
@@ -41,6 +41,14 @@ positive int is almost certainly a demo of this game.
 | room               | str  | v3+ only; lobby/room name |
 | mode               | str  | v3+ only; game mode |
 | playerName         | str  | v3+ only |
+| tableHash          | u32  | v6+ only; CRC32 of the persisted enum tables |
+
+**tableHash (v6+)** — the file's `targetType` values are indices into
+ordered tables (species, deploy kinds, pickup kinds, ball variants), not
+names. The writer stamps CRC32 of the canonical table serialization at
+record time so a later reorder/edit flags the clip (demovalidate WARN)
+instead of silently remapping ids. Append new entries only — never
+reorder or the hash drift is real, not noise.
 
 CRC32 is the standard IEEE polynomial (0xEDB88320 reflected), init/xor-out
 0xFFFFFFFF — the same as zlib/gzip. Coverage: every byte after the checksum
@@ -67,7 +75,8 @@ field itself to end of file.
    Frames are dead-reckon deduped at record time — playback must linearly
    interpolate between stored timestamps.
 
-2. `projectileEvents[]` — u32 count, 59-byte records:
+2. `projectileEvents[]` — u32 count, 59-byte records (v1–5) or 60-byte
+   records (v6+, trailing u8 targetType; older files default it to 0):
 
    | Field        | Type |
    |--------------|------|
@@ -78,8 +87,16 @@ field itself to end of file.
    | weaponType   | u8   |
    | surfaceNormal| 3×f32|
    | targetId     | u16  |
+   | targetType   | u8   | v6+ |
    | hasPeak      | u8   |
    | peakPos      | 3×f32|
+
+   **`targetId` semantics depend on eventType**: on `Fired` it carries
+   the shooter roster index **+ 1** (0 = the local/POV player — playback
+   kicks the viewmodel only for these). On `Hit` it is the victim's id
+   in the lane `targetType` names: ball variant (0–63) → ball map,
+   `255` (`HIT_TARGET_NONE`) → terrain or the anonymous 0xFFFF player
+   hit. `Bounce`/`Destroyed` carry 0.
 
 3. `targetEvents[]` — u32 count, 49-byte records:
 
@@ -190,6 +207,11 @@ field itself to end of file.
 - v5: + optional trailer sections (u8 count + tag/len/payload each);
   first section is HMAP, an embedded coarse heightmap for terrain
   fallback and map-match validation
+- v6: + targetType u8 at end of each projectileEvent record (victim
+  lane on Hit events — closes the last raw-id lookup against
+  cross-lane id aliasing), + tableHash u32 at end of header (content
+  table fingerprint — a species/kind/variant reorder warns instead of
+  silently remapping old clips)
 
 ## Known limits (for future re-implementers)
 

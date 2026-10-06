@@ -36,7 +36,7 @@ function mkFile(): DemoFile {
     posX: 1, posY: 2, posZ: 3, velX: 40, velY: 5, velZ: -6,
     projectileId: 42, weaponType: 3,
     surfaceNormalX: 0, surfaceNormalY: 1, surfaceNormalZ: 0,
-    targetId: 9, hasPeakPosition: true,
+    targetId: 9, targetType: 1, hasPeakPosition: true,
     peakPosX: 8, peakPosY: 9, peakPosZ: 10,
   }];
 

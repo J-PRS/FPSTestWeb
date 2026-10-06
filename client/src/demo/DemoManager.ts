@@ -361,8 +361,8 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordBounce(projectileId, position, velocity, surfaceNormal);
   }
 
-  recordProjectileHit(projectileId: number, position: Vec3, targetId: number, weaponType: number): void {
-    this.recorder.recordHit(projectileId, position, targetId, weaponType);
+  recordProjectileHit(projectileId: number, position: Vec3, targetId: number, weaponType: number, targetType: number): void {
+    this.recorder.recordHit(projectileId, position, targetId, weaponType, targetType);
   }
 
   recordProjectileDestroyed(projectileId: number, position: Vec3): void {

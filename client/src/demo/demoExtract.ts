@@ -27,6 +27,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
       ...startFrame(frames.length > 0 ? frames[0] : null),
       projectileLifetime: 0,
       ...r.context,
+      tableHash: 0, // stamped by the writer at serialize time
     },
     frames,
     projectileEvents: [...r.projectileEvents],
@@ -99,6 +100,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
       startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
       projectileLifetime,
       ...r.context,
+      tableHash: 0, // stamped by the writer at serialize time
     },
     frames: normFrames,
     projectileEvents: normProj,

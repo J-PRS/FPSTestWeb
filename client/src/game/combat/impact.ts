@@ -17,6 +17,7 @@ import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/confi
 import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats } from '../../../../shared/weapons.js';
 import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 import { isBotId } from '../../../../shared/botNames.js';
+import { HIT_TARGET_NONE } from '../../demo/types.js';
 import { lgDischarge } from './lightning.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
 
@@ -308,7 +309,11 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && p.demoProjectileId) {
     const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
-    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType);
+    // Lane tag for the id: ball variant for ball hits so playback looks the
+    // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
+    // today's anonymous 0xFFFF player hit).
+    const targetType = p.hitBall ? p.hitBall.variant : HIT_TARGET_NONE;
+    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType, targetType);
   }
   // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
   // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
@@ -347,13 +352,8 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   const mine = !shooterId || shooterId === 'local';
   if (mine && weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
   if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
-  if (!burstGibs(ball, ball.pos, _debrisDir, ball.vel)) {
-    deps.world.debrisList.push(new BallDebris(
-      deps.lazyScene(), deps.lazyTerrain(), ball.pos,
-      ball.color, ball.scale,
-      { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel, kind: ball.debrisKind, shardGeos: ball.debrisGeos },
-    ));
-  }
+  ichorDeath(c, ball, _debrisDir);
+  corpseBurst(c, ball, _debrisDir);
   screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
   sfx.enemyCue(ball.pos, ball.dieCue ?? 'die');
   // kills++ is personal credit — bot-authored kills still reach the
@@ -425,6 +425,12 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
   const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
   if (mine) logHitScore(c, p, 'ball', airborne);
   if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);
+  else if (ball.ichor !== undefined) {
+    // Non-lethal hit: a thin spray along the shot direction — the stains
+    // come free wherever the droplets land (ichorSpray paints them).
+    _debrisDir.copy(p.vel).normalize();
+    ichorSpray(c, ball, _debrisDir, 0.28);
+  }
 
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && !destroyed) {

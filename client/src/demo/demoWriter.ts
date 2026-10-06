@@ -3,6 +3,7 @@
 // Format: magic(1) + version(4) + header fields + frames + events
 
 import type { DemoFile } from './types.js';
+import { demoTableHash } from './demoTables.js';
 
 // CRC32 lookup table
 
@@ -41,8 +42,9 @@ function writeString(view: DataView, offset: number, str: string): number {
 
 // Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 + 1 = 49 bytes
 export const FRAME_SIZE = 49;
-// Projectile event size: 1 + 4 + 12 + 12 + 2 + 1 + 12 + 2 + 1 + 12 = 59 bytes
-export const PROJECTILE_EVENT_SIZE = 59;
+// Projectile event size: 1 + 4 + 12 + 12 + 2 + 1 + 12 + 2 + 1 + 12 + 1 = 60
+// bytes (v6 appended targetType). v5 and older read at 59.
+export const PROJECTILE_EVENT_SIZE = 60;
 // Target event size: 1 + 4 + 12 + 12 + 2 + 1 + 4 + 1 + 12 = 49 bytes
 export const TARGET_EVENT_SIZE = 49;
 // Remote frame size: 4 + 2 + 12 + 12 + 4 + 4 + 1 = 39 bytes
@@ -108,6 +110,7 @@ function writeProjEvents(view: DataView, offset: number, events: DemoFile['proje
     view.setFloat32(offset, e.surfaceNormalY, true); offset += 4;
     view.setFloat32(offset, e.surfaceNormalZ, true); offset += 4;
     view.setUint16(offset, e.targetId, true); offset += 2;
+    view.setUint8(offset++, e.targetType);
     view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
     view.setFloat32(offset, e.peakPosX, true); offset += 4;
     view.setFloat32(offset, e.peakPosY, true); offset += 4;
@@ -160,7 +163,7 @@ function writeRemoteFrames(view: DataView, offset: number, frames: DemoFile['rem
 export function serializeDemo(data: DemoFile): ArrayBuffer {
 
     // Calculate total size
-    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0; // fixed + 5 strings + projectileLifetime
+    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0 + 4; // fixed + 5 strings + projectileLifetime + v6 tableHash
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
     const descBytes = new TextEncoder().encode(data.header.description);
     const roomBytes = new TextEncoder().encode(data.header.room);
@@ -208,6 +211,9 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     offset = writeString(view, offset, data.header.room);
     offset = writeString(view, offset, data.header.mode);
     offset = writeString(view, offset, data.header.playerName);
+    // Stamped at write time, not taken from the caller — the hash must
+    // describe the tables the running build actually wrote ids against.
+    view.setUint32(offset, demoTableHash(), true); offset += 4;
 
     offset = writeFrames(view, offset, data.frames);
 

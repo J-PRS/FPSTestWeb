@@ -184,8 +184,8 @@ describe('playback audit — every lane animates', () => {
       eventType: ProjectileEventType.Fired, timestamp: 0,
       posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
       projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
-      surfaceNormalY: 0, surfaceNormalZ: 0, targetId, hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+      surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
+      hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     });
     // The deploy-shot bug: a turret bolt minted targetId 0 → kicked.
     emit(rig, [mkFired(5)], []); // remote shooter rosterIdx 4
@@ -259,7 +259,7 @@ describe('playback audit — entities must animate', () => {
       eventType: ProjectileEventType.Fired, timestamp: 0,
       posX: 0, posY: 50, posZ: 0, velX: 0, velY: 0, velZ: 60,
       projectileId: 7, weaponType: 0, surfaceNormalX: 0, surfaceNormalY: 0,
-      surfaceNormalZ: 0, targetId: 1, hasPeakPosition: false,
+      surfaceNormalZ: 0, targetId: 1, targetType: 0, hasPeakPosition: false,
       peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     };
     applyPlaybackEvents(rig.world, { projectiles: [ev], targets: [] });
