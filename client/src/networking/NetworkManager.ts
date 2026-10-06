@@ -118,7 +118,7 @@ export class NetworkManager {
    *  through this; armor is the repair-tool overheal pool. */
   public onDeployHp: ((id: number, hp: number, armor: number, src?: string) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
-  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
+  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number, ballHash?: string) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
   public onBallSpawn: ((data: Extract<ServerMessage, { type: 'ballSpawn' }>) => void) | null = null;
   public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;
@@ -483,7 +483,7 @@ export class NetworkManager {
     playerShot: (data) => this.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
-    stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
+    stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash),
     correction: (data) => this.handleCorrection(data),
     inputSync: (data) => this.inputs.resend(data.lastSeq, (m) => this.send(m), this.isConnected()),
     claimAck: (data) => this.ledger.ack(data),

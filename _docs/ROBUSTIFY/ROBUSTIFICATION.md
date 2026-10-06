@@ -954,15 +954,21 @@ vision vs TerrainFlow hand-off), stand approach dying to defense, or
 goal-commit churn. This is competence tuning, not a six-class bug —
 queued for a gameplay pass, not silently fixed here.
 
-### 4.7 Replica-coverage gap in the state hash — *optional*
+### 4.7 Replica-coverage gap in the state hash — *partially closed (balls)*
 
-The checksum covers players only (positions at ~1m quantum). Creature,
-ball and projectile replays have NO cross-engine desync signal — a
-replay bug there is invisible to the hash. Acceptable today: replays
-re-anchor on committed snapshots + edges and drift is cosmetic-only,
-but a quantized-hash extension over replica state would catch real
-divergence early if we ever lean on replay correctness (e.g. demo
-forensics). Optional enhancement, not a bug.
+The checksum covered players only; non-player replays had no cross-engine
+desync signal. **Ball fleet now hashed** (2026-10-01): `ballHash` rides
+the existing `stateHash` broadcast — `computeReplicaHash` over
+(id, variant, enraged, targetId) per ball. These are mirrored edge
+fields, not positions: raw positions would phantom-fire under latency
+(100ms × 40m/s = permanent ~4m false diff), so trajectory drift stays
+the fleet rubberband metric's job and this channel catches what nothing
+else did — a stranded, dropped, duplicated, or stale-lifecycle replica.
+Client-side a `ballDriftStreak` gate (≥2 consecutive mismatches → warn,
+else debug) eats lifecycle edges in flight at the check boundary, same
+shape as the health-echo persistence gate. Creatures and projectiles
+remain uncovered — same extension pattern applies if their replays ever
+need a desync signal.
 
 ---
 

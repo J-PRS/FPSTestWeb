@@ -6,7 +6,8 @@ import type { ChildLogger } from './Logger.js';
 import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
-import { computeStateHash } from '../../../shared/stateHash.js';
+import { computeStateHash, computeReplicaHash } from '../../../shared/stateHash.js';
+import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
 import type { Player } from '../entities/Player.js';
@@ -304,9 +305,34 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let hashCheckCount = 0;
   let hashMismatchCount = 0;
   let lastSnapshotRequest = 0;
+  // Ball replica-fidelity streak — the fleet hash covers identity and
+  // mirrored lifecycle fields (variant/enraged/targetId). A transition
+  // in flight can land across a check boundary, so one sighting is
+  // debug-level; a persistent mismatch means a stranded/lost/stale
+  // replica the ballRoster path never healed (§4.7).
+  let ballDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string) => {
     hashCheckCount++;
+
+    if (serverBallHash !== undefined) {
+      const localBalls = new Map<number, { variant: number; enraged: boolean; targetId: string | null }>();
+      for (const b of Ball.live) {
+        if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.enraged, targetId: b.netS.netTargetId });}
+      }
+      const localBallHash = computeReplicaHash(localBalls);
+      if (localBallHash === serverBallHash) {
+        ballDriftStreak = 0;
+      } else {
+        ballDriftStreak++;
+        const detail = `server=${serverBallHash} client=${localBallHash} ids=[${[...localBalls.keys()].join(',')}]`;
+        if (ballDriftStreak >= 2) {
+          logger.warn(`[StateHash] BALL DESYNC tick=${tick} ${detail} (persistent across ${ballDriftStreak} checks — stranded or stale replica)`);
+        } else {
+          logger.debug(`[StateHash] ball mismatch tick=${tick} ${detail} (transient — lifecycle edge in flight)`);
+        }
+      }
+    }
 
     const allPlayers = buildHashablePlayerMap(ctx);
     noteSeenIds(allPlayers.keys());

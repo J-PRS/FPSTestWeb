@@ -65,3 +65,32 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
   }
   return h.toString(16);
 }
+
+/** Replica-fidelity checksum for non-player state (balls): identity +
+ *  mirrored lifecycle fields only — variant/enraged/targetId ride the
+ *  same edge events, so wire latency can't phantom this channel the way
+ *  a raw-position hash would (100ms × 40m/s = a permanent ~4m false
+ *  diff). A stranded, dropped, duplicated, or stale replica reads here;
+ *  trajectory drift stays the fleet rubberband metric's job. Same
+ *  commutative FNV-sum so roster order can't alias. */
+export interface HashableReplica {
+  variant: number;
+  enraged: boolean;
+  targetId: string | null;
+}
+
+export function computeReplicaHash(replicas: Iterable<[number, HashableReplica]>): string {
+  let h = 0;
+  for (const [id, r] of replicas) {
+    let ph = 0x811c9dc5;
+    for (const v of [id, r.variant, r.enraged ? 1 : 0]) {
+      ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    const t = r.targetId ?? '';
+    for (let i = 0; i < t.length; i++) {
+      ph ^= t.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    h = (h + ph) >>> 0;
+  }
+  return h.toString(16);
+}

@@ -1,6 +1,6 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
-import { computeStateHash } from '../../shared/stateHash.ts';
+import { computeStateHash, computeReplicaHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -345,6 +345,13 @@ export class TickLoop {
     // client's loss telemetry counts that phantom skip as a dropped
     // frame (~3% bogus loss at the hash cadence).
     const hash = this.computeStateHash(room);
+    // Replica-fidelity hash over the ball fleet — identity + mirrored
+    // lifecycle fields (§4.7). Omitted where no ball sim runs so rooms
+    // without balls don't emit a meaningless constant.
+    const roster = room.ballSim.roster();
+    const ballHash = roster.length
+      ? computeReplicaHash(roster.map((b) => [b.id, b] as [number, { variant: number; enraged: boolean; targetId: string | null }]))
+      : undefined;
     const timestamp = wallNow();
 
     room.broadcast({
@@ -353,6 +360,7 @@ export class TickLoop {
       tick: room.tickSeq,
       playerCount,
       timestamp,
+      ballHash,
     });
 
     // Periodic status summary - suppress duplicates, batch with count
