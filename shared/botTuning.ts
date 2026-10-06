@@ -177,6 +177,7 @@ export const BOT_TUNING = {
     mountCrest: 1,       // m — far probe may only keep rising this much past the lip for the face to count as a step
     sheerDrop: -12,      // m — probe drop that reads as a sheer
     sheerDanger: 0.5,    // danger a sheer adds
+    landW: 0.2,          // airborne-falling attraction to the grazing-landing slot
   },
 };
 

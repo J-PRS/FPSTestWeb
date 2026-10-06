@@ -121,6 +121,15 @@ export class BotSteer {
     const pa = Math.min(T.steer.probeAMax, Math.max(T.steer.probeA, spd * T.steer.probeNearK));
     const pb = Math.min(T.steer.probeBMax, Math.max(T.steer.probeB, spd * T.steer.probeFarK));
 
+    // Landing instinct: airborne + falling → steer the touchdown onto
+    // the slope that best swallows the arc. JP's rule: the free speed
+    // comes from WHERE you land — a steep downslope redirects the fall
+    // into ski speed, and the entry has to GRAZE (arc slope ≈ ground
+    // grade) or the impact eats the KE it's meant to convert.
+    const agl = pos.y - g0;
+    const falling = agl > 3 && (ctx.vel?.y ?? 0) < -1 && spd > 4;
+    const arcSlope = falling ? Math.abs(ctx.vel!.y) / spd : 0;
+
     let bestX = gx, bestZ = gz, bestScore = -1;
     let safeX = gx, safeZ = gz, safeDanger = 2;
     for (let i = 0; i < T.steer.slots; i++) {
@@ -131,6 +140,19 @@ export class BotSteer {
       let interest = Math.max(0, align);
       interest *= interest; // sharpen: prefer near-goal arcs over drift
       interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
+      // Landing graze: score a slot by how well the ground's fall along
+      // it matches the arc's slope — peak at tangency (graze), fades to
+      // both splat (too steep) and glide-over (too shallow). Gated to
+      // goal-aligned slots: it picks WHICH landing on the route, never
+      // lures off it (an ungated pull cost a capper a 295s leg chasing
+      // a pretty slope away from the line).
+      if (falling && align > 0.3) {
+        const grade = (g0 - ctx.groundY(pos.x + dx * pb, pos.z + dz * pb)) / pb;
+        if (grade > 0.15) {
+          const ratio = grade / arcSlope;
+          interest += T.steer.landW * Math.min(ratio, 1 / ratio);
+        }
+      }
       // Weave: a side-pull perpendicular to the goal, oscillating so the
       // carve alternates — the emergent serpentine a runner throws.
       if (this.weave > 0) {

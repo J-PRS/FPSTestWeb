@@ -23,10 +23,10 @@ describe('teams', () => {
       expect(m.ptsPlayerKill, id).toBeGreaterThanOrEqual(0);
       // teams XOR ffa — a mode is one or the other, never both/neither.
       expect(m.teams !== m.ffa, `${id} teams/ffa must be mutually exclusive`).toBe(true);
-      // flags only on modes that declare them (ctf, rabbit).
-      expect(m.flags, `${id} flags`).toBe(id === 'ctf' || id === 'rabbit');
+      // flags only on modes that declare them (ctf, rabbit, flagrun).
+      expect(m.flags, `${id} flags`).toBe(id === 'ctf' || id === 'rabbit' || id === 'flagrun');
     }
-    expect(Object.keys(MODES).sort()).toEqual(['ctf', 'dm', 'duel', 'nuggets', 'rabbit', 'tdm']);
+    expect(Object.keys(MODES).sort()).toEqual(['ctf', 'dm', 'duel', 'flagrun', 'nuggets', 'rabbit', 'tdm']);
   });
 
   it('pickTeam alternates onto the smaller team — deterministic by join order', () => {
