@@ -418,6 +418,12 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`fieldSurface` + `vgsTree` pinned** (2026-10-05):
+  `fieldSurface.test.ts` (8 tests) — structure top face wins over
+  terrain as floor, `maxTop` bounds deck-overhead claims, flat-up
+  normal over solids, pure-terrain passthrough without a SolidWorld,
+  resolveBody wall push-out; VGS chord walk (every leaf labelled
+  non-empty, VG* all-chat `team:false`, cats carry only children).
 - **`teams`/`constants`/`env` pinned** (2026-10-05):
   `teams.test.ts` (7 tests) — mode table sanity (label/winAt/clock,
   teams XOR ffa, flags only where declared, exact mode key set),
