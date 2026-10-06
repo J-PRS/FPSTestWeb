@@ -837,7 +837,11 @@ pinned by `losMemo.test.ts` via a `losMemoSize()` test seam.
   poisoned), every scalar passes `isFiniteNumber`, ids are non-negative
   integers, `heal`/`environmentDamage` amounts clamped downstream
   (25 / 80-tagged / 40 plain per claim), every lane rate-limited.
-  NaN cannot reach a sim write.
+  NaN cannot reach a sim write. Table-indexed sweep 2026-10-06: every
+  field that indexes a lookup is strict-checked — `weaponType` must be a
+  `WEAPONS` key (§2.19), `kind` in `DEPLOY_KINDS`, `armorClass` is
+  literal light|medium|heavy, `perk` is `isPerkId`; no remaining
+  isFiniteNumber-only index claims.
 - **`creatureSlither` pinned** (2026-10-05): `creatureSlither.test.ts`
   (13 tests) — species registry derivation, uber ×4 health, live LCG
   seed, out-of-aggro speed bleed, weave→coil→leap→bite state machine
