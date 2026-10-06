@@ -157,6 +157,12 @@ unconditionally (a silent boot looks dead; once-per-process can't spam).
 `soakreport.ts` runs `LOG_LEVEL=debug` so its log audit keeps the
 telemetry lines it greps.
 
+**Warn burst suppression** (2026-10-06): identical `warn` messages
+inside a 5s window collapse to every 8th with a `×N` count — a hot
+fault path (claim rejections, unconfirmed predictions under sustained
+packet loss) emitted one line per event, a flood not a signal.
+Distinct messages always land; alternating messages unaffected.
+
 ### 2.9 Offline-chatter timer lifecycle — `botSay` drain (2026-10-06)
 
 The offline bot's `botSay` ran on bare module-global `setTimeout`s —

@@ -75,8 +75,26 @@ class Logger {
     if (this.shouldLog('info')) console.log(this.format('info', msg, data));
   }
 
+  // A hot fault path (claim rejections, unconfirmed hits) can emit the
+  // same warn every few ms under packet loss — one line per event is a
+  // flood, not a signal. Identical messages inside 5s collapse to every
+  // 8th with a count; distinct messages always land.
+  private warnBurstMsg = '';
+  private warnBurstN = 0;
+  private warnBurstAt = 0;
+
   warn(msg: string, data?: unknown): void {
     if (!this.shouldLog('warn')) return;
+    const now = Date.now();
+    if (msg === this.warnBurstMsg && now - this.warnBurstAt < 5000) {
+      this.warnBurstN++;
+      if (this.warnBurstN % 8 !== 0) return;
+      msg = `${msg} (×${this.warnBurstN} suppressed repeats)`;
+    } else {
+      this.warnBurstMsg = msg;
+      this.warnBurstN = 0;
+      this.warnBurstAt = now;
+    }
     const line = this.format('warn', msg, data);
     console.warn(line);
     this.toFile(line);
