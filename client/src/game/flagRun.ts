@@ -168,6 +168,8 @@ export class FlagRunBridge {
 
   // Frame-ago toucher positions — same swept-tap convention as CtfBridge.
   private lastTouchPos = new Map<string, THREE.Vector3>();
+  // Last measured toucher speed (m/s) — grab/cap feed lines quote it.
+  private lastTouchV = new Map<string, number>();
 
   update(dt: number): void {
     this.lapT += dt;
@@ -183,6 +185,7 @@ export class FlagRunBridge {
       this.eN++;
       const v = Math.hypot(player.vel?.x ?? 0, player.vel?.z ?? 0);
       if (v > this.maxV) this.maxV = v;
+      this.lastTouchV.set('local', v);
       this.lastTouchPos.set('local', (this.lastTouchPos.get('local') ?? new THREE.Vector3()).copy(player.pos));
       touchers.push(['local', player.pos, prev]);
     }
@@ -190,6 +193,7 @@ export class FlagRunBridge {
       if (b.isDead) continue;
       let prev = this.lastTouchPos.get(b.playerId);
       if (!prev) this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));
+      this.lastTouchV.set(b.playerId, dt > 0 ? b.position.distanceTo(prev) / dt : 0);
       touchers.push([b.playerId, b.position, prev]);
       prev.copy(b.position);
     }
@@ -245,8 +249,9 @@ export class FlagRunBridge {
         this.setBotCarry(id, true);
         this.burst(f.pos, f.team, 1.4);
         sfx.flagCue('taken', false);
-        this.w.onFeed(id === 'local' ? `YOU took the ${TEAM_LABEL[f.team]} flag!`
-          : `${id.replace('bot:', '')} took the ${TEAM_LABEL[f.team]} flag!`);
+        const gv = (this.lastTouchV.get(id) ?? 0).toFixed(0);
+        this.w.onFeed(id === 'local' ? `YOU took the ${TEAM_LABEL[f.team]} flag @ ${gv} m/s!`
+          : `${id.replace('bot:', '')} took the ${TEAM_LABEL[f.team]} flag @ ${gv} m/s!`);
         break;
       }
       f.mesh.position.copy(f.pos);
@@ -315,7 +320,8 @@ export class FlagRunBridge {
     this.setBotCarry(f.carrier, false);
     bank(this.w.scores, cTeam);
     this.w.onCapture(cTeam);
-    this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s`);
+    const cv = (f.carrier ? this.lastTouchV.get(f.carrier) ?? 0 : 0).toFixed(0);
+    this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s @ ${cv} m/s`);
     if (this.capT < this.bestCap) this.bestCap = this.capT;
     sfx.flagCue('captured', true);
     this.burst(f.home, cTeam, 2.4);
