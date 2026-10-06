@@ -39,10 +39,11 @@ const STAND_LIFT = 0.6;   // bot aim lift for the socket spot
  *  the pole actually inserts into. */
 export function mkFlagPlate(teamGlow: number): THREE.Group {
   const g = new THREE.Group();
-  // Weighted base — wide foot, slight taper, like field equipment bolted down.
+  // Weighted base — a shield-sized socket foot (~1.2m across) that bolts
+  // to whatever pad the map gives it; the platform is the MAP's job.
   const base = mkLoft([
-    { z: 0.26, ring: profOct(3.0, 3.0, 0.3) },
-    { z: 0, ring: profOct(3.3, 3.3, 0.3) },
+    { z: 0.22, ring: profOct(0.9, 0.9, 0.15) },
+    { z: 0, ring: profOct(1.2, 1.2, 0.15) },
   ], deckMat);
   base.rotation.x = -Math.PI / 2;
   g.add(base);
@@ -52,7 +53,7 @@ export function mkFlagPlate(teamGlow: number): THREE.Group {
     { z: 0, ring: profOct(0.78, 0.78, 0.15) },
   ], darkMat);
   collar.rotation.x = -Math.PI / 2;
-  collar.position.y = 0.26;
+  collar.position.y = 0.22;
   g.add(collar);
   // Well — recessed dark hole inside the collar.
   const well = mkLoft([
@@ -60,14 +61,14 @@ export function mkFlagPlate(teamGlow: number): THREE.Group {
     { z: 0, ring: profOct(0.36, 0.36, 0.1) },
   ], darkMat);
   well.rotation.x = -Math.PI / 2;
-  well.position.y = 0.46;
+  well.position.y = 0.42;
   g.add(well);
   // Team-glow rim on the base edge — whose socket this is, at a glance.
   const glow = new THREE.MeshBasicMaterial({ color: teamGlow });
   glow.side = THREE.DoubleSide;
-  const rim = mkAnnulus(profOct(3.12, 3.12, 0.3), profOct(2.98, 2.98, 0.3), 0.08, 0.2, glow);
+  const rim = mkAnnulus(profOct(1.08, 1.08, 0.15), profOct(0.94, 0.94, 0.15), 0.07, 0.18, glow);
   rim.rotation.x = -Math.PI / 2;
-  rim.position.y = 0.05;
+  rim.position.y = 0.04;
   g.add(rim);
   return g;
 }
