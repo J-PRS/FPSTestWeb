@@ -294,6 +294,10 @@ export function pickRepair(b: BotBrain, ctx: BrainCtx, pos: BotVec, fearing: boo
    *  drain. Returns undefined when the host has no energy model. */
 export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): number | undefined {
     if (ctx.energy === undefined) return undefined;
+    // A pinned wall-mount needs the tank for jets — a held drain skill
+    // keeps the tank sputter-locked at zero and the lip never mounts
+    // (soak: shielded hunters pinned at the stand dais 5s+ cycles).
+    if (b.mountWait) return 0;
     const fighting = b.h.hunt !== null;
     const hurt = (ctx.healthFrac ?? 1) < 0.6;
     let status = 0;

@@ -29,6 +29,13 @@ export class BotMoves {
   jetWhy = '-';
   /** Last computed jet bit — what actually reached the input layer. */
   jetOut = false;
+  /** Set while the mount-perch holds for tank — statusIntent sheds
+   *  drain skills so the refill can actually land (a shield-clamped
+   *  tank oscillates at the sputter floor and the lip never mounts). */
+  mountWait = false;
+  /** Perched by design (breath refill or mount-staging) — the mobility
+   *  watchdog must not read a deliberate stand-still as a pin. */
+  get perched(): boolean { return this.breath || this.mountWait; }
   /** Catch-breath state: a climber with an empty tank perches on the
    *  face (walk key released, friction holds the slide) while the tank
    *  refills — staged climbing, the human ledge-rest. Without it the
@@ -52,6 +59,7 @@ export class BotMoves {
   holdFor(): number { return this.jetHold; }
 
   hints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
+    this.mountWait = false;
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
     const gd = Math.hypot(dx, dz);
     if (gd < 0.5) return { ski: false, jet: false, jump: false };
@@ -70,7 +78,22 @@ export class BotMoves {
     const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : gd;
     const nx = dx / gd, nz = dz / gd;
     const g0 = ctx.groundY(pos.x, pos.z);
-    const rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;
+    let rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;
+    // The mount sense must read the GOAL LINE, not only the steerer's
+    // step: a pinned bot's rim orbit feeds the memory trail and the
+    // step deflects tangent, so a step-only probe never sees the lip —
+    // mount gates stay dark and the orbit self-reinforces (soak: rim
+    // pins with jet=-/off while the stand face was dead ahead). When
+    // the objective crosses a face, that's the rise that matters.
+    if (ctx.objective) {
+      const odx = ctx.objective.x - pos.x, odz = ctx.objective.z - pos.z;
+      const olen = Math.hypot(odx, odz);
+      if (olen > 1) {
+        const probeD = Math.min(6, olen);
+        const riseGoal = ctx.groundY(pos.x + (odx / olen) * probeD, pos.z + (odz / olen) * probeD) - g0;
+        if (riseGoal > rise) rise = riseGoal;
+      }
+    }
     const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     const airborne = pos.y - g0 > 2;
     // Capper grab-orbit brake: the flag touch ring is ~2.2m and a runner
@@ -167,13 +190,18 @@ export class BotMoves {
     // for it. A stalled shove pays the free jump; the tap covers only
     // what jump apex can't. Fires on stall, not on rise alone, so a
     // moving walker keeps running through gentle grades.
-    if (!ctx.posted && !airborne && rise > T.moves.stepRise && speed < T.moves.jumpUphillSpeed) {
+    // Posted anchors aren't exempt: a defender stalled against the stand
+    // lip has no other way back onto its post — the stall gates above
+    // already keep a freely-moving post planted (soak: four pinned
+    // anchors ringed around the henge dais, all posted, all rise~3.6m).
+    if (!airborne && rise > T.moves.stepRise && speed < T.moves.jumpUphillSpeed) {
       this.jetWhy = 'hop';
       // A lip above jump apex but below breathRise has no perch — with a
       // dry tank the hop kept firing anyway and the bot rim-orbited the
       // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
       // the shove while the tank refills to the hop's floor, then mount.
       if (rise > T.moves.stepJetRise && !tanked && ctx.energy !== undefined) {
+        this.mountWait = true;
         return { ski: false, jet: false, jump: false, park: true };
       }
       return { ski: false, jet: rise > T.moves.stepJetRise && tanked, jump: true };

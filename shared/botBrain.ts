@@ -421,6 +421,13 @@ export class BotBrain {
     return { why: this.moves.jetWhy, escapeT: this.escapeS.escapeJetT, out: this.moves.jetOut, hold: this.moves.holdFor() };
   }
 
+  /** True while the mount-perch holds a lip for tank refill — the
+   *  disposition reads it to shed drain skills until the mount fires. */
+  get mountWait(): boolean { return this.moves.mountWait; }
+
+  /** Perched-by-design (breath/mount staging) for the mobility watchdog. */
+  get perched(): boolean { return this.moves.perched; }
+
   /** The bot's skill matrix — hosts read it to bias weapon selection
    *  (a phenom draws its good gun) and to build the aimSkill ctx hook. */
   get skill(): BotSkill {

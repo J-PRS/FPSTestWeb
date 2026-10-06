@@ -49,7 +49,7 @@ export const BOT_TUNING = {
     hopRiseHi: 3,        // m — jet-assist hop rise upper bound
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
     stepRise: 0.4,       // m — sub-climb face ahead that walls a stalled push (dais lip ~0.85m, skirt 2.2m)
-    stepJetRise: 1.2,    // m — rise past jump apex that pays a tap alongside the hop
+    stepJetRise: 0.7,    // m — lips this tall need a jet tap: jump apex is ~0.87 (7^2/2g) so anything past ~0.7 hops back down the face
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
     hopSpeed: 6.4,       // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate

@@ -64,6 +64,10 @@ export class MobilityWatchdog {
       return;
     }
     if (!carryingFlag && brain.holding) { w.since = now; return; }
+    // A perched bot (tank refill on a face, lip-mount staging) is
+    // standing still ON PURPOSE — not a pin. Same exemption shape as
+    // `holding`: parked by choice, re-arm the leash instead of warning.
+    if (brain.perched) { w.since = now; return; }
     // Standing on the destination is "arrived", not stuck — driveMove
     // cuts input inside 0.5m, so a parked-on-goal bot covers nothing by
     // design. 2.5m of slack covers yaw-circling around the point.
