@@ -147,10 +147,19 @@ export class BotSteer {
       // lures off it (an ungated pull cost a capper a 295s leg chasing
       // a pretty slope away from the line).
       if (falling && align > 0.3) {
-        const grade = (g0 - ctx.groundY(pos.x + dx * pb, pos.z + dz * pb)) / pb;
+        const landY = ctx.groundY(pos.x + dx * pb, pos.z + dz * pb);
+        const grade = (g0 - landY) / pb;
         if (grade > 0.15) {
           const ratio = grade / arcSlope;
-          interest += T.steer.landW * Math.min(ratio, 1 / ratio);
+          // JP's rule priced: a landing whose ground keeps FALLING past
+          // the touchdown pays more than an equally-grazed dip that
+          // bottoms out — descent length IS the gravity budget the
+          // landing buys. Diverting to it is free within the goal arc;
+          // braking to reach one is a different (speed-for-energy)
+          // trade this doesn't make.
+          const chain = (landY - ctx.groundY(pos.x + dx * pb * 2, pos.z + dz * pb * 2)) / pb;
+          const payoff = 1 + Math.min(2, Math.max(0, chain) * 4);
+          interest += T.steer.landW * Math.min(ratio, 1 / ratio) * payoff;
         }
       }
       // Weave: a side-pull perpendicular to the goal, oscillating so the
