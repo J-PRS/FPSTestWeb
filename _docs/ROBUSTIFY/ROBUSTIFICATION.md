@@ -365,9 +365,6 @@ telemetry lines it greps.
 - **Test harness**: replica `held`/`roster` evict on wire `remove`;
   the `tauntRng`/`strictRng` hooks are the deliberate seams the
   tests exercise.
-- **Client ambient draws**: `NetworkManager` `Math.random` is
-  one-time identity mint (localStorage-persisted, never sim);
-  `remotes` `Date.now` feeds scoreboard alive-seconds display only.
 - **Leaver-map key domains**: `killCounts`/`lastWeaponByPlayer`/
   `aliveSince` correctly stay sibling maps — their key domains span
   `'local'` + client fill bots + self, not RemoteSet members; the
@@ -418,6 +415,24 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`envClaims` pinned** (2026-10-05): `envClaims.test.ts` (10 tests,
+  fake host) — untagged env damage clamps [1,40], nearby named attacker
+  keeps the 80 cap, a distant named attacker is a forge (attribution
+  drops to 'environment', cap halves, heartbeat beat), `bot:` tags skip
+  the range gate, dead/missing → 'gone'; heal caps at 25, refused heals
+  don't consume the 1.5s cadence, team-mode draws healCredit only,
+  over-cap clamps at maxHealth.
+- **Join/reclaim atomicity audited** (2026-10-05): grace reclaim checks
+  the session token BEFORE the connected test (a zombie socket can't
+  lock out its owner), registers the new socket BEFORE evicting the old
+  (onClose sees the seat already owned — the generation check at
+  GameServer.ts:245-246 double-covers sockets seated pre-registry),
+  stamps lastSeen so a >60s grace seat isn't idle-reaped, and last-
+  writer-wins for racing reclaims is deterministic. Second 'join' on a
+  seated socket drops at the WIRE guard; spectator squat evicts via
+  specRooms before seating. Rejection paths send sessionRejected before
+  close so stale-token clients can't reprobe-loop. Pin coverage:
+  reconnect/graceZombie/joinGuard/flagGraceDrop/teleportGrace.
 - **TickLoop containment holes closed** (2026-10-05): empty-room
   `dispose()` ran outside the per-room guard — a throwing dispose
   escaped the interval uncaught (process kill for every room) and a
@@ -533,17 +548,6 @@ telemetry lines it greps.
   claim), getWeaponStats fallback, cadence sanity + every keyed
   weapon existing. The wire-authoritative table's derived ceilings
   can't drift silently.
-- **Join/reclaim atomicity audited** (2026-10-05): grace reclaim checks
-  the session token BEFORE the connected test (a zombie socket can't
-  lock out its owner), registers the new socket BEFORE evicting the old
-  (onClose sees the seat already owned — the generation check at
-  GameServer.ts:245-246 double-covers sockets seated pre-registry),
-  stamps lastSeen so a >60s grace seat isn't idle-reaped, and last-
-  writer-wins for racing reclaims is deterministic. Second 'join' on a
-  seated socket drops at the WIRE guard; spectator squat evicts via
-  specRooms before seating. Rejection paths send sessionRejected before
-  close so stale-token clients can't reprobe-loop. Pin coverage:
-  reconnect/graceZombie/joinGuard/flagGraceDrop/teleportGrace.
 - **Map/Set iteration-order determinism** (2026-10-05): every Map/Set
   in `shared/` audited for order-dependent iteration on a sim path —
   `stateHash` is a commutative per-player sum (roster order can't
@@ -595,14 +599,6 @@ telemetry lines it greps.
   references a snapshot that could arrive later, so intra-tick and
   cross-packet ordering can never replay an edge against a stale base.
   The "state edges + committed snapshot" rule kills the class.
-- **Floating promises** (2026-10-05): every unawaited `.then(`/`void `
-  async call in `server_bun/src` audited — the fire-and-forget sites
-  (DemoStorage index-reconcile chain, RtcServer `loadNd`/`answerOffer`,
-  BallSim terrain attach, GameServer heightmap) all terminate in a
-  `catch` or rely on the `unhandledRejection` handler at
-  `server.ts:155`, which logs at ERROR level by design ("log rather
-  than swallowing silently"). A rejected promise is loud, never
-  silent — room-tick paths have their own finer quarantine.
 - **`creatureBaneling` pinned** (2026-10-05): `creatureBaneling.test.ts`
   (13 tests) — blast-required registry rows, uber ×4/×2/×1.7 scaling,
   TOPSPEED cap + wide-aggro homing, 20% out-of-aggro throttle, stun
