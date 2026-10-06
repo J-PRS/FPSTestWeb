@@ -130,9 +130,11 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
   const inputSeq = u8.length >= 34 ? d.getUint32(o, true) : undefined;
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz) ||
       !Number.isFinite(velocity.x) || !Number.isFinite(velocity.y) || !Number.isFinite(velocity.z)) return null;
-  // Same bound as the JSON validator's validateBody — position is
-  // judge-mode truth, so an absurd claim would become broadcast state.
+  // Same bounds as the JSON validator's validateBody — the binary lane
+  // must refuse what the JSON lane refuses, and position is judge-mode
+  // truth, so an absurd claim would become broadcast state.
   if (px * px + py * py + pz * pz > 8192 * 8192) return null;
+  if (velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z > 1000 * 1000) return null;
   return {
     type: 'position',
     position: { x: px, y: py, z: pz },

@@ -24,4 +24,14 @@ describe('scenario: position magnitude bound', () => {
     const ok = encodePosition({ x: 4000, y: 500, z: -4000 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
     expect(decodePosition(ok)).not.toBeNull();
   });
+
+  it('binary lane rejects velocity past the JSON lane\'s 1000 m/s bound', () => {
+    // i16 @0.1 m/s quantization reaches ±3276 — without the bound the
+    // binary lane admits what validateBody refuses, and the claimed
+    // velocity anchors moveJudge's divergence math.
+    const fast = encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 1100, y: 0, z: 0 }, 1, 0);
+    expect(decodePosition(fast)).toBeNull();
+    const legal = encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 500, y: 300, z: -500 }, 1, 0);
+    expect(decodePosition(legal)).not.toBeNull();
+  });
 });

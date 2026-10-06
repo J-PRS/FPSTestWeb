@@ -418,6 +418,15 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **Wire field-width wrap + lane parity** (2026-10-05): audited every
+  binary field in `shared/wire.ts` — packPos/packVel clamp-and-quantize,
+  health/ping/sheep/id lengths clamped, yaw wraps by design, record
+  count u8 unreachable (maxPlayers 32). **Found+fixed**: `decodePosition`
+  enforced isFinite + the 8192m position bound but skipped
+  `validateBody`'s 1000 m/s velocity bound — a binary position frame
+  could claim velocity the JSON lane refuses, and that claim anchors
+  moveJudge divergence math. The codec now rejects |v|>1000 like the
+  JSON lane; `posMagnitude.test.ts` gained the parity case.
 - **`weapons` derivations pinned** (2026-10-05): `weapons.test.ts`
   (11 tests) — airtime ramp ±0.5s steps, cap, non-scaled ignore,
   unknown type 0, directHitAoeBonus launcher-only, beltThrowCost

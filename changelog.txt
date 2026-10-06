@@ -1,3 +1,4 @@
+2026-10-05 - fix: binary position lane now enforces the JSON lane's 1000 m/s velocity bound — decodePosition rejected absurd positions but admitted velocity claims validateBody refuses; +parity scenario case
 2026-10-05 - test: pin weapons.ts derived ceilings — airtime ramp/cap, belt costs, MAX_HIT_CLAIM_DMG re-derived from live table, stats fallback, cadence sanity (11 tests)
 2026-10-05 - audit: Map/Set iteration-order determinism classified clean — stateHash commutative sum, flagGoals sorted ids, memoized pure lookups, static-literal orders; insertion-order divergence cannot reach a sim output
 2026-10-05 - fix: split orbitStreak from stuckStreak in botEscape — the fast window erased the slow windows streak on every displaced tick, so orbiter jet escalation and wander-forfeit never fired; +13 botEscape tests
