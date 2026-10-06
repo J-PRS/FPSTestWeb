@@ -60,6 +60,9 @@ export interface WorldState {
    *  `stand` is the permanent pole+base planted at `home` (homeKnown
    *  gates it until the wire/base spec tells us where that is). */
   flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
+  /** Server-owned pickup replicas — net/pickups.ts owns the map; the
+   *  §4.7 pickup fidelity hash enumerates it. */
+  netPickups: Map<number, { kind: import('../../../shared/pickups.js').PickupKind }>;
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.
@@ -100,6 +103,7 @@ export function createWorldState(): WorldState {
     flagStates: {},
     flagHomeHush: false,
     flagMarkers: new Map(),
+    netPickups: new Map(),
     playbackMode: false,
     selfBlastStamps: [],
     selfCharge: 0,

@@ -22,6 +22,9 @@ export function wirePickups(ctx: NetCtx): void {
   // updateNuggets ticks/disposes them; the server only owns spawn,
   // collect edges, and rest-spot truth.
   const pickupMeshes = new Map<number, { nugget: Nugget; kind: PickupKind }>();
+  // Shared view for the §4.7 pickup fidelity hash — stateDebug reads the
+  // same map; kind is all it needs (id is the key).
+  deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     // A re-spawn for a live id is a blast-knock rest spot — the server's

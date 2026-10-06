@@ -153,3 +153,37 @@ export function computeDeployHash(replicas: Iterable<[number, HashableDeploy]>):
   }
   return h.toString(16);
 }
+
+/** Flags hash team + lifecycle state + carrier — the flagUpdate edge
+ *  fields. A carried→home transition or a grab that never echoed leaves
+ *  the client announcing a state the server already moved past. */
+export function computeFlagHash(flags: Iterable<[string, { state: string; carrier: string | null }]>): string {
+  let h = 0;
+  for (const [team, f] of flags) {
+    let ph = 0x811c9dc5;
+    for (const s of [team, f.state, f.carrier ?? '']) {
+      for (let i = 0; i < s.length; i++) {
+        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+      }
+      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    h = (h + ph) >>> 0;
+  }
+  return h.toString(16);
+}
+
+/** Pickups hash id + kind — spawn/collect edges. A pickupSpawn or
+ *  pickupGone that never landed leaves a gem the server collected still
+ *  shimmering (or a hole where one should be) until the next reconcile. */
+export function computePickupHash(pickups: Iterable<[number, { kind: string }]>): string {
+  let h = 0;
+  for (const [id, p] of pickups) {
+    let ph = 0x811c9dc5;
+    ph ^= id & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
+    for (let i = 0; i < p.kind.length; i++) {
+      ph ^= p.kind.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+    }
+    h = (h + ph) >>> 0;
+  }
+  return h.toString(16);
+}

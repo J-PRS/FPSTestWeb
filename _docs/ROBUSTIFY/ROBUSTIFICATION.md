@@ -961,7 +961,7 @@ field nor the orbit-escape converts proximity into the mount move.
 Competence bug, not a six-class bug — queued for the gameplay pass JP
 is already working (jet-cap fix landed 2026-10-06 and didn't move it).
 
-### 4.7 Replica-coverage gap in the state hash — *closed (balls + creatures + deployables)*
+### 4.7 Replica-coverage gap in the state hash — *closed (balls + creatures + deployables + flags + pickups)*
 
 The checksum covered players only; non-player replays had no cross-engine
 desync signal. **Ball fleet now hashed** (2026-10-01): `ballHash` rides
@@ -987,8 +987,19 @@ same persistence-gated warn.
 excluded as echo-channel (deployHp ticks would phantom-fire the check at
 heal cadence). Catches a deploySpawn/deployGone edge that never landed.
 Client `netEntries()` covers both lanes: remote spawns plus our own
-plants once `serverId` arrives. Projectiles remain uncovered —
-short-lived enough that a stranded replica is cosmetic.
+plants once `serverId` arrives.
+
+**Flags + pickups covered** (2026-10-06): `flagHash` over
+(team, state, carrier) — the flagUpdate edge fields, so a grab/return/
+drop that never echoed surfaces instead of leaving a flag announcing a
+stale state; `pickupHash` over (id, kind) catches a pickupSpawn or
+pickupGone that never landed (a collected gem still shimmering, or a
+hole where one should be). Client flag state reads `world.flagStates`
++ `flagMarkers.carrier`; pickup replicas are shared via
+`world.netPickups` (net/pickups owns the map). Same persistence-gated
+warn. Every long-lived edge-driven roster now has a fidelity signal —
+only projectiles remain uncovered, short-lived enough that a stranded
+replica is cosmetic.
 
 ---
 

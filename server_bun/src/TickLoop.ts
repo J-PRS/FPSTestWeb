@@ -1,6 +1,6 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
-import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash } from '../../shared/stateHash.ts';
+import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -365,6 +365,15 @@ export class TickLoop {
     const deployHash = deployRoster.length
       ? computeDeployHash(deployRoster.map((d) => [d.id, { kind: d.kind, owner: d.owner, team: d.team ?? '' }] as [number, { kind: string; owner: string; team: string }]))
       : undefined;
+    // Flags + pickups — the last edge-driven rosters without a desync
+    // signal (§4.7).
+    const flagHash = room.flags?.flags.size
+      ? computeFlagHash(room.flags.flags)
+      : undefined;
+    const pickupRoster = room.pickups?.snapshot() ?? [];
+    const pickupHash = pickupRoster.length
+      ? computePickupHash(pickupRoster.map((p) => [p.id, p] as [number, { kind: string }]))
+      : undefined;
     const timestamp = wallNow();
 
     room.broadcast({
@@ -376,6 +385,8 @@ export class TickLoop {
       ballHash,
       creatureHash,
       deployHash,
+      flagHash,
+      pickupHash,
     });
 
     // Periodic status summary - suppress duplicates, batch with count

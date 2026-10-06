@@ -6,7 +6,7 @@ import type { ChildLogger } from './Logger.js';
 import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
-import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash } from '../../../shared/stateHash.js';
+import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../../shared/stateHash.js';
 import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
@@ -22,7 +22,7 @@ export interface StateDebugContext {
   projectiles: Projectile[];
   getLastSentPos(): { x: number; y: number; z: number };
   /** Match state — mode/team/scores/playback, for the diagnostics dump. */
-  world?: { mode?: string; localTeam?: string; teamScores?: { alpha: number; bravo: number } | null; ffaScores?: Map<string, number>; matchEndsAt?: number | null; playbackMode?: boolean };
+  world?: { mode?: string; localTeam?: string; teamScores?: { alpha: number; bravo: number } | null; ffaScores?: Map<string, number>; matchEndsAt?: number | null; playbackMode?: boolean; flagStates?: Record<string, 'home' | 'carried' | 'dropped' | undefined>; flagMarkers?: Map<string, { carrier: string | null }>; netPickups?: Map<number, { kind: string }> };
   /** Offline bot referee — bot roster/teams for the diagnostics dump. */
   teamBots?: () => { bots: { playerId: string; team: string; isDead: boolean; position: { x: number; y: number; z: number }; botHp?: number }[]; teamOf: Map<string, string>; over: string | null; scores: { alpha: number; bravo: number }; ffaScores: Map<string, number> } | null;
   /** Scene + view camera for the crosshair aim probe (what's under the reticle). */
@@ -319,9 +319,47 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let ballDriftStreak = 0;
   let creatureDriftStreak = 0;
   let deployDriftStreak = 0;
+  let flagDriftStreak = 0;
+  let pickupDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string) => {
     hashCheckCount++;
+
+    if (serverFlagHash !== undefined && ctx.world) {
+      const local = new Map<string, { state: string; carrier: string | null }>();
+      for (const [team, state] of Object.entries(ctx.world.flagStates ?? {})) {
+        if (state) {local.set(team, { state, carrier: ctx.world.flagMarkers?.get(team)?.carrier ?? null });}
+      }
+      const localFlagHash = computeFlagHash(local);
+      if (localFlagHash === serverFlagHash) {
+        flagDriftStreak = 0;
+      } else {
+        flagDriftStreak++;
+        const detail = `server=${serverFlagHash} client=${localFlagHash} states=${JSON.stringify(Object.fromEntries([...local].map(([t, f]) => [t, `${f.state}:${f.carrier ?? '-'}`])))}`;
+        if (flagDriftStreak >= 2) {
+          logger.warn(`[StateHash] FLAG DESYNC tick=${tick} ${detail} (persistent across ${flagDriftStreak} checks — a flagUpdate edge never landed)`);
+        } else {
+          logger.debug(`[StateHash] flag mismatch tick=${tick} ${detail} (transient — flagUpdate in flight)`);
+        }
+      }
+    }
+
+    if (serverPickupHash !== undefined && ctx.world) {
+      const local = new Map<number, { kind: string }>();
+      for (const [id, p] of ctx.world.netPickups ?? []) {local.set(id, { kind: p.kind });}
+      const localPickupHash = computePickupHash(local);
+      if (localPickupHash === serverPickupHash) {
+        pickupDriftStreak = 0;
+      } else {
+        pickupDriftStreak++;
+        const detail = `server=${serverPickupHash} client=${localPickupHash} ids=[${[...local.keys()].join(',')}]`;
+        if (pickupDriftStreak >= 2) {
+          logger.warn(`[StateHash] PICKUP DESYNC tick=${tick} ${detail} (persistent across ${pickupDriftStreak} checks — a pickupSpawn/pickupGone edge never landed)`);
+        } else {
+          logger.debug(`[StateHash] pickup mismatch tick=${tick} ${detail} (transient — spawn/collect edge in flight)`);
+        }
+      }
+    }
 
     if (serverDeployHash !== undefined && ctx.netDeployables) {
       const localId = networkManager.getLocalPlayerId();
