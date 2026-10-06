@@ -49,6 +49,13 @@ export class BotLines {
    *  without the 30m release means the terrain itself owns the trap
    *  (basin treadmill) and the answer stops being terrain-aware. */
   private orbitFails = 0;
+  /** Goal the orbit latch armed for — the release radius belongs to that
+   *  goal, so a dest that moved (flag grab flips enemy→home stand
+   *  mid-think) can't inherit a latch whose radius never releases:
+   *  the carrier crawled the whole return leg in 40m beeline hops
+   *  because gd-to-home stayed above the outbound arm (kata autopsy:
+   *  ~100m in 70s latched, then 500m in 15s once it let go). */
+  private orbitGoal: BotVec | null = null;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
@@ -67,7 +74,7 @@ export class BotLines {
     // pole itself and let the moves layer own the touch.
     if (gd < (ctx.runner ? T.lines.runnerDirectGd : T.lines.minGd)) {
       this.wp = null; this.lastGd = Infinity; this.stale = 0;
-      this.traverseDir = null; this.orbitGd = Infinity; this.orbitFails = 0;
+      this.traverseDir = null; this.orbitGd = Infinity; this.orbitFails = 0; this.orbitGoal = null;
       return dest;
     }
 
@@ -124,14 +131,19 @@ export class BotLines {
     if (gd > this.lastGd - 8) this.stale++;
     else { this.stale = 0; if (this.orbitGd === Infinity) this.traverseDir = null; }
     this.lastGd = gd;
-    // Release the orbit latch only on net progress from where it armed.
+    // Release the orbit latch only on net progress from where it armed —
+    // or when the goal itself moved: a latch armed for the enemy stand
+    // has no authority over the homeward leg.
+    if (this.orbitGoal && Math.hypot(dest.x - this.orbitGoal.x, dest.z - this.orbitGoal.z) > T.lines.redest) {
+      this.orbitGd = Infinity; this.orbitFails = 0; this.traverseDir = null; this.orbitGoal = null;
+    }
     if (this.orbitGd !== Infinity && gd < this.orbitGd - 30) {
-      this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitFails = 0;
+      this.orbitGd = Infinity; this.stale = 0; this.traverseDir = null; this.orbitFails = 0; this.orbitGoal = null;
     }
     const prof = sharedEnv.thinkProf;
     let tp = prof ? sharedEnv.wallPerf!() : 0;
     if (faceAhead || this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
-      if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; }
+      if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; this.orbitGoal = { ...dest }; }
       else this.orbitFails++;
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {

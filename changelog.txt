@@ -1,3 +1,4 @@
+2026-10-06 - bots: orbit latch tied to the goal it armed for - a dest swap (grab flips enemy->home stand) releases it instead of starving the flow-field route for the whole return leg; katabatic capRun now caps (was 0 caps, ~100m/70s crawl)
 2026-10-06 - bots: airborne landing-graze steer (goal-gated tangency scoring - picks the landing slope that swallows the arc); test pins updated for flagrun + grown files
 2026-10-06 - bots: crest discipline via dead-reckoned ballistic arc (altitude burns vetoed when the free arc reaches a downslope entry) + runner propel cadence 3.5->2.8s, re-blast cap 30->38 m/s
 2026-10-06 - flagrun: end-of-match stat line - laps, avg speed (m/s), avg energy appended to the win banner
