@@ -74,8 +74,9 @@ export class NetBot {
   private holdFireUntil = 0;
   private rand: () => number;
 
-  constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout } = {}) {
+  constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout; capper?: boolean } = {}) {
     if (opts.loadout) this.loadout = opts.loadout;
+    this.forceCapper = !!opts.capper;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
     // A reject is a verdict, not transport loss — the resend loop only
@@ -226,8 +227,12 @@ export class NetBot {
    *  roster ping-pong. */
   private role: BotRole = 'offense';
   private roleT = 0;
+  /** Harness pin: guarantees a runner exists for flag-lane coverage
+   *  where squad fill might never assign one. */
+  private forceCapper = false;
 
   private squadRole(): BotRole {
+    if (this.forceCapper) return 'capper';
     this.roleT -= 0.3; // think cadence — close enough for a soft window
     if (this.roleT > 0) return this.role;
     const mates = [this.nc.id];
@@ -299,6 +304,19 @@ export class NetBot {
       this.brain.takeHit(shooter ? { ...shooter.pos } : { ...nc.self.pos });
     }
     const out = this.brain.think(THINK_S, this.ctx());
+    // The forceCapper pin exists for harness lane coverage — the brain's
+    // utility goals still outrank the route otherwise, so hard-steer.
+    if (this.forceCapper) {
+      const fo = this.flagObjective();
+      if (fo) {
+        out.dest = fo;
+        // Grab needs feet near the deck: any sustained thrust keeps the
+        // body at cruise altitude 10-20m over the flag where the 6m
+        // touch cap can't reach. Cappers walk the approach.
+        const d0 = Math.hypot(nc.self.pos.x - fo.x, nc.self.pos.z - fo.z);
+        if (out.move && d0 < 25) out.move.jet = false;
+      }
+    }
 
     // The brain's objective goals ignore enemies it can't see, and a
     // 8s test can't wait for spawns 250m apart to wander into LOS —
@@ -336,8 +354,13 @@ export class NetBot {
       // The diveRun cut matches botMoves: inside graze range with the
       // target at deck level, thrust is what holds the body airborne —
       // cut it and let momentum graze the stand.
-      jet: (!!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4)
-        && !(d < 45 && out.dest.y < nc.self.pos.y + 4),
+      jet: this.forceCapper && d < 25
+        // Final approach on foot: thrust this close keeps the body at
+        // cruise altitude over the flag where the 6m touch cap can't
+        // reach — the grab needs feet near deck level.
+        ? false
+        : ((!!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4)
+          && !(d < 45 && out.dest.y < nc.self.pos.y + 4)),
       jump: !!out.move?.jump,
     };
     if (!nc.surface) {

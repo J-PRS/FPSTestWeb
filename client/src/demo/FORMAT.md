@@ -25,7 +25,7 @@ positive int is almost certainly a demo of this game.
 | Field              | Type | Notes |
 |--------------------|------|-------|
 | magic              | u8   | 0x44  |
-| formatVersion      | i32  | 1..4  |
+| formatVersion      | i32  | 1..5  |
 | gameVersion        | str  | e.g. "1.0.0" |
 | timestamp          | f64  | ms since Unix epoch (recording wall clock) |
 | duration           | f32  | seconds |
@@ -151,6 +151,34 @@ field itself to end of file.
    | yaw, pitch   | 2×f32|
    | flags        | u8   | bit0 Dead, 1 Ski |
 
+6. `trailer sections` (v5+) — optional tagged blocks after remoteFrames:
+
+   | Field   | Type |
+   |---------|------|
+   | count   | u8   | number of sections that follow |
+
+   Each section: `u8 tag`, `u32 payloadLen`, then payloadLen bytes.
+   A reader must SKIP unknown tags — new sections land without a
+   version bump. Defined tag:
+
+   **tag 1 — HMAP** (embedded fallback heightmap):
+
+   | Field        | Type |
+   |--------------|------|
+   | gridN        | u16  | samples per side (square grid) |
+   | heightScale  | f32  | vertical gain (map's spec.heightScale) |
+   | worldScale   | f32  | meters per tile wrap |
+   | srcHash      | u32  | CRC32 of the source field's full-res bytes |
+   | dataLen      | u32  | = gridN² |
+   | data         | dataLen × u8 | raw height samples (0–255 → 0–125m × heightScale) |
+
+   The grid IS a Heightfield at gridN resolution: sample it exactly like
+   the full map (bilinear, texel-center offset, same wrap semantics).
+   Defaults: gridN 96 → ~9.2KB payload, ~1-4m rms error vs the real map.
+   Purpose: (a) terrain fallback when the original map file is gone;
+   (b) srcHash lets playback verify "map exists and matches the action"
+   and swap in the embedded grid when it doesn't.
+
 ## Version history
 
 - v1: original (no projectileLifetime)
@@ -159,6 +187,9 @@ field itself to end of file.
 - v4: + weaponType u8 at end of each local frame record; targetType
   space namespaced into lanes (balls/creatures/deployables/markers)
   covering every actor family — wire format itself unchanged
+- v5: + optional trailer sections (u8 count + tag/len/payload each);
+  first section is HMAP, an embedded coarse heightmap for terrain
+  fallback and map-match validation
 
 ## Known limits (for future re-implementers)
 

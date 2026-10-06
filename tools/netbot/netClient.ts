@@ -334,6 +334,7 @@ export class NetClient {
       case 'tickUpdate': this.applyTick(m.updates); break;
       case 'wireIds':
         for (const [id, pid] of Object.entries(m.add)) this.wireIds.set(Number(id), pid);
+        for (const id of (m.remove ?? []) as number[]) this.wireIds.delete(id);
         break;
       case 'playerHit': {
         if (m.seq !== undefined) {

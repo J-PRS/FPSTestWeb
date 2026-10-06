@@ -33,6 +33,11 @@ const DURATION = Number(args.duration ?? 60);
 const BOTS = Number(args.bots ?? 10);
 const MATCHES = Number(args.matches ?? 2);
 const OUT = String(args.out ?? 'demos_out');
+const ROOM = String(args.room ?? '');
+const MODE = String(args.mode ?? '');
+const SERVERBOTS = Number(args.serverbots ?? 0);
+const PLANT = args.plant === 'true'; // a scripted client plants deployables
+const CAPPERS = Number(args.cappers ?? 2); // fighters pinned to the flag-run role
 const BUFFER_SECONDS = DURATION + 30; // keep the whole match in the ring
 
 function bootServer() {
@@ -88,8 +93,8 @@ class DemoObserver extends NetClient {
     }
   }
 
-  constructor(url: string) {
-    super(url, 'demo_observer', new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 }), {});
+  constructor(url: string, joinOpts: ConstructorParameters<typeof NetClient>[3] = {}) {
+    super(url, 'demo_observer', new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 }), joinOpts);
     const nc = this;
     this.rec.setRemoteSource(function* (): Iterable<RemoteSample> {
       for (const [id, e] of nc.roster) {
@@ -185,17 +190,38 @@ class DemoObserver extends NetClient {
 
 for (let match = 0; match < MATCHES; match++) {
   const env = bootServer();
-  const obs = new DemoObserver(env.url);
+  const roomOpts = { ...(ROOM ? { room: ROOM } : {}), ...(MODE ? { mode: MODE } : {}), ...(SERVERBOTS ? { bots: SERVERBOTS } : {}) };
+  const obs = new DemoObserver(env.url, roomOpts);
   await obs.connect();
   const bots: { nc: NetClient; bot: NetBot }[] = [];
   for (let i = 0; i < BOTS; i++) {
     const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
-    const nc = new NetClient(env.url, `fighter_${i}`, new LatencyLink({ pingMs: 30, jitterMs: 15, lossRate: 0 }), { armorClass: botClassForLoadout(lo) });
-    const bot = new NetBot(nc, { loadout: lo });
+    const nc = new NetClient(env.url, `fighter_${i}`, new LatencyLink({ pingMs: 30, jitterMs: 15, lossRate: 0 }), { ...roomOpts, armorClass: botClassForLoadout(lo) });
+    const bot = new NetBot(nc, { loadout: lo, capper: i < CAPPERS });
     bots.push({ nc, bot });
     await nc.connect();
     await sleep(60);
   }
+  // Scripted planter: exercises the deploy lane (spawn/hp/gone + turret
+  // tracers + mine booms) and the 'nugget' kind mints ground gems for the
+  // pickup lane — NetBots themselves never plant.
+  let planter: NetClient | undefined;
+  let plantTimer: ReturnType<typeof setInterval> | undefined;
+  if (PLANT) {
+    planter = new NetClient(env.url, 'planter', new LatencyLink({ pingMs: 20, jitterMs: 10, lossRate: 0 }), roomOpts);
+    await planter.connect();
+    const kinds = ['turret', 'sentry', 'mine', 'station', 'beacon', 'nugget'];
+    let ki = 0;
+    plantTimer = setInterval(() => {
+      if (!planter) return;
+      const p = planter.self.pos;
+      planter.send({ type: 'deploy', kind: kinds[ki++ % kinds.length]!, position: { x: p.x + 3, y: p.y, z: p.z + 3 } });
+    }, 7000);
+  }
+  // v5 HMAP trailer — wait for the observer's heightfield fetch (async
+  // loadField rides alongside connect), then snapshot the coarse grid.
+  for (let i = 0; i < 100 && !obs.field; i++) await sleep(50);
+  obs.rec.setHeightmap(obs.field);
   for (const b of bots) b.bot.start();
   obs.startRecording();
   console.log(`[demorec] match ${match + 1}: ${BOTS} fighters + observer, ${DURATION}s`);
@@ -224,6 +250,8 @@ for (let match = 0; match < MATCHES; match++) {
     `${file.projectileEvents.length} proj, ${file.targetEvents.length} tgt, roster ${file.roster.length})`);
 
   for (const b of bots.splice(0)) { b.bot.stop(); b.nc.close(); }
+  if (plantTimer) clearInterval(plantTimer);
+  planter?.close();
   obs.close();
   env.server.stop(true);
   env.gs.stop();

@@ -48,6 +48,26 @@ export const TARGET_EVENT_SIZE = 49;
 // Remote frame size: 4 + 2 + 12 + 12 + 4 + 4 + 1 = 39 bytes
 export const REMOTE_FRAME_SIZE = 39;
 
+// v5 trailer: tagged optional sections after remoteFrames — each is
+// u8 tag + u32 payloadLen + payload. Unknown tags are skipped by the
+// reader, so future sections slot in without a version bump.
+export const SECTION_HMAP = 1;
+
+function writeHmapSection(view: DataView, offset: number, hm: DemoFile['heightmap']): number {
+  if (!hm) {return offset;}
+  view.setUint8(offset++, SECTION_HMAP);
+  const lenPos = offset; offset += 4;
+  const start = offset;
+  view.setUint16(offset, hm.gridN, true); offset += 2;
+  view.setFloat32(offset, hm.heightScale, true); offset += 4;
+  view.setFloat32(offset, hm.worldScale, true); offset += 4;
+  view.setUint32(offset, hm.srcHash, true); offset += 4;
+  view.setUint32(offset, hm.data.length, true); offset += 4;
+  for (const b of hm.data) {view.setUint8(offset++, b);}
+  view.setUint32(lenPos, offset - start, true);
+  return offset;
+}
+
 function writeFrames(view: DataView, offset: number, frames: DemoFile['frames']): number {
   view.setUint32(offset, frames.length, true); offset += 4;
   for (const f of frames) {
@@ -154,7 +174,10 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     const rosterBytes = data.roster.map(r => 2 + new TextEncoder().encode(r.name).length);
     const rosterSize = 2 + rosterBytes.reduce((a, b) => a + b, 0);
     const remoteFramesSize = 4 + data.remoteFrames.length * REMOTE_FRAME_SIZE;
-    const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize;
+    // v5 trailer: u8 section count + per-section tag/len/payload.
+    const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length : 0;
+    const trailerSize = 1 + hmapSize;
+    const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize;
 
     const buffer = new ArrayBuffer(totalSize);
     const view = new DataView(buffer);
@@ -199,6 +222,10 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     }
 
     offset = writeRemoteFrames(view, offset, data.remoteFrames);
+
+    // v5 trailer sections — u8 count, then tag+len+payload per section.
+    view.setUint8(offset++, data.heightmap ? 1 : 0);
+    offset = writeHmapSection(view, offset, data.heightmap);
 
     // Compute and write checksum over everything after the checksum field
     const checksumOffset = 1 + 4 + 2 + gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;

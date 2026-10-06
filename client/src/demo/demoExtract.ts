@@ -33,6 +33,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     targetEvents: [...r.targetEvents],
     roster: r.roster.map(e => ({ ...e })),
     remoteFrames: [...r.remoteFrames],
+    ...(r.heightmap ? { heightmap: r.heightmap } : {}),
   };
 }
 
@@ -104,5 +105,6 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
     targetEvents: normTgt,
     roster: r.roster.map(e => ({ ...e })),
     remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd),
+    ...(r.heightmap ? { heightmap: r.heightmap } : {}),
   };
 }

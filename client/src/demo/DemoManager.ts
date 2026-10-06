@@ -13,6 +13,7 @@ import { VideoRecorder } from './VideoRecorder.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
 import * as demoIO from './demoIO.js';
+import { getHeightfield } from '../world/heightmap.js';
 import { buildDemoUI, wirePlayerCallbacks } from './demoWire.js';
 
 export type { CoolShotEntry } from './coolShots.js';
@@ -336,6 +337,9 @@ export class DemoManager implements demoIO.DemoIOHost {
   // Called every game frame
   update(dt: number): void {
     if (this.mode === 'recording') {
+      // v5 HMAP trailer — capture the live field lazily once it exists:
+      // recording starts at boot before the room's map finishes loading.
+      if (!this.recorder.heightmap) {this.recorder.setHeightmap(getHeightfield());}
       this.recorder.update(dt);
       this.coolShotMgr.tick();
     } else if (this.mode === 'playing') {

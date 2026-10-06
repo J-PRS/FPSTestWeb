@@ -3,7 +3,7 @@
 
 import { CircularBuffer } from './CircularBuffer.js';
 import type {
-  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';
+  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, DemoHeightmap} from './types.js';
 import { RemoteFrameFlags,
   createFrame,
   type DemoFile, type DemoRosterEntry,
@@ -11,6 +11,8 @@ import { RemoteFrameFlags,
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import * as ev from './demoEvents.js';
 import { buildDemoFile, extractClip } from './demoExtract.js';
+import { hmapDownsample } from './demoHmap.js';
+import type { Heightfield } from '../../../shared/heightfield.js';
 
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
@@ -84,6 +86,16 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  Lives outside remoteFrames so pooled/pruned frames don't alias it. */
   private lastRemoteByIdx = new Map<number, { posX: number; posY: number; posZ: number; velX: number; velY: number; velZ: number; yaw: number; pitch: number; flags: number }>();
   context: DemoContext = { room: '', mode: '', playerName: '' };
+  /** v5 trailer: coarse u8 downsample of the match terrain — captured
+   *  once at start so the file self-describes its battlefield even if
+   *  the map file vanishes later. */
+  heightmap: DemoHeightmap | null = null;
+
+  /** Call once the room's field has loaded — snapshots a ~9KB coarse
+   *  grid + a fingerprint of the full-res source for the match check. */
+  setHeightmap(field: Heightfield | null): void {
+    this.heightmap = field ? hmapDownsample(field) : null;
+  }
 
   recording = false;
   /** Dedupe bit-identical frames (local + remote). Off = verbatim every

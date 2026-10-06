@@ -1,7 +1,7 @@
 // Demo system data types - binary-efficient structures for recording/replay
 
 export const DEMO_MAGIC = 0x44; // 'D'
-export const DEMO_FORMAT_VERSION = 4;
+export const DEMO_FORMAT_VERSION = 5;
 
 // Remote-frame flag bitmasks
 export const RemoteFrameFlags = {
@@ -188,6 +188,17 @@ export interface RemoteFrame {
   flags: number;              // uint8 — RemoteFrameFlags
 }
 
+// v5: optional embedded heightmap trailer — a coarse u8 grid sampled
+// off the live field so the clip replays a shaped battlefield even when
+// the map file no longer exists. See demoHmap.ts for encode/decode.
+export interface DemoHeightmap {
+  gridN: number;              // uint16 — samples per side (square)
+  heightScale: number;        // float32 — field gain (spec.heightScale)
+  worldScale: number;         // float32 — meters per tile wrap
+  srcHash: number;            // uint32 — crc32 of the source field bytes
+  data: Uint8Array;           // gridN² u8 heights (stride-1 Heightfield)
+}
+
 export interface DemoFile {
   header: DemoHeader;
   frames: DemoFrame[];
@@ -195,6 +206,7 @@ export interface DemoFile {
   targetEvents: TargetEvent[];
   roster: DemoRosterEntry[];       // empty on v1/v2 files
   remoteFrames: RemoteFrame[];     // empty on v1/v2 files
+  heightmap?: DemoHeightmap;       // absent unless the recorder saw terrain
 }
 
 export interface DemoClip {

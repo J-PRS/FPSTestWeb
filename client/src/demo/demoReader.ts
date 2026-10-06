@@ -9,7 +9,8 @@ import {
   DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile, type DemoRosterEntry,
 } from './types.js';
-import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE } from './demoWriter.js';
+import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP } from './demoWriter.js';
+import type { DemoHeightmap } from './types.js';
 
 // CRC32 lookup table
 
@@ -48,6 +49,15 @@ class Reader {
       throw new Error(`Demo file truncated: cannot read ${what}`);
     }
   }
+
+  get remaining(): number { return this.view.byteLength - this.offset; }
+  bytes(n: number): Uint8Array {
+    this.ensure(n, `${n} raw bytes`);
+    const v = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, n);
+    this.offset += n;
+    return v;
+  }
+  skip(n: number): void { this.ensure(n, `skip of ${n} bytes`); this.offset += n; }
 
   u8(): number { const v = this.view.getUint8(this.offset); this.offset += 1; return v; }
   u16(): number { const v = this.view.getUint16(this.offset, true); this.offset += 2; return v; }
@@ -250,6 +260,36 @@ function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], p
 }
 
 
+// v5 trailer: tagged optional sections after remoteFrames. Unknown tags
+// are skipped so newer sections don't break older readers of this file.
+function readTrailerSections(r: Reader): DemoHeightmap | undefined {
+  if (r.remaining === 0) {return undefined;}
+  const count = r.u8();
+  let hmap: DemoHeightmap | undefined;
+  for (let i = 0; i < count; i++) {
+    r.ensure(1 + 4, 'trailer section header');
+    const tag = r.u8();
+    const len = r.u32();
+    if (tag !== SECTION_HMAP) {r.skip(len); continue;}
+    const before = r.remaining;
+    const gridN = r.u16();
+    const heightScale = r.f32();
+    const worldScale = r.f32();
+    const srcHash = r.u32();
+    const dataLen = r.u32();
+    if (dataLen !== gridN * gridN) {
+      throw new Error(`HMAP grid ${gridN}x${gridN} != ${dataLen} bytes`);
+    }
+    const data = r.bytes(dataLen);
+    hmap = { gridN, heightScale, worldScale, srcHash, data: data.slice() };
+    // Skip any padding a future writer adds inside the declared length.
+    const consumed = before - r.remaining;
+    if (consumed > len) {throw new Error('HMAP section overruns its length');}
+    r.skip(len - consumed);
+  }
+  return hmap;
+}
+
 export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
 
     const r = new Reader(buffer);
@@ -259,6 +299,7 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
     const targetEvents = readTargetEvents(r);
     const roster = header.formatVersion >= 3 ? readRoster(r) : [];
     const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length) : [];
+    const heightmap = header.formatVersion >= 5 ? readTrailerSections(r) : undefined;
     validateHeaderCounts(header, frames, projectileEvents, targetEvents);
-    return { header, frames, projectileEvents, targetEvents, roster, remoteFrames };
+    return { header, frames, projectileEvents, targetEvents, roster, remoteFrames, ...(heightmap ? { heightmap } : {}) };
   }

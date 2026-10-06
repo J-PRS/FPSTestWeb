@@ -30,8 +30,33 @@ function monotonic(frames: { timestamp: number }[]): boolean {
   return true;
 }
 
+const REQUIRE = (() => {
+  const i = process.argv.indexOf('--require');
+  return i >= 0 ? (process.argv[i + 1] ?? '').split(',').filter(Boolean) : [];
+})();
+
 function validateFile(path: string, file: DemoFile): void {
   const tag = `[${path}]`;
+
+  // Lane coverage — the "is anything not recorded?" ledger. targetType
+  // buckets mirror FORMAT.md: 0-63 balls, 64-127 creatures, 128-223
+  // deployables, 224 kill, 225 flag, 226+ pickups.
+  const lanes: Record<string, number> = { ball: 0, creature: 0, deploy: 0, kill: 0, flag: 0, pickup: 0 };
+  for (const e of file.targetEvents) {
+    const tt = e.targetType;
+    lanes[tt === TARGETTYPE_KILL ? 'kill' : tt === TARGETTYPE_FLAG ? 'flag'
+      : tt >= TARGETTYPE_PICKUP_BASE ? 'pickup' : tt >= TARGETTYPE_DEPLOY_BASE ? 'deploy'
+      : tt >= TARGETTYPE_CREATURE_BASE ? 'creature' : 'ball']!++;
+  }
+  let projFired = 0, projDone = 0;
+  for (const e of file.projectileEvents) {
+    if (e.eventType === ProjectileEventType.Fired) projFired++;
+    if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) projDone++;
+  }
+  console.log(`  lanes: ${Object.entries(lanes).map(([k, v]) => `${k}=${v}`).join(' ')} | proj fired=${projFired} done=${projDone}`);
+  for (const lane of REQUIRE) {
+    check((lanes[lane] ?? 0) > 0, `${tag} required lane '${lane}' produced ZERO events — recording or game coverage gap`);
+  }
 
   // Stream ordering
   check(monotonic(file.frames), `${tag} frames not timestamp-ordered`);
@@ -113,10 +138,11 @@ function validateFile(path: string, file: DemoFile): void {
 
   console.log(`  ${path}: ${file.frames.length} local + ${file.remoteFrames.length} remote frames, ` +
     `${file.projectileEvents.length} proj + ${file.targetEvents.length} target events, ` +
-    `roster ${file.roster.length}, ${(file.header.duration).toFixed(1)}s`);
+    `roster ${file.roster.length}, ${(file.header.duration).toFixed(1)}s` +
+    `${file.heightmap ? `, hmap ${file.heightmap.gridN}²` : ', NO HMAP'}`);
 }
 
-const inputs = process.argv.slice(2);
+const inputs = process.argv.slice(2).filter((a, i, arr) => a !== '--require' && arr[i - 1] !== '--require');
 const paths: string[] = [];
 for (const arg of inputs) {
   if (extname(arg) === '.demo') { paths.push(arg); }

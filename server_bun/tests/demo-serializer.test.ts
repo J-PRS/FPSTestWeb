@@ -6,6 +6,8 @@ import {
   createFrame, createHeader,
   type DemoFile,
 } from '../../client/src/demo/types.ts';
+import { hmapDownsample, hmapToField, hmapMatches, hmapFingerprint } from '../../client/src/demo/demoHmap.ts';
+import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 
 function makeDemoFile(): DemoFile {
   const frames = [
@@ -210,6 +212,37 @@ describe('DemoSerializer round-trip', () => {
     expect(() => DemoSerializer.deserialize(truncated)).toThrow(/truncated|bad magic/);
   });
 
+  it('round-trips the v5 heightmap trailer and tolerates its absence', () => {
+    const original = makeDemoFile();
+    original.heightmap = {
+      gridN: 4, heightScale: 1.5, worldScale: 2048, srcHash: 0xDEADBEEF,
+      data: new Uint8Array([0, 32, 64, 96, 128, 160, 192, 224, 255, 16, 48, 80, 112, 144, 176, 208]),
+    };
+    const restored = DemoSerializer.deserialize(DemoSerializer.serialize(original));
+    expect(restored.heightmap).toBeDefined();
+    expect(restored.heightmap!.gridN).toBe(4);
+    expect(restored.heightmap!.heightScale).toBeCloseTo(1.5, 5);
+    expect(restored.heightmap!.worldScale).toBeCloseTo(2048, 1);
+    expect(restored.heightmap!.srcHash).toBe(0xDEADBEEF);
+    expect([...restored.heightmap!.data]).toEqual([...original.heightmap.data]);
+
+    // Same file without the section → no heightmap, no parse error.
+    const plain = makeDemoFile();
+    const restored2 = DemoSerializer.deserialize(DemoSerializer.serialize(plain));
+    expect(restored2.heightmap).toBeUndefined();
+  });
+
+  it('rejects a corrupt HMAP section', () => {
+    const original = makeDemoFile();
+    original.heightmap = {
+      gridN: 8, heightScale: 1, worldScale: 1500, srcHash: 1,
+      data: new Uint8Array(64),
+    };
+    const buffer = DemoSerializer.serialize(original);
+    // Truncate inside the hmap payload → CRC catches it first.
+    expect(() => DemoSerializer.deserialize(buffer.slice(0, buffer.byteLength - 4))).toThrow();
+  });
+
   it('handles empty demo (zero frames, zero events)', () => {
     const header = createHeader();
     header.duration = 0;
@@ -226,5 +259,38 @@ describe('DemoSerializer round-trip', () => {
     expect(restored.frames.length).toBe(0);
     expect(restored.projectileEvents.length).toBe(0);
     expect(restored.targetEvents.length).toBe(0);
+  });
+});
+
+describe('demoHmap helpers', () => {
+  // 16² gradient field: height rises eastward — easy to check by hand.
+  function makeField(): Heightfield {
+    const data = new Uint8Array(16 * 16);
+    for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) {data[z * 16 + x] = x * 16;}
+    return { size: 16, data, stride: 1, heightScale: 1, worldScale: 1500 };
+  }
+
+  it('downsamples a field into a small grid that resamples close to the source', () => {
+    const field = makeField();
+    const hm = hmapDownsample(field, 8);
+    expect(hm.data.length).toBe(64);
+    expect(hm.srcHash).toBe(hmapFingerprint(field));
+    const coarse = hmapToField(hm);
+    // Interior sample on a gradient rising ~15m per output cell: the
+    // honest bound is ~half a cell span — the fallback preserves shape,
+    // not survey data.
+    const x = 400, z = 700;
+    expect(Math.abs(hmHeight(coarse, x, z) - hmHeight(field, x, z))).toBeLessThan(10);
+    // But the TREND survives exactly: east is higher than west.
+    expect(hmHeight(coarse, 1200, 700)).toBeGreaterThan(hmHeight(coarse, 200, 700));
+  });
+
+  it('matches the source field and rejects a different terrain', () => {
+    const field = makeField();
+    const hm = hmapDownsample(field, 8);
+    expect(hmapMatches(hm, field)).toBe(true);
+    const flipped = makeField();
+    flipped.data = flipped.data.map((v) => 255 - v);
+    expect(hmapMatches(hm, flipped)).toBe(false);
   });
 });

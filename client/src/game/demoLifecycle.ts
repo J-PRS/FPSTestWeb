@@ -20,6 +20,8 @@ import { ProjectileEventType } from '../demo/types.js';
 import { updatePlaybackCreatures, clearPlaybackCreatures, type PlaybackCreature } from '../demo/playbackCreatures.js';
 import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playbackDeployables.js';
 import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';
+import { hmapMatches } from '../demo/demoHmap.js';
+import { getHeightfield, injectHeightmapBytes } from '../world/heightmap.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -59,6 +61,9 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
   seekReconstructing: { on: boolean };
   /** wid currently mirrored onto the viewmodel — -1 means "not applied yet". */
   playbackWid: number;
+  /** Restores the live heightmap after a clip's embedded terrain was
+   *  injected for playback; null while the real map is up. */
+  hmRestore: (() => void) | null;
 }
 
 // Frame weaponType → viewmodel wid. Any weaponType the current build doesn't
@@ -237,6 +242,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     d.overlay.style.display = 'flex';
     document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
     demoManager.fetchCoolShotsFromServer();
+    // Hand the live map back before recording resumes — a clip's embedded
+    // grid must never leak into the next recording's HMAP trailer.
+    if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; d.lazyTerrain().reloadHeightmap();}
     // Resume recording for new cool shots
     demoManager.startRecording();
     onPlaybackStop();
@@ -246,6 +254,21 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   demoManager.onPlaybackStart = () => {
     // The replay is its own world — the live wire must not fight it
     d.world.playbackMode = true;
+    // v5 HMAP: the clip carries its terrain — use it when the live field
+    // is absent or doesn't match the recorded action; the live map wins
+    // when it checks out against the embedded fingerprint.
+    const emb = demoManager.player.demoData?.heightmap;
+    if (emb && !d.hmRestore) {
+      const live = getHeightfield();
+      if (!live || !hmapMatches(emb, live)) {
+        d.hmRestore = injectHeightmapBytes(emb.data, emb.gridN, emb.heightScale, emb.worldScale);
+        d.lazyTerrain().reloadHeightmap();
+        demoManager.ui.setStatus(live ? 'map mismatch — embedded terrain' : 'embedded terrain');
+        logger.warn(live
+          ? 'demo heightmap disagrees with live map — playing on embedded grid'
+          : 'no live heightmap — playing on embedded grid');
+      }
+    }
     // Cool-shot clicks come from the overlay menu — a replay behind an
     // open menu is invisible. Close it and grab pointer lock (the click
     // is a user gesture, so the request is legal).
@@ -391,6 +414,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     seekReconstructing: { on: false },
     playbackWid: -1,
     playbackWorld,
+    hmRestore: null,
   });
 
   return {

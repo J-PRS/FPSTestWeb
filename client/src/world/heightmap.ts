@@ -215,6 +215,42 @@ export function getHeightfield(): Heightfield | null {
   return hmData ? { size: hmSize, data: hmData, stride: 4, heightScale: hmScale, worldScale: hmWorldScale } : null;
 }
 
+// Full module state, restorable — demo playback swaps in the clip's
+// embedded terrain, then hands the live map back on stop.
+export interface HeightmapSnapshot {
+  data: Uint8ClampedArray | null; size: number; scale: number; worldScale: number;
+}
+
+export function snapshotHeightmap(): HeightmapSnapshot {
+  return { data: hmData, size: hmSize, scale: hmScale, worldScale: hmWorldScale };
+}
+
+/** Replace the field with a stride-1 u8 grid (e.g. a demo's embedded
+ *  HMAP). Returns a restore() that hands back the previous field —
+ *  callers must also Terrain.reloadHeightmap() on both transitions. */
+export function injectHeightmapBytes(
+  data: Uint8Array, size: number, heightScale: number, worldScale: number
+): () => void {
+  const prev = snapshotHeightmap();
+  const rgba = new Uint8ClampedArray(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    rgba[i * 4] = data[i]!;
+    rgba[i * 4 + 1] = data[i]!;
+    rgba[i * 4 + 2] = data[i]!;
+    rgba[i * 4 + 3] = 255;
+  }
+  hmData = rgba; hmSize = size; hmScale = heightScale; hmWorldScale = worldScale;
+  buildMaxGrid();
+  _hvc.clear();
+  return () => restoreHeightmap(prev);
+}
+
+export function restoreHeightmap(snap: HeightmapSnapshot): void {
+  hmData = snap.data; hmSize = snap.size; hmScale = snap.scale; hmWorldScale = snap.worldScale;
+  buildMaxGrid();
+  _hvc.clear();
+}
+
 const _normalTmp = new THREE.Vector3();
 
 export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
