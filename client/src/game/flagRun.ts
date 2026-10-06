@@ -11,8 +11,8 @@
  * class would be an adapter thicker than the code it saves.
  */
 import * as THREE from 'three';
-import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
-import { flagStandSpecs, FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
+import { profOct, mkLoft, mkAnnulus } from '../entities/viewmodel/weaponKit';
+import { deckMat } from '../structures/structKit';
 import { mkFlagMesh } from './ctfFlags.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S,
   bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
@@ -26,13 +26,29 @@ import { Explosion } from '../effects/explosion.js';
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
 const RING_SIDE = 800;        // lap square edge — matches the lapMeasure circuit
 const LAP_CAPS = 2;           // grab-corner → cap-corner twice = one circuit
-// Flagrun stands are monuments, not plinths — you read them across the
-// map and bank off the talus, so the circuit scales the shared stand
-// bigger AND taller (~19m wide, ~6m deck top vs CTF's 9×3).
-const STAND_XZ = 1.6;
-const STAND_Y = 2.0;
-const STAND_TOP = FLAG_STAND_TOP * STAND_Y;
-const STAND_LIFT = FLAG_STAND_LIFT * STAND_Y;
+// The flag spot is a flat floor plate — a readable landmark that stays
+// out of the skiing line (no collider: a capper banks THROUGH the pad,
+// not off it).
+const STAND_TOP = 0.38;   // plate top — the flag pole seats here
+const STAND_LIFT = 0.5;   // bot aim lift for the plate spot
+
+/** Thin octagonal pad + team-glow rim — the "flag lives here" marker. */
+export function mkFlagPlate(teamGlow: number): THREE.Group {
+  const g = new THREE.Group();
+  const plate = mkLoft([
+    { z: 0.32, ring: profOct(2.9, 2.9, 0.3) },
+    { z: 0, ring: profOct(3.0, 3.0, 0.3) },
+  ], deckMat);
+  plate.rotation.x = -Math.PI / 2;
+  g.add(plate);
+  const glow = new THREE.MeshBasicMaterial({ color: teamGlow });
+  glow.side = THREE.DoubleSide;
+  const rim = mkAnnulus(profOct(3.0, 3.0, 0.3), profOct(2.86, 2.86, 0.3), 0.1, 0.26, glow);
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.06;
+  g.add(rim);
+  return g;
+}
 
 export interface FlagRunDeps {
   lazyTerrain(): Terrain;
@@ -95,14 +111,11 @@ export class FlagRunBridge {
       { x: around.x - half, z: around.z - half }, { x: around.x + half, z: around.z - half },
       { x: around.x + half, z: around.z + half }, { x: around.x - half, z: around.z + half },
     ];
-    const specs: StructureSpec[] = [];
     raw.forEach((p, i) => {
       const team: TeamId = i % 2 === 0 ? 'alpha' : 'bravo';
       const home = new THREE.Vector3(p.x, terrain.getHeight(p.x, p.z), p.z);
       this.corners.push(home);
-      specs.push(...flagStandSpecs(home, team, STAND_XZ, STAND_Y));
-      const stand = mkFlagStand(TEAM_COLORS[team]);
-      stand.scale.set(STAND_XZ, STAND_Y, STAND_XZ);
+      const stand = mkFlagPlate(TEAM_COLORS[team]);
       const base = new THREE.Mesh(FLAG_BASE_GEO,
         new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
       base.position.y = STAND_TOP + 0.07;
@@ -114,7 +127,6 @@ export class FlagRunBridge {
       deps.lazyScene().add(stand, mesh);
       this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0 });
     });
-    w.applyStandSpecs(specs);
     w.onFeed(`FLAG RUN — grab an enemy flag, bank it at any ${TEAM_LABEL[w.playerTeam]} stand.`);
   }
 

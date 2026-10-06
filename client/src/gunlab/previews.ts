@@ -16,10 +16,17 @@ import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { SWARM_SPECS } from '../game/species/registry.js';
 import type { Terrain } from '../world/terrain.js';
-import { PICKUP_ACCENT } from '../entities/PickupModel.js';
+import { PICKUP_ACCENT, pickupParts } from '../entities/PickupModel.js';
+import { metalMat } from '../entities/procMetal.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { EMIT_GAIN } from '../core/config.js';
 import type { PickupKind } from '../../../shared/pickups.js';
+import { mkFlagPlate } from '../game/flagRun.js';
+import { mkFlagMesh } from '../game/ctfFlags.js';
+import { TEAM_COLORS } from '../../../shared/teams.js';
+import { PlayerModel, type PlayerModelVariant } from '../entities/PlayerModel.js';
+import { CLASS_BODY_VARIANT } from '../entities/playerClips.js';
+import type { ArmorClass } from '../../../shared/botClasses.js';
 
 // The one live-body tick — whichever preview proxy is parked owns it.
 // gunlab's render loop reads it through this holder so proxy builders
@@ -122,18 +129,39 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
     const g = new THREE.Group();
     const base = new THREE.Color(PICKUP_ACCENT[kind]);
     const emit = base.clone().lerp(new THREE.Color(0xFFFFFF), 0.33).multiplyScalar(EMIT_GAIN);
-    const gem = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(NUGGET_R, 0),
-      new THREE.MeshBasicMaterial({ color: emit }),
-    );
+    // Diegetic kinds get the real pickupParts body+accent — the same
+    // shapes/materials Nugget builds in-game. Null parts keep the plain
+    // gem (gem kind itself).
+    const parts = pickupParts(kind);
+    let gem: THREE.Mesh;
+    if (parts) {
+      gem = new THREE.Mesh(parts.body, metalMat(parts.bodyColor));
+      gem.add(new THREE.Mesh(parts.accent, new THREE.MeshBasicMaterial({ color: emit })));
+    } else {
+      gem = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(NUGGET_R, 0),
+        new THREE.MeshBasicMaterial({ color: emit }),
+      );
+    }
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({
       map: getGlowTexture(32),
       color: base.clone().multiplyScalar(EMIT_GAIN),
-      transparent: true, opacity: 0.85,
+      transparent: true, opacity: 0.55,
       depthWrite: false, blending: THREE.AdditiveBlending,
     }));
-    halo.scale.setScalar(2.2);
+    halo.scale.setScalar(1.1);
     g.add(gem, halo);
+    // Glow-behind trick: the billboard is coplanar with the model's
+    // center, so wherever the surface falls behind that plane the sprite
+    // crops the silhouette. Each frame park it just past the body on the
+    // far side of the camera (proxy-local space — inspect recentres and
+    // rotates the proxy, so a world-space offset would drift).
+    previewLive.tick = () => {
+      g.updateMatrixWorld();
+      const local = g.worldToLocal(cam.getWorldPosition(_camW));
+      halo.position.copy(local.normalize().multiplyScalar(-0.25));
+    };
+    g.userData.disposeCreature = () => { previewLive.tick = null; };
     return g;
   };
 }
@@ -163,6 +191,16 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
   return proxy;
 }
 export const ITEMS: [label: string, build: () => THREE.Group][] = [
+  // Flag on its floor plate — the flagrun pad + the shared flag mesh,
+  // the in-game pair previewed as one piece.
+  ['flag', () => {
+    const g = new THREE.Group();
+    g.add(mkFlagPlate(TEAM_COLORS.alpha));
+    const flag = mkFlagMesh('alpha');
+    flag.position.y = 0.38; // pole seats on the plate top
+    g.add(flag);
+    return g;
+  }],
   ['sentry',  () => itemProxy(() => { const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt) => d.update(dt, []), dispose: (s) => d.dispose(s) }; })],
   ['shield',  () => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
@@ -173,4 +211,57 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
       return { group: d.group, update: (dt) => d.update(dt), dispose: (s) => d.dispose(s) }; })],
   ['drone',   () => itemProxy(() => { const d = new DeployDrone(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt, p) => d.update(dt, p, 0, []), dispose: (s) => d.dispose(s) }; })],
+];
+
+// Class lineup — all three armor classes at once (only three exist, a
+// picker would be ceremony). REAL PlayerModel instances on the class
+// bodies (scifisoldier/cybersoldier/polyart GLBs) so the silhouette,
+// fit scale and idle animation are the shipping ones — same trick the
+// old classlineup page did by hand, but through the real pipeline.
+const CLASS_LINEUP: [cls: ArmorClass, x: number, labelY: number][] = [
+  ['light',  -1.9, 2.1],
+  ['medium',  0.0, 2.5],
+  ['heavy',   2.4, 3.2],
+];
+function mkTextSprite(text: string, y: number): THREE.Sprite {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext('2d')!;
+  ctx.font = '600 30px monospace';
+  ctx.fillStyle = '#9cf';
+  ctx.textAlign = 'center';
+  ctx.fillText(text.toUpperCase(), 128, 42);
+  const tex = new THREE.CanvasTexture(cv);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.scale.set(1.6, 0.4, 1);
+  s.position.y = y;
+  return s;
+}
+export const CLASSES: [label: string, build: () => THREE.Group][] = [
+  ['classes', () => {
+    const proxy = new THREE.Group();
+    const models: PlayerModel[] = [];
+    for (const [cls, x, ly] of CLASS_LINEUP) {
+      const pm = new PlayerModel(LAB_SCENE, CLASS_BODY_VARIANT[cls] as PlayerModelVariant);
+      void pm.load().then(() => {
+        if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
+        pm.setPosition(x, 0, 0);
+        pm.setRotation(0, 0); // setRotation adds the rig's authored yaw — 0 is the rig's forward
+      });
+      models.push(pm);
+      const label = mkTextSprite(cls, ly);
+      label.position.x = x;
+      proxy.add(label);
+    }
+    proxy.add(creatureLayer); // PlayerModel.scene = LAB_SCENE = creatureLayer
+    // Invisible bounds for inspect's Box3 fit — the lineup is wide, not tall.
+    const bounds = new THREE.Mesh(new THREE.BoxGeometry(6.4, 3.4, 1.4), new THREE.MeshBasicMaterial());
+    bounds.visible = false;
+    bounds.position.set(0.25, 1.7, 0);
+    proxy.add(bounds);
+    proxy.userData.liveFocus = () => new THREE.Vector3(0.25, 1.4, 0);
+    proxy.userData.disposeCreature = () => { for (const m of models) {m.dispose();} previewLive.tick = null; };
+    previewLive.tick = (dt) => { for (const m of models) {m.update(dt);} };
+    return proxy;
+  }],
 ];
