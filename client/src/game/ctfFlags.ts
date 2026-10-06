@@ -80,8 +80,12 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   bar.position.y = 3.8;
   const bannerMat = new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] });
   bannerMat.side = THREE.DoubleSide; // cloth reads from either face
-  const banner = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
-  banner.position.set(0, 2.85, 0); // top edge on the bar, hangs to ~1.9
+  // The cloth splits into two panels so the pole passes BETWEEN them —
+  // one banner read from either side, no clipping through the shaft.
+  const bannerL = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
+  bannerL.position.set(0, 2.85, 0.11);
+  const bannerR = new THREE.Mesh(FLAG_BANNER_GEO, bannerMat);
+  bannerR.position.set(0, 2.85, -0.11);
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
     new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
   finial.position.y = 4.15;
@@ -90,7 +94,7 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   const pommel = new THREE.Mesh(FLAG_POMMEL_GEO, FLAG_POLE_MAT);
   pommel.rotation.x = Math.PI; // taper points DOWN
   pommel.position.y = -0.2;
-  g.add(pole, bar, banner, finial, pommel);
+  g.add(pole, bar, bannerL, bannerR, finial, pommel);
   return g;
 }
 
