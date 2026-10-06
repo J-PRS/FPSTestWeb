@@ -108,12 +108,7 @@ export class HitLedger {
     // Trade accounting runs both directions of the batch: a self-frag
     // after a same-window enemy kill, or the enemy kill landing first.
     const now0 = simNow();
-    if (shooterId === targetId) {
-      if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) selfKillTrades.trades++;
-      recentKills.push({ t: now0, shooterId });
-    } else if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) {
-      selfKillTrades.trades++;
-    }
+    if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) selfKillTrades.trades++;
     recentKills.push({ t: now0, shooterId });
     if (recentKills.length > 256) recentKills.splice(0, recentKills.length - 256);
     weaponStats.recordKillSpeed(modeTag,
