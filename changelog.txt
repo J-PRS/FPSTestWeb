@@ -1,3 +1,4 @@
+2026-10-06 - bots: runner propel chain 2.8s->2.2s cadence, re-blast cap 38->44 m/s - kata carry 73s->46s, avg speed 24->32 m/s. Sustained 50+ still gated by hp/terrain, not cadence
 2026-10-06 - bots: flow-route lookahead 80->34m - a corridor hop spanning multiple bends aimed the bot across bowls into walls it couldn't pay (hs=1.5 raindance basin-locked 300s->legs complete ~90s); bend-detection alternative reverted (kata apron regression)
 2026-10-06 - bots: stay glued on descents - momentum hop now vetoes grades past hopDescRise; a hop over a downhill is airtime the slope can't pump (kata carry: descents averaged 23 vs 29 on flats)
 2026-10-06 - docs: capper-craft canon added to tribes reference (routes as hill/angle/jet tuples, entrance vs exit, bowls, jet-early, propel+jets tandem, llama vs e-grab); verified arsenal already rides the shove (propelJetUntil)

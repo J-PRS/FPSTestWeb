@@ -671,7 +671,7 @@ export class BotArsenal implements BeamHost {
     // disc-jumps on a tighter cadence and keeps blasting past the usual
     // ceiling — ring entries at ~27m/s die in ~3s where a 45m/s
     // blow-through clears the ring before the defense re-acquires.
-    const movingCap = surge ? (strike ? 48 : 38) : 12;
+    const movingCap = surge ? (strike ? 50 : 44) : 12;
     if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
     // No energy gate here by design: a heel blast costs ammo + hp, NOT
     // jet fuel — gating it on a charged tank stranded every trapped
@@ -731,7 +731,7 @@ export class BotArsenal implements BeamHost {
     // Runners chain on the human cadence (~2.8s between disc-jumps);
     // everyone else pays the full 8s — chaining is blood + ammo, and a
     // bot with somewhere to be trades it gladly while a roamer shouldn't.
-    this.propelT.set(id, now + (surge ? (strike ? 2200 : 2800) : 8000));
+    this.propelT.set(id, now + (surge ? (strike ? 2200 : 2200) : 8000));
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
     logger.info('Bot propel', { id });
   }
