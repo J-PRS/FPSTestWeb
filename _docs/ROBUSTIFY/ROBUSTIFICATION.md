@@ -210,6 +210,19 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.16 Error-level bursts unthrottled (2026-10-06)
+
+`logger.error` had no burst collapse — `warn` suppressed identical
+repeats (every-8th with a count inside 5s) but a hot error path (a
+per-tick send failure, a flapping lane) wrote every line to console +
+disk unthrottled. The collapse is now shared: `error` dedupes on the
+same rule as `warn`, distinct messages still always land. Same-lane
+sweep: `playerRoom`/`specRooms`/registry teardown verified complete in
+`onClose` + `removePlayerCompletely`; wire input coercion verified
+(`jet`→bool, `status` masked bits only, `inputDirection` normalizes so
+oversized forward/right can't over-thrust); every position field on the
+wire passes `validateVec3`.
+
 ### 2.15 `recentKills` double-record (2026-10-06)
 
 `hitLedger.recordKill` pushed the shooter into `recentKills` twice per

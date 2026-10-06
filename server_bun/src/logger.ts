@@ -75,34 +75,40 @@ class Logger {
     if (this.shouldLog('info')) console.log(this.format('info', msg, data));
   }
 
-  // A hot fault path (claim rejections, unconfirmed hits) can emit the
-  // same warn every few ms under packet loss — one line per event is a
-  // flood, not a signal. Identical messages inside 5s collapse to every
-  // 8th with a count; distinct messages always land.
-  private warnBurstMsg = '';
-  private warnBurstN = 0;
-  private warnBurstAt = 0;
+  // A hot fault path (claim rejections, unconfirmed hits, send failures)
+  // can emit the same line every few ms under packet loss — one line per
+  // event is a flood, not a signal. Identical messages inside 5s collapse
+  // to every 8th with a count; distinct messages always land.
+  private warnBurst = { msg: '', n: 0, at: 0 };
+  private errorBurst = { msg: '', n: 0, at: 0 };
+
+  private collapse(burst: { msg: string; n: number; at: number }, msg: string): string | null {
+    const now = Date.now();
+    if (msg === burst.msg && now - burst.at < 5000) {
+      burst.n++;
+      if (burst.n % 8 !== 0) return null;
+      return `${msg} (×${burst.n} suppressed repeats)`;
+    }
+    burst.msg = msg;
+    burst.n = 0;
+    burst.at = now;
+    return msg;
+  }
 
   warn(msg: string, data?: unknown): void {
     if (!this.shouldLog('warn')) return;
-    const now = Date.now();
-    if (msg === this.warnBurstMsg && now - this.warnBurstAt < 5000) {
-      this.warnBurstN++;
-      if (this.warnBurstN % 8 !== 0) return;
-      msg = `${msg} (×${this.warnBurstN} suppressed repeats)`;
-    } else {
-      this.warnBurstMsg = msg;
-      this.warnBurstN = 0;
-      this.warnBurstAt = now;
-    }
-    const line = this.format('warn', msg, data);
+    const collapsed = this.collapse(this.warnBurst, msg);
+    if (collapsed === null) return;
+    const line = this.format('warn', collapsed, data);
     console.warn(line);
     this.toFile(line);
   }
 
   error(msg: string, data?: unknown): void {
     if (!this.shouldLog('error')) return;
-    const line = this.format('error', msg, data);
+    const collapsed = this.collapse(this.errorBurst, msg);
+    if (collapsed === null) return;
+    const line = this.format('error', collapsed, data);
     console.error(line);
     this.toFile(line);
   }
