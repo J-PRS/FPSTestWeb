@@ -205,7 +205,9 @@ function readTargetEvents(r: Reader): TargetEvent[] {
 function readRoster(r: Reader): DemoRosterEntry[] {
   r.ensure(2, 'roster count');
   const count = r.u16();
-  if (count > 256) {throw new Error(`Invalid roster count: ${count} (max 256)`);}
+  // u16 field max — roster entries also come from kill-marker adoption,
+  // not just live remotes, so a long recording's join churn can exceed 256.
+  if (count > 65_535) {throw new Error(`Invalid roster count: ${count} (max 65535)`);}
   const roster: DemoRosterEntry[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     roster[i] = { name: r.str() };

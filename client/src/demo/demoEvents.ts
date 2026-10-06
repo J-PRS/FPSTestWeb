@@ -178,8 +178,17 @@ export function recordDeployBoom(b: DemoRecorder, netId: number, position: Vec3)
 
 function rosterIdx(b: DemoRecorder, id: string | null): number {
     if (!id) {return -1;}
-    const i = b.rosterIdxById.get(id);
-    return i === undefined ? -1 : i;
+    let i = b.rosterIdxById.get(id);
+    if (i === undefined) {
+      // Adopt-if-unknown, same policy as remote sampling: kills reference
+      // victims the 20Hz sampler never captured — including the LOCAL
+      // player, who never enters remoteFrames at all. A -1→0 clamp would
+      // silently misname roster[0] as the victim.
+      i = b.roster.length;
+      b.rosterIdxById.set(id, i);
+      b.roster.push({ name: id });
+    }
+    return i;
   }
 
 export function recordKill(b: DemoRecorder, shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {

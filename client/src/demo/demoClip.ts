@@ -8,7 +8,7 @@
 import type {
   ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';
 import {
-  ProjectileEventType, TargetEventType,
+  ProjectileEventType, TargetEventType, TARGETTYPE_KILL,
 } from './types.js';
 
 // Remote frames inside the clip window, plus one synthetic frame at
@@ -109,6 +109,11 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
   const aliveBalls = new Map<number, TargetEvent>();
   for (const e of targetEvents) {
     if (e.timestamp >= clipStart) {break;}
+    // Kill markers carry a victim ROSTER INDEX in targetId, not an entity
+    // id — they are point-in-time edges with no alive state, and letting
+    // them into the alive table both synthesizes phantom spawns at
+    // clipStart and clobbers a same-id ball's snapshot entry.
+    if (e.targetType === TARGETTYPE_KILL) {continue;}
     if (e.eventType === TargetEventType.Destroyed) {
       aliveBalls.delete(e.targetId);
       continue;
@@ -134,6 +139,7 @@ function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<nu
   const firstEventByTargetId = new Map<number, TargetEvent>();
   const hasSpawnedInClip = new Set<number>();
   for (const e of actualTgtEvents) {
+    if (e.targetType === TARGETTYPE_KILL) {continue;}
     if (!firstEventByTargetId.has(e.targetId)) {
       firstEventByTargetId.set(e.targetId, e);
     }
