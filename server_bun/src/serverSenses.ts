@@ -270,7 +270,13 @@ export class ServerBotSenses {
       const d = Math.hypot(dx, e.pos.y - pos.y, dz);
       // Brawl range, not spotting range — a foe it can't reach yet is a
       // marching target, not an ignored duel.
-      if (d < BRAWL_RANGE && losClear(ctx, pos, e.pos)) {
+      // Reach-gated like pickFire: a foe past the drawn gun's reach
+      // isn't being ignored — closing on it is the correct play, and
+      // charging "cowardice" while it does so is the early-spawn spam
+      // (spawn rings put enemies in the cone at 40-60m, out of most
+      // weapons' honest reach).
+      const reach = ctx.weaponRange?.(d) ?? BRAWL_RANGE;
+      if (d < Math.min(BRAWL_RANGE, reach) && losClear(ctx, pos, e.pos)) {
         // Only counts when the bot is actually LOOKING at the foe —
         // an enemy outside the ~113° view cone is invisible to it, so
         // "ignoring" it is a false positive that maxes out honest bots.

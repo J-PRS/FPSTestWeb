@@ -297,7 +297,7 @@ export class BotMoves {
       // ~8m steer step, so a gd gate is dead code and the hop chain
       // never fires (the 10-18m/s walk-in every soak autopsy blames).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : ((ctx.runner || ctx.wave) && od > T.moves.runnerHopGd))),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > T.moves.runnerHopGd)),
     };
   }
 

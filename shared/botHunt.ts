@@ -492,7 +492,12 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
   if (prev) {
     const py = ctx.groundY(prev.x, prev.z);
     if (py - g0 <= 4) {
-      const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 0.6;
+      // Commitment rule: the held spot must be clearly beaten to be
+      // abandoned — a marginal challenger isn't worth a move (feet
+      // churn, treadmill pins, shots interrupted). The margin is sized
+      // to real score swings: LOS flips score ±3.5, range-band drift
+      // ~0.8 over 10m — under 1.5 nothing meaningful changed.
+      const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 1.5;
       if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
     }
   }
