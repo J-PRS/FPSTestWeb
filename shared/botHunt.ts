@@ -232,6 +232,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
  *  position-keeping: the dest pick breaks contact instead of
  *  holding an orbit. */
 function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | null, fearing: boolean, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
+  const prevFight = st.fightPos;
   st.fightPos = null;
   // A runner's route owns his feet: a capper that orbits every midfield
   // contact dies at ~130m out without ever arriving (soak: hunt pulls
@@ -245,7 +246,7 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
   // instead of it.
   const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
   if (best && !fearing && dist3(pos, best.pos) <= orbit) {
-    st.fightPos = pickFightPos(st, ctx, pos, best);
+    st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
   }
   if (!best || ctx.runner || ctx.wave) pickGoal(ctx, pos);
 }
@@ -474,7 +475,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
  *  the enemy roster, and climbable ground. Standing still is candidate
  *  0 with an inertia bonus, so a good spot is kept instead of orbiting
  *  for orbit's sake. Returns null to hold position. */
-export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec | null {
+export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy, prev?: BotVec | null): BotVec | null {
   // Fight where the drawn gun is lethal — a Flak brawler's ring closes
   // to ~10m, a rail holds its orbit. Weapon-blind hosts keep the
   // generic midpoint (Flak's ~60% FFA acc was an orbit at 17m where
@@ -483,6 +484,18 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
   const g0 = ctx.groundY(pos.x, pos.z);
   let bx = pos.x, bz = pos.z;
   let bs = scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
+  // The spot already committed gets a real margin: replanning every
+  // think makes near-tied ring candidates flip-flop, and a dest that
+  // zigzags ±10m reads to the watchdog as a pin the bot never escapes
+  // (soak: defender churning fight spots around a stand, walking off
+  // and back without ever settling). Beat the incumbent or keep it.
+  if (prev) {
+    const py = ctx.groundY(prev.x, prev.z);
+    if (py - g0 <= 4) {
+      const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 0.6;
+      if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
+    }
+  }
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
     const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
