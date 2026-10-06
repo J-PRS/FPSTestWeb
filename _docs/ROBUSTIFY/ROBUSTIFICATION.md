@@ -1019,7 +1019,8 @@ hole where one should be). Client flag state reads `world.flagStates`
 `world.netPickups` (net/pickups owns the map). Same persistence-gated
 warn. Every long-lived edge-driven roster now has a fidelity signal —
 only projectiles remain uncovered, short-lived enough that a stranded
-replica is cosmetic.
+replica is cosmetic. Hash stability pinned by `fidelityHash.test.ts`:
+order-independence plus a perturbation per mirrored edge field.
 
 ---
 
