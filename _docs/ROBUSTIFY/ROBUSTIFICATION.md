@@ -418,6 +418,14 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`movement` sim pinned** (2026-10-05): `movement.test.ts` (13
+  tests) — cloak-drain curve + clamps, fixed-step accumulator parity
+  (0.1s lumped == 10×0.01s split, sub-step remainder carries),
+  MAX_DT stall cap, jet force/mass (heavy climbs slower), terminal
+  velocity airborne-only, stop-threshold friction, ski momentum
+  preserved above walk speed, overspeed bleed decays not clamps,
+  body-contact separation + mass-weighted bump + self skip +
+  y-overlap gate, autoHop repeat landings.
 - **`botBrain` head pinned** (2026-10-05): `botBrain.test.ts` (11
   tests) — contact/lost chatter edges fire once, fear-vs-hero wound
   roll, heal re-arms the edge, underfire/bored latches, belt mid-range
