@@ -20,6 +20,17 @@ describe('wire: weaponType validation', () => {
     expect(v.success).toBe(false);
   });
 
+  it('rejects oversized projectileId on every claim site', () => {
+    // projectileId is a ledger/record map key — unbounded strings from a
+    // 1MB frame were attacker-shaped key memory. Legit ids are short.
+    const fat = 'p'.repeat(4096);
+    const base = { shot: { targetId: null }, aoeShot: { position: { x: 0, y: 0, z: 0 } } } as const;
+    expect(WIRE.shot!.validate({ type: 'shot', ...base.shot, projectileId: fat }).success).toBe(false);
+    expect(WIRE.aoeShot!.validate({ type: 'aoeShot', ...base.aoeShot, projectileId: fat }).success).toBe(false);
+    expect(WIRE.projectileDestroy!.validate({ type: 'projectileDestroy', projectileId: fat }).success).toBe(false);
+    expect(WIRE.shot!.validate({ type: 'shot', ...base.shot, projectileId: 'p1' }).success).toBe(true);
+  });
+
   it('accepts absent weaponType (optional) and every real table key', () => {
     // shot needs targetId (string|null); aoeShot needs position.
     const base = { shot: { targetId: null }, aoeShot: { position: { x: 0, y: 0, z: 0 } }, shotFired: {} } as const;
