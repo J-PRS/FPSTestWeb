@@ -159,7 +159,8 @@ async function init(): Promise<void> {
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
   // never resident — no default-field flash on F5.
-  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p) || (Boolean(urlParams.mode) && urlParams.mode !== 'classic');
+  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p) ||
+    (Boolean(urlParams.mode) && urlParams.mode !== 'classic' && urlParams.mode !== 'flagrun');
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   if (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map))) {
     await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
@@ -314,9 +315,13 @@ async function initDemo(): Promise<void> {
  *  MODE=OFF is solo too: the picker labels it "(solo)", but the empty
  *  mode still joined the default room and the server's move judge kept
  *  correcting the player — the warp complaints. Only a ?room= link or a
- *  ?p2p= code pulls a no-mode session online. */
+ *  ?p2p= code pulls a no-mode session online. flagrun is the same kind
+ *  of solo ruleset (local circuit + optional offline bot cappers): an
+ *  explicit ?room/?p2p still wins, otherwise it must not connect —
+ *  connecting joined the server's default room and the player spawned
+ *  into a live nuggets match instead of the lap. */
 async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classicMode: boolean, mode: string | undefined): Promise<void> {
-  const soloMode = !mode && !urlParams.room && !urlParams.p2p;
+  const soloMode = (!mode || mode === 'flagrun') && !urlParams.room && !urlParams.p2p;
   // The probed saved map was already primed as boot terrain — apply its
   // structures/arena/interiors/sky now that the net ctx exists.
   if (!classicMode && !soloMode) {bootApplySavedMap(netCtx, savedMap);}
