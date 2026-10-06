@@ -418,6 +418,13 @@ telemetry lines it greps.
   flood cache, connected grids never null, twin-instance replay, and
   shipped-shape tripwires on `BOT_TUNING` (finite keys, `thinkS=0.3`
   comment-pinned — 0.5 broke beast-awareness + replay).
+- **`teams`/`constants`/`env` pinned** (2026-10-05):
+  `teams.test.ts` (7 tests) — mode table sanity (label/winAt/clock,
+  teams XOR ffa, flags only where declared, exact mode key set),
+  pickTeam deterministic alternation, bank/winner threshold edges,
+  flag rule constants ordered; capsule geometry derivation (cylinder
+  height, eye inside, radius can't eat the capsule); setSharedEnv
+  merge semantics; sharedNow quiet-by-default epoch-0.
 - **`botRand` gate pinned** (2026-10-05): `botRand.test.ts` (6 tests)
   — strictRng throws on unblessed ambient (`botRng(Math.random)` is
   the "forgot to seed" case) yet honors `botRngRelease()` (tagged
