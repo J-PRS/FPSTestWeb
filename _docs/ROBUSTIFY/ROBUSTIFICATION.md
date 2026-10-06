@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.23 Per-reject position warns flooded the log (2026-10-06)
+
+`Position rejected` warned on EVERY rejected report — position claims
+run ~20-30Hz, so a diverging player emitted ~20 warns/s until the
+force-accept, each with unique interpolated text (defeating the
+burst-collapse). The warn now fires on streak-start only, alongside the
+correction it narrates; per-reject signal stays in the hb counters.
+Force-accept still warns (it's the streak's own headline).
+
 ### 2.22 CoolShots panel repainted behind a closed overlay (2026-10-06)
 
 The 1s "time ago" interval rebuilt ~20 DOM nodes whenever shots existed —

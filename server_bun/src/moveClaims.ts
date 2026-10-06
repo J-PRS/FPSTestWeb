@@ -138,9 +138,12 @@ export class MoveClaims {
     player.consecutiveRejects++;
     this.h.hb('posrej');
     this.h.hbMax('posrejSpeed', speed);
-    logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
-    // Send correction on the first reject of a streak only — no flood
+    // Send correction on the first reject of a streak only — no flood.
+    // The warn follows the same rule: every report in a reject streak is
+    // the same divergence (unique text also defeats logger burst-collapse),
+    // so per-reject logging is ~20 warns/s of pure noise per offender.
     if (player.consecutiveRejects === 1) {
+      logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
       const validState = this.h.playerManager.getLastValidState(playerId);
       if (validState) {
         this.h.sendToPlayer(playerId, {
