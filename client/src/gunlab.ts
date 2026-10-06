@@ -5,15 +5,16 @@
 // /weapons/*.glb/_ao.png files hot-swaps bake assets in place — no reload.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import ManifoldModule from 'manifold-3d';
 import manifoldWasmUrl from 'manifold-3d/manifold.wasm?url';
 import { ViewModel } from './entities/ViewModel.js';
 import { MODEL_BUILDERS } from './entities/viewmodel/weaponsGeo.js';
 import { ARCHIVE_BUILDERS } from './entities/viewmodel/weaponsGeoArchive.js';
-import { bakeVertexAO } from './effects/vertexAO.js';
+import { bakeVertexAO, enhanceWeaponMaterial } from './effects/vertexAO.js';
+import { metalMat } from './entities/procMetal.js';
 import { WeaponType } from '../../shared/weaponTable.js';
-import { CREATURES, PICKUPS, ITEMS, previewLive, initPreviews } from './gunlab/previews.js';
+import { CREATURES, PICKUPS, ITEMS, CLASSES, previewLive, initPreviews } from './gunlab/previews.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string }
@@ -366,7 +367,7 @@ function rebuild(): void {
   for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
   if (state.pick) {
-    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS].find(([l]) => l === state.pick);
+    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES].find(([l]) => l === state.pick);
     if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   }
   if (wasInspect) {setInspect(true);}
@@ -393,18 +394,9 @@ async function mani(): Promise<any> {
   }
   return maniMod;
 }
-async function unionToggle(): Promise<void> {
-  const g = vm.weapons.get(state.wt);
-  if (!g) {return;}
-  if (unionOn && unioned) {
-    g.remove(unioned.mesh);
-    unioned.mesh.geometry.dispose();
-    (unioned.mesh.material as THREE.Material).dispose();
-    for (const o of unioned.hidden) {o.visible = true;}
-    unioned = null;
-    unionOn = false;
-    return;
-  }
+// Collect a group's lit meshes as Manifold solids in GROUP space —
+// shared input for both the union preview and the shell carve.
+async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: THREE.Mesh[]; manis: any[]; rejected: number; inV: number; inT: number }> {
   const { Manifold, Mesh: MMesh } = await mani();
   g.updateWorldMatrix(true, true);
   const parts: THREE.Mesh[] = [];
@@ -412,11 +404,10 @@ async function unionToggle(): Promise<void> {
     const m = o as THREE.Mesh;
     if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') {parts.push(m);}
   });
-  if (parts.length === 0) {return;}
   const inv = g.matrixWorld.clone().invert();
   const manis: any[] = [];
+  const kept: THREE.Mesh[] = [];
   let inV = 0, inT = 0, rejected = 0;
-  const t0 = performance.now();
   for (const m of parts) {
     // Strip baked attrs BEFORE welding — mergeVertices only merges verts
     // whose whole attribute set matches, and per-vertex AO/wear differs,
@@ -433,12 +424,44 @@ async function unionToggle(): Promise<void> {
         vertProperties: (geo.attributes.position!.array as Float32Array).slice(),
         triVerts: new Uint32Array(geo.index!.array as ArrayLike<number>),
       })));
+      kept.push(m);
     } catch (error) {
       rejected++;
       console.warn(`[union] part ${parts.indexOf(m)} (${m.geometry.type}) not manifold:`, error);
     }
     geo.dispose();
   }
+  return { Manifold, parts: kept, manis, rejected, inV, inT };
+}
+
+// Manifold mesh → BufferGeometry (group space). Keeps Manifold's shared
+// vertex pool INDEXED — going non-indexed forces flat facet normals, and
+// curved tubes (mkTube/cylinders) shade faceted. toCreasedNormals then
+// splits only at real creases: tube segments smooth, box edges stay hard.
+function maniToGeo(om: any): THREE.BufferGeometry {
+  const np = om.numProp;
+  const verts = new Float32Array(om.numVert * 3);
+  for (let v = 0; v < om.numVert; v++) { verts[v * 3] = om.vertProperties[v * np]!; verts[v * 3 + 1] = om.vertProperties[v * np + 1]!; verts[v * 3 + 2] = om.vertProperties[v * np + 2]!; }
+  const ni = new THREE.BufferGeometry();
+  ni.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  ni.setIndex(new THREE.BufferAttribute(new Uint32Array(om.triVerts), 1));
+  return toCreasedNormals(ni, Math.PI / 3); // 60° — tube facets (~20-36°) smooth, 90° edges hard
+}
+
+async function unionToggle(): Promise<void> {
+  const g = vm.weapons.get(state.wt);
+  if (!g) {return;}
+  if (unionOn && unioned) {
+    g.remove(unioned.mesh);
+    unioned.mesh.geometry.dispose();
+    (unioned.mesh.material as THREE.Material).dispose();
+    for (const o of unioned.hidden) {o.visible = true;}
+    unioned = null;
+    unionOn = false;
+    return;
+  }
+  const t0 = performance.now();
+  const { Manifold, parts, manis, rejected, inV, inT } = await manifoldParts(g);
   if (manis.length === 0) {return;}
   let solid: any;
   try {
@@ -447,20 +470,7 @@ async function unionToggle(): Promise<void> {
   } catch (error) { console.warn('[union] manifold failed:', error); return; }
   const om = solid.getMesh();
   console.log(`[union] w${state.wt}: ${parts.length} parts (${rejected} rejected) — ${inV}v/${inT}t in → ${om.numVert}v/${om.triVerts.length / 3}t out, ${(performance.now() - t0).toFixed(0)}ms`);
-  const geo = new THREE.BufferGeometry();
-  const np = om.numProp;
-  const verts = new Float32Array(om.numVert * 3);
-  for (let v = 0; v < om.numVert; v++) { verts[v * 3] = om.vertProperties[v * np]!; verts[v * 3 + 1] = om.vertProperties[v * np + 1]!; verts[v * 3 + 2] = om.vertProperties[v * np + 2]!; }
-  // Non-indexed + face normals — hard-surface shading, matches the kit look.
-  const ni = new THREE.BufferGeometry();
-  const pos = new Float32Array(om.triVerts.length * 3);
-  for (let t = 0; t < om.triVerts.length; t++) {
-    const vi = om.triVerts[t]!;
-    pos[t * 3] = verts[vi * 3]!; pos[t * 3 + 1] = verts[vi * 3 + 1]!; pos[t * 3 + 2] = verts[vi * 3 + 2]!;
-  }
-  ni.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  ni.computeVertexNormals();
-  geo.dispose();
+  const ni = maniToGeo(om);
   for (const mm of manis) {mm.delete?.();}
   solid.delete?.();
   // Clone material — shared bodyMat's wearTex must not be retargeted —
@@ -476,10 +486,100 @@ async function unionToggle(): Promise<void> {
   // here (this was the original point of the union preview anyway).
   bakeVertexAO(wrap);
   const hidden: THREE.Object3D[] = [];
-  g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && parts.includes(m)) { m.visible = false; hidden.push(m); } });
+  g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') { m.visible = false; hidden.push(m); } });
   g.add(out);
   unioned = { mesh: out, hidden };
   unionOn = true;
+}
+
+// --- shell: the fake union ---
+// Subtract every other part from each part (part_i − union(rest)) — the
+// intersection curves become REAL verts, so the bake's merged occluder
+// reads like the union shell while every part keeps its own material
+// and geometry identity. Toggle restores the authored buffers — no
+// rebake needed, the originals kept their bake.
+let shellOn = false;
+const shelled = new Map<THREE.Mesh, THREE.BufferGeometry>();
+
+function unshell(): void {
+  for (const [m, orig] of shelled) { m.geometry.dispose(); m.geometry = orig; }
+  shelled.clear();
+  shellOn = false;
+}
+
+async function shellToggle(): Promise<void> {
+  const g = vm.weapons.get(state.wt);
+  if (!g) {return;}
+  if (shellOn) {unshell(); return;}
+  const t0 = performance.now();
+  const { Manifold, parts, manis, rejected } = await manifoldParts(g);
+  if (manis.length < 2) {return;} // a lone part has nothing to carve against
+  g.updateWorldMatrix(true, true);
+  let carved = 0, outT = 0;
+  for (let i = 0; i < manis.length; i++) {
+    const m = parts[i]!;
+    const rest = Manifold.union(manis.filter((_, j) => j !== i));
+    const cut = manis[i].subtract(rest);
+    rest.delete?.();
+    const om = cut.getMesh();
+    cut.delete?.();
+    if (om.numVert === 0) {continue;} // fully buried part — keep it authored
+    // Manifold works in group space; swap back into this mesh's local
+    // frame so its own transform keeps applying.
+    const geo = maniToGeo(om);
+    geo.applyMatrix4(m.matrixWorld.clone().invert().multiply(g.matrixWorld));
+    if (!shelled.has(m)) {shelled.set(m, m.geometry);}
+    m.geometry = geo;
+    outT += om.triVerts.length / 3;
+    carved++;
+  }
+  for (const mm of manis) {mm.delete?.();}
+  if (carved === 0) {return;}
+  shellOn = true;
+  // Occluder is now the trimmed surface — union-quality AO on authored
+  // parts. Rejected/non-manifold parts stay as-is in the merge.
+  bakeVertexAO(g);
+  console.log(`[shell] w${state.wt}: carved ${carved}/${manis.length} parts (${rejected} rejected) → ${outT}t, ${(performance.now() - t0).toFixed(0)}ms`);
+}
+
+// --- metal: procMetal A/B ---
+// Swaps the active pick's Lambert bodies for the metalMat recipe —
+// Lambert can't show specular, so this is the whole point of the toggle.
+// Fresh Standard mats get the wear/grunge shader re-injected (that's
+// what sells worn metal vs flat plastic). Stash + restore like shell.
+let metalOn = false;
+const metaled = new Map<THREE.Mesh, THREE.Material>();
+const metalCache = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+function metalFor(src: THREE.Material): THREE.MeshStandardMaterial {
+  let m = metalCache.get(src);
+  if (!m) {
+    const l = src as THREE.MeshLambertMaterial;
+    m = metalMat(l.color?.getHex() ?? 0x3A4048);
+    if (l.emissive) {m.emissive.copy(l.emissive);} // Lambert fakes ambient via emissive — carry it
+    enhanceWeaponMaterial(m);
+    metalCache.set(src, m);
+  }
+  return m;
+}
+function unmetal(): void {
+  for (const [m, orig] of metaled) {m.material = orig;}
+  metaled.clear();
+  metalOn = false;
+}
+function metalToggle(): void {
+  const g = archiveGroup ?? vm.weapons.get(state.wt);
+  if (!g) {return;}
+  if (metalOn) {unmetal(); return;}
+  let n = 0;
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m.material as THREE.Material).type !== 'MeshLambertMaterial') {return;}
+    if (!metaled.has(m)) {metaled.set(m, m.material as THREE.Material);}
+    m.material = metalFor(m.material as THREE.Material);
+    n++;
+  });
+  if (n === 0) {return;}
+  metalOn = true;
 }
 
 // --- rail UI ---
@@ -487,7 +587,7 @@ function paintRail(): void {
   rail.innerHTML = '';
   // Category picker — weapons today, creatures/pickups/etc as they get
   // previewable builds. The select repaints the rail below it.
-  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups']];
+  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups']];
   const catSel = document.createElement('select');
   catSel.className = 'catsel';
   for (const [id, label] of cats) {
@@ -499,7 +599,7 @@ function paintRail(): void {
   }
   catSel.addEventListener('change', () => { state.cat = catSel.value; saveState(); paintRail(); });
   rail.append(catSel);
-  const catTable = state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : null;
+  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : null;
   if (catTable) {
     for (const [label, build] of catTable) {
       const b = document.createElement('button');
@@ -572,34 +672,71 @@ function paintTools(): void {
   });
   fovWrap.append('fov ', fovIn, fovVal);
   tools.append(fovWrap);
-  mk(state.inspect ? '◈ FPS view' : '◉ inspect view', () => { setInspect(!state.inspect); paintRail(); });
+  // Side-by-side button pairs — same visual as the rows, half the rail.
+  const row = (labels: [label: string, fn: () => void][]): HTMLButtonElement[] => {
+    const div = document.createElement('div');
+    div.className = 'btnrow';
+    const bs = labels.map(([label, fn]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', fn);
+      div.append(b);
+      return b;
+    });
+    tools.append(div);
+    return bs;
+  };
   const noBake = new URLSearchParams(location.search).has('nobake');
-  mk(noBake ? '▣ bake: OFF' : '▢ bake: ON', () => {
-    // ?nobake forces procedural viewmodels — view+gun survive the
-    // reload via the localStorage pose.
-    const u = new URL(location.href);
-    if (noBake) {u.searchParams.delete('nobake');} else {u.searchParams.set('nobake', '1');}
-    flushSave();
-    location.href = u.toString();
-  });
-  mk('▦ sheet', shotSheet);
-  mk(zOverlay ? '⚠ z: ON' : '⚠ z', () => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); });
-  mk(wireOn ? '▧ wire: ON' : '▧ wire', () => { wireOn = !wireOn; applyWire(); paintRail(); });
+  const [, bakeB] = row([
+    [state.inspect ? '◈ FPS' : '◉ inspect', () => { setInspect(!state.inspect); paintRail(); }],
+    ['▣ baked', () => {
+      // ?nobake forces procedural viewmodels — view+gun survive the
+      // reload via the localStorage pose.
+      const u = new URL(location.href);
+      if (noBake) {u.searchParams.delete('nobake');} else {u.searchParams.set('nobake', '1');}
+      flushSave();
+      location.href = u.toString();
+    }],
+  ]);
+  bakeB!.classList.toggle('active', !noBake);
+  const [, zB] = row([
+    ['▦ sheet', shotSheet],
+    ['⚠ z', () => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); }],
+  ]);
+  zB!.classList.toggle('active', Boolean(zOverlay));
   // Wear-mask debug — paints R=final wear / G=grime / B=edge flag instead
   // of shading. It's a shader define, so it needs a reload like ?bake.
   const wearViz = new URLSearchParams(location.search).has('wearviz');
-  mk(wearViz ? '◐ wearviz: ON' : '◐ wearviz', () => {
-    const u = new URL(location.href);
-    if (wearViz) {u.searchParams.delete('wearviz');} else {u.searchParams.set('wearviz', '1');}
-    flushSave();
-    location.href = u.toString();
-  });
-  mk(unionOn ? '⛛ union: ON' : '⛛ union', () => { unionToggle().then(paintRail); });
-  mk('ⓘ info', () => infoDump());
-  mk('▣ src', () => copyBuilderSrc());
-  mk('▸ kick', () => vm.kick(1));
-  mk('▸ punch', () => vm.punch(false));
-  mk('▸ throw', () => vm.startThrow());
+  // union (rendered weld) and shell (per-part carve) share one row —
+  // they're the same question asked two ways.
+  const [unionB, shellB, metalB] = row([
+    ['⛛ union', () => { unionToggle().then(paintRail); }],
+    ['◨ shell', () => { shellToggle().then(paintRail); }],
+    ['▤ metal', () => { metalToggle(); paintRail(); }],
+  ]);
+  unionB!.classList.toggle('active', unionOn);
+  shellB!.classList.toggle('active', shellOn);
+  metalB!.classList.toggle('active', metalOn);
+  const [wireB, wearB] = row([
+    ['▧ wire', () => { wireOn = !wireOn; applyWire(); paintRail(); }],
+    ['◐ wearviz', () => {
+      const u = new URL(location.href);
+      if (wearViz) {u.searchParams.delete('wearviz');} else {u.searchParams.set('wearviz', '1');}
+      flushSave();
+      location.href = u.toString();
+    }],
+  ]);
+  wireB!.classList.toggle('active', wireOn);
+  wearB!.classList.toggle('active', wearViz);
+  row([
+    ['ⓘ info', () => infoDump()],
+    ['▣ src', () => copyBuilderSrc()],
+  ]);
+  row([
+    ['▸ kick', () => vm.kick(1)],
+    ['▸ punch', () => vm.punch(false)],
+    ['▸ throw', () => vm.startThrow()],
+  ]);
   rail.append(tools);
 }
 
@@ -733,6 +870,8 @@ async function copyBuilderSrc(): Promise<void> {
 let archiveGroup: THREE.Group | null = null;
 let archiveLabel = '';
 function selectArchive(label: string, mk: () => THREE.Group): void {
+  unshell();
+  unmetal();
   // parent-remove, not vm.group.remove: inspect mode re-parents the
   // preview into `scene` as the orbit anchor, so a group-only remove
   // silently leaves the old pick on stage (and setInspect re-homes it).
@@ -758,6 +897,8 @@ function selectArchive(label: string, mk: () => THREE.Group): void {
 
 function select(wt: number): void {
   state.wt = wt;
+  unshell(); // carved geos don't follow a weapon swap
+  unmetal();
   if (archiveGroup) {
     (archiveGroup.userData.disposeCreature as (() => void) | undefined)?.();
     archiveGroup.parent?.remove(archiveGroup);
@@ -819,6 +960,23 @@ addEventListener('mouseup', () => { dragging = false; });
 addEventListener('keydown', (e) => {
   if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); infoDump(false); return; }
   if (e.altKey && e.code === 'KeyW') { e.preventDefault(); infoDump(true); return; }
+  if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    const step = e.code === 'ArrowDown' ? 1 : -1;
+    const table = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : null;
+    if (table?.length) {
+      const i = table.findIndex(([l]) => l === archiveLabel);
+      const next = table[(i + step + table.length) % table.length];
+      selectArchive(next[0], next[1]);
+      return;
+    }
+    const wts = [...vm.weapons.keys()].toSorted((a, b) => a - b);
+    if (wts.length) {
+      const i = wts.indexOf(state.wt);
+      select(wts[(i + step + wts.length) % wts.length]);
+    }
+    return;
+  }
   if (e.code !== 'Space' || e.repeat) {return;}
   e.preventDefault(); // page scroll
   setInspect(!state.inspect);
@@ -918,7 +1076,7 @@ const savedCam = state.cam ? [...state.cam] : null;
 const savedTgt = state.tgt ? [...state.tgt] : null;
 // Restore the parked non-weapon pick (archive/creature/pickup).
 if (state.pick) {
-  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS];
+  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES];
   const hit = tables.find(([l]) => l === state.pick);
   if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   else {state.pick = undefined;}
@@ -947,12 +1105,13 @@ renderer.setAnimationLoop(() => {
   vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);
   if (state.inspect && inspectAnchor) {
     orbit.update(); // damping settles between frames — must tick
-    // The anchor is parked in the scene outside vm.group, so the kick
-    // delta never reaches it — apply the exposed kick+punch offset.
+    // The anchor is parked in the scene outside vm.group, so the pose
+    // delta (kick + throw/switch dips + sway) never reaches it — mirror
+    // the full post-write delta so detached weapons do everything.
     const ip = inspectAnchor.userData.inspectPos as THREE.Vector3 | undefined;
     if (ip) {
-      inspectAnchor.position.copy(ip).add(vm.kickDeltaPos);
-      inspectAnchor.rotation.set(vm.kickDeltaRotX, 0, vm.kickDeltaRotZ);
+      inspectAnchor.position.copy(ip).add(vm.poseDeltaPos);
+      inspectAnchor.rotation.set(vm.poseDeltaRotX, 0, vm.poseDeltaRotZ);
     }
   }
   previewLive.tick?.(dt); // creature previews tick real species sim (aim/track)
