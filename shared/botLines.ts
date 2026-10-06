@@ -107,6 +107,12 @@ export class BotLines {
       }
     }
 
+    // Eyes ahead, not scars behind: the goal line's worst rise-per-meter
+    // is probed before spending any momentum — a face that exceeds the
+    // mountable band engages the traverse pick NOW instead of after the
+    // stagnation ladder bleeds a few hundred E into it (katabatic soaks:
+    // sheep warns carrying 400-1100 bleed).
+    const faceAhead = gd > T.lines.faceProbeMin && this.routeRise(ctx, pos, dest, Math.min(gd, 40)) > T.lines.faceRise;
     // Stagnation meter: a route that re-plans without closing ground is
     // in an orbit trap — on a massif the energy-play exemption keeps
     // picking lateral downhill pockets and the bot laps the contour at
@@ -124,7 +130,7 @@ export class BotLines {
     }
     const prof = sharedEnv.thinkProf;
     let tp = prof ? sharedEnv.wallPerf!() : 0;
-    if (this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
+    if (faceAhead || this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
       if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; }
       else this.orbitFails++;
       let bestPass: BotVec | null = null, bestPassD = 250;
@@ -227,6 +233,22 @@ export class BotLines {
     this.wpGoal = { ...dest };
     this.lineT = T.lines.commitS;
     return this.wp ?? dest;
+  }
+
+  /** Worst local rise-per-meter along the goal line out to `dist` —
+   *  a ramp reads ~0.2-0.4, a bounded lip ~0.5-1, a sheer face >>1.
+   *  Same metric botEscape's pickDetour scores candidate routes on. */
+  private routeRise(ctx: BrainCtx, pos: BotVec, dest: BotVec, dist: number): number {
+    const g0 = ctx.groundY(pos.x, pos.z);
+    const dx = (dest.x - pos.x) / dist, dz = (dest.z - pos.z) / dist;
+    let worst = 0;
+    for (let d = 3; d <= dist; d += 3) {
+      const g = ctx.groundY(pos.x + dx * d, pos.z + dz * d);
+      const prev = ctx.groundY(pos.x + dx * (d - 3), pos.z + dz * (d - 3));
+      const seg = (g - prev) / 3;
+      if (seg > worst) worst = seg;
+    }
+    return worst;
   }
 
   /** Fan the goal cone, profile each ray's terrain, keep the best run. */

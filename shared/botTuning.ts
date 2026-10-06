@@ -82,6 +82,9 @@ export const BOT_TUNING = {
                          // orbit, so the last leg aims at the pole itself
     redest: 22,          // m — goal drift forcing a re-roll
     staleLimit: 3,       // dead rolls before the give-up path
+    faceProbeMin: 40,    // m — legs shorter than this skip the early face probe
+    faceRise: 0.8,       // rise/m — goal-line slope that counts as a face,
+                         // engaging traverse before E bleeds into it
     runnerReachK: 2.2,   // runner reach multiplier
     farReachGd: 300,     // m — legs longer than this get far eyes
     farReachK: 0.45,     // far-eye reach as a share of remaining leg
