@@ -32,6 +32,7 @@ export interface FlagRunDeps {
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
+    energy?: number;
     movement?: { setStructures(l: readonly StructureSpec[] | undefined): void } };
   lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
   world: { explosions: { push(e: Explosion): void } };
@@ -68,6 +69,12 @@ export class FlagRunBridge {
   private bestLap = Infinity;
   private capT = 0;              // seconds since last cap — leg time
   private playerPos: THREE.Vector3 | null = null;
+  // Match stats for the end banner — path meters / live seconds /
+  // energy samples taken while alive.
+  private pathM = 0;
+  private liveS = 0;
+  private eSum = 0;
+  private eN = 0;
 
   constructor(private deps: FlagRunDeps, private w: FlagRunWiring, around: THREE.Vector3) {
     const terrain = deps.lazyTerrain();
@@ -125,6 +132,10 @@ export class FlagRunBridge {
     const touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
     if (!player.isDead) {
       const prev = this.lastTouchPos.get('local') ?? player.pos;
+      this.pathM += player.pos.distanceTo(prev);
+      this.liveS += dt;
+      this.eSum += player.energy ?? 0;
+      this.eN++;
       this.lastTouchPos.set('local', (this.lastTouchPos.get('local') ?? new THREE.Vector3()).copy(player.pos));
       touchers.push(['local', player.pos, prev]);
     }
@@ -196,6 +207,13 @@ export class FlagRunBridge {
     }
   }
 
+  /** End-of-match stat line appended to the win banner. */
+  statsLine(): string {
+    const speed = this.liveS > 0 ? this.pathM / this.liveS : 0;
+    const e = this.eN > 0 ? this.eSum / this.eN : 0;
+    return ` — ${this.lap} laps, avg ${speed.toFixed(1)} m/s, avg E ${e.toFixed(0)}`;
+  }
+
   private friendlyHomes(): THREE.Vector3[] {
     return this.flags.filter(f => f.team === this.w.playerTeam).map(f => f.home);
   }
@@ -232,6 +250,7 @@ export class FlagRunBridge {
   reset(): void {
     for (const f of this.flags) { f.state = 'home'; f.carrier = null; f.pos.copy(f.home); }
     this.caps = 0; this.lap = 0; this.lapT = 0; this.capT = 0;
+    this.pathM = 0; this.liveS = 0; this.eSum = 0; this.eN = 0;
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {

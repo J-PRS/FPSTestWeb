@@ -242,7 +242,7 @@ export class TeamBots {
       const w = checkWin(this);
       if (w) {
         this.over = w;
-        this.hooks.remoteKillFeed(winText(this, w));
+        this.hooks.remoteKillFeed(winText(this, w) + (this.flagrun?.statsLine() ?? ''));
         sfx.pickup();
         // Standings window — pin the board unless the player already
         // had it open, so auto-shown means auto-dismissed only.
