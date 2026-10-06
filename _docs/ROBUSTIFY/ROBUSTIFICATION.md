@@ -248,7 +248,8 @@ purges `lastDropNotify` keys for the player but skipped
 been rejected left a permanent entry; over a long-lived room the map
 grew with cumulative player churn, not live roster. Now cleaned with
 the same prefix sweep. Both throttles pinned by
-`rejectWarnCleanup.test.ts`.
+`rejectWarnCleanup.test.ts`; the deferred-claim disconnect drop pinned
+by `deferredClaim.test.ts`.
 
 ---
 
