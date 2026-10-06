@@ -210,6 +210,14 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.25 Unlimited datachannels per RTC peer (2026-10-06)
+
+The offer cap (64 peers) bounded connections but not channels — one
+accepted RTC peer could mint unlimited `adapterOf` entries + adapter
+attachments by spamming datachannels. Legit flow opens exactly two
+(game + ctrl); `pc.onDataChannel` now refuses channels past 4 (closed,
+not attached).
+
 ### 2.24 Forged-ownership destroy warns were unthrottled (2026-10-06)
 
 `projectileDestroy rejected` logged per claim — a forged-destroy spammer

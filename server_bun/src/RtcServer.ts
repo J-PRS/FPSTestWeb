@@ -180,7 +180,15 @@ export class RtcServer {
         try { pc.close(); } catch { /* gone */ }
       }
     }, 30_000);
+    let dcCount = 0;
     pc.onDataChannel((dc) => {
+      // The offer cap bounds peers, not channels — a single accepted
+      // peer could mint unlimited adapterOf entries by spamming
+      // datachannels. Legit flow opens exactly two (game + ctrl).
+      if (++dcCount > 4) {
+        try { dc.close(); } catch { /* gone */ }
+        return;
+      }
       adapter.attach(dc as DataChannelLabeled);
       this.adapterOf.set(dc, adapter);
       dc.onMessage((msg) => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
