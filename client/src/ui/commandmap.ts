@@ -51,6 +51,9 @@ export class CommandMap {
   toggle(force?: boolean): void {
     this.open = force ?? !this.open;
     this.canvas.style.display = this.open ? 'block' : 'none';
+    // Same stacking problem the scoreboard solves with .sb-open: world-
+    // anchored markers are later #hud siblings and paint over the map.
+    this.canvas.parentElement?.classList.toggle('cm-open', this.open);
   }
 
   /** Per-frame while open: blit the baked terrain, then stamp objectives

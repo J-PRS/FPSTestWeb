@@ -131,10 +131,15 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #keys-modal .keys-close:hover { color: #fff; }
 .keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
-#overlay .menu-section {
-  font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
-  color: rgba(140,170,195,0.6); margin-bottom: 10px;
+.keys-subhead {
+  margin: 12px 0 4px;
+  font-size: 0.58rem; font-weight: 600; letter-spacing: 0.2em;
+  color: rgba(140,170,195,0.6);
 }
+/* Fixed-key rows: read-only chips — dimmer, no hover, no cursor bait. */
+.keys-fixed .keys-row { opacity: 0.55; }
+.keys-chip.fixed { cursor: default; }
+.keys-chip.fixed:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16); }
 #overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
 #overlay .btn-row button {
   padding: 9px 14px; text-align: left;
@@ -159,6 +164,18 @@ body.menu-open #frag-msg { display: none !important; }
   border-color: #3aa7ff; color: #fff;
   background: rgba(58,167,255,0.22);
   box-shadow: 0 0 10px rgba(58,167,255,0.2);
+}
+/* Tribes-style state box — no checkmark: a hollow square OFF, filled
+   accent square ON, docked on the right of the toggle tile. */
+#overlay .btn-row button.tog { display: flex; align-items: center; justify-content: space-between; }
+#overlay .btn-row button.tog::after {
+  content: ''; width: 9px; height: 9px; flex: none; margin-left: 12px;
+  border: 1px solid rgba(160,190,215,0.5); border-radius: 2px;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+#overlay .btn-row button.tog.on::after {
+  background: #3aa7ff; border-color: #3aa7ff;
+  box-shadow: 0 0 6px rgba(58,167,255,0.55);
 }
 #overlay .field-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -194,10 +211,44 @@ body.menu-open #frag-msg { display: none !important; }
   border-color: #3aa7ff; color: #fff;
   background: rgba(58,167,255,0.25);
 }
+/* Locked option (e.g. non-RAW pixel modes at 1x scale): the stored pick
+   keeps its active tint so it reads as "armed", just unavailable. */
+#overlay .field-row .seg-row button:disabled {
+  opacity: 0.35; cursor: default;
+}
+#overlay .field-row .seg-row button:disabled:hover { color: #9db2c4; }
+#overlay .field-row .seg-row button.active:disabled:hover { color: #fff; }
 #overlay .field-row input:focus { border-color: #3aa7ff; }
+#overlay .vol-wrap { display: flex; align-items: center; gap: 8px; }
+#overlay .vol-val {
+  width: 30px; text-align: right; font-size: 0.66rem;
+  color: #9db2c4; letter-spacing: 0.05em;
+}
+/* Custom slider: accent-filled track + square thumb to match the .tog
+   state boxes — the stock accent-color widget leaves the level ambiguous. */
 #overlay .field-row input[type="range"] {
-  width: 110px; padding: 0; accent-color: #3aa7ff; text-align: inherit;
-  background: transparent; border: none;
+  -webkit-appearance: none; appearance: none;
+  width: 96px; height: 14px; padding: 0; margin: 0;
+  background: transparent; border: none; cursor: pointer;
+}
+#overlay .field-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, #3aa7ff var(--v, 100%), rgba(255,255,255,0.14) var(--v, 100%));
+}
+#overlay .field-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 10px; height: 10px; margin-top: -3px;
+  background: #dff0ff; border: 1px solid #3aa7ff; border-radius: 2px;
+}
+#overlay .field-row input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 2px; background: rgba(255,255,255,0.14);
+}
+#overlay .field-row input[type="range"]::-moz-range-progress {
+  height: 4px; border-radius: 2px; background: #3aa7ff;
+}
+#overlay .field-row input[type="range"]::-moz-range-thumb {
+  width: 9px; height: 9px;
+  background: #dff0ff; border: 1px solid #3aa7ff; border-radius: 2px;
 }
 #overlay .field-row select {
   padding: 4px 8px;
@@ -365,6 +416,24 @@ body.lobby-open #loadout-bar {
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
 .cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
 .cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }
+
+/* Right-click context menu on cool-shot items — same dark-glass palette
+   as the items themselves. */
+.cool-shot-menu {
+  position: fixed; z-index: 1000;
+  display: flex; flex-direction: column; min-width: 150px;
+  background: rgba(14,18,26,0.96);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px; padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.cool-shot-menu button {
+  all: unset; box-sizing: border-box;
+  font-family: inherit; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: #cdd9e5; padding: 7px 10px; border-radius: 4px; cursor: pointer;
+}
+.cool-shot-menu button:hover { background: rgba(58,167,255,0.15); color: #fff; }
 .section-label { font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.2em; font-weight: 600; margin: 8px 0 0; }
 .section-label:first-of-type { margin-top: 0; }
 

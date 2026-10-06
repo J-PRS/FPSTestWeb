@@ -101,8 +101,6 @@ export class HudStats {
       });
     }
 
-    this.updateFps(dt);
-
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
       if (this.hitTimer <= 0) h.hitMarker.classList.remove('visible');
@@ -172,6 +170,14 @@ export class HudStats {
       this.dmgDirT = Math.max(0, this.dmgDirT - dt * 1.1);
       this.h.dmgDir.style.opacity = String(this.dmgDirT);
     }
+  }
+
+  /** A frame actually RENDERED — the FPS meter counts renders, not loop
+   *  ticks: the fps-cap skips renderFrame while sim/input tick at full
+   *  rAF, so ticking here would read 60 on a 30fps cap. dt is the real
+   *  elapsed time since the last render. */
+  rendered(dt: number): void {
+    this.updateFps(dt);
   }
 
   private updateFps(dt: number): void {

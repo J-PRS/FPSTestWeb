@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { MAX_HEALTH } from '../core/config.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
+import { REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 
 import { Ball, Targetable } from '../entities/balls.js';
 
@@ -32,6 +33,15 @@ const BAR_HEIGHT = 5;
 const FLASH_DURATION = 0.12;
 const DELAY_DURATION = 0.3;
 const BAR_LIFETIME = 5.0; // hit-popup linger — a wounded readout, not a flash
+const REPAIR_LINGER = 0.4; // weld bar outlives the beam by a beat — no flicker between ticks
+
+/** Structural repair target — deployables.ts Item satisfies this; kept
+ *  structural so ui/ doesn't import the game module. */
+export interface RepairTarget {
+  pos: THREE.Vector3;
+  dead: boolean;
+  v: { health: number; armor: number; maxHealth: number };
+}
 
 export class HealthBarSystem {
   private bars: Map<string, HealthBar> = new Map();
@@ -82,6 +92,12 @@ export class HealthBarSystem {
         border-radius: 1px;
         display: none;
       }
+      .enemy-hpbar .armor {
+        position: absolute; top: 100%; left: 0; height: 2px;
+        background: rgba(90, 200, 255, 0.95);
+        border-radius: 1px;
+        display: none;
+      }
     `;
     document.head.appendChild(style);
 
@@ -92,6 +108,40 @@ export class HealthBarSystem {
 
   spawn(playerId: string, damage: number, health: number): void {
     this.upsertBar(playerId, damage, health);
+  }
+
+  // Repair-weld bars — keyed by the item itself; health/armor read LIVE
+  // off item.v every frame so the bar visibly climbs with the beam,
+  // not just on the tick that spawned it. A short linger absorbs the
+  // 100ms fire interval; release the trigger and it fades out.
+  private repairBars = new Map<RepairTarget, { bar: HealthBar; armorEl: HTMLDivElement }>();
+
+  /** Beam is touching this item right now — show/refresh its vitals. */
+  showRepair(item: RepairTarget): void {
+    let r = this.repairBars.get(item);
+    if (!r) {
+      const el = this.createBarEl();
+      el.classList.add('ally'); // welded things are friendly by definition
+      const armorEl = document.createElement('div');
+      armorEl.className = 'armor';
+      el.appendChild(armorEl);
+      r = {
+        bar: {
+          damage: 0, flashTimer: 0, delayTimer: 0, life: 0,
+          maxHealth: item.v.maxHealth, currentHealth: item.v.health,
+          el, bgEl: el.querySelector('.bg')!, healthEl: el.querySelector('.health')!,
+          whiteEl: el.querySelector('.white')!,
+        },
+        armorEl,
+      };
+      this.repairBars.set(item, r);
+    }
+    r.bar.life = REPAIR_LINGER;
+  }
+
+  private removeRepair(item: RepairTarget): void {
+    const r = this.repairBars.get(item);
+    if (r) { r.bar.el.remove(); this.repairBars.delete(item); }
   }
 
   spawnBall(ball: Targetable, damage: number, health: number): void {
@@ -142,6 +192,20 @@ export class HealthBarSystem {
         continue;
       }
       this.updateBallBar(ball, bar, dt, cameraPos, cameraDir);
+    }
+
+    // Repair bars — vitals mirror the live item record so the weld
+    // visibly knits the bar shut (and the armor sliver grows past full).
+    for (const [item, r] of this.repairBars) {
+      if (item.dead) { this.removeRepair(item); continue; }
+      r.bar.currentHealth = item.v.health;
+      r.bar.maxHealth = item.v.maxHealth;
+      this.updateBar(r.bar, dt,
+        _targetPos.set(item.pos.x, item.pos.y + 1.6, item.pos.z),
+        cameraPos, cameraDir, () => this.removeRepair(item));
+      const cap = item.v.maxHealth * REPAIR_ARMOR_MULT;
+      r.armorEl.style.display = item.v.armor > 0.5 ? 'block' : 'none';
+      r.armorEl.style.width = `${BAR_WIDTH * Math.min(1, item.v.armor / cap)}px`;
     }
   }
 
@@ -228,6 +292,8 @@ export class HealthBarSystem {
       bar.el.remove();
     }
     this.ballBars.clear();
+    for (const [, r] of this.repairBars) r.bar.el.remove();
+    this.repairBars.clear();
     this.knownHealth.clear();
     this.knownMax.clear();
   }

@@ -378,14 +378,16 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 .player-indicator.hidden {
   opacity: 0;
 }
-/* Scoreboard open: world-anchored markers are HUD siblings that paint
-   above the panel (DOM order, no z-index) — fade them out entirely. */
-.sb-open .player-indicator {
+/* Scoreboard/command map open: world-anchored markers are HUD siblings
+   that paint above the panel (DOM order, no z-index) — fade them out. */
+.sb-open .player-indicator,
+.cm-open .player-indicator {
   opacity: 0;
 }
 /* Healthbars have the same problem one level up: #healthbar-container is
-   appended to body AFTER #hud, so it paints over the board. */
-body:has(#hud.sb-open) #healthbar-container {
+   appended to body AFTER #hud, so it paints over the board/map. */
+body:has(#hud.sb-open) #healthbar-container,
+body:has(#hud.cm-open) #healthbar-container {
   opacity: 0;
 }
 /* Flag markers — diamond silhouette, team color, always legible. */
@@ -471,7 +473,7 @@ body:has(#hud.sb-open) #healthbar-container {
 .beacon-aim.edge::before { clip-path: none; border-radius: 50%; border-color: #7df9ff; background: transparent; }
 .beacon-aim.edge::after { content: none; }
 .beacon-aim.hidden { opacity: 0; }
-.sb-open .beacon-aim { opacity: 0; }
+.sb-open .beacon-aim, .cm-open .beacon-aim { opacity: 0; }
 /* A flag offscreen stays a filled diamond — losing the flag's edge marker
    is exactly the failure mode this element exists to prevent. */
 .player-indicator.flag.offscreen::before {
@@ -549,6 +551,11 @@ body:has(#hud.sb-open) #healthbar-container {
 /* Name cell tinted by team — readable at a glance even flat-sorted. */
 #scoreboard tr.sb-alpha td:nth-child(2) { color: #7db8ff; }
 #scoreboard tr.sb-bravo td:nth-child(2) { color: #ff9a6a; }
+/* CLASS column — one hue per chassis so comp reads at a glance. */
+#scoreboard td.sb-cls-light { color: #9fe8a9; }
+#scoreboard td.sb-cls-medium { color: #ffd27f; }
+#scoreboard td.sb-cls-heavy { color: #ff8f8f; }
+#scoreboard td.sb-cls-none { color: #666; }
 #team-score {
   position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;

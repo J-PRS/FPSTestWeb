@@ -58,12 +58,74 @@ export class CoolShotsPanel {
     });
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      this.demoManager.downloadCoolShotById(shot.id);
+      this.openMenu(e.clientX, e.clientY, shot);
     });
     container.appendChild(item);
   }
 
+  private menu: HTMLElement | null = null;
+
+  private closeMenu(): void {
+    this.menu?.remove();
+    this.menu = null;
+  }
+
+  /** Right-click menu — play / download .demo / export mp4. Appended to
+   *  the overlay so it dies with the overlay's own display:none, and
+   *  dismissed by any outside click, Escape, or the next list re-render
+   *  (the panel repaints every second for time-ago labels). */
+  private openMenu(x: number, y: number, shot: CoolShotEntry): void {
+    this.closeMenu();
+    const menu = document.createElement('div');
+    menu.className = 'cool-shot-menu';
+    const act = (label: string, fn: () => void) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeMenu();
+        fn();
+      });
+      menu.appendChild(b);
+    };
+    act('Play', () => {
+      this.demoManager.playCoolShotById(shot.id);
+      this.overlay.style.display = 'none';
+      this.requestLock();
+    });
+    act('Download .demo', () => {
+      void this.demoManager.downloadCoolShotById(shot.id);
+    });
+    act('Export MP4', () => {
+      this.demoManager.exportCoolShotMp4(shot.id);
+      this.overlay.style.display = 'none';
+      this.requestLock();
+    });
+    this.overlay.appendChild(menu);
+    // Clamp into the viewport — anchored top-left of the cursor, flips up/
+    // left when it would overflow an edge.
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = `${Math.max(0, Math.min(x, innerWidth - mw - 4))}px`;
+    menu.style.top = `${Math.max(0, Math.min(y, innerHeight - mh - 4))}px`;
+    this.menu = menu;
+    const dismiss = (e: Event) => {
+      if (menu.contains(e.target as Node)) return;
+      this.closeMenu();
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('keydown', key, true);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { this.closeMenu(); e.stopPropagation(); }
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('keydown', key, true);
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('keydown', key, true);
+  }
+
   private renderCoolShots(shots: CoolShotEntry[]): void {
+    // The 1s time-ago repaint must NOT close the context menu — item
+    // nodes are rebuilt but the menu's actions captured the entry.
     this.lastCoolShots = shots;
     this.coolShotsTop.innerHTML = '';
     this.coolShotsRecent.innerHTML = '';

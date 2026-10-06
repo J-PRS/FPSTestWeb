@@ -90,7 +90,8 @@ export function createHudDom(): HudDom {
       <div id="conn-banner"></div>
       <div id="scoreboard">
         <div id="sb-title"></div>
-        <table><thead><tr><th>#</th><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th><th>ALIVE</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <table><thead><tr><th>#</th><th>PLAYER</th><th>CLASS</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th><th>ALIVE</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <div id="sb-countdown"></div>
       </div>
     `;
     document.body.appendChild(el);

@@ -1,12 +1,12 @@
 // In-game log mirror — a small scrolling console in the bottom-right so
 // warnings/errors are visible without opening devtools. Shows with the
-// backquote debug overlay, the menu DEBUG toggle (fps-debug), or an Alt+Q
-// peek (which also copies the buffer). Lines come live off Logger's
-// lineListener; while hidden nothing is appended — the panel reseeds from
-// the ring buffer on show so storms never do DOM work nobody can see.
+// backquote debug overlay or an Alt+Q peek (which also copies the buffer).
+// The menu DEBUG toggle is visuals-only (wireframes/gizmos) and must NOT
+// pull this panel in. Lines come live off Logger's lineListener; while
+// hidden nothing is appended — the panel reseeds from the ring buffer on
+// show so storms never do DOM work nobody can see.
 
 import Logger, { LogLevel } from '../core/Logger.js';
-import { settings } from '../core/settings.js';
 
 const MAX_LINES = 150;
 
@@ -56,7 +56,7 @@ function reseed(): void {
 
 function syncVisible(): void {
   if (!panel) return;
-  const show = overlay || revealed || settings.get('fps-debug') === 1;
+  const show = overlay || revealed;
   const was = panel.classList.contains('show');
   panel.classList.toggle('show', show);
   if (show && !was) reseed();
@@ -102,7 +102,4 @@ export function initLogPanel(): void {
   ensurePanel();
   Logger.setLineListener(appendLine);
   syncVisible();
-  window.addEventListener('fps:set', (e) => {
-    if ((e as CustomEvent<{ key: string }>).detail.key === 'fps-debug') syncVisible();
-  });
 }

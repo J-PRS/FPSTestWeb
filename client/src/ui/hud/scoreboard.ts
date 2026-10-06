@@ -8,10 +8,12 @@ import { MODES, type ModeId, type TeamId } from '../../../../shared/teams.js';
 
 /** Header text — "CAPTURE THE FLAG · Dangerous Crossing". The map arg
  *  arrives already resolved server-side (spec.name ?? spec filename);
- *  the filename fallback gets prettified (katabatic_bare → Katabatic Bare). */
+ *  the filename fallback gets prettified (katabatic_bare → Katabatic Bare).
+ *  Spec-less rooms play the built-in field — label it "Default" so the
+ *  title still carries both halves (UT/Quake convention: mode · map). */
 export function scoreboardTitle(mode?: string, mapName?: string): string {
   const label = MODES[mode as ModeId]?.label ?? mode?.toUpperCase() ?? '';
-  const map = mapName ? prettifyMapName(mapName) : '';
+  const map = mapName ? prettifyMapName(mapName) : (label ? 'Default' : '');
   return [label, map].filter(Boolean).join(' · ');
 }
 
@@ -29,6 +31,8 @@ export type SbRow = {
   name: string; frags: number; score: number | null; ping: number | null;
   net?: string | null; self: boolean; dead: boolean;
   team?: TeamId; sheep?: number | null; bot?: boolean;
+  /** Armor class — 'light' | 'medium' | 'heavy', rides the roster. */
+  cls?: string;
   /** Seconds since last spawn/respawn — null while dead. */
   alive?: number | null;
 };
@@ -47,6 +51,10 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   // in front would be a second legend saying the same thing.
   nameTd.appendChild(document.createTextNode(` ${r.name}`));
   tr.appendChild(nameTd);
+  const clsTd = document.createElement('td');
+  clsTd.textContent = r.cls ? r.cls.toUpperCase() : '—';
+  clsTd.className = `sb-cls-${r.cls ?? 'none'}`;
+  tr.appendChild(clsTd);
   for (const cell of cells) {
     const td = document.createElement('td');
     td.textContent = cell;

@@ -24,6 +24,7 @@ interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: Drop
 const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
   javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
+  conc: 'Concussion Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
   proxy: 'Proxy Grenade', satchel: 'Satchel Charge (2)', heal: 'Heal Grenade',
 };
@@ -145,10 +146,11 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   function refreshLoadout(): void {
     if (!ui) return;
     const player = deps.lazyPlayer();
-    // appliedClass flips at respawn — re-flag locked options so a
-    // banked tier swap un-grays (or grays) the right entries.
-    const opts = weaponOptsFor(player.appliedClass);
-    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.loadout[i])); });
+    // Options gate on armorClass — the tier whose kit is being edited
+    // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
+    // Faces come from menuKit: the pending kit while a swap is banked.
+    const opts = weaponOptsFor(player.armorClass);
+    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     ui.beltDrop?.setValue(player.beltItem);
     ui.skillDrop?.setValue(player.skill);
     ui.perkDrop?.setValue(player.perk);
@@ -251,12 +253,11 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     const player = deps.lazyPlayer();
     player.setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-    // Re-flag option locks on appliedClass (tier in effect — the banked
-    // swap lands at respawn) AND re-face the slot chips: setArmorClass
-    // just swapped player.loadout to the picked tier's remembered kit,
-    // so the faces must follow or they keep showing the old tier's guns.
-    const opts = weaponOptsFor(player.appliedClass);
-    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.loadout[i])); });
+    // Re-flag locks + re-face chips for the tier just picked — the menu
+    // now edits that tier's pending kit (live gun untouched until
+    // respawn), so faces show the recalled kit and gates follow it.
+    const opts = weaponOptsFor(player.armorClass);
+    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     refreshTiles();
   };
   const refreshTiles = () => {
@@ -285,11 +286,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- WEAPONS: one numbered cell per slot. No group head — every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
-  // Filter by appliedClass (tier in effect), not armorClass — a banked
-  // mid-life pick doesn't unlock heavy ordnance until the next respawn.
-  // lazyPlayer can be unborn at wire-up — default the flag pass to
-  // medium so a pre-game menu build doesn't deref a missing player.
-  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium');
+  // Filter by armorClass — the tier the menu edits (a banked class swap
+  // edits that tier's kit, so its legal picks must show). lazyPlayer can
+  // be unborn at wire-up — default the flag pass to medium.
+  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
   const allWeaponOpts = weaponOpts; // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
     const { cell, cap } = mkCellDom(weaponCells);

@@ -256,7 +256,7 @@ export class HUD {
   lastDeathTxt = '';
 
   setDeathOverlay(on: boolean): void { ch.setDeathOverlay(this, on); }
-  updateDeathCountdown(respawnMs: number): void { ch.updateDeathCountdown(this, respawnMs); }
+  updateDeathCountdown(respawnMs: number, held = false): void { ch.updateDeathCountdown(this, respawnMs, held); }
   // Spectator chrome: HUD hides entirely while flying; this hint is all
   // that remains so the exit key stays discoverable.
   spectateHint: HTMLDivElement | null = null;

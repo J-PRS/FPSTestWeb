@@ -19,6 +19,8 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
         <button class="keys-close">✕</button>
       </div>
       <div class="keys-grid"></div>
+      <div class="keys-subhead">FIXED KEYS</div>
+      <div class="keys-grid keys-fixed"></div>
       <button class="keys-reset">RESET KEYS</button>
     </div>`;
 
@@ -65,6 +67,33 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
     chips.set(d.action, chip);
     row.append(chip);
     grid.append(row);
+  }
+
+  // Hardcoded keys — shown for completeness, not rebindable. Context-only
+  // keys (demo F6/space, dev Alt+*) are deliberately absent.
+  const FIXED: [label: string, key: string][] = [
+    ['Scoreboard (hold)', 'TAB'],
+    ['Command map', 'M'],
+    ['Chat all', 'T'],
+    ['Chat team', 'Y'],
+    ['VGS menu', 'V'],
+    ['Perf stats', '`'],
+    ['Pixel mode', 'F4'],
+    ['Menu', 'ESC'],
+  ];
+  const fixedGrid = host.querySelector<HTMLElement>('.keys-fixed')!;
+  for (const [label, key] of FIXED) {
+    const row = document.createElement('div');
+    row.className = 'keys-row';
+    const span = document.createElement('span');
+    span.className = 'keys-label';
+    span.textContent = label;
+    row.append(span);
+    const chip = document.createElement('span');
+    chip.className = 'keys-chip fixed';
+    chip.textContent = key;
+    row.append(chip);
+    fixedGrid.append(row);
   }
 
   host.querySelector<HTMLElement>('.keys-close')!.addEventListener('click', (e) => {
