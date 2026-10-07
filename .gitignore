@@ -28,6 +28,16 @@ _tools/dif2glb_in/
 # Unity Asset Store bodies — licensed, not owned; stay out of git
 client/public/assets/models/class_*.glb
 
+# Session probe scripts + generated captures — scratch, not for git
+.devin_*
+client/.devin_*
+client/.probe/
+_tools/tmp_probe*
+tas_film*.mp4
+demos_out/
+combo_clips/
+.rebase_*
+
 # Heavy local scratch — extraction dumps, screenshots, zips (not for git)
 _tools/animpacks/
 _tools/ualgrab/
