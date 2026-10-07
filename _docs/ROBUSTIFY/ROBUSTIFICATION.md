@@ -2556,3 +2556,11 @@ scoreboard/chat (name spoofing), zero-width chars (`\u200b`-`\u200f`,
 visually impersonable. The sanitize now strips them too. `nameSpec.test.ts`
 pins the spoof cases + all-invisible stays `undefined`.
 ### 2.126 - end
+
+### 2.127 - Demo download path guard pin
+`/demos/:file` is a public unauthenticated read; `loadDemo`'s filename
+check (no `..`/`/`/`\`, must end `.demo`) is the only thing between a
+request and arbitrary local file reads. `demoDownload.test.ts` drives it
+with a planted `../outside.demo` + separator/absolute variants and a real
+clip load. A dropped guard fails the test instead of leaking disk files.
+### 2.127 - end
