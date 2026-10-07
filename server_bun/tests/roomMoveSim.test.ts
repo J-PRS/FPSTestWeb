@@ -69,7 +69,10 @@ describe('RoomMoveSim', () => {
     // the client hasn't seen its respawn yet and honestly reports the
     // corpse spot. Past the window it must flag again.
     expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0, undefined, 6)).toBeNull();
-    await new Promise((r) => setTimeout(r, 520));
+    // New-epoch seq 7 outruns the consumed watermark (5): the in-flight
+    // gap grace (600ms from streak start) defers it; past the window the
+    // edge is provably lost and raw judging flags the stale spot again.
+    await new Promise((r) => setTimeout(r, 620));
     expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0, undefined, 7)).not.toBeNull();
   });
 
@@ -235,6 +238,36 @@ describe('RoomMoveSim', () => {
     // Same offset with no anchor (old client) → judged on stale state.
     // At ski speed the gap can exceed tolerance, so this is allowed to
     // flag — the assert that matters is above.
+  });
+
+  test('in-flight input gap defers judging instead of banking severe strikes', async () => {
+    // Live-net regression: a joiner whose first inputMove is still in
+    // flight stamps reports with seqs past everything the server saw.
+    // Judging those raw compares a jetting client against an input-
+    // starved idle shadow — 60m+ in <1s — and 3 strikes latched the
+    // cheat flag on honest queue latency (seen: 7 warns in one batch
+    // right after a 16-bot join wave). Young gaps defer for 600ms
+    // (heartbeat + RTT); only a SUSTAINED gap resumes raw judging, so
+    // real teleports still flag.
+    const m = new RoomMoveSim(flat);
+    let flagged = 0;
+    let gaps = 0;
+    m.onCheat = () => flagged++;
+    m.onInputGap = () => gaps++;
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
+    m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0, undefined, 9); // in-flight → defer
+    m.reconcile('p1', { x: 110, y: 0, z: 0 }, 0, undefined, 9); // defer
+    m.reconcile('p1', { x: 120, y: 0, z: 0 }, 0, undefined, 9); // streak 3 → inputSync hint
+    expect(flagged).toBe(0); // queue latency never reached the judge
+    expect(gaps).toBe(1);
+    // Past the defer window the edge is provably lost — raw judging
+    // resumes and teleport-scale departures still reach the latch.
+    await new Promise((r) => setTimeout(r, 620));
+    m.reconcile('p1', { x: 130, y: 0, z: 0 }, 0, undefined, 10);
+    m.reconcile('p1', { x: 140, y: 0, z: 0 }, 0, undefined, 10);
+    m.reconcile('p1', { x: 150, y: 0, z: 0 }, 0, undefined, 10);
+    expect(flagged).toBe(1);
   });
 
   test('speed-scaled tolerance absorbs ski-speed drift but not teleports', () => {

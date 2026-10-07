@@ -23,6 +23,11 @@ describe('scenario: move-authority corrections', () => {
     } as never);
     expect(sent.filter((m) => m.type === 'correction').length).toBe(0);
 
+    // Deliver the input edge the report is stamped with — uncovered
+    // seqs defer while the gap is young (the judge can't replay an
+    // input it never received), which would mask the correction this
+    // scenario exists to exercise.
+    room.moveSim.setInput(p.id, { forward: 0 }, 0, 2);
     // Second report claims 5m the sim never walked — past the 1.5m
     // authority tolerance, inside plausibility bounds (<50m jump, <300m/s).
     room.messages.handleMessage(p.id, {

@@ -6,6 +6,7 @@ import { SolidWorld } from '../../shared/solidWorld.ts';
 import { FieldSurface, MoveJudge, type Shadow } from './moveJudge.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
+import { evictEldest } from './evictEldest.ts';
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -54,7 +55,7 @@ export class RoomMoveSim {
 
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
-    this.surface = field ? new FieldSurface(field) : null;
+    this.surface = field ? FieldSurface.fromField(field) : null;
     this.authoritative = authoritative && !!field;
     this.judge = new MoveJudge({
       authoritative: () => this.authoritative,
@@ -73,7 +74,7 @@ export class RoomMoveSim {
    *  current server position: ticks stepped against the WRONG field during
    *  the join window would otherwise surface as a one-off divergence. */
   attachField(field: Heightfield, reportedPos?: (playerId: string) => Vec3Like | undefined): void {
-    this.surface = new FieldSurface(field);
+    this.surface = FieldSurface.fromField(field);
     this.surface.solid = this.solid;
     this.authoritative = this.wantsAuthority;
     for (const [pid, sh] of this.shadows) {
@@ -140,7 +141,7 @@ export class RoomMoveSim {
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
-      gapStreak: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
+      gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
     });
   }
 
@@ -226,7 +227,7 @@ export class RoomMoveSim {
         inp: { ...sh.sim.input },
         e: sh.energy,
       });
-      if (sh.seqStates.size > 32) sh.seqStates.delete(sh.seqStates.keys().next().value!);
+      if (sh.seqStates.size > 32) evictEldest(sh.seqStates);
     }
     if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
     sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
@@ -302,6 +303,7 @@ export class RoomMoveSim {
     // seq parked in pending is covered, just not drained yet. ≥3
     // consecutive uncovered reports means events were lost, not queued.
     if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) {
+      if (sh.gapStreak === 0) sh.gapAt = wallNow(); // streak start — the judge's in-flight grace window
       sh.gapStreak++;
       const now = wallNow();
       if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
