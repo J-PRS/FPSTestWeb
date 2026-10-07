@@ -17,24 +17,26 @@ interface Rig {
   worldState: { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>;
                 explosions: { pos: THREE.Vector3; age: number }[];
                 projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
-  playerState: { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number };
-  state: { modeId: string; creature: Targetable | null; creatureDist: number };
+  playerState: { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; health: number; maxHealth: number };
+  targets: Targetable[];
+  state: { modeId: string };
 }
 
 const mkRig = (): Rig => {
   const bots: GameBot[] = [];
   const teamOf = new Map<string, string>();
   const worldState = { remotePlayers: new Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>(), explosions: [] as { pos: THREE.Vector3; age: number }[], projectiles: [] as { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
-  const playerState = { pos: v(), vel: v(), isDead: false, isCloaked: false, lastFireAt: -Infinity };
-  const state = { modeId: 'ctf', creature: null as Targetable | null, creatureDist: 0 };
+  const playerState = { pos: v(), vel: v(), isDead: false, isCloaked: false, lastFireAt: -Infinity, health: 100, maxHealth: 100 };
+  const targets: Targetable[] = [];
+  const state = { modeId: 'ctf' };
   const host = {
     bots, teamOf,
     player: () => playerState,
     world: () => worldState,
     mode: () => state.modeId,
-    nearestCreature: (_p: THREE.Vector3, maxDist: number) => { state.creatureDist = maxDist; return state.creature; },
+    targets,
   };
-  return { senses: new BotSenses(host as SenseHost), bots, teamOf, worldState, playerState, state };
+  return { senses: new BotSenses(host as SenseHost), bots, teamOf, worldState, playerState, targets, state };
 };
 
 describe('enemyBotsForTeam', () => {
@@ -100,17 +102,20 @@ describe('enemyList', () => {
     expect(ids).not.toContain('me');
   });
 
-  it('creatures enter with the creature: prefix; nuggets mode senses farther', () => {
+  it('all live scored creatures enter the list; dead and scoreless stay out', () => {
     const r = mkRig();
     const me = mkBot('me', 'bravo');
-    const creature = { id: 'c9', pos: v(60, 0, 0), vel: v(), dead: false } as unknown as Targetable;
-    r.state.creature = creature;
-    r.state.modeId = 'nuggets';
+    r.targets.push(
+      { id: 'c9', pos: v(60, 0, 0), vel: v(), dead: false } as unknown as Targetable,
+      { id: 'c10', pos: v(90, 0, 0), vel: v(), dead: false } as unknown as Targetable,
+      { id: 'dead1', pos: v(5, 0, 0), vel: v(), dead: true } as unknown as Targetable,
+      { id: 'decor', pos: v(7, 0, 0), vel: v(), dead: false, scoreless: true } as unknown as Targetable,
+    );
     const out = r.senses.enemyList(me);
-    expect(r.state.creatureDist).toBe(80);
-    expect(out.some((e) => e.id === 'creature:c9')).toBe(true);
-    r.state.modeId = 'ctf';
-    r.senses.enemyList(me);
-    expect(r.state.creatureDist).toBe(35);
+    const ids = out.map((e) => e.id);
+    expect(ids).toContain('creature:c9');
+    expect(ids).toContain('creature:c10'); // the whole roster, not just nearest
+    expect(ids).not.toContain('creature:dead1');
+    expect(ids).not.toContain('creature:decor');
   });
 });

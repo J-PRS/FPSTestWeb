@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.77: enemy bodies mirror — offline saw only nearest creature; foe scans pooled
 2026-10-08 - robustify §2.76: hpFrac on offline enemy entries — orbit priced full-hp targets; mirror closed
 2026-10-08 - robustify §2.75: offline weapon pick dropped courage — senses vs fired-gun mismatch
 2026-10-08 - robustify §2.74: weapon-sense mirror — shared botWeaponHooks; beams led like shells offline, 3 hooks missing

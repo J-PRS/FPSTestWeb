@@ -248,6 +248,26 @@ That closes the ctx/enemy mirror field-by-field: every sense the shared
 brain reads is now either fed identically on both ends or deliberately
 server-only (squad orchestration, influence map, human-chat notices).
 
+### 2.77 enemy bodies mirror — client saw only the nearest creature (2026-10-08)
+
+Server `ServerParties.of` pushes the ENTIRE bodies roster into
+`enemies` (every ball `b:${id}`, every crawler `c:${id}`), while the
+client `enemyList` injected a single `nearestCreature` result — so
+offline bots could never weigh a far beast against a near one; nearest
+won by list position, not by the brain's own pick. `SenseHost` now
+carries the live `targets` roster and every `!dead && !scoreless` entry
+lands as a `creature:${id}` enemy, matching the server's unfiltered
+channel (scoreless decor stays out — the server's roster is
+pops-declared creatures only; the `targets` list also carries ambient
+birds, hence the filter where the server needs none).
+
+Same sweep caught a class-10 churn sibling one call away:
+`enemyBotsForLocal`/`enemyBotsForTeam` allocated a fresh array + entry
+literal per call, and deployable scans (`foesFor`, rocket fan,
+revenge-owner `some()`) call them per deployable per tick. Both now
+fill pooled scratch (`_foePool`/`_foeOut`, count-based like §2.67) —
+every consumer reads the list synchronously before the next call.
+
 ### 2.75 Courage dropped from the offline pick (2026-10-08)
 
 Same block, residual drift the §2.74 factory couldn't see: the senses'

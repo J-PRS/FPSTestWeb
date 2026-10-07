@@ -122,7 +122,7 @@ export class TeamBots {
       player: () => this.deps.lazyPlayer(),
       world: () => this.deps.world,
       mode: () => this.mode,
-      nearestCreature: (p, d) => this.hooks.nearestCreature(p, d),
+      targets: this.deps.targets,
     });
     this.fire = new BotFire({
       scene: () => this.deps.lazyScene(),

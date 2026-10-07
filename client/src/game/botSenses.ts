@@ -27,7 +27,9 @@ export interface SenseHost {
              projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
   /** Active mode id — farming modes extend the creature sense range. */
   mode(): string;
-  nearestCreature(pos: THREE.Vector3, maxDist: number): Targetable | null;
+  /** Shootable-world roster — creature enemies come from this, the same
+   *  unfiltered bodies channel the server parties feed. */
+  readonly targets: Targetable[];
 }
 
 export type FoeEntry = { id: string; pos: THREE.Vector3; alive: boolean };
@@ -57,28 +59,48 @@ function nextBot(): BotEntry & { id?: string } {
 
 export class BotSenses {
   constructor(private host: SenseHost) {}
+  // Pooled foe list — deployable scans call this per item per tick and
+  // every consumer (foesFor, rocket fan, some()) reads it synchronously
+  // before the next call, so the same entries can be rewritten.
+  private readonly _foePool: BotEntry[] = [];
+  private readonly _foeOut: BotEntry[] = [];
+  private nextFoe(i: number): BotEntry {
+    const e = this._foePool[i] ?? (this._foePool[i] = { playerId: '', pos: null as never, vel: null as never, alive: false });
+    this._foeOut[i] = e;
+    return e;
+  }
 
   enemyBotsForLocal(): BotEntry[] {
     const myTeam = this.host.teamOf.get('local');
-    return this.host.bots
-      .filter(b => !b.isDead && b.team !== myTeam)
-      .map(b => ({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: true }));
+    let n = 0;
+    for (const b of this.host.bots) {
+      if (b.isDead || b.team === myTeam) {continue;}
+      const e = this.nextFoe(n++);
+      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel; e.alive = true;
+    }
+    this._foeOut.length = n;
+    return this._foeOut;
   }
 
   /** Players hostile to a GIVEN team — a bot-owned turret/mine scans
    *  these: enemy bots AND the local player when they're on the other
    *  side. FFA makes everyone a foe of everyone. */
   enemyBotsForTeam(team: string): BotEntry[] {
-    const out: BotEntry[] = [];
+    let n = 0;
     const player = this.host.player();
     if (this.host.teamOf.get('local') !== team) {
-      out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now())) });
+      const e = this.nextFoe(n++);
+      e.playerId = 'local'; e.pos = player.pos; e.vel = player.vel;
+      e.alive = !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now()));
     }
     for (const b of this.host.bots) {
       if (b.team === team) {continue;}
-      out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && (!b.isCloakHidden || b.ghostT > 0) });
+      const e = this.nextFoe(n++);
+      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel;
+      e.alive = !b.isDead && (!b.isCloakHidden || b.ghostT > 0);
     }
-    return out;
+    this._foeOut.length = n;
+    return this._foeOut;
   }
 
   /** Blasts inside the noise ring's TTL — mirrors Room.noisesNear
@@ -145,12 +167,15 @@ export class BotSenses {
       e.hpFrac = rp.botHp !== undefined ? rp.botHp / (rp.botMaxHp ?? 1) : undefined;
       _enemies.push(e);
     }
-    // Farming modes look farther — the brain prefers beast targets
-    // when huntCreatures is on, so a far beast still enters the list.
-    const c = this.host.nearestCreature(bot.position, this.host.mode() === 'nuggets' ? 80 : 35);
-    if (c) {
+    // Every live scored creature enters — the server parties feed the
+    // whole bodies roster unfiltered, so a far beast competes with a
+    // near one for the same pick instead of nearest-only winning by
+    // list position. Scoreless decor stays out (server's roster is
+    // pops-declared creatures only).
+    for (const t of this.host.targets) {
+      if (t.dead || t.scoreless) {continue;}
       const e = nextBot() as EnemyEntry & { playerId?: string };
-      e.id = `creature:${c.id}`; e.pos = c.pos; e.vel = c.vel; e.alive = !c.dead; e.aimY = 0;
+      e.id = `creature:${t.id}`; e.pos = t.pos; e.vel = t.vel; e.alive = true; e.aimY = 0;
       _enemies.push(e);
     }
     return _enemies;
