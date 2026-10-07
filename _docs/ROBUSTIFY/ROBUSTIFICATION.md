@@ -217,6 +217,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.58 Arrival floor on the fire-window law (2026-10-07)
+
+Shot-claim cadence trusted client stamps: one giant `timestamp` poisoned
+`win.lastTs`, making every later stamped gap negative → lenient admit →
+cadence law permanently dead for that weapon key (only the 40/s flood
+bucket remained). Detecting the forgery via arrival-vs-stamp deltas is
+impossible — honest batched delivery after a stall looks identical —
+so the rolling-second arrival bound now counts EVERY claim, stamped or
+not (stamps govern the pellet/violation law; arrivals are the only
+stamp-proof evidence). Pinned: giant stamp + 15 rapid stamped claims →
+the 16th rejects.
+
 ### 2.57 Finite-guard on env/heal claim handlers (2026-10-07)
 
 Server-side NaN sweep: wire decode validates every claim field

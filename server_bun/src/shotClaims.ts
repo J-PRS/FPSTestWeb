@@ -207,6 +207,17 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
         win = { start: now, count: 0, lastTs: undefined, arr: [], violations: 0 };
         h.fireWindows.set(key, win);
       }
+      // Hard floor, stamp-independent: a forged stamp can make any gap
+      // look legal (one giant stamp poisons lastTs and every later gap
+      // goes negative → lenient admit), so the rolling-second arrival
+      // bound counts EVERY claim, stamped or not. A backlog burst
+      // passes; >2× sustained rate still reads.
+      win.arr = win.arr.filter(t => now - t < 1000);
+      win.arr.push(now);
+      if (win.arr.length >= Math.ceil(1000 / slack) + 2) {
+        h.reject(playerId, 'Shot', `fire rate (flood: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
+        return;
+      }
       if (msg.timestamp !== undefined) {
         const gap = win.lastTs !== undefined ? msg.timestamp - win.lastTs : Infinity;
         if (gap >= slack) {
@@ -230,16 +241,9 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
         win.count++;
         win.lastTs = Math.max(win.lastTs ?? 0, msg.timestamp);
       } else {
-        // Stampless claims can't prove trigger spacing — bound the
-        // SUSTAINED rate: arrivals inside a rolling second, legal rate +
-        // backlog slack. A backlog burst passes; >2× rate still reads.
-        win.arr = win.arr.filter(t => now - t < 1000);
-        win.arr.push(now);
+        // Stampless claims can't prove trigger spacing — the arrival
+        // floor above is the whole law for them.
         win.count++;
-        if (win.arr.length >= Math.ceil(1000 / slack) + 2) {
-          h.reject(playerId, 'Shot', `fire rate (stampless flood: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
-          return;
-        }
       }
     }
 

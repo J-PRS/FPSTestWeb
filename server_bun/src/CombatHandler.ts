@@ -472,8 +472,8 @@ export class CombatHandler {
   respawnRequest(id: string, hold = false): void {
     const p = this.playerManager.getPlayer(id);
     if (p?.isDead) {
-      // Dead press = "respawn me now" — releases a die-and-spectate hold
-      // or just skips the remaining countdown.
+      // Dead press releases a die-and-spectate hold — it never skips a
+      // live countdown (a click-beats-timer hole made the delay decorative).
       this.respawner.respawnNow(id);
       return;
     }

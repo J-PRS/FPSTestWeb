@@ -77,6 +77,21 @@ describe('scenario: fire-window law', () => {
     expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(1);
   });
 
+  it('a forged giant stamp cannot evade the arrival floor', () => {
+    const room = mkRoom({ bots: 2 }, 'tdm');
+    const w = watch(room);
+    const [a] = twoPlayers(room);
+    const rejects = spyRejects(room, a.id);
+    // One giant stamp poisons lastTs — every later stamped gap is
+    // negative and admits leniently. Old law: cadence dead forever.
+    // The stamp-independent arrival floor is the only stamp-proof
+    // evidence: the 16th rapid claim rejects regardless of stamps.
+    spawnShot(room, a.id, 1e9);
+    for (let i = 0; i < 15; i++) spawnShot(room, a.id, i * 10);
+    expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(1);
+    expect(w.count('projectileCreated')).toBe(15);
+  });
+
   it('dedup: a resent spawn nonce re-acks without consuming a fire-window slot', () => {
     const room = mkRoom({ bots: 2 }, 'tdm');
     const w = watch(room);
