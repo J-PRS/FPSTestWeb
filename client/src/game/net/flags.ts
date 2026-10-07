@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
+import { reconcileReplicas } from '../replicas.js';
 import * as sfx from '../../core/sfx.js';
 import { Explosion } from '../../effects/explosion.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
@@ -186,26 +187,24 @@ export function wireFlags(ctx: NetCtx): void {
   };
 
   networkManager.onFlagUpdate = (flags) => {
-    // An empty roster (room hop out of a CTF match, or gameState with no
-    // flags) tears the meshes and HUD diamonds down.
-    const live = new Set(flags.map(f => f.team));
-    for (const team of flagMeshes.keys()) { // Map delete-during-iterate is safe
-      if (live.has(team as TeamId)) continue;
-      const vis = flagMeshes.get(team)!;
-      deps.lazyScene().remove(vis.flag, vis.stand);
-      flagMeshes.delete(team);
-      wasDropped.delete(team);
-      prevState.delete(team);
-      deps.world.flagMarkers.delete(team as TeamId);
-      deps.lazyHud().removePlayerIndicator(`flag:${team}`);
-      deps.lazyHud().removePlayerIndicator(`stand:${team}`);
-      delete deps.world.flagStates[team as TeamId];
-    }
     // Post-matchStart broadcast carries the reset transitions — hush
     // exactly this update, then announce edges normally again.
     const hush = deps.world.flagHomeHush;
     deps.world.flagHomeHush = false;
-    for (const f of flags) applyFlagUpdate(f, hush);
+    reconcileReplicas(flagMeshes, flags, {
+      rowId: (f) => f.team,
+      ensure: (f) => ensureFlagMesh(f.team),
+      apply: (_vis, f) => applyFlagUpdate(f, hush),
+      reap: (vis, team) => {
+        deps.lazyScene().remove(vis.flag, vis.stand);
+        wasDropped.delete(team);
+        prevState.delete(team);
+        deps.world.flagMarkers.delete(team as TeamId);
+        deps.lazyHud().removePlayerIndicator(`flag:${team}`);
+        deps.lazyHud().removePlayerIndicator(`stand:${team}`);
+        delete deps.world.flagStates[team as TeamId];
+      },
+    });
   };
 
   const applyFlagUpdate = (f: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }, hush = false): void => {
@@ -227,6 +226,14 @@ export function wireFlags(ctx: NetCtx): void {
     if (marker.homeKnown) {
       vis.stand.visible = true;
       vis.stand.position.copy(marker.home);
+      if (!marker.homeLogged) {
+        marker.homeLogged = true;
+        // Collider-vs-mesh float probe: the stand OBBs base at the wire
+        // home's y — a mesh seated elsewhere means the snap that emitted
+        // `home` disagrees with the snap that emitted the stand specs.
+        const ty = deps.lazyTerrain().getHeight(marker.home.x, marker.home.z);
+        console.log(`[standPlant] ${f.team} home=(${marker.home.x.toFixed(2)},${marker.home.y.toFixed(2)},${marker.home.z.toFixed(2)}) terrain=${ty.toFixed(2)} dy=${(marker.home.y - ty).toFixed(2)}`);
+      }
     }
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
     // The wire's home is ground level; the pole seats ON the platform

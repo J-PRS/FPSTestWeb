@@ -9,8 +9,8 @@
  * roster instead of ghosting forever.
  */
 
-export interface ReplicaHooks<T, R> {
-  rowId: (r: R) => number;
+export interface ReplicaHooks<T, R, K> {
+  rowId: (r: R) => K;
   /** Returns true when the entry counts as alive-but-spawnable — a
    *  `dead` flag means the ctor failed or a gone edge landed and the
    *  roster must respawn it rather than skip forever. */
@@ -24,11 +24,11 @@ export interface ReplicaHooks<T, R> {
   apply?: (e: T, r: R) => void;
   /** Teardown for an entry the roster dropped — runs while the entry is
    *  still in the caller's hands; the map delete happens inside. */
-  reap: (e: T, id: number) => void;
+  reap: (e: T, id: K) => void;
 }
 
-export function reconcileReplicas<T, R>(map: Map<number, T>, rows: R[], hooks: ReplicaHooks<T, R>): void {
-  const live = new Set<number>();
+export function reconcileReplicas<T, R, K>(map: Map<K, T>, rows: R[], hooks: ReplicaHooks<T, R, K>): void {
+  const live = new Set<K>();
   for (const r of rows) {
     const id = hooks.rowId(r);
     live.add(id);
