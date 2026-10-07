@@ -1,3 +1,4 @@
+2026-10-01 - Mannequin throw clip - UAL_OverhandThrow is UAL2-only and Punch doesn't exist on the rig; throw now resolves to UAL_Pistol_Shoot like cybersoldier
 2026-10-01 - Whiff warn credits attacker speed - netDriven creatures/balls replaying fast legitimately sit ~20m off the snapshot they bit on; only slow-attacker whiffs warn now
 2026-10-01 - C5: WIRE_POSITION round-trip pinned - the binary position-report frame now carries every declared position-intent field; all three hand-packed frames (position/tick/ballSegment) are conformance-pinned
 2026-10-01 - MoveJudge shadow gates named as phases - reconcile's implicit early-return ladder is now an explicit gatePhase (grace/seed/stale-epoch/parked-defer/gap-young/judge); same semantics, named lifecycle (task 109)

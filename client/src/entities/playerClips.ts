@@ -293,6 +293,11 @@ export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationStat
     // Default stance is armed — the relaxed Idle_Loop dangles the gun at
     // the thigh; Pistol_Idle holds it raised and reads as "in combat".
     idle: 'UAL_Pistol_Idle_Loop',
+    // Bake sources are kevdev-only — UAL_OverhandThrow (UAL2) never
+    // lands here, so 'throw' bottomed out on 'Punch', which this rig
+    // doesn't ship either (warn + hold pose). Pistol_Shoot's arm
+    // extension is the same stand-in the cybersoldier override uses.
+    throw: 'UAL_Pistol_Shoot',
   },
 };
 
