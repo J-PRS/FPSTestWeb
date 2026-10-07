@@ -30,6 +30,7 @@ import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { healPool } from './healPool.ts';
 import { SIM_TICK_DT } from '../../shared/wire.ts';
+import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
 
 const TICK_DT = SIM_TICK_DT;
 // Distance-tiered send: committed edges only matter to players who can
@@ -274,7 +275,7 @@ export class CreatureSim {
     // A baneling dies by popping — shot or fuse, the blast is the point.
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
     const pos = { x: c.x, y: c.y, z: c.z };
-    this.broadcast({ type: 'crawlDie', id: c.id, position: pos, by: by ?? null });
+    this.broadcast(verbPayload(WORLD_MODEL.creature!, 'gone', 'id', c.id, { position: pos, by }) as ServerMessage);
     if (by) this.onKilled?.(by, pos);
   }
 

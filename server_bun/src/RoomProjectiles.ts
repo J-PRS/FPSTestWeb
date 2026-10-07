@@ -27,7 +27,7 @@ import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../s
 import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -255,7 +255,7 @@ export class RoomProjectiles {
 
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
     this.projs.delete(proj.id);
-    this.room.broadcast({ type: 'projectileDestroyed', projectileId: proj.id });
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, {}) as ServerMessage);
     // Skillshot ramp: sim shells carry their real flight age — a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
@@ -393,7 +393,7 @@ export class RoomProjectiles {
     for (const [id, proj] of this.projs) {
       if (proj.ownerId === ownerId) {
         this.projs.delete(id);
-        this.room.broadcast({ type: 'projectileDestroyed', projectileId: id });
+        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, {}) as ServerMessage);
       }
     }
   }

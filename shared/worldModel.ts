@@ -33,6 +33,12 @@ export interface WorldKindDecl {
    *  in wire order. Declared so the emit can't add a field the client's
    *  spawn handler doesn't consume. */
   spawnFields?: KindFieldDecl[];
+  /** Gone payload shape — fields past the id a destroy message carries. */
+  goneFields?: KindFieldDecl[];
+  /** Update payload shape — fields past the id an update message carries
+   *  (only for kinds whose update rides a JSON verb; binary updaters like
+   *  ballSegment encode their own frame). */
+  updateFields?: KindFieldDecl[];
   /** Streamed motion fields — the shared sim replays them, so they are
    *  presence-checked only (a stranded replica), never value-diffed. */
   simFields: KindFieldDecl[];
@@ -55,6 +61,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'targetId', channel: 'edge' },
       { name: 'tp', channel: 'edge' },
       { name: 't', channel: 'sim' },
+    ],
+    goneFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'by', channel: 'edge' },
     ],
     simFields: [
       { name: 'position', channel: 'sim' },
@@ -79,6 +89,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'tp', channel: 'edge' },
       { name: 't', channel: 'sim' },
     ],
+    goneFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'by', channel: 'edge' },
+    ],
     simFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
@@ -97,6 +111,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'kind', channel: 'edge' },
       { name: 'pos', channel: 'sim' },
       { name: 'team', channel: 'edge' },
+    ],
+    updateFields: [
+      { name: 'hp', channel: 'echo' },
+      { name: 'armor', channel: 'echo' },
+      { name: 'src', channel: 'echo' },
     ],
     simFields: [
       { name: 'pos', channel: 'sim' },
@@ -144,6 +163,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'shotId', channel: 'echo' },
       { name: 'pellet', channel: 'echo' },
     ],
+    goneFields: [],
     simFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
@@ -151,20 +171,32 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
 };
 
-/** Build a spawn payload for `verb` from the declared field list — the
- *  emitter supplies the values; the declared ORDER and field set own the
- *  wire shape, so a field can't drift into a message the client's spawn
- *  handler never reads. Values absent from `vals` become the declared
- *  `absent` sentinel or null. */
+/** Build a lifecycle payload from the declared field list — the emitter
+ *  supplies the values; the declared ORDER and field set own the wire
+ *  shape, so a field can't drift into a message the client's handler
+ *  never reads. Values absent from `vals` become the declared `absent`
+ *  sentinel or null. */
+export function verbPayload(
+  kind: WorldKindDecl,
+  verb: 'spawn' | 'update' | 'gone',
+  idField: string,
+  id: number | string,
+  vals: Record<string, unknown>,
+): Record<string, unknown> {
+  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
+  const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
+  for (const f of fields ?? []) msg[f.name] = vals[f.name] ?? f.absent ?? null;
+  return msg;
+}
+
+/** Spawn-half convenience — most emits only need the spawn verb. */
 export function spawnPayload(
   kind: WorldKindDecl,
   id: number | string,
   idField: string,
   vals: Record<string, unknown>,
 ): Record<string, unknown> {
-  const msg: Record<string, unknown> = { type: kind.verbs.spawn, [idField]: id };
-  for (const f of kind.spawnFields ?? []) msg[f.name] = vals[f.name] ?? f.absent ?? null;
-  return msg;
+  return verbPayload(kind, 'spawn', idField, id, vals);
 }
 
 /** The per-id field tuple a hash-miss diff carries for a kind — the

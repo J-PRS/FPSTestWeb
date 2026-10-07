@@ -30,6 +30,7 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { encodeBallSegment, SIM_TICK_DT } from '../../shared/wire.ts';
+import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 import { BallCombat } from './ballCombat.ts';
@@ -230,7 +231,7 @@ export class BallSim {
     this.retargetAcc.delete(b.id);
     this.resyncAcc.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
-    this.broadcast({ type: 'ballDie', id: b.id, position: pos, by: by ?? null });
+    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: pos, by }) as ServerMessage);
     if (by) this.onKilled?.(by, pos, b.variant);
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {

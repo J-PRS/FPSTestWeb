@@ -7,7 +7,7 @@
  * carpet the map — there was previously no server record at all.
  */
 import type { Vec3, ClaimVerdict, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -299,7 +299,7 @@ export class RoomDeployables {
   private sendHp(d: Deployed, src?: string): void {
     // src is the welder's id on a heal tick — other clients draw their
     // repair beam off it; damage ticks carry no src.
-    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor), ...(src ? { src } : {}) });
+    this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'update', 'id', d.id, { hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor), src }) as ServerMessage);
   }
 
   // Repair claims are rate-limited per shooter+target — a client can pace
