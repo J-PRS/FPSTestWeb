@@ -26,7 +26,7 @@ export interface KindFieldDecl {
 export interface WorldKindDecl {
   /** Wire verb prefix: ball => ballSpawn / ballSegment / ballDie. */
   kind: string;
-  verbs: { spawn: string; update: string; gone: string; roster?: string };
+  verbs: { spawn?: string; update?: string; gone?: string; roster?: string };
   /** Lifecycle/mirrored fields a replica MUST agree on — hashed + diffed. */
   fields: KindFieldDecl[];
   /** Spawn payload shape — the full field list a spawn message carries,
@@ -217,7 +217,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
   flag: {
     kind: 'flag',
-    verbs: { spawn: 'flagSpawn', update: 'flagUpdate', gone: 'flagGone' },
+    // flagUpdate IS the whole lifecycle — state/carrier/pos ride the
+    // roster feed, so there are no spawn/gone edge verbs to declare.
+    verbs: { update: 'flagUpdate' },
     fields: [
       { name: 'state', channel: 'edge' },
       { name: 'carrier', channel: 'edge' },
@@ -236,7 +238,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
   pickup: {
     kind: 'pickup',
-    verbs: { spawn: 'pickupSpawn', update: 'pickupKnock', gone: 'pickupGone' },
+    // Blast knocks rebroadcast pickupSpawn (the edge re-seats clients to
+    // the new truth spot) — there is no distinct update verb.
+    verbs: { spawn: 'pickupSpawn', gone: 'pickupGone' },
     fields: [
       { name: 'kind', channel: 'edge' },
     ],
@@ -258,7 +262,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
   projectile: {
     kind: 'projectile',
-    verbs: { spawn: 'projectileCreated', update: 'projectileUpdate', gone: 'projectileDestroyed' },
+    // Shells are edges-only: spawn edge + deterministic replay + destroy
+    // — there is no update verb on the wire.
+    verbs: { spawn: 'projectileCreated', gone: 'projectileDestroyed' },
     fields: [
       { name: 'weaponType', channel: 'edge' },
       { name: 'ownerId', channel: 'edge' },

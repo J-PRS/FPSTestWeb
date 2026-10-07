@@ -134,6 +134,20 @@ describe('world model <-> protocol conformance', () => {
     }
   });
 
+  it('every declared verb and event type exists on the ServerMessage union', () => {
+    // A declared verb nothing emits is worse than none — it reads as a
+    // wire surface that doesn't exist. Pin declarations to union members.
+    const sStart = PROTOCOL.indexOf('export type ServerMessage');
+    const union = PROTOCOL.slice(sStart);
+    for (const kind of Object.values(WORLD_MODEL)) {
+      const verbs = [kind.verbs.spawn, kind.verbs.update, kind.verbs.gone, kind.verbs.roster, ...Object.keys(kind.events ?? {})];
+      for (const v of verbs) {
+        if (!v) continue;
+        expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
+      }
+    }
+  });
+
   it('simFields stays a subset of the declared field lists', () => {
     // simFields names which declared fields drive the shared sim — a
     // name that isn't declared anywhere is dead data nobody verifies.
