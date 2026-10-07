@@ -244,6 +244,11 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
 // the same bytes the room's sims consume so terrain matches bit-for-bit.
 export async function mapBinRoute(url: URL): Promise<Response> {
   const file = url.pathname.slice('/maps/'.length);
+  // T2 ports carry rights-restricted assets — a public-beta deploy never
+  // serves them, even when the catalog flag leaked a name through.
+  if (CONFIG.publicBeta && file.startsWith('t2/')) {
+    return corsResponse('Not found', { status: 404 });
+  }
   // maps/-relative asset path: word-char segments, ≤3 dirs deep, bin/
   // image/model/json payload — t2/<map>/sky/px.png needs the third level.
   if (!/^(?:[\w-]{1,64}\/){0,3}[\w-]{1,64}\.(?:bin|png|jpe?g|webp|glb|json)$/.test(file)) {

@@ -191,6 +191,7 @@ export class PlayerModel {
 
     return new Promise((resolve, reject) => {
       let attempts = 0;
+      let fellBack = false;
       const attempt = () => {
       // One parse per rig URL for the whole session — SkeletonUtils.clone
       // hands each remote its own skeleton bound to shared geometry and
@@ -210,6 +211,19 @@ export class PlayerModel {
           if (++attempts <= 4) {
             logger.warn(`Model load failed, retry ${attempts}/4`, error);
             setTimeout(attempt, 600 * attempts);
+            return;
+          }
+          // A rig absent from the deploy bundle (clean builds strip the
+          // class_* GLBs) permanently 404s — retrying can't help, so swap
+          // the variant once for a body the bundle always ships.
+          if (!fellBack && url.includes('/class_')) {
+            fellBack = true;
+            logger.warn('Rig missing from bundle, using fallback body', { variant: this.variant });
+            (this as { variant: PlayerModelVariant }).variant = this.variant === 'polyart' ? 'knight' : 'mannequin';
+            this.pose = new PoseControl(this.variant);
+            const fbShoot = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
+            this.pose.wantSpineLock = !fbShoot || fbShoot.startsWith('UAL_');
+            this.load().then(resolve, reject);
             return;
           }
           logger.error('Failed to load', error);

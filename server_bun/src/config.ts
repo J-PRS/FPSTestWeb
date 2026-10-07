@@ -112,6 +112,11 @@ export const CONFIG = {
   // Empty = LAN/direct-connect only, which is what dev needs anyway.
   iceServersJson: envStr('FPS_ICE_SERVERS', ''),
 
+  // Public-beta asset profile: drop the rights-restricted content —
+  // _t2-marked map specs vanish from the catalog and maps/t2/* fetches
+  // 404. Off in dev where the full T2 port set stays playable.
+  publicBeta: envStr('FPS_PUBLIC_BETA', '0') === '1',
+
   // Per-type rate limits live in wire.ts beside the validators and
   // handlers — one WIRE entry is the whole contract for a message type.
 

@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+.git
+_maps/t2
+maps/t2
+client
+server_bun/demos
+server_bun/logs
+server_bun/_tmp
+*.old

@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { CONFIG } from './config.ts';
 import { type MapSpec, resolveMapSpec, specModes } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
@@ -80,7 +81,9 @@ export class MapCatalog {
   private readSpec(name: string): MapSpec {
     const path = `${MAPS_DIR}/${name}.json`;
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
-    if ((parsed as { _t2?: unknown })._t2 !== undefined) this.t2Flags.add(name);
+    const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
+    if (isT2 && CONFIG.publicBeta) throw new Error('t2 spec excluded by FPS_PUBLIC_BETA');
+    if (isT2) this.t2Flags.add(name);
     const spec = resolveMapSpec(parsed);
     // Fail loud on coerced/dropped fields — a typo in the JSON shouldn't
     // silently play as a different map than the author wrote.
