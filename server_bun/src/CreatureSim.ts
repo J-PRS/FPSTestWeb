@@ -165,8 +165,8 @@ export class CreatureSim {
   private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
     this.brain.noteEdge(c.id);
     if (kind === 'retarget') this.skipCount.set(c.id, (this.skipCount.get(c.id) ?? 0) + 1);
-    const msg: ServerMessage = {
-      type: 'crawlEvt', id: c.id, kind, sk: this.skipCount.get(c.id) ?? 0,
+    const msg = verbPayload(WORLD_MODEL.creature!, 'update', 'id', c.id, {
+      kind, sk: this.skipCount.get(c.id) ?? 0,
       // For 'blink' the position field carries the committed DESTINATION —
       // a far client that missed the decision still teleports correctly.
       position: kind === 'blink' && isTotem(c)
@@ -174,7 +174,7 @@ export class CreatureSim {
         : { x: c.x, y: c.y, z: c.z },
       velocity: { x: c.vx, y: c.vy, z: c.vz },
       targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
-    };
+    }) as ServerMessage;
     if (!this.sendTo) { this.broadcast(msg); return; }
     const n = (this.edgeSeq.get(c.id) ?? 0) + 1;
     this.edgeSeq.set(c.id, n);

@@ -107,6 +107,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'position', channel: 'sim' },
       { name: 'by', channel: 'edge' },
     ],
+    updateFields: [
+      { name: 'kind', channel: 'edge' },
+      { name: 'sk', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
+    ],
     rosterFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
