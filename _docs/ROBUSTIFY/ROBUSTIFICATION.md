@@ -3093,3 +3093,18 @@ client-only on every check. The snapshot pass now retires both the
 record (remoteDelete) and the entity (remotePlayers.remove) for any
 id the server snapshot doesn't list. Symmetric with the 2.166 mint;
 membership is now healed in both directions. (stateDebug.ts)
+
+## 2.170 Audit pass: teardown funnel + edge-ownership sweep (clean)
+
+Post-refactor verification sweep, no defects found: every replica lane
+now obeys the single-owner rule -- players (2.168 patch-or-drop edges,
+membership feeds create), creatures/balls (dedup spawn + roster cull),
+pickups (spawn-edge create + reconcile cull), deployables (2.160/2.161
+own-plant ghost fixes). Server teardown funnel verified complete:
+fireWindows/lastFireNotify/lastHeal/chargeBank/pendingClaims/lastDropNotify/
+lastRejectWarn/healTicks (both key orientations) all swept on disconnect;
+HitLedger duelStart is age-pruned (60s) so orphan keys can't grow.
+Foraged-stamp defense in fire gating verified (rolling arrival floor +
+lastTs max-clamp). Entity-side revive visuals for a hit-flipped isDead
+record stay hash-heal-owned (position needed) -- accepted gap, seconds
+of stale visual worst case. (audit only)

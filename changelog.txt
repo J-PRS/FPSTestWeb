@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.170: audit pass - teardown funnel + edge-ownership sweep clean after the single-owner refactor
 2026-10-01 - robustify 2.169: state-hash audit retires client-only roster members - a lost playerLeft edge no longer desyncs forever (record + entity removed on snapshot truth)
 2026-10-01 - robustify 2.167+2.168: ballFields per-id diff for the ball hash (names the diverging field, not just ids); roster single-owner refactor - edges now patch-or-drop via patchRemotePlayer, only membership feeds create (kills the phantom-stub class by construction)
 2026-10-01 - robustify 2.166: state-hash audit heals missing roster members - server-only players get their record seeded from the snapshot so a lost join edge no longer desyncs forever
