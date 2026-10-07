@@ -16,6 +16,7 @@ export class BotSheepMeter {
   /** Last sim-ms each body's maxed warn fired — a true llama re-maxes
    *  every life, so the alarm needs a cooldown or it floods anyway. */
   private maxWarnedAt = new Map<string, number>();
+  private lastMaxLine = new Map<string, string>();
 
   constructor(private room: Room) {}
 
@@ -26,7 +27,10 @@ export class BotSheepMeter {
    *  the same recency evidence a bot's own fire intent gives it. */
   noteFire(id: string): void { this.core.noteFire(id); }
 
-  clear(id: string): void { this.core.clear(id); }
+  clear(id: string): void {
+    this.core.clear(id);
+    this.lastMaxLine.delete(id);
+  }
 
   /** No ticks on record = unproven = full meter. */
   of(id: string): number { return this.core.of(id); }
@@ -68,10 +72,14 @@ export class BotSheepMeter {
     const whyPts = { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), bleed: +why.bleed.toFixed(1), cover: +why.cover.toFixed(1) };
     const sheepLog = process.env.FPS_SHEEP_LOG;
     if (sheepLog) {
-      try {
-        appendFileSync(sheepLog,
-          `${(this.core.now / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} bleed=${whyPts.bleed} cover=${whyPts.cover}\n`);
-      } catch { /* a bad log path must never break a match */ }
+      const line = `${(this.core.now / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} bleed=${whyPts.bleed} cover=${whyPts.cover}`;
+      // A bot hovering at the meter edge re-maxes on every dip+refill; the
+      // why-line is unchanged, so repeats carry no information.
+      if (line !== this.lastMaxLine.get(id)) {
+        this.lastMaxLine.set(id, line);
+        try { appendFileSync(sheepLog, line + '\n'); }
+        catch { /* a bad log path must never break a match */ }
+      }
       logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
     } else {
       logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });

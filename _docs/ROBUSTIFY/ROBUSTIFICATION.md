@@ -217,6 +217,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.50 Sheep log dedupe (2026-10-07)
+
+Soak read found `FPS_SHEEP_LOG` files repeating identical why-lines —
+`newlyMaxed` is edge-triggered, but a bot hovering at meter=100 dips and
+re-maxes within the same sim second, re-firing the warn. The 600s
+cooldown uses `core.now` (sim ms), which a fast-forwarded soak burns
+through, so the file fills with verbatim duplicates carrying zero
+information. The append is now skipped when the emitted line is
+identical to the bot's last (`lastMaxLine`, cleared in `clear()`).
+Observed: `run/soak.log` tail had the same `idle=5.2 bleed=36` line 6+
+times consecutively per bot.
+
 ### 2.49 ExplosionTracker prefix-trim (2026-10-07)
 
 `cleanup()` expired entries with `shift()` per entry — O(n) per add
