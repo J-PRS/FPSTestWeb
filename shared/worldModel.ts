@@ -117,3 +117,38 @@ export function kindFields(kind: WorldKindDecl, roster: Iterable<{ id: number }>
   }
   return out;
 }
+
+/** Client half of the hash-miss diff: compare the server's emitted field
+ *  tuples against the local replica map by DECLARED field name — the
+ *  same list the emit used, so a new hashed field diffs on both ends
+ *  automatically. Returns descriptive strings (`#id:missing`,
+ *  `#id:stranded`, `#id:field local/remote`). */
+export function kindFieldDiffs(
+  kind: WorldKindDecl,
+  local: Map<number, Record<string, unknown>>,
+  serverFields: readonly (readonly unknown[])[] | undefined,
+): { diffs: string[]; keys: Set<string> } {
+  const diffs: string[] = [];
+  const keys = new Set<string>();
+  if (!serverFields) return { diffs, keys };
+  const seen = new Set<number>();
+  for (const row of serverFields) {
+    const id = row[0] as number;
+    seen.add(id);
+    const l = local.get(id);
+    if (!l) { diffs.push(`#${id}:missing`); keys.add(`${id}:missing`); continue; }
+    for (let i = 0; i < kind.fields.length; i++) {
+      const f = kind.fields[i]!;
+      const remote = row[i + 1];
+      const lv = l[f.name] ?? f.absent ?? null;
+      if (lv !== (remote ?? f.absent ?? null)) {
+        diffs.push(`#${id}:${f.name} ${lv}/${remote}`);
+        keys.add(`${id}:${f.name}`);
+      }
+    }
+  }
+  for (const id of local.keys()) {
+    if (!seen.has(id)) { diffs.push(`#${id}:stranded`); keys.add(`${id}:stranded`); }
+  }
+  return { diffs, keys };
+}

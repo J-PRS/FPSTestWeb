@@ -7,6 +7,7 @@ import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
 import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../../shared/stateHash.js';
+import { WORLD_MODEL, kindFieldDiffs } from '../../../shared/worldModel.js';
 import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
@@ -316,7 +317,13 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   // in flight can land across a check boundary, so one sighting is
   // debug-level; a persistent mismatch means a stranded/lost/stale
   // replica the ballRoster path never healed (§4.7).
+  // Enraged/targetId are DERIVED inside the replayed integrator, so a
+  // bounce landing one tick either side of the enrage boundary flips the
+  // flag transiently on a different ball each check — a fleet-level
+  // streak of identical-name diffs is churn, not a stranded replica.
+  // Only a diff pinned to the same id+field twice running is real.
   let ballDriftStreak = 0;
+  let prevBallDiffs = new Set<string>();
   let creatureDriftStreak = 0;
   let deployDriftStreak = 0;
   let flagDriftStreak = 0;
@@ -381,18 +388,10 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         // a field diff is a kind/owner/team asymmetry.
         let detail = `server=${serverDeployHash} client=${localDeployHash} ids=[${[...local.keys()].join(',')}]`;
         if (serverDeployFields) {
-          const diffs: string[] = [];
-          const seen = new Set<number>();
-          for (const [id, kind, owner, team] of serverDeployFields) {
-            seen.add(id);
-            const l = local.get(id);
-            if (!l) {diffs.push(`#${id}:server-only ${kind}/${owner}/${team}`);}
-            else if (l.kind !== kind || l.owner !== owner || l.team !== team) {diffs.push(`#${id}:${l.kind}/${l.owner}/${l.team}->${kind}/${owner}/${team}`);}
-          }
-          for (const id of local.keys()) {
-            if (!seen.has(id)) {diffs.push(`#${id}:client-only`);}
-          }
-          if (diffs.length) {detail += ` diffs={${diffs.slice(0, 6).join(', ')}}`;}
+          // Generated from the deploy declaration — same field list the
+          // server emitted, so emit and diff can't drift apart.
+          const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverDeployFields);
+          if (d.diffs.length) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
         }
         if (deployDriftStreak >= 2) {
           logger.warn(`[StateHash] DEPLOY DESYNC tick=${tick} ${detail} (persistent across ${deployDriftStreak} checks — a deploySpawn/deployGone edge never landed)`);
@@ -421,21 +420,10 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         // stranded targetId) so the next soak answers instead of asking.
         let detail = `server=${serverCreatureHash} client=${localCreatureHash} ids=[${[...local.keys()].join(',')}]`;
         if (serverCreatureFields) {
-          const diffs: string[] = [];
-          for (const [id, species, state, uber, targetId] of serverCreatureFields) {
-            const l = local.get(id);
-            if (!l) { diffs.push(`#${id}:missing`); continue; }
-            const f: string[] = [];
-            if (l.species !== species) {f.push(`species ${l.species}/${species}`);}
-            if (l.state !== state) {f.push(`state ${l.state}/${state}`);}
-            if (l.uber !== uber) {f.push(`uber`);}
-            if ((l.targetId ?? null) !== (targetId ?? null)) {f.push(`tgt ${l.targetId ?? '-'}/${targetId ?? '-'}`);}
-            if (f.length) {diffs.push(`#${id}:${f.join(',')}`);}
-          }
-          for (const id of local.keys()) {
-            if (!serverCreatureFields.some((r) => r[0] === id)) {diffs.push(`#${id}:stranded`);}
-          }
-          if (diffs.length) {detail += ` diff=${diffs.slice(0, 6).join(' ')}`;}
+          // Generated from the creature declaration — same field list
+          // the server emitted, so emit and diff can't drift apart.
+          const d = kindFieldDiffs(WORLD_MODEL.creature!, local, serverCreatureFields);
+          if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
           // Heal field-level drift the way the snapshot heals player
           // liveness: a lost crawlEvt leaves sim.state/targetId stale
           // forever (the audit just re-warns). Edges stay the primary
@@ -465,32 +453,32 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       const localBallHash = computeReplicaHash(localBalls);
       if (localBallHash === serverBallHash) {
         ballDriftStreak = 0;
+        prevBallDiffs.clear();
       } else {
         ballDriftStreak++;
         // Membership alone isn't the signal here — enraged/targetId churn
         // mismatches the hash on identical rosters, so diff the server's
         // per-id fields like the creature/deploy lanes do.
         let detail = `server=${serverBallHash} client=${localBallHash} ids=[${[...localBalls.keys()].join(',')}]`;
+        let diffKeys: Set<string> | null = null;
         if (serverBallFields) {
-          const diffs: string[] = [];
-          for (const [id, variant, enraged, targetId] of serverBallFields) {
-            const l = localBalls.get(id);
-            if (!l) {diffs.push(`#${id}:missing`); continue;}
-            const f: string[] = [];
-            if (l.variant !== variant) {f.push(`variant ${l.variant}/${variant}`);}
-            if (l.enraged !== enraged) {f.push(`enraged`);}
-            if ((l.targetId ?? null) !== (targetId ?? null)) {f.push(`tgt ${l.targetId ?? '-'}/${targetId ?? '-'}`);}
-            if (f.length) {diffs.push(`#${id}:${f.join(',')}`);}
-          }
-          for (const id of localBalls.keys()) {
-            if (!serverBallFields.some((r) => r[0] === id)) {diffs.push(`#${id}:stranded`);}
-          }
-          if (diffs.length) {detail += ` diff=${diffs.slice(0, 6).join(' ')}`;}
+          // Generated from the ball declaration — same field list the
+          // server emitted, so emit and diff can't drift apart.
+          const d = kindFieldDiffs(WORLD_MODEL.ball!, localBalls, serverBallFields);
+          diffKeys = d.keys;
+          if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
         }
-        if (ballDriftStreak >= 2) {
-          logger.warn(`[StateHash] BALL DESYNC tick=${tick} ${detail} (persistent across ${ballDriftStreak} checks — stranded or stale replica)`);
+        // Per-key persistence: enraged/targetId flip transiently at bounce
+        // boundaries (same integrator, ±1 tick of contact phase), and a
+        // fleet streak of rotating offenders reads as "persistent" when
+        // nothing is actually stuck. Escalate only diffs the same id+field
+        // repeated, or a fieldless hash drift that won't heal.
+        const persistent = diffKeys ? [...diffKeys].filter((k) => prevBallDiffs.has(k)) : [];
+        if (diffKeys) {prevBallDiffs = diffKeys;}
+        if (persistent.length > 0 || (!diffKeys && ballDriftStreak >= 2)) {
+          logger.warn(`[StateHash] BALL DESYNC tick=${tick} ${detail} (persistent ${persistent.length ? persistent.slice(0, 6).join(', ') : `across ${ballDriftStreak} checks`} — stranded or stale replica)`);
         } else {
-          logger.debug(`[StateHash] ball mismatch tick=${tick} ${detail} (transient — lifecycle edge in flight)`);
+          logger.debug(`[StateHash] ball mismatch tick=${tick} ${detail} (transient — lifecycle edge or derived-flag boundary in flight)`);
         }
       }
     }

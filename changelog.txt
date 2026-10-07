@@ -1,3 +1,4 @@
+2026-10-01 - C5: client hash-diff lanes generate from the world-model - stateDebug ball/creature/deploy diffs use kindFieldDiffs so emit and diff share the declared field list
 2026-10-01 - C5: creature/deploy/flag/pickup kinds join the world-model table - every replica lane's verbs + field channels declared once; all three hash-diff emits generate from the declarations
 2026-10-01 - C5: world-model table seeded - shared/worldModel.ts declares each entity kind's verbs + field channels once; 'ball' is the pilot and TickLoop's ballFields hash-diff now generates from it
 2026-10-01 - C5: crawler-family claims gated by serverPaid - hitTargetLocal (bot/deployable damage) plus shell splash/contact were claiming hits the authority already settles; all 8 species thread the flag through claimDamageMelee
