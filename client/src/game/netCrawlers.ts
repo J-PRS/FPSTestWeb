@@ -86,7 +86,13 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     totem:    { Klass: Totem,    list: totems,    state: 'aim'     },
   };
 
+  // Non-finite authority state silently poisons the replay sim — drop
+  // the edge and warn (server fault, hostile p2p peer).
+  const finite = (v: { x: number; y: number; z: number }) =>
+    Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
+    if (!finite(m.position) || (m.tp && !finite(m.tp))) {deps.logger.warn(`crawl spawn #${m.id} dropped: non-finite vector`); return;}
     if (netCrawlerById.has(m.id)) {return;}
     const sp = SPECIES[m.species ?? 'crawler'] ?? SPECIES.crawler!;
     const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
@@ -109,6 +115,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
+    if (!finite(m.position) || !finite(m.velocity) || (m.tp && !finite(m.tp))) {deps.logger.warn(`crawl #${m.id} ${m.kind} dropped: non-finite vector`); return;}
     if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
     // Server retargetDue() spends the whole tick on the re-aim — the
     // creature takes no step that tick. `sk` is the cumulative count of

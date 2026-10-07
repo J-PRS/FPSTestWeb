@@ -338,7 +338,15 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   const { estSimNow, ballEventAge } = ballClock;
   Ball.netSimNow = estSimNow;
 
+  // A non-finite component in authority state (server fault, hostile p2p
+  // peer) silently poisons the replay sim — drop the edge and warn.
+  const finite = (v: { x: number; y: number; z: number }) =>
+    Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }) =>
+    finite(m.position) && finite(m.velocity) && (!m.tp || finite(m.tp));
+
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
+    if (!finiteMsg(m)) {logger.warn(`ball spawn #${m.id} dropped: non-finite vector`); return;}
     if (netBallById.has(m.id)) {return;}
     Ball.initNetMode();
     const ball = new Ball(scene, deps.lazyTerrain(), m.variant as 0 | 1 | 2 | 3, {
@@ -373,6 +381,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
     if (!b) {return;}
+    if (!finiteMsg(m)) {logger.warn(`ball #${m.id} ${m.kind ?? 'segment'} dropped: non-finite vector`); return;}
     // Out-of-order delivery guard: an older stamp would rewind the sim
     // anchor and the next frames would extrapolate a stale leg — that
     // rewind was a live source of the giant rubberband warns.
