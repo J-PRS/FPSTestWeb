@@ -3,6 +3,8 @@
 
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
+import { gzip } from 'node:zlib';
+import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
@@ -17,7 +19,10 @@ export interface DemoMeta {
 }
 
 const INDEX_FILE = 'index.json';
-const MAX_DEMOS = 100;
+// Evicted clips gzip into archive/ rather than unlink — nothing is ever
+// truly lost (a future Shot-of-the-Day pin may reach back past the cap).
+const ARCHIVE_DIR = 'archive';
+const gzipAsync = promisify(gzip);
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -185,19 +190,38 @@ export class DemoStorage {
     this.index.push(meta);
     this.index.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
 
-    // Cap at MAX_DEMOS, remove oldest excess entries
-    if (this.index.length > MAX_DEMOS) {
-      const removed = this.index.splice(MAX_DEMOS);
+    // Cap the live index — the tail is lowest-lifetime, gzip it to
+    // archive rather than delete outright.
+    if (this.index.length > CONFIG.demoMaxClips) {
+      const removed = this.index.splice(CONFIG.demoMaxClips);
+      const archiveDir = join(this.demosDir, ARCHIVE_DIR);
+      await mkdir(archiveDir, { recursive: true }).catch(() => {});
       for (const r of removed) {
-        const rmPath = join(this.demosDir, r.filename);
-        await unlink(rmPath).catch(() => {});
+        try {
+          const src = join(this.demosDir, r.filename);
+          const gz = await gzipAsync(await readFile(src));
+          await writeFile(join(archiveDir, `${r.filename}.gz`), gz);
+          await unlink(src);
+        } catch { /* eviction failure must not lose the save */ }
       }
+      await this.capArchive(archiveDir);
     }
 
     await this.saveIndex();
     logger.info('Demo saved', { filename, lifetime: header.projectileLifetime.toFixed(2), duration: header.duration.toFixed(1), size: data.byteLength, totalDemos: this.index.length });
 
     return { filename, projectileLifetime: header.projectileLifetime, description: header.description };
+  }
+
+  // Archive FIFO — clip filenames carry an ISO timestamp so name order is
+  // chronological order; oldest gz files go once past the cap.
+  private async capArchive(archiveDir: string): Promise<void> {
+    try {
+      const files = (await readdir(archiveDir)).filter(f => f.endsWith('.gz')).sort();
+      for (const f of files.slice(0, files.length - CONFIG.demoArchiveMax)) {
+        await unlink(join(archiveDir, f)).catch(() => {});
+      }
+    } catch { /* retention sweep failure is benign */ }
   }
 
   async listDemos(): Promise<DemoMeta[]> {
