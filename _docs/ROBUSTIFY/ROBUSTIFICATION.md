@@ -29,6 +29,13 @@ The failure classes this codebase actually produces:
    replay can't model (retarget: re-aim consumes the tick, no sim step,
    wire carried no marker). Any `continue`/early-return inside a step
    loop is a suspect; the wire must carry the post-skip anchor or a count.
+9. **Architectural redundancy** — parallel implementations of one concern:
+   same-shaped maps/caches in sibling modules, re-derived helpers a shared
+   util already owns, layer crossings (UI in sim, server logic in wire
+   decode), orphaned subsystems, copy-pasted validation that has drifted.
+   Each duplicate is a latent divergence: when they differ, one is wrong.
+   Hunt = enumerate every implementation of a picked concern, quote the
+   bodies side by side, collapse into the single owner.
 
 The unifying rule adopted: **anything two ends compute should exist exactly
 once in `shared/`; anything lagged or event-driven must be excluded from

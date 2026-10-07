@@ -9,6 +9,7 @@ import { basename, extname, join } from 'path';
 import { logger } from './logger.js';
 import { wallNow } from './wallClock.js';
 import { rotateLogIfBig } from './logRotate.ts';
+import { evictEldest } from './evictEldest.js';
 
 export const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 
@@ -51,7 +52,7 @@ function postThrottleAllow(ip: string): boolean {
     postIps.set(ip, w);
     // Wholesale clear() here would reset the window for every live IP —
     // under a churn attack that's a throttle amnesty. Evict eldest first.
-    if (postIps.size > 1024) postIps.delete(postIps.keys().next().value!);
+    if (postIps.size > 1024) evictEldest(postIps);
   }
   return ++w.count <= POST_IP_LIMIT;
 }

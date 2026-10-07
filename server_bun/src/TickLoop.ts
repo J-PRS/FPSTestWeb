@@ -5,6 +5,7 @@ import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
 import { simNow } from './simClock.ts';
+import { evictEldest } from './evictEldest.ts';
 
 // Heal/suppression helpers live in tickHelpers.ts so tickRecords doesn't
 // import this file — re-exported here because scenario tests import them
@@ -213,10 +214,7 @@ export class TickLoop {
       this.faultedRooms.add(room.name);
       // Bounded — a fault loop recreating doomed rooms under fresh names
       // would otherwise grow the set one name per ~10 ticks forever.
-      if (this.faultedRooms.size > 512) {
-        const oldest = this.faultedRooms.values().next().value;
-        if (oldest !== undefined) this.faultedRooms.delete(oldest);
-      }
+      if (this.faultedRooms.size > 512) evictEldest(this.faultedRooms);
       logger.info('Quarantined room drained + disposed', { room: room.name });
     } catch (e) {
       logger.error('Quarantine drain failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });

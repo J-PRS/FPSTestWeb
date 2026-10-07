@@ -10,6 +10,7 @@ import type { WebSocketData } from './types.ts';
 import type { Room } from './Room.ts';
 import type { PlayerState } from './types.ts';
 import type { TransportKind } from '../../shared/protocol.ts';
+import { evictEldest } from './evictEldest.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { wallNow } from './wallClock.ts';
@@ -126,7 +127,7 @@ export class RoomSwitcher {
     // cooldown must survive the hop), so cap growth like duelStart —
     // evict the eldest, not clear(): a wholesale wipe under id churn
     // resets the cooldown for every live hopper at once.
-    if (this.cooldowns.size > 1024) this.cooldowns.delete(this.cooldowns.keys().next().value!);
+    if (this.cooldowns.size > 1024) evictEldest(this.cooldowns);
     return false;
   }
 

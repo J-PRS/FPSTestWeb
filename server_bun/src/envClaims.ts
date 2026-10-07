@@ -5,6 +5,7 @@ import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { CombatHandler } from './CombatHandler.ts';
 import { healPool } from './healPool.ts';
 import { wallNow } from './wallClock.ts';
+import { evictEldest } from './evictEldest.ts';
 
 type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 
@@ -14,7 +15,7 @@ type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 const envSeen = new Set<string>();
 const markEnvSeen = (id: string): boolean => {
   if (envSeen.has(id)) return false;
-  if (envSeen.size > 512) envSeen.delete(envSeen.keys().next().value!);
+  if (envSeen.size > 512) evictEldest(envSeen);
   envSeen.add(id);
   return true;
 };

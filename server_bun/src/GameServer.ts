@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
+import { evictEldest } from './evictEldest.ts';
 import { SessionManager } from './SessionManager.ts';
 import { MapCatalog } from './mapCatalog.ts';
 import { RoomFactory } from './roomFactory.ts';
@@ -363,7 +364,7 @@ export class GameServer {
     const now = wallNow();
     if (now - (this.invalidWarnAt.get(key) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
       this.invalidWarnAt.set(key, now);
-      if (this.invalidWarnAt.size > 4096) this.invalidWarnAt.clear();
+      if (this.invalidWarnAt.size > 4096) evictEldest(this.invalidWarnAt);
       logger.warn(msg, { playerId, ...data });
     }
   }

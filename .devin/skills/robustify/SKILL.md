@@ -72,6 +72,12 @@ taught — log it in the changelog like any other change.
    replay can't model (retarget: re-aim, no sim step, wire carried no
    marker). Any `continue`/early-return in a step loop is a suspect;
    the wire must carry the post-skip anchor or a count.
+9. Architectural redundancy — parallel implementations of one concern:
+   same-shaped maps/caches in sibling modules, re-derived helpers a
+   shared util already owns, layer crossings (UI reaching into sim,
+   server logic in wire decode), orphaned subsystems kept alive by one
+   import, and copy-pasted validation that has already drifted. Each
+   duplicate is a latent divergence: when they differ, one is wrong.
 
 ## Work loop — pick the highest-value thing, then keep going
 
@@ -86,8 +92,13 @@ one item; do not stop because §4 is empty. Each session:
 3. **Hunt beyond the §1 classes:**
    - Performance — per-frame allocations in hot paths, unbatched draws,
      redundant per-tick work, growth-only buffers, hoistable loop work.
-   - Duplication — two implementations of one computation (constants,
-     validators, solvers — the recurring bug class).
+   - Duplication/architecture (class 9) — the highest-yield structural
+     hunt: pick a concern (validation, cooldowns, eviction, vector
+     math, roster bookkeeping) and enumerate EVERY implementation;
+     near-identical bodies in different files are drift waiting to
+     happen. Collapse duplicates into the single owner, delete orphans,
+     route stray callers through the canonical path. Evidence: quote
+     the two bodies side by side — "looks similar" is not a finding.
    - Structure — files past their sizeWatch pin, bookkeeping a type or
      registry could enforce.
    - Untested invariants — behaviors that must hold but nothing pins;

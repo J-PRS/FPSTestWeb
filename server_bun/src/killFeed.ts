@@ -10,6 +10,7 @@ import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, comboTailFor
 import { tauntRand } from '../../shared/botRand.ts';
 import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
+import { evictEldest } from './evictEldest.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -76,7 +77,7 @@ export class KillFeed {
     this.lastKiller.set(targetId, shooterId);
     // Bounded grudges — a long-running room shouldn't bank one entry
     // per player who ever died.
-    if (this.lastKiller.size > 256) this.lastKiller.clear();
+    if (this.lastKiller.size > 256) evictEldest(this.lastKiller);
 
     this.notices(shooterId, targetId, shooter.streak, ended);
 
@@ -102,7 +103,7 @@ export class KillFeed {
   private victimLine(targetId: string, shooterId: string): void {
     const streak = (this.deathStreak.get(targetId) ?? 0) + 1;
     this.deathStreak.set(targetId, streak);
-    if (this.deathStreak.size > 256) this.deathStreak.clear();
+    if (this.deathStreak.size > 256) evictEldest(this.deathStreak);
     if (streak >= 3) this.say(targetId, 'tilt', shooterId);
     else if (this.hardShot(targetId, shooterId)) this.say(targetId, 'props', shooterId);
     else {

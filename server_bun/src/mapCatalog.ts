@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { type MapSpec, resolveMapSpec, specModes } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import { evictEldest } from './evictEldest.ts';
 
 const MAPS_DIR = `${import.meta.dir}/../../maps`;
 
@@ -25,8 +26,7 @@ export class MapCatalog {
   noteSource(room: string, src: string): void {
     if (!src) return;
     if (this.roomMapName.size >= 256 && !this.roomMapName.has(room)) {
-      const oldest = this.roomMapName.keys().next().value;
-      if (oldest !== undefined) this.roomMapName.delete(oldest);
+      evictEldest(this.roomMapName);
     }
     this.roomMapName.set(room, src);
   }
@@ -58,7 +58,7 @@ export class MapCatalog {
       return spec;
     } catch {
       this.specMisses.set(name, wallNow());
-      if (this.specMisses.size > 512) this.specMisses.clear();
+      if (this.specMisses.size > 512) evictEldest(this.specMisses);
       return undefined;
     }
   }
