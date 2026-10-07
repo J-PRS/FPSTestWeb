@@ -20,6 +20,9 @@ export interface VaultEntry {
   timestamp: number;
   description: string;
   projectileLifetime: number;
+  weapon?: string;
+  distance?: number;
+  direct?: boolean;
   data: DemoFile;
 }
 

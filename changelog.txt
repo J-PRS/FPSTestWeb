@@ -1,3 +1,4 @@
+2026-10-01 - cool-shot tiles show weapon, shot-to-hit distance, direct-hit tag (meta flows to IDB vault)
 2026-10-01 - demo vault cap 50 -> 100 clips
 2026-10-01 - demos: personal clip vault in IndexedDB (idb dep) - clips survive refresh/upload fail, FIFO cap 50, lazy vault playback/download
 2026-10-01 - naming DECISION: game name = ANABATIC (over Anabasis - less occupied, not a canon squat)

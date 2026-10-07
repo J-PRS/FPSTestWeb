@@ -410,6 +410,7 @@ body.lobby-open #loadout-bar { display: none; }
 .cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
 .cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgba(140,170,195,0.7); min-width: 16px; }
 .cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.cool-shot-item .shot-meta { font-size: 0.65rem; color: rgba(140,170,195,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
 .cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
 .cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }
