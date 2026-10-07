@@ -70,7 +70,9 @@ export interface Targetable {
   capsuleEnd?: THREE.Vector3;
   color: THREE.Color;
   scale: number;
-  takeDamage(damage: number): boolean;
+  /** serverPaid: the authority's sim already settles this damage (shell
+   *  contact / shell splash) — skip the hit claim or it pays twice. */
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean;
   applyKnockback(from: THREE.Vector3, force: number): void;
   applyPull(to: THREE.Vector3, force: number): void;
   /** Props (Tumbleweed) die visually but shouldn't credit frags. */
@@ -345,11 +347,13 @@ export class Ball {
     return dx * dx + dy * dy + dz * dz <= r * r;
   }
 
-  takeDamage(damage: number): boolean {
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {
       // Server-authoritative: claim the hit (with any knockback the caller
       // already staged), flash locally, and let ballDie decide death.
-      Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);
+      // Shell contact/splash callers pass serverPaid — the sim's
+      // creatureSweep/splashDamage pays those, a claim would double-pay.
+      if (!opts?.serverPaid) Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);
       this._netImp.set(0, 0, 0);
       this.flashTimer = 0.15;
       // Predicted health — the claim carries exactly this damage, so the

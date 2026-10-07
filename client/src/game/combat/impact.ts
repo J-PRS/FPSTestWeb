@@ -420,7 +420,9 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
   const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
   if (p.config.weaponType === WeaponType.Chaingun) chaingunBank(c, p, ball);
   deps.reportTargetDamage?.(ball, dmg);
-  const destroyed = ball.takeDamage(dmg);
+  // Shell contact is server-paid — the authority's creatureSweep pays
+  // this hit already; a claim would double it (feedback still local).
+  const destroyed = ball.takeDamage(dmg, { serverPaid: true });
   detonateCharge(p, ball, dmg);
   // Numbers + crosshair marker are MY-hit feedback — bot shells carry
   // shooterId and shouldn't fire them (damage itself still applies).

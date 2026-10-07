@@ -203,7 +203,9 @@ describe('applyExplosionForce — balls and nuggets', () => {
     ball = mkBall(5, 10); // 20 dmg at dist 5 > 10 hp
     r.balls.push(ball);
     r.blast.applyExplosionForce(args());
-    expect(ball.takeDamage).toHaveBeenCalledWith(20);
+    // No weaponType on this blast → a deployable-style pop, which still
+    // claims (no server sim owns it); weapon blasts pass serverPaid:true.
+    expect(ball.takeDamage).toHaveBeenCalledWith(20, { serverPaid: false });
     expect(r.hooks.onTargetDestroyed).toHaveBeenCalled();
   });
 

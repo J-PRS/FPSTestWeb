@@ -98,7 +98,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // shouldn't stamp them under my crosshair (same gate as remotes).
       if (!a.shooterId) {deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());}
       deps.reportTargetDamage?.(ball, dmg);
-      if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
+      // Shell splash is server-paid: the authority's detonate already
+      // splash-damages the swarm — claiming would double-dip. Deployable
+      // pops (mines) still claim — no server sim owns their blast.
+      const splashServerPaid = weaponType !== undefined;
+      if (ball.takeDamage(dmg, { serverPaid: splashServerPaid })) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
       if (!ball.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);}
       const dm = deps.lazyDemoManager();
       if (dm?.isRecording) {
