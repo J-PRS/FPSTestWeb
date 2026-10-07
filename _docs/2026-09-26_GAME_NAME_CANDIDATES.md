@@ -215,3 +215,15 @@ namespace, free .io/.gg, kata-family wink, theme-true (sun-heated slope
 throwing air upward = the game's momentum-climbing fantasy), no baggage.
 Remaining soft notes: two itch occupants (weak claims), upslope sign is
 the aspirational direction anyway.
+
+### Ascend-shelf check 2026-10-01
+
+Steam-clean: anabasis, sursum, sublimis, culmen, hypsos, oreibates,
+surgo, ascensus, anelixis, akron (Ohio association). Dead:
+**surgo** - multiple real companies on it (surgo.com medical supplier
+since 1968, surgohealth.com AI co, surgo.co.za BPO) - JP kill;
+ortus/oriens/scala/meteoros collisions; **excelsior** Stan Lee + NY
+motto + brands. **Anabasis** noted as possible Anabatic upgrade (noun,
+Xenophon's march up-country, same root). anabatic.com = PT Anabatic
+Technologies Tbk (Indonesian listed IT co); anabatic.io ambiguous
+(registry-free but redirects); .gg/.dev free.
