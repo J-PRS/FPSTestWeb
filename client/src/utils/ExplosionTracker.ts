@@ -29,8 +29,11 @@ export class ExplosionTracker {
 
   private cleanup(): void {
     const cutoff = Date.now() - FRAG_MESSAGE_DURATION;
-    while (this.recentExplosions.length > 0 && this.recentExplosions[0].timestamp < cutoff) {
-      this.recentExplosions.shift();
-    }
+    // Entries are append-ordered by timestamp — find the first live one
+    // and drop the whole expired prefix in one splice; shift() per entry
+    // is O(n) per add under a burst.
+    let live = 0;
+    while (live < this.recentExplosions.length && this.recentExplosions[live].timestamp < cutoff) {live++;}
+    if (live > 0) {this.recentExplosions.splice(0, live);}
   }
 }

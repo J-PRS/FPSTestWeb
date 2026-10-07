@@ -210,6 +210,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.49 ExplosionTracker prefix-trim (2026-10-07)
+
+`cleanup()` expired entries with `shift()` per entry — O(n) per add
+under a burst, same class the logBuffer TRIM_GRACE fix closed. Now
+splice-trims the whole expired prefix at once (entries are append-ordered
+by timestamp). Audited clean alongside: `remoteProjectiles`/`registry`
+maps reap on explode + destroy echo + dead sweep, `flagMarkers`/
+`flagStates` are 2-key bounded, `playerUal` maps are manifest-keyed,
+`lastWeaponByPlayer` evicts on player-left.
+
 ### 2.48 SnapshotBuffer bound pinned (2026-10-07)
 
 `snapshotBound.test` pins the interp queue's window contract: a 2000-push
