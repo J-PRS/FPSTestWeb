@@ -233,6 +233,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.71 Noise-TTL mirror drift (2026-10-08)
+
+Class 9 (drifted mirror) — server `Room.NOISE_TTL` was 2000ms but the
+client `recentNoises` gate read `age > 1.5`, and a client test PINNED
+the wrong constant ("age gate is 1.5s"), which is exactly how mirror
+drift survives refactors. Offline bots heard 25% less than online ones.
+`NOISE_TTL_MS` now lives in shared/wire.ts beside SERVER_TICK_MS; both
+sides and the test derive from it.
+
 ### 2.70 Test writes into live logs (2026-10-08)
 
 Found via the every-3rd-round log read: `client_warning.log` was

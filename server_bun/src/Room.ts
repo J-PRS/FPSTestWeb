@@ -16,8 +16,10 @@ import { MessageHandler, type RoomInfo } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
+import { seatKits } from '../../shared/structKits.ts';
 import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
+import { NOISE_TTL_MS } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -343,7 +345,7 @@ export class Room {
     // foe-clearance scoring so the forward spheres stay useful.
     this.players.spawnHomeBias = (id) => {
       const role = this.bots?.roleOf(id);
-      return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : 0;
+      return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : undefined;
     };
     // A tasked member materializes toward his JOB, not home — the wave
     // member who respawned at base re-ran the lethal transit and died
@@ -609,6 +611,11 @@ export class Room {
   /** Re-attach the merged structure list everywhere it feeds — called
    *  at boot and whenever flag homes re-snap (terrain attach, map swap). */
   private attachAllStructures(): void {
+    // Kit pieces ground-seat on the live heightfield — authored y in the
+    // map file can't know the terrain, and a floating/buried compound is
+    // worse than an advisory height. Spec objects are shared with the
+    // wire echo, so the mutation reaches clients as the real position.
+    if (this.field) seatKits(this.spec.structures, (x, z) => hmHeight(this.field!, x, z));
     const list = this.effStructures();
     this.moveSim.attachStructures(list);
     this.projectiles?.attachStructures(list);
@@ -853,7 +860,7 @@ export class Room {
   // blasts). Bots "hear" these without LOS, which produces emergent
   // scouting: a fight across the map attracts attention.
   private noises: { pos: Vec3; at: number }[] = [];
-  private static NOISE_TTL = 2000; // ms — old noise fades
+  private static NOISE_TTL = NOISE_TTL_MS; // old noise fades
   private static NOISE_MAX = 24;
 
   /** Every broadcast carrying a firing position is audible. */

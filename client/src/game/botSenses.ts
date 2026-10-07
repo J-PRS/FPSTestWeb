@@ -12,6 +12,7 @@ import type * as THREE from 'three';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../shared/botBrain.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import { shootRevealed } from '../../../shared/status.js';
+import { NOISE_TTL_MS } from '../../../shared/wire.js';
 import type { GameBot } from './botBrain.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from '../entities/balls.js';
@@ -80,12 +81,12 @@ export class BotSenses {
     return out;
   }
 
-  /** Blasts younger than ~1.5s inside earshot — mirrors Room.noisesNear
+  /** Blasts inside the noise ring's TTL — mirrors Room.noisesNear
    *  (50m radius). Gunshots stay unheard, same as the server. */
   recentNoises(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
     const out: { x: number; y: number; z: number }[] = [];
     for (const e of this.host.world().explosions) {
-      if (e.age > 1.5) {continue;}
+      if (e.age > NOISE_TTL_MS / 1000) {continue;}
       const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
       if (dx * dx + dy * dy + dz * dz < 50 * 50) {
         const v = nextVec();

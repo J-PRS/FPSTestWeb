@@ -333,6 +333,10 @@ export const SERVER_TICK_MS = 50;
  *  must agree or every edge/replay drifts one quantum per miss. */
 export const SIM_TICK_DT = SERVER_TICK_MS / 1000;
 
+/** Combat noise ring TTL — server `noises` and the client senses mirror
+ *  must agree or offline bots hear less than online ones. */
+export const NOISE_TTL_MS = 2000;
+
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 
 const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit', 'segment'] as const;

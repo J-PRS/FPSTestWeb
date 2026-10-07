@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { BotSenses, type SenseHost } from '../game/botSenses.js';
+import { NOISE_TTL_MS } from '../../../shared/wire.js';
 import type { GameBot } from '../game/botBrain.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -53,16 +54,17 @@ describe('enemyBotsForTeam', () => {
 });
 
 describe('recentNoises', () => {
-  it('earshot is 50m and age gate is 1.5s', () => {
+  it('earshot is 50m and age gate tracks the wire noise TTL', () => {
     const r = mkRig();
     r.worldState.explosions.push(
       { pos: v(10, 0, 0), age: 1 },
-      { pos: v(60, 0, 0), age: 1 },  // out of earshot
-      { pos: v(10, 0, 0), age: 2 },  // too old
+      { pos: v(10, 0, 0), age: NOISE_TTL_MS / 1000 - 0.01 }, // just inside
+      { pos: v(60, 0, 0), age: 1 },                         // out of earshot
+      { pos: v(10, 0, 0), age: NOISE_TTL_MS / 1000 + 0.01 }, // too old
     );
     const out = r.senses.recentNoises(v());
-    expect(out).toHaveLength(1);
-    expect(out[0]!.x).toBe(10);
+    expect(out).toHaveLength(2);
+    expect(out.every((o) => o.x === 10)).toBe(true);
   });
 });
 
