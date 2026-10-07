@@ -551,4 +551,20 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   .feed-btn { width: 40px; height: 40px; font-size: 0.9rem; }
   .feed-meta { left: 10px; right: 64px; bottom: 26px; max-width: none; }
   .feed-hint { display: none; }
+
+  /* Menu on a phone: the absolute side drawers (280px + 400px) overlap
+     the whole viewport. Stack everything into one scroll column instead —
+     resume button first (flex order), then loadout, settings, shots. */
+  #overlay { flex-direction: column; overflow-y: auto; }
+  #overlay-center { position: relative; inset: auto; order: -1; min-height: 38vh; }
+  #cool-shots-panel, #menu-side {
+    position: relative; inset: auto; top: auto; right: auto; bottom: auto; left: auto;
+    width: 100%; border: none;
+  }
+  #menu-side { border-top: 1px solid rgba(255,255,255,0.07); }
+  #loadout-bar {
+    position: relative; left: auto; bottom: auto; transform: none;
+    max-width: 100%; margin: 12px auto;
+  }
+  #keys-modal .keys-box { width: 96vw; }
 }
