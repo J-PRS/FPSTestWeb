@@ -1,3 +1,4 @@
+2026-10-01 - C5: deployGone generates from world-model - deploy.remove() emits via verbPayload gone; only the binary ballSegment frame stays hand-coded
 2026-10-01 - C5: crawlEvt generates from worldModel.updateFields - creature declares its edge payload shape once (kind/sk/pos/vel/targetId/tp/t)
 2026-10-01 - C5: flagUpdate rows generate from worldModel.rosterFields - the flag snapshot shares the declared field list (team-keyed rows)
 2026-10-01 - C5: pickupGone emits via verbPayload - every entity lifecycle verb now derives its wire shape from the world-model table

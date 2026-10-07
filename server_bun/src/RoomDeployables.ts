@@ -351,7 +351,7 @@ export class RoomDeployables {
     for (const k of this.lastRepair.keys()) {
       if (k.endsWith(`:${id}`)) this.lastRepair.delete(k);
     }
-    this.room.broadcast({ type: 'deployGone', id });
+    this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'gone', 'id', id, {}) as ServerMessage);
   }
 
   /** AOE blast sweep — every deployable inside the radius eats scaled
