@@ -396,15 +396,17 @@ export class TickLoop {
       deployHash,
       flagHash,
       pickupHash,
-      // On a creature-hash miss the client diffs these per-id fields so
-      // the warn says WHICH lifecycle field diverged (~30B/creature).
+      // On a creature-hash miss the client diffs these per-id fields —
+      // the tuple order comes from the creature declaration so emit and
+      // diff can't drift apart.
       creatureFields: creatureRoster.length
-        ? creatureRoster.map((c) => [c.id, c.species, c.state, c.uber, c.targetId] as [number, string, string, boolean, string | null])
+        ? kindFields(WORLD_MODEL.creature!, creatureRoster) as [number, string, string, boolean, string | null][]
         : undefined,
       // Same per-id detail for the deploy lane — a phantom hash entry
       // (a ghost item, a missing base asset) names itself in the warn.
+      // Team may be absent — kindFields nulls it like the literal did.
       deployFields: deployRoster.length
-        ? deployRoster.map((d) => [d.id, d.kind, d.owner, d.team ?? ''] as [number, string, string, string])
+        ? kindFields(WORLD_MODEL.deploy!, deployRoster) as [number, string, string, string][]
         : undefined,
       // Ball fleet per-id fields — generated from the ball declaration
       // so a new hashed field can't desync the emit/diff pair. The tuple
