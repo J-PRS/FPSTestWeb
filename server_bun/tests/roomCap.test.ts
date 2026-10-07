@@ -3,10 +3,22 @@ import { GameServer } from '../src/GameServer.ts';
 import { CONFIG } from '../src/config.ts';
 import type { Room } from '../src/Room.ts';
 
+function fakeWs() {
+  return {
+    data: {} as { playerId?: string },
+    sent: [] as string[],
+    send(d: string | ArrayBuffer) { this.sent.push(typeof d === 'string' ? d : new TextDecoder().decode(d)); },
+    close() { /* no-op */ },
+    readyState: 1,
+  };
+}
+
 interface Peek {
   factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null };
   rooms: Map<string, Room>;
   tickLoop: { stop(): void };
+  playerRoom: Map<string, Room>;
+  removePlayerCompletely(room: Room, playerId: string, reason: string): void;
 }
 
 // Room minting is join-driven — an attacker cycling fresh names grows
@@ -83,6 +95,21 @@ describe('room cap', () => {
     peek.factory.roomFor('b');
     peek.factory.roomFor('c'); // recycles 'a'
     expect(resp.timers.size).toBe(0);
+  });
+
+  it('player departure purges the playerRoom index too', () => {
+    // playerRoom lives on GameServer, above the room-level funnel §2.91
+    // pins — a missed delete leaves roomOfPlayer answering a ghost id
+    // with a stale room for the server's life.
+    const peek = mkServer();
+    const ws = fakeWs();
+    gs.onOpen(ws as never);
+    gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+    const room = peek.playerRoom.get('p1')!;
+    expect(room).toBeDefined();
+
+    peek.removePlayerCompletely(room, 'p1', 'test');
+    expect(peek.playerRoom.has('p1')).toBe(false);
   });
 
   it('spectators count as audience — a watched room is not recyclable', () => {

@@ -2207,3 +2207,17 @@ per-IP join throttle, and auto-quality/localStorage write paths are
 event-only. The unbounded-input lane is clean.
 
 ### 2.99 - end
+
+### 2.100 playerRoom index pin (2026-10-08)
+
+§2.91 pinned the room-level depart funnel; the GameServer wrapper
+above it owns playerRoom + ops.leaves, untested until now. roomCap
+test drives a real join, calls the wrapper, asserts the playerId→room
+index entry dies — a stale entry would route messages from a ghost id
+into a dead room forever. Lane audit along the way: WS payload size
+bounded (CONFIG.maxPayloadLength), every server setTimeout is
+owner-tracked (killFeed pending, registry grace, RtcServer stale,
+join deadline), demo remoteFrames prunes at the same rolling window as
+the ring buffer, pendingClips merge + clear on record start.
+
+### 2.100 - end
