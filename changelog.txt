@@ -1,3 +1,4 @@
+2026-10-07 - robustify 2.137: demo upload filename collision - same-second same-lifetime saves suffixed instead of clobbering
 2026-10-07 - robustify 2.136: prefetch cache capped at 4; vault evict uses ts-index cursor (no getAll payload deserialize per put)
 2026-10-07 - clip feed: finger-tracked swipe (drag follows touch, 18pct-travel or 0.5px/ms flick commits, else springs back)
 2026-10-07 - moveJudge: open input gaps scale the severe bar by starved-input deficit (speed x gap age, cap 2s) - RTC blackouts no longer bank teleport strikes

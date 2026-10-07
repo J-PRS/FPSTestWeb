@@ -174,7 +174,15 @@ export class DemoStorage {
     }
 
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s.demo`;
+    // Second-precision stamp + 0.1s lifetime: two uploads in the same
+    // second with equal air-time mint the same name and would silently
+    // clobber — suffix until the name is free on disk and in the index.
+    const base = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s`;
+    const taken = new Set(this.index.map(m => m.filename));
+    let filename = `${base}.demo`;
+    for (let n = 2; existsSync(join(this.demosDir, filename)) || taken.has(filename); n++) {
+      filename = `${base}_${n}.demo`;
+    }
 
     const filePath = join(this.demosDir, filename);
     await writeFile(filePath, new Uint8Array(data));

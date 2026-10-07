@@ -2696,3 +2696,17 @@ findings, both shipped:
 Also audited clipRoute for injection (all user-controlled/meta fields
 escaped) - clean.
 ### 2.136 - end
+
+### 2.137 - demo upload filename collisions (data-loss)
+
+Class-9 sweep of eviction/cap sites (evictEldest is canonical; the two
+hand-rolled keys().next() sites need the evicted value, left as-is)
+turned up a worse class-2 bug in DemoStorage.saveDemo: the minted
+filename is second-precision ISO + 0.1s-rounded lifetime, so two
+uploads in the same second with equal air-time produced the same name -
+writeFile silently clobbered the first clip while the index grew a
+second row pointing at the one surviving file. Two players at the
+12/min rate limit collide routinely. Now suffixes _2, _3... until the
+name is free on disk and in the index. New test freezes the clock to
+prove the rename path deterministically.
+### 2.137 - end
