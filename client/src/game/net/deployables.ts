@@ -73,4 +73,6 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
       ctx.deps.lazyDemoManager?.()?.recordDeployGone(id);
     }
   }
+  // The own lane needs the same cull — remotes don't cover it.
+  mgr.cullOwn(live);
 }

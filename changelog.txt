@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.161: roster reconcile now culls own plants too - remoteIds() only covered the remotes map, so own deployables missing from the roster lingered as ghosts (same class as 2.160, second door)
 2026-10-01 - robustify 2.160: deployGone now kills own plants too - they live in byId not the remotes map, so the remove edge missed them and left ghost meshes + phantom deploy-hash entries
 2026-10-01 - robustify 2.159: verified-clean audit sweep of deployable wire edges, cap symmetry, rate limits, repair-claim validation, ledger bounds and the player-teardown funnel - all lanes hardened already, coverage logged
 2026-10-01 - robustify 2.158: regression test for render-clock re-anchor on rewound server clock (locks 2.157); audited deploy/creature hash, cap, rate-limit, ledger, journal and extrapolation lanes - all clean

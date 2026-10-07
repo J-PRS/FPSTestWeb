@@ -543,6 +543,16 @@ export class Deployables {
     }
   }
 
+  /** Roster-reconcile cull for our OWN lane: remoteIds() only covers the
+   *  remotes map, so an own plant whose serverId fell off the roster
+   *  (cap-recycle while we were away, blast edge lost) would linger
+   *  forever — same ghost-mesh + phantom-hash class as deployGone. */
+  cullOwn(live: ReadonlySet<number>): void {
+    for (const i of this.items) {
+      if (i.serverId !== undefined && !live.has(i.serverId)) {this.killItem(i);}
+    }
+  }
+
   /** Wire-id → item pairs across BOTH lanes: remote spawns keyed by the
    *  map, plus our own plants once ackLocal stamped their serverId.
    *  Feeds the §4.7 deployable fidelity hash — the server's roster

@@ -2979,3 +2979,14 @@ netEntries hashing against the server roster -- the deploy-hash lane's
 real desync class. remoteRemove now also kills any items entry whose
 serverId matches (via killItem for the proper fizzle teardown).
 (deployables.ts)
+
+## 2.161 Roster-cull covered the remote lane only
+
+Same blind spot as 2.160, second door: reconcileDeployables culled
+remoteIds() -- the remotes map -- so an own plant whose serverId fell
+off the server roster (cap-recycle while away, lost blast edge) was
+never culled at reconcile either. New Deployables.cullOwn(live) kills
+own items with a stamped serverId absent from the roster; unacked
+plants (serverId undefined) are untouched. Both doors of the own-plant
+ghost class are now shut: edge path (remoteRemove) and reconcile path.
+(deployables.ts, net/deployables.ts)
