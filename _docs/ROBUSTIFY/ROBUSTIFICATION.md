@@ -36,6 +36,15 @@ The failure classes this codebase actually produces:
    Each duplicate is a latent divergence: when they differ, one is wrong.
    Hunt = enumerate every implementation of a picked concern, quote the
    bodies side by side, collapse into the single owner.
+10. **Future-cost debt** — structures that bill at scale, on low-end
+    devices, or on bad networks: O(players^2) or O(rooms x players)
+    work, per-frame/per-tick allocations that only hurt on a weak
+    GPU/GC, wire chatter that multiplies with roster size, reconnect-
+    storm amplification, single-owner state that blocks a second
+    instance, giant flat structs standing in for a state machine, and
+    "solved locally" patterns that should be one shared mechanism.
+    Ask: what does this cost at 10x, on 4GB + integrated graphics, and
+    when the link drops every third packet?
 
 The unifying rule adopted: **anything two ends compute should exist exactly
 once in `shared/`; anything lagged or event-driven must be excluded from

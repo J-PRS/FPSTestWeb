@@ -25,6 +25,14 @@ idle-room cost, and process footprint all count. Every perf change
 needs a measured before/after and a correctness argument (a pin, a
 replay, or a behavior-identical proof), never "should be faster".
 
+**Architecture and tech debt are first-class targets too.** The hunt
+is not only for bugs that fire today but for structures that bill
+later: what breaks at 10× players/rooms, on a 5-year-old laptop or
+phone GPU, at 20% packet loss or a flapping mobile uplink, or the
+first time a second engineer touches the file. A correct architecture
+is the cheapest robustness there is — it retires bug classes instead
+of paying them off one fix at a time.
+
 ## Self-evolution
 
 The program grows its own hunting repertoire. When a round turns up a
@@ -78,6 +86,15 @@ taught — log it in the changelog like any other change.
    server logic in wire decode), orphaned subsystems kept alive by one
    import, and copy-pasted validation that has already drifted. Each
    duplicate is a latent divergence: when they differ, one is wrong.
+10. Future-cost debt — structures that bill at scale, on low-end
+    devices, or on bad networks: O(players²) or O(rooms×players) work,
+    per-frame/per-tick allocations that only hurt on a weak GPU/GC,
+    wire chatter that multiplies with roster size, reconnect-storm
+    amplification, single-owner state that blocks a second instance,
+    giant flat structs standing in for a state machine, and "solved
+    locally" patterns that should be one shared mechanism. Ask: what
+    does this cost at 10×, on 4GB and integrated graphics, and when
+    the link drops every third packet?
 
 ## Work loop — pick the highest-value thing, then keep going
 
@@ -92,13 +109,20 @@ one item; do not stop because §4 is empty. Each session:
 3. **Hunt beyond the §1 classes:**
    - Performance — per-frame allocations in hot paths, unbatched draws,
      redundant per-tick work, growth-only buffers, hoistable loop work.
-   - Duplication/architecture (class 9) — the highest-yield structural
-     hunt: pick a concern (validation, cooldowns, eviction, vector
-     math, roster bookkeeping) and enumerate EVERY implementation;
-     near-identical bodies in different files are drift waiting to
-     happen. Collapse duplicates into the single owner, delete orphans,
-     route stray callers through the canonical path. Evidence: quote
-     the two bodies side by side — "looks similar" is not a finding.
+   - Duplication/architecture (classes 9–10) — the highest-yield
+     structural hunt: pick a concern (validation, cooldowns, eviction,
+     vector math, roster bookkeeping) and enumerate EVERY
+     implementation; near-identical bodies in different files are
+     drift waiting to happen. Collapse duplicates into the single
+     owner, delete orphans, route stray callers through the canonical
+     path. Evidence: quote the two bodies side by side — "looks
+     similar" is not a finding.
+   - Scale & future-cost (class 10) — audit one hot path per round the
+     way an operator would: cost per player per tick, bytes per
+     message × fan-out, allocs per frame, work on the reconnect path,
+     behavior when a room goes empty/full. Prefer counters and
+     arithmetic over "seems fine"; a measured N² at N=32 is a finding
+     even when today's N=8 hides it.
    - Structure — files past their sizeWatch pin, bookkeeping a type or
      registry could enforce.
    - Untested invariants — behaviors that must hold but nothing pins;

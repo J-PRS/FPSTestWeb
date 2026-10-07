@@ -28,6 +28,13 @@ idle-room cost, and process footprint all count. Every perf change
 needs a measured before/after and a correctness argument (a pin, a
 replay, or a behavior-identical proof), never "should be faster".
 
+**Architecture and tech debt are first-class targets too.** Hunt not
+only bugs that fire today but structures that bill later: what breaks
+at 10x players/rooms, on a 5-year-old laptop or phone GPU, at 20%
+packet loss or a flapping mobile uplink, or the first time a second
+engineer touches the file. A correct architecture retires bug classes
+instead of paying them off one fix at a time.
+
 **The program is self-evolving.** When a round turns up a bug class §1
 doesn't name, ADD it to §1 of the state doc. When a lane is exhausted,
 record it in §3 and invent the deeper lane it implies — unit pins →
@@ -50,7 +57,7 @@ taught — changelog it like any other change.
 1. `AGENTS.md` — project rules (server authority, shared/ determinism,
    scenario test conventions, changelog format).
 2. `_docs/ROBUSTIFY/ROBUSTIFICATION.md` — the living state doc. It has:
-   - §1 threat model (the six failure classes to hunt)
+   - §1 threat model (the failure classes to hunt)
    - §2 what already shipped (do NOT redo it)
    - §3 verified-clean areas (do NOT re-audit them)
    - §4 open items ranked by value — the *known* work queue, not the whole job
@@ -64,16 +71,23 @@ Do not stop after one item. Do not stop because §4 is empty. Each session:
 1. **Take the top §4 item** if one exists. Implement it properly —
    `shared/` code for anything both ends compute, tests for every new
    guarantee. Move details to §2.
-2. **Hunt the six failure classes** (§1) across `shared/`, `server_bun/src/`,
-   `client/src/` when §4 runs thin: determinism divergence, silent
-   staleness, ambient nondeterminism, silent coercion, unbounded growth,
-   observability noise. Classify findings: fix now / §4 / §3.
-3. **Hunt beyond the six classes** — the mandate is the whole game:
+2. **Hunt the §1 failure classes** (§1) across `shared/`, `server_bun/src/`,
+   `client/src/` when §4 runs thin. Classify findings: fix now / §4 / §3.
+3. **Hunt beyond the classes** — the mandate is the whole game:
    - **Performance**: per-frame allocations in hot paths, unbatched draws,
      redundant per-tick work, growth-only buffers that never shrink,
      work in loops that could hoist, missing distance/lod tiers.
-   - **Duplication**: two implementations of one computation anywhere
-     (the bug class that keeps biting — constants, validators, solvers).
+   - **Duplication/architecture** (class 9): pick a concern — validation,
+     cooldowns, eviction, vector math, roster bookkeeping — and enumerate
+     EVERY implementation; near-identical bodies in different files are
+     drift waiting to happen. Collapse into the single owner, delete
+     orphans, route strays through the canonical path. Evidence: quote
+     the two bodies side by side — "looks similar" is not a finding.
+   - **Scale & future-cost** (class 10): audit one hot path per round like
+     an operator — cost per player per tick, bytes per message x fan-out,
+     allocs per frame, work on the reconnect path, empty/full room
+     behavior. Counters and arithmetic over "seems fine"; a measured
+     N^2 at N=32 is a finding even when today's N=8 hides it.
    - **Structural smells**: oversized files growing past their sizeWatch
      pin, leaky abstraction seams, manual bookkeeping a type or registry
      could enforce.
@@ -89,6 +103,13 @@ Do not stop after one item. Do not stop because §4 is empty. Each session:
 
 When a lane is exhausted, say so in the report — then move to the next
 lane. "The audit lane is clean" is a checkpoint, not a stopping point.
+
+**Pins are earned by probes, not greps.** A test pin only counts as the
+round's deliverable when preceded by a falsifiable probe — a soak log
+read, a replica-hash diff, a runtime bisect — not by a pattern sweep.
+
+**Every third round starts in the logs.** Before touching code, read the
+latest `logs/client*.log` and the newest session JSONL tail.
 
 ## Rules
 
@@ -157,6 +178,8 @@ cd client && ./node_modules/.bin/tsc --noEmit
 ## Report back
 
 - What you changed (files + why)
+- **Evidence, not file names** — each claim carries its observation
+  ("warn count N->0 across soak X", "493 anchor asserts incl. bounces")
 - What you audited with no fixable findings (recorded in §3 — one line,
   never the headline)
 - What's now in §4 (new findings + re-ranked queue)
