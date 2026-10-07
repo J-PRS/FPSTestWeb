@@ -1990,3 +1990,15 @@ up twice more in `botSteer` (separation gather + memory-prune). Its
 signature takes `Pick<BotVec,'x'|'z'>` so 2D records typecheck.
 
 ### 2.83 - end
+
+### 2.84 RTC adapter reported only the ctrl lane's backpressure (2026-10-08)
+
+Same class as §2.79's binary drain, one layer down: the RtcServer
+adapter multiplexes every peer over two datachannels — 'game'
+(unordered, all WIRE_TICK fanout) and 'ctrl' (ordered, JSON + ball
+segments). `getBufferedAmount()` read `ctrl ?? game`, so while a stalled
+peer's game channel ballooned with 20Hz tick frames the drown drain
+saw ctrl's ~0 and never fired. It now reports `max(game, ctrl)` — the
+worst lane is the one that matters.
+
+### 2.84 - end

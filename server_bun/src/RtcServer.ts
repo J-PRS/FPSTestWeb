@@ -96,7 +96,12 @@ class RtcSocketAdapter {
     else this.game = dc; // 'game' or unlabeled → the fast lane
   }
   get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
-  getBufferedAmount(): number { return (this.ctrl ?? this.game)?.bufferedAmount?.() ?? 0; }
+  // Backpressure must report the WORST lane: ctrl-only reads showed ~0
+  // while a stalled 'game' channel (all WIRE_TICK traffic) ballooned
+  // past the drown drain's threshold unchecked.
+  getBufferedAmount(): number {
+    return Math.max(this.game?.bufferedAmount?.() ?? 0, this.ctrl?.bufferedAmount?.() ?? 0);
+  }
   send(msg: string | Uint8Array): number {
     // Lane route: tick frames (WIRE_TICK) are seq'd volatile state → game;
     // strings and everything else (ball segments) must arrive → ctrl.
