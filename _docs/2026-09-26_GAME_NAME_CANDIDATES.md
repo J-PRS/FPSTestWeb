@@ -162,3 +162,16 @@ Bulk-check the ⭐ list before committing:
 5. Trademark check is a separate pass — clean search ≠ legally clear
 
 Search cleanliness = triage only, not legal clearance.
+
+## Namespace check 2026-10-01 (Steam storesearch + RDAP)
+
+Zero Steam hits — namespace-clean: **couloir, hoodoo, katabatic,
+inselberg, haboob, sukhovey, syrtis, jebel** + scratch-list survivors
+**slagg, pharanx, kremnos, clivus, ulthule, arduum, orthobamon, katante**.
+Dead on collision: **fusillade** (exact Steam title), **arduus**,
+**fastigium**. Auster/ammos/mote/dreg/brood/defile collide too.
+Domains: every .com taken (expected); .io/.gg free for
+couloir/hoodoo/katabatic/inselberg; .dev taken for all checked.
+Scratch list folded in from `_scratch/names.md`; katantē(s)/orthobamōn
+fail the diacritics filter as written but ASCII forms stay listed.
+
