@@ -217,6 +217,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.56 Finite-guard on ball + creature net edges (2026-10-07)
+
+NaN-ingress lane, second half: the four decode funnels that feed the
+replay sims — `netBallSpawn`, `netBallSegment`, `netCrawlSpawn`,
+`netCrawlEvt` — accepted non-finite position/velocity/tp components. A
+malformed edge poisons the ballistic/ballistic-adjacent sim the same
+way §2.55's authority vectors do. All four now drop+warn. That closes
+the local-sim NaN-ingress surface: every wire-decoded vector that
+seeds or anchors sim state is finite-checked.
+
 ### 2.55 Finite-guard on authority state vectors (2026-10-07)
 
 NaN-ingress lane: the two paths that write wire-decoded vectors straight
