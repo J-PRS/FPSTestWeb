@@ -217,6 +217,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.54 Film chase-cam teleport reseats the pos-jump watch (2026-10-07)
+
+Same class as §2.41 — a designed teleport logged as a physics snap.
+The soak read surfaced `POS JUMP 286m → (160,200,160)` warns from
+`?film=1` runs: `flagRun`'s chase-cam seat writes `player.pos` every
+frame along the TAS dot without `noteLocalSnap()`. The recording aid
+now reseats the watch after each seat. That was the last unwatched
+local-player teleport site — the class is closed.
+
 ### 2.53 Sim tick quantum unified (2026-10-07)
 
 Duplication lane: `0.05` (one sim quantum) was hardcoded in six places —
