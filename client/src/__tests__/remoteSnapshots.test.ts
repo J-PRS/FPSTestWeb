@@ -91,6 +91,25 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(7);
   });
 
+  it('keeps the render clock and timeline monotonic on reordered packets', () => {
+    const buf = new SnapshotBuffer();
+    const now = Date.now();
+    // In-order history, then a datagram-lane reorder: an old snapshot
+    // arrives after a newer one. It must not rewind the anchor or land
+    // unsorted at the tail (the sampler assumes monotonic t).
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.push(now - 50, {x:10,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.push(now - 100, {x:5,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    // renderTime = latestT + elapsed - delay ≈ (now-50) - 40 = now-90:
+    // inside the stale snapshot's window. If it had appended unsorted at
+    // the tail the pair scan would read the wrong bracket.
+    buf.interpDelay = 40;
+    const { pos } = sample(buf);
+    expect(pos.x).toBeGreaterThan(5);
+    expect(pos.x).toBeLessThan(10);
+    expect(buf.size).toBe(3);
+  });
+
   it('keeps the yaw lerp on the shortest arc across ±PI', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();

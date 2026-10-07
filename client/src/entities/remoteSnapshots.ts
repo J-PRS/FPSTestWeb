@@ -43,8 +43,13 @@ export class SnapshotBuffer {
   private pool: NetSnapshot[] = [];
   // Anchor pair for the render clock: newest snapshot's server time and
   // the client wall time it arrived. renderTime = latestT + elapsed.
+  // Reordered packets must NOT move the anchor — rewinding latestT snaps
+  // the rendered remote backward each stale arrival.
   private latestT = 0;
   private latestArrive = 0;
+  /** Arrival stamp of the last push — jitter stats measure the wire, not
+   *  the timeline order, so they track raw arrivals even when reordered. */
+  private lastArrive = 0;
   interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
   /** EMA of the observed arrival interval — send suppression stretches it
    *  well past the nominal 20Hz without being jitter. */
@@ -62,10 +67,14 @@ export class SnapshotBuffer {
     vel: { x: number; y: number; z: number },
     arriveMs = Date.now(),
   ): number {
-    const prev = this.latestArrive;
+    const prev = this.lastArrive;
     const gap = prev > 0 ? arriveMs - prev : 0;
-    this.latestT = t;
-    this.latestArrive = arriveMs;
+    this.lastArrive = arriveMs;
+    const isNewest = t >= this.latestT;
+    if (isNewest) {
+      this.latestT = t;
+      this.latestArrive = arriveMs;
+    }
     if (gap > 10 && gap < 2000) {
       // Fast EMA on cadence change (tier-10 streams arrive at 10x the
       // baseline — 0.15 takes ~7s to converge, during which renderTime
@@ -88,10 +97,14 @@ export class SnapshotBuffer {
     snap.t = t; snap.x = pos.x; snap.y = pos.y; snap.z = pos.z;
     snap.yaw = rot.yaw; snap.pitch = rot.pitch;
     snap.vx = vel.x; snap.vy = vel.y; snap.vz = vel.z;
-    this.snapshots.push(snap);
+    // Datagram lanes deliver out of order — insert at timeline position,
+    // never a plain append: the sampler assumes monotonic t.
+    let idx = this.snapshots.length;
+    while (idx > 0 && this.snapshots[idx - 1]!.t > t) {idx--;}
+    this.snapshots.splice(idx, 0, snap);
 
     // Keep a few intervals of history — the delay window plus one pair.
-    const cutoff = t - Math.max(1000, this.arrivalInterval * 4);
+    const cutoff = this.latestT - Math.max(1000, this.arrivalInterval * 4);
     while (this.snapshots.length > 2 && this.snapshots[0]!.t < cutoff) {
       this.pool.push(this.snapshots.shift()!);
     }
