@@ -2305,3 +2305,16 @@ ring in-memory, /rooms bounded by room cap, /join per-IP throttled,
 /wthash + /rtcconfig constants, /health in-memory.
 
 ### 2.106 - end
+
+### 2.107 Route guards pinned black-box (2026-10-08)
+
+The HTTP route guards had zero coverage — a regression in any of them
+silently re-opens a DoS lane: /join's per-IP mint throttle (the gate
+§2.98's room cap depends on), the ops gate on /metrics /status
+/weaponstats (leaks the "when is the server weakest" readout), and the
+join mode/map validators. routeGuards.test.ts drives makeRoutes with a
+fake HttpCtx and asserts: 5/mint budget per IP + localhost exempt, bad
+mode and unknown map 400, ops 401 without token / 200 bearer-or-key,
+dev-open when the token is unset.
+
+### 2.107 - end
