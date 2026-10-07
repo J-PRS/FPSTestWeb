@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSyn
 import { basename, extname, join } from 'path';
 import { logger } from './logger.js';
 import { wallNow } from './wallClock.js';
+import { rotateLogIfBig } from './logRotate.ts';
 
 export const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 
@@ -33,16 +34,7 @@ export function rotateLogs(): void {
   } catch { /* same */ }
 }
 
-const MID_RUN_ROLL_BYTES = 32 * 1024 * 1024;
-
-/** Boot-time rotate leaves a long-lived server with forever logs — any
- *  appender calls this before writing so a hot file rolls mid-run too.
- *  Sync stat is fine: appenders are all throttled or windowed. */
-export function rotateLogIfBig(p: string): void {
-  try {
-    if (existsSync(p) && statSync(p).size > MID_RUN_ROLL_BYTES) rotateLog(p);
-  } catch { /* rotation must never block an append */ }
-}
+export { rotateLogIfBig } from './logRotate.ts';
 
 /** Per-IP append throttle — bodies cap at 512KB each, but nothing else
  *  stopped one caller from filling logs/ at line speed. 20 posts/min is
@@ -76,7 +68,7 @@ export async function clientLogRoute(req: Request, cors: (body: BodyInit | null,
     // Boot-time rotate leaves a long-lived server with one forever log —
     // roll it mid-run too. statSync per post is fine: posts are IP-throttled.
     const logPath = join(LOGS_DIR, 'client.log');
-    if (existsSync(logPath) && statSync(logPath).size > 32 * 1024 * 1024) rotateLog(logPath);
+    rotateLogIfBig(logPath);
     appendFileSync(logPath, body);
     const warnLines: string[] = [];
     const errLines: string[] = [];

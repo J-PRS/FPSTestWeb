@@ -132,14 +132,24 @@ export class ClaimLedger {
   sweep(now: number, ctx: { pingMs: number; tier: TransportKind | string | undefined }): void {
     if (now - this.lastPendingSweep < 250) {return;}
     this.lastPendingSweep = now;
+    // Per-claim warns here were a flood under sustained ack loss — every
+    // waiting entry expired with its own interpolated line. The census
+    // keeps per-kind counts; the log gets one line per sweep pass.
+    let unacked = 0, oldest = 0;
+    const byKind: Record<string, number> = {};
     for (const [seq, c] of this.pendingClaims) {
       if (now - c.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}
       this.pendingClaims.delete(seq);
       claimCensus.unconfirmed++;
+      unacked++;
+      oldest = Math.max(oldest, Math.round(now - c.t));
+      byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
       const key = `${c.kind}:unconfirmed`;
       claimCensus.byReason.set(key, (claimCensus.byReason.get(key) ?? 0) + 1);
       claimCensus.last = key;
-      logger.warn(`${c.kind} claim never acked — dropped server-side or the ack died`, { seq, ageMs: Math.round(now - c.t) });
+    }
+    if (unacked > 0) {
+      logger.warn(`${unacked} claim(s) never acked — dropped server-side or the acks died`, { byKind, oldestMs: oldest });
     }
     for (const [id, h] of this.pendingHits) {
       if (now - h.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}

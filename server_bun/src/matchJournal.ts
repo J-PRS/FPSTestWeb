@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { mkdirSync, appendFileSync } from 'node:fs';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
-import { rotateLogIfBig } from './clientLogs.ts';
+import { rotateLogIfBig } from './logRotate.ts';
 
 interface MatchRec {
   t: number;

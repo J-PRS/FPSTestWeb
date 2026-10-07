@@ -210,10 +210,19 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.33 Claim-sweep warns flooded under sustained ack loss (2026-10-07)
+
+`claimLedger.sweep()` warned per expired pending claim — with acks dead,
+every waiting entry expired with its own interpolated line (hundreds/s
+of console warns). The census keeps per-kind counts; the log now emits
+one aggregated line per sweep pass with the kind histogram + oldest age.
+
 ### 2.32 `.jsonl` ledgers rolled at 32MB mid-run (2026-10-07)
 
 The `client.log` mid-run roll (§2.26) generalized: `rotateLogIfBig()`
-is shared from clientLogs and now guards `matches.jsonl` and
+lives in `logRotate.ts` (import.meta/dir-free — clientLogs is not safe
+to import outside the server graph; pulling it into matchJournal broke
+the client typecheck) and now guards `matches.jsonl` and
 `weaponstats.jsonl` appends — both only rotated at boot before, growing
 for the server's life. `logger.ts` (server.log) is the deliberate
 exception: it is browser-embedded and cannot import node:fs at top

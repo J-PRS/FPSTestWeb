@@ -231,7 +231,7 @@ export class WeaponStats {
       if (!paths) return;
       try {
         const { appendFileSync, mkdirSync } = await import('node:fs');
-        const { rotateLogIfBig } = await import('./clientLogs.ts');
+        const { rotateLogIfBig } = await import('./logRotate.ts');
         mkdirSync(paths.dir, { recursive: true });
         rotateLogIfBig(paths.file);
         appendFileSync(paths.file, JSON.stringify({
