@@ -104,6 +104,7 @@ export class GameServer {
       roomFor: (n, m, mp, b, u) => this.factory.roomFor(n, m, mp, b, u),
       removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
       totalPlayers: () => opsTotalPlayers(this),
+      specRooms: this.specRooms,
       playerRoom: this.playerRoom,
       sessions: this.sessions,
     });

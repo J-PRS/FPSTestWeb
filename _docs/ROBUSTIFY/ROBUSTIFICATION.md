@@ -2485,3 +2485,15 @@ with the roster unchanged. A dropped check reopens unbounded seating —
 the flood throttle only gates mint RATE, not total bodies.
 
 ### 2.120 - end
+
+### 2.121 Spectators count toward the process budget (2026-10-11)
+
+globalMaxPlayers counted players only — spectators rode the per-room
+cap alone, so a watcher fleet across many rooms could seat thousands
+of tick-fanout targets while the process budget read 0 players. Every
+entry path now counts players + specRooms against the budget:
+SessionManager join + spectate close 1013, and RoomSwitcher.roomFull
+denies the hop (SwitchHost gained specRooms). specDepart.test.ts pins
+both spectator refusals; roomswitch.test.ts pins the hop denial.
+
+### 2.121 - end

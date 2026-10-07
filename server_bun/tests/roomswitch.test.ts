@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
+import { CONFIG } from '../src/config.ts';
 
 /** Minimal ServerWebSocket stand-in — captures every send so the test
  *  can assert the new room's gameState actually reached the wire. */
@@ -78,6 +79,27 @@ describe('switchRoom', () => {
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'a' }));
     gs.onMessage(ws2, JSON.stringify({ type: 'switchRoom', room: 'c' }));
     expect(rooms.get('c')?.players.getPlayer('p2')).toBeTruthy();
+  });
+
+  it('refuses a hop when spectators fill the global budget', () => {
+    // Spectators draw the same tick stream as players — a watcher fleet
+    // must not leave headroom the per-room caps claim is free.
+    (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 2;
+    try {
+      gs = new GameServer();
+      const spec = fakeWs();
+      gs.onMessage(spec, JSON.stringify({ type: 'join', playerId: 'w1', room: 'watch', spectate: true }));
+      const ws = fakeWs();
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'a' }));
+      // budget: 1 player + 1 spectator = 2, at cap — the hop must deny.
+      gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
+      const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
+      expect(rooms.get('a')?.players.getPlayer('p1')).toBeTruthy();
+      expect(rooms.get('b')?.players.getPlayer('p1')).toBeUndefined();
+      expect(ws.sent.some((s: string) => s.includes('is full'))).toBe(true);
+    } finally {
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 128;
+    }
   });
 
   it('reconnect tokens survive the hop — reclaim works in the new room', () => {

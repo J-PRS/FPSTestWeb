@@ -88,4 +88,48 @@ describe('departSpectator', () => {
     expect(peek.specRooms.has('over')).toBe(false);
     expect(peek.registry.state('over')).toBeUndefined();
   });
+
+  // Spectators count toward the process budget: a watcher fleet across
+  // many rooms must not bypass globalMaxPlayers through the per-room cap.
+  describe('global budget', () => {
+    const origGlobal = CONFIG.globalMaxPlayers;
+    afterEach(() => {
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = origGlobal;
+    });
+
+    it('refuses a spectate join once players fill the global budget', () => {
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 1;
+      gs = new GameServer();
+      (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
+      const peek = gs as unknown as GamePeek;
+
+      const ws1 = fakeWs();
+      gs.onOpen(ws1 as never);
+      gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+
+      const ws2 = fakeWs();
+      gs.onOpen(ws2 as never);
+      gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true }));
+      expect(ws2.closed).toContain(1013);
+      expect(peek.specRooms.has('w1')).toBe(false);
+    });
+
+    it('counts existing spectators against the budget too', () => {
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 1;
+      gs = new GameServer();
+      (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
+      const peek = gs as unknown as GamePeek;
+
+      const ws1 = fakeWs();
+      gs.onOpen(ws1 as never);
+      gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true }));
+      expect(peek.specRooms.has('w1')).toBe(true);
+
+      const ws2 = fakeWs();
+      gs.onOpen(ws2 as never);
+      gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'w2', room: 'default', spectate: true }));
+      expect(ws2.closed).toContain(1013);
+      expect(peek.specRooms.has('w2')).toBe(false);
+    });
+  });
 });

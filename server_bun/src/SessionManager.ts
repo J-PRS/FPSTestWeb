@@ -135,9 +135,11 @@ export class SessionManager {
 
     // Two caps: the room's own seat count and the process-wide budget —
     // rooms share one core, so total bodies is the number that matters
-    // for latency, not per-room occupancy.
+    // for latency, not per-room occupancy. Spectators draw the same tick
+    // stream as players, so they count against the budget too.
     if (room.playerCount() >= CONFIG.maxPlayers ||
-        (CONFIG.globalMaxPlayers > 0 && this.d.totalPlayers() >= CONFIG.globalMaxPlayers)) {
+        (CONFIG.globalMaxPlayers > 0 &&
+          this.d.totalPlayers() + this.d.specRooms.size >= CONFIG.globalMaxPlayers)) {
       ws.close(1013, 'Server full');
       return;
     }
@@ -229,6 +231,14 @@ export class SessionManager {
   private spectate(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string): void {
     if (room.spectators.size >= CONFIG.maxPlayers) {
       ws.close(1013, 'Spectators full');
+      return;
+    }
+    // Every spectator is a tick-fanout target, so they ride the same
+    // process budget as players — per-room cap alone would let a
+    // watcher fleet across many rooms bypass it entirely.
+    if (CONFIG.globalMaxPlayers > 0 &&
+        this.d.totalPlayers() + this.d.specRooms.size >= CONFIG.globalMaxPlayers) {
+      ws.close(1013, 'Server full');
       return;
     }
     ws.data.playerId = playerId;

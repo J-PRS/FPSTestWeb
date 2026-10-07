@@ -21,6 +21,7 @@ export interface SwitchHost {
   roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
   totalPlayers(): number;
+  specRooms: Map<string, Room>;
   playerRoom: Map<string, Room>;
   sessions: { tokenFor(playerId: string): string };
 }
@@ -134,7 +135,11 @@ export class RoomSwitcher {
   }
 
   private roomFull(room: Room): boolean {
+    // The global budget counts every fanout target — spectators draw the
+    // same tick stream as players, so players + watchers together are
+    // what the budget actually bounds.
     return room.playerCount() >= CONFIG.maxPlayers ||
-      (CONFIG.globalMaxPlayers > 0 && this.host.totalPlayers() >= CONFIG.globalMaxPlayers);
+      (CONFIG.globalMaxPlayers > 0 &&
+        this.host.totalPlayers() + this.host.specRooms.size >= CONFIG.globalMaxPlayers);
   }
 }
