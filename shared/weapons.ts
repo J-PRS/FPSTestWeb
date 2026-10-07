@@ -46,6 +46,15 @@ import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
 export { WeaponType, WEAPONS, idSeed, jitteredTtl } from './weaponTable.js';
 export type { WeaponStats } from './weaponTable.js';
 
+/** Claimless-combat rollout: intents (shotFired) for these weaponTypes
+ *  spawn a server-authoritative shell instead of riding the
+ *  shot/aoeShot claim path. One table on both ends — the client's
+ *  predictor and the server's intent gate must never disagree. */
+export const SERVER_SIMMED_WEAPONS = new Set<number>([WeaponType.BoltLauncher]);
+export function serverSimmed(weaponType: number | undefined): boolean {
+  return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
+}
+
 export const REPAIR_RANGE = 14;        // beam reach (m)
 export const REPAIR_HEAL_PER_TICK = 5; // per fire tick → ~50 hp/s at 0.1s rate
 export const REPAIR_MIN_TICK_S = 0.07; // server: min seconds between claims per shooter+target

@@ -143,6 +143,10 @@ export interface RoomInfo {
    *  human ignore debit reads its recency (bots report via BrainOut). */
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[];
+  /** Fire-intent → authoritative shell spawn (RoomProjectiles). Returns
+   *  the LiveProj id or null when the weapon has no body. Only
+   *  server-simmed weapons route here. */
+  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
 }
 
 /** RoomInfo → CombatDeps projection — kept out of the constructor so the
@@ -164,6 +168,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
     preyNear: roomInfo?.preyNear,
+    fireProjectile: roomInfo?.fireProjectile,
   };
 }
 

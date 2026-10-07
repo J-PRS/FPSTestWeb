@@ -22,7 +22,7 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingSwipeView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
@@ -114,6 +114,19 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // NetProbe: claimed-vs-flown drift — must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
   spawnDrift(velocity.distanceTo(p.vel));
+  if (serverSimmed(config.weaponType)) {
+    // Claimless path: the intent is all we send — the server spawns its
+    // own authoritative shell and echoes shotId on projectileCreated,
+    // which linkOwnProjectile binds to this predicted shell. Contact
+    // and blast outcomes arrive as broadcasts; nothing is claimed here.
+    deps.lazyNetworkManager().sendShotFired({
+      weaponType: config.weaponType,
+      dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+      pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
+      shotId: p.shotId ?? undefined,
+    });
+    return;
+  }
   deps.lazyNetworkManager().sendShot({
     targetId: null, // no target yet
     position: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },

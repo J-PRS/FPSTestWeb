@@ -166,12 +166,16 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
       const wt = optWeaponType(obj.weaponType);
       if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
+      const pos = optVec(obj.pos);
+      if (!pos.ok) return { success: false, error: `pos: ${pos.error}` };
       return {
         success: true,
         data: {
           type: 'shotFired',
           weaponType: wt.v,
           dir: dir.ok ? dir.data : undefined,
+          pos: pos.ok ? pos.data : undefined,
+          shotId: optShotId(obj.shotId),
         },
       };
     },

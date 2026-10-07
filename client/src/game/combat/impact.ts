@@ -14,7 +14,7 @@ import { burstGibs } from '../../entities/swarms.js';
 import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
 import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/config.js';
-import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats } from '../../../../shared/weapons.js';
+import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats, serverSimmed } from '../../../../shared/weapons.js';
 import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 import { isBotId } from '../../../../shared/botNames.js';
 import { HIT_TARGET_NONE } from '../../demo/types.js';
@@ -151,7 +151,9 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // so sending it ahead of the aoeShot/shot claims above used to make
   // every blast arrive at a projectile the server no longer knew
   // ("blast with no known projectile" — splash silently never applied).
-  if (p.serverProjectileId || p.shotId) {
+  // Server-simmed shells never claim: the authority's own sim owns the
+  // lifecycle and its projectileDestroyed echo does the tombstoning.
+  if ((p.serverProjectileId || p.shotId) && !serverSimmed(p.config.weaponType)) {
     deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
   }
 }
@@ -222,7 +224,10 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   if (claimable && claimLegal === false) {
     deps.logger.info(`[Shot] aoe claim suppressed pre-flight: ${p.config.displayName} air=${airtime.toFixed(2)}s`);
   }
-  const sendAOE = !claimable || claimLegal === false
+  // Server-simmed weapons predict the blast (FX/knockback/numbers stay
+  // local) but never send the claim — the authority's shell arrives at
+  // the same contact and declares it via broadcasts.
+  const sendAOE = !claimable || claimLegal === false || serverSimmed(weaponType)
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
@@ -473,7 +478,10 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   if (playerId === 'local') return;
   const networkManager = deps.lazyNetworkManager();
-  if (networkManager && willClaim) {
+  // Server-simmed shells never claim their hit — predicted feedback
+  // (damage numbers, bars, hitmarker) already ran above; the authority
+  // declares the outcome via playerHit/projectileDestroyed.
+  if (networkManager && willClaim && !serverSimmed(p.config.weaponType)) {
     networkManager.sendShot({
       targetId: playerId,
       position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },

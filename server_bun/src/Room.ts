@@ -713,6 +713,7 @@ export class Room {
       rng: () => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
+      fireProjectile: (pid, wt, origin, dir, vel, shotId) => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),
@@ -742,7 +743,8 @@ export class Room {
         this.applyClassScale(pid);
       },
       moveTrack: (pid, pos, yaw) => {
-        this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
+        const p = this.players.getPlayer(pid);
+        this.moveSim.track(pid, pos, yaw, p?.perk, p?.team);
         // Re-seats (room hop) have stale position frames in flight — arm
         // the same grace resync() uses so they can't seed the fresh
         // shadow at the old seat and flag the real spawn landing a cheat.
@@ -1066,6 +1068,7 @@ export class Room {
       // new own-team can't grab or return it. Drop it at their feet.
       this.flagCarrierDied(p.id);
       this.players.setTeam(p.id, small);
+      this.moveSim.setTeam(p.id, small);
       this.broadcast({ type: 'teamUpdate', playerId: p.id, team: small });
       counts[big]--;
       counts[small]++;

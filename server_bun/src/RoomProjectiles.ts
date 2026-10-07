@@ -136,11 +136,11 @@ export class RoomProjectiles {
    *  Burst weapons (flak/shotgun) fire the whole pellet fan — a pull
    *  registers `burst` shells fanned by golden-angle cone offsets, same
    *  coverage the client spawnFan produces. */
-  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3): string | null {
+  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string): string | null {
     const stats = getWeaponStats(weaponType);
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
-    if (burst <= 1 || spread <= 0) return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel);
+    if (burst <= 1 || spread <= 0) return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId);
     // Fan basis: right = dir × up0, up = right × dir — deterministic
     // Vogel-spiral coverage (no rng: every pellet's offset is fixed by
     // index, so sim replicas fan identically).
@@ -162,7 +162,7 @@ export class RoomProjectiles {
     return first;
   }
 
-  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3): string | null {
+  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string): string | null {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.speed <= 0) return null; // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
@@ -184,6 +184,9 @@ export class RoomProjectiles {
     this.room.broadcast({
       type: 'projectileCreated', projectileId: id, ownerId,
       position: { ...origin }, velocity: vel, weaponType,
+      // The intent's nonce — the shooter's predicted shell binds its
+      // server identity off this echo (linkOwnProjectile).
+      shotId,
     });
     return id;
   }

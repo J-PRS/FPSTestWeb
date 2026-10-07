@@ -712,8 +712,10 @@ export class NetworkManager {
   }
 
   /** Cosmetic fire relay — hitscan kinds (fan/beam) leave no projectile,
-   *  so this tells the server to paint muzzle audio/visual on observers. */
-  sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number } }): void {
+   *  so this tells the server to paint muzzle audio/visual on observers.
+   *  For SERVER_SIMMED_WEAPONS it's the fire intent — pos/shotId help the
+   *  spawn hint + echo binding; the server derives truth itself. */
+  sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) return;
     this.send({ type: 'shotFired', ...a });
   }

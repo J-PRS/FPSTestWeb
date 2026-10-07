@@ -4,6 +4,8 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
+import { serverSimmed } from '../../shared/weapons.ts';
+import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos, CLAIM_DEFER_MS, type ClaimDefer } from './claimLedger.ts';
@@ -85,6 +87,9 @@ export interface CombatDeps {
   influence?: InfluenceMap;
   /** Seeded room rng — absent = ambient Math.random (production). */
   rng?: () => number;
+  /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
+   *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
+  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
 }
 
 /**
@@ -360,6 +365,27 @@ export class CombatHandler {
     this.lastFireNotify.set(playerId, now);
     this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, clampPing(player.ping));
+    // Claimless pilot: a server-simmed intent spawns an authoritative
+    // shell — the intent IS the whole claim; contact/blast outcomes
+    // arrive as broadcasts, never as client claims. projectileCreated
+    // covers observers' visuals, so the playerShot relay is skipped.
+    if (serverSimmed(msg.weaponType) && msg.dir && finiteVec(msg.dir) && this.deps.fireProjectile) {
+      if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
+        this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
+        return;
+      }
+      player.protectedUntil = 0; // firing breaks your own spawn shield
+      const l = Math.hypot(msg.dir.x, msg.dir.y, msg.dir.z) || 1;
+      const id = this.deps.fireProjectile(playerId, msg.weaponType!,
+        { x: at.x, y: at.y + 1.6, z: at.z },
+        { x: msg.dir.x / l, y: msg.dir.y / l, z: msg.dir.z / l },
+        player.velocity, msg.shotId);
+      if (id) {
+        this.hb('shot.serverSim');
+        if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
+        return;
+      }
+    }
     this.broadcast({
       type: 'playerShot', id: playerId, weaponType: msg.weaponType,
       pos: { x: at.x, y: at.y + 1.6, z: at.z }, dir: msg.dir,

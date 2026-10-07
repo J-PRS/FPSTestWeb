@@ -71,8 +71,11 @@ export type ClientMessage =
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string }
   // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
   // this cosmetic "I pulled the trigger" lets the server relay a playerShot
-  // so firefights are audible/visible. Carries no damage semantics.
-  | { type: 'shotFired'; weaponType?: number; dir?: Vec3 }
+  // so firefights are audible/visible. For server-simmed weapons
+  // (SERVER_SIMMED_WEAPONS) it's the fire INTENT instead: the server
+  // spawns an authoritative shell, echoes shotId on projectileCreated,
+  // and declares all outcomes — pos/shotId only help binding, never truth.
+  | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; shotId?: string }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   // inputMove is a change-only stream — on unordered transports (RTC/WT
