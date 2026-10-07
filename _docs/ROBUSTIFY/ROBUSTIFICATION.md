@@ -3005,3 +3005,19 @@ dispose/splice, far ones age out without buffer writes), killfeed (6
 row cap), Projectile.solidIndex reset on BOTH the join and admin
 hot-reload paths, movement/teleport wire surface (limits everywhere;
 teleport intentionally unlimited via honor-and-count).
+
+## 2.163 deployFields: deploy-desync warns now name the culprit
+
+The soak's DEPLOY DESYNC ids=[1,2] has run 380+ checks without ever
+saying WHAT diverged -- the warn printed only client-side ids, so a
+server-only roster entry (missed spawn edge) was invisible by
+construction. Mirrored the creatureFields pattern end-to-end:
+protocol carries deployFields [id, kind, owner, team], TickLoop emits
+them from the same snapshot that feeds deployHash, wireIn/NetworkManager
+plumb them, and the stateDebug deploy branch diffs per-id on a mismatch
+-- server-only names a lost spawn, client-only names a lost deployGone,
+and a field diff names a kind/owner/team asymmetry. Next soak answers
+instead of asking. Also logged this round: a stale-corpse signal
+(isDead client=true server=false on BOT-BRICK-09) parked for a later
+round. (protocol.ts, TickLoop.ts, wireIn.ts, NetworkManager.ts,
+stateDebug.ts)

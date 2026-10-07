@@ -203,7 +203,10 @@ export type ServerMessage =
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string; deployHash?: string; flagHash?: string; pickupHash?: string;
       /** Per-creature [id, species, state, uber, targetId] — lets a hash
        *  mismatch name the diverging field instead of just listing ids. */
-      creatureFields?: [number, string, string, boolean, string | null][] }
+      creatureFields?: [number, string, string, boolean, string | null][];
+      /** Per-deployable [id, kind, owner, team] — same purpose as
+       *  creatureFields, for the deploy roster. */
+      deployFields?: [number, string, string, string][] }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
       /** Last inputMove seq the server consumed — the client replays its

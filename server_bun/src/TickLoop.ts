@@ -400,6 +400,11 @@ export class TickLoop {
       creatureFields: creatureRoster.length
         ? creatureRoster.map((c) => [c.id, c.species, c.state, c.uber, c.targetId] as [number, string, string, boolean, string | null])
         : undefined,
+      // Same per-id detail for the deploy lane — a phantom hash entry
+      // (a ghost item, a missing base asset) names itself in the warn.
+      deployFields: deployRoster.length
+        ? deployRoster.map((d) => [d.id, d.kind, d.owner, d.team ?? ''] as [number, string, string, string])
+        : undefined,
     });
 
     // Periodic status summary - suppress duplicates, batch with count

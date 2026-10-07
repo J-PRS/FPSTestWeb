@@ -322,7 +322,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let flagDriftStreak = 0;
   let pickupDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][]) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][], serverDeployFields?: [number, string, string, string][]) => {
     hashCheckCount++;
 
     if (serverFlagHash !== undefined && ctx.world) {
@@ -375,7 +375,25 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         deployDriftStreak = 0;
       } else {
         deployDriftStreak++;
-        const detail = `server=${serverDeployHash} client=${localDeployHash} ids=[${[...local.keys()].join(',')}]`;
+        // The hash alone can't say WHAT diverged — diff the server's
+        // per-id roster so the warn names the entry: a server-only id is
+        // a missed spawn edge, a client-only id a missed deployGone, and
+        // a field diff is a kind/owner/team asymmetry.
+        let detail = `server=${serverDeployHash} client=${localDeployHash} ids=[${[...local.keys()].join(',')}]`;
+        if (serverDeployFields) {
+          const diffs: string[] = [];
+          const seen = new Set<number>();
+          for (const [id, kind, owner, team] of serverDeployFields) {
+            seen.add(id);
+            const l = local.get(id);
+            if (!l) {diffs.push(`#${id}:server-only ${kind}/${owner}/${team}`);}
+            else if (l.kind !== kind || l.owner !== owner || l.team !== team) {diffs.push(`#${id}:${l.kind}/${l.owner}/${l.team}->${kind}/${owner}/${team}`);}
+          }
+          for (const id of local.keys()) {
+            if (!seen.has(id)) {diffs.push(`#${id}:client-only`);}
+          }
+          if (diffs.length) {detail += ` diffs={${diffs.slice(0, 6).join(', ')}}`;}
+        }
         if (deployDriftStreak >= 2) {
           logger.warn(`[StateHash] DEPLOY DESYNC tick=${tick} ${detail} (persistent across ${deployDriftStreak} checks — a deploySpawn/deployGone edge never landed)`);
         } else {
