@@ -1,3 +1,4 @@
+2026-10-01 - hosting doc: TURN pick = Cloudflare Realtime (free 1TB/mo tier) over coturn/metered
 2026-10-01 - workflows: NOTES.md + workflows/beta-launch.md + robustify-round.md specs (loop-me); rootcheck allowlist
 2026-10-01 - netcode: split inbound dispatch out of NetworkManager into wireIn.ts (handler table + wire-id roster + seq watermarks); NM down to 879 lines
 2026-10-01 - netcode: judge credits RTT/2 transit staleness - sustained 150ms ping no longer rubberbands (latency soak pinned)

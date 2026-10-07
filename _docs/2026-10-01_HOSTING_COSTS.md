@@ -105,3 +105,14 @@ expect booter DDoS once visible → Cloudflare in front is non-optional.
 - **Egress math**: at ~50 MB/player-hour, each +1000 player-hours/day
   adds ~1.5 TB/mo — track the 20TB included cap before CPU becomes
   the limit.
+
+## TURN decision (2026-10-01)
+
+Picked: **Cloudflare Realtime TURN** — GA on every CF account, anycast
+edge, **first 1,000 GB/mo free**, $0.05/GB after. Our relay traffic is a
+small fraction of that (RTC duels only, strict-NAT minority, ~20-30KB/s
+per relayed session → 1TB ≈ 10k+ player-hours). Beats coturn (a daemon +
+relay-port range + creds ops on the game box) and metered.ca (smaller
+free tier, extra vendor) on both cost and ops. Needs: CF account + TURN
+key id/token minted via the Calls API → `FPS_ICE_SERVERS`.
+
