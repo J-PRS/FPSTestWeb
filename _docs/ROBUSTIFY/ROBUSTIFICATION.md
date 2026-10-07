@@ -224,6 +224,24 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.59 evictEldest — one bounded-eviction owner (2026-10-07)
+
+First class-9 (architectural redundancy) round. The "cap a map at N,
+drop the oldest" concern was hand-rolled ~10 times and had drifted:
+`joinIps`, `invalidWarnAt`, `lastKiller`, `deathStreak`, `specMisses`
+still used wholesale `clear()` — the amnesty bug fixed piecemeal in
+three earlier rounds (a flood past the cap resets the cooldown/window
+for every live entry). New `evictEldest` helper owns the pattern; all
+nine sites route through it (`claimLedger`'s tombstone-side-effect
+evictions and `groundMemo`'s pure-memo clear stay local). Drift class
+closed: a future cap can't re-introduce clear() without review seeing
+the helper exists.
+
+NOTE: `server_bun/src/moveJudge.ts` + `RoomMoveSim.ts` carry uncommitted
+user WIP (gapAt/INPUT_GAP_DEFER_MS defer window, FieldSurface.fromField)
+— the soakChaos tail-p95 failure this run (10.67m > 5m bound) matches
+correction starvation from the defer window, not this change.
+
 ### 2.58 Arrival floor on the fire-window law (2026-10-07)
 
 Shot-claim cadence trusted client stamps: one giant `timestamp` poisoned
