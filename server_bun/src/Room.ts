@@ -836,6 +836,8 @@ export class Room {
     return {
       room: roomName,
       mode: this.mode,
+      // This authority sims every outcome — no client claim is legitimate.
+      claimsAccepted: false,
       scores: this.scores,
       teams: this.modeSpec?.teams,
       friendlyFire: CONFIG.friendlyFire,

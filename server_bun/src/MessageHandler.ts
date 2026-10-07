@@ -28,6 +28,13 @@ type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 export interface RoomInfo {
   room: string;
   mode: string;
+  /** Whether outcome claims (aoeShot, creatureHit, heal, repair,
+   *  projectileDestroy) are adjudicated. A sim-running authority sets
+   *  false: clients only ever send intents there, so a claim that still
+   *  arrives is forged or stale — reject, don't adjudicate. A P2P host
+   *  embeds these modules without sims and leaves it unset (default
+   *  true): there the claim IS the authority path. */
+  claimsAccepted?: boolean;
   /** Live scoreboard object (mutated by Room.score) — echoed into gameState. */
   scores?: { alpha: number; bravo: number };
   /** Team-mode room → friendly fire is blocked at the damage funnel. */
@@ -221,6 +228,10 @@ export class MessageHandler {
 
   roomInfo: RoomInfo = { room: 'default', mode: '' };
 
+  /** Set from roomInfo.claimsAccepted at construction — wire.ts's claim
+   *  verbs consult it before adjudicating (RoomInfo has the doc). */
+  readonly acceptClaims: boolean;
+
   hb(key: string, n = 1): void {
     const h = this.roomInfo.health;
     if (h) h.set(key, (h.get(key) ?? 0) + n);
@@ -253,6 +264,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
+    this.acceptClaims = roomInfo?.claimsAccepted ?? true;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, combatDeps(roomInfo));
     this.moves = new MoveClaims(this);
     this.attachStructures(roomInfo?.structures);

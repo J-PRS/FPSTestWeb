@@ -8,14 +8,20 @@ import { WeaponType, getWeaponStats } from '../../../shared/weapons.ts';
 type Room = ReturnType<typeof mkRoom>;
 type Player = ReturnType<typeof twoPlayers>[number];
 
-function beamTick(room: Room, shooterId: string, victim: Player): void {
-  room.messages.handleMessage(shooterId, {
-    type: 'aoeShot',
-    position: { ...victim.position },
+/** One beam tick = one shotFired Lightning intent — the room's honest
+ *  ray (beamSweep) names the contact and the charge economy pays it. */
+function beamTick(room: Room, shooter: Player, victim: Player): void {
+  const eye = { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z };
+  const dir = {
+    x: victim.position.x - eye.x,
+    y: (victim.position.y - 0.9) - eye.y,
+    z: victim.position.z - eye.z,
+  };
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  room.messages.handleMessage(shooter.id, {
+    type: 'shotFired',
     weaponType: WeaponType.Lightning,
-    excludeTargetId: victim.id,
-    projectileId: null,
-    airtime: 0,
+    dir: { x: dir.x / len, y: dir.y / len, z: dir.z / len },
   } as never);
 }
 
@@ -47,7 +53,7 @@ describe('scenario: LG charge economy vs players', () => {
     freeze(room, b.id, { x: 30, y: 31, z: 0 });
     expect(b.charge).toBe(0);
 
-    for (let i = 0; i < 10; i++) beamTick(room, a.id, b);
+    for (let i = 0; i < 10; i++) beamTick(room, a, b);
     // Ticks 1-4 pay full damage (bank 0); 5-9 bank (4-3)x2=2 each,
     // 10+ bank (4-2)x2=4 — 10 + 4 = 14 gross, minus tiny drain.
     expect(b.charge).toBeGreaterThan(10);
@@ -60,7 +66,7 @@ describe('scenario: LG charge economy vs players', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     freeze(room, b.id, { x: 10, y: 31, z: 0 });
 
-    for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
+    for (let i = 0; i < 12; i++) beamTick(room, a, b);
     const banked = b.charge;
     const dmg = getWeaponStats(WeaponType.Chaingun).directDamage;
 
@@ -83,7 +89,7 @@ describe('scenario: LG charge economy vs players', () => {
     freeze(room, b.id, { x: 6, y: 31, z: 0 });
     freeze(room, c.id, { x: 8, y: 31, z: 0 }); // inside the pop radius
 
-    for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
+    for (let i = 0; i < 12; i++) beamTick(room, a, b);
     expect(b.charge).toBeGreaterThan(0);
     const hpC = c.health;
     b.health = 30; // ensure the rocket kill lands
@@ -101,7 +107,7 @@ describe('scenario: LG charge economy vs players', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     freeze(room, b.id, { x: 30, y: 31, z: 0 });
 
-    for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
+    for (let i = 0; i < 12; i++) beamTick(room, a, b);
     const banked = b.charge;
     room.messages.botAttack(a.id, b.id, WeaponType.Chaingun);
     expect(b.charge).toBeLessThan(banked);

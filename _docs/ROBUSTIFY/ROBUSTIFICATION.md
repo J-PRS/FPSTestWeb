@@ -3255,3 +3255,26 @@ them. Residual P2P gaps noted: direct-hit 'shot' claims are dead wire-
 side (kinetic weapons rely on aoeShot only) and LG/beam intents resolve
 cosmetically on hosts lacking beamSweep. (tsc + p2pHost/blastForce 21
 green)
+
+## 2.180 — Claim verbs refuse on sim authorities (claimsAccepted)
+
+The other half of authoritySims: suppression decided *what the client
+sends*; this decides *what the authority accepts*. RoomInfo gains
+`claimsAccepted` — Room's handlerInfo sets false (a sim-running
+authority takes intents only); a MessageHandler built without roomInfo
+(P2P host, offline) defaults true since claims ARE its outcome path.
+wire.ts gates aoeShot/creatureHit/crawlerHit/repair/heal/
+projectileDestroy at the handle: refused claims get a claimAck reject
+('outcomes are server-simmed'), never adjudication — aoeSlam's
+trusting msg.power, creature-hit range caps, the whole re-derive layer
+stops being reachable from the wire on the dedicated server. protocol
+gains claimSeq on aoeShot/projectileDestroy so the refusal can stamp.
+Also folded in: the class lock moved above every fire intent (beams/
+melee no longer bypass classCanFire) and every claim-driving scenario
+test converted to intents — melee swing, slam power (now derived off
+the velocity shadow, floor/ceiling pinned), LG beam ticks, heal
+claims, forged aoeShot (claimAck refusal pin). healCredit/healRate/
+roompickups re-pinned to refusal semantics; envClaims/demoCoverage/
+combatorder kept as the claim-lane unit coverage. replicaParity +
+capRun failures confirmed pre-existing on HEAD (stash-verified).
+(tsc + 64 focused tests green)

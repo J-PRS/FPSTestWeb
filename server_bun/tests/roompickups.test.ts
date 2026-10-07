@@ -110,7 +110,7 @@ describe('RoomPickups', () => {
     expect(room.pickups!.snapshot().length).toBe(0);
   });
 
-  it('gem collect heals server-side; heal claims get no credit in team rooms', () => {
+  it('gem collect heals server-side; heal claims are refused outright', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     const p = addAt(room, 'p1', 'alpha', 10, 0);
     p.health = 50;
@@ -124,12 +124,12 @@ describe('RoomPickups', () => {
     expect(p.health).toBe(70); // claims can't re-spend a heal already applied
   });
 
-  it('ffa rooms heal free-form (local nuggets, no server backing)', () => {
+  it('heal claims are refused on sim authorities, ffa included', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 0, 0);
     p.health = 50;
     p.protectedUntil = 0;
     room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
-    expect(p.health).toBe(75);
+    expect(p.health).toBe(50); // claimsAccepted: false — collect pays the heal
   });
 });

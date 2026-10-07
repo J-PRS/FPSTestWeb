@@ -162,13 +162,13 @@ describe('shotFired relay', () => {
     const p = players.addPlayer('p1');
     p.position = { x: 5, y: 10, z: -3 };
 
-    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 12, dir: { x: 1, y: 0, z: 0 } });
+    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 3, dir: { x: 1, y: 0, z: 0 } });
 
     expect(broadcasts.length).toBe(1);
     const m = broadcasts[0]!.msg as Extract<ServerMessage, { type: 'playerShot' }>;
     expect(m.type).toBe('playerShot');
     expect(m.id).toBe('p1');
-    expect(m.weaponType).toBe(12);
+    expect(m.weaponType).toBe(3);
     expect(m.pos).toEqual({ x: 5, y: 11.6, z: -3 }); // eye offset over the stamped feet pos
     expect(m.dir).toEqual({ x: 1, y: 0, z: 0 });
     expect(broadcasts[0]!.exclude).toBe('p1');
@@ -177,9 +177,9 @@ describe('shotFired relay', () => {
   it('the 50ms relay gate drops the burst — silent, no reject', () => {
     const { players, combat, broadcasts } = shotHarness();
     players.addPlayer('p1');
-    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 9 });
-    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 9 });
-    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 9 });
+    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 3 });
+    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 3 });
+    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 3 });
     expect(broadcasts.length).toBe(1);
   });
 
@@ -187,7 +187,7 @@ describe('shotFired relay', () => {
     const { players, combat, broadcasts } = shotHarness();
     const p = players.addPlayer('p1');
     p.isDead = true;
-    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 9 });
+    combat.handleShotFired('p1', { type: 'shotFired', weaponType: 3 });
     expect(broadcasts.length).toBe(0);
   });
 });

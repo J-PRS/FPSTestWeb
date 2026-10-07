@@ -67,7 +67,7 @@ export type ClientMessage =
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not
   // the echo-race/FIFO inference it replaced.
-  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string }
+  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string; claimSeq?: number }
   // Q-skill Slam landing — the intent carries WHERE the dive landed;
   // the server derives blast power from its own velocity shadow (the
   // dive speed IS the payload — a claimed speed is just a number).
@@ -85,7 +85,7 @@ export type ClientMessage =
   // datagrams) events can land out of order, so each carries a seq and the
   // server drops stale ones.
   | { type: 'inputMove'; seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation }
-  | { type: 'projectileDestroy'; projectileId: string; shotId?: string }
+  | { type: 'projectileDestroy'; projectileId: string; shotId?: string; claimSeq?: number }
   // claimSeq stamps the claim kinds the client wants a verdict for —
   // every claim carrying one gets a claimAck back (applied vs rejected+
   // reason), so a rejected claim is never indistinguishable from a lost

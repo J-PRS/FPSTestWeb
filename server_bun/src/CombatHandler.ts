@@ -305,6 +305,12 @@ export class CombatHandler {
     const now = wallNow();
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
     const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
+    // Class lock applies to every fire intent — beams and melee skip the
+    // projectile branch but must not dodge it.
+    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
+      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
+      return;
+    }
     // Melee intent: the swing point is server-derived (rewound origin +
     // aim offset), so a forged position can't widen the arc — the old
     // aoeShot claim carried a client position for exactly this math.
@@ -379,10 +385,6 @@ export class CombatHandler {
     // arrive as broadcasts, never as client claims. projectileCreated
     // covers observers' visuals, so the playerShot relay is skipped.
     if (fireProjectile) {
-      if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-        this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
-        return;
-      }
       // Belt throws pay the same charge the spawn claim would deduct —
       // skipping it would make free ordnance a forged intent away.
       if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {

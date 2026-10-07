@@ -95,10 +95,10 @@ describe('scenario: class-locked ordnance', () => {
       pos: { x: 1, y: 32, z: 0 },
       weaponType: WeaponType.Railgun,
     } as never);
-      // The LG beam claims through the AOE funnel — same gate must hold.
+      // The LG beam intent hits the same class lock — refused either way.
       room.messages.handleMessage(a.id, {
-        type: 'aoeShot',
-        position: { x: 1, y: 32, z: 0 },
+        type: 'shotFired',
+        dir: { x: 0, y: 0.3, z: 1 },
         weaponType: WeaponType.Lightning,
       });
     }
@@ -115,8 +115,8 @@ describe('scenario: class-locked ordnance', () => {
     expect(rejects()).toBe(4);
     expect(w.count('projectileCreated')).toBe(1);
     room.messages.handleMessage(a.id, {
-      type: 'aoeShot',
-      position: { x: 1, y: 32, z: 0 },
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
       weaponType: WeaponType.Lightning,
     });
     expect(rejects()).toBe(4);

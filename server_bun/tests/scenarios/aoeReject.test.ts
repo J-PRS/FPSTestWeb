@@ -16,20 +16,20 @@ describe('scenario: aoeShot validation', () => {
     const hpBefore = room.players.getPlayer(b.id)!.health;
 
     // A never fired — but claims a rocket detonated right at B's feet.
-    // The claim first defers (its spawn could be in flight on an
-    // unordered transport); each new claim flushes retries, and with no
-    // spawn ever registering it exhausts into a reject.
+    // This authority sims every outcome, so the claim is refused at the
+    // gate — the stamp comes back as a refused ack, never a blast.
     const forged = {
       type: 'aoeShot',
       position: { x: 30, y: 31, z: 0 },
       weaponType: WeaponType.BoltLauncher,
       projectileId: null,
       airtime: 0.5,
+      claimSeq: 3,
     } as Extract<ClientMessage, { type: 'aoeShot' }>;
     for (let i = 0; i < 6; i++) room.messages.handleMessage(a.id, forged);
     step(room, 5);
     expect(w.count('playerHit')).toBe(0);
     expect(room.players.getPlayer(b.id)!.health).toBe(hpBefore);
-    expect(toA.filter((m) => m.type === 'shotRejected').length).toBeGreaterThanOrEqual(1);
+    expect(toA.some((m) => m.type === 'claimAck' && (m as { ok?: boolean }).ok === false)).toBe(true);
   });
 });

@@ -113,10 +113,14 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           power: isFiniteNumber(obj.power) ? obj.power : undefined,
           directHit: obj.directHit === true ? true : undefined,
           shotId: optShotId(obj.shotId),
+          claimSeq: optClaimSeq(obj.claimSeq),
         },
       };
     },
-    handle: (h, id, m) => h.combat.handleAOEShot(id, m),
+    handle: (h, id, m) => {
+      if (h.acceptClaims === false) { h.claimAck(id, 'aoeShot', m.claimSeq, 'outcomes are server-simmed'); return; }
+      h.combat.handleAOEShot(id, m);
+    },
   },
 
   shotFired: {
@@ -220,9 +224,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!pid.ok) {
         return { success: false, error: 'projectileId: invalid or oversized' };
       }
-      return { success: true, data: { type: 'projectileDestroy', projectileId: pid.v!, shotId: optShotId(obj.shotId) } };
+      return { success: true, data: { type: 'projectileDestroy', projectileId: pid.v!, shotId: optShotId(obj.shotId), claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.combat.handleProjectileDestroy(id, m),
+    handle: (h, id, m) => {
+      if (h.acceptClaims === false) { h.claimAck(id, 'projectileDestroy', m.claimSeq, 'outcomes are server-simmed'); return; }
+      h.combat.handleProjectileDestroy(id, m);
+    },
   },
 
   environmentDamage: {
@@ -257,7 +264,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'heal', amount: obj.amount, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
+    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.acceptClaims === false ? 'outcomes are server-simmed' : h.combat.handleHeal(id, m)),
   },
 
   creatureHit: {
@@ -275,7 +282,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
     handle: (h, id, m) => {
-      const v = h.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
+      const v = h.acceptClaims === false ? null : h.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
       h.claimAck(id, 'creatureHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
     },
   },
@@ -295,7 +302,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
     handle: (h, id, m) => {
-      const v = h.creatureSim?.handleHit(id, m.id, m.damage);
+      const v = h.acceptClaims === false ? null : h.creatureSim?.handleHit(id, m.id, m.damage);
       h.claimAck(id, 'crawlerHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
     },
   },
@@ -323,7 +330,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'repair', targetId: obj.targetId, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'repair', m.claimSeq, h.roomInfo.onRepair?.(id, m.targetId) ?? 'gone'),
+    handle: (h, id, m) => h.claimAck(id, 'repair', m.claimSeq, h.acceptClaims === false ? 'outcomes are server-simmed' : (h.roomInfo.onRepair?.(id, m.targetId) ?? 'gone')),
   },
 
   // Mirror-only claim: the server re-derives the energy ante itself —
