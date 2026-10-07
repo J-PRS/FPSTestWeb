@@ -167,23 +167,33 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   }
 
   const wrapIdx = (i: number): number => ((i % entries.length) + entries.length) % entries.length;
-  const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> => dm.coolShotMgr.resolveClipData(e);
+  // Never rejects: IDB/read failures and corrupt blobs all degrade to a
+  // plain miss — a throw inside a pager transition would strand
+  // `advancing` with the poster frozen over the feed.
+  const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> =>
+    dm.coolShotMgr.resolveClipData(e).catch(() => null);
 
   // Neighbor parked at frame 0 — real pixels under the outgoing poster.
-  function mountPaused(data: DemoFile): void {
-    dm.onPlaybackStart?.();
-    dm.player.load(data);
-    dm.player.seek(0);
-    dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
-    dm.setMode('paused');
+  function mountPaused(data: DemoFile): boolean {
+    try {
+      dm.onPlaybackStart?.();
+      dm.player.load(data);
+      dm.player.seek(0);
+      dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
+      dm.setMode('paused');
+      return true;
+    } catch { return false; }
   }
 
-  function mountPlay(data: DemoFile): void {
-    dm.onPlaybackStart?.();
-    dm.player.load(data);
-    dm.player.seek(0);
-    dm.player.play();
-    dm.setMode('playing');
+  function mountPlay(data: DemoFile): boolean {
+    try {
+      dm.onPlaybackStart?.();
+      dm.player.load(data);
+      dm.player.seek(0);
+      dm.player.play();
+      dm.setMode('playing');
+      return true;
+    } catch { return false; }
   }
 
   const current = (): CoolShotEntry | undefined => entries[index];
@@ -226,8 +236,9 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     const e = entries[index]!;
     paintMeta();
     updateAddress();
-    if (preloaded) {mountPlay(preloaded);}
-    else {dm.playCoolShotById(e.id);}
+    if (preloaded && mountPlay(preloaded)) {
+      // mounted above
+    } else {dm.playCoolShotById(e.id);}
     // Dead-clip watchdog — fire-and-forget playback gives no failure
     // signal, so a clip that never starts gets skipped on a timer.
     const g = clipGen;
@@ -246,7 +257,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     dm.player.pause();
     const e = entries[wrapIdx(index + dir)]!;
     const data = await resolveClip(e);
-    if (data) {mountPaused(data);}
+    if (data) {void mountPaused(data);} // a failed mount just means no parked frame
     trackPanes(0, dir);
     await slidePanes(dir, true, SLIDE_MS);
     hidePoster();

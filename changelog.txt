@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.143: clip feed - a throw during a pager transition (IDB rejection, corrupt blob in load()) can no longer strand `advancing` with the poster frozen over the feed
 2026-10-01 - clip feed: true filmstrip drag - live canvas tracks as the second pane so both clips move together (was poster-only slide)
 2026-10-01 - robustify 2.142: p2p signalling - parse signal frame inside guard; malformed frame no longer aborts the handshake via unhandled rejection
 2026-10-01 - robustify 2.141: demo upload - bounds-checked header parse (malformed -> 400, no internal echo); reject non-finite/absurd lifetime that would pin index top

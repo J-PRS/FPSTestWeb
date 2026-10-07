@@ -2778,3 +2778,13 @@ JSON.parse site (WebSocketConnection, tiers, tiersWebTransport,
 GameServer) is already guarded - this was the only unprotected one.
 Now parse-guarded with a null/object check before the switch.
 (signalling.ts)
+
+## 2.143 Clip feed pager: any throw in the transition stranded the feed
+
+go() held `advancing` across `await resolveClip` + mountPaused with no
+guard: an IDB get() rejection or a corrupt clip blob throwing in
+player.load() would leave advancing set and the poster frozen over the
+canvas - every nav input dead until reload. Now resolveClip never
+rejects (catch -> null) and mount* return bool on failure, degrading to
+the plain fetch path; the transition always completes.
+(clipFeed.ts)
