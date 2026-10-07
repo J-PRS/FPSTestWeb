@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.36 envSeen first-claim dedupe amnesty (2026-10-07)
+
+`envClaims.envSeen` (the first-env-claim-per-player warn dedupe) capped
+at >512 with a wholesale `clear()` — under id churn, one crossing could
+re-fire the "first claim" warn for every live player. Eldest-evict like
+§2.35; consequence was mild (a repeated marker line) but the class is
+the class. `moveClaims.lastTeleport`/`lastTeleportWarn` (both evict on
+removal) and `roomEvents.subs` (unsub closure) audited clean.
+
 ### 2.35 Switch-cooldown churn amnesty (2026-10-07)
 
 `RoomSwitcher.cooldowns` capped at >1024 with a wholesale `clear()` —

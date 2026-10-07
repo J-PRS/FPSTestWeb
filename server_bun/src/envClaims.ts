@@ -14,7 +14,7 @@ type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 const envSeen = new Set<string>();
 const markEnvSeen = (id: string): boolean => {
   if (envSeen.has(id)) return false;
-  if (envSeen.size > 512) envSeen.clear();
+  if (envSeen.size > 512) envSeen.delete(envSeen.keys().next().value!);
   envSeen.add(id);
   return true;
 };
