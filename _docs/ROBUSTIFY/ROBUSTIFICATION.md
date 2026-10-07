@@ -2018,4 +2018,10 @@ by a 3D distance (`dist3`), so a pickup on a different floor shrank
 the unit vector and made the onRoute gate stricter than intended â€”
 the shared helper normalizes properly on XZ, a mild semantic fix.
 
+Second wave found five MORE clones the first pass missed
+(botLines ×2 escape/homing dot-products, botSteer sway heading,
+botHunt shooter-motion projection + retreatDest). Same collapse;
+the scalar-reuse sites (standoff `sd`, dodge `tl`, steer `al`,
+disposition `od`/`ptd`) correctly keep their hypot.
+
 ### 2.85 - end

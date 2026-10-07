@@ -13,6 +13,7 @@
 import type { BotVec, BrainCtx } from './botBrain.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import { sharedEnv } from './env.ts';
+import { dirXZ } from './botVec.ts';
 
           // fan of candidate directions around the goal
         // rad — half-angle of the fan
@@ -174,8 +175,8 @@ export class BotLines {
         // A route that just re-feeds the face is no escape: only take
         // it when it points meaningfully off the goal line.
         if (wp) {
-          const wd = Math.hypot(wp.x - pos.x, wp.z - pos.z) || 1;
-          const offLine = ((wp.x - pos.x) / wd) * ((dest.x - pos.x) / gd) + ((wp.z - pos.z) / wd) * ((dest.z - pos.z) / gd) < 0.75;
+          const w = dirXZ(wp.x - pos.x, wp.z - pos.z);
+          const offLine = w.x * ((dest.x - pos.x) / gd) + w.z * ((dest.z - pos.z) / gd) < 0.75;
           if (!offLine) wp = null;
         }
       }
@@ -265,9 +266,9 @@ export class BotLines {
       // itself is clear, cut to it — the human line is nearly straight
       // in close, jets absorb the small stuff.
       if (routed && gd < 150 && !faceAhead) {
-        const rd = Math.hypot(routed.x - pos.x, routed.z - pos.z) || 1;
-        const offLine = ((routed.x - pos.x) / rd) * ((dest.x - pos.x) / gd)
-          + ((routed.z - pos.z) / rd) * ((dest.z - pos.z) / gd);
+        const r = dirXZ(routed.x - pos.x, routed.z - pos.z);
+        const offLine = r.x * ((dest.x - pos.x) / gd)
+          + r.z * ((dest.z - pos.z) / gd);
         if (offLine < 0.92) {
           const reach = Math.min(40, gd);
           routed = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };

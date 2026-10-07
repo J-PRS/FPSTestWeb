@@ -14,7 +14,7 @@ import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
 import { rollSkill, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
-import { dist3, distSqXZ } from './botVec.ts';
+import { dist3, distSqXZ, dirXZ } from './botVec.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -354,9 +354,9 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // shrinks. Movement-phenom bots handle their own speed better.
   if (ctx.vel) {
     const ax = st.lastSeen.x - pos.x, az = st.lastSeen.z - pos.z;
-    const ad = Math.hypot(ax, az) || 1;
-    const perp = Math.abs(ctx.vel.x * (az / ad) - ctx.vel.z * (ax / ad));
-    const along = (ctx.vel.x * ax + ctx.vel.z * az) / ad;
+    const ad = dirXZ(ax, az);
+    const perp = Math.abs(ctx.vel.x * ad.z - ctx.vel.z * ad.x);
+    const along = ctx.vel.x * ad.x + ctx.vel.z * ad.z;
     err *= 1 + (perp * 0.05) / Math.max(0.6, st.skill.movement) - Math.max(0, along) * 0.01;
   }
   // Getting shot throws the aim off — decaying spike, not a toggle.
@@ -557,8 +557,8 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
  *  body when one is near — suppression keeps them honest. */
 export function retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
   const ax = pos.x - t.pos.x, az = pos.z - t.pos.z;
-  const al = Math.hypot(ax, az) || 1;
-  let rx = pos.x + (ax / al) * 24, rz = pos.z + (az / al) * 24;
+  const al = dirXZ(ax, az);
+  let rx = pos.x + al.x * 24, rz = pos.z + al.z * 24;
   let ally: BotVec | null = null;
   let ad = Infinity;
   for (const o of ctx.others ?? []) {

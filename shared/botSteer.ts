@@ -14,7 +14,7 @@ import type { BotVec, BrainCtx } from './botBrain.ts';
 import { wrapAngleDelta } from './angles.ts';
 import { botRand } from './botRand.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
-import { distSqXZ } from './botVec.ts';
+import { dirXZ, distSqXZ } from './botVec.ts';
 
 // --- context steering senses ---
         // directions sampled around the circle
@@ -66,8 +66,9 @@ export class BotSteer {
       const az = dest.z + Math.sin(this.swayT) * r - pos.z;
       const al = Math.hypot(ax, az) || 1;
       const step0 = Math.min(al, T.steer.step * 0.3);
-      this.heading.x = ax / al; this.heading.z = az / al;
-      return { x: pos.x + (ax / al) * step0, y: pos.y, z: pos.z + (az / al) * step0 };
+      const hd = dirXZ(ax, az);
+      this.heading.x = hd.x; this.heading.z = hd.z;
+      return { x: pos.x + hd.x * step0, y: pos.y, z: pos.z + hd.z * step0 };
     }
     gx /= gd; gz /= gd;
     const g0 = ctx.groundY(pos.x, pos.z);
