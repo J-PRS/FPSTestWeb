@@ -2807,3 +2807,11 @@ model stayed stopped/T-posed forever, re-entering every frame. The
 early return now only applies while the action is actually running; a
 stopped same-clip refire falls through to reset()+play().
 (PlayerModel.ts)
+
+## 2.146 Clip feed: mid-drag auto-advance double-committed
+
+go() (wheel/keys/scheduleNext auto-advance) could fire while a touch
+drag was armed - it ran its own slide while the finger still tracked
+panes, and touchend's commit path then advanced a SECOND clip. go() now
+cancels any live drag before sliding; touchend sees drag null and
+returns. (clipFeed.ts)

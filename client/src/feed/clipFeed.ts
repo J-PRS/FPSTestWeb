@@ -264,6 +264,9 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
 
   async function go(dir: 1 | -1): Promise<void> {
     if (entries.length === 0 || advancing) {return;}
+    // An auto-advance/keys/wheel go() can land mid-gesture — cancel the
+    // drag outright or touchend's commit path advances a second clip.
+    drag = null;
     advancing = dir;
     const ni = wrapIdx(index + dir);
     const e = entries[ni]!;

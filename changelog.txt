@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.146: clip feed - wheel/keys/auto-advance during a swipe no longer double-advances (drag is cancelled when go() takes over)
 2026-10-01 - clip feed: outgoing clip keeps playing through the swipe - canvas stays on the live clip while the neighbor pane (meta placeholder, real frame at commit) slides over
 2026-10-01 - robustify 2.145: anim stall guard actually heals now - same-clip early return skipped the restart, leaving the model stopped (T-posed) after any action stall
 2026-10-01 - menu on phones: side drawers + loadout + shots stacked into one scrollable column at <=820px (was overlapping absolute panels covering the screen)
