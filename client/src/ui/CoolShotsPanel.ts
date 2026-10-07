@@ -55,8 +55,14 @@ export class CoolShotsPanel {
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
     // Tile: weapon + shot→hit distance + air time — the brag stats.
     // meta is optional (server/vault-restored entries may lack it).
-    const meta = [shot.weapon, shot.distance != null ? `${shot.distance.toFixed(0)}m` : '']
-      .filter(Boolean).join(' · ');
+    const dist = shot.distance != null ? `${shot.distance.toFixed(0)}m` : '';
+    // The column ellipsizes past ~18 chars; a long weapon name would eat the
+    // distance, so multi-word names initial only when the pair overflows.
+    let weapon = shot.weapon ?? '';
+    if (weapon && dist && (weapon.length + dist.length) > 15 && weapon.includes(' ')) {
+      weapon = weapon.split(/\s+/).map(w => w[0]).join('');
+    }
+    const meta = [weapon, dist].filter(Boolean).join(' · ');
     item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span>${meta ? `<span class="shot-meta">${meta}</span>` : ''}<span class="time-ago">${this.timeAgo(shot.timestamp)}</span>`;
     item.addEventListener('click', () => {
       this.demoManager.playCoolShotById(shot.id);
