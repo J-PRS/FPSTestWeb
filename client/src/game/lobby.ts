@@ -51,7 +51,7 @@ export interface LobbyDeps {
   /** In-place room hop over the live socket — false when there's no
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */
-  switchRoom?(name: string, map?: string, bots?: number, mode?: string): boolean;
+  switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): boolean;
   /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
    *  picker preview. Absent → no preview panel. */
   mapThumbUrl?(name: string): string;
@@ -288,7 +288,7 @@ export class Lobby {
     this.rows.append(row);
   }
 
-  join(name: string, map?: string, bots?: number, mode?: string): void {
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): void {
     // Already there — a reload would boot us into the same seat anyway.
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
@@ -302,7 +302,7 @@ export class Lobby {
     if (name === 'default') {
       // Live hop cleans the param; the reload path needs ?room=default
       // present or the boot won't connect at all.
-      if (this.deps.switchRoom?.(name, map, bots, mode)) {
+      if (this.deps.switchRoom?.(name, map, bots, mode, unlisted)) {
         q.delete('room');
         history.replaceState(null, '', q.toString() ? `${location.pathname}?${q}` : location.pathname);
         return;
@@ -312,9 +312,10 @@ export class Lobby {
     for (const [k, v] of [['map', map], ['bots', bots], ['mode', mode]] as const) {
       if (v !== undefined && v !== '') {q.set(k, String(v));} else {q.delete(k);}
     }
+    if (unlisted) {q.set('unlisted', '1');} else {q.delete('unlisted');}
     const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
     // Live socket: hop in place — the gameState rebuild does the rest.
-    if (this.deps.switchRoom?.(name, map, bots, mode)) {
+    if (this.deps.switchRoom?.(name, map, bots, mode, unlisted)) {
       history.replaceState(null, '', href);
       return;
     }

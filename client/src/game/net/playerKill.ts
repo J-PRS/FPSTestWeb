@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
-import { botDisplayName } from '../../../../shared/botNames.js';
+import { displayName } from '../nameOf.js';
 import { noteKill } from '../../core/stateDebug.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
@@ -38,7 +38,8 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   }
   const roster = nm().getPlayers();
   deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
-    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air });
+    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air,
+      sName: displayName(shooterId, roster), tName: displayName(targetId, roster) });
   if (targetId === localId) {
     logger.info(`Local player killed by ${shooterId}`);
     const player = deps.lazyPlayer();
@@ -51,7 +52,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
       ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
       : shooterId === targetId
         ? `YOU DIED\nfragged yourself`
-        : `YOU DIED\nfragged by ${botDisplayName(shooterId)}`);
+        : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`);
     return;
   }
 
@@ -61,7 +62,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
     // Announce only on the crossing kill — `>=` repeated the title on
     // every frag past the threshold, so a 4-kill life yelled SPREE twice.
     const streakName = STREAK_NAMES.find(([n]) => ++deps.world.killStreak === n)?.[1];
-    const name = botDisplayName(targetId);
+    const name = displayName(targetId, roster);
     deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();
   }

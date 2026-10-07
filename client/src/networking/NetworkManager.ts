@@ -17,7 +17,7 @@ import { InputStream } from './inputStream.js';
 const logger = new ChildLogger('NetworkManager');
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
-const ROSTER_FIELDS = ['internalId', 'position', 'rotation', 'velocity', 'isDead',
+const ROSTER_FIELDS = ['internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
   'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep'] as const;
 const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
   internalId: '',
@@ -30,6 +30,8 @@ const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
 
 export interface RemotePlayerState {
   id: string;
+  /** Chosen display name (cosmetic — ids are still the identity). */
+  name?: string;
   internalId: string;
   position: { x: number; y: number; z: number };
   rotation: { yaw: number; pitch: number };
@@ -205,6 +207,7 @@ export class NetworkManager {
             this.send({
               type: 'join',
               playerId: this.localPlayerId,
+              name: settings.get('fps-name').trim() || undefined,
               token: this.sessionToken ?? undefined,
               // Offset cursor — a reclaim carries the last reliable ev we
               // saw so the server replays only the missed frames.
@@ -213,6 +216,7 @@ export class NetworkManager {
               mode: urlParams.mode ?? undefined,
               map: urlParams.map ?? undefined,
               bots: urlParams.bots,
+              unlisted: urlParams.unlisted || undefined,
               perk: this.joinPerk?.(),
               armorClass: this.joinClass?.(),
               transport: this.ws?.tier,
@@ -691,6 +695,7 @@ export class NetworkManager {
     // re-firing onPlayerJoined spam-recreates/logs the remote every time.
     const isNew = !this.players.has(data.playerId);
     this.upsertRemotePlayer(data.playerId, {
+      name: data.name,
       position: data.position,
       rotation: data.rotation,
       velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
@@ -1103,9 +1108,9 @@ export class NetworkManager {
    *  with a fresh gameState, which the normal (re)connect path rebuilds
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
-  switchRoom(room: string, map?: string, bots?: number, mode?: string): boolean {
+  switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): boolean {
     if (!this.isConnected()) return false;
-    this.send({ type: 'switchRoom', room, map, bots, mode });
+    this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined });
     return true;
   }
 

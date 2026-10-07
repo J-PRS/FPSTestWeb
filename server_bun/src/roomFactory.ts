@@ -78,12 +78,13 @@ export class RoomFactory {
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
    *  honored at creation — the first joiner defines the match. */
-  roomFor(name: string, mode = '', map = '', bots?: number): Room {
+  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false): Room {
     let room = this.host.rooms.get(name);
     if (!room) {
       const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
       this.host.maps.noteSource(name, src);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
+      room.unlisted = unlisted;
       room.sessions = this.host.sessions;
       room.mapSrc = src; // spec source filename — scoreboard map title fallback
       // `room` is a mutable let — bind a const for the closures or TS
@@ -119,6 +120,7 @@ export class RoomFactory {
       if (map && this.host.maps.mapNameOf(room.name) !== map) continue;
       if (mode && room.mode !== mode) continue;
       if (room.playerCount() >= CONFIG.maxPlayers) continue;
+      if (room.unlisted) continue;
       if (!best || room.playerCount() < best.playerCount()) best = room;
     }
     if (best) return best;

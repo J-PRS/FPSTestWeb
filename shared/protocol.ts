@@ -35,10 +35,18 @@ export type ClientMessage =
   // room: optional match room — server validates [\w-]{1,32}, absent =
   // 'default'. mode: only honored when the join creates the room.
   | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string; armorClass?: string;
+      /** Chosen display name — sanitized server-side, carried on
+       *  gameState/playerJoined for scoreboard/chat/feed rendering. The
+       *  id remains the identity; names are cosmetic and non-unique. */
+      name?: string;
       /** map hint for room creation — /join-spawned rooms can be disposed
        *  and rebuilt before the first join lands, so the join carries the
        *  spec source too. bots overrides the spec's bot count. */
       map?: string; bots?: number;
+      /** Creation-time flag: keep the room off /rooms and out of
+       *  quick-join picks — in only by knowing the name. Honored only
+       *  when this join creates the room (like `mode`). */
+      unlisted?: boolean;
       /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
       transport?: string;
       /** Offset cursor: last reliable `ev` seq the client processed — a
@@ -125,7 +133,7 @@ export type ClientMessage =
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation
   // hints as join; room absent = 'default'.
-  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number };
+  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number; unlisted?: boolean };
 
 export interface TickUpdatePlayer {
   playerId: string;
@@ -150,6 +158,8 @@ export type ServerMessage =
   // joiner, inherited by everyone after (join claims can't redefine it).
   | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string> }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string;
+      /** Chosen display name (cosmetic — ids are still the identity). */
+      name?: string;
       /** Current vitals — an announce can't fabricate 100/alive for a
        *  wounded or dead grace rejoiner (hash checks would flag the gap
        *  until the first tick record). Optional for old peers. */
@@ -307,6 +317,8 @@ export type ServerMessage =
 
 export interface GameStatePlayer {
   id: string;
+  /** Chosen display name — cosmetic, non-unique; ids stay the identity. */
+  name?: string;
   internalId: string;
   position: Vec3;
   rotation: Rotation;

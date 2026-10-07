@@ -18,7 +18,7 @@ export interface SessionDeps {
   playerRoom: Map<string, Room>;
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
-  roomFor(name: string, mode?: string, map?: string, bots?: number): Room;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
@@ -96,7 +96,7 @@ export class SessionManager {
 
     const playerId = playerIdResult.data;
 
-    const { token, roomName, roomMode, joinMap, joinBots, resumeSeq } = SessionManager.joinSpec(handshake);
+    const { token, roomName, roomMode, joinMap, joinBots, resumeSeq, name, unlisted } = SessionManager.joinSpec(handshake);
 
     // A reclaim must land in the room the session was in — find by playerId
     // rather than trusting the claimed room (reconnecting to a different
@@ -119,7 +119,7 @@ export class SessionManager {
       return;
     }
 
-    const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots);
+    const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted);
 
     // Watch-only join: `spectate: true` registers the socket for this
     // room's broadcasts + tick stream without spawning a player — no
@@ -158,7 +158,7 @@ export class SessionManager {
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
     this.d.registry.begin(playerId, room.name);
-    this.seat(ws, room, playerId, handshake, idToken);
+    this.seat(ws, room, playerId, handshake, idToken, name);
   }
 
   /** Grace-period reclaim: the seat is still reserved — cancel the removal
@@ -241,12 +241,23 @@ export class SessionManager {
   /** Field extraction — untyped handshake object → typed join fields.
    *  Map/bots hints ride the join so a disposed quick-join room rebuilds
    *  with the same spec — the room name alone doesn't carry it. */
+  /** Display-name sanitize — the wire name rides gameState/playerJoined
+   *  verbatim into DOM text nodes, so this only needs to kill control
+   *  bytes and cap length (markup dies at textContent rendering). */
+  private static nameSpec(v: unknown): string | undefined {
+    if (typeof v !== 'string') return undefined;
+    // eslint-disable-next-line no-control-regex -- intentional strip of C0/C1 controls
+    const n = v.replace(/[\x00-\x1f\x7f-\x9f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    return n || undefined;
+  }
+
   private static joinSpec(handshake: Record<string, unknown>): {
     token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
-    resumeSeq: number | undefined;
+    resumeSeq: number | undefined; name: string | undefined; unlisted: boolean;
   } {
     const word = (v: unknown): string => typeof v === 'string' && SessionManager.ROOM_NAME_RE.test(v) ? v : '';
     return {
+      name: SessionManager.nameSpec(handshake.name),
       token: typeof handshake.token === 'string' ? handshake.token : undefined,
       roomName: word(handshake.room) || 'default',
       roomMode: word(handshake.mode),
@@ -260,6 +271,7 @@ export class SessionManager {
       resumeSeq: typeof handshake.resumeSeq === 'number' && Number.isFinite(handshake.resumeSeq)
         ? Math.max(0, Math.floor(handshake.resumeSeq))
         : undefined,
+      unlisted: handshake.unlisted === true,
     };
   }
 
@@ -287,9 +299,10 @@ export class SessionManager {
 
   /** The seat itself: player record, transport tag, indices, handshake
    *  reply, and the join/tier counters. */
-  private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string): void {
+  private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string, name?: string): void {
     const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
+    joinedPlayer.name = name;
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;
     }

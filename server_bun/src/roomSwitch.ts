@@ -21,7 +21,7 @@ const word = (v: unknown): string | undefined =>
 
 export interface SwitchHost {
   roomOfPlayer(playerId: string): Room | undefined;
-  roomFor(name: string, mode?: string, map?: string, bots?: number): Room;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
   totalPlayers(): number;
   playerRoom: Map<string, Room>;
@@ -40,7 +40,7 @@ export class RoomSwitcher {
   switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
     if (this.throttled(playerId)) return;
 
-    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number });
+    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean });
     if (!target) return;
     const { from, to, prev } = target;
 
@@ -50,7 +50,7 @@ export class RoomSwitcher {
     from.messages.onPlayerDisconnected(playerId);
     this.host.removePlayerCompletely(from, playerId, 'roomSwitch');
 
-    this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport);
+    this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name);
     // Banked respawn edits ride the hop too — a hop is a seat transfer,
     // not a respawn, so a queued class/perk swap must survive it or the
     // client's declared next-life loadout silently vanishes.
@@ -66,7 +66,7 @@ export class RoomSwitcher {
 
   /** Everything that can deny a hop before teardown — null means the
    *  request dies here (with the client notified when it's worth it). */
-  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number }): { from: Room; to: Room; prev?: PlayerState } | null {
+  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
     const name = word(msg.room) ?? 'default';
     const from = this.host.roomOfPlayer(playerId);
     if (!from) return null;
@@ -85,7 +85,7 @@ export class RoomSwitcher {
 
     const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
       ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
-    const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
+    const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots, msg.unlisted === true);
     if (this.roomFull(to)) {
       from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${name} is full` });
       return null;
@@ -97,10 +97,11 @@ export class RoomSwitcher {
 
   /** The join tail a room hop shares with SessionManager's accept path —
    *  token, roster entry, socket registration, handshake replay. */
-  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind): void {
+  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string): void {
     const sessionToken = this.host.sessions.tokenFor(playerId);
     room.sessionTokens.set(playerId, sessionToken);
     const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
+    joined.name = name;
     if (transport) joined.transport = transport;
     // Room hops don't stop the client's stream: reports emitted in the
     // OLD room keep arriving for ~1 RTT and would poison the fresh

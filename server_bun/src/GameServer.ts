@@ -83,7 +83,7 @@ export class GameServer {
       rooms: this.rooms,
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
-      roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
+      roomFor: (n, m, mp, b, u) => this.factory.roomFor(n, m, mp, b, u),
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       totalPlayers: () => opsTotalPlayers(this),
       ops: this.ops,
@@ -100,7 +100,7 @@ export class GameServer {
     });
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id) => this.roomOfPlayer(id),
-      roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
+      roomFor: (n, m, mp, b, u) => this.factory.roomFor(n, m, mp, b, u),
       removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
       totalPlayers: () => opsTotalPlayers(this),
       playerRoom: this.playerRoom,
@@ -260,7 +260,7 @@ export class GameServer {
 
   /** Lobby listing — live matches a client can join by name. */
   listRooms() {
-    return [...this.rooms.values()].map(r => ({
+    return [...this.rooms.values()].filter(r => !r.unlisted).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
       map: this.maps.mapNameOf(r.name),

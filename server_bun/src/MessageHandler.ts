@@ -454,6 +454,7 @@ export class MessageHandler {
     this.broadcast({
       type: 'playerJoined',
       playerId: player.id,
+      name: player.name,
       internalId: player.internalId,
       position: player.position,
       rotation: player.rotation,

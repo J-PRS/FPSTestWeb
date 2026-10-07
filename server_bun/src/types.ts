@@ -31,6 +31,9 @@ export interface WebSocketData {
 
 export interface PlayerState {
   id: string;
+  /** Chosen display name from the join handshake — cosmetic only;
+   *  identity, claims and claims-adjacent maps all still key on `id`. */
+  name?: string;
   internalId: string;
   position: Vec3;
   rotation: Rotation;

@@ -135,7 +135,7 @@ export class HUD {
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
    *  fade, capped at 6 rows; textContent only (names are server strings). */
   feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean,
-    meta?: { shooter?: string; target?: string; weapon?: number; air?: number }): void {
+    meta?: { shooter?: string; target?: string; weapon?: number; air?: number; sName?: string; tName?: string }): void {
     ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, meta);
   }
 

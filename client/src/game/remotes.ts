@@ -14,6 +14,7 @@ import { scoreboardTitle } from '../ui/hud/scoreboard.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
+import { settings } from '../core/settings.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
@@ -327,7 +328,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   const selfFrags = (deps.world.killCounts.get('local') ?? 0)
     + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
   const now = Date.now();
-  const rows = [{ name: localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass }];
+  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
   const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string }[] = [...nm.getPlayers().keys()]
@@ -335,7 +336,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     .map(id => {
       queriedIds.add(id);
       const ps = nm.getPlayers().get(id);
-      return { name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass };
+      return { name: isBotId(id) ? botRosterName(id) : (ps?.name ?? id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.

@@ -49,6 +49,9 @@ import { wallNow } from './wallClock.ts';
 
 export class Room {
   readonly name: string;
+  /** Unlisted rooms never appear in /rooms or quick-join picks — the
+   *  only way in is knowing the name. Set once at creation. */
+  unlisted = false;
   // First joiner's mode locks the match — later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;

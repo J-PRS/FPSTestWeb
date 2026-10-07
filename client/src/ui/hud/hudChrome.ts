@@ -13,8 +13,8 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
   el.classList.toggle('taken', st !== 'home');
 };
 
-export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, meta?: { shooter?: string; target?: string; weapon?: number; air?: number }): void {
-    const { shooter: sTeam, target: tTeam, weapon, air } = meta ?? {};
+export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, meta?: { shooter?: string; target?: string; weapon?: number; air?: number; sName?: string; tName?: string }): void {
+    const { shooter: sTeam, target: tTeam, weapon, air, sName, tName } = meta ?? {};
     const row = document.createElement('div');
     row.className = 'kf-row';
     if (localIsShooter) row.classList.add('me');
@@ -24,7 +24,7 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     const s = document.createElement('span');
     // Team tint like the TAB board — alpha/bravo first letter keys the class.
     s.className = 'kf-s' + (sTeam ? ` tm-${sTeam[0]}` : '');
-    s.textContent = shooter === 'environment' ? '☠' : botDisplayName(shooter);
+    s.textContent = shooter === 'environment' ? '☠' : (sName ?? botDisplayName(shooter));
     const w = document.createElement('span');
     w.className = 'kf-w';
     // Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
@@ -36,7 +36,7 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     w.textContent = wName || airTag ? `${wName}${airTag} ` : '';
     const t = document.createElement('span');
     t.className = 'kf-t' + (localIsTarget ? ' dead' : tTeam ? ` tm-${tTeam[0]}` : '');
-    t.textContent = suicide ? 'self' : botDisplayName(target);
+    t.textContent = suicide ? 'self' : (tName ?? botDisplayName(target));
     row.append(s, w, t);
     h.killFeed.append(row);
     while (h.killFeed.childElementCount > 6) h.killFeed.firstElementChild!.remove();

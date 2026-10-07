@@ -12,13 +12,30 @@
 import { vgsGate } from './vgs.ts';
 import { speakVgs, speakChat, chatTtsEnabled } from '../core/tts.js';
 import { botDisplayName, feedNames } from '../../../shared/botNames.js';
+import { settings } from '../core/settings.js';
 
 export interface ChatDeps {
   send(text: string, team: boolean): void;
   /** null when offline — feed still shows locally-echoed/system lines */
   isConnected(): boolean;
   localName(): string;
+  /** Display name for a speaker id — resolves the join-declared `name`
+   *  for humans; absent (offline/bots) the raw id/bot name renders. */
+  nameFor?(id: string): string;
+  /** id → its roster entry — /mute needs to resolve typed display
+   *  names back to the identity (names are cosmetic, ids are not). */
+  idFor?(name: string): string | undefined;
 }
+
+/** Client-side mute — the speaker's lines never render/speak on THIS
+ *  client; everyone else still sees them (a server mute would be a
+ *  moderation power beta doesn't need). Stored by playerId so a name
+ *  change can't slip it. */
+const mutedIds = (): Set<string> => {
+  try { return new Set(JSON.parse(settings.get('fps-muted')) as string[]); }
+  catch { return new Set(); }
+};
+const saveMuted = (s: Set<string>) => settings.set('fps-muted', JSON.stringify([...s]));
 
 const MAX_LINES = 8;
 const FADE_MS = 12_000;
@@ -80,8 +97,10 @@ export class Chat {
         const text = this.input.value.trim();
         if (text) {
           const line = text.slice(0, 200);
-          this.deps.send(line, this.team);
-          this.echoSelf(line, this.team);
+          if (!this.slash(line)) {
+            this.deps.send(line, this.team);
+            this.echoSelf(line, this.team);
+          }
         }
         this.close();
       } else if (e.code === 'Escape') {
@@ -110,6 +129,28 @@ export class Chat {
   private close(): void {
     this.inputWrap.style.display = 'none';
     this.input.blur();
+  }
+
+  /** /mute /unmute /muted — local commands, never reach the wire.
+   *  Returns true when the line was consumed. */
+  private slash(line: string): boolean {
+    const [cmd, ...rest] = line.split(/\s+/);
+    const arg = rest.join(' ');
+    if (cmd === '/mute' || cmd === '/unmute') {
+      const id = this.deps.idFor?.(arg) ?? arg;
+      if (!id) { this.add(null, `no such player: ${arg}`); return true; }
+      const s = mutedIds();
+      if (cmd === '/mute') { s.add(id); } else { s.delete(id); }
+      saveMuted(s);
+      this.add(null, `${cmd === '/mute' ? 'muted' : 'unmuted'} ${this.nameOf(id)}`);
+      return true;
+    }
+    if (cmd === '/muted') {
+      const s = mutedIds();
+      this.add(null, s.size ? `muted: ${[...s].map((id) => this.nameOf(id)).join(', ')}` : 'nobody muted');
+      return true;
+    }
+    return false;
   }
 
   /** Own line rendered instantly + registered so the server's relayed
@@ -158,7 +199,12 @@ export class Chat {
     }
   }
 
-  private static buildLine(from: string | null, text: string, team: boolean, vgs?: string): HTMLDivElement {
+  /** Instance-bound so it can consult deps.nameFor for human ids. */
+  private nameOf(from: string): string {
+    return this.deps.nameFor?.(from) ?? botDisplayName(from);
+  }
+
+  private buildLine(from: string | null, text: string, team: boolean, vgs?: string): HTMLDivElement {
     const line = document.createElement('div');
     line.style.cssText = 'text-shadow:1px 1px 0 #000;margin-top:1px;';
     if (from === null) {
@@ -168,7 +214,7 @@ export class Chat {
     }
     const who = document.createElement('span');
     who.style.color = team ? '#7d7' : '#fd8';
-    who.textContent = `${team ? '[T] ' : ''}${botDisplayName(from)}: `;
+    who.textContent = `${team ? '[T] ' : ''}${this.nameOf(from)}: `;
     const body = document.createElement('span');
     body.textContent = vgs ? `[${vgs}] ${feedNames(text)}` : feedNames(text);
     // Whole line tinted for team — name-color alone was easy to miss
@@ -183,6 +229,12 @@ export class Chat {
   }
 
   add(from: string | null, text: string, team = false, vgs?: string, muted = false): HTMLDivElement {
+    if (from !== null && mutedIds().has(from)) {
+      // Swallowed silently — the muted speaker's words die at the wall.
+      // Still consume a pending self-echo so the map can't leak.
+      if (from === this.deps.localName()) {this.swallowSelfEcho(from, text, team, vgs);}
+      return document.createElement('div');
+    }
     if (from !== null) {
       const isSelf = from === this.deps.localName();
       if (isSelf) {
@@ -194,7 +246,7 @@ export class Chat {
       }
       Chat.speak(from, text, vgs, isSelf);
     }
-    const line = Chat.buildLine(from, text, team, vgs);
+    const line = this.buildLine(from, text, team, vgs);
     // A muted echo that missed its pending match (feed trimmed, relay
     // path) still renders gray — never as a normal send.
     if (muted && from !== null) {Chat.grayMuted(line);}

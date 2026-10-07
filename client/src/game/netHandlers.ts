@@ -31,6 +31,7 @@ import { wireProjectiles } from './net/projectiles.js';
 import { wireDeployables } from './net/deployables.js';
 import { wireWorld } from './net/world.js';
 import { wireResync } from './net/resync.js';
+import { displayName } from './nameOf.js';
 
 export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
@@ -66,6 +67,17 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     send: (text, team) => networkManager.sendChat(text, team),
     isConnected: () => networkManager.isConnected(),
     localName: () => networkManager.getLocalPlayerId(),
+    nameFor: (id) => displayName(id, networkManager.getPlayers()),
+    // /mute typed a display name — find the id it belongs to. Names are
+    // non-unique, so an ambiguous hit just mutes the first match (the
+    // id itself always works).
+    idFor: (name) => {
+      if (networkManager.getPlayers().has(name)) return name;
+      for (const [id, p] of networkManager.getPlayers()) {
+        if (p.name === name) return id;
+      }
+      return undefined;
+    },
   });
   // VGS lines arrive flagged with their chord — the feed prints
   // "[VGS] SHAZBOT!" (keypaths learnable from chat) and speaks through
@@ -128,7 +140,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       if (!res.ok) {throw new Error(`join ${res.status}`);}
       return res.json() as Promise<{ room: string }>;
     },
-    switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
+    switchRoom: (name, map, bots, mode, unlisted) => networkManager.switchRoom(name, map, bots, mode, unlisted),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
     isConnected: () => networkManager.isConnected(),
     listP2pLobbies: async () => {

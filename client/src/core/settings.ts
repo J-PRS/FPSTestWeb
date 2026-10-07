@@ -29,6 +29,7 @@ type Schema = {
   'fps-server': string;       // remote host (trycloudflare name or full host) — '' = same-host dev
   'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
+  'fps-unlisted': number;     // 1 = hosted server rooms stay off /rooms + quick-join
   'fps-fav-rooms': string;    // JSON string[] — server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
   'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
@@ -41,7 +42,10 @@ type Schema = {
   'fps-aa': number;           // antialiasing: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x
   'fps-fov': number;          // world camera FOV degrees (viewmodel cam stays fixed)
   'fps-player-id': string;    // claimed identity — survives F5/restarts
+  'fps-name': string;         // chosen display name — cosmetic, rides the join
   'fps-session-token': string; // server-issued reclaim token
+  'fps-muted': string;        // JSON string[] — playerIds muted client-side
+  'fps-onboarded': number;    // 1 = first-run controls card already shown
 };
 
 const DEFAULTS: Schema = {
@@ -69,6 +73,7 @@ const DEFAULTS: Schema = {
   'fps-server': '',
   'fps-p2p': '',
   'fps-lobby': 0,
+  'fps-unlisted': 0,
   'fps-fav-rooms': '[]',
   'fps-shadows': true,
   'fps-tts-chat': false,
@@ -81,7 +86,10 @@ const DEFAULTS: Schema = {
   'fps-aa': 0,
   'fps-fov': 90,
   'fps-player-id': '',
+  'fps-name': '',
   'fps-session-token': '',
+  'fps-muted': '[]',
+  'fps-onboarded': 0,
 };
 
 const parse = {

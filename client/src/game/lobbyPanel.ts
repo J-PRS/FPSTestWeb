@@ -12,7 +12,7 @@ export interface LobbyPanelHost {
   fillMapSelect(): void;
   mapFamOn(kind: 't2' | 'custom'): boolean;
   toggleMapFam(kind: 't2' | 'custom'): void;
-  join(name: string, map?: string, bots?: number, mode?: string): void;
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): void;
   currentRoom(): string;
   /** Favorites persist across sessions — classic browser column. */
   isFav(name: string): boolean;
@@ -276,6 +276,17 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       });
       famRow.appendChild(b);
     }
+    // PRIVATE rides the same toggle row — an unlisted room is off /rooms
+    // and quick-join; friends get in by CREATE / JOIN BY NAME only.
+    const privBtn = btn('PRIVATE');
+    privBtn.classList.toggle('active', settings.get('fps-unlisted') === 1);
+    privBtn.title = 'unlisted — not on the public room list';
+    privBtn.addEventListener('click', () => {
+      const on = settings.get('fps-unlisted') !== 1;
+      settings.set('fps-unlisted', on ? 1 : 0);
+      privBtn.classList.toggle('active', on);
+    });
+    famRow.appendChild(privBtn);
     const mapRow = field('MAP');
     const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
     mapRow.appendChild(mapSelect);
@@ -300,8 +311,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         // A typed name skips quickJoin — host names their own room. The
         // MODE pick still applies or a named host silently drops it.
         const named = nameInput.value.trim();
-        const room = named || (await h.deps.quickJoin(mode, map || undefined, bots)).room;
-        h.join(room, map || undefined, bots, mode || undefined);
+        const priv = settings.get('fps-unlisted') === 1;
+        // A named PRIVATE room is always self-hosted — quickJoin would
+        // land in someone's public match instead of creating ours.
+        const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots)).room);
+        h.join(room, map || undefined, bots, mode || undefined, priv || undefined);
       } catch { hostBtn.disabled = false; }
     });
 
@@ -357,6 +371,18 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); });
     srvRow.append(srvIn, srvBtn);
 
+    const plyRow = field('PLAYER');
+    const plyIn = document.createElement('input');
+    plyIn.maxLength = 24;
+    plyIn.placeholder = 'display name';
+    plyIn.value = settings.get('fps-name');
+    plyIn.className = 'lb-input';
+    plyIn.style.cssText = 'flex:1;min-width:0;';
+    plyIn.addEventListener('keydown', (e) => e.stopPropagation());
+    // Names ship on the next join handshake — no need to reload mid-edit.
+    plyIn.addEventListener('input', () => settings.set('fps-name', plyIn.value.trim()));
+    plyRow.appendChild(plyIn);
+
     const p2pRow = field('P2P DUEL');
     const p2pIn = document.createElement('input');
     p2pIn.maxLength = 24;
@@ -394,7 +420,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const refreshLobs = () => { void refreshLobsFn(); };
     refreshLobs();
 
-    joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
+    joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, plyRow, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
     tabs.get('HOST')!.append(hostLbl, nameRow, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
     tabs.get('SOLO')!.append(buildOfflineList());
     tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);

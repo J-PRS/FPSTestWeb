@@ -193,6 +193,7 @@ export class PlayerManager {
   toGameStatePlayer(player: PlayerState): GameStatePlayer {
     return {
       id: player.id,
+      name: player.name,
       internalId: player.internalId,
       position: { ...player.position },
       rotation: { ...player.rotation },
