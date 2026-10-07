@@ -2373,3 +2373,16 @@ timers. A formula slip or cap removal now fails a test instead of
 silently storming the server or leaking queue growth.
 
 ### 2.111 - end
+
+### 2.112 Wire limit table pinned (2026-10-11)
+
+The rate-limit TABLE itself was unverified — ratelimiter.test.ts only
+pins bucket mechanics, so snapshotRequest's 3/5s could silently loosen
+to the 120/s default and reopen the reserialize DoS. wireLimits.test.ts
+pins one-direction tightness bounds (never ALLOW more): reserialize
+types stay <=3/5s, broadcast-churn types (throwFlag, chat) stay far
+below the default with chat's 10s mute, and the default lane itself
+stays <=120/s. A new expensive type landing on 'default' now fails a
+test instead of shipping unbounded.
+
+### 2.112 - end
