@@ -1,3 +1,4 @@
+2026-10-07 - remove legacy MODE dropdown from ESC menu (superseded by hub OFFLINE tab)
 2026-10-07 - hub review fixes: offline-join dead-end (isConnected dep), auto-open edge-trigger, stale leave btn, centered hub window, empty-state row
 2026-10-07 - play hub: tabbed JOIN/HOST/OFFLINE/P2P browser, favorites+refresh, open-lobby list, LEAVE SERVER button, auto-opens when offline
 2026-10-07 - robustify: unify sim tick quantum as SIM_TICK_DT (6 duplicated 0.05 sites)

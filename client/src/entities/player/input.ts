@@ -256,18 +256,9 @@ export class PlayerInput {
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    // Boot-time flags: mode/spawns/debug are read once at module init, so
-    // a change persists the setting and reloads rather than half-applying.
-    const modeSelect = document.querySelector('#mode-select') as HTMLSelectElement | null;
-    if (modeSelect) {
-      modeSelect.value = settings.get('fps-mode');
-      modeSelect.addEventListener('change', () => {
-        settings.set('fps-mode', modeSelect.value);
-        location.reload();
-      });
-      modeSelect.addEventListener('keydown', (e) => e.stopPropagation());
-    }
-
+    // Boot-time flags: spawns/debug are read once at module init, so a
+    // change persists the setting and reloads rather than half-applying.
+    // (Solo/bot mode selection lives in the play hub's OFFLINE tab.)
     const spawnsBtn = document.querySelector('#spawns-toggle') as HTMLButtonElement | null;
     if (spawnsBtn) {
       const label = () => { spawnsBtn.textContent = settings.get('fps-spawns') ? 'SPAWNS: RANDOM' : 'SPAWNS: SCRIPTED'; };
