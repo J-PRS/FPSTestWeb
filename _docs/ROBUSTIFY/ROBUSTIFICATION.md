@@ -217,6 +217,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.55 Finite-guard on authority state vectors (2026-10-07)
+
+NaN-ingress lane: the two paths that write wire-decoded vectors straight
+into the local sim — `onCorrection` (hard snap + journal rewind) and
+`restoreLocalPlayer` (gameState reconnect reseat) — accepted non-finite
+components silently. A malformed authority vector (server fault, hostile
+p2p peer) would poison the movement controller with NaN — the failure
+nanScan exists to hunt. Both now finite-check and drop+warn. Remote-
+player visuals were left alone (interp is display-only; SnapshotBuffer
+windowing limits spread).
+
 ### 2.54 Film chase-cam teleport reseats the pos-jump watch (2026-10-07)
 
 Same class as §2.41 — a designed teleport logged as a physics snap.
