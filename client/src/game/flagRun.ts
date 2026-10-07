@@ -340,6 +340,16 @@ export class FlagRunBridge {
   // Last measured toucher speed (m/s) — grab/cap feed lines quote it.
   private lastTouchV = new Map<string, number>();
 
+  /** Jersey swap — same body keeps its touch-receipt continuity. */
+  rekey(oldId: string, newId: string): void {
+    const p = this.lastTouchPos.get(oldId);
+    this.lastTouchPos.delete(oldId);
+    if (p !== undefined) this.lastTouchPos.set(newId, p);
+    const v = this.lastTouchV.get(oldId);
+    this.lastTouchV.delete(oldId);
+    if (v !== undefined) this.lastTouchV.set(newId, v);
+  }
+
   update(dt: number): void {
     this.tickTasGhost(dt);
     this.lapT += dt;

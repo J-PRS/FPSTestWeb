@@ -528,6 +528,10 @@ export class TeamBots {
     this.senses.rekey(oldId, newId);
     this.sheep.rekey(oldId, newId);
     this.notices.rekey(oldId, newId);
+    this.fire.rekey(oldId, newId);
+    this.wd.rekey(oldId, newId);
+    this.ctf?.rekey(oldId, newId);
+    this.flagrun?.rekey(oldId, newId);
   }
 
 

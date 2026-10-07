@@ -53,6 +53,14 @@ export class BotFire {
   boltPool: THREE.Line[] = [];
   private lastShotAt = new Map<string, number>();
 
+  /** Jersey swap — cadence receipts follow the body like the other
+   *  id-keyed meters (see Bots.rekeyBot). */
+  rekey(oldId: string, newId: string): void {
+    const v = this.lastShotAt.get(oldId);
+    this.lastShotAt.delete(oldId);
+    if (v !== undefined) this.lastShotAt.set(newId, v);
+  }
+
   constructor(public host: FireHost) {}
 
   /** Resolve a bot's shot. Range-band pick comes from the shared loadout

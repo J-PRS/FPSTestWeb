@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.88: rekeyBot fan-out completed — fire cadence, watchdog, CTF roles, flag-run touch meters now migrate on jersey swap
 2026-10-08 - robustify §2.87: rubberband warn-receipt maps capped at 512 — id-keyed receipts grew unbounded across a long match
 2026-10-08 - robustify §2.86: dir3 owns the guarded 3D normalize — creatureFlyer/totem collapsed; their ||0.001 guard scaled unit vectors on tiny gaps
 2026-10-08 - robustify §2.85: dirXZ owns the zero-guarded XZ normalize — five clones collapsed, one was silently dividing by 3D distance

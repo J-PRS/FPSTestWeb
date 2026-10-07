@@ -34,6 +34,23 @@ export class BotWatchdog {
   private readonly stuck = new Set<string>();
   private idleWindows = 0;
 
+  /** Jersey swap — samples migrate so the same body keeps its
+   *  displacement anchor/warn state instead of restarting windows
+   *  and leaving a dead-id entry behind. */
+  rekey(oldId: string, newId: string): void {
+    for (const m of [this.logic, this.render] as const) {
+      const v = m.get(oldId);
+      m.delete(oldId);
+      if (v !== undefined) m.set(newId, v);
+    }
+    const a = this.anchor.get(oldId);
+    this.anchor.delete(oldId);
+    if (a !== undefined) this.anchor.set(newId, a);
+    for (const s of [this.stalled, this.stuck] as const) {
+      if (s.delete(oldId)) s.add(newId);
+    }
+  }
+
   step(dt: number, bots: Iterable<WatchBot>): void {
     this.t += dt;
     if (this.t < WD_DT) {return;}

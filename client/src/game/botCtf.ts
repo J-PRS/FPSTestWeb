@@ -154,6 +154,14 @@ export class CtfBridge {
   // reused vectors (the flags module reads them synchronously each tick).
   private lastTouchPos = new Map<string, THREE.Vector3>();
 
+  /** Jersey swap — touch tracker + role table follow the body. */
+  rekey(oldId: string, newId: string): void {
+    const v = this.lastTouchPos.get(oldId);
+    this.lastTouchPos.delete(oldId);
+    if (v !== undefined) this.lastTouchPos.set(newId, v);
+    this.ctf.rekey(oldId, newId);
+  }
+
   private touchers(bots: GameBot[]): [string, THREE.Vector3, THREE.Vector3][] {
     const player = this.deps.lazyPlayer();
     // Tail semantics: read prev BEFORE overwriting it with the new pos.

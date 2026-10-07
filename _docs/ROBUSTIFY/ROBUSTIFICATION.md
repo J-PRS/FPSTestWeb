@@ -2050,3 +2050,17 @@ the file's own convention (server cappedSet/§2.59 evictEldest, same
 shape).
 
 ### 2.87 - end
+
+### 2.88 RekeyBot missed five id-keyed meter owners (2026-10-08)
+
+Same drift family as §2.80: a jersey swap migrates every per-id meter
+through rekeyBot, but five owners had no rekey hook at all —
+botFire.lastShotAt (fresh cadence), BotWatchdog's logic/render/anchor/
+stuck/stalled (dead-id samples + warn re-arm), ctfFlags.roles (a
+rekeyed specialist was read as unassigned and re-rolled a generic
+role), CtfBridge.lastTouchPos and FlagRunBridge's lastTouchPos/V
+(touch-velocity receipt continuity). Each owner now has rekey() and
+rekeyBot fans out to all of them — the migration can't drift a
+fourth time.
+
+### 2.88 - end

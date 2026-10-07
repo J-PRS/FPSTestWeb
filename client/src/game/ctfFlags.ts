@@ -169,6 +169,14 @@ export class CtfFlags {
   // Without roles every bot read the same objective and the whole squad
   // ran the same flag route — nobody held the stand.
   private roles = new Map<string, 'capper' | 'ldefense' | 'hof' | 'offense' | 'defense' | 'infiltrator'>();
+
+  /** Jersey swap — a rekeyed capper keeps its slot; without this the
+   *  next cycle reads it as unassigned and re-rolls a generic role. */
+  rekey(oldId: string, newId: string): void {
+    const r = this.roles.get(oldId);
+    this.roles.delete(oldId);
+    if (r !== undefined) this.roles.set(newId, r);
+  }
   private roleT = 0;
   // Offline bots DO carry the cloak intent (GameBot.applyStatus →
   // STATUS.CLOAK → setCloakHidden), so the infiltrator lane is playable
