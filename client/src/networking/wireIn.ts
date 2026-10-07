@@ -371,8 +371,12 @@ export class WireIn {
       }
       this.lastHitSeq = data.seq;
     }
-    // Update REMOTE player health in storage (local player health handled by callback)
-    this.h.upsertRemotePlayer(data.targetId, { health: data.health });
+    // Update REMOTE player health in storage (local player health handled
+    // by callback). A processed hit also proves the server holds the target
+    // alive — it never lands a hit on a dead player — so a record still
+    // marked dead from a lost respawn edge un-sticks here instead of
+    // waiting for the hash-diff heal.
+    this.h.upsertRemotePlayer(data.targetId, { health: data.health, isDead: false });
     this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
   }
 

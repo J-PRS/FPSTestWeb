@@ -3021,3 +3021,14 @@ instead of asking. Also logged this round: a stale-corpse signal
 (isDead client=true server=false on BOT-BRICK-09) parked for a later
 round. (protocol.ts, TickLoop.ts, wireIn.ts, NetworkManager.ts,
 stateDebug.ts)
+
+## 2.164 playerHit un-sticks a stale corpse record
+
+The soak's isDead client=true server=false diff was a lost respawn edge;
+the healRemoteLife safety net repairs it, but only on the next
+hash-diff cycle (~seconds of stale corpse + wrong hash inputs). A
+processed playerHit already proves the server holds the target ALIVE --
+it never lands a hit on a dead player. The roster update now also writes
+isDead: false, so the record self-heals at the next hit instead of
+waiting for the diff cycle. Local-death state is untouched (local
+player death is callback-owned). (wireIn.ts)
