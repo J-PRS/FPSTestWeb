@@ -3191,3 +3191,18 @@ LG_CHAIN_DMG_SCALE) so the shown set and the paid set share numbers.
 server weapon killing a charged creature doesn't discharge its bank
 (beam-kill only) — noted for the next pass. (tsc both sides + 81
 focused tests green)
+
+## 2.176 Repair beam joins the intent model — the server names the weld
+
+The last beam claim: every 100ms tick the welder claimed WHICH item it
+was repairing and the server re-derived range/LOS/team/amount around
+that name. Now the shotFired tick is the whole intent — same as the
+LG: rewind the muzzle, pick the weldable deployable the ray actually
+touches (same r=1.1 padded-sphere pick as the client's repairHit,
+nearest entry wins), and route it into the existing deployables.repair
+economy (hp to cap, overflow to armor, revive early). Friendly
+filtering moved into a shared weldable() so the pick and the pay see
+the same rule. 30/s flood gate on the intent. Client keeps its
+predicted heal + beam FX; the sendRepair claim is gone. Bots were
+already server-side for welds, so bot/ human repair now share one
+code path end to end. (tsc both sides + 39 focused tests green)

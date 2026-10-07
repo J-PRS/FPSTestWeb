@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE } from '../../shared/weapons.ts';
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
@@ -104,6 +104,10 @@ export interface CombatDeps {
    *  handleHit; absent when the room runs no creature sims. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
   crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
+  /** Repair-beam intent: the server picks the weldable deployable the
+   *  ray touches, then `repair` pays it (Room.deployables.repair). */
+  repairTarget?: (playerId: string, muzzle: Vec3, dir: Vec3, range: number) => number | null;
+  repair?: (playerId: string, targetId: number) => ClaimVerdict | void;
 }
 
 /**
@@ -339,6 +343,21 @@ export class CombatHandler {
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
+    }
+    // Beam intent (Repair): same shape — the tick is the intent and the
+    // server names the weld target off the honest ray, so the per-tick
+    // `repair` claim isn't needed. Falls through to the cosmetic relay.
+    if (msg.weaponType === WeaponType.Repair && dir && this.deps.repairTarget) {
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
+      recent.push(now);
+      this.simmedFireTimes.set(playerId, recent);
+      const mpos = rewindPos(player, clampPing(player.ping));
+      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const id = this.deps.repairTarget(playerId,
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
+      if (id !== null) this.deps.repair?.(playerId, id);
     }
     if (!fireProjectile) {
       // Cosmetic relay only — throttled: a dropped relay costs a muzzle

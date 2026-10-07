@@ -871,6 +871,7 @@ export class Room {
       beamSweep: (pid, muzzle, dir, range) => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
+      repairTarget: (pid, muz, dir, range) => this.deployables.repairTarget(pid, muz, dir, range),
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),

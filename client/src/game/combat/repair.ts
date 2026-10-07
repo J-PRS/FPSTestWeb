@@ -42,7 +42,7 @@ function repairTrace(deps: CombatDeps, cam: THREE.Camera): { hitT: number; item:
   // would heal things the shooter can't see, and the server rejects it).
   if (Projectile.solidColliders.length) {
     _p.copy(_o).addScaledVector(_d, hitT);
-    const sh = segSolidHit(_o, _p, Projectile.solidColliders);
+    const sh = segSolidHit(_o, _p, Projectile.solidColliders, undefined, deps.world.localTeam);
     if (sh) hitT *= sh.t;
   }
 
@@ -79,8 +79,8 @@ export function createRepair(deps: CombatDeps) {
       // Predicted heal — the deployHp echo lands the same number; an
       // unreachable claim just snaps back on the next broadcast.
       deps.lazyDeployables?.().healItem(hit.item, REPAIR_HEAL_PER_TICK);
-      const nm = deps.lazyNetworkManager();
-      if (hit.item.serverId !== undefined && nm?.isConnected()) nm.sendRepair(hit.item.serverId);
+      // No repair claim — the shotFired beam intent already resolves
+      // this weld server-side (server picks the same padded-sphere hit).
       deps.lazyDamageNumbers().spawn(hit.item.pos, REPAIR_HEAL_PER_TICK, '#7dffb8', cam);
       deps.lazyHealthBarSystem().showRepair(hit.item);
     }

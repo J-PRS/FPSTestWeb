@@ -6,18 +6,19 @@
  * teardown on death/leave/match-reset. Without this layer a cheater could
  * carpet the map — there was previously no server record at all.
  */
-import type { Vec3, ClaimVerdict, ServerMessage } from './types.ts';
+import type { Vec3, ClaimVerdict, ServerMessage, PlayerState } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload, rosterRow } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
-import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
+import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT, WeaponType } from '../../shared/weapons.ts';
 import { tickDrone, tickMine, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
 export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
-import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
+import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
+import type { StructureCollider } from '../../shared/ballCollide.ts';
 import { simNow } from './simClock.ts';
 import type { TeamId } from '../../shared/teams.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
@@ -102,8 +103,25 @@ function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null
 export class RoomDeployables {
   items = new Map<number, Deployed>();
   private nextId = 1;
+  /** Live solid hulls for moveSim — the Room hands this array to the
+   *  SolidWorld ONCE; every add/remove rewrites it in place so bodies
+   *  can't walk through gear that appeared mid-match. Drones and
+   *  nuggets are unsolid (mobile / never an item). */
+  readonly solidCols: StructureCollider[] = [];
 
   constructor(public room: Room) {}
+
+  private refreshSolids(): void {
+    this.solidCols.length = 0;
+    for (const d of this.items.values()) {
+      if (!deploySolid(d.kind)) continue;
+      const def = DEPLOY_ITEMS[d.kind];
+      this.solidCols.push({
+        cx: d.pos.x, cy: d.pos.y + def.bodyH / 2, cz: d.pos.z,
+        hx: def.bodyR, hy: def.bodyH / 2, hz: def.bodyR, cos: 1, sin: 0,
+      });
+    }
+  }
 
   /** Client claims a plant. Validates kind, per-player cap, and that the
    *  drop point is near the planter — the deploy anim throws the pod a few
@@ -143,6 +161,7 @@ export class RoomDeployables {
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0 });
+    this.refreshSolids();
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: { ...pos }, team: player.team }) as ServerMessage);
@@ -163,6 +182,7 @@ export class RoomDeployables {
       this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: { ...e.pos }, team: e.team }) as ServerMessage);
       logger.info('Base asset seeded', { id, kind: k, team: e.team, x: +e.pos.x.toFixed(1), z: +e.pos.z.toFixed(1) });
     }
+    this.refreshSolids();
   }
 
   /** Owner death clears their field — no orphaned turrets farming kills
@@ -306,6 +326,39 @@ export class RoomDeployables {
   // its beam ticks but can't bank a year's worth in a burst.
   private lastRepair = new Map<string, number>();
 
+  /** Friendly only: own gear always; teammates' gear when teams exist.
+   *  Base assets belong to the team, not a body — same-side weld only. */
+  private weldable(p: PlayerState, d: Deployed, playerId: string): boolean {
+    if (d.base) return !d.team || p.team === d.team;
+    if (p.team && d.owner !== playerId) {
+      return this.room.players.getPlayer(d.owner)?.team === p.team;
+    }
+    return p.team !== undefined || d.owner === playerId;
+  }
+
+  /** Beam-intent target: the weldable deployable the ray actually
+   *  touches — same padded-sphere pick as the client's repairHit
+   *  (r=1.1, body-center +0.7), nearest entry wins. Lets the
+   *  shotFired intent replace the per-tick repair claim: the server
+   *  names the target too. */
+  repairTarget(playerId: string, muzzle: Vec3, dir: Vec3, range: number): number | null {
+    const p = this.room.players.getPlayer(playerId);
+    if (!p || p.isDead) return null;
+    let best: number | null = null;
+    let bestT = range;
+    for (const d of this.items.values()) {
+      const cx = d.pos.x - muzzle.x, cy = d.pos.y + 0.7 - muzzle.y, cz = d.pos.z - muzzle.z;
+      const proj = cx * dir.x + cy * dir.y + cz * dir.z;
+      if (proj < 0 || proj > bestT) continue;
+      const perp2 = (cx * cx + cy * cy + cz * cz) - proj * proj;
+      if (perp2 >= 1.1 * 1.1) continue;
+      if (!this.weldable(p, d, playerId)) continue;
+      const entry = proj - Math.sqrt(1.1 * 1.1 - perp2);
+      if (entry < bestT) { bestT = Math.max(entry, 0); best = d.id; }
+    }
+    return best;
+  }
+
   /** Repair-tool beam tick on a friendly deployable: heal to base, then
    *  overcharge armor to REPAIR_ARMOR_MULT×. Server re-derives distance,
    *  LOS, team and the heal amount — the claim names a target, nothing
@@ -314,16 +367,7 @@ export class RoomDeployables {
     const d = this.items.get(targetId);
     const p = this.room.players.getPlayer(playerId);
     if (!d || !p || p.isDead) return 'gone';
-    // Friendly only: own gear always; teammates' gear when teams exist.
-    // Base assets belong to the team, not a body — same-side weld only.
-    if (d.base) {
-      if (d.team && p.team !== d.team) return 'enemy';
-      if (!d.team && p.team) { /* neutral gear — anyone on a side may weld */ }
-      else if (!d.team && !p.team) { /* ffa — anyone may weld */ }
-    } else if (p.team && d.owner !== playerId) {
-      const owner = this.room.players.getPlayer(d.owner);
-      if (owner?.team !== p.team) return 'enemy';
-    } else if (!p.team && d.owner !== playerId) return 'enemy';
+    if (!this.weldable(p, d, playerId)) return 'enemy';
     const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
     if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return 'range'; // 1.5× slack
     if (!losClear(this, p.position, d.pos, p.team)) return 'los';
@@ -352,21 +396,30 @@ export class RoomDeployables {
       if (k.endsWith(`:${id}`)) this.lastRepair.delete(k);
     }
     this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'gone', 'id', id, {}) as ServerMessage);
+    this.refreshSolids();
   }
 
   /** AOE blast sweep — every deployable inside the radius eats scaled
    *  splash (same falloff curve as players). Own gear is not exempt:
    *  a careless mortar wrecks your own turret too. */
-  applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[]): void {
+  applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[], weapon?: number, splash?: number): void {
     if (this.items.size === 0) return;
+    // Sticky launcher is the breaching tool — 2x to structures/base
+    // assets gives the otherwise-purposeless gun a siege job.
+    const mult = weapon === WeaponType.Sticky ? 2 : 1;
+    const aoe = splash ?? damage;
     for (const d of this.items.values()) {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (dist > radius) continue;
+      // Contact hit — the blast center landed inside the item's body
+      // radius (a sticky glued ON the turret): pays the direct line, no
+      // falloff. Outside it, splash does its normal aoe scale.
+      const direct = dist <= DEPLOY_ITEMS[d.kind].bodyR;
       // Static gear can't dodge — a bolt landing inside the envelope does
       // at least half its base splash, so clearing a stand costs a few
       // well-placed lobs instead of a dozen grazed edges.
-      const dmg = Math.max(aoeDamage(damage, dist, radius, scales), Math.round(damage * 0.5));
+      const dmg = (direct ? damage : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;
       if (dmg <= 0) continue;
       logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
       this.hurt(d, dmg, shooterId);
@@ -393,7 +446,7 @@ export class RoomDeployables {
       else if (d.kind === 'station') tickStation(this, d, dt);
       else if (d.kind === 'drone') tickDrone(this, d, dt);
       else if (d.kind === 'sensor') tickSensor(this, d, dt);
-      else if (d.kind === 'sentry') tickSentry(this, d, dt);
+      else if (d.kind === 'baseturret') tickSentry(this, d, dt);
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).

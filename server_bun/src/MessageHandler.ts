@@ -158,6 +158,8 @@ export interface RoomInfo {
   /** Beam contact damage sinks — BallSim/CreatureSim handleHit. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
   crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
+  /** Repair-beam intent resolution — Room.deployables.repairTarget. */
+  repairTarget?: (playerId: string, muzzle: Vec3, dir: Vec3, range: number) => number | null;
 }
 
 /** RoomInfo → CombatDeps projection — kept out of the constructor so the
@@ -183,6 +185,8 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     beamSweep: roomInfo?.beamSweep,
     ballHit: roomInfo?.ballHit,
     crawlerHit: roomInfo?.crawlerHit,
+    repairTarget: roomInfo?.repairTarget,
+    repair: roomInfo?.onRepair,
   };
 }
 
