@@ -17,6 +17,7 @@ import {
 import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import type { NetworkManager } from './NetworkManager.js';
 
@@ -199,10 +200,12 @@ export class WireIn {
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       if (data.targetId || data.shotId) this.h.confirmClaimHit(data.targetId ?? '', data.shotId);
+      const wName = data.weaponType !== undefined ? String(WeaponType[data.weaponType] ?? data.weaponType) : undefined;
+      netProbeClaim('reject', data.reason, wName, data.targetId, this.h.getPing());
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
         targetId: data.targetId,
-        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
+        weapon: wName,
         pingMs: this.h.getPing(),
       });
       this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
@@ -214,6 +217,7 @@ export class WireIn {
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       if (data.targetId || data.shotId) this.h.confirmClaimHit(data.targetId ?? '', data.shotId);
+      netProbeClaim('drop', data.reason, data.weaponType !== undefined ? String(WeaponType[data.weaponType] ?? data.weaponType) : undefined, data.targetId, this.h.getPing());
       logger.warn(`claim dropped — predicted damage never applied`, {
         reason: data.reason, targetId: data.targetId,
         weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,

@@ -4,6 +4,7 @@
 // the rolling battle log sections read from.
 
 import { aimProbe } from './aimProbe.js';
+import { diagLines as netProbeLines } from '../debug/netProbe.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { StateDebugContext } from './stateDebug.js';
 
@@ -45,6 +46,9 @@ export function diagLines(ctx: StateDebugContext): string[] {
   pushWorld(lines, ctx.world);
   pushRender(lines);
   pushAimProbe(lines, ctx);
+  // Netcode census — corrections/claim verdicts answer "why did it
+  // rubberband / why didn't that hit land" before the row dumps.
+  lines.push(...netProbeLines());
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
   for (const [id, ps] of wire) {
     const rp = ctx.remotePlayers.get(id);

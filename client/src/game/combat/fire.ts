@@ -15,6 +15,7 @@ import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
+import { spawnDrift } from '../../debug/netProbe.js';
 import {
   EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE, SCORCH_MAX,
 } from '../../core/config.js';
@@ -110,6 +111,9 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // arcBlockedAt replay a slower, undeflected arc that clips walls the
   // real shell cleared ("flight blocked" rejects on honest hits).
   const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+  // NetProbe: claimed-vs-flown drift — must stay ~0 or the server's
+  // arc replay diverges (the 'flight blocked' phantom-reject class).
+  spawnDrift(velocity.distanceTo(p.vel));
   deps.lazyNetworkManager().sendShot({
     targetId: null, // no target yet
     position: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },

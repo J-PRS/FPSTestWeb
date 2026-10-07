@@ -11,11 +11,16 @@ import { weaponDef } from '../../weapons.js';
 import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
+import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
   wirePlayerCombat(ctx);
   wirePlayerLifecycle(ctx);
+  // NetProbe harness — stats source, ghost scene, Alt+N panel, Alt+Q section.
+  initNetProbe();
+  bindStats(ctx.networkManager);
+  attachScene(ctx.deps.lazyScene());
 }
 
 /** Hit feedback, knockback, reconciliation, kills — the damage wire. */
@@ -158,8 +163,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
       logger.info(`Correction ignored: ${err.toFixed(2)}m below snap threshold`);
       return;
     }
+    // NetProbe: record the delta + ghost the truth-vs-predicted gap
+    // BEFORE the snap moves player.pos.
+    const prePos = { x: player.pos.x, y: player.pos.y, z: player.pos.z };
+    corrGhost(position, prePos);
     const journal = inputSeq !== undefined ? nm().inputsAfter(inputSeq) : [];
     if (journal.length === 0) {
+      probeCorr(err, _seq, 0, Math.hypot(player.vel.x, player.vel.y, player.vel.z), true);
       player.pos.set(position.x, position.y, position.z);
       player.vel.set(velocity.x, velocity.y, velocity.z);
       noteLocalSnap();
@@ -197,6 +207,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     player.onGround = st.onGround;
     noteLocalSnap();
     player.syncMovement();
+    probeCorr(err, _seq, journal.length, Math.hypot(st.vel.x, st.vel.y, st.vel.z), false);
     logger.info(`Correction replayed: ${err.toFixed(2)}m err, ${journal.length} inputs from seq ${inputSeq}`);
   };
 
