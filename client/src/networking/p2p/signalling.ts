@@ -43,7 +43,12 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
     ws.addEventListener('close', (e) => { if (e.code === 1008) {fail(new Error(`room rejected: ${e.reason}`));} });
 
     ws.addEventListener('message', async (ev) => {
-      const msg = JSON.parse(ev.data as string) as SignalMsg;
+      // A malformed signal frame must not kill the handshake — an exception
+      // inside this async listener surfaces as an unhandled rejection and
+      // silently aborts ICE relay.
+      let msg: SignalMsg | null = null;
+      try { msg = JSON.parse(ev.data as string) as SignalMsg; } catch { return; }
+      if (msg === null || typeof msg !== 'object') {return;}
       try {
         switch (msg.t) {
           case 'role': {

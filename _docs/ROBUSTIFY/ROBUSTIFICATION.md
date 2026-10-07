@@ -2767,3 +2767,14 @@ and would pin itself to the top of the sorted index forever (eviction
 drops the lowest). Now: every read is bounds-checked (Malformed demo
 header -> 400, internals no longer echoed), and lifetime must be finite
 and <=300s. (DemoStorage.ts, serverRoutes.ts, demoHeaderBounds.test.ts)
+
+## 2.142 P2P signalling: unguarded JSON.parse inside async listener
+
+The signalling socket's message listener parsed the frame BEFORE its
+try/switch - a malformed signal frame threw inside an async listener,
+surfacing as an unhandled rejection and silently aborting the ICE relay
+mid-handshake (host/guest pair left half-wired). Every other inbound
+JSON.parse site (WebSocketConnection, tiers, tiersWebTransport,
+GameServer) is already guarded - this was the only unprotected one.
+Now parse-guarded with a null/object check before the switch.
+(signalling.ts)
