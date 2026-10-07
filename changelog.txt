@@ -1,3 +1,4 @@
+2026-10-11 - robustify 2.124: pin rejected-join registry invariant — no record, no begin-overwrite
 2026-10-11 - robustify 2.123: /client-log rejects oversized bodies on content-length before buffering
 2026-10-11 - robustify 2.122: pin windowAllow throttle primitive — expired-first sweep, no amnesty evict
 2026-10-11 - robustify 2.121: spectators count toward globalMaxPlayers on join, spectate + room-hop paths

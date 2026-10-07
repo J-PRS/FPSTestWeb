@@ -2522,3 +2522,16 @@ pins both halves: declared-giant 413 without ever reading the body,
 lied-header still 413 on the actual bytes.
 
 ### 2.123 - end
+
+### 2.124 Rejected-join registry invariant (2026-10-11)
+
+registry.begin() only runs on the success path — every reject
+(throttle, bad handshake, denied claim, full seat) returns first —
+but nothing pinned it. A future reorder leaks a 'connecting' record
+that never seats and never reaps; worse, begin() on a live id
+overwrites the real record with a fresh generation. joinGuard.test.ts
+now asserts denied joins leave zero registry state AND that a denied
+claim keeps the victim's 'active' seat untouched (a thief's begin
+would have flipped it to 'connecting').
+
+### 2.124 - end

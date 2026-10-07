@@ -22,6 +22,7 @@ type FakeWs = ReturnType<typeof fakeWs>;
 
 function mkSessions(room: ReturnType<typeof mkRoom>) {
   const playerRoom = new Map<string, typeof room>();
+  const reg = new SessionRegistry();
   return {
     mgr: new SessionManager({
       rooms: new Map([[room.name, room]]), playerRoom, specRooms: new Map(),
@@ -29,10 +30,11 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
       totalPlayers: () => playerRoom.size,
       ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 },
-      registry: new SessionRegistry(),
+      registry: reg,
       departSpectator: () => false,
     }),
     playerRoom,
+    reg,
   };
 }
 
@@ -71,6 +73,28 @@ describe('join guards', () => {
     join(mgr, thief, 'victim'); // no token → claim denied
     await flush();
     expect(thief.closed[0]?.reason).toBe('Player ID claimed');
+  });
+
+  it('a rejected join leaves no registry record behind', async () => {
+    const room = mkRoom({}, 'tdm');
+    const { mgr, reg } = mkSessions(room);
+    // Every reject path must return BEFORE registry.begin — a record
+    // without a seat leaks a gen entry that never gets reaped.
+    const throttled = fakeWs();
+    for (let i = 0; i < 5; i++) join(mgr, fakeWs(), `f${i}`);
+    join(mgr, throttled, 'f6');
+    join(mgr, fakeWs(), 'victim'); // claim an id for the thief probe
+    room.players.removePlayer('victim');
+    const thief = fakeWs('10.2.2.2');
+    join(mgr, thief, 'victim');
+    const bad = fakeWs('10.3.3.3');
+    mgr.handle(bad as never, { type: 'notjoin' });
+    await flush();
+    expect(reg.state('f6')).toBeUndefined();
+    // begin() on a live id would overwrite to 'connecting' + fresh gen —
+    // the denied thief must never reach it; victim's seat stays 'active'.
+    expect(reg.state('victim')).toBe('active');
+    expect(bad.data.playerId).toBeUndefined();
   });
 
   it('rejects malformed handshakes before any state change', async () => {
