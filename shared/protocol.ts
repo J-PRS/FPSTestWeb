@@ -190,7 +190,10 @@ export type ServerMessage =
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
-  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string; deployHash?: string; flagHash?: string; pickupHash?: string }
+  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string; deployHash?: string; flagHash?: string; pickupHash?: string;
+      /** Per-creature [id, species, state, uber, targetId] — lets a hash
+       *  mismatch name the diverging field instead of just listing ids. */
+      creatureFields?: [number, string, string, boolean, string | null][] }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
       /** Last inputMove seq the server consumed — the client replays its

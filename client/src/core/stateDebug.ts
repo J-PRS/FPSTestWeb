@@ -322,7 +322,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let flagDriftStreak = 0;
   let pickupDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][]) => {
     hashCheckCount++;
 
     if (serverFlagHash !== undefined && ctx.world) {
@@ -391,7 +391,27 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         creatureDriftStreak = 0;
       } else {
         creatureDriftStreak++;
-        const detail = `server=${serverCreatureHash} client=${localCreatureHash} ids=[${[...local.keys()].join(',')}]`;
+        // The hash alone can't say WHAT diverged — with the server's
+        // per-id fields attached, name it (e.g. state drift vs a
+        // stranded targetId) so the next soak answers instead of asking.
+        let detail = `server=${serverCreatureHash} client=${localCreatureHash} ids=[${[...local.keys()].join(',')}]`;
+        if (serverCreatureFields) {
+          const diffs: string[] = [];
+          for (const [id, species, state, uber, targetId] of serverCreatureFields) {
+            const l = local.get(id);
+            if (!l) { diffs.push(`#${id}:missing`); continue; }
+            const f: string[] = [];
+            if (l.species !== species) {f.push(`species ${l.species}/${species}`);}
+            if (l.state !== state) {f.push(`state ${l.state}/${state}`);}
+            if (l.uber !== uber) {f.push(`uber`);}
+            if ((l.targetId ?? null) !== (targetId ?? null)) {f.push(`tgt ${l.targetId ?? '-'}/${targetId ?? '-'}`);}
+            if (f.length) {diffs.push(`#${id}:${f.join(',')}`);}
+          }
+          for (const id of local.keys()) {
+            if (!serverCreatureFields.some((r) => r[0] === id)) {diffs.push(`#${id}:stranded`);}
+          }
+          if (diffs.length) {detail += ` diff=${diffs.slice(0, 6).join(' ')}`;}
+        }
         if (creatureDriftStreak >= 2) {
           logger.warn(`[StateHash] CREATURE DESYNC tick=${tick} ${detail} (persistent across ${creatureDriftStreak} checks — stranded or stale replica)`);
         } else {

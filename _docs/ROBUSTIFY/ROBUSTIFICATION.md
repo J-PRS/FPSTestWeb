@@ -210,6 +210,19 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.38 Creature-hash field attribution (2026-10-07)
+
+The §4.7 creature hash CAUGHT a live desync in the 2026-10-07 soak —
+`CREATURE DESYNC tick=433 … persistent across 12 checks` on all 6 ids —
+but the warn could only list ids, not which lifecycle field diverged
+(state? targetId? stranded?). `stateHash` now carries `creatureFields`
+(the per-id `[id, species, state, uber, targetId]` the server hashed,
+~30B/creature); on a miss the client diffs them and the warn names the
+diverging fields (e.g. `diff=#3:state wander/chase #5:stranded`). The
+next soak answers instead of asking. Root-cause candidates queued:
+retarget-skip ticks the client can't model, far-client FAR_SKIP edge
+drops, or a hash-input skew.
+
 ### 2.37 Bot-chatter cooldown churn amnesty (2026-10-07)
 
 `lastSpoke` (per-bot speak cooldown) and `lastKillOn` (per victim-pair

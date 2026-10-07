@@ -1,3 +1,5 @@
+2026-10-07 - robustify: creature desync warns now name the diverging field via server-side hash fields
+2026-10-07 - kit pieces gain a "scale" spec field (0.25-4, kit-only): one knob scales render + KIT_HULLS collider expansion together; bastion.json bases (bastion compound + bunker outpost) go 2x with outposts pushed out to match the doubled footprint
 2026-10-07 - robustify: bot chatter cooldowns evict eldest under churn instead of mass-unmuting every bot
 2026-10-07 - robustify: envSeen dedupe evicts eldest under id churn instead of re-warning every live player
 2026-10-07 - robustify: room-switch cooldown evicts eldest under churn instead of amnesty-clearing every live hopper

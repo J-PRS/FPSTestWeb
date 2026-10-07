@@ -387,6 +387,11 @@ export class TickLoop {
       deployHash,
       flagHash,
       pickupHash,
+      // On a creature-hash miss the client diffs these per-id fields so
+      // the warn says WHICH lifecycle field diverged (~30B/creature).
+      creatureFields: creatureRoster.length
+        ? creatureRoster.map((c) => [c.id, c.species, c.state, c.uber, c.targetId] as [number, string, string, boolean, string | null])
+        : undefined,
     });
 
     // Periodic status summary - suppress duplicates, batch with count
