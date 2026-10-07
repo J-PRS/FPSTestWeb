@@ -1,0 +1,12 @@
+slagg
+ulthule
+scarp
+pharanx
+katantē(s)
+kremnos
+orthobamōn
+clivus
+arduus
+fastigium
+scree
+arduum

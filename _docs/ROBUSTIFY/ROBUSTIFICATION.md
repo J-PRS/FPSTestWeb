@@ -1953,3 +1953,23 @@ When adding new replicated state or new diagnostics:
    disconnect/remove/dispose; u16 spaces (wire ids) never mint unboundedly.
 6. **Lag is not a warning.** Observability thresholds sit above the protocol's
    normal freshness windows; a warn means something is actually wrong.
+
+### 2.82 Rotated log archives grew unbounded + root-clutter gate (2026-10-08)
+
+`rotateLogIfBig` bounds the live file at 32MB but every roll landed in
+`OLD/` forever — a spamming appender filled the disk through the roll
+itself, which defeats the point of rotation. `OLD/` now keeps the
+newest 16 archives per dir (`pruneOld`, mtime-ordered). Verified:
+20 rolls leave exactly 16.
+
+Second half is prevention, not a fix: `_rootcheck.mjs` gates repo-root
+clutter — wired into client's `npm run check` ahead of tsc/oxlint/
+vitest, failing on any root entry outside the allowlist (scratch
+probes, captures, stray dumps). 45 `.devin_*` probe files moved to
+`_tools/devin_scratch/` rather than deleted; 27 user-owned strays
+(`1`, `1000`, `tas_film*.mp4`, `anyshaz.*`, `names.md`, root
+`package.json`/lock, `.rebase_*`, `.cpu_check.ps1`, `.tas_*.log`,
+`overview_v*.py.old`, `__RUN.bat`) stay flagged until each gets a
+home or an allowlist entry.
+
+### 2.82 - end

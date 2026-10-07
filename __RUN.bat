@@ -1,0 +1,2 @@
+_run_client_noreload.bat
+_run_server.bat

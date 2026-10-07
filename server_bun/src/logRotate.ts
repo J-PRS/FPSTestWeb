@@ -5,10 +5,13 @@
  * rolls mid-run too. Kept import.meta/dir-free so anything can import
  * it (clientLogs itself is not safe outside the server graph).
  */
-import { existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 
 const MID_RUN_ROLL_BYTES = 32 * 1024 * 1024;
+// Archive cap — rotation bounds the live file but OLD/ grew unbounded,
+// so a spamming appender still filled the disk through the roll itself.
+const OLD_KEEP = 16;
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 const logStamp = (t: Date) =>
@@ -22,7 +25,22 @@ export function rotateLogIfBig(p: string): void {
     if (!existsSync(p) || statSync(p).size === 0 || statSync(p).size <= MID_RUN_ROLL_BYTES) return;
     const dir = dirname(p);
     mkdirSync(join(dir, 'OLD'), { recursive: true });
-    const dst = join(dir, 'OLD', `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
+    const oldDir = join(dir, 'OLD');
+    mkdirSync(oldDir, { recursive: true });
+    const dst = join(oldDir, `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
     renameSync(p, dst);
+    pruneOld(oldDir);
   } catch { /* rotation must never block an append */ }
+}
+
+/** Keep the newest OLD_KEEP archives per directory — mtime order, so a
+ *  clock-skewed name can't hide a stale file from eviction. */
+function pruneOld(oldDir: string): void {
+  try {
+    const files = readdirSync(oldDir)
+      .map((f) => join(oldDir, f))
+      .filter((p) => statSync(p).isFile())
+      .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    for (const p of files.slice(OLD_KEEP)) unlinkSync(p);
+  } catch { /* pruning is best-effort like rotation itself */ }
 }

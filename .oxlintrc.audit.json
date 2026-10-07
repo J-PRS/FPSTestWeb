@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "extends": ["./.oxlintrc.json"],
+  // Type-aware pass — oxlint builds the program from the nearest tsconfig,
+  // so this is slower; run deliberately, not in the edit loop.
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    // Only exist under type-aware mode — the async ban makes
+    // floating/misused promises the exact class raw .then chains rot into.
+    "typescript/no-floating-promises": "warn",
+    "typescript/no-misused-promises": "warn",
+    "typescript/no-unnecessary-condition": "warn",
+    "typescript/no-unnecessary-type-assertion": "warn",
+    "typescript/no-unsafe-assignment": "warn",
+    "typescript/no-unsafe-member-access": "warn",
+    "typescript/no-unsafe-call": "warn",
+    "typescript/no-unsafe-return": "warn",
+    "typescript/no-unsafe-argument": "warn",
+    "typescript/require-await": "off",
+    "typescript/no-for-in-array": "warn",
+    "typescript/no-base-to-string": "warn",
+    "typescript/no-duplicate-type-constituents": "warn",
+    "typescript/no-redundant-type-constituents": "warn",
+    "typescript/no-meaningless-void-operator": "warn",
+    "typescript/no-mixed-enums": "warn",
+    "typescript/prefer-promise-reject-errors": "warn",
+    "typescript/await-thenable": "warn",
+    "typescript/no-implied-eval": "warn",
+    "typescript/unbound-method": "warn",
+    "typescript/restrict-plus-operands": "warn",
+    "typescript/restrict-template-expressions": "warn",
+    "typescript/switch-exhaustiveness-check": "warn",
+    "promise/no-return-in-finally": "warn",
+    "promise/valid-params": "warn"
+  }
+}
