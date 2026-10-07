@@ -17,7 +17,8 @@ import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
-import { chatter, RoomNoticer, type ChatterKind } from '../../../shared/botTaunts.js';
+import { chatter, type ChatterKind } from '../../../shared/botTaunts.js';
+import { RoomNoticer } from '../../../shared/roomNoticer.js';
 import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
 
 /**

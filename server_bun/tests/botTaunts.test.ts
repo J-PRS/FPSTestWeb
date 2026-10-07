@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, endTaunt, startTaunt,
   chatter, chatKindFor, vgsCommandFor, setMatchMuted, setTauntClock,
-  resetTauntCooldowns, RoomNoticer,
+  resetTauntCooldowns,
 } from '../../shared/botTaunts.ts';
+import { RoomNoticer } from '../../shared/roomNoticer.ts';
 import { tauntRng } from '../../shared/botRand.ts';
 
 // botTaunts rides the real 'chat' wire — a NaN cooldown or a chord that

@@ -5,7 +5,7 @@ import { BotWatchdog } from '../game/botWatchdog.js';
 import { BotSenses, type SenseHost } from '../game/botSenses.js';
 import { CtfFlags, type FlagCtx } from '../game/ctfFlags.js';
 import { FlagRunBridge, type FlagRunDeps, type FlagRunWiring } from '../game/flagRun.js';
-import { RoomNoticer } from '../../../shared/botTaunts.js';
+import { RoomNoticer } from '../../../shared/roomNoticer.js';
 import { makeScores } from '../../../shared/teams.js';
 
 // Bots.rekeyBot fans a jersey swap out to every id-keyed meter — these

@@ -2318,3 +2318,17 @@ mode and unknown map 400, ops 401 without token / 200 bearer-or-key,
 dev-open when the token is unset.
 
 ### 2.107 - end
+
+### 2.108 RoomNoticer extracted — botTaunts back under its size pin (2026-10-08)
+
+The §2.73 noticer port pushed shared/botTaunts.ts to 1284 — 15% over its
+sizeWatch grandfather pin (1099). Honest fix, not a pin bump: the
+self-contained RoomNoticer class moved to shared/roomNoticer.ts
+(bots.ts, serverSenses.ts, both test files re-pointed), leaving
+botTaunts at 1237 — back inside the pinned +15% allowance. Same round:
+a pin for claimedIdentities' 10k half-eviction (identityCap.test.ts) —
+the last unpinned bound on the join path. Full-server suite gate:
+everything green except the known soakChaos p95 from the committed
+moveJudge WIP.
+
+### 2.108 - end

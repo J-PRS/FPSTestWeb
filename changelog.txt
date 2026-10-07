@@ -1,3 +1,4 @@
+2026-10-08 - robustify 2.108: extract RoomNoticer to shared/roomNoticer.ts (sizeWatch back under pin) + pin claimedIdentities cap
 2026-10-08 - robustify 2.107: pin HTTP route guards — join throttle, ops gate, mode/map validators
 2026-10-08 - robustify 2.106: /demos listing caches 5s — no per-request stat sweep on a public route
 2026-10-08 - robustify 2.105: /stats leaderboard caches on journal size — poll storm reparses only per match
