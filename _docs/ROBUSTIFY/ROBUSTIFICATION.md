@@ -2025,3 +2025,16 @@ the scalar-reuse sites (standoff `sd`, dodge `tl`, steer `al`,
 disposition `od`/`ptd`) correctly keep their hypot.
 
 ### 2.85 - end
+
+### 2.86 Guarded 3D normalize — the same family in the creature files (2026-10-08)
+
+Third wave of the normalize family: `Math.sqrt(dx²+dy²+dz²) || 0.001`
+appeared in creatureFlyer and creatureTotem with a subtly DIFFERENT
+guard than the `||1` convention — on sub-millimeter separations the
+0.001 guard scaled the "unit" vector by d/0.001 (a 0.5mm gap produced
+a half-length direction). `dir3` in botVec owns it now with the `||1`
+guard, which keeps tiny inputs unit-length. ballSim's two `||1`
+magnitude-ratio uses (bounce speed preservation) correctly stayed —
+they need the scalar, not a direction.
+
+### 2.86 - end

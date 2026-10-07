@@ -11,6 +11,7 @@ import { type Heightfield, hmHeight } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
+import { dir3 } from './botVec.js';
 
 export const FLYER_SIM = {
   ORBIT_R: 16.0,        // circle radius around the prey anchor
@@ -90,11 +91,11 @@ export function makeSimFlyer(
 
 function flyToward(c: SimFlyer, gx: number, gy: number, gz: number, speed: number, dt: number): void {
   const dx = gx - c.x, dy = gy - c.y, dz = gz - c.z;
-  const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+  const u = dir3(dx, dy, dz);
   const k = Math.min(1, c.sp.STEER_K * dt);
-  c.vx += ((dx / d) * speed - c.vx) * k;
-  c.vy += ((dy / d) * speed - c.vy) * k;
-  c.vz += ((dz / d) * speed - c.vz) * k;
+  c.vx += (u.x * speed - c.vx) * k;
+  c.vy += (u.y * speed - c.vy) * k;
+  c.vz += (u.z * speed - c.vz) * k;
 }
 
 /** One step — authority and predictor run the same transitions. `target`

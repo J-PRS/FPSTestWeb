@@ -26,3 +26,12 @@ export function dirXZ(dx: number, dz: number): { x: number; z: number } {
   const l = Math.hypot(dx, dz) || 1;
   return { x: dx / l, z: dz / l };
 }
+
+/** Zero-guarded 3D normalize — guarded with ||1 so near-zero input
+ *  still yields a unit vector (the old `||0.001` copies silently halved
+ *  the direction on sub-millimeter separations). SimVec/BotVec
+ *  compatible in spirit; call sites pass components. */
+export function dir3(dx: number, dy: number, dz: number): { x: number; y: number; z: number } {
+  const l = Math.hypot(dx, dy, dz) || 1;
+  return { x: dx / l, y: dy / l, z: dz / l };
+}

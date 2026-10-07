@@ -20,6 +20,7 @@ import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
+import { dir3 } from './botVec.js';
 
 export const TOTEM_SIM = {
   RANGE: 105.0,          // engage envelope — inside readable fog distance
@@ -138,9 +139,8 @@ export function totemSolveBeam(
   cols?: readonly StructureCollider[],
 ): void {
   const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT * c.radius, ez = c.z;
-  let dx = lx - ex, dy = ly - ey, dz = lz - ez;
-  const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
-  dx /= d; dy /= d; dz /= d;
+  const u = dir3(lx - ex, ly - ey, lz - ez);
+  const dx = u.x, dy = u.y, dz = u.z;
   c.lockDirX = dx; c.lockDirY = dy; c.lockDirZ = dz;
   c.lockDist = c.sp.RANGE;
   for (let t = 1; t <= c.sp.RANGE; t += 1) {
