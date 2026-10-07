@@ -123,7 +123,7 @@ export class CreatureSim {
     const out = [];
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
-      out.push(rosterRow(WORLD_MODEL.creature!, c.id, {
+      out.push(rosterRow(WORLD_MODEL.creature!, 'id', c.id, {
         position: { x: c.x, y: c.y, z: c.z },
         velocity: { x: c.vx, y: c.vy, z: c.vz },
         uber: c.uber, seed: c.rng, species: c.species, state: c.state,

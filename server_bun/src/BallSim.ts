@@ -147,7 +147,7 @@ export class BallSim {
     const out = [];
     for (const b of this.balls.values()) {
       if (b.dead) continue;
-      out.push(rosterRow(WORLD_MODEL.ball!, b.id, {
+      out.push(rosterRow(WORLD_MODEL.ball!, 'id', b.id, {
         variant: b.variant, colorIdx: b.colorIdx,
         position: { x: b.x, y: b.y, z: b.z },
         velocity: { x: b.vx, y: b.vy, z: b.vz },

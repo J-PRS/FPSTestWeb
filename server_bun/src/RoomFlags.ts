@@ -20,6 +20,7 @@ import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import { CTF_PTS } from '../../shared/teams.ts';
+import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
 
 // 'unspawned' is server-internal — rabbit's flag doesn't exist until
 // first blood, and it never reaches the wire (snapshot filters it).
@@ -131,11 +132,11 @@ export class RoomFlags {
     // home rides every snapshot — the stand mesh + socket marker are
     // placed from it, including by clients who join mid-run while the
     // flag itself is away (a 'home'-state pos alone can't tell them).
-    return [...this.flags.values()].filter((f) => f.state !== 'unspawned').map((f) => ({
-      team: f.team, pos: { ...f.pos }, home: { ...f.home },
+    return [...this.flags.values()].filter((f) => f.state !== 'unspawned').map((f) => rosterRow(WORLD_MODEL.flag!, 'team', f.team, {
+      pos: { ...f.pos }, home: { ...f.home },
       // 'unspawned' is filtered above — the wire union only knows live states.
-      state: f.state as 'home' | 'carried' | 'dropped', carrier: f.carrier,
-    }));
+      state: f.state, carrier: f.carrier,
+    }) as { team: TeamId; pos: Vec3; home: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null });
   }
 
   /** Carrier died — flag drops where they fell. Called from the shared

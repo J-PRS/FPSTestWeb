@@ -155,6 +155,14 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'state', channel: 'edge' },
       { name: 'carrier', channel: 'edge' },
     ],
+    rosterFields: [
+      // The flag's row key is its team — rosterRow writes it under the
+      // idField ('team'), so it does not repeat here.
+      { name: 'pos', channel: 'sim' },
+      { name: 'home', channel: 'edge' },
+      { name: 'state', channel: 'edge' },
+      { name: 'carrier', channel: 'edge' },
+    ],
     simFields: [
       { name: 'pos', channel: 'sim' },
     ],
@@ -231,10 +239,11 @@ export function verbPayload(
  *  contract as verbPayload: the declared field set owns the wire shape. */
 export function rosterRow(
   kind: WorldKindDecl,
-  id: number,
+  idField: string,
+  id: number | string,
   vals: Record<string, unknown>,
 ): Record<string, unknown> {
-  const row: Record<string, unknown> = { id };
+  const row: Record<string, unknown> = { [idField]: id };
   for (const f of kind.rosterFields ?? []) {
     if (!(f.name in vals) && f.absent === undefined) {
       console.warn(`[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
