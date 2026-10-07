@@ -28,7 +28,8 @@ import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } f
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
-import type { Room } from './Room.ts';
+import type { PlayerManager } from './PlayerManager.ts';
+import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
 import { weaponStats } from './weaponStats.ts';
 
@@ -90,8 +91,35 @@ function timeToCeiling(y0: number, vy: number, g: number, ceiling: number): numb
   return t1 > 0 ? t1 : Infinity;
 }
 
+/** The slice of a live authority RoomProjectiles needs: everything a
+ *  blast touches in one bag so a Room AND a P2P host can own the sim.
+ *  Optional members are the roster sims a host legitimately lacks —
+ *  their `?.` sites already degrade (no creature casualties off shells). */
+export interface ProjHost {
+  players: PlayerManager;
+  messages: MessageHandler;
+  broadcast(msg: unknown, exclude?: string): void;
+  rng(): number;
+  tickSeq: number;
+  mode: string;
+  pushNoise(pos: Vec3): void;
+  ballSim?: {
+    handleHit(ownerId: string, ballId: number, dmg: number): { killed: boolean };
+    splashDamage(ownerId: string, at: Vec3, radius: number, dmg: number, excludeId?: number): void;
+    sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null;
+    ballAt(id: number): { radius: number } | null | undefined;
+  };
+  creatureSim?: {
+    handleHit(ownerId: string, crawlerId: number, dmg: number): { killed: boolean };
+    splashDamage(ownerId: string, at: Vec3, radius: number, dmg: number, excludeId?: number): void;
+    sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null;
+  };
+  deployables?: { shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null };
+  moveSim?: { structureTop(x: number, z: number): number };
+}
+
 export class RoomProjectiles {
-  readonly room: Room;
+  readonly room: ProjHost;
   field: Heightfield | null;
   /** Highest terrain height anywhere on the map — a shell above it
    *  cannot touch ground this step, so segFieldHit can be skipped. */
@@ -106,7 +134,7 @@ export class RoomProjectiles {
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
 
-  constructor(room: Room, field: Heightfield | null) {
+  constructor(room: ProjHost, field: Heightfield | null) {
     this.room = room;
     this.field = null;
     this.attachField(field);
@@ -294,7 +322,7 @@ export class RoomProjectiles {
         const bAt = {
           x: bx,
           y: Math.max(this.field ? hmHeight(this.field, bx, bz) : at.y,
-            this.room.moveSim.structureTop(bx, bz)),
+            this.room.moveSim?.structureTop(bx, bz) ?? -Infinity),
           z: bz,
         };
         // Credit the carrier — bomblet stats drive the envelope, but

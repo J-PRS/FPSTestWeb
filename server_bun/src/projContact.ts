@@ -49,13 +49,13 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // Wall sweep before the player check — a shell that clips a face
     // detonates there instead of phasing through to someone inside.
     if (r.solids.length) {
-      const hit = segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined);
+      const hit = segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined, proj.ownerTeam);
       if (hit) { if (stats.stick) { r.attach(proj, hit); return true; } r.detonate(proj, hit); return true; }
     }
     // Shield sweep — an enemy dome eats the shell at the field's edge,
     // before any body inside can be reached. Walls already won if they
     // hit earlier in the frame (sequential order like everything else).
-    const st = r.room.deployables.shieldBlock(from, p.pos, proj.ownerId);
+    const st = r.room.deployables?.shieldBlock(from, p.pos, proj.ownerId) ?? null;
     if (st !== null) {
       const at = {
         x: from.x + (p.pos.x - from.x) * st,
@@ -151,11 +151,11 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
       if (th) bestT = segPointT(p.pos, end, th);
     }
     if (r.solids.length) {
-      const sh = segSolidHit(p.pos, end, r.solids, r.solidIndex ?? undefined);
+      const sh = segSolidHit(p.pos, end, r.solids, r.solidIndex ?? undefined, proj.ownerTeam);
       if (sh) bestT = Math.min(bestT, segPointT(p.pos, end, sh));
     }
     // A dome eats the discharged beam too — same rule as flight contact.
-    const sht = r.room.deployables.shieldBlock(p.pos, end, proj.ownerId);
+    const sht = r.room.deployables?.shieldBlock(p.pos, end, proj.ownerId) ?? null;
     if (sht !== null) bestT = Math.min(bestT, sht);
     const midX = (p.pos.x + end.x) / 2, midY = (p.pos.y + end.y) / 2, midZ = (p.pos.z + end.z) / 2;
     // +0.6: the reject is off the capsule MIDPOINT — a heavy's cylinder
