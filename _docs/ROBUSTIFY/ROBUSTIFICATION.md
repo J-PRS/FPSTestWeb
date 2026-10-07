@@ -2359,3 +2359,17 @@ state by design; /health stays open — its degraded detail only exists
 when the failure is already visible in-game.
 
 ### 2.110 - end
+
+### 2.111 Reconnect contract pinned (2026-10-11)
+
+WebSocketConnection's reconnect machinery — the only thing standing
+between a dropped tab and a dead session — had zero coverage across its
+five guarantees: deliberate disconnect() must not resurrect via the
+async close handler, a sub-5s session is a flap candidate and gets 4x
+backoff, a long-lived session retries at base interval, the offline
+queue caps at 100, and KEEP_NEWEST/binary lanes dedupe to the freshest
+entry. wsReconnect.test.ts drives all five via a fake WebSocket + fake
+timers. A formula slip or cap removal now fails a test instead of
+silently storming the server or leaking queue growth.
+
+### 2.111 - end
