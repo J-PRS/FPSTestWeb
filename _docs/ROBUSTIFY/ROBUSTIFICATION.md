@@ -2148,3 +2148,16 @@ verified the remaining entity-death lanes (CreatureSim edgeSeq/
 skipCount, BallSim resyncAcc/retargetAcc) delete on death.
 
 ### 2.95 - end
+
+### 2.96 Spectator depart funnel pinned (2026-10-08)
+
+Pin class, last funnel: departSpectator collapses four stores (room
+spectators, connections, specRooms index, registry seat) but had no
+coverage — the audit-added funnel could silently regress to the old
+dual inline paths. specDepart.test.ts drives a real spectate join
+through GameServer, departs, asserts all four purge plus the player-
+seat refusal. Broadcast/serialization lane audited clean first:
+serialize-once in frame(), journal bounded, drown checks on all
+three send lanes, snapshot buffer pools its reclaim path.
+
+### 2.96 - end
