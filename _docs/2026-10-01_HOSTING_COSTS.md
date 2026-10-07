@@ -57,6 +57,43 @@ metered tier) or ~15-20% of strict-NAT players can't P2P.
 20TB included traffic. Oracle Always Free as the $0 alternative
 (ARM64, tolerable friction). Cloudflare free tier in front.
 
+## Bootstrapped-indie playbook (researched 2026-10)
+
+What small global-multiplayer games actually run on:
+
+- **Agar.io / Diep.io** (Matheus Valadares, HN): one CPU-core box per
+  room process; on 40+ core dedicated boxes he ran 40+ processes.
+  Custom WebSocket stack; ~190 players/agar room, 72/diep room.
+  Deliberately avoided cloud for bandwidth cost.
+- **Slither.io** (Steve Howse): avoided AWS/Google — "incredibly
+  expensive for the amount of bandwidth" — scrambled for cheap regional
+  hosts during virality; ~$15k/mo across 158+ servers at peak.
+- **DDNet / Teeworlds**: official servers in ~9 countries on cheap KVM
+  VPS + community-hosted servers (they ship the server binary, players
+  host their own). Main pain: booter DDoS getting them kicked off
+  hosts without protection.
+- **Xonotic-class open-source games**: fully community-hosted — dev
+  infra cost is $0; the community runs the rooms.
+
+Patterns:
+
+1. **Cheap regional VPS matched to demand** — everyone converges here.
+   Nobody bootstrapped pays cloud egress rates; bandwidth is the bill.
+2. **Community-hosted servers = free global coverage.** Ship the server
+   (our Dockerfile is already one command) and communities run regional
+   rooms for $0 — solves "US rooms before US revenue exists" and builds
+   community. THE indie answer.
+3. **Fat shared boxes** (agario's 40 rooms/box) = cheapest per-player at
+   scale — our multi-room lobby is already that shape.
+4. **Bare metal beats VPS ~10x** at sustained scale — graduation move,
+   not a starting move.
+
+Applied: offer the self-hostable server early (community runs US/Asia
+rooms free), one Hetzner EU box as the official lobby, official
+regional boxes only where a community sustains real CCU. Caveats:
+client code WILL get ripped → keep the server authoritative (we do);
+expect booter DDoS once visible → Cloudflare in front is non-optional.
+
 ## Scaling thresholds (when the model changes)
 
 - **>2-3k CCU**: single-core tick loop saturates → shard rooms across
