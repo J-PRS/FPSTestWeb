@@ -2832,3 +2832,10 @@ tile meta (id/timestamp/desc/lifetime/weapon/distance). New meta store
 reads it; evict deletes from both in one tx. v2 rows backfill lazily on
 first list() via a count drift check - async backfill inside the IDB
 upgrade transaction would race its auto-commit. (demoVault.ts)
+
+## 2.149 Cool-shot play race: last-resolve won, not last-click
+
+playAt's vault.get is async - rapid tile clicks resolved out of order,
+so a slower earlier request's playDemoData stomped the clip the user
+actually picked last. playSeq generation guard: a superseded resolve
+returns before touching playback. (coolShots.ts)

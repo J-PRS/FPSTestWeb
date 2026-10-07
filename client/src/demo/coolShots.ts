@@ -55,6 +55,9 @@ export class CoolShotManager {
   // so a swipe lands with zero network gap. Consumed once on play.
   private prefetched = new Map<string, DemoFile>();
   private vaultLoaded = false;
+  // Play-race guard: vault.get is async, so rapid tile clicks resolve
+  // out of order — last-click must win, not last-resolve.
+  private playSeq = 0;
   coolShots: CoolShotEntry[] = [];
   serverUrl = '';
   uploadFailureCount = 0;
@@ -223,11 +226,13 @@ export class CoolShotManager {
   playAt(index: number): void {
     if (index < 0 || index >= this.coolShots.length) {return;}
     const entry = this.coolShots[index];
+    const seq = ++this.playSeq;
     if (entry.clipData) {
       this.deps.playDemoData(entry.clipData);
       logger.debug(`Playing cool shot: ${entry.description}`);
     } else {
       void this.vault.get(entry.id).then((data) => {
+        if (seq !== this.playSeq) {return;} // a newer play request superseded us
         if (data) {
           this.deps.playDemoData(data);
           logger.debug(`Playing cool shot from vault: ${entry.description}`);
