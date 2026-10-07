@@ -1,3 +1,4 @@
+2026-10-07 - robustify: room-switch cooldown evicts eldest under churn instead of amnesty-clearing every live hopper
 2026-10-07 - robustify: pinned room.empty guard — bots-only rooms are empty and teardown-able while a spectator keeps the room alive
 2026-10-07 - robustify: claim-sweep unacked warns coalesce into one line per pass; logRotate.ts extracted import-meta-free so jsonl ledgers roll mid-run without breaking client typecheck
 2026-10-07 - robustify: matches.jsonl and weaponstats.jsonl roll at 32MB mid-run via shared rotateLogIfBig; WeaponStats class exported for hermetic bounds tests

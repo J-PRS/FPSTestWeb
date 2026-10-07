@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.35 Switch-cooldown churn amnesty (2026-10-07)
+
+`RoomSwitcher.cooldowns` capped at >1024 with a wholesale `clear()` —
+under player-id churn, one boundary crossing reset the switch cooldown
+for every live hopper at once (the `postIps`/`invalidWarnAt` class).
+Now evicts the eldest entry; the per-hopper window survives. The entry
+still deliberately outlives the player — the cooldown must survive the
+hop it is guarding.
+
 ### 2.34 Empty-room guard pinned (2026-10-07)
 
 `roomEmpty.test` pins the guard that drives TickLoop teardown: a

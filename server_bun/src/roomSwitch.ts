@@ -123,8 +123,10 @@ export class RoomSwitcher {
     // throttled too or switchRoom name-spam churns roomFor unbounded.
     this.cooldowns.set(playerId, now);
     // Server-lifetime map: hoppers keep their entry past removal (the
-    // cooldown must survive the hop), so cap growth like duelStart.
-    if (this.cooldowns.size > 1024) this.cooldowns.clear();
+    // cooldown must survive the hop), so cap growth like duelStart —
+    // evict the eldest, not clear(): a wholesale wipe under id churn
+    // resets the cooldown for every live hopper at once.
+    if (this.cooldowns.size > 1024) this.cooldowns.delete(this.cooldowns.keys().next().value!);
     return false;
   }
 
