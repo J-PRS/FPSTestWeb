@@ -200,6 +200,16 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'targets', channel: 'edge' },
       ],
     },
+    // gameState deployables[] row — hp/armor/team ride optional on the
+    // snapshot row; spawn edges always carry the full set.
+    rosterFields: [
+      { name: 'owner', channel: 'edge' },
+      { name: 'kind', channel: 'edge' },
+      { name: 'pos', channel: 'sim' },
+      { name: 'hp', channel: 'echo', absent: null },
+      { name: 'armor', channel: 'echo', absent: null },
+      { name: 'team', channel: 'edge', absent: null },
+    ],
     simFields: [
       { name: 'pos', channel: 'sim' },
       { name: 'hp', channel: 'echo' },
@@ -236,6 +246,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     ],
     goneFields: [
       { name: 'by', channel: 'edge' },
+    ],
+    // gameState pickups[] row — `kind` rides optional on the snapshot.
+    rosterFields: [
+      { name: 'pos', channel: 'sim' },
+      { name: 'kind', channel: 'edge', absent: null },
     ],
     simFields: [
       { name: 'pos', channel: 'sim' },
@@ -471,10 +486,28 @@ export function checkPacket(
   // row — the fields live there, not at message level. Roster feeds pick
   // the container for THEIR kind: gameState carries every roster, so a
   // blind first-array pick would check ball rows against player fields.
-  const ROSTER_ROWS: Record<string, string> = { ball: 'balls', creature: 'crawlers', flag: 'flags', player: 'players' };
-  const rows = verb === 'roster' && ROSTER_ROWS[kind.kind]
-    ? msg[ROSTER_ROWS[kind.kind]!]
-    : msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
+  const ROSTER_ROWS: Record<string, string> = { ball: 'balls', creature: 'crawlers', flag: 'flags', player: 'players', pickup: 'pickups', deploy: 'deployables' };
+  if (verb === 'roster') {
+    // A roster feed may carry several kinds (gameState ships them all) —
+    // sweep every declared container present, not just the caller's.
+    for (const k of Object.values(WORLD_MODEL)) {
+      if (!k.rosterFields || k === kind) continue;
+      const extra = msg[ROSTER_ROWS[k.kind]!];
+      if (Array.isArray(extra)) {
+        for (const r of extra) {
+          for (const f of k.rosterFields) {
+            if (!(f.name in (r as Record<string, unknown>)) && f.absent === undefined) {
+              console.warn(`[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
+            }
+          }
+        }
+      }
+    }
+    const rows = ROSTER_ROWS[kind.kind] ? msg[ROSTER_ROWS[kind.kind]!] : undefined;
+    if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); }
+    return;
+  }
+  const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
   if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
   check(msg);
 }
