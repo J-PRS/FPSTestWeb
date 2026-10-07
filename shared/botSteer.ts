@@ -14,6 +14,7 @@ import type { BotVec, BrainCtx } from './botBrain.ts';
 import { wrapAngleDelta } from './angles.ts';
 import { botRand } from './botRand.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
+import { distSqXZ } from './botVec.ts';
 
 // --- context steering senses ---
         // directions sampled around the circle
@@ -98,7 +99,7 @@ export class BotSteer {
       if (this.memory.length > 24) this.memory.shift();
     }
     this.memory = this.memory.filter(
-      (m) => now - m.t < T.steer.memMs && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < T.steer.memRange * T.steer.memRange,
+      (m) => now - m.t < T.steer.memMs && distSqXZ(m, pos) < T.steer.memRange * T.steer.memRange,
     );
 
     // Separation bodies are the only others a slot can ever see —
@@ -107,7 +108,7 @@ export class BotSteer {
     let near: BotVec[] | null = null;
     if (ctx.others) {
       for (const o of ctx.others) {
-        const od2 = (o.x - pos.x) ** 2 + (o.z - pos.z) ** 2;
+        const od2 = distSqXZ(o, pos);
         if (od2 <= sep2 && od2 > 0.0001) (near ??= []).push(o);
       }
     }

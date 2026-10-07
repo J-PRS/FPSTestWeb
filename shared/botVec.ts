@@ -11,3 +11,10 @@ export function distSq(a: BotVec, b: BotVec): number {
   const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
   return dx * dx + dy * dy + dz * dz;
 }
+
+/** Horizontal reach — orbit/arrive checks treat altitude as "there",
+ *  unlike distSq which would read a ledge gap as distance left. Takes
+ *  the minimal shape so 2D records (steer memory) typecheck too. */
+export function distSqXZ(a: Pick<BotVec, 'x' | 'z'>, b: Pick<BotVec, 'x' | 'z'>): number {
+  return (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+}

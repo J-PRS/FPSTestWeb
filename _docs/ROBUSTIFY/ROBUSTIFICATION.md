@@ -1984,6 +1984,9 @@ owner) and `botHunt.ts` shadowed BOTH, with its `distSq` silently 2D
 "just import the helper" fix *change behavior* by pulling altitude into
 orbit-reach checks. `botHunt` now imports shared `dist3` and its
 horizontal helper is renamed `distSqXZ` so the semantic difference
-can't hide behind the shared name again.
+can't hide behind the shared name again — then promoted into botVec
+itself when the same inline `(x) ** 2 + (z) ** 2` expression turned
+up twice more in `botSteer` (separation gather + memory-prune). Its
+signature takes `Pick<BotVec,'x'|'z'>` so 2D records typecheck.
 
 ### 2.83 - end

@@ -14,7 +14,7 @@ import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
 import { rollSkill, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
-import { dist3 } from './botVec.ts';
+import { dist3, distSqXZ } from './botVec.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -49,9 +49,8 @@ const PURSUE_MS = 3500;
 const SIGHT_M = 300;
 const PURSUE_M = 200;
 
-// Orbit/goal reach is horizontal — the brain family's shared distSq is
-// 3D and would make height deltas read as "not there yet".
-const distSqXZ = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+// Orbit/goal reach is horizontal — shared distSqXZ keeps that distinct
+// from the 3D distSq, which would read a ledge gap as distance left.
 
 // ---- Hunt state: everything the fire/position decisions mutate ----
 
