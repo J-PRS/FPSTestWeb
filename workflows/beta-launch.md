@@ -33,8 +33,9 @@ decisions.
    `FPS_ICE_SERVERS` (if TURN used).
 3. **Edge** — domain on Cloudflare: site proxied (TLS+DDoS), game socket
    on a DNS-only subdomain (CF proxy can't carry UDP/WebTransport).
-4. **TURN** — coturn on the same box OR hosted TURN; fills the ~15-20%
-   symmetric-NAT gap for RTC lanes.
+4. **TURN** — Cloudflare Realtime TURN (decided 2026-10-01): free
+   1,000 GB/mo, anycast, zero daemons; mint key id/token via the Calls
+   API → `FPS_ICE_SERVERS`. Fills the ~15-20% symmetric-NAT gap.
 5. **Soak** — real-socket smoke from outside the LAN; watch `/status`.
 6. **Go-live** — announce; monitor `/status` + error archive
    (`logs/OLD/`) + `/client-log` intake.
@@ -44,8 +45,8 @@ decisions.
 - **Domain**: buy ~$10/yr + Cloudflare account. Needed for WSS/TLS
   and `isDevHost()` https gate.
 - **Box**: order the CX43 (~€10/mo, hourly billing — can destroy/recreate).
-- **TURN**: coturn on-box ($0, one daemon) vs hosted free tier
-  (metered.ca / CF Calls — zero ops). Recommendation: coturn.
+- **TURN**: DECIDED — Cloudflare Realtime free tier; still needs the
+  key id/token minted once CF account exists.
 - **FPS_ADMIN_TOKEN** value — JP picks the secret.
 - **MAX_DEMOS / seat caps** — current defaults stand unless JP wants
   tighter at launch.
