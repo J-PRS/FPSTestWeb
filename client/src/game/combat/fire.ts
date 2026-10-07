@@ -104,8 +104,12 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   }
 
   // Send shot to server with projectile position/velocity so remote clients
-  // see the shot (all weapons, weaponType selects their visual config)
-  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
+  // see the shot (all weapons, weaponType selects their visual config).
+  // The claim MUST carry the same inherited-velocity flight the
+  // Projectile sim runs — omitting playerVel*0.5 makes the server's
+  // arcBlockedAt replay a slower, undeflected arc that clips walls the
+  // real shell cleared ("flight blocked" rejects on honest hits).
+  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
   deps.lazyNetworkManager().sendShot({
     targetId: null, // no target yet
     position: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },

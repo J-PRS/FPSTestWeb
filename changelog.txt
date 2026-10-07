@@ -1,3 +1,5 @@
+2026-10-01 - robustify 2.152: shot spawn claims now carry velocity inheritance (dir*speed + playerVel*0.5) - claimed arc matched a slower undeflected path, so server AOE replay rejected honest hits as "flight blocked by structure"
+2026-10-02 - fix: direct-hit victims never got the blast shove server-side - splashTargets excluded them from the whole sweep (damage already paid by the hit claim), so clients predicted a knockback arc the server never owed and the victim snapped back; excluded target now gets impulseOnly treatment (shove + wire notify + shadow impulse, no splash damage) - blastShove scenario pin
 2026-10-01 - robustify 2.151: duplicate clip in best-shots panel - server merge landing before upload resolution deduped on stale local filename; now deduped when the server filename is assigned
 2026-10-01 - robustify 2.150: clip feed wheel works on trackpads - per-event deltaY>=40 dropped every small trackpad tick; deltas now accumulate to the threshold
 2026-10-01 - robustify 2.149: cool-shot play race fixed - rapid clicks could let a slower earlier vault resolve stomp the last-picked clip (generation guard)

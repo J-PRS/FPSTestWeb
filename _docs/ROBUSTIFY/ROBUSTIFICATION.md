@@ -2857,3 +2857,16 @@ upload is in flight, so a server merge landing mid-flight merged the
 uploaded copy as a second entry. The same clip rendered twice: once
 local, once from server. On upload resolution the local entry now
 filters any server entry carrying the assigned filename. (coolShots.ts)
+
+## 2.152 Spawn claims omitted velocity inheritance - phantom "flight blocked" rejects
+
+spawnProjectile flew the projectile at dir*speed + playerVel*0.5 (50%
+inheritance, Tribes-style) but claimed dir*speed alone to the server.
+The server-side TrackedProjectile therefore replayed a slower,
+undeflected arc in arcBlockedAt: a shell that sailed over a wall on the
+real flight clipped it on the claimed flight, producing 'AOE: flight
+blocked by structure at ~0.2s' rejects on perfectly honest hits - the
+dominant damage-error spam seen at 40-60ms ping, and it scaled with
+shooter speed (worst while skiing). The sendShot claim now carries the
+identical inherited velocity the Projectile sim runs (same expression
+as the demo record two lines above). (fire.ts)
