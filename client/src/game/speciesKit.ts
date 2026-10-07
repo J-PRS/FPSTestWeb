@@ -118,7 +118,7 @@ class SpeciesKitImpl {
   // Identical at every onHit/onSting/onClaw/onBoltHit site. `deathText` is
   // the kill-feed attribution ("devoured by a crawler") recorded in case
   // this damage is the killing blow — the server only reports 'environment'.
-  hurtPlayer = (fromPos: THREE.Vector3, force: number, damage: number, deathText: string, reach?: number, attacker?: object): boolean  => {
+  hurtPlayer = (fromPos: THREE.Vector3, force: number, damage: number, deathText: string, reach?: number, attacker?: { vel?: THREE.Vector3 } & object): boolean  => {
     const p = this.deps.lazyPlayer();
     if (p.isDead) {return false;} // corpse shouldn't get knocked around or re-hurt
     // Victim check — a creature's bite fires for whomever ITS threat table
@@ -157,7 +157,12 @@ class SpeciesKitImpl {
         // A swarm besieging a stationary player whiffs EVERY bite, so the
         // warn folds repeats per species into ×N — a siege reads as one
         // line, not a scroll.
-        const moving = p.vel.lengthSq() > 30 * 30;
+        // Ski-speed whiffs are earned dodges, not bugs — the strike fired
+        // on a lastSeen snapshot and a fast mover is already gone. Same
+        // on the attacker side: a netDriven creature/ball replaying at
+        // ~40 m/s legitimately reads ~20m off the snapshot it bit on, so
+        // a fast attacker whiffing is replay staleness, not a reach lie.
+        const moving = p.vel.lengthSq() > 30 * 30 || (attacker?.vel?.lengthSq() ?? 0) > 15 * 15;
         const now = performance.now();
         const fold = this.whiffFold.get(deathText);
         if (fold && now - fold.at < this.WHIFF_FOLD_MS) {
