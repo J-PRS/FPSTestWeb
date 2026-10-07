@@ -24,6 +24,9 @@ const JOURNAL = join(import.meta.dir, '..', '..', 'logs', 'matches.jsonl');
 export class MatchJournal {
   private ring: Omit<MatchRec, never>[] = [];
 
+  /** Path injectable so tests aggregate in a tmp dir, not the live logs/. */
+  constructor(private journalPath = JOURNAL) {}
+
   recordEnd(rec: {
     room: string; mode: string; winner: string; scores: Record<string, number>;
     players?: { id: string; team?: string; kills: number; deaths: number }[];
@@ -32,9 +35,9 @@ export class MatchJournal {
     this.ring.push(entry);
     if (this.ring.length > 100) this.ring.shift();
     try {
-      mkdirSync(join(JOURNAL, '..'), { recursive: true });
-      rotateLogIfBig(JOURNAL);
-      appendFileSync(JOURNAL, JSON.stringify(entry) + '\n');
+      mkdirSync(join(this.journalPath, '..'), { recursive: true });
+      rotateLogIfBig(this.journalPath);
+      appendFileSync(this.journalPath, JSON.stringify(entry) + '\n');
     } catch (e) {
       logger.warn('Match journal write failed', { err: String(e) });
     }
@@ -45,14 +48,21 @@ export class MatchJournal {
     return this.ring;
   }
 
+  /** The journal only grows via recordEnd — cache the aggregate on file
+   *  size so a /stats poll storm reparses only when a match lands, not
+   *  per request. */
+  private statsCache: { size: number; rows: unknown[] } | null = null;
+
   /** Lifetime leaderboard read off the match journal — survives restarts
-   *  since matches.jsonl is append-only. Read-per-request is fine at this
-   *  scale; cache it if the file ever grows past a few MB. */
+   *  since matches.jsonl is append-only. */
   async stats(): Promise<unknown[]> {
     interface Row { playerId: string; matches: number; wins: number; kills: number; deaths: number }
+    const file = Bun.file(this.journalPath);
+    let size = -1;
+    try { size = file.size; } catch { /* no journal yet */ }
+    if (size >= 0 && this.statsCache?.size === size) return this.statsCache.rows;
     const agg = new Map<string, Row>();
     try {
-      const file = Bun.file(JOURNAL);
       const text = await file.text();
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
@@ -69,6 +79,8 @@ export class MatchJournal {
         }
       }
     } catch { /* no journal yet — empty leaderboard */ }
-    return [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
+    const rows = [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
+    if (size >= 0) this.statsCache = { size, rows };
+    return rows;
   }
 }

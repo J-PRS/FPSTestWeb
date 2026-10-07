@@ -2276,3 +2276,17 @@ that set is ops history, not sim gating. Pinned: a recycled 'a' with
 a live streak+quarantine mints clean.
 
 ### 2.104 - end
+
+### 2.105 /stats reparse-per-request bounded (2026-10-08)
+
+DoS bound on a public route: /stats aggregated the lifetime leaderboard
+by reading + JSON.parsing the ENTIRE append-only matches.jsonl on every
+request — the file only grows, so a poll storm turns the server into a
+JSON parser. Journal mutations are server-side only (recordEnd on match
+end), so a cache keyed on file size bounds it to one parse per match.
+statsCache is {size, rows}; a stat miss (no journal) skips caching.
+Journal path is now constructor-injectable so the pin tests in a tmp
+dir, not live logs/. Pinned: unchanged file returns the same rows
+object; growth re-aggregates.
+
+### 2.105 - end
