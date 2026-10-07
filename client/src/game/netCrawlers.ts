@@ -108,6 +108,13 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
     if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
+    // Server retargetDue() spends the whole tick on the re-aim — the
+    // creature takes no step that tick. The edge stands in for the
+    // skipped step here or the replay accrues one extra 50ms quantum per
+    // retarget and drifts ahead of authority (§2.38's wild desync).
+    // Far clients only see every 4th edge, so this corrects most — not
+    // all — of the skew for them; resync edges bound the residue.
+    if (m.kind === 'retarget') {c.netAcc -= 0.05;}
     c.applyNetEdge({ ...m, kind: m.kind });
     deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);
     if (m.kind === 'detonate' && c instanceof Baneling) {

@@ -210,6 +210,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.39 Retarget-skip tick: replay ran ahead of authority (2026-10-07)
+
+Found while chasing the §2.38 wild desync: `creatureBrain.stepAll`
+spends a creature's whole tick on a due retarget — the creature takes NO
+sim step that tick. The client replay had no model of the skip, so it
+accrued one extra 50ms quantum per retarget edge — its sims ran
+permanently ahead of authority on exactly the timers the state hash
+compares. A `retarget` edge now stands in for the skipped step
+(`netAcc -= 0.05`). Far clients (every-4th-edge FAR_SKIP) still
+under-correct; resync edges bound the residue — the §2.38 field diff
+will say whether this was THE diverger.
+
 ### 2.38 Creature-hash field attribution (2026-10-07)
 
 The §4.7 creature hash CAUGHT a live desync in the 2026-10-07 soak —
