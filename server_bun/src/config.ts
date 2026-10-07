@@ -87,11 +87,9 @@ export const CONFIG = {
   // Set to 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   minDemoLifetime: envNum('FPS_MIN_DEMO_LIFETIME', 0.2),
 
-  // Clip retention: live index cap, and archive cap for gzipped evictions.
-  // The archive exists for reach-back (Shot-of-the-Day etc.) — unbounded it
-  // just moves the disk-growth problem into a subdirectory.
+  // Live clip-index cap — evictions gzip into demos/archive/, which is
+  // write-only (operator-managed, never auto-deleted).
   demoMaxClips: envNum('FPS_DEMO_MAX', 100),
-  demoArchiveMax: envNum('FPS_DEMO_ARCHIVE_MAX', 500),
 
   // Server-owned creature sim — binary heightmap (8-byte w/h header + raw R
   // channel) matching the client's test_vertex.png source.

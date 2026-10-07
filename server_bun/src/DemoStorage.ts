@@ -19,8 +19,8 @@ export interface DemoMeta {
 }
 
 const INDEX_FILE = 'index.json';
-// Evicted clips gzip into archive/ rather than unlink — nothing is ever
-// truly lost (a future Shot-of-the-Day pin may reach back past the cap).
+// Evicted clips gzip into archive/ — write-only, nothing ever deletes
+// from it; the operator manages the pile manually.
 const ARCHIVE_DIR = 'archive';
 const gzipAsync = promisify(gzip);
 
@@ -204,24 +204,12 @@ export class DemoStorage {
           await unlink(src);
         } catch { /* eviction failure must not lose the save */ }
       }
-      await this.capArchive(archiveDir);
     }
 
     await this.saveIndex();
     logger.info('Demo saved', { filename, lifetime: header.projectileLifetime.toFixed(2), duration: header.duration.toFixed(1), size: data.byteLength, totalDemos: this.index.length });
 
     return { filename, projectileLifetime: header.projectileLifetime, description: header.description };
-  }
-
-  // Archive FIFO — clip filenames carry an ISO timestamp so name order is
-  // chronological order; oldest gz files go once past the cap.
-  private async capArchive(archiveDir: string): Promise<void> {
-    try {
-      const files = (await readdir(archiveDir)).filter(f => f.endsWith('.gz')).sort();
-      for (const f of files.slice(0, files.length - CONFIG.demoArchiveMax)) {
-        await unlink(join(archiveDir, f)).catch(() => {});
-      }
-    } catch { /* retention sweep failure is benign */ }
   }
 
   async listDemos(): Promise<DemoMeta[]> {
