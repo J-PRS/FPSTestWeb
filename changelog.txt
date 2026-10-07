@@ -1,3 +1,4 @@
+2026-10-01 - naming: Katabatic killed (it IS T2's most-played map - audacious, not homage); Hoodoo top pick
 2026-10-01 - naming: merged _scratch/names.md pool; namespace check kills fusillade/arduus/fastigium
 2026-10-01 - hosting doc: TURN pick = Cloudflare Realtime (free 1TB/mo tier) over coturn/metered
 2026-10-01 - workflows: NOTES.md + workflows/beta-launch.md + robustify-round.md specs (loop-me); rootcheck allowlist

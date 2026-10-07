@@ -44,7 +44,7 @@ game fills with meaning beats an epic title.
 |------|---------|-------|
 | **Couloir** | steep mountain chute you ski down | On-theme like Katabatic; skiers know it. Maybe the winner. |
 | **Hoodoo** | desert rock spire + "a curse" | Double-loaded, memorable mouthfeel |
-| **Katabatic** | gravity-driven downslope wind; also a Tribes map | Literally the skiing mechanic; Tribes-heritage pick |
+| ~~Katabatic~~ | gravity-driven downslope wind; also a Tribes map | DEAD 2026-10-01: it IS Tribes' most-played map (T2 original + Ascend remake) - naming the game after their crown jewel reads as squatting, not homage |
 | **Inselberg** | lone mountain rising from a plain | German; perfect for a desert map |
 | **Haboob** | Arabic: the giant dust wall that eats cities | Funny but legit; .io energy |
 | **Fusillade** | simultaneous volley of fire | Unused artillery word |
@@ -132,7 +132,7 @@ game fills with meaning beats an epic title.
 
 ### Tribes-lineage homage (Broadside's trick: steal map/term names)
 
-- Katabatic ✓ (map + wind term)
+- ~~Katabatic~~ - killed: T2's most iconic map, too on the nose
 - Raindance, Drydock, Equinox, Blastside (T1/T2 maps)
 - Spinfusor register: coined weapon-name energy
 
@@ -175,3 +175,4 @@ couloir/hoodoo/katabatic/inselberg; .dev taken for all checked.
 Scratch list folded in from `_scratch/names.md`; katantē(s)/orthobamōn
 fail the diacritics filter as written but ASCII forms stay listed.
 
+Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo promoted to top pick.
