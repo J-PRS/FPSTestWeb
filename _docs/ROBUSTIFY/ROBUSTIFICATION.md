@@ -2235,3 +2235,17 @@ deadlines and distance gating; demo remoteFrames/events prune at the
 rolling buffer window; server payload size bounded at transport.
 
 ### 2.101 - end
+
+### 2.102 Command-buffer backstop pin (2026-10-08)
+
+The room.commands 2000-entry cap was the last unpinned bound on the
+wire path: a validated-message flood parking between drains would grow
+the queue unboundedly and stall the cmd phase for the room. New
+cmdBackstop.test.ts parks the buffer at the cap, sends a valid
+message, asserts the drop + msgsRejected increment; a second test
+proves normal traffic still lands. Lane audit: every wire type rides
+the rate-limit table or the shared 120/s default bucket; claim/hit/
+env/shot ledgers are all capped (spent 512, PROBE_CAP tail, kills 256);
+moveSim shadows untrack on both disconnect and removal.
+
+### 2.102 - end
