@@ -71,10 +71,10 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   const wrap = document.createElement('div');
   wrap.className = 'lb-quick';
   const specs: [string, () => void][] = [
-    ['HOST', () => p2pGo(`host:${code()}`, 0)],
-    ['JOIN', () => p2pGo(`join:${code()}`, 0)],
-    // Open lobby: host publicly — anyone pressing QUICK lands here.
-    ['HOST OPEN', () => p2pGo(`host:${code()}`, 1)],
+    ['HOST PRIVATE', () => p2pGo(`host:${code()}`, 0)],
+    ['JOIN BY CODE', () => p2pGo(`join:${code()}`, 0)],
+    // Open lobby: listed publicly — anyone pressing QUICK DUEL lands here.
+    ['HOST PUBLIC', () => p2pGo(`host:${code()}`, 1)],
     // Quick join: the relay hands back the oldest open lobby.
     ['QUICK DUEL', () => p2pGo('quick', 0)],
   ];
@@ -250,7 +250,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     nameInput.placeholder = 'auto';
     nameInput.className = 'lb-input';
     nameInput.style.cssText = 'flex:1;min-width:0;';
-    nameInput.addEventListener('keydown', (e) => e.stopPropagation());
+    nameInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') hostBtn.click();
+    });
     nameRow.appendChild(nameInput);
     const modeRow = field('MODE');
     const modeSelect = document.createElement('select');
@@ -294,10 +297,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         // ANY = let the map's own spec decide the ruleset.
         const mode = modeSelect.value || mapSelect.selectedOptions[0]?.dataset.mode || '';
         const bots = botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(botsInput.value) || 0));
-        // A typed name skips quickJoin — host names their own room.
+        // A typed name skips quickJoin — host names their own room. The
+        // MODE pick still applies or a named host silently drops it.
         const named = nameInput.value.trim();
         const room = named || (await h.deps.quickJoin(mode, map || undefined, bots)).room;
-        h.join(room, map || undefined, bots);
+        h.join(room, map || undefined, bots, mode || undefined);
       } catch { hostBtn.disabled = false; }
     });
 

@@ -293,8 +293,12 @@ export class Lobby {
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
     // map/bots/mode ride the URL so a disposed room rebuilds with its
-    // spec intact — and so refresh/share land in this same match.
+    // spec intact — and so refresh/share land in this same match. A duel
+    // session is mutually exclusive with a server room — drop it here.
+    settings.set('fps-p2p', '');
+    settings.set('fps-lobby', 0);
     const q = new URLSearchParams(location.search);
+    q.delete('p2p'); q.delete('lobby');
     if (name === 'default') {
       // Live hop cleans the param; the reload path needs ?room=default
       // present or the boot won't connect at all.
