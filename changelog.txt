@@ -1,3 +1,4 @@
+2026-10-07 - vite proxies API paths to :8000 so a cloudflared tunnel carries clips+ws on one origin
 2026-10-07 - clip feed: mobile auto-routes to /clips (coarse pointer), seekable progress bar, ?play opt-out
 2026-10-07 - /clips feed: swipeable best-shots playback (wheel/arrows/space/touch), slide transition, deep-links + OG meta shell, Clear Screen + progress bar
 2026-10-01 - demo archive is write-only: evictions gzip in, no auto-delete (operator-managed)

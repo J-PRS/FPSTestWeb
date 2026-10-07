@@ -4,10 +4,15 @@ import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 
 export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl: string }> {
-  const local = {
-    wsUrl: `ws://${window.location.hostname || 'localhost'}:8000/ws`,
-    httpUrl: `http://${window.location.hostname || 'localhost'}:8000`,
-  };
+  const hn = window.location.hostname || 'localhost';
+  // Served through the cloudflared preview tunnel: the API rides the same
+  // origin via the vite proxy (see vite.config.js server.proxy).
+  const local = hn.endsWith('.trycloudflare.com')
+    ? { wsUrl: `wss://${hn}/ws`, httpUrl: `https://${hn}` }
+    : {
+      wsUrl: `ws://${hn}:8000/ws`,
+      httpUrl: `http://${hn}:8000`,
+    };
   // ?server= wins (shareable link); the lobby's saved host is the
   // standing choice so nobody has to edit a URL to switch servers.
   let host = (urlParams.get('server')?.trim() || settings.get('fps-server').trim());

@@ -171,8 +171,22 @@ export default defineConfig(({ mode }) => ({
     watch: {
       usePolling: true, // Enable polling for reliable HMR in WSL2/Docker
     },
-    // No /server proxy: the client connects to ws://host:8000/ws directly,
-    // and the stale proxy was swallowing /server.json (prefix match) and
-    // trying to WS-proxy it to :8080 — ECONNREFUSED spam.
+    // API proxy — lets a single cloudflared tunnel carry the whole app
+    // (game ws + demo clips + map assets). Only reachable on tunneled
+    // origins; localhost dev still hits :8000 directly. /clips and
+    // /server.json must stay UN-proxied: /clips is the client's own SPA
+    // route and /server.json is a public asset (prefix-match footgun —
+    // the stale /server proxy that used to live here WS-proxied it to
+    // :8080 and spammed ECONNREFUSED).
+    proxy: {
+      '/ws': { target: 'ws://localhost:8000', ws: true },
+      '/demos': 'http://localhost:8000',
+      '/maps': 'http://localhost:8000',
+      '/rooms': 'http://localhost:8000',
+      '/status': 'http://localhost:8000',
+      '/metrics': 'http://localhost:8000',
+      '/client-log': 'http://localhost:8000',
+      '/weaponstats.html': 'http://localhost:8000',
+    },
   },
 }));
