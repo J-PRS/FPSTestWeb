@@ -107,7 +107,7 @@ export interface RoomInfo {
   moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number) => boolean | void;
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
-  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
+  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   /** Rabbit rooms: current flag carrier (null = flag loose). Present only
    *  in rabbit rooms — CombatHandler gates all PvP damage on the pair
    *  involving the carrier. */

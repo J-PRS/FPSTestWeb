@@ -295,7 +295,7 @@ export class RoomMoveSim {
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
-  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
+  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
     // reportInputSeq = the client's input counter at snapshot time. Only
@@ -313,7 +313,7 @@ export class RoomMoveSim {
     } else {
       sh.gapStreak = 0;
     }
-    return this.judge.reconcile(sh, playerId, pos, yaw, vel, reportInputSeq);
+    return this.judge.reconcile(sh, playerId, pos, yaw, vel, reportInputSeq, rttMs);
   }
 
   /** Aim/heading update for entities that never send position reports

@@ -1,3 +1,4 @@
+2026-10-01 - netcode: judge credits RTT/2 transit staleness - sustained 150ms ping no longer rubberbands (latency soak pinned)
 2026-10-01 - logRotate: same-second roll collisions no longer clobber archives; rotation contract pinned
 2026-10-01 - soakChaos: gate healed-phase p95 (exclude outage+converge windows) - server suite fully green
 2026-10-01 - moveJudge: pin young-gap semantics - correction flows, no strike banking (soak residual traced to reconnect windows)

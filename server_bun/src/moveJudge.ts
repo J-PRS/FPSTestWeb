@@ -147,6 +147,10 @@ const SEVERE_MS = 60_000;
  *  the edge is judged lost: comfortably past the slowest legal input
  *  lane (netbots heartbeat at 400ms) plus a recovery RTT. */
 const INPUT_GAP_DEFER_MS = 600;
+/** Cap on the self-reported RTT credited as link-transit tolerance — a
+ *  forged multi-second ping widens the divergence budget by at most
+ *  speed×RTT_CAP/2 (~6m at ski speed), far under the SEVERE_M trip. */
+const RTT_TOL_CAP_MS = 300;
 
 export class MoveJudge {
   constructor(private host: JudgeHost) {}
@@ -154,7 +158,7 @@ export class MoveJudge {
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
-  reconcile(sh: Shadow, playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
+  reconcile(sh: Shadow, playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const s = sh.sim.state;
     const reportNow = wallNow();
     if (sh.lastReportAt > 0) {
@@ -235,7 +239,15 @@ export class MoveJudge {
     const speed3d = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
     const simRate = sh.reportEma > 0 ? Math.min(1, 250 / sh.reportEma) : 1;
     const lagTol = speed3d * (1 - simRate) * (this.host.correctMs() / 1000 + 0.25);
-    const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol;
+    // The report is ~RTT/2 stale when judged — the shadow integrated to
+    // now while the snapshot left the client an uplink ago, so even a
+    // perfect prediction reads speed×transit off. On a sustained-ping
+    // link that systematic band sits over the tight authority tolerance
+    // and every report past it re-fires a correction — the rubberband
+    // loop. Only the TRANSIT share is credited: upstream jitter past the
+    // mean still diverges honestly.
+    const transitTol = speed3d * Math.min(Math.max(rttMs ?? 0, 0), RTT_TOL_CAP_MS) / 2000;
+    const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol + transitTol;
     if (dist <= tol) return null;
 
     // Young-gap reports get corrected like any over-tolerance drift but

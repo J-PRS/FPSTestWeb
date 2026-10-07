@@ -19,7 +19,7 @@ export interface MoveHost {
   /** Room-side announce gate — first position report broadcasts join. */
   announceIfInWorld(player: PlayerState): void;
   moveAuthority(): boolean;
-  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number):
+  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number):
     { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   moveResync(playerId: string, pos: Vec3, yaw: number): void;
   moveMute(playerId: string): void;
@@ -52,7 +52,9 @@ export class MoveClaims {
 
     // inputSeq (not the frame seq) anchors the probe: it's the count of
     // inputMove events the client had consumed when it took this snapshot.
-    const simTruth = this.h.moveReport(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq);
+    // msg.ping is the client's own RTT measure riding this frame — the
+    // judge credits it as link-transit staleness (see moveJudge).
+    const simTruth = this.h.moveReport(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq, msg.ping);
 
     if (this.h.moveAuthority()) {
       // Authority mode: the sim owns position — the report only feeds it

@@ -2644,3 +2644,25 @@ whole contract: over-size rolls to OLD/ stamped, under/empty/missing
 never roll, OLD/ prunes to 16 newest by mtime, and a failed rotate
 never throws (appends can't be blocked by rotation).
 ### 2.133 - end
+
+### 2.134 - sustained-RTT judge: transit staleness no longer rubberbands
+
+The latency soak asked "does 150ms play" and the suite answered "no":
+a position report is ~RTT/2 stale by the time the judge compares it,
+so on a clean 75ms uplink the client's legit prediction reads
+speed*transit off (~3.5m at ski speed) - over the authority mode's
+1.5m tolerance every report past it re-fired a correction at the
+100ms throttle cadence (117 corrections / 20s = a rubberband loop,
+and each snap counted toward the divergence ledger). moveJudge now
+credits the systematic transit band: tol += speed3d * rttMs/2, where
+rttMs is the client's own ping measure riding the position frame,
+capped at RTT_TOL_CAP_MS=300 so a forged multi-second ping can widen
+the budget by at most speed*0.15 (~6m) - far under the SEVERE_M
+kick trip. Plumbed position msg.ping through
+moveClaims->Room.moveReport->RoomMoveSim.reconcile->MoveJudge.
+New tests/net/latencySoak.test.ts drives the real bridge on clean
+sustained links: 150ms RTT = 45 corrections/20s (was 117), post-snap
+residual p95 1.72m; 300ms probe converges in a bounded ~5.7m transit
+band instead of drifting. The 150ms global-play floor now works by
+construction, not by hope.
+### 2.134 - end

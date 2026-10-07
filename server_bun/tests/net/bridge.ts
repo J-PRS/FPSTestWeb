@@ -228,6 +228,9 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       const s = client.state;
       up.send(JSON.stringify({
         type: 'position', seq: ++posSeq, inputSeq: journal.seq,
+        // Production rides the client's own RTT measure on the frame — the
+        // bridge knows its link's latency, so report it the same way.
+        ping: (profile.up?.latencyMs ?? 0) + (profile.down?.latencyMs ?? 0),
         position: { ...s.pos }, velocity: { ...s.vel }, rotation: { yaw, pitch: 0 },
       }), now);
     }
@@ -237,11 +240,12 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       const m = JSON.parse(raw as string) as {
         type: string; seq: number; input?: WireInput; inputSeq?: number;
         position?: Vec3Like; velocity?: Vec3Like; rotation?: { yaw: number };
+        ping?: number;
       };
       if (m.type === 'inputMove') {
         server.queueInput(PID, m.input!, 0, m.seq);
       } else if (m.type === 'position') {
-        const truth = server.reconcile(PID, m.position!, m.rotation!.yaw, m.velocity, m.inputSeq);
+        const truth = server.reconcile(PID, m.position!, m.rotation!.yaw, m.velocity, m.inputSeq, m.ping);
         if (truth) {
           cm.sendToPlayer(PID, {
             type: 'correction', seq: m.seq, inputSeq: truth.inputSeq,
