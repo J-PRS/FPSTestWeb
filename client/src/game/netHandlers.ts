@@ -130,6 +130,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     },
     switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
+    isConnected: () => networkManager.isConnected(),
     listP2pLobbies: async () => {
       const res = await fetch(`${httpUrl}/rtc/lobbies`);
       if (!res.ok) {throw new Error(`lobbies ${res.status}`);}

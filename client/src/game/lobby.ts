@@ -58,6 +58,10 @@ export interface LobbyDeps {
   /** GET /rtc/lobbies — public P2P hosts still waiting for a peer.
    *  Absent → P2P tab hides the open-lobby list. */
   listP2pLobbies?(): Promise<{ room: string; since: number }[]>;
+  /** Live socket check — without it a solo-offline boot reads as "in
+   *  the default room" and the join path dead-ends (row disabled,
+   *  early return). Absent → assume online (legacy behavior). */
+  isConnected?(): boolean;
 }
 
 const POLL_MS = 3000;
@@ -84,6 +88,12 @@ export class Lobby {
 
   currentRoom(): string {
     return urlParams.room ?? 'default';
+  }
+
+  /** True membership vs the ?room fallback — a solo boot has room==null
+   *  and no socket, so it is in NO room, not the default one. */
+  private online(): boolean {
+    return this.deps.isConnected?.() ?? true;
   }
 
   constructor(deps: LobbyDeps) {
@@ -225,17 +235,28 @@ export class Lobby {
     const rank = (r: RoomRow) => (r.name === 'default' ? 0 : favs.has(r.name) ? 1 : 2);
     rooms.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const cur = rooms.find((r) => r.name === this.currentRoom());
-    this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`;
-    // Default lobby IS home — leaving it is a no-op.
-    this.leaveBtn.disabled = this.currentRoom() === 'default';
+    const online = this.online();
+    this.here.textContent = online
+      ? `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`
+      : 'IN: OFFLINE';
+    // Default lobby IS home — leaving it is a no-op; offline there's no
+    // room to leave, but the button doubles as "go to the lobby".
+    this.leaveBtn.disabled = online && this.currentRoom() === 'default';
+    this.leaveBtn.textContent = online ? 'LEAVE' : 'GO';
     for (const r of rooms) {this.addRow(r);}
+    if (rooms.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:rgba(58,167,255,0.5);padding:6px 2px;';
+      empty.textContent = '— no matches — host one or create by name below';
+      this.rows.append(empty);
+    }
   }
 
   private addRow(r: RoomRow): void {
     const row = document.createElement('button');
     row.className = 'lb-room';
     const full = r.players >= r.maxPlayers;
-    const current = r.name === this.currentRoom();
+    const current = this.online() && r.name === this.currentRoom();
     if (full || current) {row.disabled = true;}
     if (current) {row.classList.add('current');}
     if (full) {row.classList.add('full');}
@@ -263,16 +284,25 @@ export class Lobby {
 
   join(name: string, map?: string, bots?: number, mode?: string): void {
     // Already there — a reload would boot us into the same seat anyway.
-    if (name === this.currentRoom()) {return;}
+    // Offline solo has no room, so 'default' is a real join target.
+    if (name === this.currentRoom() && this.online()) {return;}
     // map/bots/mode ride the URL so a disposed room rebuilds with its
     // spec intact — and so refresh/share land in this same match.
     const q = new URLSearchParams(location.search);
-    if (name === 'default') {q.delete('room');}
-    else {q.set('room', name);}
+    if (name === 'default') {
+      // Live hop cleans the param; the reload path needs ?room=default
+      // present or the boot won't connect at all.
+      if (this.deps.switchRoom?.(name, map, bots, mode)) {
+        q.delete('room');
+        history.replaceState(null, '', q.toString() ? `${location.pathname}?${q}` : location.pathname);
+        return;
+      }
+      q.set('room', 'default');
+    } else {q.set('room', name);}
     for (const [k, v] of [['map', map], ['bots', bots], ['mode', mode]] as const) {
       if (v !== undefined && v !== '') {q.set(k, String(v));} else {q.delete(k);}
     }
-    const href = `${location.pathname}?${q.toString()}`;
+    const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
     // Live socket: hop in place — the gameState rebuild does the rest.
     if (this.deps.switchRoom?.(name, map, bots, mode)) {
       history.replaceState(null, '', href);

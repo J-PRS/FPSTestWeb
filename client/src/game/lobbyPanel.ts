@@ -163,11 +163,17 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     // ESC-menu disconnect — the classic "leave server" is a one-shot
     // reload to a clean URL: solo boot IS the disconnected state, so no
-    // teardown logic lives client-side.
+    // teardown logic lives client-side. Visibility re-evaluates on each
+    // menu open because in-place switchRoom hops change the room without
+    // a reload.
     const leaveServerBtn = document.getElementById('leave-server');
-    if (leaveServerBtn) {
+    const syncLeaveBtn = () => {
+      if (!leaveServerBtn) {return;}
       const online = urlParams.room != null || urlParams.p2p != null || settings.get('fps-p2p') !== '';
       leaveServerBtn.style.display = online ? 'block' : 'none';
+    };
+    if (leaveServerBtn) {
+      syncLeaveBtn();
       leaveServerBtn.addEventListener('click', () => {
         settings.set('fps-p2p', '');
         settings.set('fps-lobby', 0);
@@ -368,8 +374,8 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const refreshLobs = () => { void refreshLobsFn(); };
     refreshLobs();
 
-    joinPage.append(headRow, hereRow, rows, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
-    tabs.get('HOST')!.append(hostLbl, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick);
+    joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
+    tabs.get('HOST')!.append(hostLbl, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
     tabs.get('OFFLINE')!.append(buildOfflineList());
     tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
 
@@ -378,12 +384,19 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
+    let menuWasOpen = false;
     new MutationObserver(() => {
-      if (!document.body.classList.contains('menu-open') && panel.style.display !== 'none') h.toggle();
-      // Not in a game → the browser IS the front door: opening the menu
-      // lands on the room list instead of a blank settings column.
+      const menuOpen = document.body.classList.contains('menu-open');
+      if (!menuOpen && panel.style.display !== 'none') h.toggle();
+      // Not in a game → the browser IS the front door: the menu OPEN
+      // transition lands on the room list. Edge-triggered only — a user
+      // who closed the panel while the menu stays open keeps it closed.
       const offline = urlParams.room == null && urlParams.p2p == null && settings.get('fps-p2p') === '';
-      if (document.body.classList.contains('menu-open') && offline && panel.style.display === 'none') h.toggle();
+      if (menuOpen && !menuWasOpen) {
+        syncLeaveBtn();
+        if (offline && panel.style.display === 'none') h.toggle();
+      }
+      menuWasOpen = menuOpen;
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   
   return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs };
