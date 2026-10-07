@@ -80,7 +80,7 @@ describe('dodge', () => {
 
 describe('stuckBreak', () => {
   const state = (): EscapeState => ({
-    stuckStreak: 0, orbitStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
+    stuckStreak: 0, orbitStreak: 0, pinStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
     progressPos: { x: 0, y: 0, z: 0 }, progressT: 0, progressGoalD: Infinity, goalWinT: 0,
     pinX: 0, pinZ: 0, pinT: 0,
     goal: { x: 20, y: 0, z: 0 },

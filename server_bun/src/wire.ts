@@ -84,43 +84,6 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id, m) => h.moves.handleTeleport(id, m),
   },
 
-  shot: {
-    // Flood gate, not the cadence law (fireWindows owns trigger spacing).
-    // Legal worst case isn't the chaingun (~11/s): fan weapons claim every
-    // pellet per pull — a 0.7s shotgun can land two pulls (2×10) inside one
-    // window, and a stream-weapon swap adds its tail on the same bucket.
-    limit: { maxCount: 40, windowMs: 1000 },
-    validate: (obj) => {
-      const targetId = obj.targetId;
-      if (targetId !== null && typeof targetId !== 'string') {
-        return { success: false, error: 'targetId must be string or null' };
-      }
-      const position = optVec(obj.position);
-      if (!position.ok) return { success: false, error: `position: ${position.error}` };
-      const velocity = optVec(obj.velocity);
-      if (!velocity.ok) return { success: false, error: `velocity: ${velocity.error}` };
-      const wt = optWeaponType(obj.weaponType);
-      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
-      const pid = optProjIdOpt(obj.projectileId);
-      if (!pid.ok) return { success: false, error: 'projectileId: oversized' };
-      return {
-        success: true,
-        data: {
-          type: 'shot',
-          targetId: targetId as string | null,
-          position: position.ok ? position.data : undefined,
-          velocity: velocity.ok ? velocity.data : undefined,
-          timestamp: isFiniteNumber(obj.timestamp) ? obj.timestamp : undefined,
-          projectileId: pid.v,
-          weaponType: wt.v,
-          airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
-          shotId: optShotId(obj.shotId),
-        },
-      };
-    },
-    handle: (h, id, m) => h.combat.handleShot(id, m),
-  },
-
   aoeShot: {
     // All AOE weapons share one bucket — GL spam is the ceiling it guards,
     // but the floor is the Lightning beam: ~22 on-target ticks/s, so a held

@@ -7,7 +7,7 @@
 // exercise — a server-internal bot can never produce a reject.
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
-import { MoveSim, ENERGY, GRAVITY } from '../../shared/movement.ts';
+import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 
 import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
@@ -24,46 +24,15 @@ const THINK_S = 0.3;
 const POS_HZ = 10;
 /** Client-side cruise speed — roughly a medium on skis. */
 const CRUISE = 32;
-/** Bots miss on purpose — a claim rate humans actually produce. */
-const DIRECT_P = 0.55;
-const BLAST_P = 0.25;
-
-interface Shell {
-  shotId: string;
-  weaponType: number;
-  targetId: string;
-  /** Flight seconds — the claim's airtime value. */
-  flightS: number;
-  /** When the client-side flight should land. */
-  impactAt: number;
-  impactPos: Vec3;
-  /** Spawn origin + launch velocity — the shell's legal endpoint is a
-   *  point ON its own arc, not wherever the target happened to stand;
-   *  claiming blast at the target reads as a forged trajectory (reach
-   *  rejects prove the server checks exactly this). */
-  origin: Vec3;
-  launchVel: Vec3;
-  /** 'b' = ball, 'c' = crawler — creature targets claim via the
-   *  creatureHit/crawlerHit wire path instead of a `shot` hit. */
-  creature: '' | 'b' | 'c';
-  rolled: boolean;
-}
 
 export class NetBot {
   private brain: BotBrain;
   private loadout = BOT_LOADOUTS[Math.floor(Math.random() * BOT_LOADOUTS.length)] ?? BOT_LOADOUTS[0]!;
   private get cls() { return botClassForLoadout(this.loadout); }
-  private shells: Shell[] = [];
-  /** Spawn claims awaiting their projectileCreated echo — a client on a
-   *  lossy transport retransmits (the server dedups by shotId, so resends
-   *  are idempotent); on reliable lanes the echo always beats the timer
-   *  and this stays empty. */
-  private spawns = new Map<string, { msg: ClientMessage; at: number }>();
   private shotN = 0;
   private thinkTimer: ReturnType<typeof setInterval> | null = null;
   private lastFireAt = 0;
   private posTimer: ReturnType<typeof setInterval> | null = null;
-  private claimTimer: ReturnType<typeof setInterval> | null = null;
   private hopTimer: ReturnType<typeof setInterval> | null = null;
   private dropTimer: ReturnType<typeof setInterval> | null = null;
   /** Fire silence during the last stretch before a room hop — jittered
@@ -79,40 +48,13 @@ export class NetBot {
     this.forceCapper = !!opts.capper;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
-    // A reject is a verdict, not transport loss — the resend loop only
-    // exists for claims that never got ANY answer, so a refused spawn
-    // leaves the queue (and its impact shell rolls off the wire too,
-    // else it claims 'no known projectile' at flight end).
-    nc.onShotRejected = (m) => {
-      if (!m.shotId) return;
-      this.spawns.delete(m.shotId);
-      this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
-    };
-    nc.onClaimDropped = (m) => {
-      if (!m.shotId) return;
-      this.spawns.delete(m.shotId);
-      this.shells = this.shells.filter((s) => s.shotId !== m.shotId);
-    };
-    // World resynced (reconnect, room hop): the gap let the server move
-    // our record without us seeing it — pre-state claims carry stale
-    // origins, same invariant as the hop purge.
-    nc.onGameState = () => {
-      if (this.spawns.size) this.spawns.clear();
-      if (this.shells.length) this.shells.length = 0;
-    };
     if (opts.hopEveryMs) {
       this.hopTimer = setInterval(() => {
         // Hold fire for the jitter window first, THEN send the switch —
         // see holdFireUntil.
         this.holdFireUntil = Date.now() + 300;
         setTimeout(() => {
-          // Mid-match room hop — the seq-watermark bug class lives here.
-          // Shells don't cross rooms: un-acked spawns and in-flight
-          // impact claims for the old room's sky would retransmit into
-          // the new room with stale positions and earn implausible-spawn
-          // rejects — a real client's projectiles die with the room too.
-          this.spawns.clear();
-          this.shells.length = 0;
+          nc.send({ type: 'switchRoom', room: this.rand() < 0.5 ? 'netbot-a' : 'netbot-b', mode: 'dm' });
           nc.send({ type: 'switchRoom', room: this.rand() < 0.5 ? 'netbot-a' : 'netbot-b', mode: 'dm' });
           nc.tel.hops++;
         }, 200);
@@ -135,11 +77,10 @@ export class NetBot {
   start(): void {
     this.thinkTimer = setInterval(() => this.think(), THINK_S * 1000);
     this.posTimer = setInterval(() => this.sendPos(), 1000 / POS_HZ);
-    this.claimTimer = setInterval(() => this.settle(), 50);
   }
 
   stop(): void {
-    for (const t of [this.thinkTimer, this.posTimer, this.claimTimer, this.hopTimer, this.dropTimer]) {
+    for (const t of [this.thinkTimer, this.posTimer, this.hopTimer, this.dropTimer]) {
       if (t) clearInterval(t);
     }
   }
@@ -287,12 +228,6 @@ export class NetBot {
   private think(): void {
     const nc = this.nc;
     if (nc.self.isDead) {
-      // Un-acked spawns resend with their fire-time origin — after a
-      // respawn that origin is ~the corpse site, which the server reads
-      // as an implausible spawn, and every resend also eats a
-      // fire-window slot. Dead players own no shells; drop the queues.
-      if (this.spawns.size) this.spawns.clear();
-      if (this.shells.length) this.shells.length = 0;
       return;
     }
     // Getting shot is a priority interrupt — a bot that keeps walking
@@ -398,7 +333,6 @@ export class NetBot {
     // enemies — it's the most human shot there is. A claim that lands
     // after the target dies hits the same server reject any player's
     // late volley would.
-    const isCreature = targetId.startsWith('b:') || targetId.startsWith('c:');
     const weaponType = this.legalWeapon(dist);
     const w = WEAPONS[weaponType];
     if (!w || w.speed <= 0) return blocked('speed0'); // hitscan kinds — skip for now, beams need their own claim shape
@@ -416,138 +350,16 @@ export class NetBot {
     };
     const dl = Math.hypot(dir.x, dir.y, dir.z) || 1;
     const shotId = `${nc.id}-s${++this.shotN}`;
-    const spawnMsg: ClientMessage = {
-      type: 'shot', targetId: null, weaponType,
-      position: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
-      velocity: { x: (dir.x / dl) * w.speed, y: (dir.y / dl) * w.speed, z: (dir.z / dl) * w.speed },
+    // Claimless: one fire intent carries aim only — the server sims the
+    // shell and declares every outcome. No spawn claim, no hit claim,
+    // no settle bookkeeping; a real client predicts and stops there.
+    nc.send({
+      type: 'shotFired', weaponType,
+      dir: { x: dir.x / dl, y: dir.y / dl, z: dir.z / dl },
+      pos: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       shotId,
-      timestamp: Date.now(), // client fire clock — the fire-rate gate's jitter escape hatch
-    };
-    nc.send(spawnMsg);
-    this.spawns.set(shotId, { msg: spawnMsg, at: Date.now() });
+    } as ClientMessage);
     nc.tel.shots++;
-    const flightS = dist / w.speed;
-    // Lead the claim like a real client does — the shell lands where
-    // the target will BE at impact, and the server validates that point
-    // against the rewound position (a stale pos reads as a forged hit).
-    this.shells.push({
-      shotId, weaponType, targetId,
-      flightS,
-      impactAt: Date.now() + flightS * 1000,
-      origin: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
-      launchVel: { x: (dir.x / dl) * w.speed, y: (dir.y / dl) * w.speed, z: (dir.z / dl) * w.speed },
-      impactPos: {
-        x: target.pos.x + target.vel.x * flightS,
-        y: target.pos.y + target.vel.y * flightS,
-        z: target.pos.z + target.vel.z * flightS,
-      },
-      creature: isCreature ? (targetId.startsWith('b:') ? 'b' : 'c') : '',
-      rolled: false,
-    });
-  }
-
-  /** Impact bookkeeping — when the client-side flight should have landed,
-   *  emit the same claim pair impact.ts emits (direct `shot` + blast
-   *  `aoeShot`), with honest misses interleaved. */
-  private settle(): void {
-    const nc = this.nc;
-    const now = Date.now();
-    // Retransmit spawns the server never acked — the projectileCreated
-    // echo is the ack. Beyond ~2s the shell's flight is over anyway.
-    for (const [shotId, sp] of this.spawns) {
-      if (nc.projectiles.has(shotId) || now - sp.at > 2000) { this.spawns.delete(shotId); continue; }
-      if (now - sp.at > 400) { nc.send(sp.msg); sp.at = now - 200; }
-    }
-    this.shells = this.shells.filter((sh) => {
-      if (now < sh.impactAt) return true;
-      if (sh.rolled) return false;
-      sh.rolled = true;
-      const airtime = sh.flightS;
-      const w = WEAPONS[sh.weaponType];
-      const projId = nc.projectiles.get(sh.shotId);
-      const roll = this.rand();
-      const aoe = (w?.aoeRadius ?? 0) > 0;
-      const target = this.targetEntry(sh.targetId);
-      // Where the shell really is at flight end — the blast claims this
-      // point, not the target's position; a shell can't detonate off
-      // its own arc and the server's reach check knows it.
-      const drop = w?.gravity ? 0.5 * GRAVITY * sh.flightS * sh.flightS : 0;
-      const endPos = {
-        x: sh.origin.x + sh.launchVel.x * sh.flightS,
-        y: sh.origin.y + sh.launchVel.y * sh.flightS + drop,
-        z: sh.origin.z + sh.launchVel.z * sh.flightS,
-      };
-
-      if (roll < DIRECT_P && target && !target.isDead) {
-        // Direct claims need the target's position at claim-land time —
-        // the server rewinds it by our ping. Our roster copy is up to a
-        // tick stale plus the link latency, so a sprinting target is
-        // already outside the ~1-3m legal radius no matter the lead:
-        // honest players splash those, they only body-claim the slow
-        // ones. Sprinting targets take the blast branch instead.
-        if (sh.creature) {
-          // Creature hits don't rewind a player — the server sanity-
-          // clamps damage against its own sim. Same claim a real
-          // client's contact path emits.
-          const dmg = WEAPONS[sh.weaponType]?.directDamage ?? 0;
-          nc.send({
-            type: sh.creature === 'b' ? 'creatureHit' : 'crawlerHit',
-            id: +sh.targetId.slice(2), damage: dmg,
-          } as ClientMessage);
-          nc.tel.claims++;
-          return false;
-        }
-        const speed = Math.hypot(target.vel.x, target.vel.z);
-        const leadS = nc.pingMs / 2000 + 0.05;
-        const hitPos = {
-          x: target.pos.x + target.vel.x * leadS,
-          y: target.pos.y + target.vel.y * leadS,
-          z: target.pos.z + target.vel.z * leadS,
-        };
-        // Even slow targets get dodged: a juking player ends up meters
-        // from where the shell lands, and a real client sees that whiff —
-        // it never claims the hit. Only claim when the impact point still
-        // overlaps the capsule our own model renders, else take the miss
-        // branch like the real impact path does.
-        const contact = Math.hypot(sh.impactPos.x - target.pos.x, sh.impactPos.y - target.pos.y, sh.impactPos.z - target.pos.z);
-        if (speed > 15 || contact > 1.0) {
-          if (aoe) {
-            nc.send({
-              type: 'aoeShot', position: endPos, weaponType: sh.weaponType,
-              projectileId: projId ?? null, shotId: sh.shotId, airtime,
-            });
-            nc.tel.claims++;
-          } else if (projId) {
-            // No splash to offer — a sprinting target is unclaimable,
-            // so the shell just dies like a real whiffed shot.
-            nc.send({ type: 'projectileDestroy', projectileId: projId, shotId: sh.shotId });
-          }
-          return false;
-        }
-        nc.send({ type: 'shot', targetId: sh.targetId, weaponType: sh.weaponType, position: hitPos, projectileId: projId ?? null, shotId: sh.shotId, airtime });
-        nc.tel.claims++;
-        if (aoe) {
-          nc.send({
-            type: 'aoeShot', position: hitPos, weaponType: sh.weaponType,
-            excludeTargetId: sh.targetId, projectileId: projId ?? null, shotId: sh.shotId,
-            airtime, directHit: true,
-          });
-          nc.tel.claims++;
-        }
-      } else if (roll < DIRECT_P + BLAST_P && aoe) {
-        // Blast-only: near miss that still splashes — claimed where
-        // the shell's own arc ends, not at the target.
-        nc.send({
-          type: 'aoeShot', position: endPos, weaponType: sh.weaponType,
-          projectileId: projId ?? null, shotId: sh.shotId, airtime,
-        });
-        nc.tel.claims++;
-      } else if (projId) {
-        // Clean miss — shell dies at terrain/fuse like a real shot.
-        nc.send({ type: 'projectileDestroy', projectileId: projId, shotId: sh.shotId });
-      }
-      return false;
-    });
   }
 
   private inSeq = 0;

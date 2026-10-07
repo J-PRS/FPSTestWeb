@@ -1,3 +1,6 @@
+2026-10-01 - C5 demolition: 'shot' wire claim deleted end-to-end (codec/protocol/handler/client/netbot) - shotFired intent is the only path; server-simmed shells refuse all projectileDestroy incl. owner; scenario+netbot tests converted
+2026-10-07 - netdiag: stall watchdog skips document.hidden (throttled interval + starved pump read as fake silence -> mid-hide reprobes); BALL DESYNC warn is per-id+field persistent now — enraged/tgt boundary churn on rotating balls stays debug, only a diff pinned to the same ball twice escalates
+2026-10-07 - reconnect restore: localPlayerState carries the shadow's inputSeq watermark; restoreLocalPlayer rewinds+journal-replays like a correction instead of hard-snapping to last-accepted pos (the 'teleported when they score' flap-pull under loss)
 2026-10-01 - C5: melee intent - shotFired drives the swing, server derives arc point (no position claim); 3 scenario tests; client drops melee aoeShot
 2026-10-01 - C5: proxy + satchel claimless - satchel gains server stick (rests to fuse); wake bubble already modeled; only bodyless kinds (melee/lg/repair/healbeam/slam) remain on claims
 2026-10-01 - C5: all bodied weapons claimless - chaingun/railgun/cannon/rocket/pistol/revolver/sprinkler join SERVER_SIMMED_WEAPONS; only true hitscan (melee/lg/repair/healbeam/slam) + armed deployables (proxy/satchel) remain on claims

@@ -132,17 +132,9 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     }
     return p;
   }
-  deps.lazyNetworkManager().sendShot({
-    targetId: null, // no target yet
-    position: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
-    velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
-    weaponType: config.weaponType,
-    shotId: p.shotId ?? undefined,
-    // Trigger-time stamp — the server's fire-window escape hatch compares
-    // client-side spacing, and wire compression (batching/backlog drain)
-    // otherwise makes two legal shots arrive inside one window.
-    timestamp: Date.now(),
-  });
+  // Non-simmed shells (bomblets, cookoff scatter) are prediction-only —
+  // the server's own carrier/body sim owns every authoritative spawn,
+  // so nothing claims a spawn over the wire anymore.
   return p;
 }
 

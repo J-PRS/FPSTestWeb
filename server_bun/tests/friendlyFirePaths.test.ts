@@ -4,15 +4,8 @@ import { PlayerManager } from '../src/PlayerManager.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 
-/** AOE claims only resolve against a live projectile — spawn the rocket
- *  first (miss-branch shot registers proj_N server-side). */
-function spawnProj(combat: CombatHandler, id: string): void {
-  combat.handleShot(id, {
-    type: 'shot', targetId: null,
-    position: { x: 0, y: 10, z: 0 }, velocity: { x: 0, y: 0, z: -60 },
-    weaponType: WeaponType.BoltLauncher,
-  });
-}
+/** Skill claims need no projectile — melee/slam/lightning validate on
+ *  reach and occlusion, so these paths don't spawn a shell first. */
 
 // Friendly-fire sweep — every damage path between two 'alpha' teammates
 // must stay dry with the option off and wet with it on. The room-level
@@ -32,6 +25,7 @@ function harness(friendlyFire = false) {
   // Shooter + victim on the same team, parked at claim-plausible spots.
   const shooter = players.addPlayer('a1', 'alpha');
   shooter.position = { x: 0, y: 10, z: 0 };
+  shooter.armorClass = 'light'; // Lightning is light-tier — the class-lock gate otherwise refuses the tick
   shooter.protectedUntil = 0;
   const target = players.addPlayer('a2', 'alpha');
   target.position = { x: 0, y: 10, z: -3 };
@@ -40,26 +34,21 @@ function harness(friendlyFire = false) {
 }
 
 describe('friendly fire — damage paths', () => {
-  it('hitscan shot claim on a teammate', () => {
-    const { combat, target } = harness();
-    spawnProj(combat, 'a1'); // hit claims pair with a live projectile
-    combat.handleShot('a1', {
-      type: 'shot', targetId: 'a2',
-      position: { x: 0, y: 10, z: -3 }, velocity: { x: 0, y: 0, z: -60 },
-      weaponType: WeaponType.Chaingun, projectileId: 'proj_1', airtime: 0.05,
+  it('melee intent swing on a teammate', () => {
+    const { players, combat, target } = harness();
+    players.getPlayer('a1')!.position = { x: 0, y: 8.8, z: -1 }; // rewind pos ≈ swing origin
+    combat.handleShotFired('a1', {
+      type: 'shotFired', weaponType: WeaponType.Melee, dir: { x: 0, y: 0, z: -1 },
     });
     expect(target.health).toBe(target.maxHealth);
   });
 
   it('aoe splash at a teammate\'s feet', () => {
     const { combat, target } = harness();
-    spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot',
       position: { x: 0, y: 9.5, z: -3 }, // inside the victim's capsule
-      weaponType: WeaponType.BoltLauncher,
-      projectileId: 'proj_1',
-      airtime: 0.05,
+      weaponType: WeaponType.Slam,
     });
     expect(target.health).toBe(target.maxHealth);
   });
@@ -99,21 +88,20 @@ describe('friendly fire — damage paths', () => {
 });
 
 describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
-  it('hitscan + aoe + mine all damage teammates when enabled', () => {
+  it('beam tick + aoe + mine all damage teammates when enabled', () => {
     const { combat, target } = harness(true);
-    spawnProj(combat, 'a1');
-    combat.handleShot('a1', {
-      type: 'shot', targetId: 'a2',
-      position: { x: 0, y: 10, z: -3 }, velocity: { x: 0, y: 0, z: -60 },
-      weaponType: WeaponType.Chaingun, projectileId: 'proj_1', airtime: 0.05,
+    combat.handleAOEShot('a1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 10.8, z: -3 },
+      weaponType: WeaponType.Lightning,
+      excludeTargetId: 'a2',
     });
     expect(target.health).toBeLessThan(target.maxHealth);
 
     const after1 = target.health;
-    spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot', position: { x: 0, y: 9.5, z: -3 },
-      weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
+      weaponType: WeaponType.Slam,
     });
     expect(target.health).toBeLessThan(after1);
 
@@ -128,10 +116,9 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
     // Self-propulsion pays blood on server truth for humans too — a
     // feet blast costs up to SELF_SPLASH_MAX (the client self-predicts
     // the rocket-jump impulse; server only owns the damage).
-    spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot', position: { x: 0, y: 9, z: 0 },
-      weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
+      weaponType: WeaponType.Slam,
     });
     expect(self.health).toBeLessThan(self.maxHealth);
   });

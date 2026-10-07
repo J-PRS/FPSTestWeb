@@ -19,7 +19,6 @@ import type { RoomEventSink } from './roomEvents.ts';
 import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
-import { hitClaim, registerMiss } from './shotClaims.ts';
 import { simNow } from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -313,46 +312,6 @@ export class CombatHandler {
       logger.warn(`dropped ${held} deferred claim(s) on disconnect: ${playerId}`);
       this.pendingClaims = this.pendingClaims.filter(p => p.playerId !== playerId);
     }
-  }
-
-  handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) {
-      this.hb('drop.deadShooter');
-      if (player) this.notifyDrop(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
-      return;
-    }
-    this.hb('shot');
-    // Any new claim activity is also a retry opportunity for deferred
-    // ones — and the expiry trigger for claims whose spawn never lands.
-    this.flushClaims(playerId);
-    // Tier-locked ordnance — the menu filter is client-side convenience;
-    // this is the real boundary for doctored clients.
-    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
-      return;
-    }
-    player.protectedUntil = 0; // firing breaks your own spawn shield
-
-    if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
-    this.deps.emit?.({ type: 'fire', playerId });
-    if (msg.targetId) {
-      this.hitClaim(playerId, player, msg, msg.targetId);
-    } else {
-      this.registerMiss(playerId, player, msg);
-    }
-  }
-
-  /** A claim naming a target: every legality gate, then damage through
-   *  the shared outcome funnel. */
-  private hitClaim(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string): void {
-    hitClaim(this, playerId, player, msg, targetId);
-  }
-
-  /** A claim with no target: a miss. If it carries spawn coordinates it
-   *  also registers a tracked projectile observers can render. */
-  private registerMiss(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>): void {
-    registerMiss(this, playerId, player, msg);
   }
 
   /** Hitscan fire leaves no projectile for observers to see — relay a

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, freeze, twoPlayers, watch } from './harness.ts';
+import { mkRoom, step, freeze, twoPlayers } from './harness.ts';
 import { WeaponType, getWeaponStats } from '../../../shared/weapons.ts';
-import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // Server-side LG charge economy: beam ticks bank withheld damage ON the
 // victim, a non-LG hit detonates only what it invests, and a kill pops
@@ -20,29 +19,24 @@ function beamTick(room: Room, shooterId: string, victim: Player): void {
   } as never);
 }
 
-/** Fire a real projectile at the victim and claim the hit — spawn then
- *  claim, the same contract clients follow. */
+/** Fire a real intent — the server sims the shell toward the victim and
+ *  owns the hit itself; the shooter only ever declares direction. */
 function shootAt(room: Room, shooter: Player, victim: Player, weapon: WeaponType): void {
-  const w = watch(room);
+  // Aim at the capsule's axis midpoint: position.y is the capsule TOP
+  // (centerOff is negative), so chest-height guesses sail overhead.
   const dir = {
     x: victim.position.x - shooter.position.x,
-    y: 0,
+    y: (victim.position.y - 0.9) - (shooter.position.y + 1.6),
     z: victim.position.z - shooter.position.z,
   };
-  const len = Math.hypot(dir.x, dir.z) || 1;
-  const speed = getWeaponStats(weapon).speed ?? 90;
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
   room.messages.handleMessage(shooter.id, {
-    type: 'shot', targetId: null, weaponType: weapon,
-    position: { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z },
-    velocity: { x: (dir.x / len) * speed, y: 0, z: (dir.z / len) * speed },
+    type: 'shotFired', weaponType: weapon,
+    dir: { x: dir.x / len, y: dir.y / len, z: dir.z / len },
+    pos: { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z },
   } as never);
-  const created = w.msgs.filter((m) => m.type === 'projectileCreated') as Extract<ServerMessage, { type: 'projectileCreated' }>[];
-  const pid = created[created.length - 1]?.projectileId;
-  room.messages.handleMessage(shooter.id, {
-    type: 'shot', targetId: victim.id, weaponType: weapon, projectileId: pid,
-    position: { x: victim.position.x, y: victim.position.y + 1, z: victim.position.z },
-    airtime: 0.3,
-  } as never);
+  // The shell needs flight time to reach the victim — step the sim.
+  step(room, Math.ceil(len / (getWeaponStats(weapon).speed || 90) * 30) + 5);
 }
 
 describe('scenario: LG charge economy vs players', () => {
@@ -64,7 +58,7 @@ describe('scenario: LG charge economy vs players', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [a, b] = twoPlayers(room);
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
-    freeze(room, b.id, { x: 30, y: 31, z: 0 });
+    freeze(room, b.id, { x: 10, y: 31, z: 0 });
 
     for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
     const banked = b.charge;
@@ -84,8 +78,10 @@ describe('scenario: LG charge economy vs players', () => {
     const [a, b] = twoPlayers(room);
     const c = [...room.players.getAllPlayers().values()].find((p) => p.id !== a.id && p.id !== b.id)!;
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
-    freeze(room, b.id, { x: 30, y: 31, z: 0 });
-    freeze(room, c.id, { x: 32, y: 31, z: 0 }); // inside the pop radius
+    // Close range: a real flight step lets the bank drain before impact,
+    // so the corpse test fires from inside the detonation window.
+    freeze(room, b.id, { x: 6, y: 31, z: 0 });
+    freeze(room, c.id, { x: 8, y: 31, z: 0 }); // inside the pop radius
 
     for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
     expect(b.charge).toBeGreaterThan(0);

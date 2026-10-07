@@ -13,7 +13,6 @@ const VALID_BODIES: Record<string, Record<string, unknown>> = {
   teleport: { position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 } },
   ping: { timestamp: 1234 },
   chat: { text: 'hello', team: true },
-  shot: { targetId: 'p2', weaponType: 0, position: { x: 0, y: 60, z: 0 }, velocity: { x: 90, y: 0, z: 0 }, timestamp: 1, projectileId: 'proj_1', airtime: 0.5 },
   aoeShot: { position: { x: 1, y: 2, z: 3 }, weaponType: 2, excludeTargetId: 'p2', projectileId: 'proj_2', airtime: 0.8, power: 1, directHit: true },
   shotFired: { weaponType: 3, dir: { x: 1, y: 0, z: 0 } },
   jump: { position: { x: 0, y: 60, z: 0 } },
@@ -43,7 +42,7 @@ describe('validateMessage coverage', () => {
     const cases: [string, Record<string, unknown>, string[]][] = [
       ['position', { seq: 7, inputSeq: 6, ping: 40 }, ['seq', 'inputSeq', 'ping']],
       ['chat', { team: true }, ['team']],
-      ['shot', { projectileId: 'proj_1', airtime: 0.5, weaponType: 0 }, ['projectileId', 'airtime', 'weaponType']],
+      ['shotFired', { shotId: 's1', pos: { x: 1, y: 32, z: 0 } }, ['shotId', 'pos']],
       ['aoeShot', { projectileId: 'proj_2', excludeTargetId: 'p2', power: 1, directHit: true }, ['projectileId', 'excludeTargetId', 'power', 'directHit']],
       ['inputMove', { seq: 9 }, ['seq']],
       ['creatureHit', { kx: 0, ky: 0.5, kz: 0.86 }, ['kx', 'ky', 'kz']],

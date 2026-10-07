@@ -291,6 +291,11 @@ export class NetworkManager {
 
   private checkStall(): void {
     if (!this.isConnected() || !this.lastUrl) return;
+    // Hidden tabs throttle this interval AND starve the network pump —
+    // the "silent" window is throttling, not a dead socket. A real death
+    // still trips wt.closed/the pumps, and the visibility resync covers
+    // whatever's left on regain.
+    if (document.hidden) return;
     const silent = Date.now() - this.lastRxAt;
     if (this.lastRxAt === 0 || silent < NetworkManager.STALL_MS) return;
     logger.warn(`no server traffic in ${Math.round(silent)}ms — socket silent, reprobing`, { tier: this.ws?.tier });
@@ -653,28 +658,6 @@ export class NetworkManager {
       ...(position ? { position } : {}),
     });
     return isDead ? 'killed' : 'revived';
-  }
-
-  /**
-   * Send shot event to server
-   */
-  sendShot(a: {
-    targetId: string | null; position?: { x: number; y: number; z: number };
-    velocity?: { x: number; y: number; z: number }; timestamp?: number;
-    projectileId?: string | null; weaponType?: number; airtime?: number; shotId?: string;
-  }): void {
-    // Resync gap: until the replay lands our pos may be seconds of
-    // prediction off server truth — every claim born here spawns
-    // "implausible" and logs a reject. Drop it before the ledger sees
-    // it; the returning gameState clears the window.
-    if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; }
-    // Pencil the prediction into the confirm ledger — a playerHit or
-    // shotRejected clears it; silence past ~1.5s warns (see
-    // sweepPendingHits).
-    if (a.targetId && a.targetId !== 'local' && a.shotId) {
-      this.ledger.noteShot(a.shotId, a.targetId, a.weaponType);
-    }
-    this.send({ type: 'shot', ...a });
   }
 
   /** Single AOE message — weaponType resolves server-side via the shared

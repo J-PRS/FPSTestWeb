@@ -12,10 +12,9 @@ describe('scenario: dead-sender gate', () => {
     const lastValid = { ...a.lastValidPosition! };
 
     room.messages.handleMessage(a.id, {
-      type: 'shot', seq: 1,
-      position: { x: b.position.x, y: b.position.y, z: b.position.z },
-      velocity: { x: 0, y: 0, z: 0 },
-      weaponType: 1, claimedWeaponIndex: 1,
+      type: 'shotFired', seq: 1,
+      dir: { x: 1, y: 0, z: 0 },
+      weaponType: 10 /* Melee */,
     } as never);
     room.messages.handleMessage(a.id, { type: 'teleport', position: { x: 99, y: 31, z: 99 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } });
     room.moveSim.track(a.id, a.position, 0, a.perk);

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'bun:test';
 import { WIRE } from '../../src/wire.ts';
 import { WEAPONS } from '../../../shared/weapons.ts';
 
-const entries = ['shot', 'aoeShot', 'shotFired'] as const;
+const entries = ['aoeShot', 'shotFired'] as const;
 
 describe('wire: weaponType validation', () => {
   it('rejects out-of-table weaponType on every claim type', () => {
@@ -16,7 +16,7 @@ describe('wire: weaponType validation', () => {
   });
 
   it('rejects non-integer weaponType', () => {
-    const v = WIRE.shot!.validate({ type: 'shot', weaponType: 1.5 });
+    const v = WIRE.aoeShot!.validate({ type: 'aoeShot', weaponType: 1.5 });
     expect(v.success).toBe(false);
   });
 
@@ -24,16 +24,15 @@ describe('wire: weaponType validation', () => {
     // projectileId is a ledger/record map key — unbounded strings from a
     // 1MB frame were attacker-shaped key memory. Legit ids are short.
     const fat = 'p'.repeat(4096);
-    const base = { shot: { targetId: null }, aoeShot: { position: { x: 0, y: 0, z: 0 } } } as const;
-    expect(WIRE.shot!.validate({ type: 'shot', ...base.shot, projectileId: fat }).success).toBe(false);
+    const base = { aoeShot: { position: { x: 0, y: 0, z: 0 } } } as const;
     expect(WIRE.aoeShot!.validate({ type: 'aoeShot', ...base.aoeShot, projectileId: fat }).success).toBe(false);
     expect(WIRE.projectileDestroy!.validate({ type: 'projectileDestroy', projectileId: fat }).success).toBe(false);
-    expect(WIRE.shot!.validate({ type: 'shot', ...base.shot, projectileId: 'p1' }).success).toBe(true);
+    expect(WIRE.aoeShot!.validate({ type: 'aoeShot', ...base.aoeShot, projectileId: 'p1' }).success).toBe(true);
   });
 
   it('accepts absent weaponType (optional) and every real table key', () => {
-    // shot needs targetId (string|null); aoeShot needs position.
-    const base = { shot: { targetId: null }, aoeShot: { position: { x: 0, y: 0, z: 0 } }, shotFired: {} } as const;
+    // aoeShot needs position.
+    const base = { aoeShot: { position: { x: 0, y: 0, z: 0 } }, shotFired: {} } as const;
     for (const type of entries) {
       expect(WIRE[type]!.validate({ type, ...base[type] }).success).toBe(true);
       for (const k of Object.keys(WEAPONS)) {

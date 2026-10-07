@@ -54,6 +54,7 @@ function aoeVerdict(c: CombatCtx, p: Projectile, pos: { x: number; y: number; z:
   return validateAoeClaim({
     projectile: claimRecord(c, p), blastPos: pos, airtime,
     shooterVel: shooterVel(c), now: performance.now(), solids: p.solids(),
+    shooterTeam: c.deps.world.localTeam,
   });
 }
 
@@ -61,6 +62,7 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
   return validateHitClaim({
     projectile: claimRecord(c, p), hitPos, targetPos, airtime,
     shooterVel: shooterVel(c), now: performance.now(), solids: p.solids(),
+    shooterTeam: c.deps.world.localTeam,
     targetClass,
   });
 }
@@ -477,20 +479,9 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   logHitScore(c, p, 'player', airborne);
 
   if (playerId === 'local') return;
-  const networkManager = deps.lazyNetworkManager();
   // Server-simmed shells never claim their hit — predicted feedback
   // (damage numbers, bars, hitmarker) already ran above; the authority
   // declares the outcome via playerHit/projectileDestroyed.
-  if (networkManager && willClaim && !serverSimmed(p.config.weaponType)) {
-    networkManager.sendShot({
-      targetId: playerId,
-      position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
-      velocity: { x: p.vel.x, y: p.vel.y, z: p.vel.z },
-      timestamp: Date.now(), projectileId: p.serverProjectileId,
-      weaponType: p.config.weaponType, airtime: p.hitAge, shotId: p.shotId ?? undefined,
-    });
-    deps.logger.info(`[Shot] hit claim -> ${playerId} dmg=${Math.round(directDamage)} proj=${p.serverProjectileId} shot=${p.shotId ?? '-'} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);
-  }
 }
 
 /** Nugget Wars bots damaging creatures: the identical funnel a

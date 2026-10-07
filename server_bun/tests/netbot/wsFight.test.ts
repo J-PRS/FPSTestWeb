@@ -23,7 +23,7 @@ describe('netbot — real clients over real sockets', () => {
     const t1 = t();
     for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
     const shots = t1.reduce((a, x) => a + x.shots, 0);
-    const claims = t1.reduce((a, x) => a + x.claims, 0);
+    const claims = t1.reduce((a, x) => a + x.fireIntents, 0);
     const dealt = t1.reduce((a, x) => a + x.hitsDealt, 0);
     const rejects = t1.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
 

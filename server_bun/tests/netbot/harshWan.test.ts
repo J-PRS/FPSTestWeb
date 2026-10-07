@@ -8,7 +8,7 @@ describe('netbot — real clients over real sockets', () => {
     await spawn(4, { pingMs: 100, jitterMs: 300, lossRate: 0.05 });
     // Wait on claim flow, not a landed hit — under this WAN a whole window
     // can whiff legitimately (see the dealt note below).
-    await until(() => bots.reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 25000);
+    await until(() => bots.reduce((a, b) => a + b.nc.tel.fireIntents, 0) > 0, 25000);
     await sleep(600); // drain the deep in-flight window
 
     const dealt = bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);

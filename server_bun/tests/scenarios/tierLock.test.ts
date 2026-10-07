@@ -16,21 +16,21 @@ describe('scenario: class-locked ordnance', () => {
     const p = room.players.getPlayer(a.id)!;
     p.armorClass = 'medium';
     room.messages.handleMessage(a.id, {
-      type: 'shot', targetId: null,
-      position: { x: 1, y: 32, z: 0 },
-      velocity: { x: 30, y: 10, z: 0 },
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      pos: { x: 1, y: 32, z: 0 },
       weaponType: WeaponType.Mortar,
-    });
+    } as never);
     expect(toA.filter((m) => m.type === 'shotRejected').length).toBe(1);
     expect(w.count('projectileCreated')).toBe(0);
 
     p.armorClass = 'heavy';
     room.messages.handleMessage(a.id, {
-      type: 'shot', targetId: null,
-      position: { x: 1, y: 32, z: 0 },
-      velocity: { x: 30, y: 10, z: 0 },
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      pos: { x: 1, y: 32, z: 0 },
       weaponType: WeaponType.Mortar,
-    });
+    } as never);
     expect(w.count('projectileCreated')).toBe(1);
   });
 
@@ -47,11 +47,8 @@ describe('scenario: class-locked ordnance', () => {
     p.armorClass = 'light';
     for (const weaponType of [WeaponType.PlasmaGun, WeaponType.Flak]) {
       room.messages.handleMessage(a.id, {
-        type: 'shot', targetId: null,
-        position: { x: 1, y: 32, z: 0 },
-        velocity: { x: 30, y: 10, z: 0 },
-        weaponType,
-      });
+        type: 'shotFired', dir: { x: 0, y: 0.3, z: 1 }, pos: { x: 1, y: 32, z: 0 }, weaponType,
+      } as never);
     }
     expect(toA.filter((m) => m.type === 'shotRejected').length).toBe(2);
     expect(w.count('projectileCreated')).toBe(0);
@@ -60,11 +57,8 @@ describe('scenario: class-locked ordnance', () => {
     p.armorClass = 'heavy';
     for (const weaponType of [WeaponType.PlasmaGun, WeaponType.Flak]) {
       room.messages.handleMessage(a.id, {
-        type: 'shot', targetId: null,
-        position: { x: 1, y: 32, z: 0 },
-        velocity: { x: 30, y: 10, z: 0 },
-        weaponType,
-      });
+        type: 'shotFired', dir: { x: 0, y: 0.3, z: 1 }, pos: { x: 1, y: 32, z: 0 }, weaponType,
+      } as never);
     }
     expect(toA.filter((m) => m.type === 'shotRejected').length).toBe(4);
     expect(w.count('projectileCreated')).toBe(0);
@@ -72,13 +66,14 @@ describe('scenario: class-locked ordnance', () => {
     p.armorClass = 'medium';
     for (const weaponType of [WeaponType.PlasmaGun, WeaponType.Flak]) {
       room.messages.handleMessage(a.id, {
-        type: 'shot', targetId: null,
-        position: { x: 1, y: 32, z: 0 },
-        velocity: { x: 30, y: 10, z: 0 },
-        weaponType,
-      });
+        type: 'shotFired', dir: { x: 0, y: 0.3, z: 1 }, pos: { x: 1, y: 32, z: 0 }, weaponType,
+      } as never);
     }
-    expect(w.count('projectileCreated')).toBe(2);
+    // Flak is a burst fan — one intent spawns a pellet spread, so assert
+    // per-weapon creation instead of a flat count of 2.
+    for (const weaponType of [WeaponType.PlasmaGun, WeaponType.Flak]) {
+      expect(w.msgs.filter((m) => m.type === 'projectileCreated' && (m as { weaponType?: number }).weaponType === weaponType).length).toBeGreaterThan(0);
+    }
   });
 
   it('light-frame guns refuse on medium and heavy but fire on a light', () => {
@@ -95,11 +90,11 @@ describe('scenario: class-locked ordnance', () => {
     for (const cls of ['medium', 'heavy'] as const) {
       p.armorClass = cls;
       room.messages.handleMessage(a.id, {
-        type: 'shot', targetId: null,
-        position: { x: 1, y: 32, z: 0 },
-        velocity: { x: 30, y: 10, z: 0 },
-        weaponType: WeaponType.Railgun,
-      });
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      pos: { x: 1, y: 32, z: 0 },
+      weaponType: WeaponType.Railgun,
+    } as never);
       // The LG beam claims through the AOE funnel — same gate must hold.
       room.messages.handleMessage(a.id, {
         type: 'aoeShot',
@@ -112,11 +107,11 @@ describe('scenario: class-locked ordnance', () => {
 
     p.armorClass = 'light';
     room.messages.handleMessage(a.id, {
-      type: 'shot', targetId: null,
-      position: { x: 1, y: 32, z: 0 },
-      velocity: { x: 30, y: 10, z: 0 },
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      pos: { x: 1, y: 32, z: 0 },
       weaponType: WeaponType.Railgun,
-    });
+    } as never);
     expect(rejects()).toBe(4);
     expect(w.count('projectileCreated')).toBe(1);
     room.messages.handleMessage(a.id, {

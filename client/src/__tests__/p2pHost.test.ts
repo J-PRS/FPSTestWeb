@@ -91,16 +91,10 @@ describe('P2PHost', () => {
     // A must report near the shot origin — spawn sanity rejects claims far
     // from the shooter's last position.
     host.onData(a, encodePosition({ x: 4, y: 60, z: 5 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
-    // Register the projectile (miss-phase shot), then claim the hit on it.
-    // The server names projectiles itself (proj_N); a null claim falls back
-    // to the shooter's most recent spawn of that weapon type.
+    // Melee intent: shotFired carries only aim; the server derives the
+    // arc point at A's position — B stands 1m along +x, inside reach.
     host.onData(a, JSON.stringify({
-      type: 'shot', targetId: null, weaponType: 0,
-      position: { x: 4, y: 60, z: 5 }, velocity: { x: 50, y: 0, z: 0 },
-    }));
-    host.onData(a, JSON.stringify({
-      type: 'shot', targetId: 'B', weaponType: 0, projectileId: null,
-      position: { x: 5, y: 60, z: 5 }, airtime: 0.02, // seconds — 50m/s × 0.02s = 1m: origin (4) → hit (5)
+      type: 'shotFired', weaponType: 10 /* Melee */, dir: { x: 1, y: 0, z: 0 },
     }));
     const hit = b.lastJson('playerHit') as { targetId?: string } | undefined;
     const hitToA = a.lastJson('playerHit') as { targetId?: string } | undefined;

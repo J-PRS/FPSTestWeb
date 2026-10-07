@@ -13,12 +13,12 @@ describe('netbot — real clients over real sockets', () => {
     // 35s of the 45s budget — the SCTP handshake is the variable: under
     // suite CPU contention it alone has eaten the old 25s window while
     // the same lane resolves in ~7s isolated.
-    await until(() => bots.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 35000);
+    await until(() => bots.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b.nc.tel.fireIntents, 0) > 0, 35000);
     await sleep(400);
 
     for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
     const rtcBots = bots.filter((_, i) => i % 2 === 1);
-    const rtcClaims = rtcBots.reduce((a, b) => a + b.nc.tel.claims, 0);
+    const rtcClaims = rtcBots.reduce((a, b) => a + b.nc.tel.fireIntents, 0);
     const rejects = totalRejects();
     if (rejects) console.log(`  rejects: ${rejectsOf()}`);
 

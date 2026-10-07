@@ -67,7 +67,6 @@ export type ClientMessage =
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not
   // the echo-race/FIFO inference it replaced.
-  | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number; shotId?: string }
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string }
   // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
   // this cosmetic "I pulled the trigger" lets the server relay a playerShot
@@ -363,4 +362,8 @@ export interface LocalPlayerState {
   health: number;
   isDead: boolean;
   armor?: number;
+  /** Shadow's consumed inputMove watermark — lets a reconnecting client
+   *  replay journaled inputs over the restored anchor instead of
+   *  hard-snapping to a seconds-stale position (lossy-link flap). */
+  inputSeq?: number;
 }

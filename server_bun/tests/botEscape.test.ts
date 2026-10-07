@@ -16,7 +16,7 @@ const ctx = (over: Partial<BrainCtx> = {}): BrainCtx =>
   ({ pos: origin, enemies: [], now: 0, groundY: FLAT, ...over } as BrainCtx);
 
 const mkState = (): EscapeState => ({
-  stuckStreak: 0, orbitStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
+  stuckStreak: 0, orbitStreak: 0, pinStreak: 0, escapeJetT: 0, detour: null, detourT: 0,
   progressPos: { x: 0, y: 0, z: 0 }, progressT: 0, goalWinT: 0,
   progressGoalD: 0, pinX: 0, pinZ: 0, pinT: 0, goal: { ...dest },
 });

@@ -15,7 +15,7 @@ import { mulberry } from './chaos.ts';
 const SPECIMENS: Record<string, Record<string, unknown>> = {
   position: { type: 'position', position: { x: 1, y: 2, z: 3 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, seq: 4, inputSeq: 3 },
   teleport: { type: 'teleport', position: { x: 1, y: 2, z: 3 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } },
-  shot: { type: 'shot', targetId: 'p2', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, weaponType: 0 },
+  shotFired: { type: 'shotFired', weaponType: 0, dir: { x: 1, y: 0, z: 0 } },
   aoeShot: { type: 'aoeShot', position: { x: 0, y: 0, z: 0 }, weaponType: 1, excludeTargetId: null },
   inputMove: { type: 'inputMove', seq: 1, input: { forward: 1, right: 0, jump: 0, ski: 0, jet: 0 } },
 };

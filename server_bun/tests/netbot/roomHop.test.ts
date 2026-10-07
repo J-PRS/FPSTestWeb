@@ -8,10 +8,10 @@ describe('netbot — real clients over real sockets', () => {
     await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { hopEveryMs: 4000 });
     // Hop transitions gate gameplay sends until each room's gameState —
     // wait on a hop + first claim rather than a fixed window.
-    await until(() => bots.some((b) => b.nc.tel.hops > 0) && bots.reduce((a, b) => a + b.nc.tel.claims, 0) > 0, 25000);
+    await until(() => bots.some((b) => b.nc.tel.hops > 0) && bots.reduce((a, b) => a + b.nc.tel.fireIntents, 0) > 0, 25000);
 
     const hopped = bots.some((b) => b.nc.tel.hops > 0);
-    const claims = bots.reduce((a, b) => a + b.nc.tel.claims, 0);
+    const claims = bots.reduce((a, b) => a + b.nc.tel.fireIntents, 0);
     const rejects = bots.reduce((a, b) => a + [...b.nc.tel.rejects.values()].reduce((p, q) => p + q, 0), 0);
     const dedupStorms = bots.reduce((a, b) => a + b.nc.tel.dedupDrops, 0);
 
