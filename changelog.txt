@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.94: pinned resetMatch — scores/dmgPool/mode resets/sheep/respawn all asserted on match restart
 2026-10-08 - robustify §2.93: pinned remotePlayers onRemove purge — killCounts/lastWeaponByPlayer/HUD/healthbars all drop on leaver
 2026-10-08 - robustify §2.92: pinned the §2.89 flag-log wipe — reset test now asserts cap/grab/ret logs empty after match restart
 2026-10-08 - robustify §2.91: depart funnel pinned — removePlayerCompletely must purge every player-keyed room map

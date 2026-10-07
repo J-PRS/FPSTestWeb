@@ -2125,3 +2125,14 @@ asserts each receipt dies with the id. aliveSince itself is
 module-private but has pruneAliveSince as a second line of defense.
 
 ### 2.93 - end
+
+### 2.94 Offline match-boundary funnel pinned (2026-10-08)
+
+Pin class: resetMatch zeroes over/scores/ffaScores/dmgPool, re-arms
+ctf/rabbit/flagrun, respawns the dead and re-proves the living — all
+previously unasserted. resetMatch.test.ts stubs MatchHost and checks
+every receipt drains; a new per-match map added without a reset hop
+now fails a test instead of leaking the last match's meters into the
+next one.
+
+### 2.94 - end
