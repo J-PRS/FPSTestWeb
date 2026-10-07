@@ -3278,3 +3278,13 @@ roompickups re-pinned to refusal semantics; envClaims/demoCoverage/
 combatorder kept as the claim-lane unit coverage. replicaParity +
 capRun failures confirmed pre-existing on HEAD (stash-verified).
 (tsc + 64 focused tests green)
+
+## 2.181 — Tick rows patch records by declaration (rowPatch)
+
+The last hand-mapped consumer: applyTickPlayerUpdate listed ten fields
+the player kind already declares in updateFields — a declared field the
+handler forgot to copy was a silent replica-drift lane. worldModel gains
+rowPatch() (the verbPayload inverse: copy declared fields present on the
+row, absent = keep stored), and the handler now spreads it — internalId
+stays explicit since it lives outside updateFields. 0/false copy, ''
+reads as absent. (tsc + 39 net tests green)

@@ -17,7 +17,8 @@ import {
 import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
-import { WORLD_MODEL, verbForType, checkPacket } from '../../../shared/worldModel.js';
+import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
+import type { RemotePlayerState } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import type { NetworkManager } from './NetworkManager.js';
@@ -312,16 +313,10 @@ export class WireIn {
     // but skip local player here too in case of any server-side regression
     if (u.playerId === this.h.getLocalPlayerId()) return;
     this.h.upsertRemotePlayer(u.playerId, {
+      // Declared wire fields copy straight from the model — a field the
+      // handler forgot lands as a key the record still owns.
+      ...(rowPatch(WORLD_MODEL.player.updateFields!, u as unknown as Record<string, unknown>) as Partial<RemotePlayerState>),
       internalId: u.internalId || undefined,
-      position: u.position,
-      rotation: u.rotation,
-      velocity: u.velocity,
-      isDead: u.isDead,
-      health: u.health,
-      ping: u.ping,
-      ski: u.ski,
-      status: u.status,
-      sheep: u.sheep,
     });
     this.h.onPlayerUpdate?.(u.playerId, u.position, u.rotation, serverMs, u.velocity);
   }

@@ -404,6 +404,22 @@ export function rosterRow(
   return row;
 }
 
+/** Inverse of verbPayload for the consumer side: copy each declared
+ *  field present on an inbound row into a patch — undefined keys mean
+ *  "row didn't carry it, keep the stored value". Copying is the whole
+ *  point: a declared field a consumer forgot to read can't drift the
+ *  replica away from the wire again. Empty-string counts as absent
+ *  (wire never carries it meaningfully); 0/false are real values. */
+export function rowPatch(fields: KindFieldDecl[], row: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const f of fields) {
+    const v = row[f.name];
+    if (v === undefined || v === null || v === '') continue;
+    patch[f.name] = v;
+  }
+  return patch;
+}
+
 /** Spawn-half convenience — most emits only need the spawn verb. */
 export function spawnPayload(
   kind: WorldKindDecl,
