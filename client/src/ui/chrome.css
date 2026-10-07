@@ -290,14 +290,9 @@ body.menu-open #frag-msg { display: none !important; }
   border-radius: 8px;
   cursor: default;
 }
-/* The lobby column pins the right 300px — recenter the sheet in the
-   space that remains instead of sliding under it. */
-body.lobby-open #loadout-bar {
-  left: calc(50% - 190px);
-  /* The band between the side columns can't hold the single-row sheet —
-   *  cap it so the groups wrap instead of sliding under either edge. */
-  max-width: 460px;
-}
+/* The play hub is a centered window now — it covers the same screen
+   region as the loadout sheet, so the sheet steps aside while it's up. */
+body.lobby-open #loadout-bar { display: none; }
 #loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; }
 #loadout-bar .lo-head {
   font-size: 0.74rem; letter-spacing: 0.2em; font-weight: 700;

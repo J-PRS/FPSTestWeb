@@ -76,8 +76,7 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
     // Open lobby: host publicly — anyone pressing QUICK lands here.
     ['HOST OPEN', () => p2pGo(`host:${code()}`, 1)],
     // Quick join: the relay hands back the oldest open lobby.
-    ['QUICK', () => p2pGo('quick', 0)],
-    ['OFF', () => p2pGo('', 0)],
+    ['QUICK DUEL', () => p2pGo('quick', 0)],
   ];
   for (const [text, fn] of specs) {
     const b = btn(text);
@@ -190,7 +189,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     panel.style.display = 'none';
 
     // Tabbed hub — the classic server-browser layout: JOIN is the room
-    // list, HOST is match setup, OFFLINE/P2P are one-purpose pages.
+    // list, HOST is match setup, SOLO/DUEL are one-purpose pages.
     const tabBar = document.createElement('div');
     tabBar.className = 'lb-tabs';
     const tabs = new Map<string, HTMLDivElement>();
@@ -199,7 +198,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       for (const [n, el] of tabs) el.style.display = n === name ? 'block' : 'none';
       for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
     };
-    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
+    for (const name of ['JOIN', 'HOST', 'SOLO', 'DUEL']) {
       const b = btn(name);
       b.dataset.tab = name;
       b.addEventListener('click', () => showTab(name));
@@ -244,7 +243,15 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // Match setup — mode (ruleset) and map (geometry) are separate picks:
     // MODE filters which maps are offered, MAP picks the arena. Bot count
     // can override the spec default.
-    const hostLbl = label('HOST MATCH');
+    const hostLbl = label('NEW MATCH');
+    const nameRow = field('NAME');
+    const nameInput = document.createElement('input');
+    nameInput.maxLength = 32;
+    nameInput.placeholder = 'auto';
+    nameInput.className = 'lb-input';
+    nameInput.style.cssText = 'flex:1;min-width:0;';
+    nameInput.addEventListener('keydown', (e) => e.stopPropagation());
+    nameRow.appendChild(nameInput);
     const modeRow = field('MODE');
     const modeSelect = document.createElement('select');
     modeSelect.className = 'lb-input';
@@ -287,7 +294,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         // ANY = let the map's own spec decide the ruleset.
         const mode = modeSelect.value || mapSelect.selectedOptions[0]?.dataset.mode || '';
         const bots = botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(botsInput.value) || 0));
-        h.join((await h.deps.quickJoin(mode, map || undefined, bots)).room, map || undefined, bots);
+        // A typed name skips quickJoin — host names their own room.
+        const named = nameInput.value.trim();
+        const room = named || (await h.deps.quickJoin(mode, map || undefined, bots)).room;
+        h.join(room, map || undefined, bots);
       } catch { hostBtn.disabled = false; }
     });
 
@@ -381,11 +391,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     refreshLobs();
 
     joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
-    tabs.get('HOST')!.append(hostLbl, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
-    tabs.get('OFFLINE')!.append(buildOfflineList());
-    tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
+    tabs.get('HOST')!.append(hostLbl, nameRow, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
+    tabs.get('SOLO')!.append(buildOfflineList());
+    tabs.get('DUEL')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
 
-    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('SOLO')!, tabs.get('DUEL')!);
     showTab('JOIN');
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
