@@ -2001,4 +2001,9 @@ peer's game channel ballooned with 20Hz tick frames the drown drain
 saw ctrl's ~0 and never fired. It now reports `max(game, ctrl)` â€” the
 worst lane is the one that matters.
 
+Same pass found `send()` wrapping every binary frame in
+`new Uint8Array(msg)` — msg already IS a Uint8Array, so each
+sendMessageBinary copied the whole frame for nothing (~20Hz × peers ×
+~200B of pure churn on the tick fanout). Passes the buffer through now.
+
 ### 2.84 - end

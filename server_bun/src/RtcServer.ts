@@ -116,7 +116,7 @@ class RtcSocketAdapter {
     // send must not take down the whole broadcast path.
     try {
       if (typeof msg === 'string') dc.sendMessage(msg);
-      else dc.sendMessageBinary(new Uint8Array(msg));
+      else dc.sendMessageBinary(msg);
     } catch { return 0; }
     return typeof msg === 'string' ? msg.length : msg.byteLength;
   }
