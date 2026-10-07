@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WORLD_MODEL, CLIENT_INTENTS } from '../../shared/worldModel.ts';
-import { encodeBallSegment, decodeBallSegment, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame, WIRE_TICK_V3 } from '../../shared/wire.ts';
+import { encodeBallSegment, decodeBallSegment, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame, encodePosition, decodePosition, WIRE_TICK_V3 } from '../../shared/wire.ts';
 import type { WireTickPlayer } from '../../shared/wire.ts';
 
 // World-model <-> wire-union drift tripwire. The emits generate payloads
@@ -145,6 +145,19 @@ describe('world model <-> protocol conformance', () => {
         if (!v) continue;
         expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
       }
+    }
+  });
+
+  it('binary position report round-trips every declared position-intent field', () => {
+    // WIRE_POSITION is the binary lane of the 'position' intent — the
+    // declared field list is what the frame must actually carry.
+    const back = decodePosition(encodePosition(
+      { x: 10.5, y: 2.25, z: -4.5 }, { yaw: 1.2, pitch: -0.4 },
+      { x: 3.1, y: 0.4, z: -8.2 }, 7, 42, 11));
+    expect(back).not.toBeNull();
+    for (const f of CLIENT_INTENTS['position']!) {
+      expect(back as unknown as Record<string, unknown>, `decoded position frame missing '${f.name}'`)
+        .toHaveProperty(f.name);
     }
   });
 
