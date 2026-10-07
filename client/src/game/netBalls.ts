@@ -6,7 +6,7 @@ import { stepBall, makeSimBall, type SimBall, type SimVec } from '../../../share
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
 import { predictAt } from '../entities/ballNet.js';
-import { SIM_TICK_DT } from '../../../shared/wire.js';
+import { SIM_TICK_DT, finiteVec } from '../../../shared/wire.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
 import type { ChildLogger } from '../core/Logger.js';
@@ -340,10 +340,8 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
 
   // A non-finite component in authority state (server fault, hostile p2p
   // peer) silently poisons the replay sim — drop the edge and warn.
-  const finite = (v: { x: number; y: number; z: number }) =>
-    Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
   const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }) =>
-    finite(m.position) && finite(m.velocity) && (!m.tp || finite(m.tp));
+    finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
     if (!finiteMsg(m)) {logger.warn(`ball spawn #${m.id} dropped: non-finite vector`); return;}

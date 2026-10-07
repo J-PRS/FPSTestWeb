@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
 import type { ArmorClass } from '../../../../shared/botClasses.js';
+import { finiteVec } from '../../../../shared/wire.js';
 import { weaponDef } from '../../weapons.js';
 import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
@@ -146,9 +147,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // NaN/Inf in authority state poisons the whole sim silently — a
     // malformed correction (buggy peer in p2p, server fault) gets dropped
     // instead of entering the movement controller.
-    const finite = (v: { x: number; y: number; z: number }) =>
-      Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
-    if (!finite(position) || !finite(velocity)) {
+    if (!finiteVec(position) || !finiteVec(velocity)) {
       logger.warn(`Correction dropped: non-finite authority vector pos=(${position.x},${position.y},${position.z})`);
       return;
     }

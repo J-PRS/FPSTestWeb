@@ -224,6 +224,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.60 finiteVec — one NaN-guard owner (2026-10-07)
+
+Class 9, second cut. The §2.55/2.56 NaN-ingress fix introduced the
+finite-vector check as a hand-rolled local in FOUR client files
+(`net/players.ts`, `net/world.ts`, `netBalls.ts`, `netCrawlers.ts`) —
+the exact driftable duplicate the class hunts. `finiteVec` now lives
+in `shared/wire.ts` next to `WireVec3`; all four funnels call it.
+(The server's `validateVec3` keeps its own contract — it returns
+error strings, not a bool.)
+
 ### 2.59 evictEldest — one bounded-eviction owner (2026-10-07)
 
 First class-9 (architectural redundancy) round. The "cap a map at N,

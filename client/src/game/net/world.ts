@@ -17,6 +17,7 @@ import { setBotStructureSpecs } from '../botBrain.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
+import { finiteVec } from '../../../../shared/wire.js';
 import { saveLastRoomMap } from './lastRoom.js';
 import { dropVolatileWorldFx } from './resync.js';
 import { applyTerrain, applyInteriors, applyMapFog, type MapSnapshot } from './mapAssets.js';
@@ -247,7 +248,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   // A non-finite stored vector would poison the sim on every reconnect —
   // drop the restore rather than write NaN into the movement controller.
   const p = localPlayerState.position;
-  if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
+  if (!finiteVec(p)) {
     deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
     return;
   }

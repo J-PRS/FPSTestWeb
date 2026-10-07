@@ -9,12 +9,12 @@ import { Snake } from '../entities/Snake.js';
 import { Baneling } from '../entities/Baneling.js';
 import { Totem } from '../entities/Totem.js';
 import type { Targetable } from '../entities/balls.js';
+import { finiteVec as finite, SIM_TICK_DT } from '../../../shared/wire.js';
 import type { EntitiesDeps } from './entities.js';
 import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
 import { screenShake } from '../effects/screenShake.js';
 import { EXPLOSION_VFX_RADIUS } from '../core/config.js';
-import { SIM_TICK_DT } from '../../../shared/wire.js';
 
 export interface NetCrawlersCtx {
   crawlers: Crawler[];
@@ -87,9 +87,8 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   };
 
   // Non-finite authority state silently poisons the replay sim — drop
-  // the edge and warn (server fault, hostile p2p peer).
-  const finite = (v: { x: number; y: number; z: number }) =>
-    Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  // the edge and warn (server fault, hostile p2p peer). `finite` is
+  // shared/wire's finiteVec under its call-site name.
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
     if (!finite(m.position) || (m.tp && !finite(m.tp))) {deps.logger.warn(`crawl spawn #${m.id} dropped: non-finite vector`); return;}

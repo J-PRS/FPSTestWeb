@@ -33,6 +33,12 @@ const DEC = new TextDecoder();
 export interface WireVec3 { x: number; y: number; z: number }
 export interface WireRot { yaw: number; pitch: number }
 
+/** NaN/Inf in a decoded vector poisons whatever sim consumes it —
+ *  one guard every wire-consumer funnel calls before trusting xyz. */
+export function finiteVec(v: { x: number; y: number; z: number }): boolean {
+  return Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+}
+
 export interface WirePosition {
   type: 'position';
   position: WireVec3;
