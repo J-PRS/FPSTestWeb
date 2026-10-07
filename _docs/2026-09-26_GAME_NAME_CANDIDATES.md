@@ -201,3 +201,7 @@ fervor, aestus, hasta. Dead: discus (everyday Olympic word - squatting a
 common word reads presumptuous, JP 2026-10-01), calx, strata, vasto,
 auster, defile, harena, ardor, ignis, turbo, limes, velox (soap brand).
 The Mars-nomenclature seam (vallis/mensa/rupes/dorsum/syrtis) stays live.
+
+JP cuts 2026-10-01: **mensa** dead (IQ-association owns the word),
+**numidia** dead (too African for the game's register), **vallis**
+reserve only ("uncertain indie vibe"). Anabatic is the front-runner.
