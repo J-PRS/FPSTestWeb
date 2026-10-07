@@ -6,6 +6,7 @@
 
 import type { DemoManager } from '../demo/index.js';
 import type { CoolShotEntry } from '../demo/coolShots.js';
+import type { DemoFile } from '../demo/types.js';
 import { feedMode } from './feedMode.js';
 import { ChildLogger } from '../core/Logger.js';
 import type { HUD } from '../ui/hud.js';
@@ -17,6 +18,9 @@ interface FeedDeps {
   hud: HUD;
   overlay: HTMLElement;
   canvas: HTMLCanvasElement;
+  /** Same-task render — drawImage of the GL canvas reads a live buffer
+   *  only inside the task that rendered it. */
+  renderNow?: () => void;
 }
 
 const SLIDE_MS = 220;        // canvas slide in/out — one clip per screen
@@ -100,9 +104,70 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // Bumped by play() so stale auto-advance/watchdog timers aimed at the
   // previous clip can't act on the current one.
   let clipGen = 0;
-  // Finger-tracking drag state — the canvas follows touch 1:1; the ring
-  // buffer keeps the last ~120ms of samples for flick velocity.
-  let drag: { startY: number; samples: { t: number; y: number }[] } | null = null;
+  // Finger-tracking drag state — the neighbor mounts at frame 0 under a
+  // poster of the outgoing frame; the ring buffer keeps the last ~120ms
+  // of samples for flick velocity.
+  let drag: {
+    startY: number;
+    samples: { t: number; y: number }[];
+    mounted: boolean; dir: 1 | -1; ni: number;
+    savedT: number; wasPlaying: boolean;
+    ready: Promise<DemoFile | null> | null;
+  } | null = null;
+
+  // ---- Two-pane pager ----
+  // TikTok mounts the neighbor's real first frame inside the drag; a
+  // single WebGL canvas can't hold two clips, so the outgoing frame is
+  // snapshotted to a 2D poster and the live canvas becomes the incoming
+  // pane as soon as the drag registers (loaded at frame 0, paused).
+  const poster = document.createElement('canvas');
+  poster.id = 'clipfeed-poster';
+  document.body.appendChild(poster);
+  const pctx = poster.getContext('2d')!;
+
+  function snapPoster(): void {
+    d.renderNow?.();
+    poster.width = d.canvas.width;
+    poster.height = d.canvas.height;
+    pctx.drawImage(d.canvas, 0, 0);
+    poster.style.display = 'block';
+    poster.style.transition = 'none';
+    poster.style.transform = 'translateY(0px)';
+  }
+
+  function hidePoster(): void {
+    poster.style.display = 'none';
+    poster.style.transform = '';
+    poster.style.transition = '';
+  }
+
+  function slidePoster(to: string, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      poster.style.transition = `transform ${ms}ms ease-out`;
+      poster.style.transform = `translateY(${to})`;
+      setTimeout(resolve, ms);
+    });
+  }
+
+  const wrapIdx = (i: number): number => ((i % entries.length) + entries.length) % entries.length;
+  const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> => dm.coolShotMgr.resolveClipData(e);
+
+  // Neighbor parked at frame 0 — real pixels under the outgoing poster.
+  function mountPaused(data: DemoFile): void {
+    dm.onPlaybackStart?.();
+    dm.player.load(data);
+    dm.player.seek(0);
+    dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
+    dm.setMode('paused');
+  }
+
+  function mountPlay(data: DemoFile): void {
+    dm.onPlaybackStart?.();
+    dm.player.load(data);
+    dm.player.seek(0);
+    dm.player.play();
+    dm.setMode('playing');
+  }
 
   const current = (): CoolShotEntry | undefined => entries[index];
 
@@ -137,46 +202,15 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     }
   }
 
-  // transform-only drag position — used live during touch tracking where a
-  // transition would lag the finger.
-  function setDragOffset(px: number): void {
-    const c = d.canvas;
-    c.style.transition = 'none';
-    c.style.transform = `translateY(${px}px)`;
-  }
-
-  function animateTransform(toPct: number, ms: number, fade = false): Promise<void> {
-    return new Promise((resolve) => {
-      const c = d.canvas;
-      c.style.transition = `transform ${ms}ms ease-out${fade ? `, opacity ${ms}ms ease-out` : ''}`;
-      c.style.transform = `translateY(${toPct}%)`;
-      if (fade) c.style.opacity = toPct === 0 ? '1' : '0';
-      setTimeout(resolve, ms);
-    });
-  }
-
-  function slide(dir: 1 | -1): Promise<void> {
-    return animateTransform(dir * -104, SLIDE_MS, true).then(() => {
-      const c = d.canvas;
-      // Slide the new clip in from the opposite edge.
-      c.style.transition = 'none';
-      c.style.transform = `translateY(${dir * 104}%)`;
-      requestAnimationFrame(() => {
-        c.style.transform = '';
-        c.style.opacity = '1';
-        void animateTransform(0, SLIDE_MS, true);
-      });
-    });
-  }
-
-  function play(i: number): void {
+  function play(i: number, preloaded?: DemoFile | null): void {
     if (entries.length === 0) {paintMeta(); return;}
-    index = ((i % entries.length) + entries.length) % entries.length;
+    index = wrapIdx(i);
     clipGen++;
     const e = entries[index]!;
     paintMeta();
     updateAddress();
-    dm.playCoolShotById(e.id);
+    if (preloaded) {mountPlay(preloaded);}
+    else {dm.playCoolShotById(e.id);}
     // Dead-clip watchdog — fire-and-forget playback gives no failure
     // signal, so a clip that never starts gets skipped on a timer.
     const g = clipGen;
@@ -184,15 +218,21 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       if (g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {void go(1);}
     }, DEAD_CLIP_MS);
     // Warm the next clip so the swipe lands with no network gap.
-    const nxt = entries[(index + 1) % entries.length];
+    const nxt = entries[wrapIdx(index + 1)];
     if (nxt?.filename) {void dm.coolShotMgr.prefetchClip(nxt.filename);}
   }
 
   async function go(dir: 1 | -1): Promise<void> {
     if (entries.length === 0 || advancing) {return;}
     advancing = dir;
-    await slide(dir);
-    play(index + dir);
+    snapPoster();
+    dm.player.pause();
+    const e = entries[wrapIdx(index + dir)]!;
+    const data = await resolveClip(e);
+    if (data) {mountPaused(data);}
+    await slidePoster(`${dir * -104}%`, SLIDE_MS);
+    hidePoster();
+    play(index + dir, data);
     advancing = 0;
   }
 
@@ -266,7 +306,11 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   d.canvas.style.touchAction = 'none';
   window.addEventListener('touchstart', (ev) => {
     if (entries.length === 0 || advancing) {return;}
-    drag = { startY: ev.touches[0]!.clientY, samples: [{ t: performance.now(), y: ev.touches[0]!.clientY }] };
+    drag = {
+      startY: ev.touches[0]!.clientY,
+      samples: [{ t: performance.now(), y: ev.touches[0]!.clientY }],
+      mounted: false, dir: 1, ni: index, savedT: 0, wasPlaying: false, ready: null,
+    };
   }, { passive: true });
   window.addEventListener('touchmove', (ev) => {
     if (!drag) {return;}
@@ -274,25 +318,70 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     drag.samples.push({ t: performance.now(), y });
     if (drag.samples.length > 8) {drag.samples.shift();}
     const dy = drag.startY - y; // + = swiping up = next clip
-    setDragOffset(-Math.max(-window.innerHeight, Math.min(window.innerHeight, dy)));
+    // Mount the neighbor on first meaningful travel — its frame-0 tracks
+    // in with the finger, like TikTok's pager, instead of sliding blank.
+    if (!drag.mounted && Math.abs(dy) > 12) {
+      drag.mounted = true;
+      drag.dir = dy >= 0 ? 1 : -1;
+      drag.ni = wrapIdx(index + drag.dir);
+      drag.savedT = dm.player.currentTimeValue;
+      drag.wasPlaying = dm.mode === 'playing';
+      snapPoster();
+      dm.player.pause();
+      dm.setMode('paused');
+      const e = entries[drag.ni]!;
+      const mountedDrag = drag;
+      drag.ready = resolveClip(e).then((data) => {
+        if (data && drag === mountedDrag) {mountPaused(data);}
+        return data;
+      });
+    }
+    if (drag.mounted) {
+      const off = Math.max(-window.innerHeight, Math.min(window.innerHeight, dy));
+      poster.style.transform = `translateY(${-off}px)`;
+    }
   }, { passive: true });
   window.addEventListener('touchend', (ev) => {
     if (!drag) {return;}
-    const { startY, samples } = drag;
+    const d0 = drag;
     drag = null;
     const endY = ev.changedTouches[0]!.clientY;
-    const dy = startY - endY;
+    const dy = d0.startY - endY;
     // Flick velocity from the recent sample window — a short fast fling
     // commits even when the travel was small.
     const now = performance.now();
-    const s0 = samples.find(s => now - s.t <= 120) ?? samples[0]!;
+    const s0 = d0.samples.find(s => now - s.t <= 120) ?? d0.samples[0]!;
     const v = now > s0.t ? (s0.y - endY) / (now - s0.t) : 0; // px/ms, + = up
     const dir: 1 | -1 = (Math.abs(v) > 0.01 ? v : dy) >= 0 ? 1 : -1;
-    if (Math.abs(dy) > window.innerHeight * SWIPE_COMMIT_RATIO || Math.abs(v) > FLICK_V_PX_MS) {
-      if (!advancing) {void go(dir);}
-    } else if (!advancing) {
-      // Didn't commit — spring the clip back into frame.
-      void animateTransform(0, SLIDE_MS).then(() => { d.canvas.style.transition = ''; });
+    if (!d0.mounted || advancing) {return;} // tap — nothing mounted
+    const commit = Math.abs(dy) > window.innerHeight * SWIPE_COMMIT_RATIO || Math.abs(v) > FLICK_V_PX_MS;
+    if (commit && dir === d0.dir) {
+      advancing = dir;
+      const ni = d0.ni;
+      void (async () => {
+        await slidePoster(`${dir * -104}%`, SLIDE_MS);
+        hidePoster();
+        const data = await d0.ready;
+        play(ni, data);
+        advancing = 0;
+      })();
+    } else {
+      // Spring back — restore the outgoing clip where the drag found it.
+      void (async () => {
+        await slidePoster('0px', SLIDE_MS);
+        hidePoster();
+        const e = current();
+        const data = e ? await resolveClip(e) : null;
+        if (data) {
+          dm.onPlaybackStart?.();
+          dm.player.load(data);
+          dm.player.seek(d0.savedT);
+          dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
+          if (d0.wasPlaying) {dm.player.play(); dm.setMode('playing');}
+        } else {
+          play(index);
+        }
+      })();
     }
   }, { passive: true });
 

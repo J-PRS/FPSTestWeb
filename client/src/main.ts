@@ -725,7 +725,8 @@ init().then(async () => {
 
   if (feedMode.on) {
     const { startClipFeed } = await import('./feed/clipFeed.js');
-    await startClipFeed({ demoManager: demoManager!, hud, overlay, canvas: renderer.domElement });
+    await startClipFeed({ demoManager: demoManager!, hud, overlay, canvas: renderer.domElement,
+      renderNow: () => renderer.render(scene, camera) });
     return;
   }
 

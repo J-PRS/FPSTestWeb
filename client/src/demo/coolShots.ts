@@ -266,6 +266,19 @@ export class CoolShotManager {
     }
   }
 
+  /** Resolve an entry to its DemoFile without playing it — memory →
+   *  vault → prefetch cache → network. The clip feed mounts neighbors
+   *  through this so a swipe's incoming frame is real, not a blank slide. */
+  async resolveClipData(entry: CoolShotEntry): Promise<DemoFile | null> {
+    if (entry.clipData) {return entry.clipData;}
+    const data = await this.vault.get(entry.id);
+    if (data) {return data;}
+    if (entry.filename) {
+      return this.prefetched.get(entry.filename) ?? net.fetchDemo(this, entry.filename);
+    }
+    return null;
+  }
+
   async downloadById(id: string): Promise<void> {
     const entry = this.coolShots.find(s => s.id === id);
     if (!entry) {

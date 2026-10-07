@@ -513,6 +513,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 /* ---- Clip feed (/clips) - TikTok-style fullscreen replay chrome ---- */
 #clipfeed { position: fixed; inset: 0; z-index: 90; pointer-events: none;
   font-family: monospace; color: #cfe3ff; }
+/* Drag pager: 2D snapshot of the outgoing clip's last frame — slides with
+   the finger while the live canvas underneath mounts the neighbor's frame 0. */
+#clipfeed-poster { position: fixed; inset: 0; z-index: 50; width: 100%; height: 100%;
+  display: none; background: #000; }
 #clipfeed.feed-clear > * { opacity: 0 !important; transition: opacity 0.25s; }
 .feed-top { position: absolute; top: 14px; left: 18px; display: flex; gap: 12px;
   align-items: baseline; letter-spacing: 0.2em; font-size: 0.8rem; }
