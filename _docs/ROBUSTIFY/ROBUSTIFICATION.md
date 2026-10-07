@@ -233,6 +233,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.65 Pickup tick alloc churn (2026-10-07)
+
+Class 10, third cut in the same shape. `RoomPickups.tick` allocated a
+roster array copy plus one `{...position}` snapshot PER PLAYER per
+tick (~20Hz). Now iterates the live map and reuses the stored `prevPos`
+Vec3 with field-wise writes (it must stay a snapshot, not an alias).
+Audited clean while hunting: rewind ring (~8-entry shift is bounded),
+tick decode pool, blast/AoE sweeps are per-event, drainCommands early-
+exits, effStructures is O(spec) and boot/join-only.
+
 ### 2.64 Field-wise anchors in moveClaims (2026-10-07)
 
 Class 10, same shape as §2.63. `plausible()` spread-allocated

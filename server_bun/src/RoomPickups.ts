@@ -118,7 +118,7 @@ export class RoomPickups {
       if (this.prevPos.size) this.prevPos.clear();
       return;
     }
-    const players = [...this.room.players.getAllPlayers().values()];
+    const players = this.room.players.getAllPlayers(); // live map — re-iterated, no roster copy per tick
     for (const p of this.pickups.values()) {
       p.ttl -= dt;
       if (p.vel.x !== 0 || p.vel.z !== 0 || p.vel.y !== 0) {
@@ -141,7 +141,7 @@ export class RoomPickups {
         continue;
       }
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
-      for (const pl of players) {
+      for (const pl of players.values()) {
         if (pl.isDead) continue;
         // Score pickups (gems/tags) only exist in team modes; powerups
         // are grab-able by anyone alive in any mode.
@@ -177,7 +177,13 @@ export class RoomPickups {
     }
     // Snapshot AFTER the touch pass — next tick's segment starts where
     // this one ended (same ordering RoomFlags uses for its sweep).
-    for (const pl of players) this.prevPos.set(pl.id, { ...pl.position });
+    // Reuse the stored Vec3 (it must be a snapshot, not an alias — the
+    // live position mutates next tick): field writes kill N allocs/tick.
+    for (const pl of players.values()) {
+      const prev = this.prevPos.get(pl.id);
+      if (prev) { prev.x = pl.position.x; prev.y = pl.position.y; prev.z = pl.position.z; }
+      else this.prevPos.set(pl.id, { ...pl.position });
+    }
     for (const id of this.prevPos.keys()) {
       if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);
     }
