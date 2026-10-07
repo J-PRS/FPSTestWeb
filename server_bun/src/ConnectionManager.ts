@@ -30,6 +30,14 @@ const VOLATILE_TYPES = new Set([
   'playerShot', 'jump', 'jetpack', 'knockback', 'playerHit',
   'projectileCreated', 'projectileDestroyed', 'claimAck',
 ]);
+
+/** Periodic single-recipient echoes — journaled, each one burns a slot of
+ *  the fixed 1024-frame replay window for a truth only one player needs.
+ *  At a full roster (~2Hz echo each) they'd churn the whole window in
+ *  ~8-16s and evict broadcast truth (kills, flag edges, chat) a reclaimer
+ *  actually misses. A dead socket can't consume them anyway: gameState
+ *  reseeds health on reclaim, and live echoes self-repeat at 2Hz. */
+const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge']);
 const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {
@@ -95,13 +103,15 @@ export class ConnectionManager {
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
     const seq = ++this.outSeq;
     const data = JSON.stringify({ ...(msg as object), ev: seq });
-    const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
-    this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
-    if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
-      const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
-      this.journal.splice(0, n);
-      this.journalDropped += n;
-      this.onJournalWrap?.(n);
+    if (!NO_JOURNAL_TYPES.has((msg as { type: string }).type)) {
+      const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
+      this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
+      if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
+        const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
+        this.journal.splice(0, n);
+        this.journalDropped += n;
+        this.onJournalWrap?.(n);
+      }
     }
     return data;
   }

@@ -233,6 +233,19 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.62 Echo frames out of the reclaim journal (2026-10-07)
+
+Class 10 (future-cost debt). `sendToPlayer` journaled every frame —
+including the `yourHealth`/`yourCharge` per-player echoes (~2Hz each
+while active). At a full roster that's ~N journal pushes/s burning a
+fixed 1024-frame replay window: ~64-128 pushes/s churns the window to
+~8-16s of history, so a >10s grace reconnect silently loses broadcast
+truth (kills, flag edges, chat) — `reclaimGap` fires, events are gone.
+New `NO_JOURNAL_TYPES` skips journaling both echoes: a dead socket
+can't consume them, gameState reseeds health on reclaim, and live
+echoes self-repeat at 2Hz. Journal churn in a healing-heavy room
+roughly halves; broadcast history per byte doubles.
+
 ### 2.61 windowAllow — one sliding-window throttle owner (2026-10-07)
 
 Class 9. The `{count, start}` 60s-IP-window rate limiter was

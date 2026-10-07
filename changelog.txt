@@ -1,3 +1,7 @@
+2026-10-07 - robustify §2.62: yourHealth/yourCharge out of reclaim journal (echo churn was evicting broadcast truth)
+2026-10-07 - robustify skill: class 10 future-cost debt (scale/low-end/bad-network lane)
+2026-10-07 - arch: fps-* keys funnel through settings registry — has()/remove(), identity keys migrated
+2026-10-07 - arch audit fixes: departSpectator funnel, Host Pick<> slices
 2026-10-07 - robustify §2.61: windowAllow — collapse 3x IP-window throttle duplicate
 2026-10-07 - robustify §2.60: finiteVec in shared/wire — collapse 4x NaN-guard duplicate
 2026-10-07 - robustify §2.59: evictEldest helper — one bounded-eviction owner, kills clear()-amnesty drift
