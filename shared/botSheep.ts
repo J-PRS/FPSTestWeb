@@ -192,12 +192,18 @@ export class SheepCore {
     return { mech, bonusSpeed: Math.sqrt(Math.max(0, 2 * eSm)) };
   }
 
-  /** Instantaneous E loss since last sample, clamped — a body sliding
-   *  to a deadstop bleeds once, not forever. */
+  /** Instantaneous E loss ending near a deadstop, clamped — a body
+   *  sliding to a halt bleeds once, not forever. Gated on the LANDING
+   *  energy, not just the drop: without it, every uphill leg of a
+   *  legit ski route "bleeds" — rolling-terrain transit made this the
+   *  dominant channel on every maxed bot (soak: 480/600pts = transit
+   *  decel, not sheeping). A near-stop after the dump is the actual
+   *  llama tell. */
   private energyBleed(id: string, mech: number, foe: boolean): number {
     const ePrev = this.eLast.get(id);
     this.eLast.set(id, mech);
     if (ePrev === undefined || mech >= ePrev || foe) return 0;
+    if (mech >= 12.5) return 0; // still carrying >5m/s — transit, not a deadstop
     return Math.min(8, (ePrev - mech) * 0.08);
   }
 

@@ -31,15 +31,18 @@ describe('BotBrain pathing', () => {
     expect(Math.abs(out.dest.z)).toBeGreaterThan(Math.abs(out.dest.x));
   });
 
-  it('detours sideways when it has made no progress', () => {
+  it('detours around the blocked line when it has made no progress', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 0, z: 0 };
     const objective = { x: 0, y: 0, z: 100 };
-    // First think adopts the goal; then simulate a stalled bot — pos never moves
-    b.think(0.4, ctx(pos, flat, { objective }));
-    let out = b.think(1.5, ctx(pos, flat, { objective }));
-    out = b.think(0.1, ctx(pos, flat, { objective }));
-    // Stuck → perpendicular sidestep: x must dominate over the goal's +z line
+    // Wall dead ahead on the goal line — the route-cost fan deflects to
+    // a side heading. (On flat ground a no-progress detour legitimately
+    // picks goal-forward since 654dc716; the block is what makes it sidestep.)
+    const aheadWall = (x: number, z: number) => (z > 3 ? 20 : 0);
+    b.think(0.4, ctx(pos, aheadWall, { objective }));
+    let out = b.think(1.5, ctx(pos, aheadWall, { objective }));
+    out = b.think(0.1, ctx(pos, aheadWall, { objective }));
+    // Detour must leave the +z line — x dominates the straight shot
     expect(Math.abs(out.dest.x)).toBeGreaterThan(5);
   });
 });

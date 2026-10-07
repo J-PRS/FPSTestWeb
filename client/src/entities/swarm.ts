@@ -200,13 +200,22 @@ const SHADOW_CAPACITY = 1024; // initial size — grows on demand
 
 
 const shadowVert = /* glsl */ `
+  uniform sampler2D heightMap;
+  uniform float hmWorldScale;
+  uniform float hScale;
   attribute float aOpacity;
   varying vec2 vUv;
   varying float vOpacity;
   void main() {
     vUv = uv;
     vOpacity = aOpacity;
-    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    // Terrain-conforming blob: a flat disc sinks into uphill slopes, so
+    // every vertex drops to the heightfield instead — same displacement
+    // the clipmap vertex shader applies (fract() UV + hScale gain). The
+    // instance matrix keeps owning XZ + radius; y is ground + epsilon.
+    vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    wp.y = texture2D(heightMap, fract(wp.xz / hmWorldScale)).r * hScale + 0.06;
+    gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 const shadowFrag = /* glsl */ `
@@ -243,6 +252,13 @@ export class InstancedBlobShadows {
       transparent: true,
       depthWrite: false,
       depthTest: true,
+      // Shared uniform objects — Terrain rewrites them on map swap so the
+      // shadows track heightScale/tileSize without a rebind.
+      uniforms: {
+        heightMap: terrain.heightU.heightMap,
+        hmWorldScale: terrain.heightU.hmWorldScale,
+        hScale: terrain.heightU.hScale,
+      },
     });
     this.mesh = new THREE.InstancedMesh(geo, mat, SHADOW_CAPACITY);
     this.mesh.matrixWorldAutoUpdate = false;

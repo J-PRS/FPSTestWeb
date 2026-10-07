@@ -58,6 +58,21 @@ it('slamming to a deadstop bleeds once — the instant E drop signature', () => 
   expect(v.why.bleed).toBeCloseTo(8, 9);
 });
 
+it('uphill transit is not a bleed — only landing near a deadstop counts', () => {
+  const c = new SheepCore();
+  c.step(1);
+  c.tick('a', tribesing); // mech 800 recorded
+  c.set('a', 50);
+  c.step(1);
+  // 40→10 m/s climbing a slope: mech 800→50, still carrying speed —
+  // a route's gravity bill, not the llama tell.
+  const v = c.tick('a', { ...parked, vel: { x: 10, y: 0, z: 0 }, jetting: true, dt: 1 });
+  expect(v.why.bleed).toBe(0);
+  // …then the same body actually deadstops on the next tick.
+  const v2 = c.tick('a', { ...parked, jetting: true });
+  expect(v2.why.bleed).toBeCloseTo(4, 9); // mech 50→0 → 50*0.08
+});
+
 it('claiming a destination halves the pedestrian charge', () => {
   const c = new SheepCore();
   c.set('a', 50);

@@ -56,8 +56,10 @@ export function classCanFire(cls: string | undefined, w: number): boolean {
 export const CLASS_MODEL_SCALE: Record<ArmorClass, number> = {
   // Scaled to the class eye height (mannequin eye ≈1.8 at scale 1) so the
   // rendered skull sits where the hit capsule says the head is — a heavy
-  // that LOOKED 1.15× but hit-tested 2.5m was a lie.
-  light: 1.0, medium: 2.0 / 1.8, heavy: 2.5 / 1.8,
+  // that LOOKED 1.15× but hit-tested 2.5m was a lie. Medium shares the
+  // mannequin rig with light and gets a small silhouette bump so the
+  // tier still reads at distance (capsule stays 2.0m, model ~2.07m).
+  light: 1.0, medium: 2.07 / 1.8, heavy: 2.5 / 1.8,
 };
 
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {

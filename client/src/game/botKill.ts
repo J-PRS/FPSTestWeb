@@ -110,6 +110,18 @@ function concStrip(b: TeamBots, playerId: string, dmg: number, weapon: number | 
     return true;
 }
 
+/** In-flight taunt timers — tracked so match teardown can drain them:
+ *  the feed outlives the match, and a dead match's bots must not taunt
+ *  into the next room's chat (killFeed does the same on the server). */
+const sayTimers = new Set<ReturnType<typeof setTimeout>>();
+
+/** Match teardown — a queued taunt from a disposed roster is a dead id
+ *  speaking; drop it rather than let it read as live room traffic. */
+export function botSayDrain(): void {
+    for (const t of sayTimers) clearTimeout(t);
+    sayTimers.clear();
+}
+
 /** A bot's line lands a beat after the frag like a typed reply — the
  *  same delay envelope the server killfeed uses over the wire. */
 export function botSay(id: string, line: string | null, vgs?: string, team?: boolean): void {
@@ -119,13 +131,15 @@ export function botSay(id: string, line: string | null, vgs?: string, team?: boo
     // Chatter is transient like debris/audio — while hidden the timers
     // still fire but nothing queues, so alt-tab returns to a live feed,
     // not a burst of stale taunts (same rule the fx classes follow).
-    setTimeout(() => { if (!document.hidden) chatSink.add?.(name, line, team, vgs); }, delay);
+    const t = setTimeout(() => { sayTimers.delete(t); if (!document.hidden) chatSink.add?.(name, line, team, vgs); }, delay);
+    sayTimers.add(t);
     // VGS-combo intent — a rare second chord timed to hard-cut the first
     // sample mid-word ("I am the— SHAZBOT!"). Tails are global-scope
     // chords, so they land wherever the starter did.
     const tail = vgs ? comboTailFor(vgs) : undefined;
     if (tail) {
-      setTimeout(() => { if (!document.hidden) chatSink.add?.(name, tail.text, false, tail.chord); }, delay + comboCutDelayMs(line));
+      const cut = setTimeout(() => { sayTimers.delete(cut); if (!document.hidden) chatSink.add?.(name, tail.text, false, tail.chord); }, delay + comboCutDelayMs(line));
+      sayTimers.add(cut);
     }
   }
 

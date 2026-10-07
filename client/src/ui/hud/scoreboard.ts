@@ -37,6 +37,8 @@ export type SbRow = {
   alive?: number | null;
 };
 
+const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy: 'HVY' };
+
 // textContent, not innerHTML — display names will be player-chosen
 // strings; interpolating them raw is a stored-XSS hole in waiting.
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
@@ -52,7 +54,9 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   nameTd.appendChild(document.createTextNode(` ${r.name}`));
   tr.appendChild(nameTd);
   const clsTd = document.createElement('td');
-  clsTd.textContent = r.cls ? r.cls.toUpperCase() : '—';
+  // Three-letter class codes (T2 board convention) — a full word's width
+  // for a three-value column is wasted; HVY over HEV is the era spelling.
+  clsTd.textContent = r.cls ? (CLASS_SHORT[r.cls] ?? r.cls.slice(0, 3).toUpperCase()) : '—';
   clsTd.className = `sb-cls-${r.cls ?? 'none'}`;
   tr.appendChild(clsTd);
   for (const cell of cells) {

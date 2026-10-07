@@ -7,6 +7,7 @@ import * as sfx from '../../core/sfx.js';
 import { Explosion } from '../../effects/explosion.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../../structures/structures.js';
+import { mkFlagMesh } from '../ctfFlags.js';
 import { flagReturnFx } from '../flagFx.js';
 
 const _burstPos = new THREE.Vector3();
@@ -27,21 +28,10 @@ function buildFlagVis(team: TeamId): FlagVis {
   base.position.y = FLAG_STAND_TOP + 0.07; // gem socket in the well
   stand.add(base);
   stand.visible = false; // until the wire's home plants it
-  const flag = new THREE.Group();
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
-    new THREE.MeshBasicMaterial({ color: 0x888888 }));
-  pole.position.y = 2;
-  const banner = new THREE.Mesh(
-    new THREE.ConeGeometry(0.5, 1.2, 4),
-    new THREE.MeshBasicMaterial({ color: teamColor }));
-  banner.position.set(0.55, 3.4, 0);
-  const finial = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.14, 0),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor).multiplyScalar(1.4) }));
-  finial.position.y = 4.05;
-  flag.add(pole, banner, finial);
-  return { flag, stand };
+  // The real banner mesh — same origin-at-pole-base convention this
+  // file's seating math already uses; the old hand-rolled cone pennant
+  // rendered alongside it as a second flag.
+  return { flag: mkFlagMesh(team), stand };
 }
 
 /** Rabbit announcements — the flag is neutral, so no OUR/ENEMY split:
