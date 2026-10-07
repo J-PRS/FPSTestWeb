@@ -574,6 +574,23 @@ export function fieldNames(kind: WorldKindDecl): string[] {
   return kind.fields.map((f) => f.name);
 }
 
+/** Union of a kind's declared field names across the given slots —
+ *  consumers derive "every field this kind can carry" instead of
+ *  re-listing them (the client player roster's patch list is exactly
+ *  spawn ∪ update ∪ roster — a second hand-written list would drift). */
+export function declaredFieldNames(
+  kind: WorldKindDecl,
+  ...slots: ('fields' | 'spawnFields' | 'updateFields' | 'rosterFields' | 'goneFields')[]
+): string[] {
+  const out: string[] = [];
+  for (const s of slots) {
+    for (const f of kind[s] ?? []) {
+      if (!out.includes(f.name)) out.push(f.name);
+    }
+  }
+  return out;
+}
+
 /** Emit `fields` for every entity in a roster — id first, then each
  *  declared field in declaration order. The tuple's element type is the
  *  declared fields' types; callers cast to their wire slot. */

@@ -12,12 +12,15 @@ import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
 import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
+import { WORLD_MODEL, declaredFieldNames } from '../../../shared/worldModel.js';
 
 const logger = new ChildLogger('NetworkManager');
 
-// Roster upsert fields + fresh-player defaults (optional fields default undefined).
-const ROSTER_FIELDS = ['internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
-  'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep'] as const;
+// Roster upsert fields + fresh-player defaults (optional fields default
+// undefined). The field list comes from the player kind's wire declaration —
+// every field the roster can carry is exactly spawn ∪ update ∪ roster, so a
+// new declared field patches through here without a second list to update.
+const ROSTER_FIELDS = declaredFieldNames(WORLD_MODEL['player']!, 'spawnFields', 'updateFields', 'rosterFields');
 const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
   internalId: '',
   position: { x: 0, y: 500, z: 0 },
@@ -514,7 +517,8 @@ export class NetworkManager {
       // the decode pool (a pooled slot tracks whichever player decoded
       // LAST), so they fill the entry's own sub-objects instead.
       if (k === 'position' || k === 'rotation' || k === 'velocity') continue;
-      (next as unknown as Record<string, unknown>)[k] = patch[k] ?? next[k] ?? ROSTER_DEFAULTS[k];
+      const key = k as keyof RemotePlayerState;
+      (next as unknown as Record<string, unknown>)[k] = patch[key] ?? next[key] ?? ROSTER_DEFAULTS[key];
     }
     if (patch.position) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; }
     if (patch.rotation) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }

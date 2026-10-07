@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { WORLD_MODEL, CLIENT_INTENTS } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, CLIENT_INTENTS, declaredFieldNames } from '../../shared/worldModel.ts';
 import { encodeBallSegment, decodeBallSegment, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame, encodePosition, decodePosition, WIRE_TICK_V3 } from '../../shared/wire.ts';
 import type { WireTickPlayer } from '../../shared/wire.ts';
 
@@ -193,5 +193,16 @@ describe('world model <-> protocol conformance', () => {
       expect(u as unknown as Record<string, unknown>, `decoded tick record missing '${f.name}'`)
         .toHaveProperty(f.name);
     }
+  });
+
+  it('player roster field union covers every RemotePlayerState patch slot', () => {
+    // The client derives its roster patch list from this union — a field
+    // declared on one verb but missing the union would silently never
+    // patch through. Pin the full expected set.
+    expect(new Set(declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')))
+      .toEqual(new Set([
+        'internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
+        'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep',
+      ]));
   });
 });
