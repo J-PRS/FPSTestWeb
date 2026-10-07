@@ -110,6 +110,23 @@ describe('SnapshotBuffer', () => {
     expect(buf.size).toBe(3);
   });
 
+  it('re-anchors the render clock after clear() on a rewound server clock', () => {
+    const buf = new SnapshotBuffer();
+    const now = Date.now();
+    // Old room's epoch: high tick times.
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.push(now - 50, {x:10,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.clear();
+    // New room rewinds server time (tickSeq resets) — the anchor must
+    // follow, not compare against the dead epoch.
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.push(now - 50, {x:10,y:0,z:0}, {yaw:0,pitch:0}, {x:1,y:0,z:0});
+    buf.interpDelay = 40;
+    const { pos } = sample(buf);
+    expect(pos.x).toBeGreaterThan(0);
+    expect(pos.x).toBeLessThan(10);
+  });
+
   it('keeps the yaw lerp on the shortest arc across ±PI', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();

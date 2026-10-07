@@ -2939,3 +2939,16 @@ jittery remote motion until the new room's tick count passed the old
 one's. clear() now resets the anchor pair + the arrival stamp (the
 adaptive delay/jitter stats stay -- they describe the transport, not
 the timeline). (remoteSnapshots.ts)
+
+## 2.158 Regression test: render-clock re-anchor on a rewound server clock
+
+Audit round found ~10 lanes clean (deploy wire edges, roster reconcile,
+cap symmetry via shared DEPLOY_MAX, rate limits, ledger bounds, journal
+cap, extrapolation clamp, solidColliders lifecycle, healthBump keys,
+down-vs-dead hash semantics). Shipped artifact: a regression test
+locking section 2.157's clear()-anchor reset -- old-epoch pushes, a
+clear, then new-room pushes on a rewound tickSeq clock must interpolate
+inside the new window, not extrapolate from the dead epoch. Fails
+against the pre-fix code (anchor never re-arms). Also verified the
+creature-hash audit branch diffs serverCreatureFields directly -- no
+fabricated fallbacks like the deploy lane had. (remoteSnapshots.test.ts)
