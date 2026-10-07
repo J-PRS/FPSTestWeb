@@ -22,7 +22,11 @@ interface FeedDeps {
 const SLIDE_MS = 220;        // canvas slide in/out — one clip per screen
 const NEXT_DELAY_MS = 900;   // linger on the last frame before advancing
 const WHEEL_COOLDOWN = 450;  // one notch = one clip; don't stream past
-const SWIPE_MIN_PX = 60;
+// Drag commit: either ~1/5 viewport travelled or a real flick. The drag
+// itself tracks the finger 1:1 (how TikTok/Reels pagers do it) — a
+// threshold-only swipe reads as a canned animation, not a gesture.
+const SWIPE_COMMIT_RATIO = 0.18;
+const FLICK_V_PX_MS = 0.5;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -88,7 +92,9 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   let wheelLock = 0;
   let advancing = 0;
   let clearScreen = false;
-  let touchY: number | null = null;
+  // Finger-tracking drag state — the canvas follows touch 1:1; the ring
+  // buffer keeps the last ~120ms of samples for flick velocity.
+  let drag: { startY: number; samples: { t: number; y: number }[] } | null = null;
 
   const current = (): CoolShotEntry | undefined => entries[index];
 
@@ -123,22 +129,35 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     }
   }
 
-  function slide(dir: 1 | -1): Promise<void> {
+  // transform-only drag position — used live during touch tracking where a
+  // transition would lag the finger.
+  function setDragOffset(px: number): void {
+    const c = d.canvas;
+    c.style.transition = 'none';
+    c.style.transform = `translateY(${px}px)`;
+  }
+
+  function animateTransform(toPct: number, ms: number, fade = false): Promise<void> {
     return new Promise((resolve) => {
       const c = d.canvas;
-      c.style.transition = `transform ${SLIDE_MS}ms ease, opacity ${SLIDE_MS}ms ease`;
-      c.style.transform = `translateY(${dir * -104}%)`;
-      c.style.opacity = '0';
-      setTimeout(() => {
-        resolve();
-        // Slide the new clip in from the opposite edge.
-        c.style.transform = `translateY(${dir * 104}%)`;
-        requestAnimationFrame(() => {
-          c.style.transform = 'translateY(0)';
-          c.style.opacity = '1';
-          setTimeout(() => { c.style.transition = ''; }, SLIDE_MS);
-        });
-      }, SLIDE_MS);
+      c.style.transition = `transform ${ms}ms ease-out${fade ? `, opacity ${ms}ms ease-out` : ''}`;
+      c.style.transform = `translateY(${toPct}%)`;
+      if (fade) c.style.opacity = toPct === 0 ? '1' : '0';
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function slide(dir: 1 | -1): Promise<void> {
+    return animateTransform(dir * -104, SLIDE_MS, true).then(() => {
+      const c = d.canvas;
+      // Slide the new clip in from the opposite edge.
+      c.style.transition = 'none';
+      c.style.transform = `translateY(${dir * 104}%)`;
+      requestAnimationFrame(() => {
+        c.style.transform = '';
+        c.style.opacity = '1';
+        void animateTransform(0, SLIDE_MS, true);
+      });
     });
   }
 
@@ -212,12 +231,41 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     }
   });
 
-  window.addEventListener('touchstart', (ev) => { touchY = ev.touches[0]!.clientY; }, { passive: true });
+  // Tracked drag: the canvas follows the finger (translate only, no
+  // transition), then commits past ~18% viewport or a flick and springs
+  // back otherwise. touch-action:none is set while the feed runs so the
+  // browser doesn't fight the gesture with pull-to-refresh.
+  d.canvas.style.touchAction = 'none';
+  window.addEventListener('touchstart', (ev) => {
+    if (entries.length === 0 || advancing) {return;}
+    drag = { startY: ev.touches[0]!.clientY, samples: [{ t: performance.now(), y: ev.touches[0]!.clientY }] };
+  }, { passive: true });
+  window.addEventListener('touchmove', (ev) => {
+    if (!drag) {return;}
+    const y = ev.touches[0]!.clientY;
+    drag.samples.push({ t: performance.now(), y });
+    if (drag.samples.length > 8) {drag.samples.shift();}
+    const dy = drag.startY - y; // + = swiping up = next clip
+    setDragOffset(-Math.max(-window.innerHeight, Math.min(window.innerHeight, dy)));
+  }, { passive: true });
   window.addEventListener('touchend', (ev) => {
-    if (touchY === null) {return;}
-    const dy = touchY - ev.changedTouches[0]!.clientY;
-    touchY = null;
-    if (Math.abs(dy) >= SWIPE_MIN_PX) {void go(dy > 0 ? 1 : -1);}
+    if (!drag) {return;}
+    const { startY, samples } = drag;
+    drag = null;
+    const endY = ev.changedTouches[0]!.clientY;
+    const dy = startY - endY;
+    // Flick velocity from the recent sample window — a short fast fling
+    // commits even when the travel was small.
+    const now = performance.now();
+    const s0 = samples.find(s => now - s.t <= 120) ?? samples[0]!;
+    const v = now > s0.t ? (s0.y - endY) / (now - s0.t) : 0; // px/ms, + = up
+    const dir: 1 | -1 = (Math.abs(v) > 0.01 ? v : dy) >= 0 ? 1 : -1;
+    if (Math.abs(dy) > window.innerHeight * SWIPE_COMMIT_RATIO || Math.abs(v) > FLICK_V_PX_MS) {
+      if (!advancing) {void go(dir);}
+    } else if (!advancing) {
+      // Didn't commit — spring the clip back into frame.
+      void animateTransform(0, SLIDE_MS).then(() => { d.canvas.style.transition = ''; });
+    }
   }, { passive: true });
 
   // Progress bar + pause icon ride their own rAF — the demo UI's time
