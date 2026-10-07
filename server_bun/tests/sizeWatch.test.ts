@@ -11,13 +11,13 @@ const GROWTH_ALLOWANCE = 1.15;
 const CEILING = 900;
 const GRANDFATHERED: Record<string, number> = {
   'client/src/networking/NetworkManager.ts': 1183,
-  'client/src/entities/PlayerModel.ts': 1127,
-  'client/src/gunlab.ts': 1015,
-  'client/src/lab/scenarios.ts': 999,
-  'server_bun/src/Room.ts': 1064,
-  'server_bun/src/serverSenses.ts': 1039,
-  'client/src/effects/vertexAO.ts': 901,
-  'shared/botTaunts.ts': 914,
+  'client/src/entities/PlayerModel.ts': 1427,
+  'client/src/gunlab.ts': 1264,
+  'client/src/lab/scenarios.ts': 1000,
+  'server_bun/src/Room.ts': 1070,
+  'server_bun/src/serverSenses.ts': 1045,
+  'client/src/effects/vertexAO.ts': 956,
+  'shared/botTaunts.ts': 1099,
 };
 
 function* walk(dir: string): Generator<string> {

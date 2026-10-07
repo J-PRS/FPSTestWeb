@@ -21,9 +21,9 @@ describe('scenario: deploy rules', () => {
     // the item, so an immortal base asset kept a leaver's cooldown entry
     // for the room's life. The removal funnel must purge the player's
     // side of the keyspace too.
-    const room = mkRoom({ mode: 'tdm', bots: 1, deploys: [{ kind: 'turret', pos: { x: 10, y: 31, z: 0 }, team: 'a' }] });
+    const room = mkRoom({ mode: 'tdm', bots: 1, deploys: [{ kind: 'turret', pos: { x: 10, y: 31, z: 0 }, team: 'alpha' }] });
     const bot = firstPlayer(room);
-    bot.team = 'a' as never;
+    bot.team = 'alpha' as never;
     pin(room, bot.id, { x: 10, y: 31, z: 2 });
     const item = room.deployables.snapshot()[0]!;
     expect(room.deployables.repair(bot.id, item.id)).toBe(true);

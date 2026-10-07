@@ -38,6 +38,13 @@ const flatTerrain = {
   getNormal: () => new THREE.Vector3(0, 1, 0),
   reloadHeightmap() {},
   heightfield: null,
+  // InstancedBlobShadows binds the shared uniform objects verbatim —
+  // a flat 1×1 black map samples as height 0, same as getHeight().
+  heightU: {
+    heightMap: { value: new THREE.DataTexture(new Uint8Array(4), 1, 1) },
+    hmWorldScale: { value: 1 },
+    hScale: { value: 1 },
+  },
 } as unknown as Terrain;
 
 // Build a lifecycle whose world is real playback code over stub scenery —
