@@ -1,7 +1,8 @@
 import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
-import { CombatHandler, type CombatDeps } from './CombatHandler.ts';
+import { CombatHandler, type CombatDeps, type BeamContact } from './CombatHandler.ts';
+import type { HitVerdict } from './types.ts';
 import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
@@ -151,6 +152,12 @@ export interface RoomInfo {
    *  the LiveProj id or null when the weapon has no body. Only
    *  server-simmed weapons route here. */
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
+  /** Beam-intent resolution — the honest ray a Lightning tick strikes
+   *  (terrain/wall/player/creature, earliest wins). Room.beamSweep. */
+  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;
+  /** Beam contact damage sinks — BallSim/CreatureSim handleHit. */
+  ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
+  crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
 }
 
 /** RoomInfo → CombatDeps projection — kept out of the constructor so the
@@ -173,6 +180,9 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     envRange: roomInfo?.envRange,
     preyNear: roomInfo?.preyNear,
     fireProjectile: roomInfo?.fireProjectile,
+    beamSweep: roomInfo?.beamSweep,
+    ballHit: roomInfo?.ballHit,
+    crawlerHit: roomInfo?.crawlerHit,
   };
 }
 

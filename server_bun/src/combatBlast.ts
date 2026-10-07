@@ -99,7 +99,13 @@ export class BlastRunner {
 
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
-    this.h.deps.emit?.({ type: 'blast', pos: position, damage: ctx.baseDamage, radius, shooterId: playerId, scales: ctx.scales });
+    // Two damage lines ride the event: `damage` is the direct-hit pay,
+    // `splash` the aoe line — deployables inside their contact radius
+    // take the first, everyone else the second's falloff.
+    this.h.deps.emit?.({
+      type: 'blast', pos: position, damage: ctx.baseDamage, radius, shooterId: playerId, scales: ctx.scales, weapon,
+      splash: stats.aoeDamage * this.h.ddMult(player),
+    });
 
     // A dropped flag is a loose physical object — every blast (claimed or
     // trusted) can punt it. Lives inside processAOE so claimed shots,
@@ -295,9 +301,9 @@ export class BlastRunner {
   /** The charge pop itself — a Lightning-stat blast scaled by the amount
    *  detonated, credited to the detonating shooter. ChargeBank decides
    *  when this fires; the blast is ours. */
-  pop(ownerId: string, target: PlayerState, amount: number): void {
+  pop(ownerId: string, pos: Vec3, amount: number): void {
     const lgStats = getWeaponStats(WeaponType.Lightning);
-    this.processAOE(ownerId, { ...target.position }, null, {
+    this.processAOE(ownerId, { ...pos }, null, {
       ...lgStats,
       aoeDamage: Math.min(amount, LG_POP_DMG_CAP),
       aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),

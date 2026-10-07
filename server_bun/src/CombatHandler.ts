@@ -23,6 +23,23 @@ import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
 import { wallNow } from './wallClock.ts';
 import { tauntRand } from '../../shared/botRand.ts';
+import { lgTickDamage, lgChargeAt, LG_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
+import { perkMods } from '../../shared/perks.ts';
+import type { HitVerdict } from './types.ts';
+
+/** What a beam intent's honest ray struck — the room resolves earliest
+ *  contact; CombatHandler pays it. `contact` is the surface point (pop
+ *  blasts and relays anchor there). Chain ids ride a second contact
+ *  when the fork arcs to another creature. */
+export interface BeamContact {
+  playerId?: string;
+  ballId?: number;
+  crawlerId?: number;
+  contact: Vec3;
+  chainBallId?: number;
+  chainCrawlerId?: number;
+  chainContact?: Vec3;
+}
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -79,6 +96,14 @@ export interface CombatDeps {
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
    *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
+  /** Beam-intent resolution — the honest ray against terrain, walls,
+   *  players, and creatures; earliest contact wins. Absent = beam
+   *  intents stay cosmetic relays only. */
+  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;
+  /** Creature damage sinks for beam contacts — BallSim/CreatureSim
+   *  handleHit; absent when the room runs no creature sims. */
+  ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
+  crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
 }
 
 /**
@@ -144,7 +169,7 @@ export class CombatHandler {
       (id) => this.deps.emit?.({ type: 'botSpoke', id }), sendToPlayer);
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
-    this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target, amount));
+    this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target.position, amount));
     this.aoe = new AoeClaims(this);
   }
 
@@ -299,6 +324,22 @@ export class CombatHandler {
       }, playerId);
       return;
     }
+    // Beam intent (Lightning): each tick IS the intent — the room's
+    // honest ray decides the contact and the ramp/bank economy pays
+    // here, so neither a creatureHit claim nor a per-tick aoeShot is
+    // needed. Falls through to the cosmetic playerShot relay below.
+    if (msg.weaponType === WeaponType.Lightning && dir && this.deps.beamSweep) {
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
+      recent.push(now);
+      this.simmedFireTimes.set(playerId, recent);
+      player.protectedUntil = 0;
+      const mpos = rewindPos(player, clampPing(player.ping));
+      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      this.beamPay(playerId, player, this.deps.beamSweep(playerId,
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
+    }
     if (!fireProjectile) {
       // Cosmetic relay only — throttled: a dropped relay costs a muzzle
       // flash, but a dropped intent would orphan a predicted shell.
@@ -421,6 +462,54 @@ export class CombatHandler {
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = wallNow() + FORCE_SEND_MS;
     this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId, air: opts.air });
+  }
+
+  /** Beam tick payout — the contact is already the honest earliest, so
+   *  this only runs the economy: player victims ride ChargeBank like a
+   *  bot beam (ramp → tick → bank → serverHit); creatures bank their
+   *  withheld charge on a per-creature map and pop it on a beam kill,
+   *  the same corpse-burst players get. */
+  private creatureCharge = new Map<string, { charge: number; t: number }>();
+
+  private beamPay(playerId: string, player: PlayerState, c: BeamContact | null): void {
+    if (!c) return;
+    if (c.playerId) {
+      const n = this.chargeBank.step(playerId, c.playerId);
+      const victim = this.playerManager.getPlayer(c.playerId);
+      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage;
+      if (victim && !victim.isDead && !this.friendly(playerId, c.playerId)) {
+        this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
+      }
+      this.serverHit(playerId, c.playerId, dmg, 'Lightning', { hb: 'beam.lg', weapon: WeaponType.Lightning });
+      return;
+    }
+    if (c.ballId !== undefined) this.creatureTick(playerId, 'ball', c.ballId, c.contact, 1);
+    if (c.crawlerId !== undefined) this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, 1);
+    if (c.chainBallId !== undefined && c.chainContact) this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE);
+    if (c.chainCrawlerId !== undefined && c.chainContact) this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE);
+  }
+
+  private creatureTick(playerId: string, kind: 'ball' | 'crawl', id: number, at: Vec3, scale: number): void {
+    const key = `${kind}:${id}`;
+    const n = this.chargeBank.step(playerId, key);
+    const nowS = simNow() / 1000;
+    const prev = this.creatureCharge.get(key);
+    const acc = (prev ? lgChargeAt(prev.charge, prev.t, nowS) : 0)
+      + this.chargeBank.withheldFor(n) * scale * LG_POP_CHARGE_MULT;
+    this.creatureCharge.set(key, { charge: acc, t: nowS });
+    if (this.creatureCharge.size > 64) {
+      for (const [k, e] of this.creatureCharge) {
+        if (nowS - e.t > 30) this.creatureCharge.delete(k);
+      }
+    }
+    const verdict = kind === 'ball'
+      ? this.deps.ballHit?.(playerId, id, lgTickDamage(n) * scale)
+      : this.deps.crawlerHit?.(playerId, id, lgTickDamage(n) * scale);
+    if (verdict?.killed) {
+      this.creatureCharge.delete(key);
+      if (acc > 0) this.blast.pop(playerId, at, acc);
+      this.hb('beam.kill');
+    }
   }
 
   /** Deliberate respawn (the client's K bind) — routed through the same

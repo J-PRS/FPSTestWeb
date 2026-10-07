@@ -19,6 +19,10 @@ import { structureColliders } from '../../shared/ballSim.ts';
 import { seatKits } from '../../shared/structKits.ts';
 import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
+import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
+import { LG_CHAIN_RANGE } from '../../shared/combat.ts';
+import type { BeamContact } from './CombatHandler.ts';
 import { NOISE_TTL_MS } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
@@ -739,6 +743,74 @@ export class Room {
     if (scoredBy) this.score(scoredBy);
   }
 
+  /** Beam-intent resolution: the honest ray a Lightning tick strikes —
+   *  earliest of terrain face, wall, player capsule, or creature wins
+   *  (same math as botBeam.beamContact). A creature contact also picks
+   *  the chain fork; payment stays in CombatHandler. */
+  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number): BeamContact | null {
+    const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
+    const at = (t: number): Vec3 => ({ x: muzzle.x + (end.x - muzzle.x) * t, y: muzzle.y + (end.y - muzzle.y) * t, z: muzzle.z + (end.z - muzzle.z) * t });
+    let bestT = 1;
+    if (this.field) {
+      const th = segFieldHit(muzzle, end, this.field);
+      if (th) bestT = segPointT(muzzle, end, th);
+    }
+    const solids = this.projectiles.solidColliders;
+    if (solids.length) {
+      const sh = segSolidHit(muzzle, end, solids, undefined, this.players.getPlayer(shooterId)?.team);
+      if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+    }
+    let playerId: string | undefined;
+    for (const [pid, t] of this.players.getAllPlayers()) {
+      if (pid === shooterId || t.isDead) continue;
+      const cap = classCapsule(t.armorClass);
+      const c = { x: t.position.x, y: t.position.y + cap.centerOff, z: t.position.z };
+      if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
+      const tt = segPointT(muzzle, end, c);
+      if (tt <= bestT) { bestT = tt; playerId = pid; }
+    }
+    const bc = this.ballSim?.sweepHit(muzzle, end, 0.2);
+    if (bc && bc.t <= bestT) {
+      return { ballId: bc.id, contact: at(bc.t), ...this.beamChain(at(bc.t), dir, bc.id, undefined) };
+    }
+    const cc = this.creatureSim?.sweepHit(muzzle, end, 0.2);
+    if (cc && cc.t <= bestT) {
+      return { crawlerId: cc.id, contact: at(cc.t), ...this.beamChain(at(cc.t), dir, undefined, cc.id) };
+    }
+    if (playerId !== undefined) return { playerId, contact: at(bestT) };
+    return bestT < 1 ? { contact: at(bestT) } : null;
+  }
+
+  /** Chain-fork pick — the nearest OTHER live creature within range of
+   *  the primary contact, forward-ish of the beam so the arc can't
+   *  reach backward through the shooter. */
+  private beamChain(contact: Vec3, dir: Vec3, excludeBall: number | undefined, excludeCrawler: number | undefined):
+      { chainBallId?: number; chainCrawlerId?: number; chainContact?: Vec3 } {
+    const cands: { id: number; kind: 'ball' | 'crawl'; x: number; y: number; z: number; d2: number }[] = [];
+    const consider = (kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number): void => {
+      const dx = x - contact.x, dy = y - contact.y, dz = z - contact.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= LG_CHAIN_RANGE * LG_CHAIN_RANGE) return;
+      const d = Math.sqrt(d2) || 1;
+      if ((dx * dir.x + dy * dir.y + dz * dir.z) < d * 0.35) return;
+      cands.push({ id, kind, x, y, z, d2 });
+    };
+    for (const b of this.ballSim?.balls.values() ?? []) {
+      if (b.dead || b.id === excludeBall) continue;
+      consider('ball', b.id, b.x, b.y, b.z);
+    }
+    for (const c of this.creatureSim?.crawlers.values() ?? []) {
+      if (c.dead || c.id === excludeCrawler) continue;
+      consider('crawl', c.id, c.x, c.y, c.z);
+    }
+    let best: (typeof cands)[number] | null = null;
+    for (const c of cands) { if (!best || c.d2 < best.d2) best = c; }
+    if (!best) return {};
+    return best.kind === 'ball'
+      ? { chainBallId: best.id, chainContact: { x: best.x, y: best.y, z: best.z } }
+      : { chainCrawlerId: best.id, chainContact: { x: best.x, y: best.y, z: best.z } };
+  }
+
   /** Any player death drops a carried flag — called from the damage
    *  funnel. In rabbit the same hook doubles as the flag's birth: the
    *  first corpse of the match is where the flag enters play. */
@@ -796,6 +868,9 @@ export class Room {
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
       fireProjectile: (pid, wt, origin, dir, vel, shotId) => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+      beamSweep: (pid, muzzle, dir, range) => this.beamSweep(pid, muzzle, dir, range),
+      ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
+      crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),

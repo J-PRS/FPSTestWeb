@@ -3165,3 +3165,29 @@ bite claims stay legitimately client-owned (server never simmed those
 interactions). Also caught by the purity suite along the way:
 warnOnce's Date.now moved to sharedNow (seeded clock) to keep
 worldModel inside the env seam. (tsc + 502 vitest + purity green)
+
+## 2.175 Lightning beam is server-resolved — the heaviest claim lane dies
+
+The LG was the last per-tick claim generator: ~20 aoeShot claims/s on
+players plus creatureHit claims on every beamed creature, all so the
+server could re-derive what its own ray would have found. The beam is
+now an intent like everything else: each shotFired tick carries dir,
+handleShotFired rewinds the muzzle, and Room.beamSweep runs the honest
+ray (segFieldHit terrain, solidIndex walls, classCapsule players,
+ball/crawler sweeps — the same math botBeam.beamContact already used).
+Earliest contact pays: player victims ride the existing ChargeBank
+ramp/bank economy (step → lgTickDamage → bank → serverHit), creatures
+tick through handleHit with their own ramp keys and bank withheld
+charge on a per-creature map — a beam kill pops the bank at the
+contact point, the same corpse-burst players get. The chain fork
+resolves server-side too (nearest other live creature forward of the
+contact within LG_CHAIN_RANGE, half tick). Client keeps every
+prediction — beam, contact sparks, numbers, hitmarker, shroud,
+predicted zap — and drops the claims: takeDamage serverPaid, the
+per-tick aoeShot deleted, lgPop's blast claim suppressed when
+connected. Constants moved to shared/combat (LG_RANGE, LG_CHAIN_RANGE,
+LG_CHAIN_DMG_SCALE) so the shown set and the paid set share numbers.
+30/s flood gate per player on the intent. Known gap: a non-beam
+server weapon killing a charged creature doesn't discharge its bank
+(beam-kill only) — noted for the next pass. (tsc both sides + 81
+focused tests green)

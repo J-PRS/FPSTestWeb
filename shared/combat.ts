@@ -153,6 +153,12 @@ export const LG_CHARGE_DRAIN_S = 800;
 export const LG_POP_RADIUS_MAX = 14;
 export const LG_POP_RADIUS_MIN = 3;
 
+/** Beam reach + the chain-fork fork range/damage scale — shared so the
+ *  server's beam trace pays the same set the client predicts. */
+export const LG_RANGE = 55;
+export const LG_CHAIN_RANGE = 9;
+export const LG_CHAIN_DMG_SCALE = 0.5;
+
 /** Decayed banked charge on a victim — both ends run the same lazy drain.
  *  `chargeT` is in the caller's timebase (server: epoch seconds). */
 export function lgChargeAt(acc: number, chargeT: number, nowS: number): number {
@@ -214,6 +220,9 @@ function checkFlightLegality(args: {
   /** Map-structure colliders — when present, the claimed flight must
    *  not pass through a wall to reach its end point. */
   solids?: readonly StructureCollider[];
+  /** Shooter's team — team-filtered solids (shield gates) don't block
+   *  a matching shell's claimed flight. */
+  shooterTeam?: string;
 }): HitClaimVerdict {
   const { projectile, endPos, shooterVel, now } = args;
   let { airtime } = args;
@@ -250,7 +259,7 @@ function checkFlightLegality(args: {
   // Wall occlusion: sample the ballistic arc — a shell that would have
   // struck a face before its claimed end can't honestly get there.
   if (args.solids?.length) {
-    const blockedAt = arcBlockedAt(projectile, stats.gravity ? GRAVITY : 0, airtime, args.solids);
+    const blockedAt = arcBlockedAt(projectile, stats.gravity ? GRAVITY : 0, airtime, args.solids, args.shooterTeam);
     if (blockedAt !== null) {
       return { ok: false, reason: `flight blocked by structure at ~${blockedAt.toFixed(2)}s` };
     }
@@ -278,7 +287,7 @@ function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, ai
 const ARC_STEP_S = 1 / 120;
 function arcBlockedAt(
   projectile: TrackedProjectile, g: number, airtime: number,
-  solids: readonly StructureCollider[],
+  solids: readonly StructureCollider[], passTeam?: string,
 ): number | null {
   const steps = Math.max(4, Math.min(240, Math.ceil(airtime / ARC_STEP_S)));
   const dt = airtime / steps;
@@ -295,7 +304,7 @@ function arcBlockedAt(
       // lands its final segment on that face — that is the impact the
       // claim describes, not a wall flown through. Only a face hit
       // BEFORE the last step means the arc can't honestly reach the end.
-      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids)) return t;
+      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids, undefined, passTeam)) return t;
     }
     px = nx; py = ny; pz = nz;
   }
@@ -312,11 +321,13 @@ export function validateHitClaim(args: {
   shooterVel: Vec3Like;
   now: number;
   solids?: readonly StructureCollider[];
+  /** Shooter's team — gate solids matching it don't occlude the claim. */
+  shooterTeam?: string;
   /** Target armor class — the capsule a heavy presents is taller. */
   targetClass?: string;
 }): HitClaimVerdict {
   const { projectile, hitPos, targetPos, shooterVel, now, airtime } = args;
-  const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now, solids: args.solids });
+  const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now, solids: args.solids, shooterTeam: args.shooterTeam });
   if (!flight.ok) return flight;
 
   // Target proximity: hitPos must be within the legal hit radius at that
@@ -344,7 +355,9 @@ export function validateAoeClaim(args: {
   shooterVel: Vec3Like;
   now: number;
   solids?: readonly StructureCollider[];
+  /** Shooter's team — gate solids matching it don't occlude the claim. */
+  shooterTeam?: string;
 }): HitClaimVerdict {
   const { projectile, blastPos, shooterVel, now, airtime } = args;
-  return checkFlightLegality({ projectile, endPos: blastPos, airtime, shooterVel, now, solids: args.solids });
+  return checkFlightLegality({ projectile, endPos: blastPos, airtime, shooterVel, now, solids: args.solids, shooterTeam: args.shooterTeam });
 }

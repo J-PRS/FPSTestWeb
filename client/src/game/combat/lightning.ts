@@ -166,9 +166,11 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
   hooks.processExplosion({
     pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
     forceMultiplier: 1,
-    // Server sees a normal Lightning blast for remote-player prediction;
-    // the scaled damage is the PvE fantasy side (enemies are client-run)
-    sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
+    // Offline the pop still claims its blast; connected, the server's
+    // beam kill detonates the banked charge itself.
+    sendAOE: deps.lazyNetworkManager()?.isConnected()
+      ? undefined
+      : (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
     explosionTint: 0x8FDCFF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
   });
 }
@@ -278,7 +280,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   sh.sprite.position.copy(t.pos);
   sh.sprite.scale.setScalar(1.5 + charge * 4);
   deps.reportTargetDamage?.(t, dmg);
-  if (t.takeDamage(dmg)) {
+  if (t.takeDamage(dmg, { serverPaid: deps.lazyNetworkManager()?.isConnected() === true })) {
     hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
     lgPop(deps, hooks, t.pos, acc);
     chargeBank.delete(t.id);
@@ -386,13 +388,8 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       deps.lazyHealthBarSystem().predictDamage(hitPlayerId, tick);
     }
     deps.lazyHud().showHitMarker();
-    const networkManager = deps.lazyNetworkManager();
-    if (networkManager?.isConnected()) {
-      networkManager.sendAOEShot({
-        position: { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },
-        weaponType: WeaponType.Lightning, excludeTargetId: hitPlayerId,
-      });
-    }
+    // No per-tick aoeShot claim — the shotFired beam intent already
+    // pays the victim server-side through the same ramp/bank economy.
     // Splash sweep still runs for bystander knockback; the named victim is
     // skipped so the pin + predict above isn't double-applied.
     hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: hitPlayerId, forceMultiplier: 1 });

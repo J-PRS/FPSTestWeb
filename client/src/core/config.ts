@@ -34,14 +34,10 @@ export const BOLT_FIRE_RATE = 0.8; // bolt launcher fire rate (seconds)
 export const DISC_RATE = 1; // Disc fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
-export const LG_RANGE = 55;      // hard beam cap — mid-range tracker, outranged by totems
-// Death-burst economy lives in shared/combat.ts — the server banks and
-// detonates the same numbers the client predicts.
-export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECAY_S, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN } from '../../../shared/combat.js';
-// Chain fork: after the beam lands, it arcs to one more enemy within range
-// of the first — half damage, but it charges the pop too
-export const LG_CHAIN_RANGE = 9;
-export const LG_CHAIN_DMG_SCALE = 0.5;
+// Death-burst economy, beam reach, and the chain fork live in
+// shared/combat.ts — the server banks and traces the same numbers the
+// client predicts.
+export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECAY_S, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN, LG_RANGE, LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE } from '../../../shared/combat.js';
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
