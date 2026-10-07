@@ -135,4 +135,16 @@ describe('netHarness — real wire messages through real handlers', () => {
     expect(h.world.mode).toBe('ctf');
     vi.unstubAllGlobals();
   });
+
+  it('a throwing sessionStorage bails the mismatch without crashing the handler', () => {
+    vi.stubGlobal('sessionStorage', {
+      getItem: () => { throw new Error('SecurityError'); },
+      setItem: () => { throw new Error('QuotaExceededError'); },
+      removeItem: () => { throw new Error('SecurityError'); },
+    });
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1', mode: 'dm' } as ServerMessage);
+    expect(() => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999999, room: 'x' } as ServerMessage)).not.toThrow();
+    expect(h.world.mode).toBe('dm'); // still bailed before the swap
+    vi.unstubAllGlobals();
+  });
 });

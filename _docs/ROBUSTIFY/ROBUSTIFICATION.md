@@ -2436,3 +2436,17 @@ session, just don't persist. Pinned: settings.test.ts drives a
 fully-throwing localStorage through set/get/has/remove.
 
 ### 2.116 - end
+
+### 2.117 Last raw storage site wrapped (2026-10-11)
+
+§2.116's sweep had one survivor: the fps-proto-reload sessionStorage
+counter in handleGameState — a throwing storage (private mode) would
+crash the handler mid-frame right when the client most needs the bail
+path. The counter read is now try/catch (dead counter = budget spent:
+warn + return), the setItem+nav block is wrapped, and the clean-connect
+removeItem can't throw. Audit: lastRoom.ts already wrapped; identity
+rides settings (safe since 2.116). netHarness.test.ts pins a
+fully-throwing sessionStorage through the mismatch path — warns, bails,
+no crash.
+
+### 2.117 - end

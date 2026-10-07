@@ -575,19 +575,24 @@ export class NetworkManager {
     this.resyncQuietUntil = 0; // truth landed — position claims are judged fresh
     const serverProto = data.protocolVersion ?? 0;
     if (serverProto !== PROTOCOL_VERSION) {
-      const tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0');
+      // Storage can throw (private mode / disabled embeds) — treat a dead
+      // counter as budget spent: warn + bail, never crash the handler.
+      let tries = 2;
+      try { tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0'); } catch { /* fall through */ }
       logger.warn(`Protocol mismatch: client=${PROTOCOL_VERSION} server=${serverProto} (attempt ${tries + 1})`);
       // Browser-only escape: headless harnesses (vitest, e2e replays) have
       // no location to reload — they get the warn + early return only.
       if (tries < 2 && typeof location !== 'undefined') {
-        sessionStorage.setItem('fps-proto-reload', String(tries + 1));
-        const url = new URL(location.href);
-        url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
-        location.href = url.toString();
+        try {
+          sessionStorage.setItem('fps-proto-reload', String(tries + 1));
+          const url = new URL(location.href);
+          url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
+          location.href = url.toString();
+        } catch { /* storage/nav both optional — warn already logged */ }
       }
       return;
     }
-    sessionStorage.removeItem('fps-proto-reload'); // clean connect — reset the budget
+    try { sessionStorage.removeItem('fps-proto-reload'); } catch { /* no budget to reset */ } // clean connect — reset the budget
 
     // gameState is the authoritative roster on (re)connect — clear stale entries
     // for players who left during our disconnect, then add the current set.
