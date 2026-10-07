@@ -147,6 +147,14 @@ const SEVERE_MS = 60_000;
  *  the edge is judged lost: comfortably past the slowest legal input
  *  lane (netbots heartbeat at 400ms) plus a recovery RTT. */
 const INPUT_GAP_DEFER_MS = 600;
+/** While an input-seq gap is open the shadow replays stale input, so the
+ *  honest report↔sim deficit keeps growing at roughly the player's speed.
+ *  Severe banking credits that starved-input deficit (gap age × speed,
+ *  capped) — a blackout doesn't read as a teleport (the 60–99m warns a
+ *  congested-RTC soak produced). Corrections and divergence counting are
+ *  unaffected, and a real teleport still clears the bar: it arrives as a
+ *  step function while the credit only grows linearly. */
+const GAP_SEVERE_CREDIT_S = 2;
 /** Cap on the self-reported RTT credited as link-transit tolerance — a
  *  forged multi-second ping widens the divergence budget by at most
  *  speed×RTT_CAP/2 (~6m at ski speed), far under the SEVERE_M trip. */
@@ -253,8 +261,13 @@ export class MoveJudge {
     // Young-gap reports get corrected like any over-tolerance drift but
     // bank nothing — the producing input may still be in flight, and a
     // strike counted on a phantom gap is a false positive the client
-    // can't defend against.
-    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);
+    // can't defend against. An OPEN gap past the defer window keeps
+    // banking divergences but the severe bar scales by the starved-input
+    // deficit (see GAP_SEVERE_CREDIT_S).
+    const gapCredit = sh.gapStreak > 0
+      ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
+      : 0;
+    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, SEVERE_M + gapCredit);
     const now = wallNow();
     if (now - sh.lastCorrection < this.host.correctMs()) return null;
     sh.lastCorrection = now;
@@ -277,10 +290,10 @@ export class MoveJudge {
    *  contact-timing gap (the next correction converges it), so WARN only
    *  on repeats or blow-throughs; count=1 marginal clips are the known
    *  noise floor and stay INFO for later review. */
-  private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number): void {
+  private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number): void {
     sh.divergences++;
     this.noteHealth(dist);
-    this.noteSevere(sh, playerId, dist);
+    this.noteSevere(sh, playerId, dist, severeM);
     // Mid-arc knockback skew is transient by construction — the severe
     // counter still eats it (3 hits in 60s = real teleport), but the
     // log line stays informational. Same for permissive mode: without
@@ -308,8 +321,8 @@ export class MoveJudge {
 
   /** Rolling severe-blow counter — N overshoots inside the window flags
    *  the shadow as a teleporter, not a drifter. */
-  private noteSevere(sh: Shadow, playerId: string, dist: number): void {
-    if (dist <= SEVERE_M || sh.cheated) return;
+  private noteSevere(sh: Shadow, playerId: string, dist: number, severeM: number): void {
+    if (dist <= severeM || sh.cheated) return;
     const now = wallNow();
     sh.severeT = sh.severeT.filter((t) => now - t < SEVERE_MS);
     sh.severeT.push(now);

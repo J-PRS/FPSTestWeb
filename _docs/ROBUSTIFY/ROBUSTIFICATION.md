@@ -1822,16 +1822,13 @@ desyncs — sim replayed past the stamp and still off — still warn.
   within 14m of the claimed dest → trickle charge) already exempts posted
   guards; the maxed bots are genuine zombies — same competence finding as
   §4.7b, not a metering bug.
-- **Residual `Movement cheat` warns under sustained input gaps** —
-  post-§2.16 the join-wave burst is gone, but a 16-RTC-bot soak still
-  logged ~3 warns/80s at dist 60–99m. Hypothesis: RTC congestion holds
-  an inputMove gap past the 600ms defer window, so raw judging resumes
-  while the shadow is still starved — a lag blackout then banks strikes
-  exactly like a teleport. Options if the rate bothers real clients:
-  count strikes only when `gapStreak === 0` (edge recovered and the
-  report STILL diverges — the strongest cheat signal), or scale
-  SEVERE_M by gap duration. Needs a reproducer that holds an input gap
-  ~1s under live RTC before picking.
+- ~~**Residual `Movement cheat` warns under sustained input gaps**~~ -
+  *closed (2.135)*: the soak's hypothesis confirmed and fixed - an open
+  gap past the defer window now scales the severe bar by the
+  starved-input deficit (speed x gap age, capped 2s). Divergences and
+  corrections unchanged; strikes wait for a divergence the credit can't
+  explain. Pinned in roomMoveSim.test: ~70m at 30 m/s inside a ~0.6s gap
+  banks nothing; 300m still latches.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server
@@ -2666,3 +2663,18 @@ residual p95 1.72m; 300ms probe converges in a bounded ~5.7m transit
 band instead of drifting. The 150ms global-play floor now works by
 construction, not by hope.
 ### 2.134 - end
+
+### 2.135 - gap-open severe bar scales by starved-input deficit
+
+The 16-RTC-bot soak's ~3 Movement-cheat warns/80s at 60-99m were real:
+past the 600ms gapYoung defer, raw judging resumed while the shadow was
+still replaying stale input, so an honest client in a blackout drifted
+speed x gapAge and banked teleport strikes. Strikes now wait for a
+divergence the starved-input credit can't explain: severe bar =
+SEVERE_M + speed3d x min(gapAge, 2s). A stopped body gets no credit
+(stale input cannot move it); a real teleport arrives as a step
+function, far past the linear credit. Divergence counting, corrections,
+and inputSync hints are unchanged. Pinned in
+tests/roomMoveSim.test.ts: 4 reports at ~70m/30 m/s inside a ~0.62s open
+gap bank zero strikes; 3x 300m reports still latch cheated.
+### 2.135 - end

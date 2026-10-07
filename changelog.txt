@@ -1,3 +1,4 @@
+2026-10-07 - moveJudge: open input gaps scale the severe bar by starved-input deficit (speed x gap age, cap 2s) - RTC blackouts no longer bank teleport strikes
 2026-10-07 - vite proxies API paths to :8000 so a cloudflared tunnel carries clips+ws on one origin
 2026-10-07 - clip feed: mobile auto-routes to /clips (coarse pointer), seekable progress bar, ?play opt-out
 2026-10-07 - /clips feed: swipeable best-shots playback (wheel/arrows/space/touch), slide transition, deep-links + OG meta shell, Clear Screen + progress bar

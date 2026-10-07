@@ -271,6 +271,35 @@ describe('RoomMoveSim', () => {
     expect(flagged).toBe(1);
   });
 
+  test('open input gap scales the severe bar by starved-input deficit', async () => {
+    // RTC-congestion regression: while a report runs ahead of the input
+    // watermark the shadow replays stale input, so an honest moving client
+    // drifts speed×gapAge — a ~1s blackout at ski speed reads 60–99m and
+    // banked teleport strikes (seen: ~3 warns/80s on a 16-bot RTC soak).
+    // The severe bar now credits the deficit (speed×gap age, capped 2s):
+    // divergences/corrections still count, strikes wait for a gap the
+    // credit can't explain.
+    const m = new RoomMoveSim(flat);
+    let flagged = 0;
+    m.onCheat = () => flagged++;
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
+    const s = m.simState('p1')!;
+    s.vel.x = 30; // ski-speed shadow — credit = 30×gapAge
+    // Open a gap: reports stamp seqs ahead of everything consumed.
+    m.reconcile('p1', { x: 70, y: 0, z: 0 }, 0, undefined, 9);
+    // Past the defer window the gap is still open — dist 70 > SEVERE_M 60
+    // but inside 60 + 30×~0.62s credit: no strike banks.
+    await new Promise((r) => setTimeout(r, 620));
+    for (let i = 0; i < 4; i++) m.reconcile('p1', { x: 70 + i, y: 0, z: 0 }, 0, undefined, 9);
+    expect(flagged).toBe(0);
+    // A real teleport is a step function — far past the linear credit.
+    m.reconcile('p1', { x: 300, y: 0, z: 0 }, 0, undefined, 10);
+    m.reconcile('p1', { x: 310, y: 0, z: 0 }, 0, undefined, 10);
+    m.reconcile('p1', { x: 320, y: 0, z: 0 }, 0, undefined, 10);
+    expect(flagged).toBe(1);
+  });
+
   test('speed-scaled tolerance absorbs ski-speed drift but not teleports', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
