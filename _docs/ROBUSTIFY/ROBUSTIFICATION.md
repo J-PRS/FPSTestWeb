@@ -2883,3 +2883,16 @@ of a converged re-sim. inputsAfter now takes gapMs (the correction's
 round-trip window, passed as ping) and re-seeds the still-held input at
 (now - gapMs) so it governs the gap - the CFWK replay finally covers
 the steady-input case it was built for. (inputStream.ts, players.ts)
+
+## 2.154 Reordered snapshots rewound the render clock + corrupted the buffer
+
+SnapshotBuffer.push() did latestT = t unconditionally and appended the
+snapshot -- but t is SERVER time and RTC/WT datagram lanes deliver out
+of order. A stale packet (a) rewound the render-clock anchor, visibly
+snapping the remote backward on each reorder, and (b) landed at the
+tail of an array the sampler scans assuming monotonic t, so the
+straddling-pair search read a corrupted window. The anchor now advances
+only on the newest t (jitter stats track raw arrivals via a separate
+stamp), snapshots splice into sorted position, and pruning keys off
+latestT instead of the pushed t. Regression test covers the reorder.
+(remoteSnapshots.ts)
