@@ -17,6 +17,7 @@ import type { PickupKind } from '../../shared/pickups.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -108,6 +109,9 @@ export interface RoomInfo {
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
+  /** Shadow's consumed-input watermark for gameState restores — anchors
+   *  the client's post-flap journal replay. */
+  inputSeqOf?: (playerId: string) => number;
   /** Rabbit rooms: current flag carrier (null = flag loose). Present only
    *  in rabbit rooms — CombatHandler gates all PvP damage on the pair
    *  involving the carrier. */
@@ -443,6 +447,10 @@ export class MessageHandler {
         health: player.health,
         armor: player.armor,
         isDead: player.isDead,
+        // The shadow's input watermark — the anchor is last-accepted
+        // truth, so the reconnecting client replays its journal over
+        // it instead of snapping backward (see restoreLocalPlayer).
+        inputSeq: this.roomInfo.inputSeqOf?.(playerId),
       },
     });
 
@@ -460,9 +468,7 @@ export class MessageHandler {
   }
 
   private announceJoin(player: PlayerState): void {
-    this.broadcast({
-      type: 'playerJoined',
-      playerId: player.id,
+    this.broadcast(spawnPayload(WORLD_MODEL.player!, player.id, 'playerId', {
       name: player.name,
       internalId: player.internalId,
       position: player.position,
@@ -472,7 +478,7 @@ export class MessageHandler {
       armorClass: player.armorClass,
       health: player.health,
       isDead: player.isDead,
-    }, player.id);
+    }) as ServerMessage, player.id);
   }
 
   /** Spectator join — no player record, so everyone is "others", there's

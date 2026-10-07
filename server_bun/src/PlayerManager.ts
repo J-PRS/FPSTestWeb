@@ -6,6 +6,7 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
 import { ENERGY } from '../../shared/movement.ts';
+import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
@@ -191,8 +192,7 @@ export class PlayerManager {
   }
 
   toGameStatePlayer(player: PlayerState): GameStatePlayer {
-    return {
-      id: player.id,
+    return rosterRow(WORLD_MODEL.player!, 'id', player.id, {
       name: player.name,
       internalId: player.internalId,
       position: { ...player.position },
@@ -204,7 +204,7 @@ export class PlayerManager {
       team: player.team,
       transport: player.transport,
       armorClass: player.armorClass,
-    };
+    }) as unknown as GameStatePlayer;
   }
 
   updatePosition(playerId: string, position: Vec3, rotation: Rotation, velocity: Vec3, seq?: number): void {

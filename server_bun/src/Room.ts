@@ -34,6 +34,7 @@ import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClas
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
+import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
@@ -364,7 +365,14 @@ export class Room {
     if (this.spec.bots) this.bots.populate(this.spec.bots);
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
-    if (this.spec.deploys) this.deployables.seedBase(this.spec.deploys);
+    if (this.spec.deploys) {
+      // Ride structure floors: a generator seeded inside a genhouse must
+      // stand on its deck (seated high over terrain), not drown in it.
+      // max() keeps authored elevations — tower sentries never descend.
+      this.deployables.seedBase(this.spec.deploys.map(e => ({
+        ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.deployFloor(e.pos.x, e.pos.z, e.pos.y)) },
+      })));
+    }
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.effStructures());
     this.registerSims();
@@ -493,6 +501,10 @@ export class Room {
   private flagStandTop(x: number, z: number): number {
     let top = this.field ? hmHeight(this.field, x, z) : 0;
     for (const s of this.spec.structures ?? []) {
+      // Kit pieces carry a placeholder {1,1,1} size — their real footprint
+      // is the hull table. Counting the dummy box as a standable surface
+      // lifts flag homes ~1m whenever a compound is centered on the flag.
+      if (s.kind === 'kit') continue;
       if (Math.abs(x - s.pos.x) <= s.size.x / 2 && Math.abs(z - s.pos.z) <= s.size.z / 2) {
         top = Math.max(top, s.pos.y + s.size.y);
       }
@@ -523,6 +535,24 @@ export class Room {
       x += (dx / dd) * 15; z += (dz / dd) * 15;
     }
     return { x, z };
+  }
+
+  /** Highest walkable surface under a seeded deploy that isn't a climb
+   *  away from its authored height — genhouse decks ride ~1m over the
+   *  max-seated base, walls/roofs sit higher and must not win. Returns
+   *  terrain-or-structure top; the caller still takes max() with the
+   *  authored y so a tower-top asset is never dragged down. */
+  private deployFloor(x: number, z: number, authoredY: number): number {
+    let top = this.field ? hmHeight(this.field, x, z) : 0;
+    for (const c of this.ballSim?.colliders ?? []) {
+      const dx = x - c.cx, dz = z - c.cz;
+      const lx = dx * c.cos + dz * c.sin;
+      const lz = -dx * c.sin + dz * c.cos;
+      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
+      const t = c.cy + c.hy;
+      if (t > top && t <= authoredY + 6) top = t;
+    }
+    return top;
   }
 
   private snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
@@ -567,7 +597,8 @@ export class Room {
    *  effStructures, so the last push's snapshot is what a stayer has. */
   private emittedStands: string | null = null;
   private standsJson(): string {
-    return JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand'));
+    // Shields ride the diff too — a generator flip changes which panes emit.
+    return JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand' || s.kind === 'shield'));
   }
 
   /** Re-push the merged structure list when the stand hulls moved — a
@@ -578,6 +609,11 @@ export class Room {
     if (stands === this.emittedStands) return;
     this.emittedStands = stands;
     const spec = this.spec;
+    // Refresh the join-time echo too — setMap freezes whatever snap was
+    // live when applySpec ran (often the previous map's field), and
+    // gameState re-serves that stale list to every reconnect until the
+    // map reloads.
+    this.messages.setMap({ ...spec, structures: this.effStructures() });
     this.broadcast({
       type: 'mapUpdate',
       silent: true,
@@ -595,8 +631,21 @@ export class Room {
    *  daises — 'stand' entries collide everywhere (move sim, shells,
    *  balls, blast LOS) and ride the wire echo, but the client never
    *  draws them as generic boxes (the dais mesh is their visual). */
+  /** Generator state flips which shield panes exist — colliders and the
+   *  wire echo share this list, so one call re-syncs every client. */
+  refreshPowerStructures(): void {
+    this.attachAllStructures();
+    this.pushStructureUpdate();
+  }
+
   private effStructures(): StructureSpec[] {
-    const out = [...(this.spec.structures ?? [])];
+    // Team shield panes vanish while their grid is dark — no collider,
+    // no render, no blocker on either side.
+    // deployables construct after the first moveSim/ballSim attach —
+    // pre-seed the grid reads live, so a missing table means powered.
+    const out = (this.spec.structures ?? []).filter(
+      (s) => s.kind !== 'shield' || !s.team || (this.deployables?.teamPowered(s.team) ?? true),
+    );
     if (!this.modeSpec?.flags) return out;
     if (process.env.FPS_NOSTAND) return out; // soak A/B: measure approach cost of the dais hulls
     if (this.mode === 'rabbit') {
@@ -725,6 +774,7 @@ export class Room {
         jetHeld: !!i.jet,
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
+      inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
@@ -1043,7 +1093,7 @@ export class Room {
     }
     this.lastSentPositions.delete(playerId);
     this.chatPace.delete(playerId);
-    this.connections.broadcast({ type: 'playerLeft', playerId });
+    this.connections.broadcast(verbPayload(WORLD_MODEL.player!, 'gone', 'playerId', playerId, {}) as ServerMessage);
     this.rebalanceTeams();
     log('Player removed', { room: this.name, playerId, reason, remaining: this.playerCount() });
   }

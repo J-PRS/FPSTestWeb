@@ -229,6 +229,65 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'velocity', channel: 'sim' },
     ],
   },
+  // The player lane: join announce / leave / gameState roster rows / the
+  // per-tick record. Players are the only client-owned kind — the server
+  // relays their claimed state rather than simming it, so their verbs
+  // carry claimed values instead of sim-derived ones.
+  player: {
+    kind: 'player',
+    verbs: { spawn: 'playerJoined', update: 'tickUpdate', gone: 'playerLeft' },
+    fields: [
+      { name: 'internalId', channel: 'edge' },
+      { name: 'health', channel: 'sim' },
+      { name: 'isDead', channel: 'edge' },
+      { name: 'team', channel: 'edge' },
+    ],
+    // playerJoined announce — id rides the 'playerId' key, not 'id'.
+    spawnFields: [
+      { name: 'name', channel: 'edge' },
+      { name: 'internalId', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'rotation', channel: 'sim' },
+      { name: 'team', channel: 'edge' },
+      { name: 'transport', channel: 'edge' },
+      { name: 'armorClass', channel: 'edge' },
+      { name: 'health', channel: 'sim' },
+      { name: 'isDead', channel: 'edge' },
+    ],
+    goneFields: [],
+    // tickUpdate record — id rides 'playerId'; the binary tick frame
+    // packs the same fields.
+    updateFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'rotation', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'health', channel: 'sim' },
+      { name: 'isDead', channel: 'edge' },
+      { name: 'ping', channel: 'sim' },
+      { name: 'ski', channel: 'sim' },
+      { name: 'status', channel: 'edge' },
+      { name: 'sheep', channel: 'sim' },
+    ],
+    // gameState player row — id rides 'id' here (GameStatePlayer.id),
+    // unlike the verbs' playerId.
+    rosterFields: [
+      { name: 'name', channel: 'edge' },
+      { name: 'internalId', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'rotation', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'isDead', channel: 'edge' },
+      { name: 'health', channel: 'sim' },
+      { name: 'status', channel: 'edge' },
+      { name: 'team', channel: 'edge' },
+      { name: 'transport', channel: 'edge' },
+      { name: 'armorClass', channel: 'edge' },
+    ],
+    simFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+    ],
+  },
 };
 
 /** Build a lifecycle payload from the declared field list — the emitter

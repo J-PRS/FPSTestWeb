@@ -22,6 +22,27 @@ function unionLine(verb: string): string | null {
   return m ? m[0] : null;
 }
 
+// Roster rows can live inside a named interface (gameState's players are
+// GameStatePlayer[]) — resolve `interface X { ... }` bodies the same way
+// so a field-name reference can't hide drift.
+const INTERFACES = new Map<string, string>();
+for (const m of PROTOCOL.matchAll(/interface (\w+) \{([\s\S]*?)\n\}/g)) {
+  INTERFACES.set(m[1]!, m[2]!);
+}
+const hasField = (text: string, name: string) =>
+  text.includes(`${name}:`) || text.includes(`${name}?:`);
+
+// A verb member can point at a named row type (`updates: TickUpdatePlayer[]`)
+// — expand the search text to include the bodies of any interfaces it names.
+function withInterfaces(member: string): string {
+  let text = member;
+  for (const m of member.matchAll(/(\w+)\[\]/g)) {
+    const body = INTERFACES.get(m[1]!);
+    if (body) text += `\n${body}`;
+  }
+  return text;
+}
+
 const VERB_LISTS: ['spawn' | 'update' | 'gone', 'spawnFields' | 'updateFields' | 'goneFields' | 'rosterFields'][] = [
   ['spawn', 'spawnFields'],
   ['update', 'updateFields'],
@@ -37,9 +58,10 @@ describe('world model <-> protocol conformance', () => {
       it(`${kind.kind}.${verb} exists in the ServerMessage union with every declared field`, () => {
         const line = unionLine(verb);
         expect(line, `${verb} not found in protocol.ts`).not.toBeNull();
+        const text = withInterfaces(line!);
         for (const f of fields!) {
           // Union members mark wire-optional fields as `name?:`.
-          const present = line!.includes(`${f.name}:`) || line!.includes(`${f.name}?:`);
+          const present = hasField(text, f.name);
           expect(present, `${verb} union member is missing declared field '${f.name}'`).toBe(true);
         }
       });
@@ -50,10 +72,13 @@ describe('world model <-> protocol conformance', () => {
         // flagUpdate) — find the union line whose row shape carries every
         // declared roster field.
         const names = kind.rosterFields!.map((f) => f.name);
-        const lines = PROTOCOL.split('\n');
-        const has = (l: string, n: string) => l.includes(`${n}:`) || l.includes(`${n}?:`);
-        const hit = lines.some((l) => names.every((n) => has(l, n)));
-        expect(hit, `${kind.kind}: no union member carries roster fields ${names.join(' ')}`).toBe(true);
+        // Check inline union members AND named interface bodies.
+        const chunks = [
+          ...PROTOCOL.split('\n'),
+          ...INTERFACES.values(),
+        ];
+        const hit = chunks.some((l) => names.every((n) => hasField(l, n)));
+        expect(hit, `${kind.kind}: no union member/interface carries roster fields ${names.join(' ')}`).toBe(true);
       });
     }
   }

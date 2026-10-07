@@ -16,6 +16,8 @@ import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import type { ServerMessage } from '../../shared/protocol.ts';
 
 // FPS_SOAK_RANDLO=1: every slot draws from the union of weapons the
 // authored kits place there — measures raw per-weapon lethality with
@@ -66,7 +68,10 @@ export class BotRoster {
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.
       const cls = botClassForLoadout(loadout);
-      const p = this.room.players.addPlayer(id, undefined, loadout.perk, cls, true);
+      // Team BEFORE spawn — addPlayer picks the point, and an unaffiliated
+      // pick falls back to the flat pool which straddles both bases
+      // (bastion): the bot materializes inside the enemy's defended base.
+      const p = this.room.players.addPlayer(id, this.room.nextTeam(), loadout.perk, cls, true);
       this.loadouts.set(id, loadout);
       this.roles.set(id, 'offense');
       this.applyClass(p, cls);
@@ -74,20 +79,22 @@ export class BotRoster {
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = simNow();
       this.room.assignTeam(p);
-      this.room.broadcast({
-        type: 'playerJoined',
-        playerId: id,
+      this.room.broadcast(spawnPayload(WORLD_MODEL.player!, id, 'playerId', {
+        name: p.name,
         internalId: p.internalId,
         position: p.position,
         rotation: p.rotation,
         team: p.team,
+        transport: p.transport,
         armorClass: cls,
-      });
+        health: p.health,
+        isDead: p.isDead,
+      }) as ServerMessage);
       this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
-      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
+      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
   }
