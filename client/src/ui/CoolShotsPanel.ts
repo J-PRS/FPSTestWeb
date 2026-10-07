@@ -55,7 +55,7 @@ export class CoolShotsPanel {
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
     // Tile: weapon + shot→hit distance + air time — the brag stats.
     // meta is optional (server/vault-restored entries may lack it).
-    const meta = [shot.weapon, shot.distance != null ? `${shot.distance.toFixed(0)}m` : '', shot.direct ? 'direct' : '']
+    const meta = [shot.weapon, shot.distance != null ? `${shot.distance.toFixed(0)}m` : '']
       .filter(Boolean).join(' · ');
     item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span>${meta ? `<span class="shot-meta">${meta}</span>` : ''}<span class="time-ago">${this.timeAgo(shot.timestamp)}</span>`;
     item.addEventListener('click', () => {

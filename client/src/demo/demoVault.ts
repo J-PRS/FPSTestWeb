@@ -22,7 +22,6 @@ export interface VaultEntry {
   projectileLifetime: number;
   weapon?: string;
   distance?: number;
-  direct?: boolean;
   data: DemoFile;
 }
 

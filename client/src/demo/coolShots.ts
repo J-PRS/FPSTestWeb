@@ -21,7 +21,6 @@ export interface CoolShotEntry {
   description: string;
   weapon?: string;   // displayName of the weapon that scored the hit
   distance?: number; // shot-origin → hit-point travel distance (m)
-  direct?: boolean;  // direct hit (not splash)
   clipData?: DemoFile; // only set for locally-generated clips
 }
 
@@ -37,7 +36,6 @@ interface PendingClip {
   bestLifetime: number;
   weapon?: string;
   distance?: number;
-  direct?: boolean;
 }
 
 export interface CoolShotDeps {
@@ -93,7 +91,7 @@ export class CoolShotManager {
   // If a new cool shot happens during an existing pending clip's wait period,
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5, bufferAfter: number = 5, hitTime?: number, meta?: { weapon?: string; distance?: number; direct?: boolean }): void {
+  onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5, bufferAfter: number = 5, hitTime?: number, meta?: { weapon?: string; distance?: number }): void {
     if (!this.deps.isRecording()) {return;}
     if (projectileLifetime < minLifetime) {return;}
 
@@ -111,7 +109,6 @@ export class CoolShotManager {
         if (projectileLifetime >= pending.bestLifetime) {
           pending.weapon = meta?.weapon;
           pending.distance = meta?.distance;
-          pending.direct = meta?.direct;
         }
         const totalDur = pending.clipEnd - pending.clipStart;
         pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
@@ -137,7 +134,6 @@ export class CoolShotManager {
       bestLifetime: projectileLifetime,
       weapon: meta?.weapon,
       distance: meta?.distance,
-      direct: meta?.direct,
     });
     logger.debug(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
   }
@@ -171,7 +167,6 @@ export class CoolShotManager {
       description: pending.description,
       weapon: pending.weapon,
       distance: pending.distance,
-      direct: pending.direct,
       clipData,
     };
     // Upload to server; on success, use the server-assigned filename and free local clipData
@@ -189,7 +184,7 @@ export class CoolShotManager {
     this.trimList();
     // Vault is the durable copy — memory clipData frees after upload,
     // vault keeps the clip downloadable/playbackable across sessions.
-    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, direct: entry.direct, data: clipData });
+    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, data: clipData });
     this.onChanged?.(this.coolShots);
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
@@ -216,7 +211,7 @@ export class CoolShotManager {
     const have = new Set(this.coolShots.map(s => s.id));
     for (const m of meta) {
       if (have.has(m.id)) {continue;}
-      this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime, weapon: m.weapon, distance: m.distance, direct: m.direct });
+      this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime, weapon: m.weapon, distance: m.distance });
     }
     this.trimList();
     this.onChanged?.(this.coolShots);
