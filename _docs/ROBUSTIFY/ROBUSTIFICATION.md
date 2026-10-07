@@ -2952,3 +2952,18 @@ inside the new window, not extrapolate from the dead epoch. Fails
 against the pre-fix code (anchor never re-arms). Also verified the
 creature-hash audit branch diffs serverCreatureFields directly -- no
 fabricated fallbacks like the deploy lane had. (remoteSnapshots.test.ts)
+
+## 2.159 Verified-clean: deployable + claim-lane audit sweep
+
+No code change -- documented so later rounds don't re-sweep. Covered:
+deploy wire edges (spawn/gone/down/up/hp), roster reconcile culls,
+shared DEPLOY_MAX cap symmetry (server recycles oldest-by-ttl, client
+predicts insertion-oldest -- equivalent), wire rate limits (deploy 4/s,
+repair 30/s; teleport intentionally unlimited, honor-and-count via
+teleportSpam), repair claim validation (friendly rule, 1.5x range
+slack, LOS, per-pair cooldown), plant distance (MAX_PLANT_DIST=40,
+tested via 'toofar' case), claim-ledger bounds (server MAX_SPENT +
+client 256-cap + tombstone dedup), per-player teardown funnel
+(rateLimiter/limiter warns/deployables/projectiles/scoring/sessionTokens
+/wireId retirement all swept in removePlayerCompletely), lastRepair key
+sweeps on owner-leave and item-remove, wireIdRetired mint-time sweep.
