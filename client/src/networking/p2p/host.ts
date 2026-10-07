@@ -25,6 +25,8 @@ import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
 import { RoomProjectiles } from '../../../../server_bun/src/RoomProjectiles.js';
+import { RoomMoveSim } from '../../../../server_bun/src/RoomMoveSim.js';
+import { ENERGY } from '../../../../shared/movement.js';
 import { beamSweepRay } from '../../../../server_bun/src/beamSweep.js';
 import { getHeightfield } from '../../world/heightmap.js';
 
@@ -58,9 +60,13 @@ export class P2PHost {
   pushNoise(): void { /* intentionally silent */ }
 
   private readonly projectiles: RoomProjectiles;
+  /** Peer moveReports reconcile against a shadow sim — the host judges
+   *  teleports instead of relaying them verbatim. */
+  private readonly moveShadows = new RoomMoveSim(null, true);
 
   constructor() {
     this.projectiles = new RoomProjectiles(this, null);
+    this.playerManager.energyBurn = (pid, n) => this.moveShadows.drainEnergy(pid, n);
     this.messageHandler = new MessageHandler(
       this.playerManager,
       this.rateLimiter,
@@ -80,6 +86,26 @@ export class P2PHost {
             field: getHeightfield(),
             solids: this.projectiles.solidColliders,
           }, pid, muzzle, dir, range),
+        // Movement reconciles like dedicated: inputs queue on the shadow,
+        // reports judge it, resync/energy ride the same hooks.
+        moveInput: (pid, i, status, seq) => this.moveShadows.queueInput(pid, {
+          forward: i.forward, right: i.right,
+          jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
+          jetHeld: !!i.jet,
+        }, status, seq),
+        moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
+        inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
+        drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
+        onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+        energyOf: (pid) => this.moveShadows.energyOf(pid),
+        moveResync: (pid, pos, yaw, fullEnergy) => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
+        moveTrack: (pid, pos, yaw) => {
+          const p = this.playerManager.getPlayer(pid);
+          this.moveShadows.track(pid, pos, yaw, p?.perk, p?.team);
+          this.moveShadows.markReseated(pid);
+        },
+        moveMute: (pid) => this.moveShadows.markReseated(pid),
+        moveUntrack: (pid) => this.moveShadows.untrack(pid),
       },
     );
     // 20Hz to match the dedicated server's tick cadence. With two players
@@ -198,10 +224,15 @@ export class P2PHost {
     // (attachField rescans the whole map, so this isn't a per-tick call).
     if (!this.fieldAttached) {
       const f = getHeightfield();
-      if (f) { this.projectiles.attachField(f); this.fieldAttached = true; }
+      if (f) {
+        this.projectiles.attachField(f);
+        this.moveShadows.attachField(f, (pid) => this.playerManager.getPlayer(pid)?.position);
+        this.fieldAttached = true;
+      }
     }
     // Shells fly even with one player — the host fires before guests join.
     this.projectiles.tick(0.05);
+    this.moveShadows.tick(0.05);
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
     for (const [recipientId] of players) {

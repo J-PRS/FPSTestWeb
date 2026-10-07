@@ -3316,3 +3316,13 @@ from the spawn/event field lists; the isNew vitals guard and the
 respawn revive (isDead=false/health=100/zero velocity) stay explicit
 because they're policy, not field mapping.
 (tsc + 22 focused tests green)
+
+## 2.184 — P2P hosts reconcile movement too (RoomMoveSim on host)
+
+Peers' moveReports were relayed verbatim — the host trusted every
+position claim, the one adjudication gap dedicated never had. The host
+now runs RoomMoveSim(field, authoritative): inputs queue on shadows,
+reports judge teleports, energy/skill/slam-drain ride the same deps,
+and attachField lands lazily once the heightmap loads. PlayerManager
+energyBurn wired so damage energy-drain mirrors dedicated.
+(tsc + p2pHost 10/10 green)
