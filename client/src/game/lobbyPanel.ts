@@ -198,7 +198,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       for (const [n, el] of tabs) el.style.display = n === name ? 'block' : 'none';
       for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
     };
-    for (const name of ['JOIN', 'HOST', 'SOLO', 'DUEL']) {
+    for (const name of ['JOIN', 'HOST', 'SOLO', 'P2P']) {
       const b = btn(name);
       b.dataset.tab = name;
       b.addEventListener('click', () => showTab(name));
@@ -397,9 +397,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
     tabs.get('HOST')!.append(hostLbl, nameRow, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
     tabs.get('SOLO')!.append(buildOfflineList());
-    tabs.get('DUEL')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
+    tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
 
-    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('SOLO')!, tabs.get('DUEL')!);
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('SOLO')!, tabs.get('P2P')!);
     showTab('JOIN');
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
