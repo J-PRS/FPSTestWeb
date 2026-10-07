@@ -329,6 +329,10 @@ export class RoomProjectiles {
    *  Indices sort back to map order so results are identical to the
    *  flat scan, insertion order included. */
   private shellGrid: { seq: number; cells: Map<number, number[]>; list: LiveProj[] } | null = null;
+  // Reused result scratches — shellsNear feeds only incomingNear, which
+  // consumes it synchronously per bot think before the next call.
+  private readonly shellIdx: number[] = [];
+  private readonly shellOut: LiveProj[] = [];
   private shellsNear(pos: Vec3, radius: number): LiveProj[] {
     const seq = this.room.tickSeq;
     if (this.shellGrid?.seq !== seq) {
@@ -345,7 +349,8 @@ export class RoomProjectiles {
     }
     const { cells, list } = this.shellGrid;
     const CELL = 16, BIAS = 2048;
-    const idx: number[] = [];
+    const idx = this.shellIdx;
+    idx.length = 0;
     const x0 = Math.floor((pos.x - radius) / CELL), x1 = Math.floor((pos.x + radius) / CELL);
     const z0 = Math.floor((pos.z - radius) / CELL), z1 = Math.floor((pos.z + radius) / CELL);
     for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
@@ -353,7 +358,10 @@ export class RoomProjectiles {
       if (cell) for (const i of cell) idx.push(i);
     }
     idx.sort((a, b) => a - b);
-    return idx.map((i) => list[i]!);
+    const out = this.shellOut;
+    out.length = 0;
+    for (const i of idx) out.push(list[i]!);
+    return out;
   }
 
   /** Shells inside `radius` that are closing on `pos` — feeds bot threat

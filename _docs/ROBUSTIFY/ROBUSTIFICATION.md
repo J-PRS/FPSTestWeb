@@ -233,6 +233,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.69 Threat-sense result arrays (2026-10-07)
+
+Class 10, server think loop. `shellsNear` rebuilt `idx` + `idx.map(...)`
+arrays per call — 2 allocs × per bot per think (~10Hz each) in the
+threat sense. Result scratches now pooled on the manager (`shellIdx`/
+`shellOut`); sole consumer `incomingNear` reads it synchronously.
+Server side pushes live pos refs, so no §2.68-style alias exists —
+noise/threat senses return live objects, never pooled writes.
+
 ### 2.68 Sense-pool slot aliasing (2026-10-07)
 
 Real bug, pooled-scratch class. `recentNoises` rewound `_vecUsed` after
