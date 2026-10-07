@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 
 import { MoveSim, MOVEMENT_CONFIG, type BodyCapsule, type MoveState, type MoveInput, type Vec3Like } from '../../../shared/movement.js';
 import { SolidWorld } from '../../../shared/solidWorld.js';
+import { FieldSurface } from '../../../shared/fieldSurface.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 
 import type { Terrain } from '../world/terrain.js';
@@ -13,31 +14,19 @@ export { MOVEMENT_CONFIG };
 export type MovementState = MoveState & { pos: THREE.Vector3; vel: THREE.Vector3 };
 export type MovementInput = MoveInput;
 
-// Adapts THREE-Terrain to the shared sim's plain-object surface interface.
-// Map structures layer over the terrain — identical math to the server's
-// FieldSurface so prediction and shadow agree about walls and floors.
-class TerrainSurface {
-  private solid: SolidWorld | null = null;
-  constructor(private terrain: Terrain) {}
-  setStructures(list: readonly StructureSpec[] | undefined): void {
-    this.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
-  }
-  getHeight(x: number, z: number): number {
-    const g = this.terrain.getHeight(x, z);
-    const t = this.solid?.topAt(x, z) ?? -Infinity;
-    return t > g ? t : g;
-  }
-  getNormal(x: number, z: number, out: Vec3Like): Vec3Like {
-    if ((this.solid?.topAt(x, z) ?? -Infinity) > this.terrain.getHeight(x, z)) {
-      out.x = 0; out.y = 1; out.z = 0;
-      return out;
-    }
-    const n = this.terrain.getNormal(x, z); // may be a shared scratch — copy fields now
+// The client plugs its THREE-Terrain in as a bare ground sampler; the
+// solid overlay (reach-bounded tops, flat normals, wall push-out) is the
+// shared FieldSurface itself — there is no second adapter to drift. A
+// client-side reimplementation once dropped the maxTop bound and
+// teleported walkers onto structure roofs.
+const terrainSampler = (terrain: Terrain) => ({
+  getHeight: (x: number, z: number) => terrain.getHeight(x, z),
+  getNormal: (x: number, z: number, out: Vec3Like): Vec3Like => {
+    const n = terrain.getNormal(x, z); // may be a shared scratch — copy fields now
     out.x = n.x; out.y = n.y; out.z = n.z;
     return out;
-  }
-  resolveBody(s: MoveState, height: number): void { this.solid?.resolveBody(s, height); }
-}
+  },
+});
 
 /**
  * Client-side movement controller — thin wrapper over the shared MoveSim
@@ -46,20 +35,20 @@ class TerrainSurface {
  */
 export class MovementController {
   private sim: MoveSim;
-  private surface: TerrainSurface;
+  private surface: FieldSurface;
   private state: MovementState;
 
   constructor(terrain: Terrain, initialState: MovementState) {
     // The sim's state IS this.state — callers mutating via getState()
     // (yaw/pitch each frame) are visible to the sim immediately.
     this.state = initialState;
-    this.surface = new TerrainSurface(terrain);
+    this.surface = FieldSurface.over(terrainSampler(terrain));
     this.sim = new MoveSim(this.surface, initialState);
   }
 
   /** Map structures for collision — swap on gameState/mapUpdate. */
   setStructures(list: readonly StructureSpec[] | undefined): void {
-    this.surface.setStructures(list);
+    this.surface.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
   }
 
   setInput(input: Partial<MovementInput>): void { this.sim.setInput(input); }

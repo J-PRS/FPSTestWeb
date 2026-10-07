@@ -38,20 +38,38 @@ export const HOLD_QUATS: Record<string, [number, number, number, number][]> = {
     [-0.8729, 0, 0.4465, 0.1968],
     [-0.7144, 0, -0.0469, 0.6982],
   ],
+  // Sampled from Fire_2Pistol's aim frame (t≈0.3) — the pack's authored
+  // forward two-hand aim, lifted as bind-relative offsets incl. the
+  // collarbones (chain roles 6/7) so the pinned pose reproduces the
+  // clip's shoulder line too, not just the arm links.
+  scifisoldier: [
+    [0.0823, -0.0356, 0.5247, 0.8465],
+    [0.1031, -0.0087, 0.4354, 0.8943],
+    [0.0966, -0.1437, 0.0193, 0.9847],
+    [-0.0159, 0.053, 0.6019, 0.7967],
+    [-0.0268, -0.0488, 0.1923, 0.9798],
+    [-0.1916, 0.1808, 0.0394, 0.9639],
+    [0, 0, 0.123, 0.9924],
+    [0, 0, 0.0586, 0.9983],
+  ],
 };
 
 let _holdChains: Set<string>[] | null = null;
 export function holdChains(): Set<string>[] {
   if (!_holdChains) {
     _holdChains = [
-      new Set(['upperarmr', 'basehumanrupperarm', 'basehumanrupperarm1']),
-      new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm']),
-      new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm']),
+      new Set(['upperarmr', 'basehumanrupperarm', 'basehumanrupperarm1', 'rigarmright1']),
+      new Set(['lowerarmr', 'forearmr', 'basehumanrforearm1', 'basehumanrforearm', 'rigarmright2']),
+      new Set(['handr', 'palm2r', 'fistr', 'basehumanrpalm', 'rigarmright3']),
       // Left arm comes across to the foregrip — without it the retargeted
       // clip tracks flail the free arm every frame.
-      new Set(['upperarml', 'basehumanlupperarm', 'basehumanlupperarm1']),
-      new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm']),
-      new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm']),
+      new Set(['upperarml', 'basehumanlupperarm', 'basehumanlupperarm1', 'rigarmleft1']),
+      new Set(['lowerarml', 'forearml', 'basehumanlforearm1', 'basehumanlforearm', 'rigarmleft2']),
+      new Set(['handl', 'palm2l', 'fistl', 'basehumanlpalm', 'rigarmleft3']),
+      // Collarbones — the clip still animates these, dragging the pinned
+      // arm chain's root (scifi's hold ended up muzzle-sideways).
+      new Set(['rigarmrightcollarbone']),
+      new Set(['rigarmleftcollarbone']),
     ];
   }
   return _holdChains;
@@ -97,6 +115,9 @@ export class PoseControl {
    *  `__holdbake1` marker on the adopted clip table) — the runtime
    *  compose is for rigs on pre-bake files or native-only clip sets. */
   holdBaked = false;
+  /** armedHold rigs keep the grip through Fire_* oneshots — hip-fire
+   *  doesn't lower the weapon to shoot. Hit/death still own the arms. */
+  holdShoots = false;
   private holdW = 0;
 
   // Masked aim layer (mannequin): Pistol_Aim_* clips filtered to the
@@ -157,7 +178,7 @@ export class PoseControl {
   debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
     const rads = [upper, lower, hand, lUpper, lLower, lHand].map(e =>
       new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
-    for (const hb of this.holdBones) {hb.off.copy(rads[hb.role]!);}
+    for (const hb of this.holdBones) {hb.off.copy(rads[hb.role] ?? new THREE.Quaternion());}
   }
 
   // Collects the bones this controller drives. nb = normBone(child.name).
@@ -174,7 +195,7 @@ export class PoseControl {
       for (let role = 0; role < chains.length; role++) {
         const norms = chains[role]!;
         if (norms.has(nb)) {
-          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion(...this.holdQuats[role]!), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
+          this.holdBones.push({ bone: child, role, off: new THREE.Quaternion(...(this.holdQuats[role] ?? [0, 0, 0, 1])), last: new THREE.Quaternion(), bind: child.quaternion.clone() });
           break;
         }
       }
@@ -241,7 +262,8 @@ export class PoseControl {
     // Masked aim layer — weights must land BEFORE mixer.update samples the
     // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
     // arms so it doesn't fight the reaction pose.
-    const oneshot = oneshotOwnsArms(currentAction, currentClipName);
+    let oneshot = oneshotOwnsArms(currentAction, currentClipName);
+    if (oneshot && this.holdShoots && currentClipName != null && /Fire|Shoot|Shot/.test(currentClipName)) {oneshot = false;}
     this.aimPitchSm += (this.aimPitch - this.aimPitchSm) * Math.min(dt * 12, 1);
     let procPitch = this.aimPitchSm;
     if (this.aimNeutral) {

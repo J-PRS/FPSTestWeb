@@ -99,6 +99,7 @@ if (pvariant) {
     camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
     camera.lookAt(c);
     renderer.setAnimationLoop(() => { pm.update(1 / 60); renderer.render(scene, camera); });
+    (window as unknown as { __cam: THREE.PerspectiveCamera }).__cam = camera;
     window.__clips = [...anims.keys()];
     window.__ready = true;
   };

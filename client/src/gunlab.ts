@@ -14,7 +14,7 @@ import { ARCHIVE_BUILDERS } from './entities/viewmodel/weaponsGeoArchive.js';
 import { bakeVertexAO, enhanceWeaponMaterial } from './effects/vertexAO.js';
 import { metalMat } from './entities/procMetal.js';
 import { WeaponType } from '../../shared/weaponTable.js';
-import { CREATURES, PICKUPS, ITEMS, CLASSES, previewLive, initPreviews } from './gunlab/previews.js';
+import { CREATURES, PICKUPS, ITEMS, CLASSES, STRUCTURES, previewLive, initPreviews } from './gunlab/previews.js';
 import type { AnimationState } from './entities/playerClips.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
@@ -173,6 +173,64 @@ function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
     vol.inverted ? ` INV[${vol.who.join('; ')}]` : '' 
     }${gaps.orphans ? ` [${gaps.who.join('; ')}]` : ''}`
   );
+}
+// Live stats overlay — bottom-left corner census of whatever is on
+// stage (weapon, preview, inspect anchor). Cheap counts only: the heavy
+// scans (zScan/holes/gaps) stay behind ⓘ info — they recompute geometry
+// and would stutter if run per-tick.
+let statOn = false;
+let statEl: HTMLDivElement | null = null;
+let statAt = 0;
+function statRoot(): THREE.Object3D | undefined {
+  return inspectAnchor ?? archiveGroup ??
+    vm.group.children.find(c => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
+}
+function updateStats(): void {
+  if (!statEl) {return;}
+  const root = statRoot();
+  if (!root) { statEl.textContent = 'nothing on stage'; return; }
+  root.updateMatrixWorld(true);
+  let meshes = 0, insts = 0, verts = 0, tris = 0;
+  const mats = new Set<THREE.Material>();
+  const wb = new THREE.Box3();
+  const _b = new THREE.Box3();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) {return;}
+    if ((m as THREE.InstancedMesh).isInstancedMesh) {insts++;}
+    else {meshes++;}
+    const pos = m.geometry.getAttribute('position');
+    if (!pos) {return;}
+    const n = m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
+    const times = (m as THREE.InstancedMesh).count ?? 1;
+    verts += pos.count * times;
+    tris += n * times;
+    for (const mm of Array.isArray(m.material) ? m.material : [m.material]) {mats.add(mm);}
+    if (m.geometry.boundingBox === null) {m.geometry.computeBoundingBox();}
+    if (m.geometry.boundingBox) {wb.union(_b.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));}
+  });
+  const s = wb.isEmpty() ? new THREE.Vector3() : wb.getSize(new THREE.Vector3());
+  const label = inspectAnchor ? `${inspectAnchor.name || 'inspect'}` :
+    archiveGroup ? archiveLabel : `w${state.wt}`;
+  statEl.textContent =
+    `${label}\n` +
+    `${meshes} meshes${insts ? ` + ${insts} inst` : ''} · ${mats.size} mats\n` +
+    `${verts.toLocaleString()} v · ${Math.round(tris).toLocaleString()} t\n` +
+    `${s.x.toFixed(2)} × ${s.y.toFixed(2)} × ${s.z.toFixed(2)} m`;
+}
+function toggleStats(): void {
+  statOn = !statOn;
+  if (statOn && !statEl) {
+    statEl = document.createElement('div');
+    statEl.style.cssText =
+      'position:fixed;left:8px;bottom:8px;z-index:20;pointer-events:none;' +
+      'font:11px/1.5 monospace;color:#9fd;white-space:pre;' +
+      'background:rgba(8,12,16,.72);padding:6px 9px;border:1px solid #2a4a55;';
+    document.body.append(statEl);
+  }
+  if (statEl) {statEl.style.display = statOn ? 'block' : 'none';}
+  if (statOn) {updateStats();}
+  paintRail();
 }
 async function infoDump(all = false): Promise<void> {
   const lines: string[] = [`gunlab info — ${new Date().toISOString()}`];
@@ -344,6 +402,9 @@ function setInspect(on: boolean): void {
   active.rotation.set(0, 0, 0);
   active.userData.inspectPos = active.position.clone(); // kick delta rides THIS, not home
   const dist = Math.max(size * 0.75, 0.25);
+  // Structures and lineup previews are tens of meters across — the
+  // weapon-scale 8m cap makes them impossible to frame from outside.
+  orbit.maxDistance = Math.max(8, size * 2.5);
   orbit.target.copy(focus.set(0, 0, 0));
   camera.position.copy(focus).addScaledVector(inspectDir, dist);
   orbit.update();
@@ -377,7 +438,7 @@ function rebuild(): void {
   for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
   if (state.pick) {
-    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES].find(([l]) => l === state.pick);
+    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES].find(([l]) => l === state.pick);
     if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   }
   if (wasInspect) {setInspect(true);}
@@ -636,7 +697,7 @@ function paintRail(): void {
   rail.innerHTML = '';
   // Category picker — weapons today, creatures/pickups/etc as they get
   // previewable builds. The select repaints the rail below it.
-  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups']];
+  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups'], ['structures', 'structures']];
   const catSel = document.createElement('select');
   catSel.className = 'catsel';
   for (const [id, label] of cats) {
@@ -648,7 +709,7 @@ function paintRail(): void {
   }
   catSel.addEventListener('change', () => { state.cat = catSel.value; saveState(); paintRail(); });
   rail.append(catSel);
-  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : null;
+  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
   if (catTable) {
     for (const [label, build] of catTable) {
       const b = document.createElement('button');
@@ -777,10 +838,12 @@ function paintTools(): void {
   ]);
   wireB!.classList.toggle('active', wireOn);
   wearB!.classList.toggle('active', wearViz);
-  row([
+  const [, statB] = row([
     ['ⓘ info', () => infoDump()],
+    ['▦ stat', () => toggleStats()],
     ['▣ src', () => copyBuilderSrc()],
   ]);
+  statB!.classList.toggle('active', statOn);
   row([
     ['▸ kick', () => vm.kick(1)],
     ['▸ punch', () => vm.punch(false)],
@@ -1014,7 +1077,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
     e.preventDefault();
     const step = e.code === 'ArrowDown' ? 1 : -1;
-    const table = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : null;
+    const table = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
     if (table?.length) {
       const i = table.findIndex(([l]) => l === archiveLabel);
       const next = table[(i + step + table.length) % table.length];
@@ -1127,7 +1190,7 @@ const savedCam = state.cam ? [...state.cam] : null;
 const savedTgt = state.tgt ? [...state.tgt] : null;
 // Restore the parked non-weapon pick (archive/creature/pickup).
 if (state.pick) {
-  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES];
+  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES];
   const hit = tables.find(([l]) => l === state.pick);
   if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   else {state.pick = undefined;}
@@ -1181,6 +1244,7 @@ renderer.setAnimationLoop(() => {
     _lastFocus.copy(focus);
   } else {liveFocusOn = false;}
   lookDX = 0; lookDY = 0;
+  if (statOn && now - statAt > 250) { statAt = now; updateStats(); }
   renderer.render(scene, camera);
 });
 

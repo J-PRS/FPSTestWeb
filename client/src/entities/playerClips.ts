@@ -53,7 +53,7 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
 // zero run/walk: her GLB names them on the ANIM_NAMES fallback slots and
 // kevdev supplies locomotion via VEXA_KEVDEV_BONE_MAP below.
 export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
-  'idle': 'Idle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
+  'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
   'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
   'jet': 'Jump_Rifle', 'hit': 'Hit', 'shoot': 'Fire_SniperRifle',
   // No overhand in the pack — the one-handed pistol arm swing is the
@@ -64,7 +64,7 @@ export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
 export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
   'idle': 'Idle_gunMiddle_ar', 'walk': 'WalkFront_Shoot_ar', 'run': 'Run_gunMiddle_AR',
   'jump': 'Jump', 'death': 'Die', 'ski': 'Idle_Ducking_ar',
-  'jet': 'Jump', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
+  'jet': 'Idle_gunMiddle_ar', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
   // No overhand in the GLB — Reload's two-handed body cycle reads as
   // the belt-throw/deploy windup; the Punch fallback doesn't exist here.
   'throw': 'Reload',
@@ -117,6 +117,24 @@ export interface RigManifest {
      *  rotated non-uniform scale (shear no diagonal compensation can
      *  undo). pos/quat keep their bone-space meanings. */
     world?: boolean;
+    /** Palm-line mount: gun sits at the right palm, oriented along
+     *  grip→foregrip every frame — a computed socket, no quat to drift
+     *  when the hand basis differs between clips. Falls back to model
+     *  forward when the hands split (one-hand clips). */
+    palms?: boolean;
+    /** Metres to slide the seat along the palm line toward the foregrip —
+     *  seated AT the grip palm reads too far back on two-hand holds. */
+    palmFwd?: number;
+    /** Invert the palm line — rigs whose grip bone is the FORE hand
+     *  (polyart seats on handright with the muzzle aimed back down the
+     *  line at handleft). */
+    palmsFlip?: boolean;
+    /** Radians to yaw the barrel off the palm line (around model up) —
+     *  swings the muzzle sideways while the seat stays on the grip. */
+    palmYaw?: number;
+    /** Metres to lift the seat along model up — palm mounts seat inside
+     *  the fist; a small raise gets the prop riding on the palm. */
+    palmUp?: number;
   };
   /** Post-bake facing fix: when a rig's retarget sources agree on a hip
    *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
@@ -126,6 +144,13 @@ export interface RigManifest {
    *  retargeted clips animate the arms fine but whose idle clip is an
    *  aimed stance (cyber's UAL idle reads as shouldered, not carried). */
   idleHold?: boolean;
+  /** Pin the arm chain to the hip-fire grip in EVERY state — for rigs
+   *  whose native clips carry a low-ready hold (scifisoldier's *_Rifle
+   *  family) instead of T:A's always-ready grip. The pinned hand basis
+   *  also makes the mount quat pose-invariant. Fire_* oneshots don't
+   *  release it (hip-fire doesn't lower the weapon to shoot); hit/death
+   *  still take the arms. */
+  armedHold?: boolean;
   /** Directional walk strides the GLB ships natively (polyart's
    *  WalkLeft/WalkRight/WalkBack family). Only pure lateral sectors
    *  snap to the side clips — forward diagonals keep the forward
@@ -151,7 +176,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // native UAL states via CYBER_MANNEQUIN_BONE_MAP + kevdev 8-way
   // locomotion via CYBER_KEVDEV_BONE_MAP.
   'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35], sources: [],
-                    mount: { quat: [-0.471, 0.1186, 0.0367, 0.5126] } },
+                    mount: { palms: true } },
   // Cyber+vexa are 100% retarget bakes — their source hip convention
   // lands facing +Z (toward the third-person camera), so the whole set
   // gets a π unwind onto the rig's -Z forward.
@@ -166,7 +191,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
                     mount: { quat: [0.8778, -0.1951, -0.3364, -0.2796] } },
   'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
                     walkDirs: { B: 'WalkBack_Shoot_ar', L: 'WalkLeft_Shoot_ar', R: 'WalkRight_Shoot_ar' },
-                    mount: { bone: 'handleft', world: true, quat: [-0.0171, -0.0844, -0.7012, -0.0297], size: 1.3, pos: [0, 0, -15] } },
+                    mount: { palms: true, palmFwd: 0.35, palmYaw: -0.25, palmUp: 0.05, size: 1.3 } },
 };
 
 // armorClass → dedicated body GLB, derived from the manifest — table
@@ -190,8 +215,14 @@ export const CLASS_BODY_SPEC: Record<string, {
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
 // the whole GLB (RemotePlayer.setClass).
 export const CLASS_BODY_VARIANT: Record<string, string> = {
-  light: 'scifisoldier', medium: 'cybersoldier', heavy: 'polyart',
+  light: 'mannequin', medium: 'mannequin', heavy: 'polyart',
 };
+
+// Classes whose mannequin body gets the INVERSE material swap
+// (torso = prop-gun recipe, joints = gunmetal) — light reads dark-jointed
+// vs medium's gunmetal-jointed so the two same-rig classes still differ
+// at a glance.
+export const CLASS_BODY_MAT_REV = new Set(['light']);
 
 // Death clips per class body — corpse-clamp like 'Death'/'UAL_Death01'.
 export const CLASS_BODY_DEATH_CLIPS = new Set(['Death_Rifle', 'Die', 'Death']);
@@ -297,9 +328,12 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
       out.push({ name: ANIM_NAMES[state][0], dir: false });
       for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01'])
         {out.push({ name: `UAL_${s}_Forward`, dir: true });}
-    } else {
+    } else if (variant !== 'mannequin') {
       // The Sprint set only covers the forward hemisphere — back-half
-      // run sectors ride the Run clips.
+      // run sectors ride the Run clips. Mannequin's kevdev directional
+      // bake ships a ~180° hip yaw per clip (the source turns the body
+      // to face travel) — taken raw, strafing pivots the whole rig off
+      // the aim. He stays on the reversed-walk + lean fallback instead.
       const fwdHemi = dir === 'FL' || dir === 'FR' || dir === 'L' || dir === 'R';
       const set = state === 'run' ? (fwdHemi ? 'Sprint01' : 'Run01') : 'Walk01';
       out.push({ name: `UAL_${set}_${DIR_SUFFIX[dir]}`, dir: true });

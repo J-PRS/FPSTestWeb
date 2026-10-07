@@ -20,6 +20,13 @@ const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 const _gunV = new THREE.Vector3();
 const _gunQ = new THREE.Quaternion();
 const _gunMQ = new THREE.Quaternion();
+const _gunPalmL = new THREE.Vector3();
+const _gunDir = new THREE.Vector3();
+const _gunUp = new THREE.Vector3(0, 1, 0);
+const _gunLook = new THREE.Matrix4();
+const _gunQ2 = new THREE.Quaternion();
+const _gunQYaw = new THREE.Quaternion();
+
 function smoothShade(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   let g = _creased.get(geo);
   if (!g) { g = toCreasedNormals(geo); _creased.set(geo, g); }
@@ -34,14 +41,32 @@ import { ONESHOT_CLIPS, clipCandidates,
   CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
-  isLayeredClip, AIM_BONE_MASK, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
+  isLayeredClip, AIM_BONE_MASK, AIM_TORSO_BONES, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { PoseControl } from './playerPose.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
 import { handWeaponGeo } from './handWeapons.js';
+import { metalMat } from './procMetal.js';
 import { WeaponType } from '../../../shared/weapons.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
+
+// Mannequin re-skin (cached shared recipes — each PlayerModel still
+// clones via ownMaterial so damage-flash stays per-instance).
+// mannGunMat = the prop-gun recipe (joints), mannJointMat = pickup
+// gunmetal (torso).
+let _mannGun: THREE.MeshStandardMaterial | null = null;
+let _mannMetal: THREE.MeshStandardMaterial | null = null;
+function mannGunMat(): THREE.MeshStandardMaterial {
+  if (!_mannGun) {
+    _mannGun = new THREE.MeshStandardMaterial({ color: 0x2A_2E_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
+  }
+  return _mannGun;
+}
+function mannJointMat(): THREE.MeshStandardMaterial {
+  if (!_mannMetal) {_mannMetal = metalMat();}
+  return _mannMetal;
+}
 
 // A missing clip is authored into the GLB — the variant's whole fleet
 // misses the same set, so the dedupe is (variant, clip) per session,
@@ -128,6 +153,12 @@ export class PlayerModel {
   private gunSize = 0.7;
   private gunMountPos: [number, number, number] = [0, 0, 0];
   private gunMountQuat: THREE.Quaternion | null = null;
+  private handBoneL: THREE.Bone | null = null;
+  private palmsMount = false;
+  private gunPalmFwd = 0;
+  private gunPalmFlip = false;
+  private gunPalmYaw = 0;
+  private gunPalmUp = 0;
   gun: THREE.Group | null = null;
   private gunMesh: THREE.Mesh | null = null;
   private heldWeapon = -1;
@@ -171,10 +202,14 @@ export class PlayerModel {
    *  each bakes its own clip set on its own rig (vexa ships
    *  none, it stands static until a clip'd medium replaces it). */
   readonly variant: PlayerModelVariant;
+  // Two classes share the mannequin rig — the rev flag gives one of them
+  // the inverse material swap so they don't read identical.
+  readonly mannRev: boolean;
 
-  constructor(scene: THREE.Scene, variant?: PlayerModelVariant) {
+  constructor(scene: THREE.Scene, variant?: PlayerModelVariant, mannRev = false) {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
+    this.mannRev = mannRev;
     this.pose = new PoseControl(this.variant);
     // Native shoot clips carry a self-consistent torso stance — the bind
     // slerp only helps UAL-retargeted clips whose stride roll waves the
@@ -293,8 +328,11 @@ export class PlayerModel {
     for (const clip of gltf.animations) {this.registerClip(clip, mann, knight);}
     if (CLASS_BODY_SPEC[this.variant]) {this.alignHipYaw();}
     // Any variant whose clips carry Pistol_Aim_* gets the masked layer —
-    // mk() no-ops when the rig ships none (polyart, vexa).
-    this.pose.buildAimLayer(this.mixer!, this.animations);
+    // mk() no-ops when the rig ships none (polyart, vexa). Mannequin gets
+    // the torso mask too: its locomotion clips yield spine/head quats at
+    // bake (same mask), so the aim pose owns the torso outright — no
+    // residual stride roll swinging the muzzle.
+    this.pose.buildAimLayer(this.mixer!, this.animations, mann);
 
     logger.debug('Loaded animations:', Array.from(this.animations.keys()));
 
@@ -327,11 +365,14 @@ export class PlayerModel {
     // Create collider gizmo (wireframe capsule for hitbox visualization)
     // Uses same constants as collision detection — single source of truth in config.ts
     // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
-    // Model is scaled by 0.5, so divide by scale to get correct world size
+    // Divide by the FULL visual scale (rig fit × class bump) — the gizmo
+    // is a model child, so setScale() would otherwise inflate the wire
+    // past the real sim capsule.
     const cap = this.colliderCap;
+    const vs = this.modelScale * this._visScale;
     const colliderGeo = new THREE.CapsuleGeometry(
-      (cap ? cap.radius : PLAYER_RADIUS) / this.modelScale,
-      (cap ? 2 * cap.half : CAPSULE_CYLINDER_HEIGHT) / this.modelScale,
+      (cap ? cap.radius : PLAYER_RADIUS) / vs,
+      (cap ? 2 * cap.half : CAPSULE_CYLINDER_HEIGHT) / vs,
       4, 16);
     this.colliderMat = new THREE.MeshBasicMaterial({
       color: this.colliderHex,
@@ -344,7 +385,7 @@ export class PlayerModel {
     // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT).
     // feetOffsetY lifts the whole group for rigs not authored feet-at-origin
     // — the gizmo counteracts it locally so it stays on the logical feet.
-    this.colliderGizmo.position.y = (cap ? cap.height / 2 : CAPSULE_CENTER_Y) / this.modelScale - this.feetOffsetY;
+    this.colliderGizmo.position.y = (cap ? cap.height / 2 : CAPSULE_CENTER_Y) / vs - this.feetOffsetY;
     this.colliderGizmo.renderOrder = 999; // Render last (on top)
     // Hitbox visualization is a debug overlay — same flag as the
     // AOE blast wireframes (menu DEBUG toggle / ?debug).
@@ -368,6 +409,9 @@ export class PlayerModel {
   /** Requested capsule — stashed because the gizmo only exists after the
    *  async load(); applied at creation and on re-request. */
   private colliderCap: { height: number; half: number; radius: number } | null = null;
+  /** setScale() multiplier on top of the rig fit — the collider gizmo
+   *  divides by this too so the debug wire stays at the sim capsule. */
+  private _visScale = 1;
   /** Re-size the debug gizmo to the class hit capsule — the gizmo was
    *  built from the generic constants and never matched light/heavy sim
    *  capsules. */
@@ -375,8 +419,9 @@ export class PlayerModel {
     this.colliderCap = cap;
     if (!this.colliderGizmo) {return;}
     this.colliderGizmo.geometry.dispose();
-    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / this.modelScale, (2 * cap.half) / this.modelScale, 4, 16);
-    this.colliderGizmo.position.y = (cap.height / 2) / this.modelScale - this.feetOffsetY;
+    const vs = this.modelScale * this._visScale;
+    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / vs, (2 * cap.half) / vs, 4, 16);
+    this.colliderGizmo.position.y = (cap.height / 2) / vs - this.feetOffsetY;
   }
 
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
@@ -535,6 +580,17 @@ export class PlayerModel {
       child.castShadow = true;
       child.receiveShadow = true;
       child.geometry = smoothShade(child.geometry);
+      if (this.variant === 'mannequin') {
+        // The orange/purple stock figure reads as a debug doll on a
+        // battlefield — re-skin: torso in the gun-prop recipe, joints in
+        // the shared pickup gunmetal.
+        const swap = (m: THREE.Material): THREE.Material => {
+          if (m.name === 'M_Main') {return this.mannRev ? mannGunMat() : mannJointMat();}
+          if (m.name === 'M_Joints') {return this.mannRev ? mannJointMat() : mannGunMat();}
+          return m;
+        };
+        child.material = Array.isArray(child.material) ? child.material.map(swap) : swap(child.material);
+      }
       child.material = Array.isArray(child.material)
         ? child.material.map((m) => this.ownMaterial(m))
         : this.ownMaterial(child.material);
@@ -573,6 +629,14 @@ export class PlayerModel {
       || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
+    // Foregrip palm — palm-line mounts orient the barrel along
+    // grip→foregrip, so both hands must resolve.
+    if ((child.name === 'Palm2L' || nb === 'defhandl' || nb === 'fistl'
+      || nb === 'handl' || nb === 'handleft'
+      || nb === 'rigarmleft3' || nb === 'rigleftpistol'
+      || nb === 'basehumanlpalm') && !this.handBoneL) {
+      this.handBoneL = child as THREE.Bone;
+    }
     const mbn = RIG_MANIFEST[this.variant]?.mount?.bone;
     if (mbn && nb === mbn) {this.mountBone = child as THREE.Bone;}
     this.pose.captureBone(child, nb);
@@ -588,10 +652,13 @@ export class PlayerModel {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
     const handBone = this.mountBone ?? this.handBone;
     if (!handBone && !classGun) {return;}
-    // Socket rigs without native armed anims get the canned grip pose —
-    // rigs with their own rifle-hold clips (scifisoldier/polyart) don't
-    // need arms posed on top of them.
-    this.pose.wantHoldPose = !CLASS_BODY_SPEC[this.variant]?.anims && Boolean(handBone);
+    // Socket rigs without native armed anims get the canned grip pose;
+    // `armedHold` extends it to rigs whose own clips carry low-ready
+    // (scifisoldier's *_Rifle set) but should ride the hip-fire grip in
+    // every state — including through Fire_* oneshots.
+    const armedHold = Boolean(RIG_MANIFEST[this.variant]?.armedHold);
+    this.pose.wantHoldPose = (armedHold || !CLASS_BODY_SPEC[this.variant]?.anims) && Boolean(handBone);
+    this.pose.holdShoots = armedHold;
     this.pose.holdIdle = Boolean(RIG_MANIFEST[this.variant]?.idleHold) && Boolean(handBone);
     if (!PlayerModel._gunMat) {
       PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a_2e_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
@@ -639,23 +706,28 @@ export class PlayerModel {
     const ws = handBone!.getWorldScale(new THREE.Vector3());
     const mount = RIG_MANIFEST[this.variant]?.mount;
     logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.pose.aimBoneCount });
+    if (mount?.palms && this.handBoneL && this.model) {
+      // Palm-line mount: model-root prop driven per frame — position at
+      // the grip palm, +Z along grip→foregrip. No authored quat: the
+      // palm line IS the barrel axis the clip intends, so it survives
+      // every clip's differing hand basis.
+      this.palmsMount = true;
+      this.gunPalmFwd = mount.palmFwd ?? 0;
+      this.gunPalmFlip = Boolean(mount.palmsFlip);
+      this.gunPalmYaw = mount.palmYaw ?? 0;
+      this.gunPalmUp = mount.palmUp ?? 0;
+      this.gunMountPos = mount.pos ?? [0, 0, 0];
+      this.mountGunOnModel(handBone, mount);
+      return;
+    }
     if (mount?.world && this.model) {
       // World-frame mount: the prop parents to the model root and tracks
       // the bone's world transform in update() — rigs with rotated
       // non-uniform armature scale shear a bone-parented prop into a
       // needle, which no per-axis scale compensation can undo.
-      this.gunMountBone = handBone;
       this.gunMountPos = mount.pos ?? [0, 0, 0];
       this.gunMountQuat = mount.quat ? new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]) : new THREE.Quaternion();
-      this.gunSize = mount.size ?? 0.7;
-      this.gunUnit = 1 / this.modelScale;
-      this.gunKickZ = 0.15 * this.gunUnit;
-      this.gunBaseQuat = new THREE.Quaternion();
-      this.gun.scale.setScalar(this.gunSize / this.modelScale);
-      this.muzzleFlash = ModelFx.buildMuzzleFlash();
-      this.gun.add(this.muzzleFlash);
-      this.model.add(this.gun);
-      if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
+      this.mountGunOnModel(handBone, mount);
       return;
     }
     // Per-axis: some rigs (polyart) carry non-uniform bone scale that
@@ -700,6 +772,22 @@ export class PlayerModel {
     if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
   }
 
+  // Model-root mount tail shared by the palms/world branches — the prop
+  // lives under the model, not the hand bone, so uniform modelScale is
+  // the only scale compensation needed.
+  private mountGunOnModel(bone: THREE.Bone | null, mount: { size?: number }): void {
+    this.gunMountBone = bone;
+    this.gunSize = mount.size ?? 0.7;
+    this.gunUnit = 1 / this.modelScale;
+    this.gunKickZ = 0.15 * this.gunUnit;
+    this.gunBaseQuat = new THREE.Quaternion();
+    this.gun!.scale.setScalar(this.gunSize / this.modelScale);
+    this.muzzleFlash = ModelFx.buildMuzzleFlash();
+    this.gun!.add(this.muzzleFlash);
+    this.model!.add(this.gun!);
+    if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
+  }
+
   // Nodes above the hips that authored rigs animate as root motion —
   // computed from the loaded hierarchy once per model.
   private _rootMotionNodes: Set<string> | null = null;
@@ -719,8 +807,14 @@ export class PlayerModel {
       stripHipXZ(clip, this.rootMotionNodes());
       clampHipY(clip, 0.25, this.rootMotionNodes());
       if (mann && isLayeredClip(clip.name)) {
-        clip.tracks = clip.tracks.filter(t =>
-          !AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+        clip.tracks = clip.tracks.filter(t => {
+          const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
+          // Arm tracks always yield; torso quat tracks too (aim layer
+          // owns them now) — position tracks stay for the stride bob.
+          if (AIM_BONE_MASK.has(bn)) {return false;}
+          if (t.name.endsWith('.quaternion') && AIM_TORSO_BONES.has(bn)) {return false;}
+          return true;
+        });
         dampenSway(clip, SWAY_BONES);
       }
     }
@@ -1066,9 +1160,40 @@ export class PlayerModel {
       mb.localToWorld(_gunV.set(this.gunMountPos[0], this.gunMountPos[1], this.gunMountPos[2]));
       this.model.worldToLocal(_gunV);
       this.gunRestX = _gunV.x; this.gunBaseY = _gunV.y; this.gunBaseZ = _gunV.z;
-      mb.getWorldQuaternion(_gunQ);
-      this.model.getWorldQuaternion(_gunMQ).invert();
-      this.gunBaseQuat!.copy(_gunMQ).multiply(_gunQ).multiply(this.gunMountQuat!);
+      if (this.palmsMount && this.handBoneL) {
+        // Palm-line mount: the barrel axis is right-palm → left-palm.
+        // Degenerate (hands split for a one-hand clip) → keep the palm
+        // seat but aim model-forward (-Z) instead of a garbage line.
+        this.handBoneL.getWorldPosition(_gunPalmL);
+        this.model.worldToLocal(_gunPalmL);
+        _gunDir.subVectors(_gunPalmL, _gunV);
+        const len = _gunDir.length();
+        if (len > 0.03) {_gunDir.divideScalar(len);} else {_gunDir.set(0, 0, -1);}
+        // |z| guard: hand-splits (one-hand clips) give lateral axes —
+        // fall back to model forward. Either z sign is valid: rigs grip
+        // both handednesses (polyart's palm line runs +Z).
+        if (Math.abs(_gunDir.z) < 0.15) {_gunDir.set(0, 0, -1);}
+        if (this.gunPalmFlip) {_gunDir.negate();}
+        // Seat offset along the barrel — right-palm seat alone reads too
+        // far back on two-hand holds (polyart's marine grip).
+        if (this.gunPalmFwd || this.gunPalmUp) {
+          _gunV.addScaledVector(_gunDir, this.gunPalmFwd);
+          _gunV.y += this.gunPalmUp;
+          this.gunRestX = _gunV.x; this.gunBaseY = _gunV.y; this.gunBaseZ = _gunV.z;
+        }
+        // lookAt maps -Z to eye→target; eye=left palm, target=right →
+        // +Z = grip→foregrip = barrel dir. Slerp so clip jitter and
+        // state pops don't buzz the muzzle.
+        if (this.gunPalmFlip) {_gunLook.lookAt(_gunV, _gunPalmL, _gunUp);}
+        else {_gunLook.lookAt(_gunPalmL, _gunV, _gunUp);}
+        _gunQ2.setFromRotationMatrix(_gunLook);
+        if (this.gunPalmYaw) {_gunQ2.premultiply(_gunQYaw.setFromAxisAngle(_gunUp, this.gunPalmYaw));}
+        this.gunBaseQuat!.slerp(_gunQ2, Math.min(dt * 14, 1));
+      } else {
+        mb.getWorldQuaternion(_gunQ);
+        this.model.getWorldQuaternion(_gunMQ).invert();
+        this.gunBaseQuat!.copy(_gunMQ).multiply(_gunQ).multiply(this.gunMountQuat!);
+      }
       this.gun.scale.setScalar(this.gunSize / this.modelScale);
     }
     this.fx.tick(dt);
@@ -1272,10 +1397,18 @@ export class PlayerModel {
     // Class bodies carry the class silhouette in the GLB itself — a
     // _classScale bump on top would double the tiering.
     if (CLASS_BODY_SPEC[this.variant]) {return;}
+    this._visScale = scale;
     if (this.model) {
       // Multiply the model's own fit scale (0.5 robot, 2.0/size.y mannequin)
       // so the armor-class bump composes with whichever GLB loaded.
       this.model.scale.setScalar((this.modelScale || 0.5) * scale);
+      // The gizmo is a child of the scaled root — rebuild it so the wire
+      // still traces the sim capsule, not the bumped silhouette.
+      if (this.colliderGizmo) {
+        this.setColliderCapsule(this.colliderCap ?? {
+          height: CAPSULE_CENTER_Y * 2, half: CAPSULE_CYLINDER_HEIGHT / 2, radius: PLAYER_RADIUS,
+        });
+      }
     }
   }
 

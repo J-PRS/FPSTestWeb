@@ -6,7 +6,7 @@ import type { PlayerInput } from './player/input.js';
 import type { PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
-import { CLASS_BODY_VARIANT } from './playerClips.js';
+import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import type * as THREE from 'three';
 import type { BeltItem } from './Player.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -136,9 +136,10 @@ export class PlayerLoadout {
     // tier swap rebuilds the whole model, not a rescale; the hidden /
     // gizmo-off local state reasserts once the new GLB lands.
     const want = CLASS_BODY_VARIANT[c] ?? 'vexa';
-    if (this.h.model && this.h.model.variant !== want) {
+    const rev = CLASS_BODY_MAT_REV.has(c);
+    if (this.h.model && (this.h.model.variant !== want || this.h.model.mannRev !== rev)) {
       const old = this.h.model;
-      const m = new PlayerModel(this.h.scene, want as PlayerModelVariant);
+      const m = new PlayerModel(this.h.scene, want as PlayerModelVariant, rev);
       this.h.model = m;
       m.load().then(() => {
         m.setScale(CLASS_MODEL_SCALE[c]);

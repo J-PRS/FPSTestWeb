@@ -16,7 +16,7 @@ import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
 import { PlayerInput } from './player/input.js';
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
-import { CLASS_BODY_VARIANT } from './playerClips.js';
+import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
@@ -383,7 +383,8 @@ export class Player {
 
     // Your third-person body wears the same class GLB remotes see on
     // you — what you see looking down IS the hitbox class you claim.
-    this.model = new PlayerModel(scene, (CLASS_BODY_VARIANT[this.appliedClass] ?? 'vexa') as PlayerModelVariant);
+    this.model = new PlayerModel(scene, (CLASS_BODY_VARIANT[this.appliedClass] ?? 'vexa') as PlayerModelVariant,
+      CLASS_BODY_MAT_REV.has(this.appliedClass));
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills + input routing — the two ctx objects live in

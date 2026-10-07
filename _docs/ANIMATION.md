@@ -62,6 +62,104 @@ the animbake needs them in `client/public/assets/models/` too.
 - Handled mount quirk lives in `mount:` — bone-space `quat` for palm
   mounts, `world: true` for rigs with sheared bone chains (polyart).
 
+## Gun mounts: palm-line vs authored quat (2026-10)
+
+Rig `mount:` in `playerClips.ts` picks one of three seats:
+
+- `palms` — **palm-line mount (preferred)**. Seat = the grip palm (the
+  `mount.bone` override or the auto-detected right palm), barrel axis =
+  the live `grip → foregrip` palm line recomputed every frame. No authored
+  quat — it can't drift when a clip's hand basis differs, which is why
+  polyart's solved quat kept presenting the gun outside the hands.
+- `world` — prop parents to the model root, tracks bone world transform +
+  authored `quat`/`pos`. For rigs whose non-uniform armature scale shears
+  a bone-parented prop.
+- default — bone-parented with `quat`/`euler` + `pos`/`size`/`fat`.
+
+Palm-mount knobs:
+
+| Field | Meaning |
+|---|---|
+| `palmFwd` | Metres to slide the seat along the barrel — the gun's origin is mid-gun, so seat ≈ half-gun-length forward of the rear palm puts the butt in the grip |
+| `palmYaw` | Radians around model-up to swing the muzzle sideways (±~0.25 visible) |
+| `palmUp` | Metres to lift the seat — palms seat inside the fist, ~0.05 rides on the grip |
+| `palmsFlip` | Invert the palm line for rigs whose resolved grip is the FORE hand |
+| `pos` | Bone-space nudge on the seat |
+| `size` | Prop scale (polyart 1.3) |
+
+Palm-line guard: `|dir.z| < 0.15` falls back to model forward — hand
+splits (one-hand clips) give lateral axes; **either z sign is valid**,
+rigs grip both handednesses (polyart's line runs +Z). Grip handedness:
+resolve which palm is rear — `Hand_Right` z=−0.42 vs `Hand_Left` z=+0.94
+means right=rear, foregrip=left.
+
+Debug loop: `posedump.html?pmodel=<variant>&state=idle` exposes
+`window.__pm` and `__cam` — `heavygun-top.js`/`heavygun-shot.js` in
+headless-test are the seat/dump scripts; palm fields are settable at
+runtime (`pm.gunPalmYaw = x`) for sign sweeps before committing.
+
+## Directional locomotion: the root-yaw problem (2026-10)
+
+Directional stride clips (kevdev `Walk01_*`, `Run01_*`, `Sprint01_*`
+packs; Mixamo `Left/Right/Backward` families) are authored two ways:
+
+- **Facing-frame clips** — body keeps one facing, legs supply the
+  lateral/back footwork. This is what a blendspace wants: the controller
+  owns yaw (the aim), the clip owns gait.
+- **Travel-frame clips** — the hips carry a ~180° (or 90°) yaw so the
+  character physically turns toward travel. Right for a turn-in-place
+  system, wrong for an FPS where the body must stay on the aim.
+
+Kevdev's directional set is travel-frame: playing it raw pivots the
+whole rig (the "tomb raider" strafe).
+
+### What engines do (researched 2026-10)
+
+- **Unity** — *Root Transform Rotation / Bake into Pose*. Root yaw is
+  extracted from the clip and pinned to a fixed facing; the controller
+  owns actual heading. The docs call out strafing explicitly as the case
+  where the body-forward heuristic fails and an offset is required.
+- **UE blendspaces / Babylon `RootMotionSource.Root`** — hip travel AND
+  yaw are treated as root motion to *extract*, not pose to keep.
+- **Layered masks** (UE linked layers, Unity avatar masks; the V Rising
+  writeup) — legs layer owns direction, upper-body layer owns aim; when
+  the pelvis convention differs they hang a proxy joint under the root
+  to carry the chest reference.
+
+### Robust fix for our pipeline
+
+Per-key yaw normalization **at bake time** (`_tools/animbake/bake.ts`),
+NOT a runtime modal vote:
+
+1. For each directional clip's hip quat track, compute the hip-forward
+   XZ yaw **per key** in the hip's parent frame (static armature
+   transform — never pose-derived).
+2. Premultiply each key by the rotation bringing that key's yaw to the
+   canonical facing (+Z for mannequin). Per-key — not one delta from
+   frame 0 — so intra-clip pelvis sway survives while facing pins.
+3. Re-enable the directional candidates the runtime now skips for
+   `mannequin` (see `clipCandidates` — it currently falls back to
+   reversed-walk + strafe lean).
+4. Verify with the hip-yaw probe (`headless-test/hipyaw.js`): every
+   `UAL_{Walk,Run,Sprint}01_*` clip must measure ~0°, not ±180°.
+
+### What NOT to do (measured, 2026-10-06)
+
+`alignHipYaw()` corrects hip-yaw outliers by voting a modal canonical
+across the clip set — fine when one bad clip disagrees with a consistent
+family (polyart `Idle_Ducking_ar`). On mannequin the kevdev directional
+set is ~21 clips vs ~20 natives — the vote is a coin flip, and whichever
+hemisphere wins, half the locomotion set gets rotated the wrong way.
+Single-delta-from-first-key also can't fix clips whose pelvis yaw isn't
+constant. Reverted; the gate stays `CLASS_BODY_SPEC`-only until the
+bake-side normalization lands.
+
+Runtime workaround in place: mannequin skips directional candidates →
+backpedal = reversed forward loop (`setLocomotionReversed`), strafes =
+forward loop + `setBodyLean` roll, aim layer keeps the upper body on
+target. Legs read as forward gait during strafe — acceptable but not
+the authored strafe footwork.
+
 ## Transitions: the T-pose rule (2026-10 fix)
 
 **Never let total running action weight drop below 1.** The mixer fills

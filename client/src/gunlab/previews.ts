@@ -25,8 +25,8 @@ import { mkFlagPlate } from '../game/flagRun.js';
 import { mkFlagMesh } from '../game/ctfFlags.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
 import { PlayerModel, type PlayerModelVariant } from '../entities/PlayerModel.js';
-import { CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
-import { classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
+import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
+import { CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
 
 // The one live-body tick — whichever preview proxy is parked owns it.
 // gunlab's render loop reads it through this holder so proxy builders
@@ -168,6 +168,33 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
 export const PICKUPS: [label: string, build: () => THREE.Group][] =
   (Object.keys(PICKUP_ACCENT) as PickupKind[]).map((k) => [k, buildNugget(k)]);
 
+// Base structures — the structKit compositions, real builders straight
+// out of structures.ts. Big pieces: liveFocus parks the camera framing
+// on the compound center rather than the group origin.
+import { mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad, mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk, mkArch, mkShard } from '../structures/structures.js';
+import { ramp } from '../structures/structKit.js';
+export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
+  ['bastion', () => {
+    const g = mkBastion();
+    g.userData.liveFocus = () => new THREE.Vector3(0, 4, -4);
+    return g;
+  }],
+  ['katastand', () => mkKataStand()],
+  ['bunker',   () => mkBunker(12, 10, 4.2)],
+  ['flagtower', () => mkFlagTower()],
+  ['tower',    () => mkBaseTower(9, 12)],
+  ['wallrun',  () => mkWallRun(18, 4.2)],
+  ['wallgate', () => mkWallGate(18, 4.2, 6)],
+  ['ramp',     () => ramp(5, 12, 2.5)],
+  ['gendome',  () => mkGenDome(5)],
+  ['landpad',  () => mkLandingPad(4.5)],
+  ['commast',  () => mkCommsMast(10)],
+  ['pillar',   () => mkPillar()],
+  ['obelisk',  () => mkObelisk()],
+  ['arch',     () => mkArch()],
+  ['shard',    () => mkShard()],
+];
+
 // Deployable previews — real entity instances (real .group, real update
 // loop) parked on the lab terrain stub. The group's own bounds feed
 // inspect's Box3 fit, so no invisible proxy mesh is needed.
@@ -244,12 +271,13 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     const proxy = new THREE.Group();
     const models: PlayerModel[] = [];
     for (const [cls, x, ly] of CLASS_LINEUP) {
-      const pm = new PlayerModel(LAB_SCENE, CLASS_BODY_VARIANT[cls] as PlayerModelVariant);
+      const pm = new PlayerModel(LAB_SCENE, CLASS_BODY_VARIANT[cls] as PlayerModelVariant, CLASS_BODY_MAT_REV.has(cls));
       // The gizmo defaults to the generic capsule — without the class
       // sizes the collider wireframe would lie about light/heavy.
       pm.setColliderCapsule(classCapsule(cls));
       void pm.load().then(() => {
         if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
+        pm.setScale(CLASS_MODEL_SCALE[cls]); // real tier silhouette, not raw rig height
         pm.setPosition(x, 0, 0);
         pm.setRotation(0, 0); // setRotation adds the rig's authored yaw — 0 is the rig's forward
       });

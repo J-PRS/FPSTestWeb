@@ -3,7 +3,7 @@ import { mkGltfLoader } from '../gltfLoad.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
 import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, POLYART_KEVDEV_BONE_MAP, POLYART_UAL2_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
-import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, SWAY_BONES } from './playerClipSurgery.js';
+import { stripHipXZ, dampenSway, computeRootMotionNodes, isLayeredClip, AIM_BONE_MASK, AIM_TORSO_BONES, SWAY_BONES } from './playerClipSurgery.js';
 import { HOLD_QUATS, holdChains } from './playerPose.js';
 
 const logger = new ChildLogger('PlayerUal');
@@ -211,8 +211,12 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   for (const [name, clip] of baked) {
     stripHipXZ(clip, roots);
     if (variant === 'mannequin' && isLayeredClip(name)) {
-      clip.tracks = clip.tracks.filter(t =>
-        !AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      clip.tracks = clip.tracks.filter(t => {
+        const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
+        if (AIM_BONE_MASK.has(bn)) {return false;}
+        if (t.name.endsWith('.quaternion') && AIM_TORSO_BONES.has(bn)) {return false;}
+        return true;
+      });
       dampenSway(clip, SWAY_BONES);
     }
   }

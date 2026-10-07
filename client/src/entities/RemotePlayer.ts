@@ -4,7 +4,7 @@ import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
-import { CLASS_BODY_VARIANT } from './playerClips.js';
+import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botClasses.js';
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
@@ -86,14 +86,15 @@ export class RemotePlayer {
   armorClass?: string;
   setClass(cls?: string): void {
     this.armorClass = cls;
-    this._classScale = cls === 'heavy' ? CLASS_MODEL_SCALE.heavy : cls === 'light' ? CLASS_MODEL_SCALE.light : 1;
+    this._classScale = CLASS_MODEL_SCALE[cls === 'light' || cls === 'heavy' ? cls : 'medium'];
     // The class IS the body: a tier change swaps the whole GLB, not a
     // scale factor — class bodies carry their own proportions.
     const want = (CLASS_BODY_VARIANT[cls ?? 'medium'] ?? 'vexa') as PlayerModelVariant;
-    if (this._model.variant !== want) {
+    const rev = CLASS_BODY_MAT_REV.has(cls ?? 'medium');
+    if (this._model.variant !== want || this._model.mannRev !== rev) {
       this._model.dispose();
       this._loaded = false;
-      this._model = new PlayerModel(this.scene, want);
+      this._model = new PlayerModel(this.scene, want, rev);
       this._model.load().then(() => this.finishModelLoad())
         .catch((error) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(error) }));
       return;
@@ -157,7 +158,8 @@ export class RemotePlayer {
     // silhouettes, picked from the constructor's wire class when present
     // (a mid-match re-fit rebuilds via setClass).
     this._model = new PlayerModel(scene,
-      (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'vexa') as PlayerModelVariant);
+      (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'vexa') as PlayerModelVariant,
+      CLASS_BODY_MAT_REV.has(_armorClass ?? 'medium'));
     this.model.load().then(() => {
       this.finishModelLoad();
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
