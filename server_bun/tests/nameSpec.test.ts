@@ -17,8 +17,6 @@ function fakeWs() {
     close(code: number, reason: string) { this.closed.push({ code, reason }); },
   };
 }
-type FakeWs = ReturnType<typeof fakeWs>;
-
 function mkSessions(room: ReturnType<typeof mkRoom>) {
   const playerRoom = new Map<string, typeof room>();
   return {
