@@ -16,7 +16,7 @@ import { FlagRunBridge } from './flagRun.js';
 import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
-import { respawnBotF, hitF, hurtLocal, botKilledF, botSay } from './botKill.js';
+import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
 import { chatter } from '../../../shared/botTaunts.js';
 import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
 
@@ -225,13 +225,24 @@ export class TeamBots {
     for (const b of this.bots) if (!b.isDead) others.push(b.position);
     others.push(player.pos);
     const bodies = this.bodyScratch;
-    bodies.length = 0;
+    // Pooled per index — length is only trimmed at the end, so entries
+    // survive between frames and reuse kills ~3 allocs/bot/frame (the
+    // literal plus classCapsule's fresh object per call).
+    let bn = 0;
     for (const b of this.bots) {
       if (b.isDead) continue;
-      bodies.push({ id: b.playerId, x: b.position.x, y: b.position.y, z: b.position.z, h: classCapsule(b.armorClass).eye, mass: classMass(b.armorClass), r: classCapsule(b.armorClass).radius, vx: b.vel.x, vz: b.vel.z });
+      const cap = classCapsule(b.armorClass);
+      const e = bodies[bn] ?? (bodies[bn] = {} as BodyCapsule);
+      e.id = b.playerId; e.x = b.position.x; e.y = b.position.y; e.z = b.position.z;
+      e.h = cap.eye; e.mass = classMass(b.armorClass); e.r = cap.radius; e.vx = b.vel.x; e.vz = b.vel.z;
+      bn++;
     }
     const pst = CLASS_STATS[player.appliedClass];
-    bodies.push({ id: 'local', x: player.pos.x, y: player.pos.y, z: player.pos.z, h: pst.eyeHeight, mass: pst.mass, r: pst.radius, vx: player.vel.x, vz: player.vel.z });
+    const le = bodies[bn] ?? (bodies[bn] = {} as BodyCapsule);
+    le.id = 'local'; le.x = player.pos.x; le.y = player.pos.y; le.z = player.pos.z;
+    le.h = pst.eyeHeight; le.mass = pst.mass; le.r = pst.radius; le.vx = player.vel.x; le.vz = player.vel.z;
+    bn++;
+    bodies.length = bn;
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
     this.rabbit?.update(dt, this.collectors(), (id) => this.posOf(id), (id) => this.holdPoint(id));
@@ -620,10 +631,13 @@ export class TeamBots {
   }
 
   dispose(): void {
+    botSayDrain(); // queued taunts belong to this match's roster, not the next one's feed
     for (const b of this.bots) this.deps.world.remotePlayers.remove(b.playerId);
     this.bots.length = 0;
     this.fire.dispose();
     this.rabbit?.dispose();
+    this.ctf?.dispose();
+    this.flagrun?.dispose();
   }
 }
 

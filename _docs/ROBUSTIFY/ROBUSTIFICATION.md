@@ -233,6 +233,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.67 Separation-sense capsule churn (2026-10-07)
+
+Class 10, client frame loop. `Bots.update` rebuilt `bodyScratch` with a
+fresh literal per live bot per frame AND called `classCapsule` twice
+per bot — ~3 allocs/bot/frame (~3.6k/s at 20 bots, GC churn on
+low-end). Entries now pooled per index (length trimmed only at end).
+Audited clean first: `enemyList` was already pooled (`_enemies`/
+`nextBot`/`nextVec`), `ctxFor` reuses its scratch, `othersScratch`
+pushes live refs not copies.
+
 ### 2.66 Flag tick prevPos snapshot (2026-10-07)
 
 Class 10 + 9 (drifted sibling): `RoomFlags.tick` ran the IDENTICAL
