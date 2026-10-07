@@ -2788,3 +2788,11 @@ canvas - every nav input dead until reload. Now resolveClip never
 rejects (catch -> null) and mount* return bool on failure, degrading to
 the plain fetch path; the transition always completes.
 (clipFeed.ts)
+
+## 2.144 Prefetch cache consumed-on-read
+
+resolveClipData read the warm prefetch slot without consuming it, so a
+played clip kept its ~350KB stash slot until FIFO eviction pushed it
+out - dead weight crowding the 4-slot cap. The prefetch now hands over
+the buffer on use; replay falls back to vault/network as before.
+(coolShots.ts)

@@ -274,7 +274,11 @@ export class CoolShotManager {
     const data = await this.vault.get(entry.id);
     if (data) {return data;}
     if (entry.filename) {
-      return this.prefetched.get(entry.filename) ?? net.fetchDemo(this, entry.filename);
+      // Consume the warm slot: a played clip can't be replayed from the
+      // same prefetch, and holding it just burns the capped stash.
+      const warm = this.prefetched.get(entry.filename);
+      if (warm) {this.prefetched.delete(entry.filename); return warm;}
+      return net.fetchDemo(this, entry.filename);
     }
     return null;
   }

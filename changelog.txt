@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.144: clip prefetch consumed on read - played clips no longer sit in the 4-slot warm cache until evicted
 2026-10-01 - clip feed: shuffle queue (random, not lifetime-sorted); move neighbor mount off the touchmove handler to kill the mid-drag hitch
 2026-10-01 - robustify 2.143: clip feed - a throw during a pager transition (IDB rejection, corrupt blob in load()) can no longer strand `advancing` with the poster frozen over the feed
 2026-10-01 - clip feed: true filmstrip drag - live canvas tracks as the second pane so both clips move together (was poster-only slide)
