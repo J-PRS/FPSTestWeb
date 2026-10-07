@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.140: clip feed - auto-advance blocked by overloaded paused mode (natural end parks clock at duration); guard now distinguishes end vs manual pause
 2026-10-07 - robustify 2.139: clip feed - generation-guarded auto-advance (stale timer double-skip) + dead-clip watchdog
 2026-10-07 - robustify 2.138: moveJudge clamps claimed report velocity at 200 m/s - forged fast reports can no longer buy teleport tolerance
 2026-10-07 - robustify 2.137: demo upload filename collision - same-second same-lifetime saves suffixed instead of clobbering

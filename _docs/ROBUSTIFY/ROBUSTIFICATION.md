@@ -2744,3 +2744,14 @@ feed meta all textContent - clean) found two class-4/6 feed bugs:
   Watchdog: 10s after play() with mode not playing/paused -> advance.
 Both are feed-lifecycle correctness, not chrome.
 ### 2.139 - end
+
+## 2.140 Feed auto-advance - 'paused' is overloaded: natural end vs manual pause
+
+The lifecycle parks `dm.mode='paused'` when a clip ends naturally
+(demoWire.ts) - the same mode a user pause leaves. The 2.139
+scheduleNext guard "yield to a manual pause" therefore blocked EVERY
+auto-advance: the feed froze on each clip's last frame (self-inflicted
+regression caught this round). End-of-clip also parks the clock at
+`duration`, so the guard now distinguishes: paused && clock < duration =
+user holds; paused && clock >= duration = advance. Verified headless:
+clip 1 ends -> counter flips to 2/N. (clipFeed.ts)

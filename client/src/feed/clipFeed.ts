@@ -203,7 +203,13 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     // the user took the wheel.
     const g = clipGen;
     setTimeout(() => {
-      if (!advancing && g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {void go(1);}
+      if (advancing || g !== clipGen) {return;}
+      // 'paused' is overloaded: manual pause (hold the feed) AND the mode
+      // natural end leaves — the lifecycle parks the clock at duration,
+      // so end-of-clip must still advance while a mid-clip pause holds.
+      const parkedAtEnd = dm.player.duration > 0 && dm.player.currentTimeValue >= dm.player.duration;
+      if (dm.mode === 'playing' || (dm.mode === 'paused' && !parkedAtEnd)) {return;}
+      void go(1);
     }, NEXT_DELAY_MS);
   }
 
