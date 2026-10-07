@@ -2678,3 +2678,21 @@ and inputSync hints are unchanged. Pinned in
 tests/roomMoveSim.test.ts: 4 reports at ~70m/30 m/s inside a ~0.62s open
 gap bank zero strikes; 3x 300m reports still latch cheated.
 ### 2.135 - end
+
+### 2.136 - feed/vault memory bounds (fresh-code audit)
+
+Round opened in logs per protocol: today's client log carried only the
+benign KHR_parallel_shader_compile warn - no signal, moved to a
+fresh-code sweep of the /clips work shipped this session. Two class-5
+findings, both shipped:
+- `prefetched` (coolShots) grew per swipe - consume deletes only the
+  played clip, so fast skipping / deep-link jumps left every warmed
+  DemoFile (~100-350KB) cached for the session. Now FIFO-capped at 4
+  (the feed needs only neighbor clips warm).
+- `DemoVault.evict` ran `getAll` on every put - deserializing up to
+  ~35MB of clip payloads through structured clone just to find the
+  oldest timestamp. DB bumped to v2 with a `ts` index; eviction now
+  iterates the index and deletes by key without loading values.
+Also audited clipRoute for injection (all user-controlled/meta fields
+escaped) - clean.
+### 2.136 - end

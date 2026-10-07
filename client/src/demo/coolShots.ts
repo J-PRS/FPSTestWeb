@@ -251,11 +251,19 @@ export class CoolShotManager {
     if (index !== -1) {this.playAt(index);}
   }
 
-  /** Feed pre-buffer: warm a server clip into memory; playAt consumes it. */
+  /** Feed pre-buffer: warm a server clip into memory; playAt consumes it.
+   *  Skips that never play leave the entry behind, so the map is capped —
+   *  the feed only ever needs the neighbor clips warm. */
+  private static readonly PREFETCH_CAP = 4;
   async prefetchClip(filename: string): Promise<void> {
     if (!filename || this.prefetched.has(filename)) {return;}
     const data = await net.fetchDemo(this, filename);
-    if (data) {this.prefetched.set(filename, data);}
+    if (data) {
+      if (this.prefetched.size >= CoolShotManager.PREFETCH_CAP) {
+        this.prefetched.delete(this.prefetched.keys().next().value!);
+      }
+      this.prefetched.set(filename, data);
+    }
   }
 
   async downloadById(id: string): Promise<void> {

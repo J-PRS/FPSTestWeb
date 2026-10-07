@@ -34,8 +34,14 @@ export class DemoVault {
     // Lazy: opening IDB on module load would fault sessions that never
     // record a clip (and jsdom tests, where IDB may not exist).
     if (!this.dbp) {
-      this.dbp = openDB(DB_NAME, 1, {
-        upgrade(db) { db.createObjectStore(STORE, { keyPath: 'id' }); },
+      this.dbp = openDB(DB_NAME, 2, {
+        upgrade(db, _oldVersion, _newVersion, tx) {
+          if (!db.objectStoreNames.contains(STORE)) {
+            db.createObjectStore(STORE, { keyPath: 'id' });
+          }
+          const store = tx.objectStore(STORE);
+          if (!store.indexNames.contains('ts')) {store.createIndex('ts', 'timestamp');}
+        },
       });
       this.dbp.catch(() => { this.dbp = null; });
     }
@@ -74,13 +80,18 @@ export class DemoVault {
     }
   }
 
-  // FIFO: newest survive; oldest go once past CAP. (Sort by timestamp —
-  // key order can't stand in for it, ids are opaque strings.)
+  // FIFO: newest survive; oldest go once past CAP. The 'ts' index cursor
+  // deletes by key without deserializing clip payloads — getAll would
+  // pull ~35MB of DemoFiles through structured clone on every put.
   private async evict(db: IDBPDatabase): Promise<void> {
-    const keys = await db.getAllKeys(STORE);
-    if (keys.length <= CAP) { return; }
-    const all = (await db.getAll(STORE)) as VaultEntry[];
-    all.sort((a, b) => a.timestamp - b.timestamp);
-    for (const s of all.slice(0, all.length - CAP)) { await db.delete(STORE, s.id); }
+    const tx = db.transaction(STORE, 'readwrite');
+    let excess = (await tx.store.count()) - CAP;
+    if (excess <= 0) { return; }
+    for await (const cursor of tx.store.index('ts').iterate()) {
+      if (excess <= 0) { break; }
+      await cursor.delete();
+      excess--;
+    }
+    await tx.done;
   }
 }
