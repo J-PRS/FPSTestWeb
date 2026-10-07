@@ -233,6 +233,26 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.74 Weapon-sense hook mirror (2026-10-08)
+
+Fourth mirror-drift find, the most concrete yet. The server senses feed
+the brain ctx seven pick-based weapon hooks (speed, reach, fuse, arc
+drop, orbit, cadence, splash); the client composition carried only four
+and had *already drifted*: `weaponSpeed` used `speed || 60`, erasing the
+hitscan 0 — offline beams led targets like shells, the exact bug the
+server hook's own comment documents fixing online. Missing `weaponRange`
+meant offline bots hosed air past a 55m beam; missing `fireInterval`
+flattened every gun's trigger rhythm to a generic 0.45s; missing
+`preferredRange` dropped the burst-fan orbit table.
+
+All seven hooks now come from `botWeaponHooks(pick, lo)` in
+shared/botWeaponHooks.ts — ONE factory both ends call, so the formulas
+can't hand-drift a third time. `aimSkill` stays bespoke (its signature
+carries the skill matrix). Remaining unmirrored senses are
+orchestration-only by nature (posted/marshal/wave/runner = server squad
+planner; imap* = server influence sim) — the offline roster has no
+squad layer to feed them.
+
 ### 2.73 Room-event notice mirror (2026-10-08)
 
 Third find in the mirror-drift lane. Server bots hear a `notice` sense —

@@ -13,7 +13,8 @@ import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../shared/botSkill.js';
-import { getWeaponStats } from '../../../shared/weapons.js';
+import { botWeaponHooks } from '../../../shared/botWeaponHooks.js';
+import { type WeaponType } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
 import type { ChatterKind } from '../../../shared/botTaunts.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
@@ -253,18 +254,14 @@ export class GameBot extends RemotePlayer {
       // pick at that range — mirrors the server's senses hook. The
       // draw is skill-biased: phenoms reach for their gun, and the
       // aim error scores the same matrix so pick and aim agree.
-      weaponSpeed: (d) => {
-        const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0));
-        return getWeaponStats(wt).speed || 60;
-      },
-      // Fuse-carrier picks detonate at their clock, not the body — aim
-      // intercept caps at the fuse the same way the server's hook does.
-      weaponFuse: (d) => {
-        const ws = getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)));
-        return ws.fuseOnly ? ws.maxLifetime : undefined;
-      },
-      weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0))).gravity,
+      // Every pick-based weapon sense — ONE shared factory with the
+      // server senses, so the offline feed can't drift the formulas
+      // (this is where beams used to lead like shells: `speed || 60`
+      // erased the hitscan 0).
+      ...botWeaponHooks(
+        (d) => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)) as WeaponType,
+        this.loadout ?? BOT_LOADOUTS[0]!,
+      ),
       aimSkill: (d, targetSpeed) =>
         aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)), targetSpeed),
     });

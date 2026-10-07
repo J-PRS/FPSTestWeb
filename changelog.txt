@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.74: weapon-sense mirror — shared botWeaponHooks; beams led like shells offline, 3 hooks missing
 2026-10-08 - robustify §2.73: notice mirror — offline bots deaf to room events; shared RoomNoticer + flag actors
 2026-10-08 - robustify §2.72: huntCreatures mirror drift — offline bots ignored creatures on non-nuggets maps
 2026-10-08 - robustify §2.71: noise-TTL mirror drift — shared NOISE_TTL_MS (client heard 25% less)

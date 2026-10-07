@@ -10,7 +10,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
 import { RoomNoticer, type ChatterKind } from '../../shared/botTaunts.ts';
-import { getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { botWeaponHooks } from '../../shared/botWeaponHooks.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
@@ -896,60 +896,14 @@ export class ServerBotSenses {
       // duel band. The shared brain takes max(FIRE_RANGE, this).
       engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,
       thief: this.thiefOf(p.team ?? ''),
-      // Aim lead uses the muzzle speed of the pick fireAt makes at
-      // that range. 0 is meaningful (hitscan beam): faking a speed
-      // made beams lead like shells (2.5% FFA accuracy).
-      weaponSpeed: (d) => {
-        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage);
-        return getWeaponStats(w).speed ?? 60;
-      },
-      // Reach of the same pick: beams die at their ray length; fuse
-      // carriers reach carry + rain radius (a 200m lob bursts 80m
-      // short); other projectiles' ceiling is gravity, not a ray.
-      // weaponFuse is the same pick's airburst clock.
-      weaponRange: (d) => {
-        const ws = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
-        if (ws.speed === 0) return 55;
-        if (ws.fuseOnly && ws.maxLifetime) return ws.speed * ws.maxLifetime + 20;
-        return undefined;
-      },
-      weaponFuse: (d) => {
-        const ws = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
-        return ws.fuseOnly ? ws.maxLifetime : undefined;
-      },
-      // Where the fight positioner should orbit, from the table: a
-      // burst weapon's expected hit fraction is the capsule footprint
-      // vs the cone at range, so the distance is where the fan lands
-      // the damage still needed — no hugging a straggler. Single-shot
-      // guns keep the loadout's slot band.
-      preferredRange: (d, hpFrac) => {
-        const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
-        const w = pickBotWeapon(lo, d, d, bias, skill?.courage);
-        const st = getWeaponStats(w);
-        if ((st.burst ?? 0) > 1 && st.pelletSpread) {
-          const need = Math.max(15, (hpFrac ?? 1) * 150 * 0.9);
-          const maxDmg = (st.burst ?? 1) * st.directDamage;
-          if (need >= maxDmg) return 8;
-          return Math.min(45, Math.max(6, (0.5 / st.pelletSpread) * Math.sqrt(maxDmg / need)));
-        }
-        if (w === lo.near || w === lo.side) return 10;
-        if (w === lo.far) return 30;
-        return undefined;
-      },
-      // Trigger rhythm follows the gun the bot would draw at that range —
-      // same legal cadence the client trigger enforces, so a drawn
-      // chaingun streams and a drawn mortar deliberates.
-      fireInterval: (d) =>
-        WEAPON_FIRE_INTERVAL_S[pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType] ?? 0.45,
-      // Lobbed shells need the arc's drop added back on the aim point.
-      weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage)).gravity,
-      // Blast geometry of the same pick — the self-splash read prices
-      // what this shell would do to its own shooter.
-      weaponAoe: (d) => {
-        const w = getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage));
-        return { r: w.aoeRadius ?? 0, dmg: w.aoeDamage ?? 0 };
-      },
+      // Every pick-based weapon sense (lead speed, reach, fuse, arc
+      // drop, orbit, cadence, self-splash) comes from the one shared
+      // factory — a hand-mirrored copy would drift the formulas the
+      // offline feed reads.
+      ...botWeaponHooks(
+        (d) => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
+        this.loadouts.get(id) ?? BOT_LOADOUTS[0]!,
+      ),
       // The bot's skill matrix scored against the weapon it would
       // actually draw at that range — pick and aim stay consistent.
       ...(skill ? {
