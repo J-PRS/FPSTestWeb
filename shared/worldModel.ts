@@ -263,10 +263,12 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'velocity', channel: 'sim' },
       { name: 'health', channel: 'sim' },
       { name: 'isDead', channel: 'edge' },
-      { name: 'ping', channel: 'sim' },
-      { name: 'ski', channel: 'sim' },
-      { name: 'status', channel: 'edge' },
-      { name: 'sheep', channel: 'sim' },
+      // Wire-optional below — the binary frame and old JSON senders omit
+      // them when unset; `absent` marks omission as legal, not drift.
+      { name: 'ping', channel: 'sim', absent: null },
+      { name: 'ski', channel: 'sim', absent: null },
+      { name: 'status', channel: 'edge', absent: null },
+      { name: 'sheep', channel: 'sim', absent: null },
     ],
     // gameState player row — id rides 'id' here (GameStatePlayer.id),
     // unlike the verbs' playerId.
@@ -347,6 +349,42 @@ export function spawnPayload(
   vals: Record<string, unknown>,
 ): Record<string, unknown> {
   return verbPayload(kind, 'spawn', idField, id, vals);
+}
+
+/** Inbound half of the emit guard: a packet that drops a declared field
+ *  warns once at dispatch — same contract as verbPayload's emit-side
+ *  warn (absent sentinel or optional = fine). Fields the sender legit
+ *  omits (`absent` declared) stay quiet. */
+export function checkPacket(
+  kind: WorldKindDecl,
+  verb: 'spawn' | 'update' | 'gone',
+  msg: Record<string, unknown>,
+): void {
+  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
+  const check = (m: Record<string, unknown>) => {
+    for (const f of fields ?? []) {
+      if (!(f.name in m) && f.absent === undefined) {
+        console.warn(`[worldModel] inbound ${kind.kind}.${kind.verbs[verb]} missing declared field '${f.name}'`);
+      }
+    }
+  };
+  // Row-wrapped verbs (tickUpdate's updates[], roster arrays) check each
+  // row — the fields live there, not at message level.
+  const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags;
+  if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
+  check(msg);
+}
+
+/** Wire-verb → (kind, verb) index for inbound checking — the dispatcher
+ *  looks a message type up here instead of mapping verbs by hand. */
+const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: 'spawn' | 'update' | 'gone' }>();
+for (const k of Object.values(WORLD_MODEL)) {
+  for (const v of ['spawn', 'update', 'gone'] as const) {
+    VERB_INDEX.set(k.verbs[v], { kind: k, verb: v });
+  }
+}
+export function verbForType(type: string): { kind: WorldKindDecl; verb: 'spawn' | 'update' | 'gone' } | undefined {
+  return VERB_INDEX.get(type);
 }
 
 /** The per-id field tuple a hash-miss diff carries for a kind — the

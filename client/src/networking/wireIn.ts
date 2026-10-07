@@ -17,7 +17,7 @@ import {
 import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
-import { WORLD_MODEL } from '../../../shared/worldModel.js';
+import { WORLD_MODEL, verbForType, checkPacket } from '../../../shared/worldModel.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import type { NetworkManager } from './NetworkManager.js';
@@ -92,6 +92,10 @@ export class WireIn {
       const d = data as Record<string, unknown>;
       this.recentHealthEvents.push({ type: data.type, t: Date.now(), detail: `${d.shooterId ?? d.playerId ?? ''}→${d.targetId ?? ''} ${d.damage ?? ''}` });
     }
+    // Declared entity verbs get the inbound field check — a packet that
+    // drops a declared field warns here instead of desyncing silently.
+    const decl = verbForType(data.type);
+    if (decl) checkPacket(decl.kind, decl.verb, data as unknown as Record<string, unknown>);
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
     if (handler) {

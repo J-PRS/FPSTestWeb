@@ -1,3 +1,4 @@
+2026-10-01 - C5: inbound packet field check - wireIn warns when a declared entity packet drops a field (verbForType/checkPacket); row-wrapped verbs check per-row, wire-optional fields declared absent
 2026-10-01 - C5 fix: verbPayload skipped the idField - spawnFields listing 'projectileId' overwrote the emitted id with null; generator now skips the declared id field
 2026-10-01 - C5: player lane declared - playerJoined/playerLeft/tickUpdate/gameState rows all declared + generated from worldModel; every entity kind now lives in the table
 2026-10-01 - C5: ballSegment decode walks worldModel.updateFields - the binary->JSON bridge now copies exactly the declared field set
