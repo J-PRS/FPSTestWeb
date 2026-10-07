@@ -1,3 +1,4 @@
+2026-10-11 - robustify 2.113: pin display-name sanitize — control strip, 24ch cap, empty->undefined
 2026-10-11 - robustify 2.112: pin wire rate-limit table — reserialize/broadcast types stay on tight budgets
 2026-10-11 - robustify 2.111: pin the ws reconnect contract — flap backoff, deliberate-close, queue cap/dedup
 2026-10-08 - robustify 2.110: pin the unlisted-room contract — hidden from /rooms + quick-join, joinable by name

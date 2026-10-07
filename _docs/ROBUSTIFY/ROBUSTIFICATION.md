@@ -2386,3 +2386,14 @@ stays <=120/s. A new expensive type landing on 'default' now fails a
 test instead of shipping unbounded.
 
 ### 2.112 - end
+
+### 2.113 Display-name sanitize pinned (2026-10-11)
+
+The wire name lands verbatim in DOM text on every client (scoreboard,
+kill feed, chat) — nameSpec's control-byte strip + whitespace collapse +
+24ch cap was the only scrub and had zero coverage. nameSpec.test.ts
+drives hostile names through the real join path: control bytes die,
+a 10KB name caps at 24, and empty-after-sanitize stays undefined rather
+than storing '' that downstream would render as a blank row.
+
+### 2.113 - end
