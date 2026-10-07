@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.79: binary send lanes bypassed the drown drain — stalled binary-only sockets never closed
 2026-10-08 - robustify §2.78: deployable foe scans pooled — per-creature literal churn on every scan tick
 2026-10-08 - robustify §2.77: enemy bodies mirror — offline saw only nearest creature; foe scans pooled
 2026-10-08 - robustify §2.76: hpFrac on offline enemy entries — orbit priced full-hp targets; mirror closed

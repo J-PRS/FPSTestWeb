@@ -126,6 +126,32 @@ describe('netcode chaos: wire layer', () => {
     expect(ws.closed?.code).toBe(1011);
   });
 
+  it('binary lanes feed the drown clock — a stalled binary-only reader closes', () => {
+    const cm = new ConnectionManager();
+    let drowned = '';
+    cm.onDrowned = (pid) => { drowned = pid; };
+    const ws = new FakeWs('a');
+    ws.buffered = 5 * 1024 * 1024; // past DROWN_BYTES
+    cm.register('a', asWs(ws));
+
+    // Reliable binary (ball segments) previously sent blind — no clock, no
+    // skip. First sighting starts the clock and lets the frame through.
+    cm.broadcastBinaryReliable(new Uint8Array(8));
+    expect(ws.sentRaw.length).toBe(1);
+    expect(ws.data.slowSince).toBeTypeOf('number');
+
+    // Tick frames shed above the cap AND feed the same clock.
+    expect(cm.sendBinaryToPlayer('a', new Uint8Array(8))).toBe('backlogged');
+    expect(ws.sentRaw.length).toBe(1);
+
+    // Aged mark — the next binary send closes the socket as drowned.
+    ws.data.slowSince = Date.now() - 6000;
+    cm.broadcastBinaryReliable(new Uint8Array(8));
+    expect(drowned).toBe('a');
+    expect(ws.closed?.code).toBe(1011);
+    expect(ws.sentRaw.length).toBe(1);
+  });
+
   it('a draining socket clears its mark — transient spike is not a drown', () => {
     const cm = new ConnectionManager();
     let drowned = '';

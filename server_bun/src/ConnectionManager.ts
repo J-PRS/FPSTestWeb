@@ -174,7 +174,13 @@ export class ConnectionManager {
     const ws = this.connections.get(playerId);
     if (!ws || ws.readyState !== 1) return 'gone';
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
-    if (buffered > MAX_TICK_BACKLOG) return 'backlogged';
+    if (buffered > MAX_TICK_BACKLOG) {
+      // Backlogged sockets ALSO feed the drown clock — the cap sheds
+      // frames but a reader that never drains must still be closed, or
+      // a tick-only client lingers forever below DROWN_BYTES.
+      this.drownCheck(playerId, ws);
+      return 'backlogged';
+    }
     ws.send(data);
     return 'sent';
   }
@@ -182,10 +188,14 @@ export class ConnectionManager {
   /** Correctness-critical binary (ball segments) — always the reliable
    *  lane. A dropped segment is a resync the client free-runs blind for
    *  ~1.2s, which is exactly the rubberband pattern; a dropped tick frame
-   *  is just interpolation noise. At ~50B × ~10/s per ball this is cheap. */
+   *  is just interpolation noise. At ~50B × ~10/s per ball this is cheap.
+   *  Still rides the drown check: a stalled reader otherwise queues
+   *  segments forever and — since ticks ride the capped lane — a
+   *  binary-only client would never even start the drain clock. The
+   *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   broadcastBinaryReliable(data: Uint8Array): void {
-    this.connections.forEach((ws) => {
-      if (ws.readyState === 1) ws.send(data);
+    this.connections.forEach((ws, pid) => {
+      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') ws.send(data);
     });
   }
 

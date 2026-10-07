@@ -278,6 +278,20 @@ per think-tick, so a base with 3 sentries and 40 wildlife paid
 now come from `_foePool` (count-indexed, `playerId` cleared — bot foes
 keep pushing their own pooled refs from §2.77's `_foeOut`).
 
+### 2.79 Drowned-client drain never triggered on binary-only traffic (2026-10-08)
+
+Bad-network find (class 10): the drown drain only ran inside the JSON
+send paths (`sendToPlayer`/`broadcast`). Both binary lanes bypassed it:
+`broadcastBinaryReliable` sent ball segments blind with no buffered
+check at all, and `sendBinaryToPlayer` shed at 256KB but never fed the
+clock — so a stalled reader pulling mostly binary traffic lingered
+forever below `DROWN_BYTES` and was never closed, parking megabytes of
+stale truth per socket on a dead room. Both paths now call
+`drownCheck`: segments skip drowned sockets (reclaim's ballRoster
+reseeds ball truth, so the skip is honest) and backlogged tick sends
+feed the same 5s hysteresis. Pinned: binary-only stalled reader closes
+with 1011 after the window.
+
 ### 2.75 Courage dropped from the offline pick (2026-10-08)
 
 Same block, residual drift the §2.74 factory couldn't see: the senses'
