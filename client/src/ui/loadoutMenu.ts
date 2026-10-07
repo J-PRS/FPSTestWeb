@@ -301,10 +301,13 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     ui.slotDrops.push(drop);
   }
 
-  // --- KIT: the five equipment picks in one strip — headless like the
-  // weapon row; each cell names its own slot. ---
-  const kitCells = mkGroup('KIT', false);
-  const sidearm = mkCellDom(kitCells);
+  // --- KIT: two rows — SIDEARM+BELT up top, PACK+SKILL+PERK under;
+  // five cells in one nowrap strip overflowed the bar's width. ---
+  const kitRowA = mkGroup('KIT', false);
+  kitRowA.classList.add('lo-grid2');
+  const kitRowB = mkGroup('KIT', false);
+  kitRowB.classList.add('lo-grid3');
+  const sidearm = mkCellDom(kitRowA);
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
     [{ v: 'pistol', label: 'Pistol' },
@@ -315,7 +318,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   );
   sidearm.cell.appendChild(ui.sidearmDrop.el);
 
-  const belt = mkCellDom(kitCells);
+  const belt = mkCellDom(kitRowA);
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
     // No descs — every belt item is one throw away from explaining itself.
@@ -324,7 +327,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   );
   belt.cell.appendChild(ui.beltDrop.el);
 
-  const pack = mkCellDom(kitCells);
+  const pack = mkCellDom(kitRowB);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
     DEPLOY_KINDS.map((kind) => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
@@ -332,7 +335,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   );
   pack.cell.appendChild(ui.packDrop.el);
 
-  const skill = mkCellDom(kitCells);
+  const skill = mkCellDom(kitRowB);
   ui.skillLabel = skill.cap;
   ui.skillDrop = mkDrop(
     SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
@@ -340,7 +343,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   );
   skill.cell.appendChild(ui.skillDrop.el);
 
-  const perk = mkCellDom(kitCells);
+  const perk = mkCellDom(kitRowB);
   perk.cap.textContent = 'PERK';
   ui.perkDrop = mkDrop(
     PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),

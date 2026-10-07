@@ -307,6 +307,7 @@ body.lobby-open #loadout-bar {
    (whole row drops together), never orphans a lone slot mid-wrap. */
 #loadout-bar .lo-cells { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-end; }
 #loadout-bar .lo-cells.lo-grid2 { display: grid; grid-template-columns: 1fr 1fr; }
+#loadout-bar .lo-cells.lo-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
 #loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: center; }
 #loadout-bar .lo-cap {
   font-size: 0.66rem; letter-spacing: 0.18em; font-weight: 600;
