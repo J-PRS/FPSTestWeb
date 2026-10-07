@@ -360,8 +360,13 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       dm.setMode('paused');
       const e = entries[drag.ni]!;
       const mountedDrag = drag;
+      // The poster already covers the outgoing frame, so the neighbor mount
+      // doesn't have to land inside this touchmove — load+seek rebuilds the
+      // world and would otherwise block the tracked frame's paint (the lag).
       drag.ready = resolveClip(e).then((data) => {
-        if (data && drag === mountedDrag) {mountPaused(data);}
+        if (data && drag === mountedDrag) {
+          setTimeout(() => { if (drag === mountedDrag) {mountPaused(data);} }, 0);
+        }
         return data;
       });
     }
@@ -426,6 +431,12 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
 
   await dm.fetchCoolShotsFromServer();
   entries = dm.getCoolShots();
+  // Shuffle the queue — the index is lifetime-sorted, which makes every
+  // feed session replay the same top-N run. One pass, one shuffle.
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [entries[i], entries[j]] = [entries[j]!, entries[i]!];
+  }
   logger.info(`Clip feed: ${entries.length} clip(s)`);
   if (feedMode.startAt) {
     const at = entries.findIndex(e => e.filename === feedMode.startAt || e.id === feedMode.startAt);
