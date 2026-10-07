@@ -1,6 +1,7 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
 import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../shared/stateHash.ts';
+import { WORLD_MODEL, kindFields } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -405,10 +406,11 @@ export class TickLoop {
       deployFields: deployRoster.length
         ? deployRoster.map((d) => [d.id, d.kind, d.owner, d.team ?? ''] as [number, string, string, string])
         : undefined,
-      // Ball fleet per-id fields — enraged/targetId churn mismatches the
-      // hash without touching membership; the diff names the field.
+      // Ball fleet per-id fields — generated from the ball declaration
+      // so a new hashed field can't desync the emit/diff pair. The tuple
+      // shape is the declaration's field order, cast at the wire edge.
       ballFields: roster.length
-        ? roster.map((b) => [b.id, b.variant, b.enraged, b.targetId] as [number, number, boolean, string | null])
+        ? kindFields(WORLD_MODEL.ball!, roster) as [number, number, boolean, string | null][]
         : undefined,
     });
 
