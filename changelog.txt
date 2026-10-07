@@ -1,3 +1,4 @@
+2026-10-07 - /clips feed: swipeable best-shots playback (wheel/arrows/space/touch), slide transition, deep-links + OG meta shell, Clear Screen + progress bar
 2026-10-01 - demo archive is write-only: evictions gzip in, no auto-delete (operator-managed)
 2026-10-01 - demo eviction archives gzipped clips to demos/archive/ (FPS_DEMO_MAX=100, FPS_DEMO_ARCHIVE_MAX=500 FIFO)
 2026-10-01 - rename Cool Shots -> Best Shots (panel title, empty state, clip description)

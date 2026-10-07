@@ -12,6 +12,7 @@ import type { CoolShotEntry } from './coolShots.js';
 import { VideoRecorder } from './VideoRecorder.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
+import { feedMode } from '../feed/feedMode.js';
 import * as demoIO from './demoIO.js';
 import { getHeightfield } from '../world/heightmap.js';
 import { buildDemoUI, wirePlayerCallbacks } from './demoWire.js';
@@ -308,8 +309,11 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.mode = 'playing';
     this.player.play();
     this.ui.setPlaying(true);
-    this.ui.show();
-    this.uiVisible = true;
+    // The feed supplies its own chrome — the transport bar would double it.
+    if (!feedMode.on) {
+      this.ui.show();
+      this.uiVisible = true;
+    }
     this.ui.setTime(0, data.header.duration);
     demoIO.updateHitMarkers(this, data);
     if (this.videoExportArmedAt) {

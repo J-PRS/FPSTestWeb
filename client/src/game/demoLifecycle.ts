@@ -21,6 +21,7 @@ import { updatePlaybackCreatures, clearPlaybackCreatures, type PlaybackCreature 
 import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playbackDeployables.js';
 import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';
 import { hmapMatches } from '../demo/demoHmap.js';
+import { feedMode } from '../feed/feedMode.js';
 import { getHeightfield, injectHeightmapBytes } from '../world/heightmap.js';
 
 const logger = new ChildLogger('DemoPlayback');
@@ -236,14 +237,17 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     if (document.pointerLockElement === d.rendererCanvas) {
       document.exitPointerLock();
     }
-    d.overlay.style.display = 'flex';
-    document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
+    // Feed mode owns the screen — the menu must never resurface there.
+    if (!feedMode.on) {
+      d.overlay.style.display = 'flex';
+      document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
+    }
     demoManager.fetchCoolShotsFromServer();
     // Hand the live map back before recording resumes — a clip's embedded
     // grid must never leak into the next recording's HMAP trailer.
     if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; d.lazyTerrain().reloadHeightmap();}
-    // Resume recording for new cool shots
-    demoManager.startRecording();
+    // Resume recording for new cool shots — the feed never records.
+    if (!feedMode.on) {demoManager.startRecording();}
     onPlaybackStop();
   };
 
@@ -271,7 +275,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // is a user gesture, so the request is legal).
     d.overlay.style.display = 'none';
     document.body.classList.remove('menu-open');
-    d.rendererCanvas.requestPointerLock();
+    // The feed plays clips without a user gesture — pointer lock would
+    // throw (and is meaningless there: no aiming, no input).
+    if (!feedMode.on) {d.rendererCanvas.requestPointerLock();}
     // Live remote players would otherwise stand ghosted inside the replay
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
     // Dispose all non-playback balls (live game balls)

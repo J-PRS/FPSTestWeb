@@ -9,6 +9,7 @@ import {
 import Logger, { ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
+import { feedMode } from './feed/feedMode.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
@@ -348,8 +349,9 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     for (let i = 0; i < 8; i++) {entities.spawnBall();}
   }
 
-  // Auto-start demo recording so cool shots are captured seamlessly
-  demoManager?.startRecording();
+  // Auto-start demo recording so cool shots are captured seamlessly —
+  // the clip feed never records (it only replays).
+  if (!feedMode.on) {demoManager?.startRecording();}
   demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
 }
 
@@ -715,11 +717,20 @@ if (hot) {
 }
 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
-wireOnboarding(); // mobile gate + first-run controls card — before init so it can't be lost in boot noise
+// The clip feed is phone-first — the desktop-required gate must not
+// block it (playback needs no keyboard/mouse).
+if (!feedMode.on) {wireOnboarding();}
 init().then(async () => {
   gameStarted = true;
 
+  if (feedMode.on) {
+    const { startClipFeed } = await import('./feed/clipFeed.js');
+    await startClipFeed({ demoManager: demoManager!, hud, overlay, canvas: renderer.domElement });
+    return;
+  }
+
   // Fetch cool shots from server so they're shown in the initial overlay
+  // (the feed path above fetches for itself and exits early).
   demoManager?.fetchCoolShotsFromServer();
 
   // Desync debugging (snapshot/hash comparison + window debug functions) —

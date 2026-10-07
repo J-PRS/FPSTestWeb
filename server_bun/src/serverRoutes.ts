@@ -241,6 +241,42 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
   return corsResponse('Not found', { status: 404 });
 }
 
+// Clip-feed deep links: GET /clips/<file> returns a static OG/Twitter card
+// for crawlers and chat unfurls (the .demo binary can't render there), then
+// meta-refreshes humans into the feed. FPS_CLIENT_URL points the refresh at
+// wherever the static client lives; empty = same origin (co-hosted deploy).
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export async function clipRoute(ctx: HttpCtx, url: URL): Promise<Response> {
+  const name = url.pathname.slice('/clips/'.length);
+  const base = (CONFIG.clientUrl ?? '').replace(/\/$/, '');
+  const path = name ? `/clips/${encodeURIComponent(name)}` : '/clips';
+  let title = 'Best shots';
+  let desc = 'Watch the top plays';
+  if (name) {
+    const meta = (await ctx.demoStorage.listDemos()).find((m) => m.filename === name);
+    if (meta) {
+      title = meta.description || title;
+      desc = `${meta.projectileLifetime.toFixed(2)}s air`;
+    } else {
+      title = 'Clip not found';
+    }
+  }
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${esc(base + path)}">
+<meta name="twitter:card" content="summary">
+<meta http-equiv="refresh" content="0;url=${esc(base + path)}">
+</head><body style="background:#060a12;color:#cfe3ff;font-family:monospace;display:flex;min-height:100vh;align-items:center;justify-content:center">
+<div><div style="color:#3aa7ff;letter-spacing:.2em;margin-bottom:8px">BEST SHOTS</div>
+<div>${esc(title)}</div><div style="opacity:.7;margin-top:4px">${esc(desc)}</div>
+<a style="color:#3aa7ff" href="${esc(base + path)}">Watch in player</a></div></body></html>`;
+  return corsResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
 // Heightfield distribution — gameState names maps/<file>.bin; clients fetch
 // the same bytes the room's sims consume so terrain matches bit-for-bit.
 export async function mapBinRoute(url: URL): Promise<Response> {

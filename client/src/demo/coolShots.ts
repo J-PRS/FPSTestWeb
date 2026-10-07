@@ -51,6 +51,9 @@ export interface CoolShotDeps {
 export class CoolShotManager {
   private pendingClips: PendingClip[] = [];
   private vault = new DemoVault();
+  // Feed pre-buffer: the clip feed fetches the NEXT clip during playback
+  // so a swipe lands with zero network gap. Consumed once on play.
+  private prefetched = new Map<string, DemoFile>();
   private vaultLoaded = false;
   coolShots: CoolShotEntry[] = [];
   serverUrl = '';
@@ -228,7 +231,15 @@ export class CoolShotManager {
         if (data) {
           this.deps.playDemoData(data);
           logger.debug(`Playing cool shot from vault: ${entry.description}`);
-        } else if (entry.filename) {
+          return;
+        }
+        const cached = entry.filename ? this.prefetched.get(entry.filename) : undefined;
+        if (cached) {
+          this.prefetched.delete(entry.filename!);
+          this.deps.playDemoData(cached);
+          return;
+        }
+        if (entry.filename) {
           this.playFromServer(entry.filename);
         }
       });
@@ -238,6 +249,13 @@ export class CoolShotManager {
   playById(id: string): void {
     const index = this.coolShots.findIndex(s => s.id === id);
     if (index !== -1) {this.playAt(index);}
+  }
+
+  /** Feed pre-buffer: warm a server clip into memory; playAt consumes it. */
+  async prefetchClip(filename: string): Promise<void> {
+    if (!filename || this.prefetched.has(filename)) {return;}
+    const data = await net.fetchDemo(this, filename);
+    if (data) {this.prefetched.set(filename, data);}
   }
 
   async downloadById(id: string): Promise<void> {

@@ -90,6 +90,9 @@ export const CONFIG = {
   // Live clip-index cap — evictions gzip into demos/archive/, which is
   // write-only (operator-managed, never auto-deleted).
   demoMaxClips: envNum('FPS_DEMO_MAX', 100),
+  // Where the static client lives — /clips deep-link shells refresh there.
+  // Empty = co-hosted (the game server serves the client too).
+  clientUrl: envStr('FPS_CLIENT_URL', ''),
 
   // Server-owned creature sim — binary heightmap (8-byte w/h header + raw R
   // channel) matching the client's test_vertex.png source.

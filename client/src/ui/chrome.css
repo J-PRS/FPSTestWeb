@@ -509,3 +509,41 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
 .lb-room { display: flex; align-items: center; gap: 2px; }
 .lb-room .meta { margin-left: auto; float: none; }
+
+/* ---- Clip feed (/clips) - TikTok-style fullscreen replay chrome ---- */
+#clipfeed { position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  font-family: monospace; color: #cfe3ff; }
+#clipfeed.feed-clear > * { opacity: 0 !important; transition: opacity 0.25s; }
+.feed-top { position: absolute; top: 14px; left: 18px; display: flex; gap: 12px;
+  align-items: baseline; letter-spacing: 0.2em; font-size: 0.8rem; }
+.feed-title { color: #3aa7ff; text-shadow: 0 1px 4px #000; }
+.feed-count { color: rgba(140,170,195,0.75); font-size: 0.7rem; }
+.feed-meta { position: absolute; left: 18px; bottom: 34px; max-width: 46ch;
+  background: rgba(6,10,18,0.55); border: 1px solid rgba(58,167,255,0.25);
+  border-radius: 8px; padding: 10px 14px; backdrop-filter: blur(3px);
+  transition: opacity 0.25s; }
+.feed-desc { font-size: 0.8rem; color: #eaf4ff; margin-bottom: 4px; }
+.feed-stats { font-size: 0.68rem; color: rgba(140,170,195,0.9); letter-spacing: 0.05em; }
+.feed-hint { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+  font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.08em;
+  text-shadow: 0 1px 3px #000; transition: opacity 0.6s; pointer-events: none; }
+.feed-rail { position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 10px; pointer-events: auto;
+  transition: opacity 0.25s; }
+.feed-btn { width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  font: 1rem monospace; color: #eaf4ff; border: 1px solid rgba(58,167,255,0.4);
+  background: rgba(8,14,24,0.6); backdrop-filter: blur(3px); }
+.feed-btn:hover { background: rgba(58,167,255,0.25); border-color: #3aa7ff; }
+.feed-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: rgba(140,170,195,0.18); }
+.feed-progress-fill { height: 100%; width: 0%; background: #3aa7ff;
+  transition: width 0.1s linear; }
+.feed-empty { position: absolute; inset: 0; display: none; align-items: center;
+  justify-content: center; font-size: 0.85rem; color: rgba(140,170,195,0.7);
+  letter-spacing: 0.1em; background: rgba(6,10,18,0.35); }
+@media (max-width: 820px) {
+  .feed-rail { right: 8px; gap: 8px; }
+  .feed-btn { width: 40px; height: 40px; font-size: 0.9rem; }
+  .feed-meta { left: 10px; right: 64px; bottom: 26px; max-width: none; }
+  .feed-hint { display: none; }
+}

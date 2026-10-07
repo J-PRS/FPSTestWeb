@@ -8,7 +8,7 @@ import { RtcServer } from './RtcServer.ts';
 import { WtServer } from './WtServer.ts';
 import { join } from 'node:path';
 import { clientLogRoute, rotateLogs } from './clientLogs.ts';
-import { adminRoute, corsResponse, demoRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
+import { adminRoute, clipRoute, corsResponse, demoRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
 import { wallNow } from './wallClock.ts';
 
 const gameServer = new GameServer();
@@ -101,6 +101,10 @@ const server = Bun.serve<WebSocketData>({
     // Prefix routes — path carries params (admin query args, demo filename).
     if (url.pathname.startsWith('/admin/')) return adminRoute(httpCtx, req, url);
     if (url.pathname.startsWith('/demos/')) return demoRoute(httpCtx, req, url);
+    // Clip-feed deep links — OG card for crawlers, refresh into the client.
+    if (url.pathname === '/clips' || url.pathname.startsWith('/clips/')) {
+      return clipRoute(httpCtx, url);
+    }
     if (url.pathname.startsWith('/maps/')) return mapBinRoute(url);
     if (url.pathname === '/client-log' && req.method === 'POST') {
       return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
