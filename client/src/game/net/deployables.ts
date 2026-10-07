@@ -3,6 +3,7 @@
 // render dumb visuals keyed by the server id so deployGone can remove them.
 
 import type { NetCtx } from './ctx.js';
+import { reconcileReplicas } from '../replicas.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 
 export function wireDeployables(ctx: NetCtx): void {
@@ -58,21 +59,27 @@ export function wireDeployables(ctx: NetCtx): void {
  *  snapshot lists, drop what it doesn't (deployGone missed while down). */
 export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }[] | undefined): void {
   const mgr = ctx.deps.entities().deployables;
-  const live = new Set<number>();
-  for (const d of roster ?? []) {
-    live.add(d.id);
-    // Deployables that predate the record window get adopted here — same
-    // trick the creature roster lane uses.
-    ctx.deps.lazyDemoManager?.()?.recordDeploySpawned(d.id, d.kind, d.pos);
-    if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) {mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });}
-    else if (d.hp !== undefined) {mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);}
-  }
-  for (const id of mgr.remoteIds()) {
-    if (!live.has(id)) {
+  const localId = ctx.deps.lazyNetworkManager().getLocalPlayerId();
+  const live = reconcileReplicas(mgr.remoteReplicas(), roster ?? [], {
+    rowId: (d) => d.id,
+    ensure: (d) => {
+      // Deployables that predate the record window get adopted here — same
+      // trick the creature roster lane uses.
+      ctx.deps.lazyDemoManager?.()?.recordDeploySpawned(d.id, d.kind, d.pos);
+      // Our own plants already exist as local items keyed by serverId —
+      // the roster only carries their hp, not a second visual.
+      if (d.owner === localId) {
+        if (d.hp !== undefined) {mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);}
+        return undefined;
+      }
+      mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });
+      return mgr.remoteReplicas().get(d.id);
+    },
+    reap: (_e, id) => {
       mgr.remoteRemove(id);
       ctx.deps.lazyDemoManager?.()?.recordDeployGone(id);
-    }
-  }
+    },
+  });
   // The own lane needs the same cull — remotes don't cover it.
   mgr.cullOwn(live);
 }

@@ -27,7 +27,7 @@ export interface ReplicaHooks<T, R, K> {
   reap: (e: T, id: K) => void;
 }
 
-export function reconcileReplicas<T, R, K>(map: Map<K, T>, rows: R[], hooks: ReplicaHooks<T, R, K>): void {
+export function reconcileReplicas<T, R, K>(map: Map<K, T>, rows: R[], hooks: ReplicaHooks<T, R, K>): Set<K> {
   const live = new Set<K>();
   for (const r of rows) {
     const id = hooks.rowId(r);
@@ -47,4 +47,5 @@ export function reconcileReplicas<T, R, K>(map: Map<K, T>, rows: R[], hooks: Rep
       hooks.reap(e, id);
     }
   }
+  return live;
 }

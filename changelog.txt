@@ -1,3 +1,4 @@
+2026-10-01 - C5 #1d: deployable roster folded into reconcileReplicas - RemoteDeployables exposes its replica map, own-lane cull rides the returned live set; all six roster lanes share one lifecycle
 2026-10-01 - C5 #1c: reconcileReplicas generic over key type; flag lane's hand-rolled cull+ensure folded in - every roster reconcile (balls/crawlers/pickups/flags) now shares one lifecycle body
 2026-10-01 - C5 #1b: pickup lane folded into reconcileReplicas - the last hand-rolled roster reap loop; all number-keyed roster culls now share one body
 2026-10-01 - C5 #1: replicas.ts - one roster-reconcile lifecycle (live set, dead-evict, ensure, apply, reap) replaces per-lane copies in netCrawlers + netBalls; membership stays roster-owned

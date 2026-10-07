@@ -33,6 +33,8 @@ export class RemoteDeployables {
   /** Server id → item for our OWN plants — deploySpawn echoes back to the
    *  owner, letting server-driven events (turretShot) find the visual. */
   private byId = new Map<number, Item>();
+  /** The remote replica map — roster reconcile drives lifecycle on it. */
+  replicas(): Map<number, Item> { return this.remote; }
   private weldBeams = new Map<string, { beam: LightningBeam; last: number }>();
   private pings: { ring: THREE.Mesh; t: number }[] = [];
   private readonly _weldFrom = new THREE.Vector3();
@@ -167,6 +169,9 @@ export class RemoteDeployables {
     trim.rotation.x = Math.PI / 2;
     trim.position.y = 0.36;
     group.add(trim);
+    // Sentry's rotating head — declared up here so update() can idle-scan
+    // it; stays a child of group so wreck slump still tilts the whole rig.
+    const head = new THREE.Group();
     if (kind === 'generator') {
       const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 3.4, 4.6), hullMat);
       hull.position.y = 1.7;
@@ -180,23 +185,43 @@ export class RemoteDeployables {
         group.add(pylon);
       }}
     } else if (kind === 'sentry') {
-      // Base gun — squat armored block on a swivel, twin barrels, glow
-      // optic; deliberately chunkier than the field turret silhouette.
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, 0.8, 8), darkMat);
-      base.position.y = 0.75;
-      group.add(base);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 2), hullMat);
-      head.position.y = 1.75;
-      group.add(head);
-      for (const sx of [-0.45, 0.45]) {
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.6, 8), darkMat);
+      // Base defense gun — must read at 200m atop its pillar: tapered
+      // armored collar, slab mantlet with a hood brow, twin heavy
+      // barrels with muzzle sleeves, rear ammo drum. ~2x the thrown
+      // pod-sentry's mass so "emplaced base gun" and "field turret"
+      // never blur in silhouette.
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.5, 1.2, 8), darkMat);
+      collar.position.y = 0.95;
+      group.add(collar);
+      // Team-lit socket ring where the mount meets the plinth — reads
+      // "this is powered" before the gun itself resolves.
+      const collarRing = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.12, 6, 24), glowMat);
+      collarRing.rotation.x = Math.PI / 2;
+      collarRing.position.y = 1.55;
+      group.add(collarRing);
+      head.position.y = 2.4;
+      const mantlet = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.7, 2.4), hullMat);
+      head.add(mantlet);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.45, 2.6), darkMat);
+      brow.position.y = 1.05;
+      head.add(brow);
+      for (const sx of [-0.6, 0.6]) {
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 3.6, 8), darkMat);
         barrel.rotation.x = Math.PI / 2;
-        barrel.position.set(sx, 1.75, 1.9);
-        group.add(barrel);
+        barrel.position.set(sx, 0.15, 2.4);
+        head.add(barrel);
+        const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.7, 8), hullMat);
+        sleeve.rotation.x = Math.PI / 2;
+        sleeve.position.set(sx, 0.15, 3.9);
+        head.add(sleeve);
       }
-      const optic = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), glowMat);
-      optic.position.set(0, 2.15, 0.9);
-      group.add(optic);
+      const optic = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), glowMat);
+      optic.position.set(0, 0.6, 1.3);
+      head.add(optic);
+      const ammo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.5), darkMat);
+      ammo.position.set(0, 0.1, -1.6);
+      head.add(ammo);
+      group.add(head);
     } else {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 9, 8), darkMat);
       mast.position.y = 4.5;
@@ -210,9 +235,13 @@ export class RemoteDeployables {
       group.add(tip);
     }
     group.position.copy(at);
-    group.position.y = this.deps.lazyTerrain().getHeight(at.x, at.z);
+    // Tower-mounted assets author a real y — terrain is a floor for the
+    // buried-y convention, not a ceiling on rooftops.
+    group.position.y = Math.max(at.y, this.deps.lazyTerrain().getHeight(at.x, at.z));
     this.deps.scene.add(group);
     const spin = kind === 'sensor' ? group.children[3]! : null;
+    const isSentry = kind === 'sentry';
+    let scanT = Math.random() * 6;
     // Joined mid-wreck: snapshot hp 0 → spawn it already dark.
     const wrecked = hp !== undefined && hp <= 0;
     let downed = wrecked;
@@ -223,6 +252,12 @@ export class RemoteDeployables {
       hurt: () => {},
       update: (dt) => {
         if (spin) {spin.rotation.y += dt * 0.8;}
+        // Sentry watch sweep — a live base gun scans its arc; a downed
+        // one freezes mid-bearing, which doubles as a dead giveaway.
+        if (isSentry && !downed) {
+          scanT += dt;
+          head.rotation.y = Math.sin(scanT * 0.5) * 0.7;
+        }
         // Burnout wisp — a downed asset smokes gently so the site reads
         // "weld me" from across the field, not just "darker box".
         if (downed) {

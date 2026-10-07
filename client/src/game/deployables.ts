@@ -569,6 +569,11 @@ export class Deployables {
     return this.remotes.ids();
   }
 
+  /** The remote replica map — roster reconcile owns its lifecycle. */
+  remoteReplicas(): Map<number, Item> {
+    return this.remotes.replicas();
+  }
+
   sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
     this.remotes.sensorPing(id, team, targets);
   }
