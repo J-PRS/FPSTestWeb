@@ -29,8 +29,10 @@ export interface LobbyPanelEls {
   modeSelect: HTMLSelectElement;
   botsInput: HTMLInputElement;
   leaveBtn: HTMLButtonElement;
-  /** Repoll the open-lobbies list — Lobby calls it on open + poll tick. */
+  /** Repoll the open-lobby list — Lobby calls it on open + poll tick. */
   refreshLobs(): void;
+  /** Server RTT readout in the JOIN header — Lobby writes it per poll. */
+  pingEl: HTMLSpanElement;
 }
 
 function btn(text: string): HTMLButtonElement {
@@ -218,7 +220,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     refreshBtn.title = 'refresh list';
     refreshBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;';
     refreshBtn.addEventListener('click', () => { h.refresh(); refreshLobsFn(); });
-    headRow.append(head, refreshBtn);
+    // Server-level RTT — one ping covers every room row (they all live
+    // on the same host), so it lives in the header, not a column.
+    const pingEl = document.createElement('span');
+    pingEl.style.cssText = 'font-size:0.62rem;letter-spacing:0.06em;';
+    headRow.append(head, pingEl, refreshBtn);
     const hereRow = document.createElement('div');
     hereRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
     const here = document.createElement('div');
@@ -399,5 +405,5 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       menuWasOpen = menuOpen;
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   
-  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs };
+  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs, pingEl };
 }

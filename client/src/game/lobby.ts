@@ -220,9 +220,15 @@ export class Lobby {
   private async refreshRooms(): Promise<void> {
     this.rows.textContent = '';
     let rooms: RoomRow[];
+    // RTT of the /rooms fetch itself = the server ping — green/amber/red.
+    const t0 = performance.now();
     try {
       rooms = await this.deps.listRooms();
+      const ms = Math.round(performance.now() - t0);
+      this.els.pingEl.textContent = `${ms}ms`;
+      this.els.pingEl.style.color = ms < 60 ? '#6fcf8f' : ms < 120 ? '#ffd76f' : '#f88';
     } catch {
+      this.els.pingEl.textContent = '';
       const err = document.createElement('div');
       err.style.color = '#f88';
       err.textContent = 'server offline';
