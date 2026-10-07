@@ -690,6 +690,13 @@ export class NetworkManager {
     });
   }
 
+  /** Slam landing intent — the server derives blast power from its own
+   *  velocity shadow; only the landing spot crosses the wire. */
+  sendSlam(position: { x: number; y: number; z: number }): void {
+    if (!this.connected) return;
+    this.send({ type: 'slam', position, claimSeq: this.ledger.stamp('slam') });
+  }
+
   sendJump(position: { x: number; y: number; z: number }): void {
     this.send({ type: 'jump', position });
   }

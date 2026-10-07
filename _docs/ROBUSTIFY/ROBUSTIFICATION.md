@@ -3206,3 +3206,17 @@ the same rule. 30/s flood gate on the intent. Client keeps its
 predicted heal + beam FX; the sendRepair claim is gone. Bots were
 already server-side for welds, so bot/ human repair now share one
 code path end to end. (tsc both sides + 39 focused tests green)
+
+## 2.177 Slam lands on a velocity shadow — the last skill claim dies
+
+Slam's aoeShot was the odd claim: a position PLUS a client-computed
+`power` multiplier off its own impact speed — the one payload field a
+forged claim could inflate at will (max slam radius + damage on any
+landing). Now a dedicated `slam` intent carries only the landing spot;
+the server derives power from the move shadow's own velocity sample
+(the claim lands while the pre-impact dive is still the freshest
+reading), runs the same power-scaled blast, and plausibility-gates the
+position against the shadow (60m). serverBlast learned an optional
+power multiplier; client keeps the predicted slam FX + thud and drops
+the claim when connected. (tsc both sides + 53 focused tests green;
+protocol.test keeps the exhaustive-type pin honest)

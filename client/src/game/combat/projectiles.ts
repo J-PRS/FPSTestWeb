@@ -114,8 +114,13 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
   // floor, 1.8 max on a huge fall. Server applies the same power factor.
   const power = Math.min(Math.max((impactSpeed - 30) / 50, 0.2), 1.8);
   const networkManager = deps.lazyNetworkManager();
-  const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
-    networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: targetId, power });
+  // Connected: the slam intent replaces the aoeShot claim — the server
+  // derives power from its own velocity shadow and runs the blast.
+  const sendAOE = networkManager.isConnected()
+    ? undefined
+    : (p: { x: number; y: number; z: number }, _targetId: string | null) =>
+      networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: _targetId, power });
+  if (networkManager.isConnected()) networkManager.sendSlam({ x: pos.x, y: pos.y, z: pos.z });
   processProjectileExplosion(c, {
     pos,
     radius: stats.aoeRadius * power * deps.lazyPlayer().mods.aoeRadius,

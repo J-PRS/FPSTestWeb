@@ -517,6 +517,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   deploy: [{ name: 'kind' }, { name: 'position' }, { name: 'claimSeq', absent: null }],
   repair: [{ name: 'targetId' }, { name: 'claimSeq', absent: null }],
   skillUse: [{ name: 'claimSeq', absent: null }],
+  slam: [{ name: 'position' }, { name: 'claimSeq', absent: null }],
   respawn: [{ name: 'hold', absent: null }],
   throwFlag: [],
   snapshotRequest: [],

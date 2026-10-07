@@ -68,6 +68,10 @@ export type ClientMessage =
   // every claim naming this shell — binding is explicit identity, not
   // the echo-race/FIFO inference it replaced.
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string }
+  // Q-skill Slam landing — the intent carries WHERE the dive landed;
+  // the server derives blast power from its own velocity shadow (the
+  // dive speed IS the payload — a claimed speed is just a number).
+  | { type: 'slam'; position: Vec3; claimSeq?: number }
   // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
   // this cosmetic "I pulled the trigger" lets the server relay a playerShot
   // so firefights are audible/visible. For server-simmed weapons

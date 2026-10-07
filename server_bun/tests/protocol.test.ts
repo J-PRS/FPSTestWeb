@@ -13,7 +13,7 @@ const ALL_CLIENT_TYPES = [
   'aoeShot', 'chat', 'classUpdate', 'clientStats', 'crawlerHit', 'creatureHit',
   'deploy', 'environmentDamage', 'heal', 'inputMove', 'jetpack', 'join', 'jump',
   'perkUpdate', 'ping', 'position', 'projectileDestroy', 'repair', 'respawn',
-  'resync', 'shotFired', 'skillUse', 'snapshotRequest', 'switchRoom',
+  'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
   'teleport', 'throwFlag',
 ] as const satisfies readonly ClientMessage['type'][];
 

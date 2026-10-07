@@ -145,6 +145,18 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id, m) => h.combat.handleShotFired(id, m),
   },
 
+  slam: {
+    // One landing per skill dive — a real player can't land twice a
+    // second; the gate exists because every slam runs a blast sweep.
+    limit: { maxCount: 6, windowMs: 1000 },
+    validate: (obj) => {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      return { success: true, data: { type: 'slam', position: pos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
+    },
+    handle: (h, id, m) => h.combat.handleSlam(id, m),
+  },
+
   jump: {
     limit: { maxCount: 10, windowMs: 1000 },
     validate: (obj) => {
