@@ -83,6 +83,14 @@ describe('envClaims', () => {
     expect(h._beats).not.toContain('envdmg.attackerFar');
   });
 
+  it('non-finite amounts are gone — handler is the trust boundary, not decode', () => {
+    const h = host({ players: { p: {} } });
+    expect(handleEnvironmentDamage(h as never, 'p', envMsg(NaN))).toBe('gone');
+    expect(handleHeal(h as never, 'p', healMsg(Infinity))).toBe('gone');
+    expect(h._players.get('p')!.health).toBe(50);
+    expect(h._hits).toHaveLength(0);
+  });
+
   it('a dead or missing player claims are gone — no health writes', () => {
     const h = host({ players: { p: { isDead: true } } });
     expect(handleEnvironmentDamage(h as never, 'p', envMsg(10))).toBe('gone');

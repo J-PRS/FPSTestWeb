@@ -217,6 +217,20 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.57 Finite-guard on env/heal claim handlers (2026-10-07)
+
+Server-side NaN sweep: wire decode validates every claim field
+(`validateVec3`/`validateBody`/`isFiniteNumber` throughout `wire.ts`,
+fuzz-pinned in `wireFuzz`), and the claim handlers sign-clamp
+(`Math.max(1, …)` — negative/zero can't invert a heal into damage or
+vice versa). Residual hole: `handleEnvironmentDamage`/`handleHeal`
+trusted decode — `Math.max(1, Math.round(NaN))` is `NaN`, so any
+non-wire caller (or a future decode bypass) writes `NaN` health into
+the tick broadcast. Both handlers now reject non-finite amounts as
+`gone`; pinned in `envClaims.test.ts` (NaN envDamage, Infinity heal →
+no health write, no hit). The handler is the trust boundary, not the
+parser.
+
 ### 2.56 Finite-guard on ball + creature net edges (2026-10-07)
 
 NaN-ingress lane, second half: the four decode funnels that feed the

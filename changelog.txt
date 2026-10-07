@@ -1,3 +1,4 @@
+2026-10-07 - robustify §2.57: finite-guard env/heal claim handlers
 2026-10-07 - robustify §2.56: finite-guard ball + creature net edges
 2026-10-07 - robustify §2.55: finite-guard authority vectors (correction, gameState restore)
 2026-10-07 - hub tab back to P2P (duel implied hosted match type)
