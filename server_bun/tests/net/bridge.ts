@@ -127,7 +127,7 @@ export type BridgeScript = (tMs: number) => { input: WireInput; yaw: number };
 const PID = 'p';
 
 export function runBridge(field: Heightfield, profile: BridgeProfile, script: BridgeScript, seconds: number, seed = 7): BridgeResult {
-  const surface = new FieldSurface(field);
+  const surface = FieldSurface.fromField(field);
   const spawn: MoveState = {
     pos: { x: 0, y: surface.getHeight(0, 0) + 1.8, z: 0 },
     vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,

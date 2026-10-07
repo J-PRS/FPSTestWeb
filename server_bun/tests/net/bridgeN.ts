@@ -75,7 +75,7 @@ export type BridgeNResult = {
 };
 
 export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: number): BridgeNResult {
-  const surface = new FieldSurface(field);
+  const surface = FieldSurface.fromField(field);
   const server = new RoomMoveSim(field, true);
   const cm = new ConnectionManager();
   const asWs = (w: FakeWs) => w as unknown as ServerWebSocket<WebSocketData>;

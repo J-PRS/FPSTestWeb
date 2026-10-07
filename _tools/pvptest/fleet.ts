@@ -25,7 +25,8 @@ import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK, WIRE_TICK_V3, 
 import { openSocket, type BotSocket, type Tier } from './net.ts';
 import { getWeaponStats } from '../../shared/weapons';
 import { MoveSim } from '../../shared/movement.ts';
-import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
+import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { readFileSync } from 'fs';
 
 // Honest movement: each bot runs the shared MoveSim against the SAME
@@ -53,10 +54,9 @@ function fieldFor(terrain?: string): Promise<Heightfield> {
   }
   return p;
 }
-const surfaceOf = (f: Heightfield) => ({
-  getHeight: (x: number, z: number) => hmHeight(f, x, z),
-  getNormal: (x: number, z: number, out: { x: number; y: number; z: number }) => { hmNormal(f, x, z, out); return out; },
-});
+// The shared FieldSurface — hand-rolled ground samplers are a divergence
+// class (wrong normal step, missing solid overlay, dropped reach bound).
+const surfaceOf = (f: Heightfield) => FieldSurface.fromField(f);
 
 interface Bot {
   name: string;

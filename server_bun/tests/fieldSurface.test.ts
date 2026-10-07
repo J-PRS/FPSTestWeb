@@ -16,14 +16,14 @@ const slab = () => SolidWorld.fromSpecs([{ kind: 'box', pos: { x: 10, y: 0, z: 2
 
 describe('fieldSurface', () => {
   it('a structure top face wins over terrain as floor', () => {
-    const fs = new FieldSurface(FLAT);
+    const fs = FieldSurface.fromField(FLAT);
     fs.solid = slab();
     expect(fs.getHeight(10, 20)).toBeCloseTo(6, 10);
     expect(fs.getHeight(0, 0)).toBe(0); // off the footprint: terrain
   });
 
   it('maxTop bounds which tops count — a deck overhead is not a floor', () => {
-    const fs = new FieldSurface(FLAT);
+    const fs = FieldSurface.fromField(FLAT);
     fs.solid = slab();
     // Feet can only claim tops within reach; capping below the slab's
     // 6m top leaves the terrain height standing.
@@ -32,7 +32,7 @@ describe('fieldSurface', () => {
   });
 
   it('normal over a structure is flat-up — a walker stands level on the slab', () => {
-    const fs = new FieldSurface(FLAT);
+    const fs = FieldSurface.fromField(FLAT);
     fs.solid = slab();
     const out = { x: 9, y: 9, z: 9 };
     fs.getNormal(10, 20, out);
@@ -40,7 +40,7 @@ describe('fieldSurface', () => {
   });
 
   it('no solid means pure terrain — getHeight/getNormal pass through', () => {
-    const fs = new FieldSurface(FLAT);
+    const fs = FieldSurface.fromField(FLAT);
     expect(fs.getHeight(10, 20)).toBe(0);
     const out = { x: 0, y: 0, z: 0 };
     expect(fs.getNormal(10, 20, out)).toBe(out);
@@ -48,7 +48,7 @@ describe('fieldSurface', () => {
   });
 
   it('resolveBody pushes a capsule out of a wall face horizontally', () => {
-    const fs = new FieldSurface(FLAT);
+    const fs = FieldSurface.fromField(FLAT);
     fs.solid = slab();
     // Eye at y=3 with height 1.8 → feet 1.2, inside the slab's 0..6 span,
     // 0.5m past its x edge → the push-out lands it clear of the face.

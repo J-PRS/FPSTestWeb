@@ -2,7 +2,36 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { structureColliders } from '../../../shared/ballCollide.js';
+import { TEAM_COLORS } from '../../../shared/teams.js';
+import {
+  mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad,
+  mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk,
+  mkArch, mkShard,
+} from '../structures/structures.js';
+import { ramp } from '../structures/structKit.js';
 import { urlParams } from '../core/params.js';
+
+// 'kit' spec pieces → their real builders (names match KIT_HULLS in
+// shared/structKits — the piece collides as that table's boxes).
+// Exported so the hull-parity test can build the REAL mapping — a table
+// duplicated in the test would pin a copy, not the seam.
+export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
+  bastion:   (g) => mkBastion(g),
+  tower:     (g) => mkBaseTower(9, 12, g),
+  wallrun:   (g) => mkWallRun(18, 4.2, g),
+  wallgate:  (g) => mkWallGate(18, 4.2, 6, g),
+  gendome:   (g) => mkGenDome(5, g),
+  landpad:   (g) => mkLandingPad(4.5, g),
+  commast:   (g) => mkCommsMast(10, g),
+  katastand: (g) => mkKataStand(g),
+  bunker:    (g) => mkBunker(12, 10, 4.2, g),
+  flagtower: (g) => mkFlagTower(8, 10.5, g),
+  pillar:    (g) => mkPillar(3, 9, g),
+  obelisk:   (g) => mkObelisk(2.4, 12, g),
+  arch:      () => mkArch(),
+  shard:     () => mkShard(),
+  ramp:      () => ramp(5, 12, 2.5),
+};
 
 // Static map structures — the server's map spec arrives on gameState and
 // every client builds identical geometry locally. Primitives stay dumb:
@@ -75,9 +104,17 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
     built.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
-        const m = o.material;
-        if (Array.isArray(m)) {m.forEach((x) => x.dispose());}
-        else {m.dispose();}
+        // Kit pieces share the kit's module-level palette materials —
+        // disposing them here poisons every later map/gunlab build.
+        let shared = false;
+        for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+          if (p.userData.kitPiece) {shared = true; break;}
+        }
+        if (!shared) {
+          const m = o.material;
+          if (Array.isArray(m)) {m.forEach((x) => x.dispose());}
+          else {m.dispose();}
+        }
       }
     });
     built = null;
@@ -100,9 +137,22 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   // per frame for pixels that never move.
   const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-  // 'stand' specs are collision-only — the flag dais mesh is their
-  // visual; drawing the generic box would double-render over it.
-  for (const s of list.filter((s) => s.kind !== 'stand' && s.kind !== 'hull')) {
+  // 'stand'/'hull' specs are collision-only — the flag dais mesh and
+  // ported interiors are their visuals; drawing the generic box would
+  // double-render over them. 'kit' pieces take the real builder path.
+  for (const s of list) {
+    if (s.kind !== 'kit') {continue;}
+    const mk = KIT_BUILDERS[s.piece ?? ''];
+    if (!mk) {continue;}
+    const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59F2FF); // unteamed = neutral cyan
+    piece.userData.kitPiece = true;
+    piece.position.set(s.pos.x, s.pos.y, s.pos.z);
+    piece.rotation.y = s.rotY ?? 0;
+    if (s.scale && s.scale !== 1) {piece.scale.setScalar(s.scale);}
+    piece.updateMatrixWorld(true);
+    built.add(piece);
+  }
+  for (const s of list.filter((s) => s.kind !== 'stand' && s.kind !== 'hull' && s.kind !== 'kit')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
     let g: THREE.BufferGeometry;
     if (s.kind === 'root') {

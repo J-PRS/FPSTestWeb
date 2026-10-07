@@ -28,6 +28,20 @@ describe('structureColliders — spec to yaw-OBB', () => {
     expect(cols[0]!.hx).toBe(1);
     expect(cols[0]!.hy).toBe(2.5);
   });
+
+  it('kit scale multiplies hull centers and extents', () => {
+    // Scaled ×2 must double BOTH the hull's offset from the piece base
+    // and its half-extents, or the visual (uniform scale) and collision
+    // drift apart.
+    const SZ = { x: 1, y: 1, z: 1 }; // ignored for kits, still required
+    const a = structureColliders([{ kind: 'kit', piece: 'bastion', pos: { x: 100, y: 0, z: 0 }, size: SZ, scale: 2 }])[0]!;
+    const b = structureColliders([{ kind: 'kit', piece: 'bastion', pos: { x: 100, y: 0, z: 0 }, size: SZ }])[0]!;
+    expect(a.hx).toBeCloseTo(b.hx * 2);
+    expect(a.cy).toBeCloseTo(b.cy * 2); // local-space cy doubles around the base
+    expect(a.cx - 100).toBeCloseTo((b.cx - 100) * 2);
+    const c = structureColliders([{ kind: 'kit', piece: 'pillar', pos: { x: 0, y: 0, z: 0 }, size: SZ, rotY: Math.PI / 2, scale: 2 }])[0]!;
+    expect(Math.abs(c.cx)).toBeCloseTo(0); // pillar hull sits on the axis
+  });
 });
 
 describe('collideStructures — push-out + elastic reflect', () => {

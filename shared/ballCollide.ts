@@ -6,6 +6,7 @@
  * on its own.
  */
 import type { StructureSpec } from './mapSpec.js';
+import { KIT_HULLS } from './structKits.js';
 import type { SimBall } from './ballSim.js';
 
 /** Restitution for structure + body bounces. Lives here (not ballSim) so
@@ -26,6 +27,25 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
   const out: StructureCollider[] = [];
   for (const s of list) {
     const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
+    if (s.kind === 'kit') {
+      // Kit pieces collide as their authored hull set (local-space boxes,
+      // folded by the piece's own rotY then the spec's) — the visual and
+      // the collision are the same table, so a builder tweak that forgets
+      // to update KIT_HULLS is the only drift risk left. `scale` is the
+      // piece's uniform world scale: hull centers AND extents multiply.
+      const k = s.scale ?? 1;
+      for (const h of KIT_HULLS[s.piece ?? ''] ?? []) {
+        const r = s.rotY ?? 0;
+        out.push({
+          cx: s.pos.x + (h.pos.x * k) * cos + (h.pos.z * k) * sin,
+          cy: s.pos.y + h.pos.y * k,
+          cz: s.pos.z - (h.pos.x * k) * sin + (h.pos.z * k) * cos,
+          hx: h.size.x / 2 * k, hy: h.size.y / 2 * k, hz: h.size.z / 2 * k,
+          cos: Math.cos(r + (h.rotY ?? 0)), sin: Math.sin(r + (h.rotY ?? 0)),
+        });
+      }
+      continue;
+    }
     if (s.kind === 'root') {
       // Arch collides as its two feet — the span overhead stays open to
       // ski under; a single OBB would wall off the whole gap.

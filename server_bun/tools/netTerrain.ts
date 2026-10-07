@@ -9,7 +9,8 @@
  * loads its room's field on every re-seat — a shared mutable field
  * swapped on hop corrupts every sim still in the old room.
  */
-import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
+import { FieldSurface } from '../../shared/fieldSurface.ts';
 
 const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
 if (!bunFile) throw new Error('netBot tools require Bun');
@@ -70,20 +71,11 @@ export function makeTerrainLoader(fallback: Heightfield): (name: string) => Prom
   };
 }
 
-/** MoveSim surface over a heightfield — gradient normals via central
- *  difference, same math the server's ground queries use. */
-export function surfaceFor(field: Heightfield) {
-  const g = (x: number, z: number) => hmHeight(field, x, z);
-  return {
-    getHeight: g,
-    getNormal(x: number, z: number, out: { x: number; y: number; z: number }) {
-      const e = 0.5;
-      out.x = (g(x - e, z) - g(x + e, z)) / (2 * e);
-      out.y = 1;
-      out.z = (g(x, z - e) - g(x, z + e)) / (2 * e);
-      const l = Math.hypot(out.x, out.y, out.z);
-      out.x /= l; out.y /= l; out.z /= l;
-      return out;
-    },
-  };
+/** MoveSim surface over a heightfield — the shared FieldSurface, so the
+ *  netbot's ground normals (hmNormal's 2.5m diff step, not a hand-rolled
+ *  0.5m one) and structure overlay are byte-identical to the server's.
+ *  A netbot sim that rolls its own surface is a divergence generator:
+ *  it once read normals at e=0.5 and never saw structure walls at all. */
+export function surfaceFor(field: Heightfield): FieldSurface {
+  return FieldSurface.fromField(field);
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getHeightmapData, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
+import { getHeightmapData, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
@@ -86,6 +86,15 @@ export class Terrain {
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
   private heightTexture: THREE.DataTexture;
+  /** Shared heightfield uniforms for anything else that needs to hug the
+   *  terrain GPU-side (instanced blob shadows drape over slopes by
+   *  sampling the same displacement). The OBJECTS are stable — reload/
+   *  rescale mutate `.value` in place, so subscribers bind once. */
+  readonly heightU = {
+    heightMap: { value: null as THREE.DataTexture | null },
+    hmWorldScale: { value: getWorldScale() },
+    hScale: { value: HSCALE * getHeightScale() },
+  };
   private gridGeo: THREE.BufferGeometry;
   // Shader-projected scorch decals: x, z, radius, intensity (16 slots)
   private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
@@ -122,6 +131,7 @@ export class Terrain {
     this.heightTexture.magFilter = THREE.LinearFilter;
     this.heightTexture.minFilter = THREE.LinearFilter;
     this.heightTexture.needsUpdate = true;
+    this.heightU.heightMap.value = this.heightTexture;
 
     // Shared flat grid geometry (normalised [-0.5, 0.5] plus one-cell
     // overlap border). Outer rings get a coarser grid: at 800m+ a heightmap
@@ -219,6 +229,7 @@ export class Terrain {
     this.heightTexture.magFilter = THREE.LinearFilter;
     this.heightTexture.minFilter = THREE.LinearFilter;
     this.heightTexture.needsUpdate = true;
+    this.heightU.heightMap.value = this.heightTexture;
     for (const level of this.levels) {
       level.material.uniforms.heightMap.value = this.heightTexture;
     }
@@ -227,6 +238,7 @@ export class Terrain {
   /** Per-map vertical gain (spec.heightScale): uniforms only — the
    *  displacement texture bytes are gain-agnostic, so no re-upload. */
   setHeightScale(worldScale: number): void {
+    this.heightU.hScale.value = worldScale;
     for (const level of this.levels) {
       level.material.uniforms.hScale.value = worldScale;
       level.material.uniforms.hscale.value = worldScale;
@@ -236,6 +248,7 @@ export class Terrain {
   /** Per-map tile span (spec.tileSize): the heightmap/albedo UV stretch —
    *  uniforms only, same as the vertical gain. */
   setWorldScale(meters: number): void {
+    this.heightU.hmWorldScale.value = meters;
     for (const level of this.levels) {
       level.material.uniforms.hmWorldScale.value = meters;
       level.material.uniforms.hmWorldScaleFrag.value = meters;

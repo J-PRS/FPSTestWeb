@@ -17,7 +17,7 @@ const flat = { getHeight: () => 0, getNormal: (_x: number, _z: number, out: Vec3
 // actually runs, so reach-limited floors are exercised end to end.
 const flatField: Heightfield = { size: 4, data: new Uint8Array(64 * 64), stride: 64 };
 const fieldSurf = (specs: StructureSpec[]): FieldSurface => {
-  const s = new FieldSurface(flatField);
+  const s = FieldSurface.fromField(flatField);
   s.solid = SolidWorld.fromSpecs(specs);
   return s;
 };

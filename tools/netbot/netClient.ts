@@ -210,7 +210,7 @@ export class NetClient {
       this.field = field;
       // Same FieldSurface the server shadow integrates on — terrain-only
       // sims diverge exactly where a wall one side can't see stands.
-      this.surface = new FieldSurface(field);
+      this.surface = FieldSurface.fromField(field);
       if (this.structures?.length) this.surface.solid = SolidWorld.fromSpecs(this.structures);
     } catch {
       // No terrain — the bot stays on flat-world kinematics.

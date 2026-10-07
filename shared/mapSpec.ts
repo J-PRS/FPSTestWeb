@@ -9,6 +9,7 @@
  */
 
 import type { TeamId } from './teams.ts';
+import { KIT_HULLS } from './structKits.js';
 
 export interface BallPopulation {
   /** solo population */
@@ -124,7 +125,13 @@ export interface StructureSpec {
    *  skips it — the visual is the real dais mesh; the spec is the hull. */
   /** 'hull' is collision-only like 'stand' — T2 interior convex-hull
    *  boxes emitted by the porter; the real mesh is the visual. */
-  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull';
+  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull' | 'kit';
+  /** 'kit' pieces render through the structKit builders and collide via
+   *  KIT_HULLS (shared/structKits) — `size` is ignored for them. */
+  piece?: string;
+  /** 'kit' pieces: uniform world scale applied to the render AND the
+   *  hull expansion — one knob, no parity seam. Default 1. */
+  scale?: number;
   pos: Vec3like;
   size: Vec3like;
   /** Y-rotation in radians (ramps/boxes), default 0. */
@@ -378,7 +385,7 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   return { x: a.x as number, z: a.z as number, radius };
 }
 
-const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull']);
+const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull', 'kit']);
 
 /** Flag-stand collision hull — a two-box trapezoid approximating the
  *  dais mesh (client/src/structures mkFlagStand): wide low skirt tier +
@@ -410,13 +417,22 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
   const out: StructureSpec[] = [];
   let dropped = 0;
   for (const s of raw) {
+    const ok = (s as Record<string, unknown>)?.kind === 'kit';
     if (!s || typeof s !== 'object' ||
         typeof (s as Record<string, unknown>).kind !== 'string' ||
         !STRUCT_KINDS.has((s as Record<string, unknown>).kind as string) ||
         !isVec((s as Record<string, unknown>).pos) ||
-        !isVec((s as Record<string, unknown>).size)) { dropped++; continue; }
+        // kit pieces carry their own dims — every other kind needs size
+        (!ok && !isVec((s as Record<string, unknown>).size)) ||
+        (ok && (typeof (s as Record<string, unknown>).piece !== 'string' ||
+                !((s as Record<string, unknown>).piece as string in KIT_HULLS)))) { dropped++; continue; }
+    // Scale only exists for kit pieces; a bogus value drops the entry —
+    // a silently-coerced wall scale would desync render from collision.
+    const sc = (s as Record<string, unknown>).scale;
+    if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 4)) { dropped++; continue; }
     const o = s as Record<string, unknown>;
-    const sv = o.size as Vec3like, pv = o.pos as Vec3like;
+    const sv = (o.size as Vec3like | undefined) ?? { x: 1, y: 1, z: 1 };
+    const pv = o.pos as Vec3like;
     const size = {
       x: Math.max(0.2, Math.min(120, sv.x)),
       y: Math.max(0.2, Math.min(60, sv.y)),
@@ -429,8 +445,10 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
     };
     out.push({
       kind: o.kind as StructureSpec['kind'],
+      piece: ok ? o.piece as string : undefined,
       pos, size,
       rotY: typeof o.rotY === 'number' && Number.isFinite(o.rotY) ? o.rotY : undefined,
+      scale: ok && sc !== undefined ? Number(sc) : undefined,
       team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
     });
     // Cap is a sanity bound, not a budget: T2 interior hull batches run
