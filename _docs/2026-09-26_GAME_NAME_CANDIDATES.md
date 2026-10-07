@@ -185,3 +185,10 @@ terrain-wind-movement concept). Semantic sign is also inverted (anabatic
 = upslope wind; the game skis downslope). Viable but compromised;
 "anabolic" autocorrect risk unchecked. Ranking after grill:
 Hoodoo > Anabatic > Couloir > Syrtis.
+
+### Greek shelf check 2026-10-01
+
+Steam-clean: dromos, kauma, lailaps, eremos, psammo, thyella.
+DEAD: **kremnos** - a major Honkai: Star Rail location (Castrum Kremnos
+region/arena/mission arc, HSR 3.0, 2025) - owned by a big title (JP
+catch). **xeros** - Xerox brand adjacency.
