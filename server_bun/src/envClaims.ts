@@ -1,13 +1,24 @@
 import type { ClientMessage, ClaimVerdict } from './types.ts';
+import type { PlayerManager } from './PlayerManager.ts';
+import type { CombatDeps } from './CombatHandler.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { logger } from './logger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
-import type { CombatHandler } from './CombatHandler.ts';
 import { healPool } from './healPool.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
 
-type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
+// Structural slice, not the whole handler — the caller still passes
+// CombatHandler, but the type records exactly what env claims may touch.
+export interface EnvHost {
+  playerManager: PlayerManager;
+  hb(key: string, n?: number): void;
+  deps: Pick<CombatDeps, 'envRange' | 'teams'>;
+  applyHit(shooterId: string, targetId: string, damage: number,
+    result: { killed: boolean; newHealth: number; newArmor: number },
+    opts: { label: string }): void;
+  lastHeal: Map<string, number>;
+}
 
 // First env claim per player lands on disk (warn → server.log) — the
 // INFO path is console-only, so without this edge marker a dead env

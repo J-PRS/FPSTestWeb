@@ -36,6 +36,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       totalPlayers: () => playerRoom.size,
       ops,
       registry,
+      departSpectator: () => false,
     }),
     playerRoom, ops, registry,
   };

@@ -25,8 +25,15 @@ function probePush<T>(arr: T[], v: T): void {
   if (arr.length > PROBE_CAP) arr.splice(0, arr.length - PROBE_CAP);
 }
 import { logger } from './logger.ts';
-import type { CombatHandler } from './CombatHandler.ts';
+import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
+
+// Structural slice — the ledger may read hit telemetry deps and write
+// through the broadcast/kill/respawn funnels, nothing else. Pick<> keeps
+// the fields synced with the handler they slice.
+export type LedgerHost = Pick<CombatHandler,
+  'broadcast' | 'chargeBank' | 'playerManager' | 'killFeed' | 'respawner' | 'hb'
+> & { deps: Pick<CombatDeps, 'emit' | 'influence' | 'mode' | 'preyNear'> };
 
 // The hit funnel tail — every damage path converges here so shot/AOE/
 // environment can't drift: telemetry (weapon spread, death spot, TTK),
@@ -36,7 +43,7 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
+  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) c.hb('kill');
@@ -67,7 +74,7 @@ export class HitLedger {
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
    *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impact: { dist?: number; pos?: { x: number; y: number; z: number } } = {}): void {
+  private noteHit(c: LedgerHost, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impact: { dist?: number; pos?: { x: number; y: number; z: number } } = {}): void {
     const { dist: impactDist, pos: impactPos } = impact;
     const modeTag = c.deps.mode ?? '';
     weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
@@ -134,7 +141,7 @@ export class HitLedger {
 
   /** The kill tail: score credit, kill broadcast, spree callouts, and the
    *  respawn timer — every damage path converges here. */
-  private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; air?: number }): void {
+  private creditKill(c: LedgerHost, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; air?: number }): void {
     // Self-frags are deaths, not kills — the kill feed already says so;
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".

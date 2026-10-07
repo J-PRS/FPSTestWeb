@@ -29,6 +29,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       totalPlayers: () => playerRoom.size,
       ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 },
       registry: new SessionRegistry(),
+      departSpectator: () => false,
     }),
     playerRoom,
   };

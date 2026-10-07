@@ -3,14 +3,19 @@ import { healPool } from './healPool.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
-import type { CombatHandler } from './CombatHandler.ts';
+import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { wallNow } from './wallClock.ts';
 
 // Server-owned attacks — no client claim to validate because the sim
 // (creature AI, server bots) IS the attacker. They still route through
 // serverHit/applyHit so kill credit and respawns stay in lockstep.
 
-export function crawlerAttack(h: CombatHandler, targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
+// Structural slice — geometry reads + the damage funnels, nothing else.
+export type AttackHost = Pick<CombatHandler,
+  '_solids' | 'solidIndex' | 'chargeBank' | 'playerManager' | 'hb' | 'friendly' | 'serverHit'
+> & { deps: Pick<CombatDeps, 'energyOf' | 'drainEnergy'> };
+
+export function crawlerAttack(h: AttackHost, targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
     // A creature wedged inside/behind geometry can't bite through it —
     // contact range is the sim's gate; the wall is ours.
     if (from && h._solids.length) {
@@ -24,7 +29,7 @@ export function crawlerAttack(h: CombatHandler, targetId: string, damage: number
     h.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
   }
 
-export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
+export function botAttack(h: AttackHost, shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) return;
     // Heal beam: same tick/cadence path as the damage beam, but the

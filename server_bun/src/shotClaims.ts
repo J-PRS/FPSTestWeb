@@ -8,15 +8,23 @@ import { perkMods } from '../../shared/perks.ts';
 import { rewindPos, rewindNearest, clampPing, freshDefer, type ClaimDefer } from './claimLedger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import { logger } from './logger.ts';
-import type { CombatHandler } from './CombatHandler.ts';
+import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { wallNow } from './wallClock.ts';
 
 // Shot-claim gates: legality checks for a claimed hit, plus the spawn
 // sanity check before a miss becomes a tracked projectile.
 
+// Structural slice — wide because claims genuinely touch the reject /
+// defer / ledger / fire-window machinery, but still narrower than the
+// whole handler (no blast runner, no respawner, no kill feed).
+export type ShotHost = Pick<CombatHandler,
+  'applyHit' | 'broadcast' | 'ddMult' | 'deferClaim' | 'fireWindows' | 'flushClaims'
+  | 'friendly' | 'hb' | 'healTicks' | 'ledger' | 'notifyDrop' | 'playerManager' | 'reject' | 'solids'
+> & { deps: Pick<CombatDeps, 'drainEnergy' | 'emit' | 'energyOf'> };
+
   /** A claim naming a target: every legality gate, then damage through
    *  the shared outcome funnel. */
-export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string, defer?: ClaimDefer): void {
+export function hitClaim(h: ShotHost, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string, defer?: ClaimDefer): void {
     // Reject self-damage — client should never send its own ID as targetId
     if (targetId === playerId) {
       h.reject(playerId, 'Shot', 'self-target', undefined, undefined, msg.shotId);
@@ -116,7 +124,7 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
    *  cadence and the jet-energy cost — claims carry no amounts, so a
    *  doctored client can at most waste its own energy budget faster
    *  than the tick law allows (which the rate map blocks anyway). */
-function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, targetId: string, target: PlayerState, shotId?: string): void {
+function healBeamClaim(h: ShotHost, playerId: string, player: PlayerState, targetId: string, target: PlayerState, shotId?: string): void {
     if (!h.friendly(playerId, targetId)) {
       h.hb('drop.healFoe'); // zapping an enemy with the med gun — no payload
       return;
@@ -156,7 +164,7 @@ function healBeamClaim(h: CombatHandler, playerId: string, player: PlayerState, 
 
   /** A claim with no target: a miss. If it carries spawn coordinates it
    *  also registers a tracked projectile observers can render. */
-export function registerMiss(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>): void {
+export function registerMiss(h: ShotHost, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     logger.debug('Shot fired (miss)', { shooter: playerId });
     if (!msg.position || !msg.velocity) {
       // A targetless shot with no spawn fields is a malformed claim, not
