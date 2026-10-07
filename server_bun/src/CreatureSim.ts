@@ -30,7 +30,7 @@ import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { healPool } from './healPool.ts';
 import { SIM_TICK_DT } from '../../shared/wire.ts';
-import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, verbPayload, rosterRow } from '../../shared/worldModel.ts';
 
 const TICK_DT = SIM_TICK_DT;
 // Distance-tiered send: committed edges only matter to players who can
@@ -123,15 +123,14 @@ export class CreatureSim {
     const out = [];
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
-      out.push({
-        id: c.id,
+      out.push(rosterRow(WORLD_MODEL.creature!, c.id, {
         position: { x: c.x, y: c.y, z: c.z },
         velocity: { x: c.vx, y: c.vy, z: c.vz },
         uber: c.uber, seed: c.rng, species: c.species, state: c.state,
         targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
-      });
+      }));
     }
-    return out;
+    return out as { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number }[];
   }
 
   private alivePlayers(): { id: string; pos: SimVec }[] {

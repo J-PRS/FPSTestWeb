@@ -39,6 +39,10 @@ export interface WorldKindDecl {
    *  (only for kinds whose update rides a JSON verb; binary updaters like
    *  ballSegment encode their own frame). */
   updateFields?: KindFieldDecl[];
+  /** Roster row shape — the field list a join-time roster row carries.
+   *  Spawn ⊄ roster: the roster adds live sim state (enraged, sim state)
+   *  the spawn already derived. */
+  rosterFields?: KindFieldDecl[];
   /** Streamed motion fields — the shared sim replays them, so they are
    *  presence-checked only (a stranded replica), never value-diffed. */
   simFields: KindFieldDecl[];
@@ -66,6 +70,16 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'position', channel: 'sim' },
       { name: 'by', channel: 'edge' },
     ],
+    rosterFields: [
+      { name: 'variant', channel: 'edge' },
+      { name: 'colorIdx', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'enraged', channel: 'edge' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
+    ],
     simFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
@@ -92,6 +106,17 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     goneFields: [
       { name: 'position', channel: 'sim' },
       { name: 'by', channel: 'edge' },
+    ],
+    rosterFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'uber', channel: 'edge' },
+      { name: 'seed', channel: 'edge' },
+      { name: 'species', channel: 'edge' },
+      { name: 'state', channel: 'edge' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
     ],
     simFields: [
       { name: 'position', channel: 'sim' },
@@ -196,6 +221,23 @@ export function verbPayload(
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
   return msg;
+}
+
+/** One roster row — id plus each declared roster field in order. Same
+ *  contract as verbPayload: the declared field set owns the wire shape. */
+export function rosterRow(
+  kind: WorldKindDecl,
+  id: number,
+  vals: Record<string, unknown>,
+): Record<string, unknown> {
+  const row: Record<string, unknown> = { id };
+  for (const f of kind.rosterFields ?? []) {
+    if (!(f.name in vals) && f.absent === undefined) {
+      console.warn(`[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
+    }
+    row[f.name] = vals[f.name] ?? f.absent ?? null;
+  }
+  return row;
 }
 
 /** Spawn-half convenience — most emits only need the spawn verb. */

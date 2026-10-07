@@ -30,7 +30,7 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { encodeBallSegment, SIM_TICK_DT } from '../../shared/wire.ts';
-import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, verbPayload, rosterRow } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 import { BallCombat } from './ballCombat.ts';
@@ -147,15 +147,15 @@ export class BallSim {
     const out = [];
     for (const b of this.balls.values()) {
       if (b.dead) continue;
-      out.push({
-        id: b.id, variant: b.variant, colorIdx: b.colorIdx,
+      out.push(rosterRow(WORLD_MODEL.ball!, b.id, {
+        variant: b.variant, colorIdx: b.colorIdx,
         position: { x: b.x, y: b.y, z: b.z },
         velocity: { x: b.vx, y: b.vy, z: b.vz },
         enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
         t: this.simTime,
-      });
+      }));
     }
-    return out;
+    return out as { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; t: number }[];
   }
 
   private spawnBall(variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
