@@ -404,8 +404,12 @@ export function wireStateDebug(ctx: StateDebugContext): void {
 
     if (serverCreatureHash !== undefined && ctx.netCreatures) {
       const local = new Map<number, { species: string; state: string; uber: boolean; targetId: string | null }>();
+      const creatureById = new Map<number, { sim: { state: string; targetId: string | null } | null }>();
       for (const c of ctx.netCreatures()) {
-        if (c.netId && !c.dead && c.sim) {local.set(c.netId, { species: c.sim.species, state: c.sim.state, uber: c.uber, targetId: c.sim.targetId });}
+        if (c.netId && !c.dead && c.sim) {
+          local.set(c.netId, { species: c.sim.species, state: c.sim.state, uber: c.uber, targetId: c.sim.targetId });
+          creatureById.set(c.netId, c);
+        }
       }
       const localCreatureHash = computeCreatureHash(local);
       if (localCreatureHash === serverCreatureHash) {
@@ -432,6 +436,18 @@ export function wireStateDebug(ctx: StateDebugContext): void {
             if (!serverCreatureFields.some((r) => r[0] === id)) {diffs.push(`#${id}:stranded`);}
           }
           if (diffs.length) {detail += ` diff=${diffs.slice(0, 6).join(' ')}`;}
+          // Heal field-level drift the way the snapshot heals player
+          // liveness: a lost crawlEvt leaves sim.state/targetId stale
+          // forever (the audit just re-warns). Edges stay the primary
+          // writer — this only corrects ones that never landed.
+          // Species is constructor-fixed; a mismatch there stays a warn.
+          for (const [id, , state, uber, targetId] of serverCreatureFields) {
+            const c = creatureById.get(id);
+            if (c?.sim && (c.sim.state !== state || (c.sim.targetId ?? null) !== (targetId ?? null))) {
+              c.sim.state = state;
+              c.sim.targetId = targetId ?? null;
+            }
+          }
         }
         if (creatureDriftStreak >= 2) {
           logger.warn(`[StateHash] CREATURE DESYNC tick=${tick} ${detail} (persistent across ${creatureDriftStreak} checks — stranded or stale replica)`);

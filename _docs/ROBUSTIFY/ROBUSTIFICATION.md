@@ -3119,3 +3119,13 @@ the server's real owner and desynced permanently (the ids=[2] warn that
 persisted 217+ checks in client_warning.log). All branches now record
 the wire owner -- the audit signal is meaningful again for the whole
 roster, not just two kinds. (tsc + 500 vitest green)
+
+## 2.172 Creature field drift now heals from the snapshot
+
+The creature hash audit named a desync (#N:state blinkOut/X, #N:tgt A/B
+persistent across 70+ checks) but never closed it: a lost crawlEvt left
+sim.state/targetId stale and the warn just re-fired forever. The audit
+now applies server creatureFields to the local sim (state + targetId;
+species is constructor-fixed, uber has no per-creature writer) -- same
+snapshot-heal doctrine as player liveness, matching the netCrawlEvt
+precedent that already pokes sim.state on a windup edge.
