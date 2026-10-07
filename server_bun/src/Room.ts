@@ -332,11 +332,15 @@ export class Room {
         // flags ('flag'): a client-claimed origin is untrusted, so it
         // must not punt loose pickups — 'pickup' emits only come from
         // server-owned blast paths (shells, mines).
-        case 'blast': this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales); break;
+        case 'blast': this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
         case 'knock': (e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force); break;
         case 'preySplash':
           this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
           this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
+          break;
+        case 'meleeSweep':
+          this.ballSim.meleeSweep(e.playerId, e.pos, e.dir);
+          this.creatureSim.meleeSweep(e.playerId, e.pos, e.dir);
           break;
         case 'armor':
           this.ballSim.armorBlast(e.pos, e.radius, e.amount);
@@ -368,6 +372,8 @@ export class Room {
     if (this.spec.bots) this.bots.populate(this.spec.bots);
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
+    // Deployables are solid — the move shadows push bodies out of gear.
+    this.moveSim.setDynamic(this.deployables.solidCols);
     if (this.spec.deploys) {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.

@@ -3138,3 +3138,30 @@ saves proceed: a demo file written mid-reconcile got adopted as an
 (listDemos returned 3 for 2 uploads, caught by the suite). Both push
 sites now check live index membership; the stale 'known' snapshot in
 reconcileIndex is gone.
+
+## 2.174 Melee on creatures is server-paid — the last big claim feeder dies
+
+The melee swing was already an intent on the player side
+(handleShotFired rewinds mpos, derives swing point, aoe on players)
+but its creature half still resolved the old way: the client's
+predicted cone called takeDamage, which minted a creatureHit/
+crawlerHit claim per body — the largest remaining source of those
+claims, and a duplicate truth about who got hit.
+
+The Melee branch now emits a meleeSweep room event carrying the same
+server-derived origin + dir; Room fans it to BallCombat.meleeSweep
+(radial shove via the existing handleHit impulse args → 'hit' segment
+edge rebroadcasts so the knocked ball's arc stays wire-truth) and
+CreatureSim.meleeSweep (damage-only, matching the claim path it
+replaces). The cone constants moved to shared/weapons
+(MELEE_ARC_DOT, MELEE_CREATURE_DAMAGE = the flat 60 the claim used
+to carry — player's own melee stays on the weapon-table aoeDamage=55)
+so the shown set and the paid set can't drift. Client keeps the full
+predicted feel — cone, flash, number, knockback shove — and passes
+serverPaid when connected so netDriven takeDamage skips the claim
+while keeping predicted health/flash. Balls' staged _netImp impulse
+now rides the server's 'hit' edge instead of a claim. Mine/blast and
+bite claims stay legitimately client-owned (server never simmed those
+interactions). Also caught by the purity suite along the way:
+warnOnce's Date.now moved to sharedNow (seeded clock) to keep
+worldModel inside the env seam. (tsc + 502 vitest + purity green)

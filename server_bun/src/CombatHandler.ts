@@ -284,6 +284,10 @@ export class CombatHandler {
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       const mpos = rewindPos(player, clampPing(player.ping));
+      // The creature half of the swing pays here too — same derived
+      // origin, same dir — so the client's predicted contact never
+      // needs a creatureHit claim.
+      this.deps.emit?.({ type: 'meleeSweep', playerId, pos: mpos, dir: { x: dir.x / l, y: dir.y / l, z: dir.z / l } });
       this.aoe.handleAOEShot(playerId, {
         type: 'aoeShot',
         position: { x: mpos.x + (dir.x / l) * reach, y: mpos.y + 1.2 + (dir.y / l) * reach, z: mpos.z + (dir.z / l) * reach },

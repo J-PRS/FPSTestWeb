@@ -214,6 +214,10 @@ export class BallSim {
     this.combat.splashDamage(ownerId, pos, radius, maxDamage, skipId);
   }
 
+  meleeSweep(ownerId: string, pos: SimVec, dir: SimVec): void {
+    this.combat.meleeSweep(ownerId, pos, dir);
+  }
+
   /** creatureHit claim — BallCombat does the lenient clamps + impulse cap. */
   handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): HitVerdict {
     return this.combat.handleHit(playerId, id, damage, kx, ky, kz);

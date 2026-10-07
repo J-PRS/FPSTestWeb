@@ -6,7 +6,7 @@
  */
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { type SimBall, type SimVec, type SegmentKind, applySimDamage } from '../../shared/ballSim.ts';
-import { MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
+import { MAX_HIT_CLAIM_DMG, getWeaponStats, WeaponType, MELEE_ARC_DOT, MELEE_CREATURE_DAMAGE } from '../../shared/weapons.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { HitVerdict } from './types.ts';
 import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
@@ -81,6 +81,22 @@ export class BallCombat {
       const d = Math.max(0, Math.hypot(b.x - pos.x, b.y - pos.y, b.z - pos.z) - b.radius);
       const dmg = aoeDamage(maxDamage, d, radius);
       if (dmg >= 1) this.handleHit(ownerId, b.id, dmg);
+    }
+  }
+
+  /** Server-derived melee swing — the intent already validated pos/dir,
+   *  so the cone pays full damage + radial shove with no claim. Mirrors
+   *  the client's cone (reach + body radius, MELEE_ARC_DOT). */
+  meleeSweep(ownerId: string, pos: SimVec, dir: SimVec): void {
+    const stats = getWeaponStats(WeaponType.Melee);
+    const reach = stats.aoeRadius, dmg = MELEE_CREATURE_DAMAGE, force = stats.knockbackForce;
+    for (const b of this.host.balls().values()) {
+      if (b.dead) continue;
+      const dx = b.x - pos.x, dy = b.y - pos.y, dz = b.z - pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > reach + b.radius || d < 1e-6) continue;
+      if ((dx / d) * dir.x + (dy / d) * dir.y + (dz / d) * dir.z < MELEE_ARC_DOT) continue;
+      this.handleHit(ownerId, b.id, dmg, (dx / d) * force, (dy / d) * force, (dz / d) * force);
     }
   }
 

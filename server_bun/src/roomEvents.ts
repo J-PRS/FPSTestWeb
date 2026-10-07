@@ -22,9 +22,13 @@ export type RoomEvent =
   // non-player world. Producers emit once per blast; the Room fans out to
   // whichever subsystems care (deployables eat splash, dropped flags punt,
   // loose pickups punt, wildlife takes splash, armor-nades plate sims).
-  | { type: 'blast'; pos: Vec3; damage: number; radius: number; shooterId: string; scales?: readonly number[] }
+  | { type: 'blast'; pos: Vec3; damage: number; radius: number; shooterId: string; scales?: readonly number[]; weapon?: number; splash?: number }
   | { type: 'knock'; pos: Vec3; radius: number; force: number; kind: 'flag' | 'pickup' }
   | { type: 'preySplash'; ownerId: string; pos: Vec3; radius: number; maxDamage: number }
+  // Melee intent aftermath: the swing is server-derived (rewound pos +
+  // aim dir), so the creature cone pays here — the client predicts the
+  // contact and never claims it.
+  | { type: 'meleeSweep'; playerId: string; pos: Vec3; dir: Vec3 }
   | { type: 'armor'; pos: Vec3; amount: number; radius: number }
   // Player-world notifications without a verdict — the shadow sim gets
   // the same impulse the blast applied; a conc'd carrier drops the flag.

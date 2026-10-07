@@ -11,6 +11,15 @@
 
 export const AOE_VFX_SCALE = 0.8;
 
+/** Melee cone half-angle (cos) — ~57°. The client swings this cone for
+ *  prediction; the server re-derives the same cone on the intent, so
+ *  both ends need one constant or the paid set drifts from the shown set. */
+export const MELEE_ARC_DOT = 0.55;
+/** Flat damage a melee swing deals to creatures — the old creatureHit
+ *  claim carried this, so the server sweep pays the same number. Player
+ *  melee damage is aoeDamage (55) on the weapon table. */
+export const MELEE_CREATURE_DAMAGE = 60;
+
 /** Canonical launchers (Bolt + Disc) bloom their blast on a direct hit:
  *  aoeRadius × this. Shared so client prediction and server validation
  *  compute the same reach — the client claims `directHit` on the aoeShot

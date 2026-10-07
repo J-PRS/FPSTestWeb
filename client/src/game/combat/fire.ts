@@ -318,6 +318,10 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
 
   const groundHit = meleeGroundContact(player.pos, e.dir, deps.lazyTerrain());
 
+  // Connected rooms pay the creature cone from the swing intent itself
+  // (server derives pos/dir) — claiming the contact too would double-pay.
+  const serverPaid = deps.lazyNetworkManager()?.isConnected() === true;
+
   let connected: THREE.Vector3 | null = null;
   for (const t of deps.targets) {
     if (t.dead) {continue;}
@@ -329,7 +333,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     t.applyKnockback(player.pos, stats.knockbackForce);
     deps.lazyDamageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());
     deps.reportTargetDamage?.(t, MELEE_DAMAGE);
-    if (t.takeDamage(MELEE_DAMAGE)) {hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);}
+    if (t.takeDamage(MELEE_DAMAGE, { serverPaid })) {hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);}
     else if (!t.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);}
     deps.lazyHud().showHitMarker();
     connected ??= t.pos;

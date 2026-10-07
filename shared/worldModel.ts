@@ -13,6 +13,7 @@
 // declaration is new.
 
 import type { SyncChannel } from './stateHash.ts';
+import { sharedNow } from './env.ts';
 
 export interface KindFieldDecl {
   /** Field name on the sim's entity record (server) and the client replica. */
@@ -531,7 +532,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
 const WARN_ONCE_MS = 5000;
 const warnOnceSeen = new Map<string, number>();
 function warnOnce(key: string, text: string): void {
-  const now = Date.now();
+  const now = sharedNow();
   const last = warnOnceSeen.get(key);
   if (last !== undefined && now - last < WARN_ONCE_MS) return;
   warnOnceSeen.set(key, now);

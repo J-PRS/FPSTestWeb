@@ -26,7 +26,7 @@ import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { logger } from './logger.ts';
-import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
+import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG, getWeaponStats, WeaponType, MELEE_ARC_DOT, MELEE_CREATURE_DAMAGE } from '../../shared/weapons.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { healPool } from './healPool.ts';
 import { SIM_TICK_DT } from '../../shared/wire.ts';
@@ -237,6 +237,23 @@ export class CreatureSim {
       if (!best || t < best.t) best = { id: c.id, t, d };
     }
     return best;
+  }
+
+  /** Server-derived melee swing — same cone BallCombat.meleeSweep pays
+   *  balls with; crawler claims never carried an impulse, so this is
+   *  damage-only like the claim path it replaces. */
+  meleeSweep(ownerId: string, pos: SimVec, dir: SimVec): void {
+    const stats = getWeaponStats(WeaponType.Melee);
+    const reach = stats.aoeRadius, dmg = MELEE_CREATURE_DAMAGE;
+    for (const c of this.crawlers.values()) {
+      if (c.dead) continue;
+      const rad = 'radius' in c ? (c.radius as number) : 1.4;
+      const dx = c.x - pos.x, dy = c.y - pos.y, dz = c.z - pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > reach + rad || d < 1e-6) continue;
+      if ((dx / d) * dir.x + (dy / d) * dir.y + (dz / d) * dir.z < MELEE_ARC_DOT) continue;
+      this.handleHit(ownerId, c.id, dmg);
+    }
   }
 
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the

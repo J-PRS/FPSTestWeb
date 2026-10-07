@@ -88,9 +88,9 @@ export const REPAIR_RATE = 0.1; // repair-tool beam tick — matches REPAIR_HEAL
 export const MRV_RATE = 2.4; // MRV launcher — slower than mortar, one trigger = a volley
 export const MELEE_COOLDOWN = 0.9;
 export const MELEE_RANGE = 3.2;    // fist reach, meters
-export const MELEE_ARC_DOT = 0.55; // ~57° half-cone — generous, CoD-style
+export { MELEE_ARC_DOT } from '../../../shared/weapons.js';
 export const MELEE_LUNGE = 8;    // forward shove on swing
-export const MELEE_DAMAGE = 60;    // flat enemy damage — a punch doesn't falloff
+export { MELEE_CREATURE_DAMAGE as MELEE_DAMAGE } from '../../../shared/weapons.js';
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
