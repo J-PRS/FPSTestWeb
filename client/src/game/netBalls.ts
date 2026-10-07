@@ -164,6 +164,18 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
   const _rbTgt: SimVec = { x: 0, y: 0, z: 0 };
   const rbLastWarn = new Map<number, number>();
   const rbSuppressed = new Map<number, number>();
+  // Warn-throttle receipts are keyed by ball id and this closure can't
+  // see the roster prune — a long match churns ids and the maps would
+  // grow forever. Evict-oldest bounds them; a dropped receipt just
+  // re-arms a warn.
+  const RB_MAP_MAX = 512;
+  function cappedSet(map: Map<number, number>, k: number, v: number): void {
+    map.set(k, v);
+    if (map.size > RB_MAP_MAX) {
+      const it = map.keys();
+      for (let i = map.size - RB_MAP_MAX; i > 0; i--) map.delete(it.next().value!);
+    }
+  }
   const RB_WARN_MS = 2000;
   let rbFleetCount = 0;
   let rbFleetWorst = { id: -1, err: 0 };
@@ -307,12 +319,12 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     const nowMs = performance.now();
     const lastW = rbLastWarn.get(m.id) ?? -Infinity;
     if (nowMs - lastW < RB_WARN_MS) {
-      rbSuppressed.set(m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
+      cappedSet(rbSuppressed, m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
       rbFleetNote(m.id, err);
       return;
     }
     const sup = rbSuppressed.get(m.id) ?? 0;
-    rbLastWarn.set(m.id, nowMs);
+    cappedSet(rbLastWarn, m.id, nowMs);
     rbSuppressed.delete(m.id);
     const diag = b.netDiag;
     const regime = diag

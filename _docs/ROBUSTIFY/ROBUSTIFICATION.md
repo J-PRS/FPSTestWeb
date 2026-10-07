@@ -2038,3 +2038,15 @@ magnitude-ratio uses (bounce speed preservation) correctly stayed —
 they need the scalar, not a direction.
 
 ### 2.86 - end
+
+### 2.87 Rubberband warn-receipt maps grew unbounded (2026-10-08)
+
+Stale-key class: `rbLastWarn`/`rbSuppressed` are keyed by ball id, but
+the warn closure can't see the roster prune (pruneNetBalls lives one
+scope out) — a long match churns ids and both maps grew for the
+session's life. Evict-oldest cap at 512 receipts; a dropped receipt
+just re-arms one warn line instead of growing memory. Bound map is
+the file's own convention (server cappedSet/§2.59 evictEldest, same
+shape).
+
+### 2.87 - end
