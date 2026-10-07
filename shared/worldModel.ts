@@ -26,7 +26,7 @@ export interface KindFieldDecl {
 export interface WorldKindDecl {
   /** Wire verb prefix: ball => ballSpawn / ballSegment / ballDie. */
   kind: string;
-  verbs: { spawn: string; update: string; gone: string };
+  verbs: { spawn: string; update: string; gone: string; roster?: string };
   /** Lifecycle/mirrored fields a replica MUST agree on — hashed + diffed. */
   fields: KindFieldDecl[];
   /** Spawn payload shape — the full field list a spawn message carries,
@@ -55,7 +55,7 @@ export interface WorldKindDecl {
 export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   ball: {
     kind: 'ball',
-    verbs: { spawn: 'ballSpawn', update: 'ballSegment', gone: 'ballDie' },
+    verbs: { spawn: 'ballSpawn', update: 'ballSegment', gone: 'ballDie', roster: 'ballRoster' },
     fields: [
       { name: 'variant', channel: 'edge' },
       { name: 'enraged', channel: 'edge' },
@@ -105,7 +105,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
   creature: {
     kind: 'creature',
-    verbs: { spawn: 'crawlSpawn', update: 'crawlEvt', gone: 'crawlDie' },
+    verbs: { spawn: 'crawlSpawn', update: 'crawlEvt', gone: 'crawlDie', roster: 'crawlRoster' },
     fields: [
       { name: 'species', channel: 'edge' },
       { name: 'state', channel: 'edge' },
@@ -249,7 +249,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   // carry claimed values instead of sim-derived ones.
   player: {
     kind: 'player',
-    verbs: { spawn: 'playerJoined', update: 'tickUpdate', gone: 'playerLeft' },
+    verbs: { spawn: 'playerJoined', update: 'tickUpdate', gone: 'playerLeft', roster: 'gameState' },
     fields: [
       { name: 'internalId', channel: 'edge' },
       { name: 'health', channel: 'sim' },
@@ -397,8 +397,11 @@ export function checkPacket(
 ): void {
   const fields =
     verb === 'spawn' ? kind.spawnFields :
-    verb === 'update' ? kind.updateFields :
+    // flag-style kinds whose update verb IS the roster broadcast check
+    // rows against rosterFields — there is no per-row updateFields list.
+    verb === 'update' ? (kind.updateFields ?? kind.rosterFields) :
     verb === 'gone' ? kind.goneFields :
+    verb === 'roster' ? kind.rosterFields :
     kind.events?.[verb];
   const label = verb in kind.verbs ? (kind.verbs as Record<string, string>)[verb]! : verb;
   const check = (m: Record<string, unknown>) => {
@@ -409,8 +412,13 @@ export function checkPacket(
     }
   };
   // Row-wrapped verbs (tickUpdate's updates[], roster arrays) check each
-  // row — the fields live there, not at message level.
-  const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags;
+  // row — the fields live there, not at message level. Roster feeds pick
+  // the container for THEIR kind: gameState carries every roster, so a
+  // blind first-array pick would check ball rows against player fields.
+  const ROSTER_ROWS: Record<string, string> = { ball: 'balls', creature: 'crawlers', flag: 'flags', player: 'players' };
+  const rows = verb === 'roster' && ROSTER_ROWS[kind.kind]
+    ? msg[ROSTER_ROWS[kind.kind]!]
+    : msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
   if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
   check(msg);
 }
@@ -419,8 +427,8 @@ export function checkPacket(
  *  looks a message type up here instead of mapping verbs by hand. */
 const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: string }>();
 for (const k of Object.values(WORLD_MODEL)) {
-  for (const v of ['spawn', 'update', 'gone'] as const) {
-    VERB_INDEX.set(k.verbs[v], { kind: k, verb: v });
+  for (const v of ['spawn', 'update', 'gone', 'roster'] as const) {
+    if (k.verbs[v]) VERB_INDEX.set(k.verbs[v]!, { kind: k, verb: v });
   }
   // Event notifies index under their own wire type, not a verb slot.
   for (const t of Object.keys(k.events ?? {})) {

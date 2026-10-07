@@ -43,18 +43,20 @@ function withInterfaces(member: string): string {
   return text;
 }
 
-const VERB_LISTS: ['spawn' | 'update' | 'gone', 'spawnFields' | 'updateFields' | 'goneFields' | 'rosterFields'][] = [
+const VERB_LISTS: [('spawn' | 'update' | 'gone' | 'roster'), 'spawnFields' | 'updateFields' | 'goneFields' | 'rosterFields'][] = [
   ['spawn', 'spawnFields'],
   ['update', 'updateFields'],
   ['gone', 'goneFields'],
+  // flag's update verb IS its roster feed — no separate roster verb.
+  ['roster', 'rosterFields'],
 ];
 
 describe('world model <-> protocol conformance', () => {
   for (const kind of Object.values(WORLD_MODEL)) {
     for (const [verbKey, listKey] of VERB_LISTS) {
       const fields = kind[listKey];
-      if (!fields) continue;
-      const verb = kind.verbs[verbKey];
+      if (!fields || !kind.verbs[verbKey]) continue;
+      const verb = kind.verbs[verbKey]!;
       it(`${kind.kind}.${verb} exists in the ServerMessage union with every declared field`, () => {
         const line = unionLine(verb);
         expect(line, `${verb} not found in protocol.ts`).not.toBeNull();
