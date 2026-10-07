@@ -150,6 +150,7 @@ export class Deployables {
   private readonly _zeroVel = new THREE.Vector3();
   private readonly _candList: TargetCandidate[] = [];
   private readonly _enemies: Foe[] = [];
+  private readonly _foePool: Foe[] = [];
 
   constructor(private deps: DeployDeps) {
     this.rockets = new DeployRockets(deps);
@@ -404,18 +405,21 @@ export class Deployables {
    *  + local-enemy bots; a bot-owned plant scans creatures + ITS team's
    *  enemies (the local player included when hostile). */
   private foesFor(owner?: DeployOwner): Foe[] {
-    this._enemies.length = 0;
+    let n = 0;
     for (const c of this.deps.targets) {
       if (c.dead || c.scoreless) {continue;}
-      this._enemies.push({ pos: c.pos, vel: c.vel, alive: true });
+      const e = this._foePool[n] ?? (this._foePool[n] = { pos: null as never, vel: null as never, alive: false });
+      e.pos = c.pos; e.vel = c.vel; e.alive = true; e.playerId = undefined;
+      this._enemies[n++] = e;
     }
+    this._enemies.length = n;
     if (owner) {
       for (const b of this.deps.botFoes?.(owner.team) ?? []) {
-        if (b.alive) {this._enemies.push(b);}
+        if (b.alive) {this._enemies[this._enemies.length] = b;}
       }
     } else {
       for (const b of this.deps.enemyBots?.() ?? []) {
-        if (b.alive) {this._enemies.push(b);}
+        if (b.alive) {this._enemies[this._enemies.length] = b;}
       }
     }
     return this._enemies;

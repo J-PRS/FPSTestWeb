@@ -268,6 +268,16 @@ revenge-owner `some()`) call them per deployable per tick. Both now
 fill pooled scratch (`_foePool`/`_foeOut`, count-based like §2.67) —
 every consumer reads the list synchronously before the next call.
 
+### 2.78 Deployable foe scans pooled (2026-10-08)
+
+Same class-10 shape one frame later: `Deployables.foesFor` built a
+fresh `{pos, vel, alive}` literal for every creature in the world on
+EVERY deployable scan — turrets, drones and mines each rebuild the list
+per think-tick, so a base with 3 sentries and 40 wildlife paid
+~120 object allocs per scan pass on the frame budget. Creature entries
+now come from `_foePool` (count-indexed, `playerId` cleared — bot foes
+keep pushing their own pooled refs from §2.77's `_foeOut`).
+
 ### 2.75 Courage dropped from the offline pick (2026-10-08)
 
 Same block, residual drift the §2.74 factory couldn't see: the senses'
