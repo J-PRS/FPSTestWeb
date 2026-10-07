@@ -1273,4 +1273,12 @@ export class RoomNoticer {
   forget(id: string): void {
     this.seen.delete(id);
   }
+
+  /** Jersey swap / id change — carry the receipt so a rekeyed bot can't
+   *  react twice to the same event, and re-point a pending actor id. */
+  rekey(oldId: string, newId: string): void {
+    const stamp = this.seen.get(oldId);
+    if (stamp !== undefined) { this.seen.delete(oldId); this.seen.set(newId, stamp); }
+    if (this.pending?.actorId === oldId) this.pending.actorId = newId;
+  }
 }

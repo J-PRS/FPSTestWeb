@@ -527,6 +527,7 @@ export class TeamBots {
     mv(this.thinkAccum); mv(this.ctxCache); mv(this.ffaScores); mv(this.dmgPool);
     this.senses.rekey(oldId, newId);
     this.sheep.rekey(oldId, newId);
+    this.notices.rekey(oldId, newId);
   }
 
 

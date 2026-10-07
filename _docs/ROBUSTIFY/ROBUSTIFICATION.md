@@ -278,6 +278,18 @@ per think-tick, so a base with 3 sentries and 40 wildlife paid
 now come from `_foePool` (count-indexed, `playerId` cleared — bot foes
 keep pushing their own pooled refs from §2.77's `_foeOut`).
 
+### 2.80 RoomNoticer missed the rekey migration (2026-10-08)
+
+Stale-key / duplicate-notice find: `TeamBots.rekeyBot` (the botMatch
+jersey swap) migrates every per-id cell — thinkAccum, ctxCache,
+ffaScores, dmgPool, senses, sheep — but not the §2.73 `RoomNoticer`.
+Its `seen` receipt map stayed keyed on the old id: the defector could
+react to the same room event twice under its new id, and a pending
+notice kept pointing at the dead actor id. `RoomNoticer` gained
+`rekey(oldId, newId)` (carries the seen stamp, re-points
+`pending.actorId`) and `rekeyBot` calls it — pinned at the shared-owner
+level since serverSenses shares the class.
+
 ### 2.79 Drowned-client drain never triggered on binary-only traffic (2026-10-08)
 
 Bad-network find (class 10): the drown drain only ran inside the JSON

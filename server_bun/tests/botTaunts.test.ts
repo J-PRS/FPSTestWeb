@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, endTaunt, startTaunt,
   chatter, chatKindFor, vgsCommandFor, setMatchMuted, setTauntClock,
-  resetTauntCooldowns,
+  resetTauntCooldowns, RoomNoticer,
 } from '../../shared/botTaunts.ts';
 import { tauntRng } from '../../shared/botRand.ts';
 
@@ -124,5 +124,23 @@ describe('botTaunts', () => {
     const c = chatter('props', 'b1', 'shooter');
     expect(c).not.toBeNull();
     expect(c!.text.length).toBeGreaterThan(0);
+  });
+});
+
+describe("RoomNoticer", () => {
+  it("rekey carries the seen receipt and re-points the pending actor", () => {
+    const n = new RoomNoticer();
+    n.notice("flagcap", "bot:1", "alpha", 1000);
+    // bot:2 consumed the notice; its receipt is what rekey must carry.
+    expect(n.for("bot:2", "bravo", 1100)?.kind).toBe("groan");
+    // Jersey swap: the defector keeps its receipt, the actor moves too.
+    n.rekey("bot:1", "bot:9");
+    n.rekey("bot:2", "bot:8");
+    expect(n.for("bot:8", "bravo", 1200)).toBeUndefined(); // already saw it
+    expect(n.for("bot:9", "alpha", 1200)).toBeUndefined(); // it is the actor now
+    // A fresh bot still reacts, with the new actor id attached.
+    const out = n.for("bot:4", "bravo", 1200);
+    expect(out?.kind).toBe("groan");
+    expect(out?.actor).toBe("bot:9");
   });
 });
