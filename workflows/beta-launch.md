@@ -56,3 +56,7 @@ decisions.
 
 One message: what's deployed where, what env is set, what the audit
 showed, and the exact decisions still open — never a raw dump.
+
+## Future ideas (parked)
+
+- **Shot of the Day**: /demos upload lane already IS global storage post-deploy. Missing piece: server-side daily pin (pick previous-day max lifetime, keep shot-of-day.demo + meta exempt from the ~100-clip eviction) + a menu tile that plays it. Small job, defer until after launch.

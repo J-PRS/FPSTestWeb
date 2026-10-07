@@ -1,3 +1,4 @@
+2026-10-01 - demo eviction archives gzipped clips to demos/archive/ (FPS_DEMO_MAX=100, FPS_DEMO_ARCHIVE_MAX=500 FIFO)
 2026-10-01 - rename Cool Shots -> Best Shots (panel title, empty state, clip description)
 2026-10-01 - cool-shot tiles: abbreviate long weapon names to initials only when meta would truncate
 2026-10-01 - cool-shot tiles: drop direct tag, keep weapon + distance + airtime
