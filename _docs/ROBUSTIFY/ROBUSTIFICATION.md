@@ -22,6 +22,13 @@ The failure classes this codebase actually produces:
    grow with player churn over a room's life.
 6. **Observability noise** — logs that fire on expected lag, drowning the
    warnings that mean something.
+7. **Boundary-value drift** — a tolerance/bucket/quantization meant to
+   absorb noise also absorbs real divergence (the 4hp health bucket hid a
+   genuine echo loss; judge drift by persistence, not magnitude).
+8. **Ordering / skip-tick** — authority spends a tick on bookkeeping the
+   replay can't model (retarget: re-aim consumes the tick, no sim step,
+   wire carried no marker). Any `continue`/early-return inside a step
+   loop is a suspect; the wire must carry the post-skip anchor or a count.
 
 The unifying rule adopted: **anything two ends compute should exist exactly
 once in `shared/`; anything lagged or event-driven must be excluded from

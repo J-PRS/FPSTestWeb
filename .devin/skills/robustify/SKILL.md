@@ -58,7 +58,7 @@ round actually taught — log it in the changelog like any other change.
    - §5 invariants every change must respect
 3. `changelog.txt` head — recent landings, to avoid collisions.
 
-## The six failure classes (§1)
+## The eight failure classes (§1)
 
 1. Determinism divergence — two implementations of "the same" computation.
 2. Silent staleness — per-id state surviving lifecycle events.
@@ -68,6 +68,13 @@ round actually taught — log it in the changelog like any other change.
 5. Unbounded growth — maps/arrays/queues without eviction or cap.
 6. Observability noise — logs firing on expected lag; real faults with no
    metric, no id, no reason.
+7. Boundary-value drift — a tolerance/bucket/quantization that is meant to
+   absorb noise also absorbs real divergence (the 4hp health bucket hid a
+   genuine echo loss for weeks; judge drift by persistence, not magnitude).
+8. Ordering / skip-tick — authority spends a tick on bookkeeping the
+   replay can't model (retarget-skip: brain re-aims, no sim step, wire
+   carried no marker). Any `continue`/early-return inside a step loop is
+   a suspect; the wire must carry either the post-skip anchor or a count.
 
 ## Work loop — pick the highest-value thing, then keep going
 
@@ -101,6 +108,19 @@ Do not report "clean", "classified-clean", or "verified-clean" as an
 outcome: report what you CHANGED. Every session ships a fix, a test, or
 a concrete improvement; an audit-only session means you didn't look
 hard enough.
+
+**Pins are earned by probes, not greps.** A test pin only counts as the
+round's deliverable when preceded by a falsifiable probe — a soak log
+read, a replica-hash diff, a runtime bisect — not by a pattern sweep
+alone. If the pin's first draft passes instantly on already-correct code
+and nothing observed motivated it, keep hunting; that shape produced
+this program's weakest rounds.
+
+**Every third round starts in the logs.** Before touching code, read the
+latest `logs/client*.log` and the newest session JSONL tail. The
+highest-value fixes in this program (health-echo artifact, POS JUMP
+false-positive, creature hash desync) came from observed behavior, not
+audits — a round that never looks at evidence is hunting blind.
 
 ## Rules
 
@@ -164,6 +184,10 @@ cd client && ./node_modules/.bin/tsc --noEmit
 ## Report
 
 - What changed (files + why) — the deliverable, every round
+- **Evidence, not file names** — each claim carries its observation:
+  "warn count N→0 across soak X", "493 anchor asserts incl. bounces",
+  "DESYNC persisted 12 checks pre-fix". A claim without observable
+  before/after is a hypothesis, not a result.
 - What you audited with no fixable findings (recorded in §3 — one line,
   not a victory claim)
 - §4 state (new findings + re-ranked queue)
