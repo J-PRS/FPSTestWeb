@@ -2423,3 +2423,16 @@ now drives the full lifecycle — mismatch bails before the swap,
 counter climbs 1->2 and stops, clean connect resets the budget.
 
 ### 2.115 - end
+
+### 2.116 Settings store survives dead localStorage (2026-10-11)
+
+Every fps-* read/write funnels through core/settings.ts — and every
+call hit raw localStorage. In Safari private mode or storage-disabled
+embeds the API throws on read AND write: get() at boot would kill the
+app outright, and set() on any toggle would crash mid-session on a
+device that could otherwise play fine. A tiny store shim now try/catches
+each op with a session-only Map shadow — settings still work for the
+session, just don't persist. Pinned: settings.test.ts drives a
+fully-throwing localStorage through set/get/has/remove.
+
+### 2.116 - end

@@ -1,3 +1,4 @@
+2026-10-11 - robustify 2.116: settings store falls back to session shadow when localStorage throws (private mode)
 2026-10-11 - robustify 2.115: pin protocol-mismatch early-return + 2-try reload budget
 2026-10-11 - robustify 2.114: pin unlisted on the switchRoom hop — private mint + join-by-name
 2026-10-11 - robustify 2.113: pin display-name sanitize — control strip, 24ch cap, empty->undefined

@@ -104,9 +104,31 @@ const parse = {
 // Keys that once stored 'true'/'false' but are numeric now — 'true' reads as 1.
 const LEGACY_TRUE_AS_ONE = new Set<keyof Schema>(['fps-pixelated']);
 
+// Storage can throw — Safari private mode caps/quota errors, embeds with
+// storage disabled. A raw throw from set() on a settings toggle (or get()
+// at boot) would kill the app on a device that can still play fine, so
+// failures fall back to a session-only shadow.
+const memFallback = new Map<string, string>();
+const store = {
+  get(k: string): string | null {
+    try { return localStorage.getItem(k); } catch { return memFallback.get(k) ?? null; }
+  },
+  set(k: string, v: string): void {
+    memFallback.set(k, v);
+    try { localStorage.setItem(k, v); } catch { /* shadow keeps it session-local */ }
+  },
+  has(k: string): boolean {
+    try { return localStorage.getItem(k) !== null; } catch { return memFallback.has(k); }
+  },
+  remove(k: string): void {
+    memFallback.delete(k);
+    try { localStorage.removeItem(k); } catch { /* nothing persisted anyway */ }
+  },
+};
+
 export const settings = {
   get<K extends keyof Schema>(key: K): Schema[K] {
-    const raw = localStorage.getItem(key);
+    const raw = store.get(key);
     const def = DEFAULTS[key];
     if (LEGACY_TRUE_AS_ONE.has(key) && raw === 'true') {return 1 as Schema[K];}
     // `as Schema[K]` — parse.* returns the right runtime type per declared type
@@ -114,7 +136,7 @@ export const settings = {
     return (typeof def === 'boolean' ? parse.boolean(raw, def as boolean) : parse.number(raw, def as number)) as Schema[K];
   },
   set<K extends keyof Schema>(key: K, value: Schema[K]): void {
-    localStorage.setItem(key, String(value));
+    store.set(key, String(value));
     // Live-toggle consumers (debug overlays) subscribe to this — the event
     // fires same-tab only, which is the only place a toggle can happen.
     window.dispatchEvent(new CustomEvent('fps:set', { detail: { key, value } }));
@@ -122,9 +144,9 @@ export const settings = {
   /** "User ever set this?" — get() can't distinguish unset from the
    *  default, which migrations (potato seeds, legacy pscale) need. */
   has(key: keyof Schema): boolean {
-    return localStorage.getItem(key) !== null;
+    return store.has(key);
   },
   remove(key: keyof Schema): void {
-    localStorage.removeItem(key);
+    store.remove(key);
   },
 };

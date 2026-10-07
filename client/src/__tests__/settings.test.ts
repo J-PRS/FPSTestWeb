@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 
 import { settings } from '../core/settings.js';
 
@@ -41,5 +41,21 @@ describe('settings store', () => {
     expect(settings.get('fps-pixelated')).toBe(1);
     store.setItem('fps-pixelated', '3');
     expect(settings.get('fps-pixelated')).toBe(3);
+  });
+
+  it('a fully-throwing localStorage still serves settings from the session shadow', () => {
+    // Private-mode Safari / storage-disabled embeds throw on every call —
+    // a raw throw on get() at boot or set() on a toggle would kill the app.
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('SecurityError'); },
+      setItem: () => { throw new Error('QuotaExceededError'); },
+      removeItem: () => { throw new Error('SecurityError'); },
+    });
+    expect(() => settings.set('fps-sens', 4.2)).not.toThrow();
+    expect(settings.get('fps-sens')).toBe(4.2);   // shadow serves it
+    expect(settings.has('fps-sens')).toBe(true);
+    expect(() => settings.remove('fps-sens')).not.toThrow();
+    expect(settings.get('fps-sens')).toBe(1);     // back to default
+    vi.unstubAllGlobals();
   });
 });
