@@ -3220,3 +3220,16 @@ position against the shadow (60m). serverBlast learned an optional
 power multiplier; client keeps the predicted slam FX + thud and drops
 the claim when connected. (tsc both sides + 53 focused tests green;
 protocol.test keeps the exhaustive-type pin honest)
+
+## 2.178 Deployable-pop creature splash — the last connected claim mint
+
+blastForce paid creature splash "serverPaid only when weaponType
+defined" — a stale comment from before server deployables. Connected,
+mine pops detonate in tickMine and pay creatures via preySplash, while
+the client's predicted pop also minted a creatureHit/crawlerHit claim:
+the same blast double-paid every creature it caught. Now splash on
+creatures is server-paid whenever a connection exists — the verbs
+stay for offline/P2P hosts where the claim IS the authority path.
+(creatureHit/crawlerHit minting on a connected client is now
+effectively zero: melee, LG beam, direct hits, and splash are all
+server-paid.) (tsc + blastForce 13 green)

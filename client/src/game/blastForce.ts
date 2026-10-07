@@ -98,10 +98,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // shouldn't stamp them under my crosshair (same gate as remotes).
       if (!a.shooterId) {deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());}
       deps.reportTargetDamage?.(ball, dmg);
-      // Shell splash is server-paid: the authority's detonate already
-      // splash-damages the swarm — claiming would double-dip. Deployable
-      // pops (mines) still claim — no server sim owns their blast.
-      const splashServerPaid = weaponType !== undefined;
+      // Every connected blast is server-paid: weapon shells detonate in
+      // the authority's sim and deployable pops (mines) detonate in
+      // tickMine + preySplash — a claim on top would double-pay.
+      const splashServerPaid = weaponType !== undefined || deps.lazyNetworkManager?.()?.isConnected?.() === true;
       if (ball.takeDamage(dmg, { serverPaid: splashServerPaid })) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
       if (!ball.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);}
       const dm = deps.lazyDemoManager();
@@ -214,6 +214,14 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     applyForceToBalls({ ...a, force: kbForce }, applyTo);
     applyForceToNuggets(pos, radius, kbForce, forceMode, forceMultiplier);
     applyForceToRemotes(a);
+    // Deployables in the envelope — the offline mirror of the server's
+    // applyBlast sweep (connected, remote hurt is a no-op so the call is
+    // cheap prediction-side noise; blastRemotes early-outs anyway).
+    {
+      const wStats = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType);
+      const direct = wStats ? (wStats.directDamage || wStats.aoeDamage) : aoeDamage;
+      deps.lazyDeployables?.()?.blastRemotes(pos, direct, aoeDamage, radius, scales, a.weaponType);
+    }
   }
 
   return { applyExplosionForce, applyForceToRemotes };
