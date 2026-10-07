@@ -96,6 +96,18 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'pos', channel: 'sim' },
     ],
   },
+  projectile: {
+    kind: 'projectile',
+    verbs: { spawn: 'projectileCreated', update: 'projectileUpdate', gone: 'projectileDestroyed' },
+    fields: [
+      { name: 'weaponType', channel: 'edge' },
+      { name: 'ownerId', channel: 'edge' },
+    ],
+    simFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+    ],
+  },
 };
 
 /** The per-id field tuple a hash-miss diff carries for a kind — the
