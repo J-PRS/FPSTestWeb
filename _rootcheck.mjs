@@ -16,6 +16,7 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const ALLOW = new Set([
   // versioned project files
   'AGENTS.md', 'ROADMAP.md', 'TASKS.md', 'TEST_PLAN_bots.md', 'TEST_PLAN_demo.md',
+  'NOTES.md', 'GLOSSARY.md',
   'changelog.txt', 'Dockerfile', 'stryker.vitest.config.ts', '_rootcheck.mjs',
   // project dirs
   '.agents', '.devin', '.git', '.github',
@@ -23,7 +24,7 @@ const ALLOW = new Set([
   'ZZZ_ROOT', 'TEMP_WEBual', 'build', 'client', 'concepts', 'demo', 'demos_flag',
   'demos_rich', 'demos_out', 'combo_clips', 'docs', 'logs', 'maps', 'node_modules',
   'reference', 'screenshots', 'screenshots_legacy', 'screenshots_web',
-  'server_bun', 'shared', 'terrain_gen', 'tools', 'traps', 'zzz',
+  'server_bun', 'shared', 'terrain_gen', 'tools', 'traps', 'workflows', 'zzz',
 ]);
 
 const ALLOW_RE = [

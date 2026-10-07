@@ -1,3 +1,4 @@
+2026-10-01 - workflows: NOTES.md + workflows/beta-launch.md + robustify-round.md specs (loop-me); rootcheck allowlist
 2026-10-01 - netcode: split inbound dispatch out of NetworkManager into wireIn.ts (handler table + wire-id roster + seq watermarks); NM down to 879 lines
 2026-10-01 - netcode: judge credits RTT/2 transit staleness - sustained 150ms ping no longer rubberbands (latency soak pinned)
 2026-10-01 - logRotate: same-second roll collisions no longer clobber archives; rotation contract pinned
