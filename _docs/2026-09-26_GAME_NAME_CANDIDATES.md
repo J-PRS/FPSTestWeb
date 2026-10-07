@@ -205,3 +205,13 @@ The Mars-nomenclature seam (vallis/mensa/rupes/dorsum/syrtis) stays live.
 JP cuts 2026-10-01: **mensa** dead (IQ-association owns the word),
 **numidia** dead (too African for the game's register), **vallis**
 reserve only ("uncertain indie vibe"). Anabatic is the front-runner.
+
+### Anabatic - final gate 2026-10-01
+
+Spellcheck filter PASSED (JP + web check): "anabatic" is dictionary-real
+(Wikipedia/M-W/Cambridge/AMS) - no "did you mean anabolic" correction.
+The word survives every filter in the method: real word, empty Steam
+namespace, free .io/.gg, kata-family wink, theme-true (sun-heated slope
+throwing air upward = the game's momentum-climbing fantasy), no baggage.
+Remaining soft notes: two itch occupants (weak claims), upslope sign is
+the aspirational direction anyway.
