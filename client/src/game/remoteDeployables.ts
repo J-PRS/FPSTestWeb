@@ -92,12 +92,13 @@ export class RemoteDeployables {
         // Remote sentries still scan and aim — pure cosmetics, no firing.
         update: (dt) => t.update(dt, this.enemies()),
         dispose: () => t.dispose(this.deps.scene),
-        v: t,
+        v: t, owner,
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
     } else if (kind === 'generator' || kind === 'sensor' || kind === 'sentry') {
       item = this.baseAssetItem(kind, at, hp, armor, team);
+      item.owner = owner;
     } else {
       const group = new THREE.Group();
       const m = new THREE.Mesh(
@@ -119,6 +120,7 @@ export class RemoteDeployables {
         kind, candId: `rdep:${id}`, pos: group.position, dead: false,
         hurt: () => {}, update, dispose: () => this.deps.scene.remove(group),
         v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
+        owner,
       };
     }
     item.serverId = id;

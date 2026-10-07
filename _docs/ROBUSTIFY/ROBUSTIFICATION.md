@@ -3108,3 +3108,14 @@ Foraged-stamp defense in fire gating verified (rolling arrival floor +
 lastTs max-clamp). Entity-side revive visuals for a hit-flipped isDead
 record stay hash-heal-owned (position needed) -- accepted gap, seconds
 of stale visual worst case. (audit only)
+
+## 2.171 Remote deployables dropped `owner` on most kinds
+
+remoteDeployables.spawn() only stamped owner on the shield and beacon
+item literals -- turret, generator/sensor/sentry (base assets), and the
+generic mine/drone fallback built Items with owner undefined. The deploy
+state hash reads Item.owner, so every remote turret hashed '' against
+the server's real owner and desynced permanently (the ids=[2] warn that
+persisted 217+ checks in client_warning.log). All branches now record
+the wire owner -- the audit signal is meaningful again for the whole
+roster, not just two kinds. (tsc + 500 vitest green)

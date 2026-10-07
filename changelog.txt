@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.171: remote deployables hash the wire owner on every kind (turret/base/generic dropped it)
 2026-10-01 - robustify 2.170: audit pass - teardown funnel + edge-ownership sweep clean after the single-owner refactor
 2026-10-01 - robustify 2.169: state-hash audit retires client-only roster members - a lost playerLeft edge no longer desyncs forever (record + entity removed on snapshot truth)
 2026-10-01 - robustify 2.167+2.168: ballFields per-id diff for the ball hash (names the diverging field, not just ids); roster single-owner refactor - edges now patch-or-drop via patchRemotePlayer, only membership feeds create (kills the phantom-stub class by construction)
