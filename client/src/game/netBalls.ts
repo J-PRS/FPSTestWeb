@@ -9,6 +9,7 @@ import { predictAt } from '../entities/ballNet.js';
 import { SIM_TICK_DT, finiteVec } from '../../../shared/wire.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
+import { reconcileReplicas } from './replicas.js';
 import type { ChildLogger } from '../core/Logger.js';
 
 export interface NetBallsCtx {
@@ -423,9 +424,11 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // died while we were reconnecting (or whose ballDie dropped on an
   // unreliable lane) would otherwise ghost forever — nothing else removes it.
   function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }[] }): void {
-    const live = new Set<number>();
-    for (const b of m.balls) { live.add(b.id); netBallSpawn(b); }
-    pruneNetBalls(netBallById, live);
+    reconcileReplicas(netBallById, m.balls, {
+      rowId: (r) => r.id,
+      ensure: (r) => { netBallSpawn(r); return netBallById.get(r.id); },
+      reap: (b) => b.netKill(),
+    });
   }
 
   // A netDriven ball pulls toward ITS committed target — resolve the id to

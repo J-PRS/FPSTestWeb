@@ -14,6 +14,7 @@ import type { EntitiesDeps } from './entities.js';
 import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
 import { screenShake } from '../effects/screenShake.js';
+import { reconcileReplicas } from './replicas.js';
 import { EXPLOSION_VFX_RADIUS } from '../core/config.js';
 
 export interface NetCrawlersCtx {
@@ -150,30 +151,25 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   }
 
   function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }[] }): void {
-    const live = new Set<number>();
-    for (const r of m.crawlers) {
-      live.add(r.id);
-      // A dead-but-registered entry is the ctor-fail wedge: evict it so
-      // this roster respawns the creature instead of skipping it forever.
-      if (netCrawlerById.get(r.id)?.dead) {netCrawlerById.delete(r.id);}
-      if (!netCrawlerById.has(r.id)) {
+    reconcileReplicas(netCrawlerById, m.crawlers, {
+      rowId: (r) => r.id,
+      isDead: (c) => c.dead,
+      ensure: (r) => {
         netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
-      }
-      const c = netCrawlerById.get(r.id);
-      if (!c) {continue;} // ctor refused (pool not ready) — next roster retries
-      c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
-      deps.lazyDemoManager()?.recordCreatureRoster(r.id, r.species ?? speciesOf(c), r.position, r.velocity);
-    }
-    // Server-truth cull: a crawler we hold that's not on the roster died
-    // while our events were in flight.
-    for (const [id, c] of netCrawlerById) {
-      if (!live.has(id)) {
-        netCrawlerById.delete(id);
+        return netCrawlerById.get(r.id);
+      },
+      apply: (c, r) => {
+        c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
+        deps.lazyDemoManager()?.recordCreatureRoster(r.id, r.species ?? speciesOf(c), r.position, r.velocity);
+      },
+      // Server-truth cull: a crawler we hold that's not on the roster died
+      // while our events were in flight.
+      reap: (c, id) => {
         appliedSkips.delete(id);
         deps.lazyDemoManager()?.recordCreatureDie(id, c.pos);
         c.dead = true;
-      }
-    }
+      },
+    });
   }
 
   return { serverCreatures, netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster };
