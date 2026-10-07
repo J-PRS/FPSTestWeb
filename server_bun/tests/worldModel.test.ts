@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WORLD_MODEL } from '../../shared/worldModel.ts';
+import { encodeBallSegment, decodeBallSegment } from '../../shared/wire.ts';
 
 // World-model <-> wire-union drift tripwire. The emits generate payloads
 // from the declared field lists, but the `as ServerMessage` casts mean
@@ -56,4 +57,20 @@ describe('world model <-> protocol conformance', () => {
       });
     }
   }
+
+  it('ballSegment binary round-trip carries every declared update field', () => {
+    // The frame is hand-packed; this pins the declared field list to what
+    // actually survives encode/decode.
+    const seg = {
+      id: 7, kind: 'bounce', position: { x: 1, y: 2, z: 3 },
+      velocity: { x: 4, y: 5, z: 6 }, enraged: true, targetId: 'p9',
+      tp: { x: 7, y: 8, z: 9 }, et: 1.5, slowT: 0.5, damp: true, t: 12.25,
+    };
+    const back = decodeBallSegment(encodeBallSegment(seg));
+    expect(back).not.toBeNull();
+    for (const f of WORLD_MODEL.ball!.updateFields!) {
+      expect(back as unknown as Record<string, unknown>, `decoded segment missing '${f.name}'`)
+        .toHaveProperty(f.name);
+    }
+  });
 });

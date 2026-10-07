@@ -70,6 +70,20 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'position', channel: 'sim' },
       { name: 'by', channel: 'edge' },
     ],
+    // ballSegment rides a packed binary frame (wire.ts), not JSON — the
+    // list still declares the shape once so the conformance test pins it.
+    updateFields: [
+      { name: 'kind', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'enraged', channel: 'edge' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 'et', channel: 'edge' },
+      { name: 'slowT', channel: 'edge' },
+      { name: 'damp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
+    ],
     rosterFields: [
       { name: 'variant', channel: 'edge' },
       { name: 'colorIdx', channel: 'edge' },

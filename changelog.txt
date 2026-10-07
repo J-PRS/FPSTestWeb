@@ -1,3 +1,4 @@
+2026-10-01 - C5: ballSegment declares updateFields + binary round-trip test - the packed frame's shape is declared once and the conformance test pins encode/decode to it
 2026-10-01 - C5: worldModel<->protocol conformance test - every declared verb/field is pinned against the ServerMessage union; drift fails the suite
 2026-10-01 - C5: deployGone generates from world-model - deploy.remove() emits via verbPayload gone; only the binary ballSegment frame stays hand-coded
 2026-10-01 - C5: crawlEvt generates from worldModel.updateFields - creature declares its edge payload shape once (kind/sk/pos/vel/targetId/tp/t)
