@@ -3032,3 +3032,14 @@ it never lands a hit on a dead player. The roster update now also writes
 isDead: false, so the record self-heals at the next hit instead of
 waiting for the diff cycle. Local-death state is untouched (local
 player death is callback-owned). (wireIn.ts)
+
+## 2.165 Phantom roster stubs from hits/kills on departed players
+
+upsertRemotePlayer mints a stub row for ANY unknown id, and
+handlePlayerHit / handlePlayerKill called it unconditionally -- a hit or
+kill edge arriving for a player who already left (or whose join edge was
+lost) created a phantom roster entry that then hashed client-only in
+every state-hash check and sat on the scoreboard forever. Both handlers
+now guard on the roster actually holding the target; respawn keeps its
+create-on-unknown safety (a respawn edge legitimately reintroduces a
+player). (wireIn.ts)

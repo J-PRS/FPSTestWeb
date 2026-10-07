@@ -375,8 +375,10 @@ export class WireIn {
     // by callback). A processed hit also proves the server holds the target
     // alive — it never lands a hit on a dead player — so a record still
     // marked dead from a lost respawn edge un-sticks here instead of
-    // waiting for the hash-diff heal.
-    this.h.upsertRemotePlayer(data.targetId, { health: data.health, isDead: false });
+    // waiting for the hash-diff heal. Guarded: upsert mints a stub row for
+    // unknown ids, and a hit for a departed target would otherwise leave a
+    // phantom roster entry hashing client-only forever.
+    if (this.h.getPlayers().has(data.targetId)) {this.h.upsertRemotePlayer(data.targetId, { health: data.health, isDead: false });}
     this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
   }
 
@@ -384,8 +386,10 @@ export class WireIn {
     // A kill IS the confirm — the fatal blow arrives as playerKill, not
     // playerHit, so the pending ledger would warn phantom otherwise.
     if (data.shooterId === this.h.getLocalPlayerId()) this.h.confirmClaimHit(data.targetId);
-    // Update REMOTE player state (local player death handled by callback)
-    this.h.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
+    // Update REMOTE player state (local player death handled by callback).
+    // Same phantom-row guard as hits — a kill for a departed target must
+    // not mint a stub corpse.
+    if (this.h.getPlayers().has(data.targetId)) {this.h.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });}
     this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
   }
 
