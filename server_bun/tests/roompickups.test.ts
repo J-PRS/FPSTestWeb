@@ -110,7 +110,7 @@ describe('RoomPickups', () => {
     expect(room.pickups!.snapshot().length).toBe(0);
   });
 
-  it('heal claims need gem credit in team rooms', () => {
+  it('gem collect heals server-side; heal claims get no credit in team rooms', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     const p = addAt(room, 'p1', 'alpha', 10, 0);
     p.health = 50;
@@ -119,10 +119,9 @@ describe('RoomPickups', () => {
     expect(p.health).toBe(50); // no credit, no heal
     room.pickups!.spawn({ x: 10, y: 0, z: 0 });
     room.pickups!.tick(0.05);
+    expect(p.health).toBe(70); // collect IS the intent — server declared the heal
     room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
-    expect(p.health).toBe(75); // credit consumed
-    room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
-    expect(p.health).toBe(75); // credit spent — second claim drops
+    expect(p.health).toBe(70); // claims can't re-spend a heal already applied
   });
 
   it('ffa rooms heal free-form (local nuggets, no server backing)', () => {

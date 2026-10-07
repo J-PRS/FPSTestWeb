@@ -86,9 +86,8 @@ export function wirePickups(ctx: NetCtx): void {
         // give offline (heal + jet boost), since MP drops no local loot.
         sfxPlayer.powerup('gem');
         const p = deps.lazyPlayer();
-        p.heal(0.2);
+        p.heal(0.2); // predicted — the server's own heal echoes on tickUpdate
         p.grantJetBoost();
-        nm().sendHeal(20);
         chat.add(null, 'nugget banked +1');
       } else if (e) {
         sfxPlayer.powerup(e.kind);

@@ -44,6 +44,8 @@ import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
 import { chatKindFor, vgsCommandFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { healPool } from './healPool.ts';
+import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { simNow } from './simClock.ts';
@@ -445,10 +447,12 @@ export class Room {
       const p = this.players.getPlayer(pid);
       if (!p) return;
       if (kind === 'gem' || kind === 'tag') {
-        // Gems also back the collector's next heal claim; both kinds pay
-        // one belt charge below — the nuggets ARE the ordnance economy.
+        // Gems also heal — server-declared now: the collect IS the intent,
+        // so the heal applies here instead of waiting on a claim that a
+        // drop could silently lose (credit stayed banked but unclaimed).
         if (kind === 'gem') {
-          p.healCredit += 25;
+          healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
+          p.forceSendUntil = wallNow() + FORCE_SEND_MS;
           // Client refills half the energy tank on a gem — the shadow
           // must too or the next jet run diverges for honest reasons.
           this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
@@ -560,16 +564,22 @@ export class Room {
   private deployFloor(x: number, z: number, authoredY: number): number {
     // No structure under it → authored y stands. Grounding to terrain
     // lives in applySpec/seatKits, not here.
-    let top = authoredY;
+    //
+    // The floor is the LOWEST solid top above the authored point, not
+    // the highest: a genhouse seats its foundation on max terrain, so
+    // the authored y often lands INSIDE the buried slab — taking the
+    // highest top in reach would plant the generator on the roof.
+    // The first surface up out of the fill is the deck.
+    let floor = Infinity;
     for (const c of this.ballSim?.colliders ?? []) {
       const dx = x - c.cx, dz = z - c.cz;
       const lx = dx * c.cos + dz * c.sin;
       const lz = -dx * c.sin + dz * c.cos;
       if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
       const t = c.cy + c.hy;
-      if (t > top && t <= authoredY + 6) top = t;
+      if (t > authoredY && t < floor && t <= authoredY + 12) floor = t;
     }
-    return top;
+    return floor === Infinity ? authoredY : floor;
   }
 
   private snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
