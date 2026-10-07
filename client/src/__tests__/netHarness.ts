@@ -11,11 +11,10 @@ import { createWorldState } from '../game/worldState.js';
 import { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 
-// handleMessage/handleBinaryMessage are `private` (compile-time only) —
-// structural cast rather than `any`, per repo lint rules.
+// replayWireMessage is the public wire-feed seam — same dispatch path a
+// live socket rides (JSON or binary both route through it).
 export interface NmWithDispatch {
-  handleMessage(d: ServerMessage): void;
-  handleBinaryMessage(d: Uint8Array): void;
+  replayWireMessage(d: ServerMessage | Uint8Array): void;
   getPlayers(): Map<string, RemotePlayerState>;
 }
 
@@ -69,5 +68,5 @@ export function makeDeps() {
   return { nm: nm as unknown as NmWithDispatch, world, calls, player };
 }
 
-export const feed = (nm: NmWithDispatch, m: ServerMessage) => nm.handleMessage(m);
-export const feedBin = (nm: NmWithDispatch, frame: Uint8Array) => nm.handleBinaryMessage(frame);
+export const feed = (nm: NmWithDispatch, m: ServerMessage) => nm.replayWireMessage(m);
+export const feedBin = (nm: NmWithDispatch, frame: Uint8Array) => nm.replayWireMessage(frame);

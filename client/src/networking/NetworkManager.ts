@@ -1,18 +1,17 @@
 import { ChildLogger } from '../core/Logger.js';
-import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG, SERVER_TICK_MS, type TickDecodePool } from '../../../shared/wire.js';
-import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
+import { encodePosition } from '../../../shared/wire.js';
+import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
-import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { TieredTransport } from './tiers.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
-import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import type { TeamId } from '../../../shared/teams.js';
-import { ClaimLedger, noteMutedClaim, rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
+import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
 import { InputStream } from './inputStream.js';
+import { WireIn } from './wireIn.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -140,15 +139,11 @@ export class NetworkManager {
 
   // --- Client-side prediction: sequence tracking + state history ---
   private sequenceCounter: number = 0;
-  private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
-  /** Decode slots reused every tick — upsert deep-fills roster vecs so
-   *  rostered values never alias a slot (see decodeTickFrame pool docs). */
-  private tickPool: TickDecodePool = { slots: [], resolveId: (id) => this.wireIds.get(id) };
-  /** v3 tick-frame roster: u16 -> playerId, fed by 'wireIds' events that
-   *  always precede the first frame referencing them (same socket). */
-  private readonly wireIds = new Map<number, string>();
   private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
   private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
+  /** Inbound dispatch — owns the handler table, wire-id roster, tick
+   *  decode pool, and per-room seq watermarks (see wireIn.ts). */
+  private readonly wireIn = new WireIn(this);
 
   // --- Ping measurement ---
   private lastPingSendTime: number = 0;
@@ -211,7 +206,7 @@ export class NetworkManager {
               token: this.sessionToken ?? undefined,
               // Offset cursor — a reclaim carries the last reliable ev we
               // saw so the server replays only the missed frames.
-              resumeSeq: this.sessionToken ? this.lastEv : undefined,
+              resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
               room: urlParams.room ?? undefined,
               mode: urlParams.mode ?? undefined,
               map: urlParams.map ?? undefined,
@@ -240,13 +235,11 @@ export class NetworkManager {
             this.lastDownReason = code !== undefined && code >= 1000 && reason ? reason : null;
             logger.info('Disconnected', { code, reason });
             this.connected = false;
-            this.lastTickSeq = -1; // a reconnect starts a fresh seq space
+            this.wireIn.resetForReconnect(); // a reconnect starts fresh seq spaces
             // Claims sent on the dead lane are void — the server replays
             // in-flight hits, not lost ones; stamped claims classify as
             // transport-lost, not unconfirmed.
             this.ledger.dropAll(true);
-            this.lastHitSeq = 0;   // hit seqs are per-room — a stale high
-                                   // watermark would drop every later hit
             // Same for the cadence metric — else the dead period counts as
             // missed ticks and loss reads ~100% right after rejoining.
             this.telemetry.reset();
@@ -263,8 +256,8 @@ export class NetworkManager {
             }
             reject(error);
           },
-          onMessage: (data) => this.handleMessage(data),
-          onBinaryMessage: (data) => this.handleBinaryMessage(data),
+          onMessage: (data) => this.wireIn.message(data),
+          onBinaryMessage: (data) => this.wireIn.binary(data),
         });
         this.ws.connect(url);
       } catch (error) {
@@ -337,10 +330,6 @@ export class NetworkManager {
   ]);
   private pendingCmds: ClientMessage[] = [];
   private static readonly MAX_PENDING_CMDS = 16;
-
-  /** Last processed reliable `ev` seq — presented as resumeSeq on a
-   *  token-carrying join so the server replays only the missed frames. */
-  private lastEv = 0;
 
   /** Outbound JSON event — typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
@@ -418,255 +407,85 @@ export class NetworkManager {
 
   /** Ring of recent health-affecting events — read by the desync dump so a
    *  hash mismatch says WHICH event diverged, not just that one did. */
-  private readonly recentHealthEvents: { type: string; t: number; detail: string }[] = [];
-  private static readonly HEALTH_EVENT_TYPES = new Set(['playerHit', 'playerKill', 'playerRespawn', 'buff', 'heal']);
   recentEvents(): readonly { type: string; t: number; detail: string }[] {
-    return this.recentHealthEvents;
+    return this.wireIn.recentEvents();
   }
 
-  /** Wire-feed seam for recorded streams (.rec): pushes one message
-   *  through the exact live dispatch path — handlers can't tell the
-   *  difference between a capture and a socket. Dev replay only. */
-  replayWireMessage(data: ServerMessage | Uint8Array): void {
-    if (typeof data === 'object' && !(data instanceof Uint8Array)) this.handleMessage(data);
-    else this.handleBinaryMessage(data as Uint8Array);
-  }
+  // ---- WireIn host surface — the whole back-channel the dispatcher
+  // needs (roster store, ledgers/journal, telemetry, session state).
 
-  private handleMessage(data: ServerMessage): void {
+  /** Any inbound frame proves liveness + feeds the byte counter. */
+  noteRx(bytes: number): void {
     this.lastRxAt = Date.now();
-    this.rxBytes += JSON.stringify(data).length; // rx approximation — JSON events are sparse
-    // Offset cursor: every reliable frame carries a room-scoped `ev`.
-    // Replays only ever carry seq > our watermark, so tracking the max
-    // doubles as the dup guard if a transport ever re-delivers.
-    const ev = (data as ServerMessage & { ev?: number }).ev;
-    if (ev !== undefined && ev > this.lastEv) this.lastEv = ev;
-    // Capture the server-issued session token for future reconnects.
-    // gameState also re-seeds the ev watermark: `ev` is room-scoped, so a
-    // room hop or fresh join must adopt THIS room's seq, not max() against
-    // a stale watermark from the old room.
-    if (data?.type === 'gameState') {
-      if (ev !== undefined) this.lastEv = ev;
-      if (typeof data.sessionToken === 'string') {
-        this.sessionToken = data.sessionToken;
-        settings.set('fps-session-token', data.sessionToken);
-      }
-    }
-    if (NetworkManager.HEALTH_EVENT_TYPES.has(data.type)) {
-      if (this.recentHealthEvents.length >= 24) this.recentHealthEvents.shift();
-      const d = data as Record<string, unknown>;
-      this.recentHealthEvents.push({ type: data.type, t: Date.now(), detail: `${d.shooterId ?? d.playerId ?? ''}→${d.targetId ?? ''} ${d.damage ?? ''}` });
-    }
-    // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
-    const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
-    if (handler) {
-      // A malformed-but-parseable message mustn't reach the connection's
-      // onError path — one bad packet shouldn't cost a reconnect.
-      try { handler(data); }
-      catch (e) { logger.warn(`Handler threw for ${data.type}`, e); }
-    } else {
-      logger.warn(`Unknown message type: ${data.type}`);
-    }
+    this.rxBytes += bytes;
   }
 
-  private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {
-    gameState: (data) => this.handleGameState(data),
-    tickUpdate: (data) => this.handleTickUpdate(data),
-    playerJoined: (data) => this.handlePlayerJoined(data),
-    playerLeft: (data) => this.handlePlayerLeft(data),
-    wireIds: (data) => {
-      for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid);
-      for (const id of data.remove ?? []) this.wireIds.delete(id);
-    },
-    teamUpdate: (data) => this.upsertRemotePlayer(data.playerId, { team: data.team }),
-    playerRespawn: (data) => this.handlePlayerRespawn(data),
-    playerHit: (data) => this.handlePlayerHit(data),
-    buff: (data) => this.onBuff?.(data),
-    yourHealth: (data) => this.onYourHealth?.(data.health),
-    yourCharge: (data) => this.onYourCharge?.(data.charge),
-    playerKill: (data) => this.handlePlayerKill(data),
-    knockback: (data) => this.onKnockback?.(data.position, data.force, data.pull),
-    jump: (data) => this.onPlayerJump?.(data.playerId, data.position),
-    jetpack: (data) => this.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data) => this.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId),
-    playerShot: (data) => this.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
-    projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId, data.shotId),
-    snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
-    stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash, data.creatureHash, data.deployHash, data.flagHash, data.pickupHash, data.creatureFields),
-    correction: (data) => this.handleCorrection(data),
-    inputSync: (data) => this.inputs.resend(data.lastSeq, (m) => this.send(m), this.isConnected()),
-    claimAck: (data) => this.ledger.ack(data),
-    teleport: (data) => this.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
-    ballSpawn: (data) => this.onBallSpawn?.(data),
-    ballSegment: (data) => this.onBallSegment?.(data),
-    ballDie: (data) => this.onBallDie?.(data),
-    ballRoster: (data) => this.onBallRoster?.(data),
-    crawlSpawn: (data) => this.onCrawlSpawn?.(data),
-    crawlEvt: (data) => this.onCrawlEvt?.(data),
-    crawlDie: (data) => this.onCrawlDie?.(data),
-    crawlRoster: (data) => this.onCrawlRoster?.(data),
-    pong: (data) => this.handlePong(data.timestamp),
-    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
-    flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
-    matchNotice: (data) => this.onMatchNotice?.(data.text),
-    serverWarn: (data) => this.onServerWarn?.(data.text),
-    // WT/RTC path of the 1008 identity reject — the close code is lost
-    // on those tiers, so the server sends this before closing.
-    sessionRejected: (data) => this.resetIdentity(data.reason),
-    pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos, data.kind),
-    pickupGone: (data) => this.onPickupGone?.(data.id, data.by ?? null),
-    teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
-    ffaScore: (data) => this.onFfaScore?.(data.scores, data.winAt),
-    ffaMatchEnd: (data) => this.onFfaMatchEnd?.(data.winner, data.scores),
-    matchEnd: (data) => this.onMatchEnd?.(data.winner, data.scores),
-    matchStart: (data) => this.onMatchStart?.(data.mode, data.scores),
-    mapUpdate: (data) => this.onMapUpdate?.(data),
-    deploySpawn: (data) => this.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
-    deployGone: (data) => this.onDeployGone?.(data.id),
-    deployDown: (data) => this.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
-    deployUp: (data) => this.onDeployUp?.(data.id),
-    sensorPing: (data) => this.onSensorPing?.(data.id, data.team, data.targets),
-    turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
-    sentryShot: (data) => this.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
-    mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
-    deployHp: (data) => this.onDeployHp?.(data.id, data.hp, data.armor, data.src),
-    // Server refused a hit claim — worth surfacing: a healthy client
-    // should basically never see this, so it's a desync tell.
-    shotRejected: (data) => {
-      rejectCensus.total++;
-      rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
-      rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.ledger.confirmHit(data.targetId ?? '', data.shotId);
-      logger.error(`shot rejected — predicted damage never applied`, {
-        reason: data.reason,
-        targetId: data.targetId,
-        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
-        pingMs: this.telemetry.ping,
-      });
-      this.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
-    },
-    // Honest-lag discard (dead shooter/target) — not a reject, but the
-    // predicted hit still needs clearing or the ledger warns phantom.
-    claimDropped: (data) => {
-      dropCensus.total++;
-      dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
-      dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.ledger.confirmHit(data.targetId ?? '', data.shotId);
-      logger.warn(`claim dropped — predicted damage never applied`, {
-        reason: data.reason, targetId: data.targetId,
-        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
-        pingMs: this.telemetry.ping,
-      });
-      this.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
-    },
-  };
-
-  private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
-    // Protocol handshake: a stale bundle can't parse a new wire format —
-    // force-reload once (cache-busted) instead of silently desyncing. The
-    // sessionStorage counter caps it at 2 attempts so a genuinely newer
-    // server can't reload-loop the tab.
-    // A new gameState means a new room instance — both seq spaces
-    // restart at 1 (hitSeq and tickSeq are per-room), so the prior
-    // room's high watermarks must not gate it. A room hop without
-    // reconnect would otherwise freeze every remote for the session.
-    this.lastHitSeq = 0;
-    this.lastTickSeq = -1;
-    this.ledger.dropAll(false);
-    this.resyncQuietUntil = 0; // truth landed — position claims are judged fresh
-    const serverProto = data.protocolVersion ?? 0;
-    if (serverProto !== PROTOCOL_VERSION) {
-      // Storage can throw (private mode / disabled embeds) — treat a dead
-      // counter as budget spent: warn + bail, never crash the handler.
-      let tries = 2;
-      try { tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0'); } catch { /* fall through */ }
-      logger.warn(`Protocol mismatch: client=${PROTOCOL_VERSION} server=${serverProto} (attempt ${tries + 1})`);
-      // Browser-only escape: headless harnesses (vitest, e2e replays) have
-      // no location to reload — they get the warn + early return only.
-      if (tries < 2 && typeof location !== 'undefined') {
-        try {
-          sessionStorage.setItem('fps-proto-reload', String(tries + 1));
-          const url = new URL(location.href);
-          url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
-          location.href = url.toString();
-        } catch { /* storage/nav both optional — warn already logged */ }
-      }
-      return;
-    }
-    try { sessionStorage.removeItem('fps-proto-reload'); } catch { /* no budget to reset */ } // clean connect — reset the budget
-
-    // gameState is the authoritative roster on (re)connect — clear stale entries
-    // for players who left during our disconnect, then add the current set.
-    // (Local player is never stored here; state comes via localPlayerState.)
-    this.players.clear();
-    // v3 id space is per-room — a stale mapping would bind records to
-    // the wrong body, so the roster snapshot replaces, not merges.
-    this.wireIds.clear();
-    if (data.wireIds) for (const [id, pid] of Object.entries(data.wireIds)) this.wireIds.set(Number(id), pid);
-    if (data.players && Array.isArray(data.players)) {
-      for (const player of data.players) {
-        if (player.id === this.localPlayerId) continue;
-        this.players.set(player.id, player);
-      }
-    }
-    logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
-    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
-  }
-
-  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; count?: number; ackSeq?: number; inputAck?: number; tickSeq?: number }): void {
-    // Host loopback delivers ticks in per-frame bursts — feeding those to
-    // the gap tracker turns frame hitches into fake "packet loss".
+  /** Tick-arrival cadence — host loopback delivers ticks in per-frame
+   *  bursts, which would read as fake packet loss in the gap tracker. */
+  tickArrived(): void {
     if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
-    // Batched player updates from server (delta compressed)
-    if (data.ackSeq !== undefined && data.ackSeq > 0) {
-      this.pruneStateHistory(data.ackSeq);
-    }
-    // Tick-set confirm: the server consumed inputs ≤ inputAck — those
-    // journal entries are dead weight and only matter to replay.
-    if (data.inputAck !== undefined && data.inputAck > 0) {
-      this.inputs.inputsAfter(data.inputAck);
-    }
-    if (!data.updates || !Array.isArray(data.updates)) return;
-    const now = Date.now();
-    // Snapshots must carry the SERVER timeline (tickSeq×50), not arrival
-    // wall time — arrival stamps fold transport jitter into the rendered
-    // path itself, which is the rubberband mechanism. The JSON path has
-    // no tickSeq and keeps the arrival fallback (host/loopback: jitter≈0).
-    const serverMs = data.tickSeq !== undefined ? data.tickSeq * SERVER_TICK_MS : now;
-    // Pooled decode hands back its whole slots array + a live count —
-    // entries past it are stale from earlier, larger frames.
-    const n = data.count ?? data.updates.length;
-    for (let i = 0; i < n; i++) {
-      const u = data.updates[i]!;
-      // v3 record ahead of its roster — can't build a body without an
-      // identity, so it drops; the next record for that id resolves.
-      if (!u.playerId) continue;
-      this.applyTickPlayerUpdate(u, serverMs);
+  }
+
+  pongReceived(timestamp: number): void {
+    this.telemetry.onPong(timestamp, Date.now());
+  }
+
+  resendInputs(lastSeq: number): void {
+    this.inputs.resend(lastSeq, (m) => this.send(m), this.isConnected());
+  }
+
+  ackInputs(inputAck: number): void {
+    this.inputs.inputsAfter(inputAck);
+  }
+
+  ackPositionSeq(seq: number): void {
+    this.pruneStateHistory(seq);
+  }
+
+  confirmClaimHit(targetId: string, shotId?: string): void {
+    this.ledger.confirmHit(targetId, shotId);
+  }
+
+  ackClaim(msg: Parameters<ClaimLedger['ack']>[0]): void {
+    this.ledger.ack(msg);
+  }
+
+  dropClaims(transportLost: boolean): void {
+    this.ledger.dropAll(transportLost);
+  }
+
+  clearResyncQuiet(): void {
+    this.resyncQuietUntil = 0;
+  }
+
+  /** Server-issued session token — persisted so a reconnect can reclaim
+   *  the grace-period seat. */
+  acceptSessionToken(token: string): void {
+    this.sessionToken = token;
+    settings.set('fps-session-token', token);
+  }
+
+  rejectSession(reason?: string): void {
+    this.resetIdentity(reason);
+  }
+
+  /** gameState's authoritative roster — replaces, never merges (v3 ids
+   *  and per-room state would alias across a merge). */
+  remoteReset(players: GameStatePlayer[] | undefined): void {
+    this.players.clear();
+    if (players) for (const p of players) {
+      if (p.id === this.localPlayerId) continue;
+      this.players.set(p.id, p);
     }
   }
 
-  private applyTickPlayerUpdate(u: TickUpdatePlayer, serverMs: number): void {
-    // Defense-in-depth: server already excludes self from tickUpdate,
-    // but skip local player here too in case of any server-side regression
-    if (u.playerId === this.localPlayerId) return;
-    this.upsertRemotePlayer(u.playerId, {
-      internalId: u.internalId || undefined,
-      position: u.position,
-      rotation: u.rotation,
-      velocity: u.velocity,
-      isDead: u.isDead,
-      health: u.health,
-      ping: u.ping,
-      ski: u.ski,
-      status: u.status,
-      sheep: u.sheep,
-    });
-    this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, serverMs, u.velocity);
-  }
+  remoteHas(playerId: string): boolean { return this.players.has(playerId); }
+  remoteDelete(playerId: string): void { this.players.delete(playerId); }
 
   // Upsert a remote player's roster entry, preserving fields the message
   // doesn't carry: merge order is patch → existing → default, so partial
   // updates (hit = health only) never stomp unrelated roster state.
-  private upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
+  upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
     if (!playerId || playerId === this.localPlayerId) return;
     const existing = this.players.get(playerId);
     // Mutate in place: a fresh object per player per tick was the
@@ -693,116 +512,13 @@ export class NetworkManager {
     if (!existing) this.players.set(playerId, next);
   }
 
-  private handlePlayerJoined(data: Extract<ServerMessage, { type: 'playerJoined' }>): void {
-    // Rejoins (grace-period reconnects) re-broadcast playerJoined — only the
-    // FIRST sighting is a roster event. Upserting health/isDead on a rejoin
-    // would stomp the server-truth values tickUpdate already delivered, and
-    // re-firing onPlayerJoined spam-recreates/logs the remote every time.
-    const isNew = !this.players.has(data.playerId);
-    this.upsertRemotePlayer(data.playerId, {
-      name: data.name,
-      position: data.position,
-      rotation: data.rotation,
-      velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
-      // The announce carries real vitals — a grace rejoiner can return
-      // wounded or dead; fabricating 100/alive was the tick-N desync.
-      isDead: isNew ? (data.isDead ?? false) : undefined,
-      health: isNew ? (data.health ?? 100) : undefined,
-      team: data.team,
-      transport: data.transport,
-      armorClass: data.armorClass,
-    });
-    if (isNew) this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
+  /** Wire-feed seam for recorded streams (.rec): pushes one message
+   *  through the exact live dispatch path — handlers can't tell the
+   *  difference between a capture and a socket. Dev replay only. */
+  replayWireMessage(data: ServerMessage | Uint8Array): void {
+    this.wireIn.dispatch(data);
   }
 
-  private handlePlayerLeft(data: Extract<ServerMessage, { type: 'playerLeft' }>): void {
-    if (data.playerId) {
-      this.players.delete(data.playerId);
-    }
-    this.onPlayerLeft?.(data.playerId);
-  }
-
-  private handlePlayerRespawn(data: Extract<ServerMessage, { type: 'playerRespawn' }>): void {
-    // Update REMOTE player in storage (local player respawn handled by callback)
-    if (data.position) {
-      this.upsertRemotePlayer(data.playerId, {
-        position: data.position,
-        rotation: data.rotation,
-        velocity: { x: 0, y: 0, z: 0 },
-        isDead: false,
-        health: 100,
-      });
-    }
-    this.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
-  }
-
-  /** Reconnect grace lets the server replay in-flight playerHit events —
-   *  seq is per-room monotonic so a stale re-delivery can't double-apply.
-   *  Reset on disconnect/gameState: a new room's seq restarts at 1, and a
-   *  retained high watermark would silently drop every hit for the whole
-   *  session — the "half my damage instances don't work" desync. */
-  private lastHitSeq = 0;
-
-  private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
-    if (data.shooterId === this.localPlayerId) this.ledger.confirmHit(data.targetId);
-    if (data.seq !== undefined) {
-      if (data.seq <= this.lastHitSeq) {
-        dedupCensus.hitSeqDrops++;
-        logger.warn(`playerHit dropped as stale seq ${data.seq} <= ${this.lastHitSeq}`);
-        return;
-      }
-      this.lastHitSeq = data.seq;
-    }
-    // Update REMOTE player health in storage (local player health handled by callback)
-    this.upsertRemotePlayer(data.targetId, { health: data.health });
-    this.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
-  }
-
-  private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
-    // A kill IS the confirm — the fatal blow arrives as playerKill, not
-    // playerHit, so the pending ledger would warn phantom otherwise.
-    if (data.shooterId === this.localPlayerId) this.ledger.confirmHit(data.targetId);
-    // Update REMOTE player state (local player death handled by callback)
-    this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
-    this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
-  }
-
-  private handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {
-    // Server rejected our position — snap to last valid state
-    logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
-    this.pruneStateHistory(data.seq);
-    this.onCorrection?.(data.seq, data.position, data.velocity, data.rotation, data.inputSeq, data.grounded);
-  }
-
-  private handleBinaryMessage(data: Uint8Array): void {
-    this.lastRxAt = Date.now();
-    this.rxBytes += data.length;
-    if (!isWireFrame(data)) {
-      logger.debug(`Received non-wire binary message: ${data.length} bytes`);
-      return;
-    }
-    // Binary ball segments decode straight into the JSON message's shape —
-    // netBallSegment sees one type regardless of transport.
-    if (data[1] === WIRE_BALLSEG) {
-      const seg = decodeBallSegment(data);
-      if (seg) this.onBallSegment?.({
-        type: 'ballSegment',
-        id: seg.id, kind: seg.kind,
-        position: seg.position, velocity: seg.velocity,
-        enraged: seg.enraged, targetId: seg.targetId,
-        tp: seg.tp, et: seg.et, slowT: seg.slowT, damp: seg.damp, t: seg.t,
-      });
-      return;
-    }
-    const tick = decodeTickFrame(data, this.tickPool);
-    if (!tick) return;
-    // Stale-drop: under an unordered transport a late frame carries an older
-    // tickSeq — interpolating it would rewind remotes. On TCP this never
-    // trips (frames can't reorder); it exists for the UDP tiers.
-    if (tick.tickSeq <= this.lastTickSeq) return;
-    this.lastTickSeq = tick.tickSeq;
-    this.handleTickUpdate(tick);
-  }
 
   /**
    * Send player position to server with rate limiting (20Hz binary frame)
@@ -1150,10 +866,6 @@ export class NetworkManager {
    *  scoreboard (remotes get theirs from gameState/playerJoined). */
   getTransportTier(): TransportKind | 'p2p' | 'host' | undefined {
     return this.ws?.tier;
-  }
-
-  private handlePong(timestamp: number): void {
-    this.telemetry.onPong(timestamp, Date.now());
   }
 
   private pruneStateHistory(ackSeq: number): void {
