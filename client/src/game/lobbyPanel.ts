@@ -1,4 +1,5 @@
 import { settings } from '../core/settings.js';
+import { urlParams } from '../core/params.js';
 import type { LobbyDeps } from './lobby.js';
 
 // Lobby panel DOM — styling lives in ui/chrome.css (.lb-*); this builds
@@ -9,8 +10,15 @@ export interface LobbyPanelHost {
   deps: LobbyDeps;
   toggle(): void;
   fillMapSelect(): void;
+  mapFamOn(kind: 't2' | 'custom'): boolean;
+  toggleMapFam(kind: 't2' | 'custom'): void;
   join(name: string, map?: string, bots?: number, mode?: string): void;
   currentRoom(): string;
+  /** Favorites persist across sessions — classic browser column. */
+  isFav(name: string): boolean;
+  toggleFav(name: string): void;
+  /** Repolls the room list on demand (the ↻ button). */
+  refresh(): void;
 }
 
 export interface LobbyPanelEls {
@@ -21,6 +29,8 @@ export interface LobbyPanelEls {
   modeSelect: HTMLSelectElement;
   botsInput: HTMLInputElement;
   leaveBtn: HTMLButtonElement;
+  /** Repoll the open-lobbies list — Lobby calls it on open + poll tick. */
+  refreshLobs(): void;
 }
 
 function btn(text: string): HTMLButtonElement {
@@ -75,6 +85,40 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   return wrap;
 }
 
+/** Offline solo/bot modes — the same modes the ESC-menu MODE select
+ *  exposes, as one-click entries (classic browser "create local game"). */
+const OFFLINE_MODES: [string, string][] = [
+  ['', 'SOLO — no bots'],
+  ['nuggets', 'NUGGET WARS 5v5'],
+  ['ctf', 'CTF 5v5'],
+  ['dm', 'DEATHMATCH ×10'],
+  ['flagrun', 'FLAG RUN (solo)'],
+  ['classic', 'CLASSIC'],
+];
+
+function playOffline(mode: string): void {
+  settings.set('fps-mode', mode);
+  settings.set('fps-p2p', '');
+  settings.set('fps-lobby', 0);
+  const q = new URLSearchParams(location.search);
+  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode']) q.delete(k);
+  const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
+  location.href = href;
+}
+
+function buildOfflineList(): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'lb-rows';
+  for (const [mode, text] of OFFLINE_MODES) {
+    const row = btn(text);
+    row.classList.add('lb-room');
+    row.style.textAlign = 'left';
+    row.addEventListener('click', () => playOffline(mode));
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
 
 /** MAP picker + pre-rendered thumbnail preview — the image swaps on
  *  selection/refill and hides itself when a map has no rendered thumb. */
@@ -117,12 +161,58 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const openBtn = document.getElementById('lobby-open');
     if (openBtn) openBtn.addEventListener('click', () => h.toggle());
 
+    // ESC-menu disconnect — the classic "leave server" is a one-shot
+    // reload to a clean URL: solo boot IS the disconnected state, so no
+    // teardown logic lives client-side.
+    const leaveServerBtn = document.getElementById('leave-server');
+    if (leaveServerBtn) {
+      const online = urlParams.room != null || urlParams.p2p != null || settings.get('fps-p2p') !== '';
+      leaveServerBtn.style.display = online ? 'block' : 'none';
+      leaveServerBtn.addEventListener('click', () => {
+        settings.set('fps-p2p', '');
+        settings.set('fps-lobby', 0);
+        const q = new URLSearchParams(location.search);
+        for (const k of ['room', 'p2p', 'lobby']) q.delete(k);
+        location.href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
+      });
+    }
+
     const panel = document.createElement('div');
     panel.className = 'lb-panel';
     panel.style.display = 'none';
 
+    // Tabbed hub — the classic server-browser layout: JOIN is the room
+    // list, HOST is match setup, OFFLINE/P2P are one-purpose pages.
+    const tabBar = document.createElement('div');
+    tabBar.className = 'lb-tabs';
+    const tabs = new Map<string, HTMLDivElement>();
+    const tabBtns: HTMLButtonElement[] = [];
+    const showTab = (name: string) => {
+      for (const [n, el] of tabs) el.style.display = n === name ? 'block' : 'none';
+      for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
+    };
+    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
+      const b = btn(name);
+      b.dataset.tab = name;
+      b.addEventListener('click', () => showTab(name));
+      tabBtns.push(b);
+      tabBar.appendChild(b);
+      const page = document.createElement('div');
+      page.style.display = 'none';
+      tabs.set(name, page);
+    }
+
+    // ---- JOIN page: server browser ------------------------------------
+    const joinPage = tabs.get('JOIN')!;
+    const headRow = document.createElement('div');
+    headRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
     const head = label('MATCHES');
-    head.style.marginTop = '0';
+    head.style.cssText = 'margin-top:0;flex:1;';
+    const refreshBtn = btn('↻');
+    refreshBtn.title = 'refresh list';
+    refreshBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;';
+    refreshBtn.addEventListener('click', () => { h.refresh(); refreshLobsFn(); });
+    headRow.append(head, refreshBtn);
     const hereRow = document.createElement('div');
     hereRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
     const here = document.createElement('div');
@@ -149,6 +239,21 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     modeSelect.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
     modeSelect.addEventListener('change', () => h.fillMapSelect());
     modeRow.appendChild(modeSelect);
+    // Map-family toggles — T2 ports vs our own arenas. Both on = full
+    // list; each can be dropped to shrink the picker. Refills through
+    // the host so MODE and family compose.
+    const famRow = document.createElement('div');
+    famRow.className = 'lb-quick';
+    famRow.style.marginBottom = '2px';
+    for (const [kind, text] of [['t2', 'T2'], ['custom', 'CUSTOM']] as const) {
+      const b = btn(text);
+      b.classList.toggle('active', h.mapFamOn(kind));
+      b.addEventListener('click', () => {
+        h.toggleMapFam(kind);
+        b.classList.toggle('active', h.mapFamOn(kind));
+      });
+      famRow.appendChild(b);
+    }
     const mapRow = field('MAP');
     const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
     mapRow.appendChild(mapSelect);
@@ -239,13 +344,47 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     p2pRow.appendChild(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
-    panel.append(head, hereRow, rows, hostLbl, modeRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
+    // Open P2P lobbies — the relay lists public hosts still waiting for
+    // a peer; clicking one is join:code without typing it.
+    const lobLbl = label('OPEN LOBBIES');
+    const lobRows = document.createElement('div');
+    lobRows.className = 'lb-rows';
+    const refreshLobsFn = async () => {
+      lobRows.textContent = '';
+      if (!h.deps.listP2pLobbies) return;
+      try {
+        const lobs = await h.deps.listP2pLobbies();
+        if (lobs.length === 0) { lobRows.textContent = '— none open —'; lobRows.style.color = 'rgba(58,167,255,0.5)'; return; }
+        lobRows.style.color = '';
+        for (const l of lobs) {
+          const row = btn(`${l.room}  ·  ${Math.max(0, Math.round((Date.now() - l.since) / 60000))}m`);
+          row.classList.add('lb-room');
+          row.style.textAlign = 'left';
+          row.addEventListener('click', () => p2pGo(`join:${l.room}`, 0));
+          lobRows.appendChild(row);
+        }
+      } catch { /* relay unreachable — same failure class as /rooms */ }
+    };
+    const refreshLobs = () => { void refreshLobsFn(); };
+    refreshLobs();
+
+    joinPage.append(headRow, hereRow, rows, connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
+    tabs.get('HOST')!.append(hostLbl, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick);
+    tabs.get('OFFLINE')!.append(buildOfflineList());
+    tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
+
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
+    showTab('JOIN');
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
     new MutationObserver(() => {
       if (!document.body.classList.contains('menu-open') && panel.style.display !== 'none') h.toggle();
+      // Not in a game → the browser IS the front door: opening the menu
+      // lands on the room list instead of a blank settings column.
+      const offline = urlParams.room == null && urlParams.p2p == null && settings.get('fps-p2p') === '';
+      if (document.body.classList.contains('menu-open') && offline && panel.style.display === 'none') h.toggle();
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   
-  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn };
+  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs };
 }

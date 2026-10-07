@@ -29,6 +29,7 @@ type Schema = {
   'fps-server': string;       // remote host (trycloudflare name or full host) — '' = same-host dev
   'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
+  'fps-fav-rooms': string;    // JSON string[] — server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
   'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
   'fps-vgs-physical': boolean; // VGS chord letters by physical position (QWERTY mnemonic) instead of layout letter
@@ -66,6 +67,7 @@ const DEFAULTS: Schema = {
   'fps-server': '',
   'fps-p2p': '',
   'fps-lobby': 0,
+  'fps-fav-rooms': '[]',
   'fps-shadows': true,
   'fps-tts-chat': false,
   'fps-vgs-physical': false,

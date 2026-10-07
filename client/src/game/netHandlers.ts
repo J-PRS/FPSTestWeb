@@ -130,6 +130,11 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     },
     switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
+    listP2pLobbies: async () => {
+      const res = await fetch(`${httpUrl}/rtc/lobbies`);
+      if (!res.ok) {throw new Error(`lobbies ${res.status}`);}
+      return res.json() as Promise<{ room: string; since: number }[]>;
+    },
   })).catch((error) => {
     // Endpoint resolution failing leaves no lobby button — log it so a
     // dead /rooms host doesn't read as a missing feature.

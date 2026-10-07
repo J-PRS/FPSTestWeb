@@ -10,6 +10,7 @@
 
 import { buildLobbyPanel } from './lobbyPanel.js';
 import { urlParams } from '../core/params.js';
+import { settings } from '../core/settings.js';
 import Logger from '../core/Logger.js';
 
 export interface RoomRow {
@@ -54,6 +55,9 @@ export interface LobbyDeps {
   /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
    *  picker preview. Absent → no preview panel. */
   mapThumbUrl?(name: string): string;
+  /** GET /rtc/lobbies — public P2P hosts still waiting for a peer.
+   *  Absent → P2P tab hides the open-lobby list. */
+  listP2pLobbies?(): Promise<{ room: string; since: number }[]>;
 }
 
 const POLL_MS = 3000;
@@ -70,8 +74,12 @@ export class Lobby {
   private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
   private leaveBtn: HTMLButtonElement;
+  private els: import('./lobbyPanel.js').LobbyPanelEls;
   private maps: MapRow[] = [];
   private mapsFailed = false;
+  // MAP picker family filter — the [T2] badge marks Tribes 2 ports;
+  // 'custom' is our own spec. Both on = the full list.
+  private mapFam = { t2: true, custom: true };
   private timer: ReturnType<typeof setInterval> | null = null;
 
   currentRoom(): string {
@@ -89,6 +97,7 @@ export class Lobby {
     this.modeSelect = els.modeSelect;
     this.botsInput = els.botsInput;
     this.leaveBtn = els.leaveBtn;
+    this.els = els;
   }
 
   /** Populate the mode + map pickers once per open — cheap, menu is
@@ -130,7 +139,9 @@ export class Lobby {
       this.mapSelect.append(o);
       return;
     }
-    const rows = mode ? this.maps.filter((m) => (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)) : this.maps;
+    const rows = this.maps.filter((m) =>
+      this.mapFam[m.t2 ? 't2' : 'custom'] &&
+      (!mode || (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)));
     if (rows.length === 0) {
       const o = document.createElement('option');
       o.textContent = `no ${mode} maps`;
@@ -149,6 +160,37 @@ export class Lobby {
     }
   }
 
+  mapFamOn(kind: 't2' | 'custom'): boolean {
+    return this.mapFam[kind];
+  }
+
+  // Favorite rooms persist across sessions — a server browser without a
+  // fav column is only half a browser.
+  private favSet(): Set<string> {
+    try { return new Set(JSON.parse(settings.get('fps-fav-rooms') || '[]') as string[]); }
+    catch { return new Set(); }
+  }
+  isFav(name: string): boolean {
+    return this.favSet().has(name);
+  }
+  toggleFav(name: string): void {
+    const favs = this.favSet();
+    if (favs.has(name)) {favs.delete(name);} else {favs.add(name);}
+    settings.set('fps-fav-rooms', JSON.stringify([...favs]));
+    void this.refresh();
+  }
+
+  /** Manual repoll — the ↻ button in the JOIN tab header. */
+  refresh(): void {
+    void this.refreshRooms();
+    this.els.refreshLobs();
+  }
+
+  toggleMapFam(kind: 't2' | 'custom'): void {
+    this.mapFam[kind] = !this.mapFam[kind];
+    this.fillMapSelect();
+  }
+
   toggle(): void {
     const open = this.panel.style.display !== 'none';
     if (open) {
@@ -165,7 +207,7 @@ export class Lobby {
     }
   }
 
-  private async refresh(): Promise<void> {
+  private async refreshRooms(): Promise<void> {
     this.rows.textContent = '';
     let rooms: RoomRow[];
     try {
@@ -177,8 +219,11 @@ export class Lobby {
       this.rows.append(err);
       return;
     }
-    // Default lobby first — it's the immortal room.
-    rooms.sort((a, b) => (a.name === 'default' ? -1 : b.name === 'default' ? 1 : a.name.localeCompare(b.name)));
+    // Default lobby first — it's the immortal room — then favorites
+    // (browser-column convention), then alphabetical.
+    const favs = this.favSet();
+    const rank = (r: RoomRow) => (r.name === 'default' ? 0 : favs.has(r.name) ? 1 : 2);
+    rooms.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const cur = rooms.find((r) => r.name === this.currentRoom());
     this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`;
     // Default lobby IS home — leaving it is a no-op.
@@ -194,15 +239,24 @@ export class Lobby {
     if (full || current) {row.disabled = true;}
     if (current) {row.classList.add('current');}
     if (full) {row.classList.add('full');}
+    // Fav star — own click target so marking a room never joins it.
+    const star = document.createElement('span');
+    star.className = 'lb-fav';
+    star.textContent = this.isFav(r.name) ? '★' : '☆';
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleFav(r.name);
+    });
     const name = document.createElement('span');
     name.textContent = r.name;
+    name.style.flex = '1';
     const meta = document.createElement('span');
     meta.className = 'meta';
     const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
       : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
     const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60_000)}m` : '';
     meta.textContent = `${r.mode ? `${r.mode  } ` : ''}${r.map ? `${r.map  } ` : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
-    row.append(name, meta);
+    row.append(star, name, meta);
     row.addEventListener('click', () => this.join(r.name));
     this.rows.append(row);
   }
