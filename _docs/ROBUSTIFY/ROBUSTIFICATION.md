@@ -233,6 +233,27 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.73 Room-event notice mirror (2026-10-08)
+
+Third find in the mirror-drift lane. Server bots hear a `notice` sense —
+flag grab/cap/return/drop, a teammate's line, match end — and the shared
+brain turns it into a chatter reaction. The client ctx never filled the
+field at all: solo bots were *deaf to room events*, not just half-deaf
+like §2.71. The flag edges already surfaced on the client via
+`onFlagEvent` (cue + explosion VFX) but carried no actor, so there was
+nothing to mirror from.
+
+Ported properly, not duplicated: the notice queue + per-bot side
+translation moved into `RoomNoticer` in shared/botTaunts.ts — one owner
+both ends call (server keeps `notice()`/`forget` wrappers). Flag events
+now carry `actor {id,team}` at every callsite so `mine` can resolve
+cheer-vs-groan; taken/dropped/returned/captured map onto the chatter
+kinds. `reply` (bot spoke) and `gg` (match end) pings mirrored too —
+the whole server notice surface, not just flags.
+
+Human-chat notice kinds stay server-only by nature: solo has no chat
+room to classify.
+
 ### 2.72 huntCreatures mirror drift (2026-10-08)
 
 Class 9 again, same lane as §2.71. Server `huntCreatures` =

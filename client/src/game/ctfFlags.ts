@@ -46,7 +46,7 @@ export interface FlagCtx {
   onCapture(team: TeamId): void;
   onFeed(text: string): void;
   /** Flag state edge for cues — same beats the network path plays. */
-  onFlagEvent?(kind: 'taken' | 'dropped' | 'returned' | 'captured', team: TeamId, at: THREE.Vector3): void;
+  onFlagEvent?(kind: 'taken' | 'dropped' | 'returned' | 'captured', team: TeamId, at: THREE.Vector3, actor?: { id: string; team: string | undefined }): void;
   /** Personal-score payout — mirrors the server's CTF_PTS awards so the
    *  offline board's PTS column credits objective work too. */
   onPersonalPoints?(id: string, pts: number): void;
@@ -144,6 +144,14 @@ export class CtfFlags {
       this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3(), flyVel: new THREE.Vector3(), airborneBy: null });
     }
     ctx.applyStandSpecs?.(standSpecs);
+  }
+
+  /** Scene teardown — retireOfflineBots drops TeamBots wholesale, and a
+   *  leaked stand+flag pair reads as a wire flag with no HUD marker. */
+  dispose(): void {
+    const scene = this.ctx.lazyScene();
+    for (const f of this.flags.values()) scene.remove(f.mesh, f.stand);
+    this.flags.clear();
   }
 
   /** Flag + stand positions for the HUD markers — DOM overlay, reads
@@ -296,7 +304,7 @@ export class CtfFlags {
       f.dropT = FLAG_RESET_S;
       const bot = this.ctx.bots.find(b => b.playerId === carrierId);
       if (bot) bot.carryingFlag = false;
-      this.ctx.onFlagEvent?.('dropped', team, f.pos);
+      this.ctx.onFlagEvent?.('dropped', team, f.pos, { id: carrierId, team: this.ctx.teamOf(carrierId) });
     }
   }
 
@@ -331,7 +339,7 @@ export class CtfFlags {
       f.dropT = FLAG_RESET_S;
       const bot = this.ctx.bots.find(b => b.playerId === carrierId);
       if (bot) bot.carryingFlag = false;
-      this.ctx.onFlagEvent?.('dropped', team, f.pos);
+      this.ctx.onFlagEvent?.('dropped', team, f.pos, { id: carrierId, team: this.ctx.teamOf(carrierId) });
     }
   }
 
@@ -385,9 +393,10 @@ export class CtfFlags {
     // Carrier vanished without dying (bot prune/disconnect) — death
     // drops funnel through dropCarried, this edge owns its own event.
     if (!cp) {
+      const vanished = f.carrier!;
       f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S;
       f.flyVel.set(0, 3, 0); // same tumble pop RoomFlags.loose gives
-      ctx.onFlagEvent?.('dropped', team, f.pos);
+      ctx.onFlagEvent?.('dropped', team, f.pos, { id: vanished, team: ctx.teamOf(vanished) });
       return;
     }
     f.pos.set(cp.x, cp.y + 1.2, cp.z); // rides above the carrier's head
@@ -398,7 +407,7 @@ export class CtfFlags {
     bank(ctx.scores, carrierTeam);
     ctx.onCapture(carrierTeam);
     ctx.onPersonalPoints?.(f.carrier!, CTF_PTS.cap);
-    ctx.onFlagEvent?.('captured', team, f.home);
+    ctx.onFlagEvent?.('captured', team, f.home, { id: f.carrier!, team: carrierTeam });
     ctx.onFeed(`${f.carrier === 'local' ? 'YOU' : f.carrier!.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
     if (f.carrier === 'local') sfx.pickup();
     const bot = ctx.bots.find(b => b.playerId === f.carrier);
@@ -437,11 +446,11 @@ export class CtfFlags {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
         f.flyVel.set(0, 0, 0); f.airborneBy = null;
         ctx.onPersonalPoints?.(id, CTF_PTS.flagReturn);
-        ctx.onFlagEvent?.('returned', team, f.pos);
+        ctx.onFlagEvent?.('returned', team, f.pos, { id, team: tTeam });
         return;
       }
       if (tTeam !== team) {
-        ctx.onFlagEvent?.('taken', team, f.pos);
+        ctx.onFlagEvent?.('taken', team, f.pos, { id, team: tTeam });
         f.state = 'carried'; f.carrier = id;
         f.flyVel.set(0, 0, 0); f.airborneBy = null;
         const bot = ctx.bots.find(b => b.playerId === id);

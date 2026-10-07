@@ -25,7 +25,8 @@ export interface CtfBridgeDeps {
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
     vel?: THREE.Vector3; yaw: number; pitch: number;
     movement?: { setStructures(l: readonly StructureSpec[] | undefined): void } };
-  lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void };
+  lazyHud(): { updateFlagIndicator(id: string, pos: THREE.Vector3, cam: THREE.Camera, team: string, kind?: 'flag' | 'stand'): void;
+    removePlayerIndicator?(id: string): void };
   world: {
     remotePlayers: Map<string, { pos: THREE.Vector3; isDead: boolean }>;
     explosions: { push(e: Explosion): void };
@@ -42,6 +43,8 @@ export interface CtfBridgeWiring {
   onFeed(t: string): void;
   /** Personal-score payout — botMatch's awardPersonal. */
   onPersonalPoints?(id: string, pts: number): void;
+  /** Flag edge → room chatter sense (the server's bots.notice mirror). */
+  onFlagNotice?(kind: 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop', actorId: string, actorTeam?: string): void;
 }
 
 export class CtfBridge {
@@ -66,7 +69,9 @@ export class CtfBridge {
         deps.lazyPlayer().movement?.setStructures(specs);
         setBotStructureSpecs(specs);
       },
-      onFlagEvent: (kind, team, at) => {
+      onFlagEvent: (kind, team, at, actor) => {
+        const chatKind = { taken: 'flaggrab', dropped: 'flagdrop', returned: 'flagreturn', captured: 'flagcap' } as const;
+        if (actor) w.onFlagNotice?.(chatKind[kind], actor.id, actor.team);
         sfx.flagCue(kind, team === w.playerTeam);
         // 'at' is the stand on a return — same converge ceremony as the
         // online path; no streak, the offline room doesn't keep a
@@ -113,6 +118,16 @@ export class CtfBridge {
       }
       m.pos.y -= 3.4 + lift;
     }
+  }
+
+  /** TeamBots retire — drop the meshes AND the HUD diamonds they drove. */
+  dispose(): void {
+    const hud = this.deps.lazyHud();
+    for (const m of this.ctf.markers()) {
+      hud.removePlayerIndicator?.(`flag:${m.team}`);
+      hud.removePlayerIndicator?.(`stand:${m.team}`);
+    }
+    this.ctf.dispose();
   }
 
   reset(): void { this.ctf.reset(); }

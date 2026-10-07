@@ -15,6 +15,7 @@ import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../shared/botSkill.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
+import type { ChatterKind } from '../../../shared/botTaunts.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
 import { perkMods, effectiveResist, type PerkMods } from '../../../shared/perks.js';
 
@@ -199,6 +200,8 @@ export class GameBot extends RemotePlayer {
     /** Damaged friendly deployable a builder could weld (host-opaque
      *  key — mirrors the server senses' dep id). */
     repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
+    /** Room event this bot noticed — the server senses' notice ping. */
+    notice?: { kind: ChatterKind; actor?: string } | null;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
     // Heights are static for a match's lifetime — every bot probes the
@@ -240,6 +243,7 @@ export class GameBot extends RemotePlayer {
       thief: ctx.thief ?? null,
       huntCreatures: ctx.huntCreatures,
       repair: ctx.repair ?? null,
+      notice: ctx.notice ?? null,
       now: performance.now(),
       // The real tank + hp — fear, mend, shield, and retreat gates all
       // read these; without them every status decision saw a full sheet.

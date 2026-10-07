@@ -9,7 +9,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotEnemy, type BotVec, type BrainCtx } from '../../shared/botBrain.ts';
-import type { ChatterKind } from '../../shared/botTaunts.ts';
+import { RoomNoticer, type ChatterKind } from '../../shared/botTaunts.ts';
 import { getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
@@ -58,8 +58,7 @@ export class ServerBotSenses {
    *  OWN think phase (phases are offset across the squad), so reactions
    *  scatter naturally; the taunt cooldown+dice thin out who speaks.
    *  Nothing dispatches "a crowd" — the chattiness is emergent. */
-  private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
-  private noticed = new Map<string, number>();
+  private readonly notices = new RoomNoticer();
   private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number; minD?: number }>();
   // Entries that were chased and failed: without this memory a dead
   // incumbent is re-elected by the very next probe (it scores best on
@@ -158,7 +157,7 @@ export class ServerBotSenses {
   /** Bot left the room — drop its notice receipt so the map can't grow
    *  one entry per retired bot for the room's life. */
   forget(id: string): void {
-    this.noticed.delete(id);
+    this.notices.forget(id);
     this.routeHold.delete(id);
     this.routeFailed.delete(id);
     this.routePrefs.delete(id);
@@ -184,24 +183,7 @@ export class ServerBotSenses {
   /** Room code reports an event worth a reaction (flag cap/grab/return/
    *  drop). Actor's own line is separate — the actor never gets a notice. */
   notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
-    this.pendingNotice = { kind, actorId, actorTeam, stamp: simNow() };
-  }
-
-  /** Translate the pending event into THIS bot's side of it — allies
-   *  cheer their team's score, enemies groan, defenders get the alert. */
-  private noticeFor(id: string, team: string | undefined, now: number): { kind: ChatterKind; actor: string } | undefined {
-    const n = this.pendingNotice;
-    if (!n) return undefined;
-    if (now - n.stamp > 2000) { this.pendingNotice = null; return undefined; }
-    if (n.actorId === id || (this.noticed.get(id) ?? 0) >= n.stamp) return undefined;
-    this.noticed.set(id, n.stamp);
-    const mine = n.actorTeam !== undefined && n.actorTeam === team;
-    switch (n.kind) {
-      case 'flagcap': case 'flagreturn': return { kind: mine ? 'cheer' : 'groan', actor: n.actorId };
-      case 'flaggrab': return { kind: mine ? 'cheer' : 'alert', actor: n.actorId };
-      case 'flagdrop': return { kind: mine ? 'groan' : 'cheer', actor: n.actorId };
-      default: return { kind: n.kind, actor: n.actorId };
-    }
+    this.notices.notice(kind, actorId, actorTeam, simNow());
   }
 
   /** One pass producing every per-think roster view — the shared tick
@@ -993,7 +975,7 @@ export class ServerBotSenses {
       imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),
       imapDanger: (v: BotVec) =>
         this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
-      notice: this.noticeFor(id, p.team, now),
+      notice: this.notices.for(id, p.team, now),
       repair: builder === false ? null : this.repairJob(p), // scan walks every deployable — only builders read it
       now,
     };

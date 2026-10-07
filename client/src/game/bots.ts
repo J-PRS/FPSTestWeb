@@ -17,7 +17,7 @@ import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
-import { chatter } from '../../../shared/botTaunts.js';
+import { chatter, RoomNoticer, type ChatterKind } from '../../../shared/botTaunts.js';
 import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
 
 /**
@@ -101,6 +101,7 @@ export class TeamBots {
    *  timing), not the two-team CtfBridge referee. */
   flagrun: FlagRunBridge | null = null;
   private senses: BotSenses;
+  private readonly notices = new RoomNoticer();
   private fire: BotFire;
   // Anti-pedestrian meter (idle/ignore/bleed/coverage) lives in
   // botSheep.ts — rates mirror the server meter.
@@ -190,6 +191,7 @@ export class TeamBots {
         onCapture: () => pushScore(this),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
         onPersonalPoints: (id, n) => awardPersonal(this, id, n),
+        onFlagNotice: (kind, actorId, actorTeam) => this.notice(kind, actorId, actorTeam),
       });
     }
     if (mode === 'rabbit') {
@@ -266,6 +268,7 @@ export class TeamBots {
           hud.setScoreboardVisible?.(true);
           this.sbAutoShown = true;
         }
+        this.notice('gg', 'match');
         this.overAt = performance.now();
       }
     } else if (performance.now() - this.overAt > 10_000) {
@@ -387,6 +390,7 @@ export class TeamBots {
     const tgt = bot.wantSay.target;
     const c = chatter(bot.wantSay.kind, bot.playerId,
       tgt === 'local' ? 'YOU' : tgt?.replace('bot:', ''));
+    if (c) this.notice('reply', bot.playerId, bot.team ?? undefined);
     botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team && bot.team !== null);
     bot.wantSay = null;
   }
@@ -454,6 +458,15 @@ export class TeamBots {
     ctx.sounds = this.senses.recentNoises(bot.position);
     ctx.threats = this.senses.incomingNear(bot.position);
     ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
+    // Room-event ping — the server senses feeds the same notice ctx so
+    // offline bots groan a cap and alert a grab like online ones.
+    ctx.notice = this.notices.for(bot.playerId, bot.team, performance.now());
+  }
+
+  /** Flag/killFeed-worthy room event → chatter sense. The CTF bridge
+   *  pushes these; the actor never hears their own ping. */
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
+    this.notices.notice(kind, actorId, actorTeam, performance.now());
   }
 
   /** Rally channel = live teammates (incl. the local player). Team
