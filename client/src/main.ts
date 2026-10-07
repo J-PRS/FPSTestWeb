@@ -55,7 +55,7 @@ import { weaponDef } from './weapons.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
-import { createGameLoop } from './game/gameLoop.js';
+import { createGameLoop, noteLocalSnap } from './game/gameLoop.js';
 import { PlayerSheep } from './game/playerSheep.js';
 import { wireNetworkHandlers } from './game/netHandlers.js';
 import { createRemotes } from './game/remotes.js';
@@ -378,6 +378,7 @@ function reviveLocal(): void {
     const a = Math.random() * Math.PI * 2;
     player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
   }
+  noteLocalSnap();
   player.syncMovement();
   player.markTeleport();
   hud.show();
@@ -454,6 +455,7 @@ function setupOfflineMode(mode: string): void {
   const spot = teamBots.flagrun?.spawnPoint();
   if (spot) {
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+    noteLocalSnap();
     player.syncMovement();
     player.markTeleport();
   }

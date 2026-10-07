@@ -210,6 +210,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.44 Offline teleports reseat the pos-jump watch (2026-10-07)
+
+Live soak caught `POS JUMP 286m` — a legit offline respawn
+(`reviveLocal`) and the Flag Run first-spawn seat in `main.ts` teleported
+`player.pos` without `noteLocalSnap()`, so the forensic watch logged a
+designed teleport as a physics snap. Both paths now reseat the watch;
+`net/players.ts` was already covered. Verified-clean alongside: shared/
+has zero wall-clock reads outside `env.ts`, server `Math.random` is
+injectable-default everywhere, pickups `rollCreatureDrop` callers all
+pass room rng.
+
 ### 2.43 Cumulative skip counter closes the far-client residue (2026-10-07)
 
 §2.39's fix skipped one quantum per retarget EDGE SEEN — but far clients

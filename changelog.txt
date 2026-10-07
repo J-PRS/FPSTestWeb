@@ -1,3 +1,4 @@
+2026-10-07 - robustify: offline respawn/flag-run spawn reseat the frame-jump watch (no more false POS JUMP warns)
 2026-10-07 - robustify: crawlEvt carries cumulative retarget-skip count so far-client replays converge fully
 2026-10-07 - robustify: pinned the retarget-skip contract — a creature holds position on the tick its retarget edge fires
 2026-10-07 - robustify: bot untrack pin now covers all 18 per-bot maps including the senses set
