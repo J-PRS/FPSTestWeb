@@ -1,3 +1,4 @@
+2026-10-08 - beta: clean deploy — FPS_PUBLIC_BETA drops _t2 maps/assets, _clean_deploy.bat strips class_* rigs (knight/mannequin fallback), Dockerfile + DEPLOY_BETA.md
 2026-10-08 - beta: player names (fps-name → join wire → scoreboard/chat/feed), private rooms (unlisted flag + HOST toggle), chat /mute
 2026-10-08 - beta: dev surfaces gated on https (isDevHost), ops dashboards behind FPS_ADMIN_TOKEN, CORS env, demo-upload throttle, first-run card + mobile gate
 2026-10-08 - pre-beta audit: legal assets, dev-surface leaks, missing features ranked (_docs/2026-10-08_BETA_AUDIT.md)
