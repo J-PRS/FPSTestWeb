@@ -50,6 +50,7 @@ function speciesOf(c: NetBeing): string {
 export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   const { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets } = ctx;
   const netCrawlerById = new Map<number, NetBeing>();
+  const appliedSkips = new Map<number, number>();
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
 
   const claim = (netId: number, damage: number) =>
@@ -104,17 +105,21 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     deps.lazyDemoManager()?.recordCreatureSpawned(m.id, m.species ?? speciesOf(c), m.position);
   }
 
-  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
+  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
     if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
     // Server retargetDue() spends the whole tick on the re-aim — the
-    // creature takes no step that tick. The edge stands in for the
-    // skipped step here or the replay accrues one extra 50ms quantum per
-    // retarget and drifts ahead of authority (§2.38's wild desync).
-    // Far clients only see every 4th edge, so this corrects most — not
-    // all — of the skew for them; resync edges bound the residue.
-    if (m.kind === 'retarget') {c.netAcc -= 0.05;}
+    // creature takes no step that tick. `sk` is the cumulative count of
+    // those skips since spawn, so even a far client that missed edges
+    // catches every skipped quantum on the next edge it sees; per-edge
+    // guessing would under-correct it by FAR_SKIP-1 (§2.38/§2.39 desync).
+    if (m.sk !== undefined) {
+      c.netAcc -= 0.05 * (m.sk - (appliedSkips.get(m.id) ?? 0));
+      appliedSkips.set(m.id, m.sk);
+    } else if (m.kind === 'retarget') {
+      c.netAcc -= 0.05; // pre-sk server: one skip per retarget edge seen
+    }
     c.applyNetEdge({ ...m, kind: m.kind });
     deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);
     if (m.kind === 'detonate' && c instanceof Baneling) {
@@ -131,6 +136,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;}
     netCrawlerById.delete(m.id);
+    appliedSkips.delete(m.id);
     deps.lazyDemoManager()?.recordCreatureDie(m.id, m.position);
     c.dead = true; // updateSpecies' disposed check sweeps it out
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));
@@ -156,6 +162,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     for (const [id, c] of netCrawlerById) {
       if (!live.has(id)) {
         netCrawlerById.delete(id);
+        appliedSkips.delete(id);
         deps.lazyDemoManager()?.recordCreatureDie(id, c.pos);
         c.dead = true;
       }

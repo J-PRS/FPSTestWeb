@@ -155,10 +155,17 @@ export class CreatureSim {
     return targetSnapOf(c);
   }
 
+  /** Cumulative retarget-skip count per creature — a retarget tick is a
+   *  sim step the creature never took, so replays must subtract one
+   *  quantum per skip. Absolute (since spawn), so a client that missed
+   *  intermediate edges catches every skip on the next edge it sees. */
+  private skipCount = new Map<number, number>();
+
   private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
     this.brain.noteEdge(c.id);
+    if (kind === 'retarget') this.skipCount.set(c.id, (this.skipCount.get(c.id) ?? 0) + 1);
     const msg: ServerMessage = {
-      type: 'crawlEvt', id: c.id, kind,
+      type: 'crawlEvt', id: c.id, kind, sk: this.skipCount.get(c.id) ?? 0,
       // For 'blink' the position field carries the committed DESTINATION —
       // a far client that missed the decision still teleports correctly.
       position: kind === 'blink' && isTotem(c)
@@ -261,6 +268,7 @@ export class CreatureSim {
     // Same key domain — the per-crawler state-sequence map would keep
     // one dead entry per kill forever.
     this.edgeSeq.delete(c.id);
+    this.skipCount.delete(c.id);
     this.brain.forget(c.id);
     // A baneling dies by popping — shot or fuse, the blast is the point.
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }

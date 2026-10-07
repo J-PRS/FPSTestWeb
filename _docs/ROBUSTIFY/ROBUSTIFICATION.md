@@ -210,6 +210,19 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.43 Cumulative skip counter closes the far-client residue (2026-10-07)
+
+§2.39's fix skipped one quantum per retarget EDGE SEEN — but far clients
+only receive every 4th edge (FAR_SKIP), so they still ran ahead 3
+quanta per 4 retargets, unboundedly, on exactly the timers the state
+hash compares. `crawlEvt` now carries `sk` — the cumulative retarget-skip
+count since spawn — and the replay subtracts `0.05 × (sk − applied)`
+per edge, converging fully on whatever edge arrives next (idempotent
+under loss, reordering and FAR_SKIP; pre-`sk` servers get the old
+per-edge fallback). `appliedSkips`/`skipCount` both reaped on death.
+Full-suite verification alongside: **379/379 scenario tests green** —
+the long-standing moveJudge WIP failure is resolved.
+
 ### 2.42 Retarget-skip contract pinned authority-side (2026-10-07)
 
 `retargetSkip.test` pins the invariant §2.39's client fix mirrors: on
