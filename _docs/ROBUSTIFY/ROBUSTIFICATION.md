@@ -3288,3 +3288,21 @@ rowPatch() (the verbPayload inverse: copy declared fields present on the
 row, absent = keep stored), and the handler now spreads it — internalId
 stays explicit since it lives outside updateFields. 0/false copy, ''
 reads as absent. (tsc + 39 net tests green)
+
+## 2.182 — P2P hosts run the weapon sims (ProjHost + authorityShells)
+
+The last surface where claims were the outcome path. beamSweep/
+beamChain extracted to beamSweep.ts as a free function over a world
+slice (players/field/solids/optional rosters) — Room delegates, P2PHost
+calls the identical cast. RoomProjectiles ctor now takes a structural
+ProjHost (players/messages/broadcast/rng/tickSeq/mode/pushNoise +
+optional roster sims, deployables, moveSim) — Room satisfies it
+structurally, P2PHost passes itself. The host ticks the sim at 20Hz
+and lazily attaches the loaded heightfield, so guest fire/beam intents
+resolve exactly as on dedicated (class gate, fire-rate gate, belt
+charge, lag-compensated muzzle all included). Client split: new
+authorityShells() (any connected transport) gates the shell/beam
+claim-suppression sites — aoeShot/projectileDestroy for simmed weapons
+and slam — while authoritySims() stays the roster-species predicate
+(creatures/deployables/repair keep claiming, the host adjudicates).
+(tsc both sides + p2pHost 10/10: intent echo + beam kill pins)

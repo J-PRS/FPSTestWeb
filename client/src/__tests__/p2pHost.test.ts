@@ -101,6 +101,36 @@ describe('P2PHost', () => {
     expect(hit?.targetId ?? hitToA?.targetId).toBe('B');
   });
 
+  it('a simmed fire intent echoes projectileCreated with the shotId', () => {
+    const a = new FakeLink(); const b = new FakeLink();
+    join(host, a, 'A'); join(host, b, 'B');
+    host.onData(a, encodePosition({ x: 0, y: 60, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
+    host.onData(a, JSON.stringify({
+      type: 'shotFired', weaponType: 0 /* BoltLauncher */, dir: { x: 1, y: 0.5, z: 0 },
+      shotId: 's-1', pos: { x: 0, y: 61.6, z: 0 },
+    }));
+    const spawned = b.lastJson('projectileCreated') as { shotId?: string; ownerId?: string } | undefined;
+    expect(spawned).toBeDefined();
+    expect(spawned!.shotId).toBe('s-1');
+    expect(spawned!.ownerId).toBe('A');
+  });
+
+  it('beam intents resolve through the host sweep — no claims', () => {
+    const a = new FakeLink(); const b = new FakeLink();
+    join(host, a, 'A'); join(host, b, 'B');
+    // Lightning is light-locked — the class gate would reject the intent.
+    (host as unknown as { playerManager: { getPlayer(id: string): { armorClass?: string } | undefined } })
+      .playerManager.getPlayer('A')!.armorClass = 'light';
+    host.onData(b, encodePosition({ x: 10, y: 60, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
+    host.onData(a, encodePosition({ x: 0, y: 60, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
+    host.onData(a, JSON.stringify({
+      type: 'shotFired', weaponType: 12 /* Lightning */, dir: { x: 1, y: -0.16, z: 0 },
+    }));
+    const hit = b.lastJson('playerHit') as { targetId?: string } | undefined;
+    const hitToA = a.lastJson('playerHit') as { targetId?: string } | undefined;
+    expect(hit?.targetId ?? hitToA?.targetId).toBe('B');
+  });
+
   it('malformed JSON is dropped without killing the link', () => {
     const a = new FakeLink();
     join(host, a, 'A');

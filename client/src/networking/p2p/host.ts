@@ -9,6 +9,11 @@
  * Deliberately absent vs GameServer: grace-period reconnects (a dropped
  * DataChannel rejoins fresh), ball sim (guests run client-side balls),
  * state-hash + idle reaper (two sockets, nothing to reap at scale).
+ *
+ * The weapon sims are NOT absent: RoomProjectiles + beamSweepRay run on
+ * the host's heightfield, so peers send the same fire/beam intents a
+ * dedicated server takes — outcome claims stay for the surfaces that
+ * have no sim here (creatures, deployables, repair).
  */
 
 import { PlayerManager } from '../../../../server_bun/src/PlayerManager.js';
@@ -19,6 +24,9 @@ import { validatePlayerId } from '../../../../server_bun/src/validation.js';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../../../shared/wire.js';
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
+import { RoomProjectiles } from '../../../../server_bun/src/RoomProjectiles.js';
+import { beamSweepRay } from '../../../../server_bun/src/beamSweep.js';
+import { getHeightfield } from '../../world/heightmap.js';
 
 const logger = new ChildLogger('P2PHost');
 
@@ -37,14 +45,42 @@ export class P2PHost {
   private byPlayer = new Map<string, P2PLink>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private tickClock: Worker | null = null;
-  private tickSeq = 0;
+  tickSeq = 0;
+  /** ProjHost surface — the weapon sims run on this host exactly as they
+   *  do on a Room; `this` IS the room to RoomProjectiles. */
+  readonly mode = 'p2p';
+  private fieldAttached = false;
+
+  get players() { return this.playerManager; }
+  get messages() { return this.messageHandler; }
+  rng(): number { return Math.random(); }
+  /** No bots on P2P — blasts have nobody to wake. */
+  pushNoise(): void { /* intentionally silent */ }
+
+  private readonly projectiles: RoomProjectiles;
 
   constructor() {
+    this.projectiles = new RoomProjectiles(this, null);
     this.messageHandler = new MessageHandler(
       this.playerManager,
       this.rateLimiter,
       (msg, exclude) => this.broadcast(msg, exclude),
       (pid, msg) => this.sendJSON(pid, msg),
+      {
+        room: 'p2p',
+        mode: 'p2p',
+        // Peers send the same fire/beam intents a dedicated server takes.
+        // claimsAccepted stays true — the roster surfaces this host can't
+        // sim (creatures, deployables, repair) still adjudicate claims.
+        fireProjectile: (pid, wt, origin, dir, vel, shotId) =>
+          this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+        beamSweep: (pid, muzzle, dir, range) =>
+          beamSweepRay({
+            players: this.playerManager,
+            field: getHeightfield(),
+            solids: this.projectiles.solidColliders,
+          }, pid, muzzle, dir, range),
+      },
     );
     // 20Hz to match the dedicated server's tick cadence. With two players
     // there's no interest management — every frame carries the one peer.
@@ -143,7 +179,7 @@ export class P2PHost {
     this.messageHandler.handleMessage(playerId, result.data);
   }
 
-  private broadcast(msg: ServerMessage, excludePlayerId?: string): void {
+  broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const text = JSON.stringify(msg);
     for (const [link, pid] of this.links) {
       if (pid === excludePlayerId) {continue;}
@@ -158,6 +194,14 @@ export class P2PHost {
   }
 
   private tick(): void {
+    // Terrain loads after connect — attach the first non-null field once
+    // (attachField rescans the whole map, so this isn't a per-tick call).
+    if (!this.fieldAttached) {
+      const f = getHeightfield();
+      if (f) { this.projectiles.attachField(f); this.fieldAttached = true; }
+    }
+    // Shells fly even with one player — the host fires before guests join.
+    this.projectiles.tick(0.05);
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
     for (const [recipientId] of players) {

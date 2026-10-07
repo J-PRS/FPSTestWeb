@@ -116,7 +116,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
   const networkManager = deps.lazyNetworkManager();
   // Connected: the slam intent replaces the aoeShot claim — the server
   // derives power from its own velocity shadow and runs the blast.
-  const sendAOE = networkManager.authoritySims()
+  const sendAOE = networkManager.authorityShells()
     ? undefined
     : (p: { x: number; y: number; z: number }, _targetId: string | null) =>
       networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: _targetId, power });

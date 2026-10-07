@@ -155,7 +155,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // ("blast with no known projectile" — splash silently never applied).
   // Server-simmed shells never claim: the authority's own sim owns the
   // lifecycle and its projectileDestroyed echo does the tombstoning.
-  if ((p.serverProjectileId || p.shotId) && !(serverSimmed(p.config.weaponType) && deps.lazyNetworkManager().authoritySims())) {
+  if ((p.serverProjectileId || p.shotId) && !(serverSimmed(p.config.weaponType) && deps.lazyNetworkManager().authorityShells())) {
     deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
   }
 }
@@ -229,7 +229,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Server-simmed weapons predict the blast (FX/knockback/numbers stay
   // local) but never send the claim — the authority's shell arrives at
   // the same contact and declares it via broadcasts.
-  const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authoritySims())
+  const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authorityShells())
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({

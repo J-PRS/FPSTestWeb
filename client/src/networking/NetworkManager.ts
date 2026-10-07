@@ -863,12 +863,23 @@ export class NetworkManager {
   /**
    * The authority runs the shared sims (RoomProjectiles/creature sims) —
    * claims/intents only make sense against it. A P2P host embeds the
-   * same server modules but deliberately carries no sims, so peers fall
-   * back to the claim lanes the host can still adjudicate (blasts via
-   * aoeShot, melee via the swing intent) instead of suppressing them.
+   * same server modules but deliberately carries no roster sims, so
+   * peers fall back to the claim lanes the host can still adjudicate
+   * (blasts via aoeShot, melee via the swing intent) instead of
+   * suppressing them.
    */
   authoritySims(): boolean {
     return this.isConnected() && this.ws?.tier !== 'p2p' && this.ws?.tier !== 'host';
+  }
+
+  /**
+   * Narrower than authoritySims: the authority runs the WEAPON sims
+   * (RoomProjectiles + beamSweep). P2P hosts qualify — a guest's simmed
+   * shot/beam sends intents only and receives projectileCreated echoes,
+   * while creature/deploy/repair claims keep running the claim lanes.
+   */
+  authorityShells(): boolean {
+    return this.isConnected();
   }
 
   getPing(): number {
