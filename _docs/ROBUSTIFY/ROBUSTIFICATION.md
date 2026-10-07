@@ -2136,3 +2136,15 @@ now fails a test instead of leaking the last match's meters into the
 next one.
 
 ### 2.94 - end
+
+### 2.95 Combat-side disconnect funnel pinned end-to-end (2026-10-08)
+
+Pin class: onPlayerDisconnected purges seven per-player maps — only
+the two warn throttles had coverage. fireWindows/healTicks/lastHeal/
+lastFireNotify/chargeBank.ramp were unasserted; a new keyed map added
+without a delete hop would regrow silently per leaver. Extended
+rejectWarnCleanup to seed every map then assert all empty. Also
+verified the remaining entity-death lanes (CreatureSim edgeSeq/
+skipCount, BallSim resyncAcc/retargetAcc) delete on death.
+
+### 2.95 - end
