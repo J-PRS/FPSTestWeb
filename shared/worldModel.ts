@@ -305,6 +305,9 @@ export function verbPayload(
   const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
   const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
   for (const f of fields ?? []) {
+    // The id field is declared for documentation but already written —
+    // skip it or a vals-less emit would overwrite the id with null.
+    if (f.name === idField) continue;
     // An emit that forgets a declared field used to sail out as null —
     // the client then diffs forever. Null IS legit when the declaration
     // names an `absent` sentinel or the field is optional on the wire,
@@ -327,6 +330,7 @@ export function rosterRow(
 ): Record<string, unknown> {
   const row: Record<string, unknown> = { [idField]: id };
   for (const f of kind.rosterFields ?? []) {
+    if (f.name === idField) continue;
     if (!(f.name in vals) && f.absent === undefined) {
       console.warn(`[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
     }

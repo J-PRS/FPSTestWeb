@@ -1,3 +1,4 @@
+2026-10-01 - C5 fix: verbPayload skipped the idField - spawnFields listing 'projectileId' overwrote the emitted id with null; generator now skips the declared id field
 2026-10-01 - C5: player lane declared - playerJoined/playerLeft/tickUpdate/gameState rows all declared + generated from worldModel; every entity kind now lives in the table
 2026-10-01 - C5: ballSegment decode walks worldModel.updateFields - the binary->JSON bridge now copies exactly the declared field set
 2026-10-01 - C5: ballSegment declares updateFields + binary round-trip test - the packed frame's shape is declared once and the conformance test pins encode/decode to it
