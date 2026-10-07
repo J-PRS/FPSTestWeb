@@ -1,3 +1,5 @@
+2026-10-08 - beta: player names (fps-name → join wire → scoreboard/chat/feed), private rooms (unlisted flag + HOST toggle), chat /mute
+2026-10-08 - beta: dev surfaces gated on https (isDevHost), ops dashboards behind FPS_ADMIN_TOKEN, CORS env, demo-upload throttle, first-run card + mobile gate
 2026-10-08 - pre-beta audit: legal assets, dev-surface leaks, missing features ranked (_docs/2026-10-08_BETA_AUDIT.md)
 2026-10-08 - robustify §2.81: tick record encodes pooled — fresh buffer per record per tick; stale untrack pin fixed
 2026-10-08 - robustify §2.80: RoomNoticer missed rekeyBot's id migration — double notice + stale key
