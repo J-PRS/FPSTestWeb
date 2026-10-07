@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, afterEach } from 'bun:test';
 import { SessionManager } from '../../src/SessionManager.ts';
 import { SessionRegistry } from '../../src/sessionRegistry.ts';
+import { CONFIG } from '../../src/config.ts';
 import { mkRoom } from './harness.ts';
 
 // Join-guard scenarios: the handshake is the only unauthenticated surface —
@@ -82,5 +83,42 @@ describe('join guards', () => {
     await flush();
     expect(bad.closed[1]?.reason).toBe('Invalid playerId');
     expect(room.playerCount()).toBe(0);
+  });
+
+  // The seat caps are the last wall between a join flood and a packed
+  // process — rooms share one core, so totalPlayers is the number that
+  // matters for latency. A dropped check reopens unbounded seating.
+  describe('seat caps', () => {
+    const origRoom = CONFIG.maxPlayers;
+    const origGlobal = CONFIG.globalMaxPlayers;
+    afterEach(() => {
+      (CONFIG as unknown as { maxPlayers: number }).maxPlayers = origRoom;
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = origGlobal;
+    });
+
+    it('refuses a join past the per-room cap with 1013', () => {
+      (CONFIG as unknown as { maxPlayers: number }).maxPlayers = 2;
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 0;
+      const room = mkRoom({}, 'tdm');
+      const { mgr } = mkSessions(room);
+      join(mgr, fakeWs(), 'p1');
+      join(mgr, fakeWs(), 'p2');
+      const third = fakeWs();
+      join(mgr, third, 'p3');
+      expect(third.closed[0]?.reason).toBe('Server full');
+      expect(room.playerCount()).toBe(2);
+    });
+
+    it('refuses a join past the global budget even with room seats free', () => {
+      (CONFIG as unknown as { maxPlayers: number }).maxPlayers = 100;
+      (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 1;
+      const room = mkRoom({}, 'tdm');
+      const { mgr } = mkSessions(room);
+      join(mgr, fakeWs(), 'p1'); // fills the global budget
+      const second = fakeWs();
+      join(mgr, second, 'p2');
+      expect(second.closed[0]?.reason).toBe('Server full');
+      expect(room.playerCount()).toBe(1);
+    });
   });
 });

@@ -2474,3 +2474,14 @@ next joiner. hibernation.test.ts drives tickRoomGuarded: dormant with
 no audience, live the tick after a human joins.
 
 ### 2.119 - end
+
+### 2.120 Join seat caps pinned (2026-10-11)
+
+Both join-refusal caps were unverified: the per-room seat count AND the
+process-wide globalMaxPlayers budget — the number that actually protects
+latency since rooms share one core. joinGuard.test.ts now drives each
+to its cap and asserts the over-cap join closes 1013 'Server full'
+with the roster unchanged. A dropped check reopens unbounded seating —
+the flood throttle only gates mint RATE, not total bodies.
+
+### 2.120 - end
