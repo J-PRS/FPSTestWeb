@@ -36,7 +36,7 @@ describe('command buffer backstop', () => {
     const room = peek.playerRoom.get('p1')!;
 
     // Park the buffer at the cap — a stalled tick's worst case.
-    for (let i = 0; i < 2000; i++) room.commands.push({ playerId: 'p1', msg: {}, at: 0 });
+    for (let i = 0; i < 2000; i++) room.commands.push({ playerId: 'p1', msg: {} as never, at: 0 });
     const rejectedBefore = peek.ops.msgsRejected;
 
     gs.onMessage(ws as never, JSON.stringify({ type: 'chat', text: 'flood' }));

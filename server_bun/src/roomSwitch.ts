@@ -14,10 +14,7 @@ import { evictEldest } from './evictEldest.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { wallNow } from './wallClock.ts';
-
-// Room/map/mode name grammar — bad values fall through to 'default'.
-const word = (v: unknown): string | undefined =>
-  typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
+import { roomWord as word } from './wire.ts';
 
 export interface SwitchHost {
   roomOfPlayer(playerId: string): Room | undefined;

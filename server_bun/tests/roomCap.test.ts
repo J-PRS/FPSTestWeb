@@ -28,7 +28,7 @@ interface Peek {
 describe('room cap', () => {
   let gs: GameServer;
   const prevMax = CONFIG.maxRooms;
-  afterEach(() => { CONFIG.maxRooms = prevMax; gs?.stop(); });
+  afterEach(() => { ;(CONFIG as unknown as { maxRooms: number }).maxRooms = prevMax; gs?.stop(); });
 
   const mkServer = () => {
     gs = new GameServer();
@@ -37,7 +37,7 @@ describe('room cap', () => {
   };
 
   it('minting past the cap recycles the eldest audience-less room', () => {
-    CONFIG.maxRooms = 3;
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 3;
     const peek = mkServer();
     peek.factory.roomFor('a'); peek.factory.roomFor('b'); peek.factory.roomFor('c');
     expect(peek.rooms.size).toBe(3);
@@ -50,7 +50,7 @@ describe('room cap', () => {
   });
 
   it('a recycled room name remints fresh on the next join', () => {
-    CONFIG.maxRooms = 2;
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 2;
     const peek = mkServer();
     peek.factory.roomFor('a'); peek.factory.roomFor('b'); peek.factory.roomFor('c');
     expect(peek.rooms.has('a')).toBe(false);
@@ -62,7 +62,7 @@ describe('room cap', () => {
   });
 
   it('refuses a mint when every room has a live human audience', () => {
-    CONFIG.maxRooms = 2;
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 2;
     const peek = mkServer();
     const a = peek.factory.roomFor('a')!;
     const b = peek.factory.roomFor('b')!;
@@ -76,7 +76,7 @@ describe('room cap', () => {
   });
 
   it('recycling a room drains its respawn wall-timers', () => {
-    CONFIG.maxRooms = 2;
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 2;
     const peek = mkServer();
     const a = peek.factory.roomFor('a')!;
     // A dead player in a room-forever-living world keeps a real
@@ -113,7 +113,7 @@ describe('room cap', () => {
   });
 
   it('spectators count as audience — a watched room is not recyclable', () => {
-    CONFIG.maxRooms = 2;
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 2;
     const peek = mkServer();
     const a = peek.factory.roomFor('a')!;
     a.spectators.add('watcher');

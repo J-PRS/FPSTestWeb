@@ -2249,3 +2249,16 @@ env/shot ledgers are all capped (spent 512, PROBE_CAP tail, kills 256);
 moveSim shadows untrack on both disconnect and removal.
 
 ### 2.102 - end
+
+### 2.103 Room-name grammar collapse (2026-10-08)
+
+Class-9 drift collapse: the room/map/mode name grammar
+(/^[\w-]{1,32}$/) existed twice — SessionManager.ROOM_NAME_RE for the
+join handshake, a private `word()` in roomSwitch for hops. Identical
+today, divergent tomorrow: join could mint rooms hop refuses. wire.ts
+now owns ROOM_NAME_RE + roomWord(); both call sites share it. Also
+fixed two latent tsc errors in the §2.98/§2.102 test files (readonly
+CONFIG.maxRooms assignment → cast, commands msg:{} → as never) that
+surfaced under a full-project typecheck.
+
+### 2.103 - end

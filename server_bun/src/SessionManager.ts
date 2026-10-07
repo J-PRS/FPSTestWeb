@@ -9,6 +9,7 @@ import type { SessionRegistry } from './sessionRegistry.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { wallNow } from './wallClock.ts';
 import { windowAllow } from './windowLimit.ts';
+import { roomWord } from './wire.ts';
 
 /** Everything the socket lifecycle needs from GameServer — supplied as
  *  closures/maps so ownership stays with the dispatcher. */
@@ -34,7 +35,6 @@ export interface SessionDeps {
  *  session reclaim (grace-period reconnect), spectate, normal join, and
  *  every rejection path (throttle, caps, claimed ids, bad tokens). */
 export class SessionManager {
-  private static readonly ROOM_NAME_RE = /^[\w-]{1,32}$/;
 
   // Persistent identity: playerId → HMAC(playerId, secret). A claimed id
   // can't be taken without its token; tokens survive server restarts when
@@ -259,13 +259,12 @@ export class SessionManager {
     token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
     resumeSeq: number | undefined; name: string | undefined; unlisted: boolean;
   } {
-    const word = (v: unknown): string => typeof v === 'string' && SessionManager.ROOM_NAME_RE.test(v) ? v : '';
     return {
       name: SessionManager.nameSpec(handshake.name),
       token: typeof handshake.token === 'string' ? handshake.token : undefined,
-      roomName: word(handshake.room) || 'default',
-      roomMode: word(handshake.mode),
-      joinMap: word(handshake.map),
+      roomName: roomWord(handshake.room) ?? 'default',
+      roomMode: roomWord(handshake.mode) ?? '',
+      joinMap: roomWord(handshake.map) ?? '',
       joinBots: typeof handshake.bots === 'number' && Number.isFinite(handshake.bots)
         ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
         : undefined,

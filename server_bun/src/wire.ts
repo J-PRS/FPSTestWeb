@@ -555,3 +555,11 @@ export function wireLimitKey(messageType: string): string {
 export function wireLimit(messageType: string): RateLimit {
   return WIRE[messageType as ClientMessage['type']]?.limit ?? WIRE_DEFAULT_LIMIT;
 }
+
+/** Room/map/mode name grammar — one owner so the join handshake and the
+ *  room-hop path agree on what a legal name is (a drifted second copy
+ *  would let one path mint rooms the other refuses). */
+export const ROOM_NAME_RE = /^[\w-]{1,32}$/;
+export function roomWord(v: unknown): string | undefined {
+  return typeof v === 'string' && ROOM_NAME_RE.test(v) ? v : undefined;
+}
