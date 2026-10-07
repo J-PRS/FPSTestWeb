@@ -43,6 +43,10 @@ export interface WorldKindDecl {
    *  Spawn ⊄ roster: the roster adds live sim state (enraged, sim state)
    *  the spawn already derived. */
   rosterFields?: KindFieldDecl[];
+  /** One-off lifecycle notifies that aren't spawn/update/gone — keyed by
+   *  wire type (deployDown, deployUp). Same declared-shape contract:
+   *  the emit and the inbound check both read this list. */
+  events?: Record<string, KindFieldDecl[]>;
   /** Streamed motion fields — the shared sim replays them, so they are
    *  presence-checked only (a stranded replica), never value-diffed. */
   simFields: KindFieldDecl[];
@@ -166,6 +170,16 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'src', channel: 'echo' },
     ],
     goneFields: [],
+    // deployDown/deployUp are lifecycle notifies — a wreck flips DOWN
+    // and back UP without leaving the roster.
+    events: {
+      deployDown: [
+        { name: 'kind', channel: 'edge' },
+        { name: 'team', channel: 'edge', absent: null },
+        { name: 'respawnS', channel: 'edge' },
+      ],
+      deployUp: [],
+    },
     simFields: [
       { name: 'pos', channel: 'sim' },
       { name: 'hp', channel: 'echo' },
@@ -351,20 +365,46 @@ export function spawnPayload(
   return verbPayload(kind, 'spawn', idField, id, vals);
 }
 
+/** One-off lifecycle notify payload — same contract as verbPayload but
+ *  the field list lives under kind.events[type] (deployDown, deployUp). */
+export function eventPayload(
+  kind: WorldKindDecl,
+  type: string,
+  idField: string,
+  id: number | string,
+  vals: Record<string, unknown>,
+): Record<string, unknown> {
+  const fields = kind.events?.[type];
+  const msg: Record<string, unknown> = { type, [idField]: id };
+  for (const f of fields ?? []) {
+    if (f.name === idField) continue;
+    if (!(f.name in vals) && f.absent === undefined) {
+      console.warn(`[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
+    }
+    msg[f.name] = vals[f.name] ?? f.absent ?? null;
+  }
+  return msg;
+}
+
 /** Inbound half of the emit guard: a packet that drops a declared field
  *  warns once at dispatch — same contract as verbPayload's emit-side
  *  warn (absent sentinel or optional = fine). Fields the sender legit
  *  omits (`absent` declared) stay quiet. */
 export function checkPacket(
   kind: WorldKindDecl,
-  verb: 'spawn' | 'update' | 'gone',
+  verb: 'spawn' | 'update' | 'gone' | (string & {}),
   msg: Record<string, unknown>,
 ): void {
-  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
+  const fields =
+    verb === 'spawn' ? kind.spawnFields :
+    verb === 'update' ? kind.updateFields :
+    verb === 'gone' ? kind.goneFields :
+    kind.events?.[verb];
+  const label = verb in kind.verbs ? (kind.verbs as Record<string, string>)[verb]! : verb;
   const check = (m: Record<string, unknown>) => {
     for (const f of fields ?? []) {
       if (!(f.name in m) && f.absent === undefined) {
-        console.warn(`[worldModel] inbound ${kind.kind}.${kind.verbs[verb]} missing declared field '${f.name}'`);
+        console.warn(`[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
       }
     }
   };
@@ -377,13 +417,17 @@ export function checkPacket(
 
 /** Wire-verb → (kind, verb) index for inbound checking — the dispatcher
  *  looks a message type up here instead of mapping verbs by hand. */
-const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: 'spawn' | 'update' | 'gone' }>();
+const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: string }>();
 for (const k of Object.values(WORLD_MODEL)) {
   for (const v of ['spawn', 'update', 'gone'] as const) {
     VERB_INDEX.set(k.verbs[v], { kind: k, verb: v });
   }
+  // Event notifies index under their own wire type, not a verb slot.
+  for (const t of Object.keys(k.events ?? {})) {
+    VERB_INDEX.set(t, { kind: k, verb: t });
+  }
 }
-export function verbForType(type: string): { kind: WorldKindDecl; verb: 'spawn' | 'update' | 'gone' } | undefined {
+export function verbForType(type: string): { kind: WorldKindDecl; verb: string } | undefined {
   return VERB_INDEX.get(type);
 }
 

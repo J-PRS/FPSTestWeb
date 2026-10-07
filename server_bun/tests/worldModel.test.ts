@@ -66,6 +66,16 @@ describe('world model <-> protocol conformance', () => {
         }
       });
     }
+    for (const [type, evFields] of Object.entries(kind.events ?? {})) {
+      it(`${kind.kind}.${type} event exists in the ServerMessage union with every declared field`, () => {
+        const line = unionLine(type);
+        expect(line, `${type} not found in protocol.ts`).not.toBeNull();
+        const text = withInterfaces(line!);
+        for (const f of evFields!) {
+          expect(hasField(text, f.name), `${type} union member is missing declared field '${f.name}'`).toBe(true);
+        }
+      });
+    }
     if (kind.rosterFields) {
       it(`${kind.kind} roster row fields exist in a protocol member`, () => {
         // Roster rows live inside a roster verb (ballRoster/crawlRoster/

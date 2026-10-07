@@ -7,7 +7,7 @@
  * carpet the map — there was previously no server record at all.
  */
 import type { Vec3, ClaimVerdict, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -274,7 +274,7 @@ export class RoomDeployables {
     if (d.hp <= 0) {
       if (d.base) {
         d.respawnT = RESPAWN_S;
-        this.room.broadcast({ type: 'deployDown', id: d.id, kind: d.kind, team: d.team, respawnS: RESPAWN_S });
+        this.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'deployDown', 'id', d.id, { kind: d.kind, team: d.team, respawnS: RESPAWN_S }) as ServerMessage);
         logger.info('Base asset down', { id: d.id, kind: d.kind, team: d.team, by });
         if (d.kind === 'generator') this.room.refreshPowerStructures(); // grid drops — gate fields go dark
       } else {
@@ -290,7 +290,7 @@ export class RoomDeployables {
     d.hp = HP[d.kind];
     d.armor = 0;
     d.respawnT = 0;
-    this.room.broadcast({ type: 'deployUp', id: d.id });
+    this.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'deployUp', 'id', d.id, {}) as ServerMessage);
     this.sendHp(d);
     logger.info('Base asset restored', { id: d.id, kind: d.kind, team: d.team });
     if (d.kind === 'generator') this.room.refreshPowerStructures();

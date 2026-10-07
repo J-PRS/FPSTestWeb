@@ -1,3 +1,4 @@
+2026-10-01 - C5: lifecycle events declared - deployDown/deployUp emit via eventPayload + inbound check + conformance pins; every wire verb for every kind is now declared
 2026-10-01 - C5: inbound packet field check - wireIn warns when a declared entity packet drops a field (verbForType/checkPacket); row-wrapped verbs check per-row, wire-optional fields declared absent
 2026-10-01 - C5 fix: verbPayload skipped the idField - spawnFields listing 'projectileId' overwrote the emitted id with null; generator now skips the declared id field
 2026-10-01 - C5: player lane declared - playerJoined/playerLeft/tickUpdate/gameState rows all declared + generated from worldModel; every entity kind now lives in the table
@@ -22,6 +23,7 @@
 2026-10-01 - C5 demolition: ClaimLedger class deleted - zero register() callers after intent migration; claimLedger.ts is now only rewindPos/clampPing lag-comp; defer/flush queue + disconnect drain gone; projectileDestroy is an unconditional drop (server owns shells); ledger test files retired to .old
 2026-10-01 - C5 demolition: aoeProjectile claim path deleted - every shelled weapon is server-simmed so a projectile aoeShot is always a reject; cluster scatter lives in RoomProjectiles.detonate for all shells; aoeShot keeps melee/slam/beam only
 2026-10-01 - C5 demolition: 'shot' wire claim deleted end-to-end (codec/protocol/handler/client/netbot) - shotFired intent is the only path; server-simmed shells refuse all projectileDestroy incl. owner; scenario+netbot tests converted
+2026-10-07 - botSteer sees solids: slotDanger probes segSolidHit at body height (own-team gate panes pass free via ctx.team; jets still clear low walls); committed-approach beeline falls through to slot scoring when the straight line is walled — team shield panes stop reading as air before the stall kit notices
 2026-10-07 - F1 toggles the visuals-only DEBUG flag (same settings.fps-debug the menu button writes; live flip, no reload) with a toast reporting the effective state
 2026-10-07 - netdiag: stall watchdog skips document.hidden (throttled interval + starved pump read as fake silence -> mid-hide reprobes); BALL DESYNC warn is per-id+field persistent now — enraged/tgt boundary churn on rotating balls stays debug, only a diff pinned to the same ball twice escalates
 2026-10-07 - reconnect restore: localPlayerState carries the shadow's inputSeq watermark; restoreLocalPlayer rewinds+journal-replays like a correction instead of hard-snapping to last-accepted pos (the 'teleported when they score' flap-pull under loss)
