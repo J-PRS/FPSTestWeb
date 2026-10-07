@@ -1,3 +1,7 @@
+2026-10-07 - robustify: lastRepair cooldown keys purge on player departure — immortal base items kept a departed welder entries for the rooms life
+2026-10-06 - bugfix: dead-state respawn press no longer skips the countdown — respawnNow ignored a live pending timer, so LMB-while-dead revived instantly and made respawnDelay decorative; the press now only releases an elapsed hold (or a timerless dead edge), pending timers fire on schedule
+2026-10-06 - bugfix: flat-pool spawn picks regained the own-base pull — spawnHomeBias returning 0 for unaffiliated ids masked the picker's `?? 2` fallback, so humans on maps like bastion scored on foe-clearance alone and could materialize at the far base; Room now returns undefined and the picker's signature documents the contract
+2026-10-06 - robustify: live 16-bot RTC soak — judge input-gap race fixed (in-flight inputMoves no longer bank teleport-strikes; defer bounded at 600ms, sustained gaps still flag), WT port now derives from FPS_PORT (9443 default unchanged, second instances stop colliding), residual cheat warns logged as sustained-gap item
 2026-10-06 - robustify: projectileId capped at 64 chars — an unbounded ledger key let a 1MB frame plant fat keys in capped maps
 2026-10-06 - robustify: postIps throttle evicts eldest instead of clear — wholesale clear reset the 60s window for every live IP under address churn
 2026-10-06 - robustify: client.log now rolls at 32MB mid-run — boot-time-only rotation left long-lived servers with one forever-growing log

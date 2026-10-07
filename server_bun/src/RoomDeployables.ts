@@ -171,6 +171,12 @@ export class RoomDeployables {
     for (const d of this.items.values()) {
       if (d.owner === ownerId) this.remove(d.id);
     }
+    // The owner's cooldown keys are their trace too: items outlive them
+    // (base gear is immortal), so a departed welder's entries would sit
+    // in lastRepair for the room's life.
+    for (const k of this.lastRepair.keys()) {
+      if (k.startsWith(`${ownerId}:`)) this.lastRepair.delete(k);
+    }
   }
 
   /** The item's effective team — authored assets carry their own, field

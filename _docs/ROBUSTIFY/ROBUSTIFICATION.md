@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.30 `lastRepair` keys outlived departed players (2026-10-07)
+
+Repair-cooldown keys are `playerId:itemId` — they were cleaned when the
+*item* died, but a departing player left entries behind, and on immortal
+base gear those entries lived for the room's life. `clearOwner` (which
+already runs on the removePlayerCompletely funnel) now also purges the
+owner's repair keys — same churn-keyed-map class as `invalidWarnAt`
+(§2.24) and `postIps` (§2.27).
+
 ### 2.29 AOE claim airtime bounds pinned (2026-10-06)
 
 `aoeClaimBounds.test` pins `validateAoeClaim`'s legality window: negative
@@ -338,6 +347,43 @@ sweep: `playerRoom`/`specRooms`/registry teardown verified complete in
 (`jet`→bool, `status` masked bits only, `inputDirection` normalizes so
 oversized forward/right can't over-thrust); every position field on the
 wire passes `validateVec3`.
+
+### 2.16 Live networked bot match — judge input-gap race (2026-10-06)
+
+First full wire-level soak: real GameServer on :8001 + 16 netBots
+(RTC data channels) on a katabatic CTF match, ~4 min, room-hopping
+across 5 maps (81 joins, ~900k messages received). Client-side
+telemetry clean end to end: 0 corrections, 0 below-ground, 0 ball/
+crawl warps, 0 errors/closes, tick gaps 0 with max ~105ms, ping
+p50 ~35ms. Three findings:
+
+* **Judge input-gap race (fixed).** `Movement cheat detected` burst —
+  7 warns inside one batch right after the join wave, dist 60–95m.
+  Cause: reports stamp `inputSeq` past every received input while the
+  first inputMove is still in flight (netbots heartbeat inputs at
+  400ms; 30Hz reports burn gapStreak 3 in ~100ms). Judging raw against
+  an input-starved shadow banks teleport-scale severe strikes on pure
+  queue latency — the cheat latch fired on honest joiners. Fix:
+  `Shadow.gapAt` stamps the streak start; uncovered reports defer for
+  INPUT_GAP_DEFER_MS (600 = slowest legal input lane + RTT) and only a
+  SUSTAINED gap resumes raw judging — a forger can't hold the frontier
+  past the window, and the window bounds correction starvation.
+  Re-soak: join-wave warns dropped from 7/burst to 3 sporadic over 80s;
+  the residual correlates with sustained-gap episodes under RTC load
+  (logged in §4.4 — same class, deeper tolerance question). Pins:
+  `in-flight input gap defers judging` test; the stale-epoch and
+  authority-correction scenarios updated to express the defer window.
+* **Reject-warn flood (verified already fixed).** ~200 `Shot rejected`/
+  `AOE rejected` warns per 4 min — stress bots fire at arbitrary
+  500–1000m targets, every verdict warned. §2.12's `rejectWarn`
+  coalescing + disconnect cleanup covers it; the re-soak shows
+  `(+N suppressed)` annotations working live. `implausible spawn`
+  rejects ride the same throttle.
+* **WT port collision (fixed).** Second instance on `FPS_PORT=8001`
+  hit `webtransport-native E_INTERNAL AddrInUse` — the WT endpoint
+  defaulted to a fixed 9443 regardless of FPS_PORT. Default is now
+  `FPS_PORT + 1443` (8000 → 9443 unchanged for the canonical config);
+  `FPS_WT_PORT` still overrides.
 
 ### 2.15 `recentKills` double-record (2026-10-06)
 
@@ -1128,6 +1174,16 @@ desyncs — sim replayed past the stamp and still off — still warn.
   within 14m of the claimed dest → trickle charge) already exempts posted
   guards; the maxed bots are genuine zombies — same competence finding as
   §4.7b, not a metering bug.
+- **Residual `Movement cheat` warns under sustained input gaps** —
+  post-§2.16 the join-wave burst is gone, but a 16-RTC-bot soak still
+  logged ~3 warns/80s at dist 60–99m. Hypothesis: RTC congestion holds
+  an inputMove gap past the 600ms defer window, so raw judging resumes
+  while the shadow is still starved — a lag blackout then banks strikes
+  exactly like a teleport. Options if the rate bothers real clients:
+  count strikes only when `gapStreak === 0` (edge recovered and the
+  report STILL diverges — the strongest cheat signal), or scale
+  SEVERE_M by gap duration. Needs a reproducer that holds an input gap
+  ~1s under live RTC before picking.
 - **Creature-constant unification (needs JP ruling)** — client
   `core/config.ts` creature knobs (CRAWLER_*/SCARAB_*/SNAKE_*… ~150
   absolutes across 10 species) feed the solo/host sim while the server
