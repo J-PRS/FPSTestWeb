@@ -2535,3 +2535,15 @@ claim keeps the victim's 'active' seat untouched (a thief's begin
 would have flipped it to 'connecting').
 
 ### 2.124 - end
+
+### 2.125 Grace ledger balance pinned (2026-10-11)
+
+roomGrace feeds Room.empty's per-tick dispose check — drift either
+way breaks teardown: a leaked +1 keeps an empty room immortal, a
+spurious -1 marks it empty while ghosts can still reclaim (and a
+reclaiming player lands in a dying room). graceLedger.test.ts pins
+the balance on every exit path: disconnect in, reclaim out,
+terminate out, re-begin releasing the OLD room's count, and
+independent counting across multiple ghosts.
+
+### 2.125 - end
