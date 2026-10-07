@@ -6,7 +6,8 @@
  * the touch — no client claim involved; the old 'bank' claim message
  * was removed entirely since this path covers every legit bank.
  */
-import type { Vec3 } from './types.ts';
+import type { Vec3, ServerMessage } from './types.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -59,7 +60,7 @@ export class RoomPickups {
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     weaponStats.recordPickup(this.room.mode, kind, 'spawned');
-    this.room.broadcast({ type: 'pickupSpawn', id, pos: { ...p.pos }, kind });
+    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: { ...p.pos }, kind }) as ServerMessage);
   }
 
   /** Match reset — clear the field and tell clients to drop the gems. */
@@ -132,7 +133,7 @@ export class RoomPickups {
           p.vel.x = p.vel.y = p.vel.z = 0;
           this.settleReachable(p);
           // Resting spot is the new truth — one edge resyncs every client.
-          this.room.broadcast({ type: 'pickupSpawn', id: p.id, pos: { ...p.pos }, kind: p.kind });
+          this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: { ...p.pos }, kind: p.kind }) as ServerMessage);
         }
       }
       if (p.ttl <= 0) {

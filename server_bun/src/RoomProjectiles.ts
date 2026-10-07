@@ -26,7 +26,8 @@ import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
-import type { Vec3 } from './types.ts';
+import type { Vec3, ServerMessage } from './types.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -185,14 +186,11 @@ export class RoomProjectiles {
       ownerTeam: owner.team,
       ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
     });
-    this.room.broadcast({
-      type: 'projectileCreated', projectileId: id, ownerId,
-      position: { ...origin }, velocity: vel, weaponType,
-      // The intent's nonce — the shooter's predicted shell binds its
-      // server identity off this echo (linkOwnProjectile). pellet picks
-      // which predicted shell inside a burst fan.
-      shotId, pellet,
-    });
+    // shotId/pellet are the intent's nonce — the shooter's predicted
+    // shell binds its server identity off this echo (linkOwnProjectile).
+    this.room.broadcast(spawnPayload(WORLD_MODEL.projectile!, id, 'projectileId', {
+      ownerId, position: { ...origin }, velocity: vel, weaponType, shotId, pellet,
+    }) as ServerMessage);
     return id;
   }
 

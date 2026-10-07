@@ -70,6 +70,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'uber', channel: 'edge' },
       { name: 'targetId', channel: 'edge' },
     ],
+    spawnFields: [
+      { name: 'position', channel: 'sim' },
+      { name: 'seed', channel: 'edge' },
+      { name: 'uber', channel: 'edge' },
+      { name: 'species', channel: 'edge' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
+    ],
     simFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
@@ -82,6 +91,12 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'kind', channel: 'edge' },
       { name: 'owner', channel: 'edge' },
       { name: 'team', channel: 'edge', absent: '' },
+    ],
+    spawnFields: [
+      { name: 'owner', channel: 'edge' },
+      { name: 'kind', channel: 'edge' },
+      { name: 'pos', channel: 'sim' },
+      { name: 'team', channel: 'edge' },
     ],
     simFields: [
       { name: 'pos', channel: 'sim' },
@@ -105,6 +120,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     fields: [
       { name: 'kind', channel: 'edge' },
     ],
+    spawnFields: [
+      { name: 'pos', channel: 'sim' },
+      { name: 'kind', channel: 'edge' },
+    ],
     simFields: [
       { name: 'pos', channel: 'sim' },
     ],
@@ -116,12 +135,37 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'weaponType', channel: 'edge' },
       { name: 'ownerId', channel: 'edge' },
     ],
+    spawnFields: [
+      { name: 'projectileId', channel: 'edge' },
+      { name: 'ownerId', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'weaponType', channel: 'edge' },
+      { name: 'shotId', channel: 'echo' },
+      { name: 'pellet', channel: 'echo' },
+    ],
     simFields: [
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
     ],
   },
 };
+
+/** Build a spawn payload for `verb` from the declared field list — the
+ *  emitter supplies the values; the declared ORDER and field set own the
+ *  wire shape, so a field can't drift into a message the client's spawn
+ *  handler never reads. Values absent from `vals` become the declared
+ *  `absent` sentinel or null. */
+export function spawnPayload(
+  kind: WorldKindDecl,
+  id: number | string,
+  idField: string,
+  vals: Record<string, unknown>,
+): Record<string, unknown> {
+  const msg: Record<string, unknown> = { type: kind.verbs.spawn, [idField]: id };
+  for (const f of kind.spawnFields ?? []) msg[f.name] = vals[f.name] ?? f.absent ?? null;
+  return msg;
+}
 
 /** The per-id field tuple a hash-miss diff carries for a kind — the
  *  ORDER comes from the declaration, so the server's emit and the

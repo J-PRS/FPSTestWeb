@@ -1,3 +1,4 @@
+2026-10-01 - C5: all six spawn emits generate from worldModel.spawnPayload - crawlSpawn/deploySpawn/pickupSpawn/projectileCreated join ballSpawn on the declared wire shape
 2026-10-01 - C5: ballSpawn emit driven by worldModel spawnFields - the wire field list comes from the declaration, not a hand-built object
 2026-10-01 - C5: projectile kind joins the world-model table - all six replica lanes declared once; verbs + field channels for server-simmed shells
 2026-10-01 - C5: client hash-diff lanes generate from the world-model - stateDebug ball/creature/deploy diffs use kindFieldDiffs so emit and diff share the declared field list

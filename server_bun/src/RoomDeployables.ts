@@ -6,7 +6,8 @@
  * teardown on death/leave/match-reset. Without this layer a cheater could
  * carpet the map — there was previously no server record at all.
  */
-import type { Vec3, ClaimVerdict } from './types.ts';
+import type { Vec3, ClaimVerdict, ServerMessage } from './types.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -144,7 +145,7 @@ export class RoomDeployables {
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0 });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
-    this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team });
+    this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: { ...pos }, team: player.team }) as ServerMessage);
     return true;
   }
 
@@ -159,7 +160,7 @@ export class RoomDeployables {
       const id = this.nextId++;
       const owner = e.team ? `base:${e.team}` : 'base';
       this.items.set(id, { id, owner, kind: k, pos: { ...e.pos }, ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
-      this.room.broadcast({ type: 'deploySpawn', id, owner, kind: k, pos: { ...e.pos }, team: e.team });
+      this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: { ...e.pos }, team: e.team }) as ServerMessage);
       logger.info('Base asset seeded', { id, kind: k, team: e.team, x: +e.pos.x.toFixed(1), z: +e.pos.z.toFixed(1) });
     }
   }
@@ -192,6 +193,16 @@ export class RoomDeployables {
     if (!d.base || !d.team || d.kind === 'generator') return true;
     for (const g of this.items.values()) {
       if (g.base && g.kind === 'generator' && g.team === d.team) return g.hp > 0;
+    }
+    return true;
+  }
+
+  /** Is a team's base grid live? Structure shields gate on this — a dead
+   *  generator drops the gate field, a team with no generator is always
+   *  powered. */
+  teamPowered(team: TeamId): boolean {
+    for (const g of this.items.values()) {
+      if (g.base && g.kind === 'generator' && g.team === team) return g.hp > 0;
     }
     return true;
   }
@@ -232,6 +243,7 @@ export class RoomDeployables {
     const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
     for (const d of this.items.values()) {
       if (d.kind !== 'shield' || d.owner === shooterId) continue;
+      if (!this.powered(d)) continue; // generator down — dome is off
       const domeTeam = this.room.players.getPlayer(d.owner)?.team;
       if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) continue;
       const t = segSphereEnter(from, to, d.pos, SHIELD_RADIUS);
@@ -264,6 +276,7 @@ export class RoomDeployables {
         d.respawnT = RESPAWN_S;
         this.room.broadcast({ type: 'deployDown', id: d.id, kind: d.kind, team: d.team, respawnS: RESPAWN_S });
         logger.info('Base asset down', { id: d.id, kind: d.kind, team: d.team, by });
+        if (d.kind === 'generator') this.room.refreshPowerStructures(); // grid drops — gate fields go dark
       } else {
         logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
         this.remove(d.id);
@@ -280,6 +293,7 @@ export class RoomDeployables {
     this.room.broadcast({ type: 'deployUp', id: d.id });
     this.sendHp(d);
     logger.info('Base asset restored', { id: d.id, kind: d.kind, team: d.team });
+    if (d.kind === 'generator') this.room.refreshPowerStructures();
   }
 
   private sendHp(d: Deployed, src?: string): void {
@@ -312,7 +326,7 @@ export class RoomDeployables {
     } else if (!p.team && d.owner !== playerId) return 'enemy';
     const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
     if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return 'range'; // 1.5× slack
-    if (!losClear(this, p.position, d.pos)) return 'los';
+    if (!losClear(this, p.position, d.pos, p.team)) return 'los';
     const key = `${playerId}:${targetId}`;
     const now = simNow() / 1000;
     if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return 'cooldown';

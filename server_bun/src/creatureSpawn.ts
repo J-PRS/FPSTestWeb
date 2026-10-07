@@ -16,6 +16,7 @@ import type { SimVec } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { STATUS, shootRevealed } from '../../shared/status.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import { simNow } from './simClock.ts';
 
 export interface SpawnHost {
@@ -74,12 +75,12 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
   c.targetId = nearestPlayer(c, alivePlayers(h))?.id ?? null;
   h.snapTarget(c);
   h.crawlers.set(c.id, c);
-  h.broadcast({
-    type: 'crawlSpawn', id: c.id, position: { x: c.x, y: c.y, z: c.z },
+  h.broadcast(spawnPayload(WORLD_MODEL.creature!, c.id, 'id', {
+    position: { x: c.x, y: c.y, z: c.z },
     seed, uber: c.uber, species: c.species,
     targetId: c.targetId, tp: h.targetSnap(c),
     t: h.simTime,
-  });
+  }) as ServerMessage);
   return c;
 }
 
