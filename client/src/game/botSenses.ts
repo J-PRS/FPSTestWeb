@@ -21,8 +21,8 @@ export interface SenseHost {
   readonly bots: GameBot[];
   /** 'local' + bot:names → team key. */
   readonly teamOf: Map<string, string>;
-  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; appliedClass?: string };
-  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number; armorClass?: string }>;
+  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; appliedClass?: string; health: number; maxHealth: number };
+  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number; armorClass?: string; botHp?: number; botMaxHp?: number }>;
              explosions: { pos: THREE.Vector3; age: number }[];
              projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
   /** Active mode id — farming modes extend the creature sense range. */
@@ -31,7 +31,7 @@ export interface SenseHost {
 }
 
 export type FoeEntry = { id: string; pos: THREE.Vector3; alive: boolean };
-export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number };
+export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number; hpFrac?: number };
 type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
 
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
@@ -126,6 +126,7 @@ export class BotSenses {
       const e = nextBot() as EnemyEntry & { playerId?: string };
       e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now()));
       e.aimY = classCapsule(player.appliedClass).centerOff;
+      e.hpFrac = player.maxHealth > 0 ? player.health / player.maxHealth : undefined;
       _enemies.push(e);
     }
     for (const [id, rp] of this.host.world().remotePlayers) {
@@ -138,6 +139,10 @@ export class BotSenses {
       const e = nextBot() as EnemyEntry & { playerId?: string };
       e.id = id; e.pos = rp.pos; e.vel = rp.vel; e.alive = !rp.isDead && (!rp.isCloakHidden || rp.ghostT > 0);
       e.aimY = classCapsule(rp.armorClass).centerOff;
+      // Wounded readout — the brain's burst-orbit pick prices the hp
+      // left on the target; wire remotes carry no tank and stay
+      // undefined (server marks them the same way).
+      e.hpFrac = rp.botHp !== undefined ? rp.botHp / (rp.botMaxHp ?? 1) : undefined;
       _enemies.push(e);
     }
     // Farming modes look farther — the brain prefers beast targets

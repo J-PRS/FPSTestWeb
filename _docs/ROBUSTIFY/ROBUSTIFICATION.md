@@ -233,6 +233,21 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.76 hpFrac missing from offline enemy entries (2026-10-08)
+
+Last field in the enemy-list mirror. Server `ServerParties.of` feeds
+`hpFrac` on every player entry — the burst-orbit pick (§2.74's
+`preferredRange`) prices the hp left on the target, and every future
+wounded-priority read will want it. The client's `enemyList` built
+entries with id/pos/vel/alive/aimY only, so the orbit always priced a
+full-health target. Local-player and bot entries now carry real hp
+fractions (wire remotes legitimately stay undefined — the server marks
+them the same way).
+
+That closes the ctx/enemy mirror field-by-field: every sense the shared
+brain reads is now either fed identically on both ends or deliberately
+server-only (squad orchestration, influence map, human-chat notices).
+
 ### 2.75 Courage dropped from the offline pick (2026-10-08)
 
 Same block, residual drift the §2.74 factory couldn't see: the senses'
