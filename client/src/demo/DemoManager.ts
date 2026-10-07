@@ -64,6 +64,8 @@ export class DemoManager implements demoIO.DemoIOHost {
       timestampStr: () => demoIO.timestampStr(),
     });
     this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
+    // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
+    void this.coolShotMgr.loadVault();
 
     // Stamped into every clip — wrong-map playback is the classic demo bug
     this.recorder.setContext({

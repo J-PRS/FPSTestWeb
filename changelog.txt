@@ -1,3 +1,4 @@
+2026-10-01 - demos: personal clip vault in IndexedDB (idb dep) - clips survive refresh/upload fail, FIFO cap 50, lazy vault playback/download
 2026-10-01 - naming DECISION: game name = ANABATIC (over Anabasis - less occupied, not a canon squat)
 2026-10-01 - naming: Surgo killed (3 real companies on it); ascend shelf results recorded
 2026-10-01 - naming: Anabatic clears final spellcheck gate - dictionary-real, no autocorrect

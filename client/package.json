@@ -16,6 +16,7 @@
     "audit:mutate": "cd .. && client/node_modules/.bin/stryker run client/stryker.config.mjs"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "manifold-3d": "^3.5.4",
     "postprocessing": "^6.39.5",
     "sam-js": "^0.3.1",

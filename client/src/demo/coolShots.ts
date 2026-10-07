@@ -6,6 +6,7 @@
 import type { DemoRecorder } from './DemoRecorder.js';
 import type { DemoFile } from './types.js';
 import * as net from './coolShotsNet.js';
+import { DemoVault } from './demoVault.js';
 import { ChildLogger } from '../core/Logger.js';
 import { feedShot } from '../ui/shotFeed.js';
 
@@ -45,6 +46,8 @@ export interface CoolShotDeps {
 
 export class CoolShotManager {
   private pendingClips: PendingClip[] = [];
+  private vault = new DemoVault();
+  private vaultLoaded = false;
   coolShots: CoolShotEntry[] = [];
   serverUrl = '';
   uploadFailureCount = 0;
@@ -166,6 +169,9 @@ export class CoolShotManager {
     });
     this.coolShots.push(entry);
     this.trimList();
+    // Vault is the durable copy — memory clipData frees after upload,
+    // vault keeps the clip downloadable/playbackable across sessions.
+    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, data: clipData });
     this.onChanged?.(this.coolShots);
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
@@ -182,14 +188,37 @@ export class CoolShotManager {
     this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
   }
 
+  // Rehydrate the list from the vault: entries restored across
+  // sessions carry no clipData — play/download pulls it back lazily.
+  async loadVault(): Promise<void> {
+    if (this.vaultLoaded) {return;}
+    this.vaultLoaded = true;
+    const meta = await this.vault.list();
+    if (meta.length === 0) {return;}
+    const have = new Set(this.coolShots.map(s => s.id));
+    for (const m of meta) {
+      if (have.has(m.id)) {continue;}
+      this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime });
+    }
+    this.trimList();
+    this.onChanged?.(this.coolShots);
+  }
+
   playAt(index: number): void {
     if (index < 0 || index >= this.coolShots.length) {return;}
     const entry = this.coolShots[index];
     if (entry.clipData) {
       this.deps.playDemoData(entry.clipData);
       logger.debug(`Playing cool shot: ${entry.description}`);
-    } else if (entry.filename) {
-      this.playFromServer(entry.filename);
+    } else {
+      void this.vault.get(entry.id).then((data) => {
+        if (data) {
+          this.deps.playDemoData(data);
+          logger.debug(`Playing cool shot from vault: ${entry.description}`);
+        } else if (entry.filename) {
+          this.playFromServer(entry.filename);
+        }
+      });
     }
   }
 
@@ -205,14 +234,16 @@ export class CoolShotManager {
       return;
     }
 
-    if (entry.clipData) {
+    const data = entry.clipData ?? await this.vault.get(entry.id);
+    if (data) {
       const filename = `clip_${entry.projectileLifetime.toFixed(1)}s_${this.deps.timestampStr()}.demo`;
-      this.deps.downloadDemoFile(entry.clipData, filename);
+      this.deps.downloadDemoFile(data, entry.filename ?? filename);
+      this.deps.setStatus('Downloaded!');
       logger.debug(`Downloaded cool shot: ${entry.description}`);
     } else if (entry.filename) {
-      const data = await this.fetchDemo(entry.filename);
-      if (data) {
-        this.deps.downloadDemoFile(data, entry.filename);
+      const fromServer = await this.fetchDemo(entry.filename);
+      if (fromServer) {
+        this.deps.downloadDemoFile(fromServer, entry.filename);
         this.deps.setStatus('Downloaded!');
         logger.debug(`Downloaded cool shot from server: ${entry.filename}`);
       }
