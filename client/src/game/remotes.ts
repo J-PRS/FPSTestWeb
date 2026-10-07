@@ -299,10 +299,21 @@ function pruneAliveSince(live: Set<string>): void {
   }
 }
 
+let lastScoreboardAt = 0;
+let scoreboardStale = true;
+
 // Scoreboard rows: local player first, then remotes sorted by frags desc
 function updateScoreboard(deps: RemotesDeps): void {
   const hud = deps.lazyHud();
-  if (!hud.scoreboardVisible) {return;}
+  // Rows rebuild at ~4Hz, not per frame — a full roster Set+sort every
+  // rendered frame is pure churn for a display the eye can't resolve
+  // past a few updates a second anyway. Open edge forces one immediate
+  // pass so the board never shows a stale frame.
+  const frameNow = performance.now();
+  if (!hud.scoreboardVisible) {scoreboardStale = true; return;}
+  if (!scoreboardStale && frameNow - lastScoreboardAt < 250) {return;}
+  scoreboardStale = false;
+  lastScoreboardAt = frameNow;
   const nm = deps.lazyNetworkManager();
   const localId = nm.getLocalPlayerId();
   // Offline combat uses the stable authority id `local`; the generated

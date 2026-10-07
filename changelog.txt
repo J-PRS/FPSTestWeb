@@ -1,3 +1,4 @@
+2026-10-07 - perf: throttle scoreboard row rebuilds to ~4Hz while open (was per rendered frame)
 2026-10-07 - robustify: cap Logger shipQueue (unbounded warn accumulation when shipping never initializes offline)
 2026-10-07 - robustify: offline respawn/flag-run spawn reseat the frame-jump watch (no more false POS JUMP warns)
 2026-10-07 - robustify: crawlEvt carries cumulative retarget-skip count so far-client replays converge fully

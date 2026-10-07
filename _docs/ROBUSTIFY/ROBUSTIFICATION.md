@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.46 Scoreboard rows throttle to ~4Hz (2026-10-07)
+
+`updateScoreboard` rebuilt the whole roster — Set + filter + map + sort —
+on EVERY rendered frame while the board was open (~60 rebuilds/s for a
+display that can't be read past ~4Hz). Now throttled to 250ms with an
+immediate pass on the open edge. Audited clean alongside: remotes frustum
+scratch is pooled, shipQueue is capped (§2.45), Logger ring buffer is
+bounded and pin-tested.
+
 ### 2.45 Ship-queue cap for never-flushed warn lines (2026-10-07)
 
 `Logger.shipQueue` grew on every WARN+ push but only drains when
