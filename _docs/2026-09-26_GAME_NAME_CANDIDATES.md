@@ -227,3 +227,14 @@ motto + brands. **Anabasis** noted as possible Anabatic upgrade (noun,
 Xenophon's march up-country, same root). anabatic.com = PT Anabatic
 Technologies Tbk (Indonesian listed IT co); anabatic.io ambiguous
 (registry-free but redirects); .gg/.dev free.
+
+### DECISION 2026-10-01 (JP): **ANABATIC**
+
+Chosen over Anabasis (squatting Xenophon's canonical title is the
+audacious move; the adjective is a technical term nobody owns
+emotionally). Survived every filter: real word, Steam-clean, no
+autocorrect, kata-family wink without squatting the map, theme-true
+(sun-heated slope throwing energy upward = climbing on mined momentum).
+Known warts accepted: anabatic.com is a listed Indonesian IT co
+(different class), itch has two small occupants, .gg/.dev free - expect
+to live on anabatic.gg.
