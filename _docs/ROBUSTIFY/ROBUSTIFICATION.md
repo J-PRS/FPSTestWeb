@@ -2191,3 +2191,19 @@ full', switchRoom sends a matchNotice, the /quickroom HTTP route 503s.
 roomCap.test.ts pins all four branches.
 
 ### 2.98 - end
+
+### 2.99 Recycle-path dispose pin (2026-10-08)
+
+§2.98's recycle calls room.dispose() — verified the chain actually
+reaches the wall-clock edges: Room.dispose → messages → combat →
+respawner.dispose drains pending respawn setTimeouts, so a recycled
+bot-corpse room can't fire playerRespawn into a world nobody reaches.
+roomCap.test.ts fifth pin: a bot corpse with an armed respawn timer,
+recycle, timers drained to zero. Audit along the way: spectate joins
+were already per-room capped (maxPlayers), MapCatalog's name-keyed
+maps all cap+evict (roomMapName 256, specMisses 512, specs bounded by
+disk), the pre-join socket path is bounded by the 15s join deadline +
+per-IP join throttle, and auto-quality/localStorage write paths are
+event-only. The unbounded-input lane is clean.
+
+### 2.99 - end

@@ -63,6 +63,28 @@ describe('room cap', () => {
     expect(peek.rooms.has('b')).toBe(true);
   });
 
+  it('recycling a room drains its respawn wall-timers', () => {
+    CONFIG.maxRooms = 2;
+    const peek = mkServer();
+    const a = peek.factory.roomFor('a')!;
+    // A dead player in a room-forever-living world keeps a real
+    // setTimeout armed; recycling without draining it fires playerRespawn
+    // into a room nobody can reach.
+    // Bot corpse — a human would keep 'a' live and correctly unrecyclable.
+    a.players.addPlayer('b1', undefined, 'none', 'medium', true);
+    a.players.getPlayer('b1')!.isDead = true;
+    const resp = a.messages.combat.respawner as unknown as {
+      schedule(id: string): void;
+      timers: Map<string, unknown>;
+    };
+    resp.schedule('b1');
+    expect(resp.timers.size).toBe(1);
+
+    peek.factory.roomFor('b');
+    peek.factory.roomFor('c'); // recycles 'a'
+    expect(resp.timers.size).toBe(0);
+  });
+
   it('spectators count as audience — a watched room is not recyclable', () => {
     CONFIG.maxRooms = 2;
     const peek = mkServer();
