@@ -3129,3 +3129,12 @@ now applies server creatureFields to the local sim (state + targetId;
 species is constructor-fixed, uber has no per-creature writer) -- same
 snapshot-heal doctrine as player liveness, matching the netCrawlEvt
 precedent that already pokes sim.state on a windup edge.
+
+## 2.173 DemoStorage ctor-reconcile vs saveDemo race
+
+The constructor fires loadIndex().then(reconcileIndex) unawaited while
+saves proceed: a demo file written mid-reconcile got adopted as an
+'orphan' AND pushed by saveDemo -- the index double-counted it
+(listDemos returned 3 for 2 uploads, caught by the suite). Both push
+sites now check live index membership; the stale 'known' snapshot in
+reconcileIndex is gone.

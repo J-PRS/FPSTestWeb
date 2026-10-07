@@ -47,10 +47,12 @@ export class DemoStorage {
     try {
       const files = await readdir(this.demosDir);
       const demoFiles = files.filter(f => f.endsWith('.demo'));
-      const known = new Set(this.index.map(m => m.filename));
       let added = 0;
       for (const filename of demoFiles) {
-        if (known.has(filename)) continue;
+        // Live membership check, not a snapshot: the ctor doesn't await
+        // this reconcile, so a saveDemo in flight writes its file before
+        // index.push — a snapshotted 'known' double-indexes it.
+        if (this.index.some(m => m.filename === filename)) continue;
         try {
           const data = await readFile(join(this.demosDir, filename));
           const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
@@ -214,7 +216,11 @@ export class DemoStorage {
       fileSize: data.byteLength,
     };
 
-    this.index.push(meta);
+    // The async ctor reconcile may have already adopted this file —
+    // pushing unconditionally would index it twice.
+    if (!this.index.some(m => m.filename === meta.filename)) {
+      this.index.push(meta);
+    }
     this.index.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
 
     // Cap the live index — the tail is lowest-lifetime, gzip it to

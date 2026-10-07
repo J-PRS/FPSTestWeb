@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.173: DemoStorage index dedupe - ctor reconcile vs saveDemo race double-indexed files
 2026-10-01 - robustify 2.172: snapshot heals creature sim.state/targetId drift (lost crawlEvt no longer warns forever)
 2026-10-01 - robustify 2.171: remote deployables hash the wire owner on every kind (turret/base/generic dropped it)
 2026-10-01 - robustify 2.170: audit pass - teardown funnel + edge-ownership sweep clean after the single-owner refactor
