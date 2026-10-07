@@ -361,16 +361,12 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   // (apex dwell + deeper camera kick) same frame the input resolved.
   meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit, connected !== null);
 
-  // Players go through the authoritative AOE claim; the swing itself
-  // rides the cosmetic fire relay so observers see/hear the punch.
+  // The swing intent rides shotFired — the server derives the arc point
+  // itself (no position claim) and relays the fire for observers.
   const networkManager = deps.lazyNetworkManager();
   if (networkManager?.isConnected()) {
     networkManager.sendShotFired({
       weaponType: WeaponType.Melee, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
-    });
-    networkManager.sendAOEShot({
-      position: { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },
-      weaponType: WeaponType.Melee, excludeTargetId: null,
     });
   }
   hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1 });

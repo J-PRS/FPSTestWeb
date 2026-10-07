@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
@@ -366,6 +366,25 @@ export class CombatHandler {
     const now = wallNow();
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
     const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
+    // Melee intent: the swing point is server-derived (rewound origin +
+    // aim offset), so a forged position can't widen the arc — the old
+    // aoeShot claim carried a client position for exactly this math.
+    if (msg.weaponType === WeaponType.Melee && dir) {
+      const meleeStats = getWeaponStats(WeaponType.Melee);
+      const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
+      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const mpos = rewindPos(player, clampPing(player.ping));
+      this.aoe.handleAOEShot(playerId, {
+        type: 'aoeShot',
+        position: { x: mpos.x + (dir.x / l) * reach, y: mpos.y + 1.2 + (dir.y / l) * reach, z: mpos.z + (dir.z / l) * reach },
+        weaponType: WeaponType.Melee, excludeTargetId: null,
+      });
+      this.broadcast({
+        type: 'playerShot', id: playerId, weaponType: msg.weaponType,
+        pos: { x: mpos.x, y: mpos.y + 1.6, z: mpos.z }, dir: msg.dir,
+      }, playerId);
+      return;
+    }
     if (!fireProjectile) {
       // Cosmetic relay only — throttled: a dropped relay costs a muzzle
       // flash, but a dropped intent would orphan a predicted shell.

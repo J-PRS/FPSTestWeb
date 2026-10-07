@@ -1,3 +1,4 @@
+2026-10-01 - C5: melee intent - shotFired drives the swing, server derives arc point (no position claim); 3 scenario tests; client drops melee aoeShot
 2026-10-01 - C5: proxy + satchel claimless - satchel gains server stick (rests to fuse); wake bubble already modeled; only bodyless kinds (melee/lg/repair/healbeam/slam) remain on claims
 2026-10-01 - C5: all bodied weapons claimless - chaingun/railgun/cannon/rocket/pistol/revolver/sprinkler join SERVER_SIMMED_WEAPONS; only true hitscan (melee/lg/repair/healbeam/slam) + armed deployables (proxy/satchel) remain on claims
 2026-10-07 - team-gated solids: 'shield' spec kind emits passTeam colliders; segSolidHit + resolveBody skip matching team — bodies, projectiles (LiveProj.ownerTeam / Projectile.shooterTeam), hit/AOE claim validation, bot LOS (team-mixed memo), sentry/drone scans, LG/repair traces all carry shooter team
