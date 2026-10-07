@@ -52,11 +52,10 @@ export type { WeaponStats } from './weaponTable.js';
  *  predictor and the server's intent gate must never disagree. */
 // The server sim (RoomProjectiles/projContact) models everything here:
 // every weapon whose shell has a body (speed > 0) — contact pops,
-// bounce + arm time, fuses, stickies, cluster scatter, ray-burst
-// discharge, heal/armor payloads, burst fans (pellet-index echoes).
-// Excluded: ProximityGrenade + SatchelCharge (armed/triggered — need a
-// detonate intent the server owns), and the body-less kinds — Melee,
-// Lightning, Repair, HealBeam, Slam, and the carrier-spawned bomblets.
+// bounce + arm time, fuses, stickies, proximity wake, cluster scatter,
+// ray-burst discharge, heal/armor payloads, burst fans (pellet-index
+// echoes). Excluded: the body-less kinds — Melee, Lightning, Repair,
+// HealBeam, Slam, and the carrier-spawned bomblets.
 export const SERVER_SIMMED_WEAPONS = new Set<number>([
   WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.PlasmaGun, WeaponType.PlasmaCannon,
   WeaponType.Grenade, WeaponType.GrenadeLauncher, WeaponType.Mortar, WeaponType.Sticky,
@@ -65,6 +64,7 @@ export const SERVER_SIMMED_WEAPONS = new Set<number>([
   WeaponType.ArmorGrenade, WeaponType.HealGrenade, WeaponType.Flak, WeaponType.Shotgun,
   WeaponType.Chaingun, WeaponType.Railgun, WeaponType.Cannon, WeaponType.RocketLauncher,
   WeaponType.Pistol, WeaponType.Revolver, WeaponType.Sprinkler,
+  WeaponType.ProxyGrenade, WeaponType.SatchelCharge,
 ]);
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);

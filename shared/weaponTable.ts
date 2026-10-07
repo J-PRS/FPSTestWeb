@@ -700,6 +700,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.0,   // NO proxy wake — a planted charge only sticks on true contact
     hitGrow: 0.1,  // >0 so hitRadiusAt never divides by zero; hitMax 0 makes it moot
     maxLifetime: 4.0, // THE fuse — long enough to walk away, short enough the victim hears it
+    stick: true,   // hand-planted: rests where it lands until the fuse
   },
   [WeaponType.MRVLauncher]: {
 
