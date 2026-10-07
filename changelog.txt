@@ -1,3 +1,4 @@
+2026-10-07 - robustify: pinned the retarget-skip contract — a creature holds position on the tick its retarget edge fires
 2026-10-07 - robustify: bot untrack pin now covers all 18 per-bot maps including the senses set
 2026-10-07 - robustify: client warning and error logs roll mid-run alongside client.log
 2026-10-07 - robustify: retarget edges now stand in for the sim step the server skips or client replay runs ahead of authority

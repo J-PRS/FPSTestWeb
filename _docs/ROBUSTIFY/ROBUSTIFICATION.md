@@ -210,6 +210,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.42 Retarget-skip contract pinned authority-side (2026-10-07)
+
+`retargetSkip.test` pins the invariant §2.39's client fix mirrors: on
+the tick a `retarget` edge fires, the creature's post-tick roster
+position still equals the edge's snapshot — the brain spent the tick
+re-aiming, not stepping. If `stepAll` ever steps through a retarget
+again, both the pin and every client's replay pacing break loudly.
+Audit lane around it (silent-coercion angle): `JSON.parse` on all five
+client inbound paths is catch-wrapped, `maxPayloadLength` is set on the
+ws server, wireIds roster resets are lifecycle, pickups reconcile via
+roster cull.
+
 ### 2.41 Untrack funnel coverage widened (2026-10-07)
 
 `botUntrack.test` peeked at only 5 of the 18 maps `untrack()` drains —
