@@ -2113,3 +2113,15 @@ RoomFlags consumers window by runStart so wipe-at-reset is the only
 bound the logs have.
 
 ### 2.92 - end
+
+### 2.93 Client depart funnel pinned — wire-player receipts purge on remove (2026-10-08)
+
+Pin class, client mirror of §2.91: remotePlayers' onRemove is the
+client depart funnel (wire leave, roster prune, idle reap) — it
+deletes aliveSince/killCounts/lastWeaponByPlayer and forgets HUD
+indicators + health bars, none of it previously covered.
+remoteRemove.test.ts drives the real createRemotes hook chain and
+asserts each receipt dies with the id. aliveSince itself is
+module-private but has pruneAliveSince as a second line of defense.
+
+### 2.93 - end
