@@ -149,7 +149,7 @@ export namespace Logger {
     logBuffer.push(logLine);
 
     // WARN+ also queues for server shipping — the on-disk client.log
-    if (level >= LogLevel.WARN) {shipQueue.push(logLine);}
+    if (level >= LogLevel.WARN) {queueForShip(logLine);}
 
     lineListener?.(logLine, level);
     trimBuffer();
@@ -227,6 +227,13 @@ export namespace Logger {
   // logs/client.log on disk. Batched every 5s; a sendBeacon on pagehide
   // catches the tail. No-op until initShipping is called with the URL.
   const shipQueue: string[] = [];
+  // Offline/bot sessions never call initShipping — without a cap every
+  // WARN+ line still queued for a flush that can never fire.
+  const SHIP_QUEUE_MAX = 2000;
+  function queueForShip(line: string): void {
+    shipQueue.push(line);
+    if (shipQueue.length > SHIP_QUEUE_MAX) {shipQueue.splice(0, shipQueue.length - SHIP_QUEUE_MAX);}
+  }
   let shipUrl = '';
 
   export function initShipping(httpUrl: string): void {
@@ -293,7 +300,7 @@ export namespace Logger {
     logBuffer.push(line);
     lineListener?.(line, level);
     trimBuffer();
-    if (line.includes('[WARN]') || line.includes('[ERROR]')) {shipQueue.push(line);}
+    if (line.includes('[WARN]') || line.includes('[ERROR]')) {queueForShip(line);}
   }
 
   export function isWritingToConsole(): boolean {

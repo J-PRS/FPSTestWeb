@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.45 Ship-queue cap for never-flushed warn lines (2026-10-07)
+
+`Logger.shipQueue` grew on every WARN+ push but only drains when
+`initShipping` ran — offline-vs-bots sessions queued every warn forever.
+Capped at 2000 (eldest dropped), same contract as the ring buffer.
+Verified clean alongside: `applyNetEdge` staleness can't desync
+(WebSocket ordering), species update loops allocate only at spawn not
+per-tick, all `markTeleport` sites reseat the pos-jump watch.
+
 ### 2.44 Offline teleports reseat the pos-jump watch (2026-10-07)
 
 Live soak caught `POS JUMP 286m` — a legit offline respawn
