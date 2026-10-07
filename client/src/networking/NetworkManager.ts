@@ -860,6 +860,17 @@ export class NetworkManager {
     return this.connected && this.ws !== null && this.ws.connected();
   }
 
+  /**
+   * The authority runs the shared sims (RoomProjectiles/creature sims) —
+   * claims/intents only make sense against it. A P2P host embeds the
+   * same server modules but deliberately carries no sims, so peers fall
+   * back to the claim lanes the host can still adjudicate (blasts via
+   * aoeShot, melee via the swing intent) instead of suppressing them.
+   */
+  authoritySims(): boolean {
+    return this.isConnected() && this.ws?.tier !== 'p2p' && this.ws?.tier !== 'host';
+  }
+
   getPing(): number {
     return this.telemetry.ping;
   }

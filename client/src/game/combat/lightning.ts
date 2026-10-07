@@ -168,7 +168,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
     forceMultiplier: 1,
     // Offline the pop still claims its blast; connected, the server's
     // beam kill detonates the banked charge itself.
-    sendAOE: deps.lazyNetworkManager()?.isConnected()
+    sendAOE: deps.lazyNetworkManager()?.authoritySims()
       ? undefined
       : (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
     explosionTint: 0x8FDCFF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
@@ -280,7 +280,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   sh.sprite.position.copy(t.pos);
   sh.sprite.scale.setScalar(1.5 + charge * 4);
   deps.reportTargetDamage?.(t, dmg);
-  if (t.takeDamage(dmg, { serverPaid: deps.lazyNetworkManager()?.isConnected() === true })) {
+  if (t.takeDamage(dmg, { serverPaid: deps.lazyNetworkManager()?.authoritySims() === true })) {
     hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
     lgPop(deps, hooks, t.pos, acc);
     chargeBank.delete(t.id);

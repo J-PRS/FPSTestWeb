@@ -320,7 +320,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
 
   // Connected rooms pay the creature cone from the swing intent itself
   // (server derives pos/dir) — claiming the contact too would double-pay.
-  const serverPaid = deps.lazyNetworkManager()?.isConnected() === true;
+  const serverPaid = deps.lazyNetworkManager()?.authoritySims() === true;
 
   let connected: THREE.Vector3 | null = null;
   for (const t of deps.targets) {

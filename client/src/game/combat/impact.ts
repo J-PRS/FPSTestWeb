@@ -155,7 +155,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // ("blast with no known projectile" — splash silently never applied).
   // Server-simmed shells never claim: the authority's own sim owns the
   // lifecycle and its projectileDestroyed echo does the tombstoning.
-  if ((p.serverProjectileId || p.shotId) && !serverSimmed(p.config.weaponType)) {
+  if ((p.serverProjectileId || p.shotId) && !(serverSimmed(p.config.weaponType) && deps.lazyNetworkManager().authoritySims())) {
     deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
   }
 }
@@ -229,7 +229,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Server-simmed weapons predict the blast (FX/knockback/numbers stay
   // local) but never send the claim — the authority's shell arrives at
   // the same contact and declares it via broadcasts.
-  const sendAOE = !claimable || claimLegal === false || serverSimmed(weaponType)
+  const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authoritySims())
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
@@ -372,7 +372,9 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   // Connected, the server's RoomPickups drop is the backed loot — a
   // local nugget here collects into a heal claim the server never
   // minted credit for (nocredit reject → predicted health desyncs).
-  if (!ball.lootless && !deps.lazyNetworkManager().isConnected()) {
+  // authoritySims — not isConnected: a P2P host has no RoomPickups, so
+  // the loot economy falls back to local nuggets there too.
+  if (!ball.lootless && !deps.lazyNetworkManager().authoritySims()) {
     for (let n = 0; n < Math.round(ball.scale); n++) {
       deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
     }

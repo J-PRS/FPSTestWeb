@@ -53,7 +53,8 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   const { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets } = ctx;
   const netCrawlerById = new Map<number, NetBeing>();
   const appliedSkips = new Map<number, number>();
-  const serverCreatures = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
+  // A P2P host carries no creature sim — peers keep client-side species.
+  const serverCreatures = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
 
   const claim = (netId: number, damage: number) =>
     deps.lazyNetworkManager()?.sendCrawlerHit(netId, damage);

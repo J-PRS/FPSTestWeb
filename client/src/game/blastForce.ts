@@ -101,7 +101,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // Every connected blast is server-paid: weapon shells detonate in
       // the authority's sim and deployable pops (mines) detonate in
       // tickMine + preySplash — a claim on top would double-pay.
-      const splashServerPaid = weaponType !== undefined || deps.lazyNetworkManager?.()?.isConnected?.() === true;
+      const splashServerPaid = weaponType !== undefined || deps.lazyNetworkManager?.()?.authoritySims?.() === true;
       if (ball.takeDamage(dmg, { serverPaid: splashServerPaid })) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
       if (!ball.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);}
       const dm = deps.lazyDemoManager();

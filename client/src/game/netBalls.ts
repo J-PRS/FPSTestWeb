@@ -343,7 +343,8 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
   const { scene, balls, targets } = { scene: deps.scene, ...ctx };
   const netBallById = new Map<number, Ball>();
-  const serverBalls = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
+  // A P2P host carries no ball sim — peers keep client-side balls there.
+  const serverBalls = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
   Ball.hitClaim = (netId, dmg, ix, iy, iz) =>
     deps.lazyNetworkManager()?.sendCreatureHit(netId, dmg, ix, iy, iz);
 
