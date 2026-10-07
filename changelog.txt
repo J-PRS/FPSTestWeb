@@ -1,3 +1,4 @@
+2026-10-07 - robustify §2.66: flags tick prevPos field-wise — last snapshot-alloc site, lane closed
 2026-10-07 - robustify §2.65: pickups tick — live-map iteration + field-wise prevPos, kill N+1 allocs/tick
 2026-10-07 - robustify §2.64: field-wise anchors in moveClaims plausible()/authority path
 2026-10-07 - robustify §2.63: updatePosition field-wise writes — kill per-report alloc churn on position ingest

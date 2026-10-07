@@ -257,9 +257,12 @@ export class RoomFlags {
       this.room.broadcast({ type: 'flagUpdate', flags: this.snapshot() });
     }
     // Snapshot AFTER the rules pass — the next tick's sweep segment
-    // starts exactly where this one ended.
+    // starts exactly where this one ended. Reuse the stored Vec3 (must
+    // stay a snapshot, not an alias): field writes kill N allocs/tick.
     for (const p of this.room.players.getAllPlayers().values()) {
-      this.prevPos.set(p.id, { ...p.position });
+      const prev = this.prevPos.get(p.id);
+      if (prev) { prev.x = p.position.x; prev.y = p.position.y; prev.z = p.position.z; }
+      else this.prevPos.set(p.id, { ...p.position });
     }
     for (const id of this.prevPos.keys()) {
       if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);

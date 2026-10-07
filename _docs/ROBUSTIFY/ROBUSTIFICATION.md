@@ -233,6 +233,13 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.66 Flag tick prevPos snapshot (2026-10-07)
+
+Class 10 + 9 (drifted sibling): `RoomFlags.tick` ran the IDENTICAL
+per-player `{...position}` prevPos alloc RoomPickups had — the sweep-
+segment pattern's two implementations. Same field-wise reuse fix.
+No other prevPos/prevSeg snapshot sites remain — lane closed.
+
 ### 2.65 Pickup tick alloc churn (2026-10-07)
 
 Class 10, third cut in the same shape. `RoomPickups.tick` allocated a
