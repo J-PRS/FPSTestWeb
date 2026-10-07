@@ -85,7 +85,9 @@ export function optProjId(v: unknown): { ok: boolean; v?: string } {
   return { ok: true, v };
 }
 export function optProjIdOpt(v: unknown): { ok: boolean; v?: string } {
-  return v === undefined ? { ok: true } : optProjId(v);
+  // null is legal on shot claims — "the shooter's most recent spawn of
+  // that weapon" (real clients send it when a miss never minted an id).
+  return v === undefined || v === null ? { ok: true } : optProjId(v);
 }
 
 /** Claim verdict cursor — the seq the client wants a claimAck for. */
