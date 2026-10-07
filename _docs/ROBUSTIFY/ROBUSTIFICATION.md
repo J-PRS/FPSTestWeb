@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.40 Warn/error side-logs skipped mid-run rotation (2026-10-07)
+
+`client.log` got mid-run rolling in §2.24 but its fan-out siblings didn't
+— `client_warning.log`/`client_error.log` appended unguarded on the same
+throttled path. On a warn-heavy client they grow exactly as fast as the
+main log. Both now roll past 32MB on the same `rotateLogIfBig` guard.
+(`server.log` stays boot-rotate-only — `logger.ts` is browser-embedded
+and can't import `node:fs`; §2.24's caveat stands.)
+
 ### 2.39 Retarget-skip tick: replay ran ahead of authority (2026-10-07)
 
 Found while chasing the §2.38 wild desync: `creatureBrain.stepAll`

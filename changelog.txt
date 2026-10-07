@@ -1,3 +1,4 @@
+2026-10-07 - robustify: client warning and error logs roll mid-run alongside client.log
 2026-10-07 - robustify: retarget edges now stand in for the sim step the server skips or client replay runs ahead of authority
 2026-10-07 - robustify: creature desync warns now name the diverging field via server-side hash fields
 2026-10-07 - kit pieces gain a "scale" spec field (0.25-4, kit-only): one knob scales render + KIT_HULLS collider expansion together; bastion.json bases (bastion compound + bunker outpost) go 2x with outposts pushed out to match the doubled footprint

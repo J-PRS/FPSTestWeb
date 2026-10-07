@@ -77,8 +77,16 @@ export async function clientLogRoute(req: Request, cors: (body: BodyInit | null,
       if (line.includes('[ERROR]')) errLines.push(line);
       else if (line.includes('[WARN]')) warnLines.push(line);
     }
-    if (warnLines.length) appendFileSync(join(LOGS_DIR, 'client_warning.log'), warnLines.join('\n') + '\n');
-    if (errLines.length) appendFileSync(join(LOGS_DIR, 'client_error.log'), errLines.join('\n') + '\n');
+    if (warnLines.length) {
+      const warnPath = join(LOGS_DIR, 'client_warning.log');
+      rotateLogIfBig(warnPath);
+      appendFileSync(warnPath, warnLines.join('\n') + '\n');
+    }
+    if (errLines.length) {
+      const errPath = join(LOGS_DIR, 'client_error.log');
+      rotateLogIfBig(errPath);
+      appendFileSync(errPath, errLines.join('\n') + '\n');
+    }
     return cors('ok');
   } catch (e) {
     logger.warn('Client log append failed', { error: (e as Error).message });
