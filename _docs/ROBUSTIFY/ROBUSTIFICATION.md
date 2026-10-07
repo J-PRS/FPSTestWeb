@@ -1973,3 +1973,17 @@ probes, captures, stray dumps). 45 `.devin_*` probe files moved to
 home or an allowlist entry.
 
 ### 2.82 - end
+
+### 2.83 distSq drift — two local copies of the brain-family helper (2026-10-08)
+
+Class 9: `distSq`/`dist3` live in `shared/botVec.ts` precisely because
+files kept carrying private copies — and two more had regrown anyway:
+`botGoals.ts` shadowed `distSq` (byte-identical 3D — now imports the
+owner) and `botHunt.ts` shadowed BOTH, with its `distSq` silently 2D
+(x,z only) under the shared name — a name collision that makes the next
+"just import the helper" fix *change behavior* by pulling altitude into
+orbit-reach checks. `botHunt` now imports shared `dist3` and its
+horizontal helper is renamed `distSqXZ` so the semantic difference
+can't hide behind the shared name again.
+
+### 2.83 - end

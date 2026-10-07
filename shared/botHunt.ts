@@ -14,6 +14,7 @@ import { sharedEnv } from './env.ts';
 import { GRAVITY } from './movement.ts';
 import { rollSkill, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
+import { dist3 } from './botVec.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -48,8 +49,9 @@ const PURSUE_MS = 3500;
 const SIGHT_M = 300;
 const PURSUE_M = 200;
 
-const dist3 = (a: BotVec, b: BotVec) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-const distSq = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+// Orbit/goal reach is horizontal — the brain family's shared distSq is
+// 3D and would make height deltas read as "not there yet".
+const distSqXZ = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 
 // ---- Hunt state: everything the fire/position decisions mutate ----
 
@@ -561,7 +563,7 @@ export function retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
   let ally: BotVec | null = null;
   let ad = Infinity;
   for (const o of ctx.others ?? []) {
-    const od = distSq(pos, o);
+    const od = distSqXZ(pos, o);
     if (od < ad && od > 4) { ad = od; ally = o; }
   }
   if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }

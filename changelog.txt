@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.83: distSq drift — botGoals/botHunt shadowed the shared botVec helpers; hunt 2D copy renamed distSqXZ
 2026-10-08 - robustify §2.82: OLD/ rotated-log archive cap (16) + _rootcheck.mjs root-clutter gate wired into npm run check
 2026-10-08 - beta: clean deploy — FPS_PUBLIC_BETA drops _t2 maps/assets, _clean_deploy.bat strips class_* rigs (knight/mannequin fallback), Dockerfile + DEPLOY_BETA.md
 2026-10-08 - beta: player names (fps-name → join wire → scoreboard/chat/feed), private rooms (unlisted flag + HOST toggle), chat /mute

@@ -10,6 +10,7 @@
  */
 import { botRand } from './botRand.ts';
 import { BOT_EYE } from './botHunt.ts';
+import { distSq } from './botVec.ts';
 import { ENERGY } from './movement.ts';
 import type { BotVec, BrainCtx } from './botBrain.ts';
 
@@ -182,9 +183,4 @@ export class BotGoals {
     // tourist hears the call of the mountain.
     return loudest && botRand() < (0.15 + this.duty() * 0.5) ? { ...loudest } : null;
   }
-}
-
-function distSq(a: BotVec, b: BotVec): number {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-  return dx * dx + dy * dy + dz * dz;
 }
