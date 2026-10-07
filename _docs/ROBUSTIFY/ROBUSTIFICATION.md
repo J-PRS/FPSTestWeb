@@ -2796,3 +2796,14 @@ played clip kept its ~350KB stash slot until FIFO eviction pushed it
 out - dead weight crowding the 4-slot cap. The prefetch now hands over
 the buffer on use; replay falls back to vault/network as before.
 (coolShots.ts)
+
+## 2.145 Anim stall guard could not actually heal (seen in client log)
+
+The stalled-cover guard re-enters the state via forceAnimationState, but
+when the stalled clip is the SAME clip the state resolves to,
+playAnimation's same-clip early return skipped the restart entirely -
+the guard warned once ('Anim action stalled ... re-entering') then the
+model stayed stopped/T-posed forever, re-entering every frame. The
+early return now only applies while the action is actually running; a
+stopped same-clip refire falls through to reset()+play().
+(PlayerModel.ts)

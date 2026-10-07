@@ -957,8 +957,10 @@ export class PlayerModel {
     // Same clip re-requested (jump↔jet share clips on the class rigs) —
     // refading an already-running action dips its weight through 0 and
     // flashes the bind pose; oneshots still restart since a replay is
-    // the point of re-firing them.
-    if (action === this.currentAction && !ONESHOT_CLIPS.has(name) && startPhase <= 0) {
+    // the point of re-firing them. The isRunning check is the stall
+    // guard's lifeline: forceAnimationState re-entering a stopped action
+    // must actually restart it or the model stays T-posed forever.
+    if (action === this.currentAction && action.isRunning() && !ONESHOT_CLIPS.has(name) && startPhase <= 0) {
       this.currentClipName = name;
       this.playingUAL = name.startsWith('UAL_');
       return;
