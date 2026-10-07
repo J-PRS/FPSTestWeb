@@ -1,3 +1,4 @@
+2026-10-11 - robustify 2.119: pin room hibernation — dormant with no audience, wakes on human join
 2026-10-11 - robustify 2.118: pin the 1.5s switchRoom hop cooldown — per-player, refusal leaves you put
 2026-10-11 - robustify 2.117: wrap fps-proto-reload sessionStorage — throwing storage can't crash gameState
 2026-10-11 - robustify 2.116: settings store falls back to session shadow when localStorage throws (private mode)

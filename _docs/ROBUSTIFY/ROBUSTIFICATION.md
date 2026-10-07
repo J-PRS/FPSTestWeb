@@ -2462,3 +2462,15 @@ a second hop inside the window is refused (player stays put, no room
 mint), and a different player hops freely under the per-player key.
 
 ### 2.118 - end
+
+### 2.119 Room hibernation pinned (2026-10-11)
+
+The audience gate (no humans + no spectators -> dormant ball/creature
+sims, skip the whole room tick) is what keeps a lobby full of empty
+named rooms cheap — and what keeps a bot-only 'default' from simming
+forever. It had zero coverage; a dropped `!audience` would burn CPU on
+every empty room and silently grow crawler populations dumped on the
+next joiner. hibernation.test.ts drives tickRoomGuarded: dormant with
+no audience, live the tick after a human joins.
+
+### 2.119 - end
