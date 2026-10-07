@@ -210,6 +210,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.47 Ball retarget-skip contract pinned authority-side (2026-10-07)
+
+Balls have the same retarget-skip structure as creatures — a due
+retarget `continue`s `stepAll` without a `stepBall` step — but their fix
+is architectural, not a counter: the retarget's own `bounce` segment IS
+the wire anchor, carrying post-skip state, so replays never model a
+missing quantum. `ballRetargetSkip.test` wraps
+`broadcastBinaryReliable`, decodes every segment for 400 ticks (493
+asserts incl. retarget bounces), and asserts segment position ===
+post-step roster truth. If `stepAll` ever steps through a retarget or
+emits a stale anchor, the pin fires.
+
 ### 2.46 Scoreboard rows throttle to ~4Hz (2026-10-07)
 
 `updateScoreboard` rebuilt the whole roster — Set + filter + map + sort —
