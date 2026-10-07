@@ -113,20 +113,31 @@ export class DemoStorage {
     }
   }
 
-  // Parse the demo binary header to extract metadata
+  // Parse the demo binary header to extract metadata. Every offset read
+  // is bounds-checked — uploads are attacker-controlled bytes, and a
+  // truncated body or lying length field would otherwise throw a bare
+  // RangeError the route can't distinguish from a write failure.
   private parseDemoHeader(buf: ArrayBuffer): { projectileLifetime: number; description: string; duration: number } {
     const view = new DataView(buf);
     let offset = 0;
+    const need = (n: number) => {
+      if (offset + n > view.byteLength) throw new Error('Malformed demo header');
+    };
 
+    need(1);
     const magic = view.getUint8(offset++);
-    if (magic !== 0x44) throw new Error('Invalid demo magic');
+    if (magic !== 0x44) throw new Error('Malformed demo header');
 
+    need(4);
     const formatVersion = view.getInt32(offset, true); offset += 4;
 
     // Read gameVersion string
+    need(2);
     const gvLen = view.getUint16(offset, true); offset += 2;
+    need(gvLen);
     offset += gvLen; // skip string bytes
 
+    need(28);
     offset += 8; // skip timestamp
     const duration = view.getFloat32(offset, true); offset += 4;
     offset += 4; // skip totalFrames
@@ -135,17 +146,21 @@ export class DemoStorage {
     offset += 4; // skip checksum
 
     // Read description string
+    need(2);
     const descLen = view.getUint16(offset, true); offset += 2;
+    need(descLen);
     const descBytes = new Uint8Array(buf, offset, descLen);
     const description = new TextDecoder().decode(descBytes);
     offset += descLen;
 
     // Skip start position/rotation/velocity (8 * float32 = 32 bytes)
+    need(32);
     offset += 32;
 
     // projectileLifetime is a binary float32 field in format v2+
     let projectileLifetime = 0;
     if (formatVersion >= 2) {
+      need(4);
       projectileLifetime = view.getFloat32(offset, true);
     } else {
       // v1 fallback: parse from description string
@@ -161,9 +176,13 @@ export class DemoStorage {
   async saveDemo(data: ArrayBuffer): Promise<{ filename: string; projectileLifetime: number; description: string }> {
     const header = this.parseDemoHeader(data);
 
-    // Reject demos below the cool-shot lifetime threshold
-    if (header.projectileLifetime < CONFIG.minDemoLifetime) {
-      logger.info('Demo rejected — below minimum lifetime', {
+    // Reject demos below the cool-shot lifetime threshold — and above the
+    // absurd: a crafted Infinity/huge lifetime would sort to the top of
+    // the index forever since eviction drops the lowest.
+    if (!Number.isFinite(header.projectileLifetime) ||
+        header.projectileLifetime < CONFIG.minDemoLifetime ||
+        header.projectileLifetime > 300) {
+      logger.info('Demo rejected — lifetime out of range', {
         lifetime: header.projectileLifetime.toFixed(2),
         threshold: CONFIG.minDemoLifetime,
         duration: header.duration.toFixed(1),

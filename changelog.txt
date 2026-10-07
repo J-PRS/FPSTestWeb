@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.141: demo upload - bounds-checked header parse (malformed -> 400, no internal echo); reject non-finite/absurd lifetime that would pin index top
 2026-10-01 - clip feed: two-pane pager - outgoing frame snapshots to a 2D poster while the live canvas mounts the neighbor clip at frame 0 mid-drag (TikTok-style); wheel/arrow transitions use the same path
 2026-10-01 - robustify 2.140: clip feed - auto-advance blocked by overloaded paused mode (natural end parks clock at duration); guard now distinguishes end vs manual pause
 2026-10-07 - robustify 2.139: clip feed - generation-guarded auto-advance (stale timer double-skip) + dead-clip watchdog

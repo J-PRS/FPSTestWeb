@@ -2755,3 +2755,15 @@ regression caught this round). End-of-clip also parks the clock at
 `duration`, so the guard now distinguishes: paused && clock < duration =
 user holds; paused && clock >= duration = advance. Verified headless:
 clip 1 ends -> counter flips to 2/N. (clipFeed.ts)
+
+## 2.141 Demo upload: parseDemoHeader had zero bounds checks
+
+saveDemo parsed attacker-controlled header offsets (gameVersion len,
+description len, v2 lifetime field) with no bounds checks - a truncated
+body or lying length field threw a bare RangeError that the route could
+not distinguish from a storage fault (500 + internal error text echoed).
+Also a crafted projectileLifetime=Infinity/huge passed the min filter
+and would pin itself to the top of the sorted index forever (eviction
+drops the lowest). Now: every read is bounds-checked (Malformed demo
+header -> 400, internals no longer echoed), and lifetime must be finite
+and <=300s. (DemoStorage.ts, serverRoutes.ts, demoHeaderBounds.test.ts)

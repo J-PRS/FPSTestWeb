@@ -217,8 +217,12 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
       }
       return json({ success: true, ...meta });
     } catch (e) {
-      logger.warn('Demo upload failed', { error: (e as Error).message });
-      return json({ success: false, error: (e as Error).message }, { status: 500 });
+      const msg = (e as Error).message;
+      logger.warn('Demo upload failed', { error: msg });
+      // Malformed input is the uploader's fault (400); a storage fault is
+      // ours (500) — and its internals don't belong in the response.
+      const bad = msg.startsWith('Malformed demo');
+      return json({ success: false, error: bad ? msg : 'Upload failed' }, { status: bad ? 400 : 500 });
     }
   }
 
