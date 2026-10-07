@@ -161,17 +161,17 @@ describe('world model <-> protocol conformance', () => {
     }
   });
 
-  it('simFields stays a subset of the declared field lists', () => {
-    // simFields names which declared fields drive the shared sim — a
-    // name that isn't declared anywhere is dead data nobody verifies.
+  it('only edge-channel fields sit on the hashed fields list', () => {
+    // replicaHash walks kind.fields verbatim — a 'sim' field (streamed
+    // motion, always up to a frame stale) or 'echo' field (server-owned,
+    // always up to an echo-interval stale) hashed at exact granularity
+    // is the phantom-desync class FIELD_CHANNELS warns about.
+    // Player is exempt — it hashes through computeStateHash's own
+    // channel-aware quantizer, not replicaHash.
     for (const kind of Object.values(WORLD_MODEL)) {
-      const declared = new Set([
-        ...(kind.fields ?? []), ...(kind.spawnFields ?? []),
-        ...(kind.updateFields ?? []), ...(kind.goneFields ?? []),
-        ...(kind.rosterFields ?? []),
-      ].map((f) => f.name));
-      for (const f of kind.simFields ?? []) {
-        expect(declared.has(f.name), `${kind.kind}.simFields '${f.name}' isn't declared on any wire list`).toBe(true);
+      if (kind.kind === 'player') continue;
+      for (const f of kind.fields ?? []) {
+        expect(f.channel === 'edge', `${kind.kind}.fields '${f.name}' is ${f.channel}-channel but rides the hash`).toBe(true);
       }
     }
   });

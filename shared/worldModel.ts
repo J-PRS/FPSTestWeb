@@ -47,9 +47,6 @@ export interface WorldKindDecl {
    *  wire type (deployDown, deployUp). Same declared-shape contract:
    *  the emit and the inbound check both read this list. */
   events?: Record<string, KindFieldDecl[]>;
-  /** Streamed motion fields — the shared sim replays them, so they are
-   *  presence-checked only (a stranded replica), never value-diffed. */
-  simFields: KindFieldDecl[];
 }
 
 export const WORLD_MODEL: Record<string, WorldKindDecl> = {
@@ -98,10 +95,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'tp', channel: 'edge' },
       { name: 't', channel: 'sim' },
     ],
-    simFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-    ],
   },
   creature: {
     kind: 'creature',
@@ -144,10 +137,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'targetId', channel: 'edge' },
       { name: 'tp', channel: 'edge' },
       { name: 't', channel: 'sim' },
-    ],
-    simFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
     ],
   },
   deploy: {
@@ -210,10 +199,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'armor', channel: 'echo', absent: null },
       { name: 'team', channel: 'edge', absent: null },
     ],
-    simFields: [
-      { name: 'pos', channel: 'sim' },
-      { name: 'hp', channel: 'echo' },
-    ],
   },
   flag: {
     kind: 'flag',
@@ -231,9 +216,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'home', channel: 'edge' },
       { name: 'state', channel: 'edge' },
       { name: 'carrier', channel: 'edge' },
-    ],
-    simFields: [
-      { name: 'pos', channel: 'sim' },
     ],
   },
   pickup: {
@@ -256,9 +238,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'pos', channel: 'sim' },
       { name: 'kind', channel: 'edge', absent: null },
     ],
-    simFields: [
-      { name: 'pos', channel: 'sim' },
-    ],
   },
   projectile: {
     kind: 'projectile',
@@ -279,10 +258,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'pellet', channel: 'echo' },
     ],
     goneFields: [],
-    simFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-    ],
   },
   // The player lane: join announce / leave / gameState roster rows / the
   // per-tick record. Players are the only client-owned kind — the server
@@ -293,7 +268,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     verbs: { spawn: 'playerJoined', update: 'tickUpdate', gone: 'playerLeft', roster: 'gameState' },
     fields: [
       { name: 'internalId', channel: 'edge' },
-      { name: 'health', channel: 'sim' },
+      { name: 'health', channel: 'echo' },
       { name: 'isDead', channel: 'edge' },
       { name: 'team', channel: 'edge' },
     ],
@@ -375,10 +350,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'team', channel: 'edge' },
       { name: 'transport', channel: 'edge' },
       { name: 'armorClass', channel: 'edge' },
-    ],
-    simFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
     ],
   },
 };
