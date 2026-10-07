@@ -210,6 +210,13 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.31 Stats-table folding pinned (2026-10-07)
+
+`weaponStatsBounds.test` pins the three bounds on the client-shaped
+stats tables: >64 source keys fold into `other`, >512 death cells into
+`far`, >64 mode names refuse. The audit that prompted it found the
+folding already implemented — the gap was coverage.
+
 ### 2.30 `lastRepair` keys outlived departed players (2026-10-07)
 
 Repair-cooldown keys are `playerId:itemId` — they were cleaned when the
