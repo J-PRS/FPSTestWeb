@@ -1,3 +1,4 @@
+2026-10-07 - robustify: pin SnapshotBuffer interp-queue bound (2000-push stream leaves <=32 snaps)
 2026-10-07 - robustify: pin ball segment anchors equal post-tick truth (retarget-skip contract, ball side)
 2026-10-07 - perf: throttle scoreboard row rebuilds to ~4Hz while open (was per rendered frame)
 2026-10-07 - robustify: cap Logger shipQueue (unbounded warn accumulation when shipping never initializes offline)

@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.48 SnapshotBuffer bound pinned (2026-10-07)
+
+`snapshotBound.test` pins the interp queue's window contract: a 2000-push
+stream at 20Hz leaves ≤32 snapshots (the 1s history floor + 2-snap
+interp minimum), and the buffer never drops below 2. The remote hot path
+audited clean alongside it — SnapshotBuffer is pooled + windowed,
+indicators are value-guarded per key, remoteAnim scratch is pooled,
+RemotePlayer interp allocates nothing per frame.
+
 ### 2.47 Ball retarget-skip contract pinned authority-side (2026-10-07)
 
 Balls have the same retarget-skip structure as creatures — a due
