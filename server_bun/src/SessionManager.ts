@@ -25,6 +25,9 @@ export interface SessionDeps {
   /** Session lifecycle state machine — owns who each playerId is; sockets
    *  carry the seat generation it stamps so stale callbacks die by gen. */
   registry: SessionRegistry;
+  /** Single spectator exit path (GameServer.departSpectator) — roster,
+   *  connection, specRooms index and session record die together. */
+  departSpectator(playerId: string, reason: string, closeCode?: number): boolean;
 }
 
 /** Join handshake + persistent identity. Handles four join shapes:
@@ -148,17 +151,9 @@ export class SessionManager {
     // treating the new player as read-only (specRooms is keyed by id,
     // not socket). Runs after claimIdentity — a rejected join shouldn't
     // kick the innocent spectator.
-    const specRoom = this.d.specRooms.get(playerId);
-    if (specRoom) {
-      const specSock = specRoom.connections.getConnection(playerId);
-      specSock?.close(1008, 'id claimed by player');
-      specRoom.spectators.delete(playerId);
-      specRoom.connections.unregister(playerId);
-      this.d.specRooms.delete(playerId);
-      // The spectator session ends here — the player session that follows
-      // is a fresh generation, not a state transition.
-      this.d.registry.terminate(playerId, 'id claimed by player');
-    }
+    // The spectator session ends here — the player session that follows
+    // is a fresh generation, not a state transition.
+    this.d.departSpectator(playerId, 'id claimed by player', 1008);
 
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);

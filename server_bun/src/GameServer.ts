@@ -88,6 +88,7 @@ export class GameServer {
       totalPlayers: () => opsTotalPlayers(this),
       ops: this.ops,
       registry: this.registry,
+      departSpectator: (id, reason, closeCode) => this.departSpectator(id, reason, closeCode),
     });
     this.factory = new RoomFactory({
       rooms: this.rooms,
@@ -223,15 +224,7 @@ export class GameServer {
     // otherwise they linger until the 4096 wholesale clear, which also
     // resets the gate for live spammers.
     this.invalidWarnAt.delete(playerId);
-    const specRoom = this.specRooms.get(playerId);
-    if (specRoom) {
-      specRoom.spectators.delete(playerId);
-      specRoom.connections.unregister(playerId);
-      this.specRooms.delete(playerId);
-      this.registry.terminate(playerId, 'spectator left');
-      logger.info('Spectator left', { playerId, room: specRoom.name });
-      return;
-    }
+    if (this.departSpectator(playerId, 'spectator left')) return;
     const room = this.roomOfPlayer(playerId);
     if (!room) {
       // Closed mid-handshake (connecting, never seated) — no room entry
@@ -397,6 +390,22 @@ export class GameServer {
 
   // Full teardown shared by grace expiry and idle reap — the five stores
   // and the broadcast must move together or a stale slot/token leaks.
+  /** Single spectator exit path — onClose and SessionManager's id-claim
+   *  both route here so the room roster, connection, specRooms index and
+   *  session record always die together. closeCode closes the spectator's
+   *  socket first when its departure is server-initiated (id claim). */
+  departSpectator(playerId: string, reason: string, closeCode?: number): boolean {
+    const specRoom = this.specRooms.get(playerId);
+    if (!specRoom) return false;
+    if (closeCode !== undefined) specRoom.connections.getConnection(playerId)?.close(closeCode, reason);
+    specRoom.spectators.delete(playerId);
+    specRoom.connections.unregister(playerId);
+    this.specRooms.delete(playerId);
+    this.registry.terminate(playerId, reason);
+    logger.info('Spectator left', { playerId, room: specRoom.name });
+    return true;
+  }
+
   private removePlayerCompletely(room: Room, playerId: string, reason: string): void {
     this.registry.terminate(playerId, reason);
     room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
