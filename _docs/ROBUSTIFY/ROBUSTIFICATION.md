@@ -2967,3 +2967,15 @@ client 256-cap + tombstone dedup), per-player teardown funnel
 (rateLimiter/limiter warns/deployables/projectiles/scoring/sessionTokens
 /wireId retirement all swept in removePlayerCompletely), lastRepair key
 sweeps on owner-leave and item-remove, wireIdRetired mint-time sweep.
+
+## 2.160 Ghost deployable: deployGone never killed own plants
+
+remoteRemove looked the id up in the remotes map only -- but own plants
+are registered by server-id via ackLocal into byId, never into remote.
+So a deployGone for OUR plant (server cap-recycle evicts the oldest, or
+a blast kill) missed the lookup, skipped dispose, and left the item
+alive in items forever: a ghost mesh on screen AND a phantom entry in
+netEntries hashing against the server roster -- the deploy-hash lane's
+real desync class. remoteRemove now also kills any items entry whose
+serverId matches (via killItem for the proper fizzle teardown).
+(deployables.ts)

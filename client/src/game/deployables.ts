@@ -534,6 +534,13 @@ export class Deployables {
 
   remoteRemove(id: number): void {
     this.remotes.remove(id);
+    // Own plants are registered by server-id via ackLocal but never join
+    // the remotes map — without this their deployGone (server cap-recycle,
+    // blast kill) leaves the item alive in items forever: a ghost mesh
+    // that also keeps hashing into netEntries against the server roster.
+    for (const i of this.items) {
+      if (i.serverId === id) {this.killItem(i);}
+    }
   }
 
   /** Wire-id → item pairs across BOTH lanes: remote spawns keyed by the
