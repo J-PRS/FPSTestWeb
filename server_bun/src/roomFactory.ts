@@ -77,10 +77,29 @@ export class RoomFactory {
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
-   *  honored at creation — the first joiner defines the match. */
-  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false): Room {
+   *  honored at creation — the first joiner defines the match.
+   *  Room minting is join-driven — a script cycling fresh names grows
+   *  `rooms` forever (hibernation kills the sim cost, not the memory or
+   *  the per-tick map iteration). Past the cap, recycle the eldest room
+   *  with no human audience: an empty or bot-only room loses nothing,
+   *  its name just remints on the next join. Returns null only when
+   *  every live room is occupied — the caller rejects the join. */
+  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false): Room | null {
     let room = this.host.rooms.get(name);
     if (!room) {
+      if (this.host.rooms.size >= CONFIG.maxRooms) {
+        for (const [n, r] of this.host.rooms) {
+          if (r.players.getHumanCount() > 0 || r.spectators.size > 0) continue;
+          r.dispose();
+          this.host.rooms.delete(n);
+          logger.warn('Room cap recycled idle room', { room: n });
+          break;
+        }
+        if (this.host.rooms.size >= CONFIG.maxRooms) {
+          logger.warn('Room mint rejected: all rooms live', { wanted: name });
+          return null;
+        }
+      }
       const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
       this.host.maps.noteSource(name, src);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
@@ -112,7 +131,7 @@ export class RoomFactory {
   /** Quick-join: pick the emptiest open room already running `mode`
    *  (and `map` when given), else spin up `<map|mode>-N`. `bots`
    *  overrides the spec's bot count/botFill on creation only. */
-  quickRoom(mode: string, map = '', bots?: number): Room {
+  quickRoom(mode: string, map = '', bots?: number): Room | null {
     let best: Room | undefined;
     for (const room of this.host.rooms.values()) {
       // Map and mode are independent filters — a peaks-ctf room must not

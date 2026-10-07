@@ -21,7 +21,7 @@ const word = (v: unknown): string | undefined =>
 
 export interface SwitchHost {
   roomOfPlayer(playerId: string): Room | undefined;
-  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
   totalPlayers(): number;
   playerRoom: Map<string, Room>;
@@ -86,6 +86,10 @@ export class RoomSwitcher {
     const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
       ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
     const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots, msg.unlisted === true);
+    if (!to) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Server full — try again shortly' });
+      return null;
+    }
     if (this.roomFull(to)) {
       from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${name} is full` });
       return null;

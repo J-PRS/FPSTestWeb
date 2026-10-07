@@ -1,0 +1,79 @@
+import { describe, it, expect, afterEach } from 'bun:test';
+import { GameServer } from '../src/GameServer.ts';
+import { CONFIG } from '../src/config.ts';
+import type { Room } from '../src/Room.ts';
+
+interface Peek {
+  factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null };
+  rooms: Map<string, Room>;
+  tickLoop: { stop(): void };
+}
+
+// Room minting is join-driven — an attacker cycling fresh names grows
+// `rooms` forever without the cap. The recycle keeps named-room
+// semantics (an evicted room remints on next join) while bounding the
+// map; only a roster of genuinely live rooms refuses new mints.
+describe('room cap', () => {
+  let gs: GameServer;
+  const prevMax = CONFIG.maxRooms;
+  afterEach(() => { CONFIG.maxRooms = prevMax; gs?.stop(); });
+
+  const mkServer = () => {
+    gs = new GameServer();
+    (gs as unknown as Peek).tickLoop.stop();
+    return gs as unknown as Peek;
+  };
+
+  it('minting past the cap recycles the eldest audience-less room', () => {
+    CONFIG.maxRooms = 3;
+    const peek = mkServer();
+    peek.factory.roomFor('a'); peek.factory.roomFor('b'); peek.factory.roomFor('c');
+    expect(peek.rooms.size).toBe(3);
+
+    const d = peek.factory.roomFor('d');
+    expect(d).not.toBeNull();
+    expect(peek.rooms.has('a')).toBe(false); // eldest empty room recycled
+    expect(peek.rooms.has('d')).toBe(true);
+    expect(peek.rooms.size).toBe(3);
+  });
+
+  it('a recycled room name remints fresh on the next join', () => {
+    CONFIG.maxRooms = 2;
+    const peek = mkServer();
+    peek.factory.roomFor('a'); peek.factory.roomFor('b'); peek.factory.roomFor('c');
+    expect(peek.rooms.has('a')).toBe(false);
+
+    // The name is free again — a later joiner gets a live room, not a
+    // tombstone; nothing was lost by the eviction.
+    expect(peek.factory.roomFor('a')).not.toBeNull();
+    expect(peek.rooms.has('a')).toBe(true);
+  });
+
+  it('refuses a mint when every room has a live human audience', () => {
+    CONFIG.maxRooms = 2;
+    const peek = mkServer();
+    const a = peek.factory.roomFor('a')!;
+    const b = peek.factory.roomFor('b')!;
+    a.players.addPlayer('h1');
+    b.players.addPlayer('h2');
+
+    expect(peek.factory.roomFor('c')).toBeNull();
+    // Live rooms are never evicted to make space.
+    expect(peek.rooms.has('a')).toBe(true);
+    expect(peek.rooms.has('b')).toBe(true);
+  });
+
+  it('spectators count as audience — a watched room is not recyclable', () => {
+    CONFIG.maxRooms = 2;
+    const peek = mkServer();
+    const a = peek.factory.roomFor('a')!;
+    a.spectators.add('watcher');
+    peek.factory.roomFor('b');
+
+    // 'b' (empty, no audience) recycles instead of watched 'a'.
+    const c = peek.factory.roomFor('c');
+    expect(c).not.toBeNull();
+    expect(peek.rooms.has('a')).toBe(true);
+    expect(peek.rooms.has('b')).toBe(false);
+  });
+});

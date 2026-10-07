@@ -133,7 +133,7 @@ export class GameServer {
     return this.journal.stats();
   }
 
-  quickRoom(mode: string, map = '', bots?: number): Room {
+  quickRoom(mode: string, map = '', bots?: number): Room | null {
     return this.factory.quickRoom(mode, map, bots);
   }
 

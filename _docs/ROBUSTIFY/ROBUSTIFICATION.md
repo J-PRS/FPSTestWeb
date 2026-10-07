@@ -2176,3 +2176,18 @@ unheld countdown, ensure re-arms a reconnecting dead player, dispose
 drains everything with the room.
 
 ### 2.97 - end
+
+### 2.98 Room-mint cap (2026-10-08)
+
+Class-10 DoS bound: joins may name any room, so a script cycling fresh
+names grew `rooms` forever — hibernation stops the sim cost, not the
+memory (a Room is ~200KB+ of sims) or the per-tick map iteration.
+CONFIG.maxRooms (256, FPS_MAX_ROOMS) bounds it: past the cap, minting
+recycles the eldest audience-less room (getHumanCount==0 && no
+spectators — an empty room loses nothing, its name remints on next
+join); only a roster of genuinely live rooms refuses the mint.
+roomFor/quickRoom now return Room|null; join closes 1013 'Server
+full', switchRoom sends a matchNotice, the /quickroom HTTP route 503s.
+roomCap.test.ts pins all four branches.
+
+### 2.98 - end

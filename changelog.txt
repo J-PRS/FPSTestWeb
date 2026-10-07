@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.98: room-mint cap — FPS_MAX_ROOMS bounds join-driven Room creation, recycles eldest idle room, refuses only when all live
 2026-10-08 - robustify §2.97: respawn double-fire fixed — sim tick now cancels the wall timer it consumes; lifecycle pinned 7 ways
 2026-10-08 - robustify §2.96: spectator depart funnel pinned — all 4 seat stores asserted purged; broadcast lane audited clean
 2026-10-08 - robustify §2.95: combat disconnect funnel pinned — all 7 player-keyed maps asserted purged onPlayerDisconnected

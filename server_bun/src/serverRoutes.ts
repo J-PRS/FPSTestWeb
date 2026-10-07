@@ -128,6 +128,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
         return corsResponse('Unknown map', { status: 400 });
       }
       const room = ctx.gameServer.quickRoom(mode, map, bots);
+      if (!room) return corsResponse('Server full', { status: 503 });
       return json({ room: room.name, mode: room.mode });
     },
     // WebTransport discovery: browser clients pin self-signed certs via

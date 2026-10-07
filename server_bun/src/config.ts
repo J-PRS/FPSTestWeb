@@ -30,6 +30,11 @@ export const CONFIG = {
   // Whole-server cap across ALL rooms — rooms share one process/core, so
   // a per-room limit alone can't bound real load. 0 = unlimited.
   globalMaxPlayers: envNum('FPS_GLOBAL_MAX_PLAYERS', 128),
+  /** Live-room cap — joins may name any room, so without this a script
+   *  mints a heavyweight Room per fresh name forever. Past the cap the
+   *  eldest audience-less room is recycled; a full roster of LIVE rooms
+   *  rejects new mints outright. */
+  maxRooms: envNum('FPS_MAX_ROOMS', 256),
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,

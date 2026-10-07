@@ -18,7 +18,7 @@ export interface SessionDeps {
   playerRoom: Map<string, Room>;
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
-  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
@@ -120,6 +120,10 @@ export class SessionManager {
     }
 
     const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted);
+    if (!room) {
+      ws.close(1013, 'Server full');
+      return;
+    }
 
     // Watch-only join: `spectate: true` registers the socket for this
     // room's broadcasts + tick stream without spawning a player — no
