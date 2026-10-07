@@ -28,10 +28,20 @@ export interface HttpCtx {
 }
 
 const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': CONFIG.corsOrigin,
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
+
+// Ops surfaces (tick-lag meters, client tails, weapon telemetry) give a
+// stranger a live "when is the server weakest" readout — when the admin
+// token exists they require it; dev (token unset) stays open.
+function opsAllowed(req: Request | undefined, url: URL): boolean {
+  if (!CONFIG.adminToken) {return true;}
+  const bearer = req?.headers.get('authorization')?.replace(/^bearer\s+/i, '');
+  return bearer === CONFIG.adminToken || url.searchParams.get('key') === CONFIG.adminToken;
+}
+const opsClosed = () => corsResponse('unauthorized', { status: 401 });
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
   return new Response(body, { ...init, headers: { ...CORS_HEADERS, ...init?.headers } });
@@ -75,8 +85,8 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
   return {
     '/': () => json(ctx.gameServer.getHealthStatus()),
     '/health': () => json(ctx.gameServer.getHealthStatus()),
-    // Ops metrics — uptime, players, balls, tick-lag stats.
-    '/metrics': () => json(ctx.gameServer.getMetrics()),
+    // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
+    '/metrics': (url, req) => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
     '/serverinfo': () => json(ctx.gameServer.getServerInfo()),
     // Lobby browse — live matches with occupancy.
@@ -87,12 +97,16 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/stats': async () => json(await ctx.gameServer.getStats()),
     // Balance telemetry — per-mode damage/hits/kills by weapon source,
     // bot-authored share split out (also journaled to weaponstats.jsonl).
-    '/weaponstats': () => json(weaponStats.snapshot()),
+    '/weaponstats': (url, req) => opsAllowed(req, url) ? json(weaponStats.snapshot()) : opsClosed(),
     // Readable dashboard over the same ledger — tables, bars, funnel pcts.
-    '/weaponstats.html': () => corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+    '/weaponstats.html': (url, req) => opsAllowed(req, url)
+      ? corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+      : opsClosed(),
     // Live ops dashboard over /metrics + /health — degraded banner,
     // per-phase tick bars, per-room bot CPU + client tails.
-    '/status': () => corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+    '/status': (url, req) => opsAllowed(req, url)
+      ? corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+      : opsClosed(),
     // Map list for the menu's match setup — name + mode + default bots.
     '/maps': () => json(ctx.gameServer.listMaps()),
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
@@ -167,8 +181,23 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
 }
 
 // Demo endpoints: POST /demos/upload, GET /demos/:filename.
+//
+// Upload is the server's only unauthenticated write path — anyone can
+// POST 16MB. The storage cap bounds the disk (~100 clips), but an
+// unthrottled poster still churns 16MB writes + index churn forever.
+// Per-IP budget mirrors the client-log rate: generous for real play,
+// useless for a filler script.
+const demoIps = new Map<string, { count: number; start: number }>();
+const DEMO_IP_LIMIT = 12;
+const DEMO_IP_WINDOW_MS = 60_000;
+
 export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
   if (url.pathname === '/demos/upload' && req.method === 'POST') {
+    const ip = ctx.requestIP?.(req)?.address;
+    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
+        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
+      return json({ success: false, error: 'Too many uploads' }, { status: 429 });
+    }
     try {
       // Reject oversized uploads before buffering the body — clips are
       // ~seconds of binary frames, 16MB is a generous ceiling

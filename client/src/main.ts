@@ -8,7 +8,7 @@ import {
 
 import Logger, { ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
-import { urlParams } from './core/params.js';
+import { urlParams, isDevHost } from './core/params.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
@@ -36,6 +36,7 @@ import { FragMessages } from './ui/FragMessages.js';
 import { HealthBarSystem } from './ui/HealthBarSystem.js';
 import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
+import { wireOnboarding } from './ui/onboarding.js';
 import { initLogPanel } from './ui/logPanel.js';
 import { installOverlapAudit, reportHudOverlap } from './ui/overlapAudit.js';
 
@@ -213,8 +214,12 @@ async function init(): Promise<void> {
       .then(() => { if (!teamBots && !networkManager.isConnected()) {setupOfflineMode(mode);} });
   }
 
-  // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
-  dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
+  // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
+  // Dev hosts only: on a public deploy these are a scriptable aim/spawn
+  // surface for anyone who reads the bundle.
+  if (isDevHost()) {
+    dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
+  }
 
   // Initialize networking — NetworkManager owns the WebSocket transport
   networkManager = new NetworkManager();
@@ -710,6 +715,7 @@ if (hot) {
 }
 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
+wireOnboarding(); // mobile gate + first-run controls card — before init so it can't be lost in boot noise
 init().then(async () => {
   gameStarted = true;
 
@@ -756,7 +762,8 @@ init().then(async () => {
     window.__playRec = async (src, speed) =>
       (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
   };
-  if (import.meta.env.DEV || urlParams.debug) {await wireDebugTools();}
+  // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
+  if (isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
@@ -767,6 +774,6 @@ init().then(async () => {
     requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap)));
   window.addEventListener('fps:set', (e) => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-    if (key === 'fps-debug' && value === 1) {wireDebugTools();}
+    if (key === 'fps-debug' && value === 1 && isDevHost()) {wireDebugTools();}
   });
 });

@@ -88,16 +88,23 @@ export const CONFIG = {
   identitySecret: envStr('FPS_SECRET', ''),
   // Admin API bearer token for /admin/* (hot-reload, kick, end match).
   // Unset = admin endpoints disabled entirely — no accidental open admin.
+  // Also gates the ops surfaces (/metrics, /status, /weaponstats*): when
+  // set they need `?key=<token>` or the bearer header; unset = open (dev).
   adminToken: envStr('FPS_ADMIN_TOKEN', ''),
+  // CORS allow-origin: a public deploy should answer its own origin(s),
+  // comma-separated — '*' is for dev where the vite server lives on :5400.
+  corsOrigin: envStr('FPS_CORS_ORIGIN', '*'),
   // Server-browser identity — what a master list / LAN browser shows.
   serverName: envStr('FPS_SERVER_NAME', 'kribes server'),
   // Free-text label (e.g. 'eu', 'lan', 'jp-lan') — clients just display it.
   serverRegion: envStr('FPS_SERVER_REGION', ''),
   // WebTransport tier (netcode v2): separate QUIC/HTTP3 UDP listener.
   // 0 = disabled. Cert/key are PEM file paths — WT has no plaintext mode;
-  // certs/dev.{crt,key} are the built-in dev fallback. Default port 9443 so
-  // a plain `bun src/server.ts` serves all three tiers.
-  wtPort: envNum('FPS_WT_PORT', 9443),
+  // certs/dev.{crt,key} are the built-in dev fallback. The default tracks
+  // FPS_PORT (+1443, so port 8000 → 9443 unchanged) — a second instance on
+  // an alternate FPS_PORT must not collide on a fixed UDP port (seen: dev
+  // server + test server both binding 9443 → EADDRINUSE at startup).
+  wtPort: envNum('FPS_WT_PORT', envNum('FPS_PORT', 8000) + 1443),
   wtCertPath: envStr('FPS_WT_CERT', ''),
   wtKeyPath: envStr('FPS_WT_KEY', ''),
   // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.

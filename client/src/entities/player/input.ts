@@ -8,6 +8,7 @@
 
 import { matchCode, type BindAction } from '../../core/keybinds.js';
 import { settings } from '../../core/settings.js';
+import { isDevHost } from '../../core/params.js';
 import { audio } from '../../core/audio.js';
 
 /** Actions a press can trigger — Player supplies the implementations. */
@@ -255,6 +256,11 @@ export class PlayerInput {
       });
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
+
+    // Dev-tools row: hidden markup unless this is an operator's host
+    // (vite dev / localhost / LAN). A public deploy never reveals it —
+    // the buttons' own wiring still runs harmlessly if absent.
+    if (isDevHost()) {document.querySelector('#dev-tools')?.removeAttribute('hidden');}
 
     // Boot-time flags: spawns/debug are read once at module init, so a
     // change persists the setting and reloads rather than half-applying.
