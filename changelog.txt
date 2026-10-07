@@ -1,3 +1,4 @@
+2026-10-01 - C5: every roster row source generates from declarations - pickups + deployables gameState snapshots now build via rosterRow; all six roster feeds emit declared shapes only
 2026-10-01 - C5: binary tick record pinned + simFields subset invariant - v3 tickPlayer round-trip carries every declared player updateField; simFields must name declared fields or the test fires
 2026-10-01 - C5: gameState envelope swept - roster check now validates every declared container present (players/flags/pickups/deployables), pickup+deploy rosterFields declared; a malformed snapshot row warns at dispatch
 2026-10-01 - C5: knockback/playerRespawn/teleport declared - last hand-built player events now emit via eventPayload + inbound-check; every server->client entity or player message is generated

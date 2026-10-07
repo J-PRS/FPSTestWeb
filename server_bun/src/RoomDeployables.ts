@@ -7,7 +7,7 @@
  * carpet the map — there was previously no server record at all.
  */
 import type { Vec3, ClaimVerdict, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload, rosterRow } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -218,7 +218,7 @@ export class RoomDeployables {
   }
 
   snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId }[] {
-    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor, team: this.teamOf(d) }));
+    return [...this.items.values()].map((d) => rosterRow(WORLD_MODEL.deploy!, 'id', d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor, team: this.teamOf(d) }) as { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId });
   }
 
   /** Creature-sim candidates — `dep:N` ids mirror the client species

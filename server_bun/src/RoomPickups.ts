@@ -7,7 +7,7 @@
  * was removed entirely since this path covers every legit bank.
  */
 import type { Vec3, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload, rosterRow } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -72,7 +72,10 @@ export class RoomPickups {
   }
 
   snapshot(): { id: number; pos: Vec3; kind: PickupKind }[] {
-    return [...this.pickups.values()].map((p) => ({ id: p.id, pos: { ...p.pos }, kind: p.kind }));
+    // rosterRow pins the row shape to the declared rosterFields — a
+    // snapshot field that drifts from the declaration warns at build
+    // time instead of diffing silently on the client.
+    return [...this.pickups.values()].map((p) => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: { ...p.pos }, kind: p.kind }) as { id: number; pos: Vec3; kind: PickupKind });
   }
 
   /** Nearest live pickup to a point — bots chase these. */
