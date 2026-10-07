@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { mkdirSync, appendFileSync } from 'node:fs';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import { rotateLogIfBig } from './clientLogs.ts';
 
 interface MatchRec {
   t: number;
@@ -32,6 +33,7 @@ export class MatchJournal {
     if (this.ring.length > 100) this.ring.shift();
     try {
       mkdirSync(join(JOURNAL, '..'), { recursive: true });
+      rotateLogIfBig(JOURNAL);
       appendFileSync(JOURNAL, JSON.stringify(entry) + '\n');
     } catch (e) {
       logger.warn('Match journal write failed', { err: String(e) });

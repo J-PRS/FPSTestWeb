@@ -210,6 +210,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.32 `.jsonl` ledgers rolled at 32MB mid-run (2026-10-07)
+
+The `client.log` mid-run roll (§2.26) generalized: `rotateLogIfBig()`
+is shared from clientLogs and now guards `matches.jsonl` and
+`weaponstats.jsonl` appends — both only rotated at boot before, growing
+for the server's life. `logger.ts` (server.log) is the deliberate
+exception: it is browser-embedded and cannot import node:fs at top
+level; it keeps boot rotation. The suite run also caught a real test
+trap — `weaponStats` is a shared singleton, so bounds tests on it are
+order-dependent; the class is now exported and the test is hermetic.
+
 ### 2.31 Stats-table folding pinned (2026-10-07)
 
 `weaponStatsBounds.test` pins the three bounds on the client-shaped
@@ -354,6 +365,44 @@ sweep: `playerRoom`/`specRooms`/registry teardown verified complete in
 (`jet`→bool, `status` masked bits only, `inputDirection` normalizes so
 oversized forward/right can't over-thrust); every position field on the
 wire passes `validateVec3`.
+
+### 2.17 structKit hull parity pin — caught real drift on first run (2026-10-06)
+
+The new `kind:'kit'` collision channel is architecturally right — pure
+data in `shared/`, both ends consume the same table — but the comment
+itself admitted the risk: "a builder tweak that forgets KIT_HULLS is
+the only drift risk left." Builders emit `userData.hulls` sidecars, so
+a client vitest (`kitHulls.test.ts`) now diffs authored hulls vs the
+server table through the REAL `KIT_BUILDERS` map. First run caught
+actual drift (class 1 — server collided where the visual doesn't):
+
+* wallrun + wallgate + bunker walls: table centered at y=2.3 spanning
+  0–4.6; authored hull centers at 2.1 spanning −0.2–4.4 → the server
+  ran ~0.4m of phantom collision above every wall top.
+* flagtower walls/stubs: 2.4→2.2 centers and 4.6→4.8 heights.
+* arch feet: table guessed ENDPOST slabs; authored are leaning
+  2.6×7.4 slabs at y=3.7 — a different shape entirely.
+* shard footprint: 4.1 vs authored 4.08.
+* `endPost` emitted NO sidecar — compound pieces had post meshes with
+  zero authored hull (the table's ENDPOST guesses were unverifiable
+  until now). Given the sidecar; the table entries proved correct.
+
+Also this round — two stale-contract fixes on user WIP:
+
+* `optProjIdOpt` (the new oversized-id gate) rejected `projectileId:
+  null`, a documented legal claim value ("most recent spawn of that
+  weapon") — silently malformed every null-id hit claim. Null now
+  passes; pinned by `p2pHost` shot-claim test.
+* `deployRules` fixture used pre-rename team id `'a'` → `'alpha'`;
+  `demoPlaybackAudit`'s flat terrain stub lacked `terrain.heightU`
+  (new swarm blob-shadow uniforms) — stubbed with a 1×1 black map.
+* `botBrain` no-progress test asserted a blind perpendicular sidestep —
+  `pickDetour` has been a route-cost heading fan since 654dc716, so on
+  flat ground goal-forward is the correct detour. Test now blocks the
+  goal line so the fan deflects sideways.
+
+Verified: client vitest 476/476 (was 18 failures), scenario suite
+373/373, both `tsc` clean.
 
 ### 2.16 Live networked bot match — judge input-gap race (2026-10-06)
 

@@ -85,7 +85,7 @@ const speedBin = (v: { x: number; y: number; z: number } | null): string => {
 
 const FLUSH_MS = 60_000;
 
-class WeaponStats {
+export class WeaponStats {
   private table: RoomTable = {};
   private deaths: { [mode: string]: { [cell: string]: number } } = {};
   private ttk: { [mode: string]: { [source: string]: TtkRow } } = {};
@@ -231,7 +231,9 @@ class WeaponStats {
       if (!paths) return;
       try {
         const { appendFileSync, mkdirSync } = await import('node:fs');
+        const { rotateLogIfBig } = await import('./clientLogs.ts');
         mkdirSync(paths.dir, { recursive: true });
+        rotateLogIfBig(paths.file);
         appendFileSync(paths.file, JSON.stringify({
           ts: new Date().toISOString(), byMode: this.table,
           deaths: this.deaths, ttk: this.ttk, flags: this.flags,

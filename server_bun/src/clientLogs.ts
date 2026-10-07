@@ -33,6 +33,17 @@ export function rotateLogs(): void {
   } catch { /* same */ }
 }
 
+const MID_RUN_ROLL_BYTES = 32 * 1024 * 1024;
+
+/** Boot-time rotate leaves a long-lived server with forever logs — any
+ *  appender calls this before writing so a hot file rolls mid-run too.
+ *  Sync stat is fine: appenders are all throttled or windowed. */
+export function rotateLogIfBig(p: string): void {
+  try {
+    if (existsSync(p) && statSync(p).size > MID_RUN_ROLL_BYTES) rotateLog(p);
+  } catch { /* rotation must never block an append */ }
+}
+
 /** Per-IP append throttle — bodies cap at 512KB each, but nothing else
  *  stopped one caller from filling logs/ at line speed. 20 posts/min is
  *  generous for a browser that ships a handful of warns per session. */
