@@ -264,7 +264,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'heal', amount: obj.amount, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.acceptClaims === false ? 'outcomes are server-simmed' : h.combat.handleHeal(id, m)),
+    // Heals stay claimed on every tier: ambient pickups (nuggets, gems)
+    // have no server-side entity to adjudicate an intent against. The
+    // bounds live in handleHeal — 25/call, 1.5s cadence, healCredit in
+    // team rooms — not in re-derivation, so the claim gate doesn't apply.
+    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
   },
 
   creatureHit: {

@@ -3326,3 +3326,15 @@ reports judge teleports, energy/skill/slam-drain ride the same deps,
 and attachField lands lazily once the heightmap loads. PlayerManager
 energyBurn wired so damage energy-drain mirrors dedicated.
 (tsc + p2pHost 10/10 green)
+
+## 2.185 — Heal claims stay decoded (claim-gate scope corrected)
+
+The claimsAccepted=false gate refused `heal` alongside combat claims —
+but heals aren't combat outcomes: ambient pickups (nuggets in non-team
+rooms) have no server entity to intent against, so the bounded claim
+(25/call, 1.5s cadence, healCredit spend in team rooms) IS the designed
+channel. Refusing it killed nugget heals on dedicated. The gate now
+covers only combat-outcome claims (aoeShot, projectileDestroy, ballHit,
+creatureHit, repair — all of which have real sim/intent paths); heal
+runs handleHeal on every tier. Three tests re-pinned to the bounded-
+accept semantics.
