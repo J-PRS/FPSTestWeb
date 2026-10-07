@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.162: verified-clean sweep - deploy lane now symmetric end-to-end (hp/down/up/gone/cull all cover own plants); demo recorder, creature caps/culls, explosion and killfeed bounds, solidIndex dual-path all confirmed hardened
 2026-10-01 - robustify 2.161: roster reconcile now culls own plants too - remoteIds() only covered the remotes map, so own deployables missing from the roster lingered as ghosts (same class as 2.160, second door)
 2026-10-01 - robustify 2.160: deployGone now kills own plants too - they live in byId not the remotes map, so the remove edge missed them and left ghost meshes + phantom deploy-hash entries
 2026-10-01 - robustify 2.159: verified-clean audit sweep of deployable wire edges, cap symmetry, rate limits, repair-claim validation, ledger bounds and the player-teardown funnel - all lanes hardened already, coverage logged

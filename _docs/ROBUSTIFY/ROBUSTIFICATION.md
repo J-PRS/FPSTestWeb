@@ -2990,3 +2990,18 @@ own items with a stamped serverId absent from the roster; unacked
 plants (serverId undefined) are untouched. Both doors of the own-plant
 ghost class are now shut: edge path (remoteRemove) and reconcile path.
 (deployables.ts, net/deployables.ts)
+
+## 2.162 Verified-clean: deploy-lane symmetry + FX/HUD bound sweep
+
+No code change -- coverage record after the 2.160/2.161 own-plant fixes.
+Deploy lane now symmetric end-to-end: own items sit in byId so
+applyDeployHp/down/up resolve them, reapDeadItems drops corpse
+bindings, deployGone kills them (2.160), roster cull covers them
+(2.161). Also swept clean: demo recorder (circular frame buffer +
+roster-by-id dedup + event prune/freelist), creature lanes (server pop
+caps per map spec, roster reconcile spawns missing AND culls extras,
+dead-ctor wedge eviction), explosions (MAX_LIVE_EXPLOSIONS + per-entry
+dispose/splice, far ones age out without buffer writes), killfeed (6
+row cap), Projectile.solidIndex reset on BOTH the join and admin
+hot-reload paths, movement/teleport wire surface (limits everywhere;
+teleport intentionally unlimited via honor-and-count).
