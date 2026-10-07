@@ -2572,3 +2572,13 @@ second loop existed only because a comment explained why room-hops also
 need it. Extracted `dropWarnKeys(playerId)`; both teardown paths share it,
 so a future warn-key shape change has one owner.
 ### 2.128 - end
+
+### 2.129 - specFor resolution pin
+The room mint resolves room name + client mode/map claims through a
+fallback chain (name -> numbered base -> map arg -> mode) with a legality
+gate (`specModes(spec).includes(mode)` or the spec default wins).
+`specFor.test.ts` pins the order, the swap gate (a dm request on a ctf
+map keeps flag rules, never sprouts stands), bots override, and the
+no-spec default. Also ran the FULL server suite: 1249/1250, only failure
+the known soakChaos p95 regression from moveJudge WIP 00bc1f32.
+### 2.129 - end
