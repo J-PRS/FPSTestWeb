@@ -1,3 +1,4 @@
+2026-10-07 - robustify: bot untrack pin now covers all 18 per-bot maps including the senses set
 2026-10-07 - robustify: client warning and error logs roll mid-run alongside client.log
 2026-10-07 - robustify: retarget edges now stand in for the sim step the server skips or client replay runs ahead of authority
 2026-10-07 - robustify: creature desync warns now name the diverging field via server-side hash fields
@@ -9,6 +10,7 @@
 2026-10-07 - robustify: claim-sweep unacked warns coalesce into one line per pass; logRotate.ts extracted import-meta-free so jsonl ledgers roll mid-run without breaking client typecheck
 2026-10-07 - robustify: matches.jsonl and weaponstats.jsonl roll at 32MB mid-run via shared rotateLogIfBig; WeaponStats class exported for hermetic bounds tests
 2026-10-06 - robustify: kit-hull parity pin caught real drift — wallrun/bunker/wallgate centers 2.3->2.1 (0.4m phantom collision above wall tops), flagtower/arch/shard hulls corrected to authored sidecars, endPost gained userData.hulls; optProjIdOpt now accepts null (legal 'most recent spawn' claim); stale fixtures fixed (heightU stub, alpha team id, route-cost detour test)
+2026-10-07 - refactor: one move-surface compositor — FieldSurface now wraps a bare GroundSampler (fromField/over factories) so the reach-bound/normal/push-out rules can't be re-implemented per side. Client TerrainSurface, netbot surfaceFor, and fleet surfaceOf deleted; client plugs THREE Terrain in as a sampler. Closes the whole adapter-drift class the teleport fix belonged to
 2026-10-07 - bugfix: walking into a structure teleported you onto its roof — client TerrainSurface.getHeight/getNormal ignored the sim's reach bound and called topAt unbounded, so the ground clamp read a 12m wall's top as floor; both now forward maxTop like shared/FieldSurface (server was never wrong). Pinned by surfaceReach.test (tall box blocks at the face, knee-high ledge still steps up)
 2026-10-07 - chat: bot taunt variety — dedup ring is now per-pool (window = most of the pool, capped 14) so a line can't repeat until its siblings air, and the smallest high-frequency pools (belt/deploy/fear/hero/underfire/lost/alert/cheer/groan/ack/etc, 4-8 lines → 8-15) got fleshed out in the same era voice
 2026-10-07 - robustify: lastRepair cooldown keys purge on player departure — immortal base items kept a departed welder entries for the rooms life

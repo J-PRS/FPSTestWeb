@@ -210,6 +210,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.41 Untrack funnel coverage widened (2026-10-07)
+
+`botUntrack.test` peeked at only 5 of the 18 maps `untrack()` drains —
+`gearLobT`, `suppressT`, `quiet`, `skillOffAt`, `supportT`, `healBeamT`,
+`healNadeT`, `deadSet`, and the five `sense.*` maps (noticed/routeHold/
+routeFailed/routePrefs/waitSpot) had no coverage; a regression in any of
+them re-leaks per-bot state silently. The pin now asserts all 17 maps +
+the deadSet. Full audit around it: `senses.forget()` is wired
+(ServerBots:170), `dmgPool`/`ffaScores` delete on seat loss, pickups
+reconcile via roster, `RateLimiter`/`ConnectionManager` delete per
+player, `/client-log` is 512KB+throttled, shared RNG is strictRng-fenced.
+
 ### 2.40 Warn/error side-logs skipped mid-run rotation (2026-10-07)
 
 `client.log` got mid-run rolling in §2.24 but its fan-out siblings didn't
