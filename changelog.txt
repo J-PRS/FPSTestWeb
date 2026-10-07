@@ -1,3 +1,4 @@
+2026-10-01 - logRotate: same-second roll collisions no longer clobber archives; rotation contract pinned
 2026-10-01 - soakChaos: gate healed-phase p95 (exclude outage+converge windows) - server suite fully green
 2026-10-01 - moveJudge: pin young-gap semantics - correction flows, no strike banking (soak residual traced to reconnect windows)
 2026-10-01 - moveJudge: young input gaps defer strike banking only - corrections keep flowing (was whole-judge defer)

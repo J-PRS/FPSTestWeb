@@ -2632,3 +2632,15 @@ what it actually meant: connected, settled prediction. Healed p95 on
 the current sim: 2.77m - prediction converges correctly after every
 reconnect, the old bound just couldn't see it.
 ### 2.132 - end
+
+### 2.133 - logRotate collision clobber + full pin coverage
+
+rotateLogIfBig stamped archives with second-precision mtimes - two
+rolls in one second landed on the same name and renameSync silently
+clobbered the previous archive (up to 32MB of log history per
+collision, right when a spamming appender was rolling hottest). The
+name now bumps a _N suffix until free. New logRotate.test.ts pins the
+whole contract: over-size rolls to OLD/ stamped, under/empty/missing
+never roll, OLD/ prunes to 16 newest by mtime, and a failed rotate
+never throws (appends can't be blocked by rotation).
+### 2.133 - end

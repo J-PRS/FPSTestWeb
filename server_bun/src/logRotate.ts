@@ -27,7 +27,12 @@ export function rotateLogIfBig(p: string): void {
     mkdirSync(join(dir, 'OLD'), { recursive: true });
     const oldDir = join(dir, 'OLD');
     mkdirSync(oldDir, { recursive: true });
-    const dst = join(oldDir, `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
+    // Same-second rolls would collide on the stamped name and renameSync
+    // silently clobbers the previous archive — up to 32MB of log history
+    // per collision. Bump a suffix until the name is free.
+    const stem = join(oldDir, `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}`);
+    let dst = stem + extname(p), n = 1;
+    while (existsSync(dst)) dst = `${stem}_${n++}${extname(p)}`;
     renameSync(p, dst);
     pruneOld(oldDir);
   } catch { /* rotation must never block an append */ }
