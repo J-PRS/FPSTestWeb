@@ -3233,3 +3233,25 @@ stay for offline/P2P hosts where the claim IS the authority path.
 (creatureHit/crawlerHit minting on a connected client is now
 effectively zero: melee, LG beam, direct hits, and splash are all
 server-paid.) (tsc + blastForce 13 green)
+
+## 2.179 authoritySims() — claim suppression keyed on capability, not transport
+
+Every claim-suppression gate keyed on isConnected(), but a P2P host
+embeds the same server modules WITHOUT the sims (no RoomProjectiles,
+ballSim, or creatureSim — deliberately absent per host.ts). Peers read
+as "connected" so claims were suppressed AND the host's intents relayed
+cosmetically: zero projectile blast, creature, and loot damage in P2P
+rooms — a silent regression the claimless migration introduced.
+
+New NetworkManager.authoritySims() = isConnected && tier not p2p/host.
+All gates that mean "the authority owns this" switch to it: the aoeShot
+blast suppression + projectileDestroy (impact), slam/LG-pop sendAOE
+(projectiles, lightning), melee + zap + splash serverPaid (fire,
+lightning, blastForce), the local-nugget loot guard (impact), and
+serverBalls/serverCreatures ownership (netBalls, netCrawlers) so P2P
+peers resume client-side species. Dedicated-server behavior unchanged;
+the claim verbs stay live for the one authority shape that still pays
+them. Residual P2P gaps noted: direct-hit 'shot' claims are dead wire-
+side (kinetic weapons rely on aoeShot only) and LG/beam intents resolve
+cosmetically on hosts lacking beamSweep. (tsc + p2pHost/blastForce 21
+green)
