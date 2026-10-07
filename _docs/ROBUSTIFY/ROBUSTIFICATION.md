@@ -2221,3 +2221,17 @@ join deadline), demo remoteFrames prunes at the same rolling window as
 the ring buffer, pendingClips merge + clear on record start.
 
 ### 2.100 - end
+
+### 2.101 Spectate-cap pin (2026-10-08)
+
+The per-room spectator bound (spectators.size >= maxPlayers → 1013)
+existed but had no coverage. specDepart.test.ts now fills a room's
+spectator seats to the cap and asserts the over-cap join closes 1013
+with no seat, no specRooms entry and no registry record minted — a
+silent cap regression would leak tick-fanout targets per forged
+socket. Lane audit: client fx lists (debris, pdebris, scorches,
+splats, implosions) are event-spawned with life + 1.5ms resumable
+deadlines and distance gating; demo remoteFrames/events prune at the
+rolling buffer window; server payload size bounded at transport.
+
+### 2.101 - end

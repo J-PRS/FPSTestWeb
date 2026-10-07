@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.101: pin per-room spectator cap — over-cap spectate join closes 1013 clean
 2026-10-08 - robustify §2.100: pin GameServer-level depart funnel — playerRoom index purges with the seat
 2026-10-08 - robustify §2.99: pin room-recycle dispose chain — respawn wall-timers drain with the room
 2026-10-08 - robustify §2.98: room-mint cap — FPS_MAX_ROOMS bounds join-driven Room creation, recycles eldest idle room, refuses only when all live
