@@ -40,6 +40,8 @@ type Schema = {
   'fps-pmode': number;        // pixel mode: 0 raw / 1 smooth(xBR) / 2 dithered / 3 atkinson
   'fps-aa': number;           // antialiasing: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x
   'fps-fov': number;          // world camera FOV degrees (viewmodel cam stays fixed)
+  'fps-player-id': string;    // claimed identity — survives F5/restarts
+  'fps-session-token': string; // server-issued reclaim token
 };
 
 const DEFAULTS: Schema = {
@@ -78,6 +80,8 @@ const DEFAULTS: Schema = {
   'fps-pmode': 0,
   'fps-aa': 0,
   'fps-fov': 90,
+  'fps-player-id': '',
+  'fps-session-token': '',
 };
 
 const parse = {
@@ -106,5 +110,13 @@ export const settings = {
     // Live-toggle consumers (debug overlays) subscribe to this — the event
     // fires same-tab only, which is the only place a toggle can happen.
     window.dispatchEvent(new CustomEvent('fps:set', { detail: { key, value } }));
+  },
+  /** "User ever set this?" — get() can't distinguish unset from the
+   *  default, which migrations (potato seeds, legacy pscale) need. */
+  has(key: keyof Schema): boolean {
+    return localStorage.getItem(key) !== null;
+  },
+  remove(key: keyof Schema): void {
+    localStorage.removeItem(key);
   },
 };

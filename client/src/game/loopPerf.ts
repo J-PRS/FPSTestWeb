@@ -129,7 +129,7 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
 // stay fully pinned. fps-shadows=false pins shadows.
 const LEGACY_PM = [[1,0],[4,0],[2,0],[4,1],[4,2],[4,3]] as const;
 function baselinePixel(): { p: number; m: number } {
-  if (localStorage.getItem('fps-pscale') !== null) {
+  if (settings.has('fps-pscale')) {
     return { p: settings.get('fps-pscale'), m: settings.get('fps-pmode') };
   }
   const [p, m] = LEGACY_PM[settings.get('fps-pixelated')] ?? [1, 0];

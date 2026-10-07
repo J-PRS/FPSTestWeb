@@ -331,7 +331,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // body — but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"
   // curtain over a connect that can never land is the wrong order.
-  if (!classicMode && !soloMode && localStorage.getItem('fps-session-token')) {
+  if (!classicMode && !soloMode && settings.get('fps-session-token')) {
     if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
   }
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });

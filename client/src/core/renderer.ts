@@ -78,7 +78,7 @@ function detectWeakGpu(): boolean {
   } catch { return false; }
 }
 function seedPotatoDefaults(): void {
-  if (localStorage.getItem('fps-pixelated') !== null || localStorage.getItem('fps-pscale') !== null || localStorage.getItem('fps-shadows') !== null) return;
+  if (settings.has('fps-pixelated') || settings.has('fps-pscale') || settings.has('fps-shadows')) return;
   if (!detectWeakGpu()) return;
   settings.set('fps-pscale', 4);
   settings.set('fps-shadows', false);
@@ -90,7 +90,7 @@ function seedPotatoDefaults(): void {
 function resolveModes(): RenderModes {
   let pscale = settings.get('fps-pscale');
   let pmode = settings.get('fps-pmode');
-  if (localStorage.getItem('fps-pscale') === null) {
+  if (!settings.has('fps-pscale')) {
     [pscale, pmode] = LEGACY_PM[settings.get('fps-pixelated')] ?? [1, 0];
   }
   // All post-processing defaults OFF — the scene reads cleanest raw.

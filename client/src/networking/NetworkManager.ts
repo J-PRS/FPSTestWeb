@@ -9,6 +9,7 @@ import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
+import { settings } from '../core/settings.js';
 import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim, rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import { InputStream } from './inputStream.js';
@@ -154,16 +155,16 @@ export class NetworkManager {
   constructor() {
     // Player ID + token persist in localStorage — a claimed identity
     // survives F5, browser restarts, and (with FPS_SECRET) server restarts.
-    const stored = localStorage.getItem('fps-player-id');
+    const stored = settings.get('fps-player-id');
     if (stored) {
       this.localPlayerId = stored;
     } else {
       this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('fps-player-id', this.localPlayerId);
+      settings.set('fps-player-id', this.localPlayerId);
     }
     // Session token issued by the server on first join — required to
     // reclaim a grace-period slot after F5/reconnect
-    this.sessionToken = localStorage.getItem('fps-session-token');
+    this.sessionToken = settings.get('fps-session-token') || null;
   }
 
   setPlayerId(playerId: string): void {
@@ -272,11 +273,11 @@ export class NetworkManager {
    *  next connect joins fresh. Reached via close(1008) on WS and via the
    *  `sessionRejected` message on WT/RTC, where the close code is lost. */
   private resetIdentity(reason?: string): void {
-    localStorage.removeItem('fps-player-id');
-    localStorage.removeItem('fps-session-token');
+    settings.remove('fps-player-id');
+    settings.remove('fps-session-token');
     this.sessionToken = null;
     this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('fps-player-id', this.localPlayerId);
+    settings.set('fps-player-id', this.localPlayerId);
     logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
   }
 
@@ -443,7 +444,7 @@ export class NetworkManager {
       if (ev !== undefined) this.lastEv = ev;
       if (typeof data.sessionToken === 'string') {
         this.sessionToken = data.sessionToken;
-        localStorage.setItem('fps-session-token', data.sessionToken);
+        settings.set('fps-session-token', data.sessionToken);
       }
     }
     if (NetworkManager.HEALTH_EVENT_TYPES.has(data.type)) {
