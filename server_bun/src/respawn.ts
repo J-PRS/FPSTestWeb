@@ -137,6 +137,12 @@ export class RespawnManager {
   tick(now: number): void {
     for (const [id, at] of this.dueAt) {
       if (now < at) continue;
+      // The wall timer is still armed — deleting the bookkeeping alone
+      // leaves it to fire() a second time on its own schedule. Sim-paced
+      // drivers reach deadlines ahead of wall clock, so every respawn
+      // would broadcast twice.
+      const t = this.timers.get(id);
+      if (t) clearTimeout(t);
       this.timers.delete(id);
       this.dueAt.delete(id);
       if (this.held.has(id)) continue; // held corpse — same gate as the wall timer

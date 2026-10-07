@@ -2161,3 +2161,18 @@ serialize-once in frame(), journal bounded, drown checks on all
 three send lanes, snapshot buffer pools its reclaim path.
 
 ### 2.96 - end
+
+### 2.97 Respawn tick-vs-wall-timer double-fire (2026-10-08)
+
+Real correctness bug hiding in the timer audit: RespawnManager.tick
+consumed dueAt/timers entries but left the armed wall setTimeout — the
+callback fires unconditionally, so sim-paced drivers (demo/fast-forward
+rooms) broadcast playerRespawn twice per death. tick now clearTimeouts
+the timer it consumes; both orders are safe (wall-first deletes
+bookkeeping, tick skips). The full lifecycle is now pinned: deadline
+fires exactly once, second-death replaces (no stack), cancel drains,
+held corpse lapses silently until respawnNow, respawnNow can't skip an
+unheld countdown, ensure re-arms a reconnecting dead player, dispose
+drains everything with the room.
+
+### 2.97 - end
