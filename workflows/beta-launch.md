@@ -60,4 +60,4 @@ showed, and the exact decisions still open — never a raw dump.
 ## Future ideas (parked)
 
 - **Shot of the Day**: /demos upload lane already IS global storage post-deploy. Missing piece: server-side daily pin (pick previous-day max lifetime, keep shot-of-day.demo + meta exempt from the ~100-clip eviction) + a menu tile that plays it. Small job, defer until after launch.
-- **TikTok-style swipeable best-shots feed (mobile)**: vertical-swipe full-screen replay of /demos clips over DemoPlayer + overlay HUD (weapon/distance/airtime); swipe/wheel/keys = next/prev, auto-advance at clip end. ~1 build slice; playback+list already exist.
+- **TikTok-style swipeable best-shots feed (mobile)**: vertical-swipe full-screen replay of /demos clips over DemoPlayer - NO game UI (no HUD/scoreboard/comments); only a minimal clip overlay (weapon - dist - airtime + who/when). Swipe up/down (wheel/arrows on desktop) = next/prev, auto-advance at clip end. ~1 build slice; playback+list already exist.
