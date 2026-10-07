@@ -171,6 +171,50 @@ const REPORT_VEL_CAP = 200;
 export class MoveJudge {
   constructor(private host: JudgeHost) {}
 
+  /** The shadow's report phases, in gate order. Each early return in
+   *  reconcile used to be an unnamed special case; naming them makes the
+   *  lifecycle explicit: every report lands in exactly one phase, and
+   *  only 'judge' reads the divergence math. 'gap-young' still judges —
+   *  it only suppresses banking (see below). */
+  private gatePhase(sh: Shadow, reportInputSeq: number | undefined): 'grace' | 'seed' | 'stale-epoch' | 'parked-defer' | 'gap-young' | 'judge' {
+    // Stale in-flight reports after a re-seat (room hop): the old seat
+    // kept reporting until the client saw gameState — those frames would
+    // seed the fresh shadow at the old position and flag the real spawn
+    // landing ~60m away as a cheat. The hop grace mutes them; the first
+    // post-gameState report seeds at the true spawn instead.
+    if (wallNow() - sh.resyncAt < CONFIG.reportGraceMs) return 'grace';
+    if (!sh.seeded) return 'seed';
+    // Stale-epoch reports: the client sent this before it saw the respawn/
+    // teleport that reseated the shadow. Judging it against the new anchor
+    // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
+    if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return 'stale-epoch';
+    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
+      const parked = reportInputSeq <= (sh.pending?.seq ?? 0);
+      // Journal coverage gate: a report stamped seq N was produced by the
+      // input whose seq is N. When that inputMove has arrived but is still
+      // parked in the pending slot (drains at the next tick's phase 0), the
+      // journal lacks the edge that produced this position — a jet toggle
+      // inside the window reads as a phantom ~10-30m climb, so defer one
+      // tick; coverage is guaranteed. A report stamped ahead of everything
+      // RECEIVED is different: its input is lost (inputSync recovers it)
+      // or forged to dodge the journal — judging it raw is the only
+      // authority-preserving answer.
+      if (parked && sh.deferStreak < 2) return 'parked-defer';
+      // Uncovered-but-young gap: the producing inputMove is plausibly
+      // still in flight — join-burst clients push inputs on a change/
+      // heartbeat lane slower than the report cadence (seen: netbots at
+      // 30Hz burn gapStreak 3 in ~100ms, well inside their 400ms input
+      // heartbeat). Judging still runs (corrections must flow — starving
+      // them for the window is what let honest drift crest unboundedly),
+      // but nothing is BANKED: divergences/severe strikes wait until the
+      // edge is judged lost. A sustained gap past the window resumes
+      // banking — a forger can't hold the frontier past it, and the
+      // window itself bounds strike starvation.
+      if (!parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS) return 'gap-young';
+    }
+    return 'judge';
+  }
+
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
@@ -192,13 +236,9 @@ export class MoveJudge {
     }
     sh.lastReportAt = reportNow;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
-    // Stale in-flight reports after a re-seat (room hop): the old seat
-    // kept reporting until the client saw gameState — those frames would
-    // seed the fresh shadow at the old position and flag the real spawn
-    // landing ~60m away as a cheat. The hop grace mutes them; the first
-    // post-gameState report seeds at the true spawn instead.
-    if (wallNow() - sh.resyncAt < CONFIG.reportGraceMs) return null;
-    if (!sh.seeded) {
+    const phase = this.gatePhase(sh, reportInputSeq);
+    if (phase === 'grace') return null;
+    if (phase === 'seed') {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };
       // The guess-run during the mute built momentum the client never
@@ -209,38 +249,13 @@ export class MoveJudge {
       sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
       return null;
     }
+    if (phase === 'stale-epoch') return null;
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
-    // Stale-epoch reports: the client sent this before it saw the respawn/
-    // teleport that reseated the shadow. Judging it against the new anchor
-    // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
-    if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return null;
-    // Journal coverage gate: a report stamped seq N was produced by the
-    // input whose seq is N. When that inputMove has arrived but is still
-    // parked in the pending slot (drains at the next tick's phase 0), the
-    // journal lacks the edge that produced this position — a jet toggle
-    // inside the window reads as a phantom ~10-30m climb, so defer one
-    // tick; coverage is guaranteed. A report stamped ahead of everything
-    // RECEIVED is different: its input is lost (inputSync recovers it)
-    // or forged to dodge the journal — judging it raw is the only
-    // authority-preserving answer.
-    let gapYoung = false;
-    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
-      const parked = reportInputSeq <= (sh.pending?.seq ?? 0);
-      // Uncovered-but-young gap: the producing inputMove is plausibly
-      // still in flight — join-burst clients push inputs on a change/
-      // heartbeat lane slower than the report cadence (seen: netbots at
-      // 30Hz burn gapStreak 3 in ~100ms, well inside their 400ms input
-      // heartbeat). Judging still runs (corrections must flow — starving
-      // them for the window is what let honest drift crest unboundedly),
-      // but nothing is BANKED: divergences/severe strikes wait until the
-      // edge is judged lost. A sustained gap past the window resumes
-      // banking — a forger can't hold the frontier past it, and the
-      // window itself bounds strike starvation.
-      gapYoung = !parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS;
-      if (parked && ++sh.deferStreak < 3) return null;
-    } else {
+    if (phase === 'parked-defer') { ++sh.deferStreak; return null; }
+    if (reportInputSeq === undefined || reportInputSeq <= sh.lastInputSeq) {
       sh.deferStreak = 0;
     }
+    const gapYoung = phase === 'gap-young';
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
     let dist = Math.hypot(dx0, dy0, dz0);
     if (reportInputSeq !== undefined) {

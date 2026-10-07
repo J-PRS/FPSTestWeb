@@ -1,3 +1,4 @@
+2026-10-01 - MoveJudge shadow gates named as phases - reconcile's implicit early-return ladder is now an explicit gatePhase (grace/seed/stale-epoch/parked-defer/gap-young/judge); same semantics, named lifecycle (task 109)
 2026-10-01 - C5: inbound intent warns throttled - malformed-packet floods capped to one warn per type+field per 5s so a hostile client can't turn the new check into a log flood
 2026-10-01 - C5 honesty pass: dead verbs dropped - flagSpawn/flagGone/pickupKnock/projectileUpdate declared but never wired; verbs slots now optional and conformance pins every declared verb+event to a ServerMessage member
 2026-10-01 - Architecture review refreshed post-C5 - wire surface closed + single-owner membership landed; new #1 = generated client replicas, #2 PlayerAnim split, #5 dead-verb honesty pass
