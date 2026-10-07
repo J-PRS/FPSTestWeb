@@ -177,6 +177,17 @@ from observed behavior — a round that never looks at evidence hunts blind.
   of truth; §3 and §4 must reflect reality when you finish.
 - Prepend `changelog.txt` (`YYYY-MM-DD - <summary>`, ASCII) when work
   settles.
+- **Never sit down early.** Finishing a milestone, landing a commit, or
+  "the surface is now closed" is never a reason to end the session —
+  the work continues into the next lane in the SAME turn. Do not stop
+  to report milestones as if done, do not ask for permission to keep
+  going, and do not treat a tidy queue as exhaustion: there is always
+  something to fix, improve, clean up, or refactor somewhere in the
+  project. The only acceptable end states are an explicit user stop
+  and a hard blocker the user must resolve — and even then, keep
+  working the lanes that don't need the blocker cleared. A round that
+  ends with "milestone reached" and no next lane started is a dodged
+  round.
 - **Every round must change something.** No exceptions: each session
   ends with a code fix, a new or tightened test, a perf fix with
   numbers, or a structural improvement — never just an audit verdict.

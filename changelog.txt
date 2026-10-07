@@ -1,3 +1,4 @@
+2026-10-01 - robustify skill: added 'never sit down early' rule - milestones never end a session; work continues into the next lane same-turn; only user stop or hard blocker ends a round
 2026-10-01 - C5: lifecycle events declared - deployDown/deployUp emit via eventPayload + inbound check + conformance pins; every wire verb for every kind is now declared
 2026-10-01 - C5: inbound packet field check - wireIn warns when a declared entity packet drops a field (verbForType/checkPacket); row-wrapped verbs check per-row, wire-optional fields declared absent
 2026-10-01 - C5 fix: verbPayload skipped the idField - spawnFields listing 'projectileId' overwrote the emitted id with null; generator now skips the declared id field
