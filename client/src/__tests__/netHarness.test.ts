@@ -107,4 +107,32 @@ describe('netHarness — real wire messages through real handlers', () => {
     hit(1, 90);
     expect(h.player.health).toBe(90);
   });
+
+  // Protocol mismatch: a stale bundle can't parse a new wire format —
+  // the gameState must bail BEFORE the roster swap (a cleared roster on
+  // a bad frame would silently desync), count the reload attempt, and
+  // stop trying after the 2-attempt budget so a newer server can't
+  // reload-loop the tab.
+  it('a protocol-mismatched gameState early-returns and caps reload attempts', () => {
+    // Plain-object location: assignment is a no-op store, but the counter
+    // path runs — headless tests still exercise the reload contract.
+    vi.stubGlobal('location', { href: 'http://x/' });
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1', mode: 'dm' } as ServerMessage);
+    expect(h.world.mode).toBe('dm');
+
+    const bad = () => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999999, room: 'evil', mode: 'ctf' } as ServerMessage);
+    bad();
+    expect(sessionStorage.getItem('fps-proto-reload')).toBe('1');
+    expect(h.world.mode).toBe('dm'); // swap never ran — stale bundle can't rewrite state
+    bad();
+    expect(sessionStorage.getItem('fps-proto-reload')).toBe('2');
+    bad();
+    expect(sessionStorage.getItem('fps-proto-reload')).toBe('2'); // budget spent — no loop
+
+    // A clean connect resets the counter and applies the frame normally.
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r2', mode: 'ctf' } as ServerMessage);
+    expect(sessionStorage.getItem('fps-proto-reload')).toBeNull();
+    expect(h.world.mode).toBe('ctf');
+    vi.unstubAllGlobals();
+  });
 });

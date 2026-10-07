@@ -2411,3 +2411,15 @@ lanes audited already-pinned (reconnect.test.ts covers token reject,
 zombie evict, replay window).
 
 ### 2.114 - end
+
+### 2.115 Protocol-mismatch reload pinned (2026-10-11)
+
+The stale-bundle escape (protocolVersion mismatch -> force one
+cache-busted reload, capped at 2 via a sessionStorage budget) was
+unverified on every edge: a dropped early-return would let a
+mismatched gameState rewrite world meta, and a lost cap would
+reload-loop the tab against a genuinely newer server. netHarness.test.ts
+now drives the full lifecycle — mismatch bails before the swap,
+counter climbs 1->2 and stops, clean connect resets the budget.
+
+### 2.115 - end
