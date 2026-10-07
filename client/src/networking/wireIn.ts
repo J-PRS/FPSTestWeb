@@ -17,6 +17,7 @@ import {
 import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import { WORLD_MODEL } from '../../../shared/worldModel.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import type { NetworkManager } from './NetworkManager.js';
@@ -113,13 +114,14 @@ export class WireIn {
     // netBallSegment sees one type regardless of transport.
     if (data[1] === WIRE_BALLSEG) {
       const seg = decodeBallSegment(data);
-      if (seg) this.h.onBallSegment?.({
-        type: 'ballSegment',
-        id: seg.id, kind: seg.kind,
-        position: seg.position, velocity: seg.velocity,
-        enraged: seg.enraged, targetId: seg.targetId,
-        tp: seg.tp, et: seg.et, slowT: seg.slowT, damp: seg.damp, t: seg.t,
-      });
+      if (seg) {
+        // The frame decodes to flat scalars — the declared updateFields
+        // own which ones cross into the JSON shape handlers see.
+        const src = seg as unknown as Record<string, unknown>;
+        const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
+        for (const f of WORLD_MODEL.ball!.updateFields!) msg[f.name] = src[f.name];
+        this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>);
+      }
       return;
     }
     const tick = decodeTickFrame(data, this.tickPool);
