@@ -311,12 +311,18 @@ export class MessageHandler {
     this.combat.botAttack(shooterId, targetId, weaponType, airtime, shotId);
   }
 
-  /** Drop per-player bookkeeping when a socket closes (grace-period cleanup
-   *  leaves PlayerManager state alive, but rate-limit warn state is per-connection) */
-  onPlayerDisconnected(playerId: string): void {
+  /** Warn keys are ${id}:${msg.type} — every teardown path must sweep
+   *  them or a leaver's entries sit in the map for the room's life. */
+  private dropWarnKeys(playerId: string): void {
     for (const key of this.rateLimitWarnings.keys()) {
       if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
     }
+  }
+
+  /** Drop per-player bookkeeping when a socket closes (grace-period cleanup
+   *  leaves PlayerManager state alive, but rate-limit warn state is per-connection) */
+  onPlayerDisconnected(playerId: string): void {
+    this.dropWarnKeys(playerId);
     this.combat.onPlayerDisconnected(playerId);
     this.roomInfo.moveUntrack?.(playerId);
     this.moves.dropPlayer(playerId);
@@ -328,9 +334,7 @@ export class MessageHandler {
    *  disconnect, and the hopper's ${id}:* keys would otherwise sit in the
    *  old room's map for its life. */
   onPlayerRemoved(playerId: string): void {
-    for (const key of this.rateLimitWarnings.keys()) {
-      if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
-    }
+    this.dropWarnKeys(playerId);
     this.combat.onPlayerRemoved(playerId);
     this.moves.dropPlayer(playerId);
     // Removal paths that skip onPlayerDisconnected (kick, reap, admin
