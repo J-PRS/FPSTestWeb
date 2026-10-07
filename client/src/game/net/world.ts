@@ -244,7 +244,14 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   const { deps } = ctx;
   deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
   const player = deps.lazyPlayer();
-  player.pos.set(localPlayerState.position.x, localPlayerState.position.y, localPlayerState.position.z);
+  // A non-finite stored vector would poison the sim on every reconnect —
+  // drop the restore rather than write NaN into the movement controller.
+  const p = localPlayerState.position;
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
+    deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
+    return;
+  }
+  player.pos.set(p.x, p.y, p.z);
   noteLocalSnap();
   deps.setLastSentPos({ x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z });
   player.yaw = localPlayerState.rotation.yaw;

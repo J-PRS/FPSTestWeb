@@ -1,3 +1,4 @@
+2026-10-07 - robustify §2.55: finite-guard authority vectors (correction, gameState restore)
 2026-10-07 - hub tab back to P2P (duel implied hosted match type)
 2026-10-07 - robustify §2.54: film chase-cam teleport reseats pos-jump watch
 2026-10-07 - hub review: host name honors mode, duel-vs-room exclusivity, clearer duel labels

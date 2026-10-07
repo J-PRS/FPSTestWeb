@@ -143,6 +143,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // During demo playback corrections fire constantly (recorded positions
     // desync from what the server last accepted) and would warp the replay.
     if (deps.world.playbackMode) return;
+    // NaN/Inf in authority state poisons the whole sim silently — a
+    // malformed correction (buggy peer in p2p, server fault) gets dropped
+    // instead of entering the movement controller.
+    const finite = (v: { x: number; y: number; z: number }) =>
+      Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+    if (!finite(position) || !finite(velocity)) {
+      logger.warn(`Correction dropped: non-finite authority vector pos=(${position.x},${position.y},${position.z})`);
+      return;
+    }
     const player = deps.lazyPlayer();
     const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
     const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
