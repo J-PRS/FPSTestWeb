@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost } from '../../shared/weapons.ts';
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
@@ -107,6 +107,8 @@ export class CombatHandler {
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
+  /** 1s sliding window of server-simmed fire intents — the flood gate. */
+  private simmedFireTimes = new Map<string, number[]>();
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
    *  burst window — start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
@@ -290,6 +292,7 @@ export class CombatHandler {
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
+    this.simmedFireTimes.delete(playerId);
     for (const key of this.fireWindows.keys()) {
       if (key.startsWith(`${playerId}:`)) this.fireWindows.delete(key);
     }
@@ -361,24 +364,44 @@ export class CombatHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     const now = wallNow();
-    if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
-    this.lastFireNotify.set(playerId, now);
+    const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
+    const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
+    if (!fireProjectile) {
+      // Cosmetic relay only — throttled: a dropped relay costs a muzzle
+      // flash, but a dropped intent would orphan a predicted shell.
+      if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
+      this.lastFireNotify.set(playerId, now);
+    } else {
+      // Intents spawn real sims + broadcasts, so they need a real flood
+      // gate — the fastest legit simmed weapon is ~13/s; 20/s is spam.
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return; }
+      recent.push(now);
+      this.simmedFireTimes.set(playerId, recent);
+    }
     this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, clampPing(player.ping));
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
     // covers observers' visuals, so the playerShot relay is skipped.
-    if (serverSimmed(msg.weaponType) && msg.dir && finiteVec(msg.dir) && this.deps.fireProjectile) {
+    if (fireProjectile) {
       if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
         this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
         return;
       }
+      // Belt throws pay the same charge the spawn claim would deduct —
+      // skipping it would make free ordnance a forged intent away.
+      if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
+        const cost = beltThrowCost(msg.weaponType);
+        if (player.beltCharges < cost) { this.hb('drop.beltDry'); return; }
+        player.beltCharges -= cost;
+      }
       player.protectedUntil = 0; // firing breaks your own spawn shield
-      const l = Math.hypot(msg.dir.x, msg.dir.y, msg.dir.z) || 1;
-      const id = this.deps.fireProjectile(playerId, msg.weaponType!,
+      const l = Math.hypot(dir!.x, dir!.y, dir!.z) || 1;
+      const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y + 1.6, z: at.z },
-        { x: msg.dir.x / l, y: msg.dir.y / l, z: msg.dir.z / l },
+        { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
         player.velocity, msg.shotId);
       if (id) {
         this.hb('shot.serverSim');

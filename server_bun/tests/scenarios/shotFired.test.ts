@@ -19,18 +19,18 @@ describe('scenario: shotFired cosmetic relay', () => {
     const toA = wsSpy(room, a.id);
     const toB = wsSpy(room, b.id);
 
-    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 1, dir: { x: 1, y: 0, z: 0 } });
+    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 3, dir: { x: 1, y: 0, z: 0 } });
     expect(toA.length).toBe(0); // shooter already rendered their own muzzle
     expect(toB.filter((m) => m.type === 'playerShot').length).toBe(1);
 
     // Second notify inside the 50ms window is dropped — a flood of
     // fire-relays can't spam the room.
-    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 1, dir: { x: 1, y: 0, z: 0 } });
+    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 3, dir: { x: 1, y: 0, z: 0 } });
     expect(toB.filter((m) => m.type === 'playerShot').length).toBe(1);
 
     // Dead shooter relays nothing.
     a.isDead = true;
-    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 1, dir: { x: 1, y: 0, z: 0 } });
+    room.messages.handleMessage(a.id, { type: 'shotFired', weaponType: 3, dir: { x: 1, y: 0, z: 0 } });
     expect(toB.filter((m) => m.type === 'playerShot').length).toBe(1);
   });
 });

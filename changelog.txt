@@ -1,3 +1,4 @@
+2026-10-01 - C5 phase 2: SERVER_SIMMED_WEAPONS covers all modeled ballistics (disc/plasma/grenade/GL/mortar/sticky/cluster/MRV/rail-belt/heal-armor); intent gate gets belt-charge + 20/s flood checks, bypasses cosmetic throttle
 2026-10-01 - robustify 2.173: DemoStorage index dedupe - ctor reconcile vs saveDemo race double-indexed files
 2026-10-01 - robustify 2.172: snapshot heals creature sim.state/targetId drift (lost crawlEvt no longer warns forever)
 2026-10-01 - robustify 2.171: remote deployables hash the wire owner on every kind (turret/base/generic dropped it)
