@@ -2728,3 +2728,19 @@ touches the shadow or the tolerance math. New test: 900 m/s claim +
 passes isolated; unrelated to the clamp, which only touches >200 m/s
 reports netbots never make.)
 ### 2.138 - end
+
+### 2.139 - clip feed stale-timer + dead-clip wedge
+
+Trust-surface audit (wire bounds + demoReader counts already capped,
+feed meta all textContent - clean) found two class-4/6 feed bugs:
+- scheduleNext fired go(1) ~0.9s after a clip ended with no cancel -
+  a manual swipe/arrow inside that window played the next clip, then
+  the stale timer fired on top of it and skipped a second clip.
+  Generation counter (clipGen, bumped per play()) voids stale timers;
+  the same guard yields to a manual seek/pause (mode!=='idle').
+- A clip that fails to start (evicted between /demos fetch and play,
+  404, fetch error) emits no onPlaybackEnd - playAt is fire-and-forget
+  so no signal exists; the feed stalled on the dead clip forever.
+  Watchdog: 10s after play() with mode not playing/paused -> advance.
+Both are feed-lifecycle correctness, not chrome.
+### 2.139 - end

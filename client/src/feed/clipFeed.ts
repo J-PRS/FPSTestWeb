@@ -22,6 +22,11 @@ interface FeedDeps {
 const SLIDE_MS = 220;        // canvas slide in/out — one clip per screen
 const NEXT_DELAY_MS = 900;   // linger on the last frame before advancing
 const WHEEL_COOLDOWN = 450;  // one notch = one clip; don't stream past
+// A clip that never reaches 'playing' (evicted server-side, 404, fetch
+// failure) emits no onPlaybackEnd, so nothing would advance — the feed
+// would wedge on the dead clip forever. Generous so slow fetches of
+// legit clips aren't skipped.
+const DEAD_CLIP_MS = 10_000;
 // Drag commit: either ~1/5 viewport travelled or a real flick. The drag
 // itself tracks the finger 1:1 (how TikTok/Reels pagers do it) — a
 // threshold-only swipe reads as a canned animation, not a gesture.
@@ -92,6 +97,9 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   let wheelLock = 0;
   let advancing = 0;
   let clearScreen = false;
+  // Bumped by play() so stale auto-advance/watchdog timers aimed at the
+  // previous clip can't act on the current one.
+  let clipGen = 0;
   // Finger-tracking drag state — the canvas follows touch 1:1; the ring
   // buffer keeps the last ~120ms of samples for flick velocity.
   let drag: { startY: number; samples: { t: number; y: number }[] } | null = null;
@@ -164,10 +172,17 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   function play(i: number): void {
     if (entries.length === 0) {paintMeta(); return;}
     index = ((i % entries.length) + entries.length) % entries.length;
+    clipGen++;
     const e = entries[index]!;
     paintMeta();
     updateAddress();
     dm.playCoolShotById(e.id);
+    // Dead-clip watchdog — fire-and-forget playback gives no failure
+    // signal, so a clip that never starts gets skipped on a timer.
+    const g = clipGen;
+    setTimeout(() => {
+      if (g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {void go(1);}
+    }, DEAD_CLIP_MS);
     // Warm the next clip so the swipe lands with no network gap.
     const nxt = entries[(index + 1) % entries.length];
     if (nxt?.filename) {void dm.coolShotMgr.prefetchClip(nxt.filename);}
@@ -182,7 +197,14 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   }
 
   function scheduleNext(): void {
-    setTimeout(() => { if (!advancing) {void go(1);} }, NEXT_DELAY_MS);
+    // Generation-guarded: a swipe/keys into the next clip inside the
+    // window would otherwise let the stale timer advance AGAIN and
+    // double-skip. Also yields to a manual seek/pause — either means
+    // the user took the wheel.
+    const g = clipGen;
+    setTimeout(() => {
+      if (!advancing && g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {void go(1);}
+    }, NEXT_DELAY_MS);
   }
 
   // The lifecycle's own onPlaybackEnd only freezes the last frame — the

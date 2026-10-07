@@ -1,3 +1,4 @@
+2026-10-07 - robustify 2.139: clip feed - generation-guarded auto-advance (stale timer double-skip) + dead-clip watchdog
 2026-10-07 - robustify 2.138: moveJudge clamps claimed report velocity at 200 m/s - forged fast reports can no longer buy teleport tolerance
 2026-10-07 - robustify 2.137: demo upload filename collision - same-second same-lifetime saves suffixed instead of clobbering
 2026-10-07 - robustify 2.136: prefetch cache capped at 4; vault evict uses ts-index cursor (no getAll payload deserialize per put)
