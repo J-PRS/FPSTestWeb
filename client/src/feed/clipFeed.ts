@@ -418,7 +418,9 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   requestAnimationFrame(tick);
 
   await dm.fetchCoolShotsFromServer();
-  entries = dm.getCoolShots();
+  // Copy before shuffling — getCoolShots returns the manager's live
+  // array and the panel's best-first order must survive feed playback.
+  entries = [...dm.getCoolShots()];
   // Shuffle the queue — the index is lifetime-sorted, which makes every
   // feed session replay the same top-N run. One pass, one shuffle.
   for (let i = entries.length - 1; i > 0; i--) {

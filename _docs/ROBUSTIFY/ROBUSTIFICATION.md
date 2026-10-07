@@ -2815,3 +2815,10 @@ drag was armed - it ran its own slide while the finger still tracked
 panes, and touchend's commit path then advanced a SECOND clip. go() now
 cancels any live drag before sliding; touchend sees drag null and
 returns. (clipFeed.ts)
+
+## 2.147 Feed shuffle mutated the shared clip list
+
+startClipFeed shuffled getCoolShots() in place - that returns the
+manager's LIVE array, so every feed visit permanently re-shuffled the
+Best Shots panel's best-first ordering. The feed now copies the array
+before shuffling. (clipFeed.ts)
