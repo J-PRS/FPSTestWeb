@@ -240,15 +240,15 @@ describe('RoomMoveSim', () => {
     // flag — the assert that matters is above.
   });
 
-  test('in-flight input gap defers judging instead of banking severe strikes', async () => {
+  test('in-flight input gap defers strike banking, not corrections', async () => {
     // Live-net regression: a joiner whose first inputMove is still in
     // flight stamps reports with seqs past everything the server saw.
     // Judging those raw compares a jetting client against an input-
     // starved idle shadow — 60m+ in <1s — and 3 strikes latched the
     // cheat flag on honest queue latency (seen: 7 warns in one batch
-    // right after a 16-bot join wave). Young gaps defer for 600ms
-    // (heartbeat + RTT); only a SUSTAINED gap resumes raw judging, so
-    // real teleports still flag.
+    // right after a 16-bot join wave). Young gaps defer STRIKE BANKING
+    // for 600ms (heartbeat + RTT) while corrections keep flowing; only a
+    // SUSTAINED gap resumes banking, so real teleports still flag.
     const m = new RoomMoveSim(flat);
     let flagged = 0;
     let gaps = 0;
@@ -256,10 +256,11 @@ describe('RoomMoveSim', () => {
     m.onInputGap = () => gaps++;
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
     m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
-    m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0, undefined, 9); // in-flight → defer
-    m.reconcile('p1', { x: 110, y: 0, z: 0 }, 0, undefined, 9); // defer
+    const corr = m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0, undefined, 9); // in-flight → young gap
+    m.reconcile('p1', { x: 110, y: 0, z: 0 }, 0, undefined, 9);
     m.reconcile('p1', { x: 120, y: 0, z: 0 }, 0, undefined, 9); // streak 3 → inputSync hint
-    expect(flagged).toBe(0); // queue latency never reached the judge
+    expect(corr).not.toBeNull(); // corrections still flow — only banking defers
+    expect(flagged).toBe(0); // queue latency banks no strikes
     expect(gaps).toBe(1);
     // Past the defer window the edge is provably lost — raw judging
     // resumes and teleport-scale departures still reach the latch.
