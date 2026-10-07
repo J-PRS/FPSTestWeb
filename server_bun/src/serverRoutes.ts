@@ -7,7 +7,7 @@
  * server state.
  */
 import { CONFIG } from './config.ts';
-import { evictEldest } from './evictEldest.ts';
+import { windowAllow } from './windowLimit.ts';
 import type { GameServer } from './GameServer.ts';
 import type { DemoStorage } from './DemoStorage.ts';
 import type { RtcRelay } from './RtcRelay.ts';
@@ -66,14 +66,7 @@ const JOIN_IP_LIMIT = 5;
 const JOIN_IP_WINDOW_MS = 60_000;
 function joinThrottleAllow(ip: string): boolean {
   if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
-  const now = wallNow();
-  let w = joinIps.get(ip);
-  if (!w || now - w.start >= JOIN_IP_WINDOW_MS) {
-    w = { count: 0, start: now };
-    joinIps.set(ip, w);
-    if (joinIps.size > 1024) evictEldest(joinIps);
-  }
-  return ++w.count <= JOIN_IP_LIMIT;
+  return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
 }
 
 // Plain GET endpoints — a new JSON route is one table entry. Handlers

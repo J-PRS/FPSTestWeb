@@ -8,6 +8,7 @@ import { isPerkId } from '../../shared/perks.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { wallNow } from './wallClock.ts';
+import { windowAllow } from './windowLimit.ts';
 
 /** Everything the socket lifecycle needs from GameServer — supplied as
  *  closures/maps so ownership stays with the dispatcher. */
@@ -55,26 +56,10 @@ export class SessionManager {
     // Loopback is the dev box and the pvptest harness — fleets spawn 24+
     // joins/minute legitimately. Flood control is for real traffic only.
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
-    const now = wallNow();
-    let w = this.joinWindows.get(ip);
-    if (!w || now - w.start >= SessionManager.JOIN_WINDOW_MS) {
-      w = { count: 0, start: now };
-      this.joinWindows.set(ip, w);
-      if (this.joinWindows.size > SessionManager.MAX_JOIN_WINDOWS) {
-        // Drop expired windows first — a flood must not reset the
-        // throttle state of IPs whose windows are still live.
-        for (const [k, e] of this.joinWindows) {
-          if (now - e.start >= SessionManager.JOIN_WINDOW_MS) this.joinWindows.delete(k);
-        }
-        // Still over = a fresh unique-IP flood — evict oldest-first
-        // (insertion order) so the table stays bounded.
-        for (const k of this.joinWindows.keys()) {
-          if (this.joinWindows.size <= SessionManager.MAX_JOIN_WINDOWS) break;
-          this.joinWindows.delete(k);
-        }
-      }
-    }
-    return ++w.count <= SessionManager.JOIN_LIMIT;
+    return windowAllow(
+      this.joinWindows, ip, wallNow(),
+      SessionManager.JOIN_WINDOW_MS, SessionManager.JOIN_LIMIT, SessionManager.MAX_JOIN_WINDOWS,
+    );
   }
 
   private identityToken(playerId: string): string {
