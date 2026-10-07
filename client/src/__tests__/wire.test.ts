@@ -87,6 +87,30 @@ describe('tick frame round-trip', () => {
     expect(b!.rotation.pitch).toBeCloseTo(0.2, 2);
   });
 
+  it('position quantization stays within POS_Q/2 at any in-range coordinate', () => {
+    // POS_Q=0.04 i16 grid: decoded pos may drift ≤2cm — fine for the
+    // interp-only consumers (upsertRemotePlayer), a hard error if any
+    // future path seeds sim state from tick records.
+    const cases = [
+      { x: 0, y: 0, z: 0 },
+      { x: 1.001, y: -2.999, z: 0.019 },
+      { x: 1300.9, y: -1300.9, z: 512.337 },
+      { x: -1299.111, y: 222.422, z: -88.888 },
+    ];
+    for (const pos of cases) {
+      const p = encodeTickPlayer({
+        playerId: 'p', position: pos,
+        rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+        health: 100, isDead: false, ping: undefined, ski: 0,
+      });
+      const decoded = decodeTickFrame(encodeTickFrame(0, 0, 0, [p]))!;
+      const q = decoded.updates[0]!.position;
+      expect(Math.abs(q.x - pos.x)).toBeLessThanOrEqual(0.02);
+      expect(Math.abs(q.y - pos.y)).toBeLessThanOrEqual(0.02);
+      expect(Math.abs(q.z - pos.z)).toBeLessThanOrEqual(0.02);
+    }
+  });
+
   it('rejects truncated frames', () => {
     const p = encodeTickPlayer({
       playerId: 'a', position: { x: 0, y: 0, z: 0 },

@@ -217,6 +217,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.51 Tick-record quantization pinned (2026-10-07)
+
+Boundary-value-drift lane probe: tick player records encode positions
+on an i16 × `POS_Q`=0.04m grid (±1310m range). Traced the consume path —
+`decodeTickFrame` → `applyTickPlayerUpdate` → `upsertRemotePlayer` →
+remote interp only; self is excluded and nothing seeds sim state from
+these records, so the ≤2cm error is safe *today*. Pinned anyway: a
+vitest case asserts decode error ≤ POS_Q/2 at origin, off-grid, and
+near-range coordinates — if any future path routes records into a
+reconciling consumer, the contract breaks loudly in the suite, not
+silently at 2cm/frame.
+
 ### 2.50 Sheep log dedupe (2026-10-07)
 
 Soak read found `FPS_SHEEP_LOG` files repeating identical why-lines —

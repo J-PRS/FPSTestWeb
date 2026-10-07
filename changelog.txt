@@ -1,3 +1,4 @@
+2026-10-07 - robustify: pin tick-record POS_Q quantization bound (<=2cm, interp-only verified)
 2026-10-07 - robustify: sheep log dedupe on identical max-line (soak-log oscillation noise)
 2026-10-07 - robustify(skill): eight-class threat model (+boundary-value drift, +ordering/skip-tick); pins require probes; every 3rd round starts in logs; reports carry evidence
 2026-10-07 - perf: ExplosionTracker expiry trims whole prefix in one splice (was O(n) shift per entry)
