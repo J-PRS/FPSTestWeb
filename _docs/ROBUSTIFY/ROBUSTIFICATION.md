@@ -2345,3 +2345,17 @@ RoomFlags.prevPos all prune against the live roster per tick;
 lastSentPositions / chatPace / wireIds purge inside removePlayer.
 
 ### 2.109 - end
+
+### 2.110 Private-room contract pinned (2026-10-08)
+
+Info-disclosure lane: the unlisted flag was guarded by two bare filters
+(listRooms' !r.unlisted, quickRoom's continue) with zero coverage — a
+dropped filter silently leaks private room names + occupancy to the
+public browse, or lands a random quick-joiner inside a private match.
+unlisted.test.ts pins all three edges: hidden from /rooms, skipped by
+quickRoom, still joinable by name. Rest of the disclosure sweep: no
+tokens/IPs on any ungated route; ffaLeader playerId is public match
+state by design; /health stays open — its degraded detail only exists
+when the failure is already visible in-game.
+
+### 2.110 - end

@@ -1,3 +1,4 @@
+2026-10-08 - robustify 2.110: pin the unlisted-room contract — hidden from /rooms + quick-join, joinable by name
 2026-10-08 - robustify 2.109: join deadline -> FPS_JOIN_TIMEOUT_MS + pinned (idle sockets close, joined sockets spared)
 2026-10-08 - robustify 2.108: extract RoomNoticer to shared/roomNoticer.ts (sizeWatch back under pin) + pin claimedIdentities cap
 2026-10-08 - robustify 2.107: pin HTTP route guards — join throttle, ops gate, mode/map validators
