@@ -2102,3 +2102,14 @@ same class §2.58-§2.90 kept fixing. departFunnel.test.ts seeds the
 receipts then asserts every registry purges on removal.
 
 ### 2.91 - end
+
+### 2.92 Flag-reset log wipe pinned (2026-10-08)
+
+Pin class: §2.89's match-boundary wipe of capLog/grabLog/retLog had no
+coverage — the reset test checked flag state only, so the wipe could
+silently regress (or a new log could be added without a reset hop).
+Extended roomflags.test.ts: seed the three logs, reset, assert empty.
+RoomFlags consumers window by runStart so wipe-at-reset is the only
+bound the logs have.
+
+### 2.92 - end

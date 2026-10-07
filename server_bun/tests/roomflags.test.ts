@@ -179,4 +179,19 @@ describe('RoomFlags', () => {
     }
     void p;
   });
+
+  it('reset also wipes the match-boundary event logs', () => {
+    // §2.89 — cap/grab/ret logs grew for the room's life; readers window
+    // by runStart so the wipe is the only bound. A future log added
+    // without a reset hop fails here instead of growing silently.
+    const room = ctfRoom();
+    addAt(room, 'p1', 'alpha', 70, 0);
+    room.tickFlags(0.05);
+    const logs = room.flags! as unknown as {
+      capLog: unknown[]; grabLog: unknown[]; retLog: unknown[];
+    };
+    logs.capLog.push({}); logs.grabLog.push({}); logs.retLog.push({});
+    room.flags!.reset();
+    expect(logs.capLog.length + logs.grabLog.length + logs.retLog.length).toBe(0);
+  });
 });
