@@ -34,24 +34,21 @@ deeper lane it implies — unit pins → property sweeps → chaos/netbot →
 load. The doc's §4 queue is regenerated, not just drained: finishing
 the queue means writing the next one from what the codebase taught you.
 
-**The skill edits itself.** Between runs — and inside a run when a
-round teaches a better way to hunt — you may rewrite any part of THIS
-file (and its `_docs/ROBUSTIFY/` twin) for maximum impact: sharpen the
-bar, add or retire lanes, reorder the work loop, codify a hunting
-technique a round just proved out (e.g. a divergence pattern, a test
-shape, a probe script worth keeping), tighten rules that produced a
-weak round, or delete instructions that stopped pulling their weight.
-Constraints on self-edits: keep it under ~170 lines (a bloated skill
-dilutes itself), never weaken the §5 invariants or the "every round
-ships a change" rule, and every self-edit must trace to something a
-round actually taught — log it in the changelog like any other change.
+**The skill edits itself.** When a round teaches a better way to hunt,
+rewrite any part of THIS file (and its `_docs/ROBUSTIFY/` twin) for
+maximum impact: sharpen the bar, add or retire lanes, codify a proven
+technique, tighten a rule that produced a weak round, delete what
+stopped pulling its weight. Constraints: keep it under ~170 lines,
+never weaken the §5 invariants or the "every round ships a change"
+rule, and every self-edit must trace to something a round actually
+taught — log it in the changelog like any other change.
 
 ## Read first (in order)
 
 1. `AGENTS.md` — project rules (server authority, `shared/` determinism,
    scenario test conventions, changelog format).
 2. `_docs/ROBUSTIFY/ROBUSTIFICATION.md` — the living state doc:
-   - §1 threat model — the six failure classes to hunt
+   - §1 threat model — the failure classes to hunt
    - §2 shipped work — do NOT redo
    - §3 verified-clean areas — do NOT re-audit
    - §4 open items ranked by value — the work queue
@@ -68,13 +65,13 @@ round actually taught — log it in the changelog like any other change.
 5. Unbounded growth — maps/arrays/queues without eviction or cap.
 6. Observability noise — logs firing on expected lag; real faults with no
    metric, no id, no reason.
-7. Boundary-value drift — a tolerance/bucket/quantization that is meant to
-   absorb noise also absorbs real divergence (the 4hp health bucket hid a
-   genuine echo loss for weeks; judge drift by persistence, not magnitude).
+7. Boundary-value drift — a tolerance meant to absorb noise also absorbs
+   real divergence (the 4hp bucket hid a genuine echo loss for weeks;
+   judge drift by persistence, not magnitude).
 8. Ordering / skip-tick — authority spends a tick on bookkeeping the
-   replay can't model (retarget-skip: brain re-aims, no sim step, wire
-   carried no marker). Any `continue`/early-return inside a step loop is
-   a suspect; the wire must carry either the post-skip anchor or a count.
+   replay can't model (retarget: re-aim, no sim step, wire carried no
+   marker). Any `continue`/early-return in a step loop is a suspect;
+   the wire must carry the post-skip anchor or a count.
 
 ## Work loop — pick the highest-value thing, then keep going
 
@@ -82,12 +79,11 @@ The mandate is broader than §4: **anything making the game faster, more
 robust, more deterministic, or cleaner is in scope.** Do not stop after
 one item; do not stop because §4 is empty. Each session:
 
-1. **Take the top §4 item** if one exists. Implement properly — `shared/`
-   code for anything both ends compute, tests for every new guarantee.
-   Move details to §2, cross off §4.
-2. **Hunt the six classes** across `shared/`, `server_bun/src/`,
+1. **Take the top §4 item** if one exists — `shared/` code for anything
+   both ends compute, tests for every guarantee. Move to §2, cross off §4.
+2. **Hunt the §1 classes** across `shared/`, `server_bun/src/`,
    `client/src/` when §4 runs thin. Classify: fix now / §4 / §3.
-3. **Hunt beyond the six classes:**
+3. **Hunt beyond the §1 classes:**
    - Performance — per-frame allocations in hot paths, unbatched draws,
      redundant per-tick work, growth-only buffers, hoistable loop work.
    - Duplication — two implementations of one computation (constants,
@@ -111,16 +107,14 @@ hard enough.
 
 **Pins are earned by probes, not greps.** A test pin only counts as the
 round's deliverable when preceded by a falsifiable probe — a soak log
-read, a replica-hash diff, a runtime bisect — not by a pattern sweep
-alone. If the pin's first draft passes instantly on already-correct code
-and nothing observed motivated it, keep hunting; that shape produced
-this program's weakest rounds.
+read, a replica-hash diff, a runtime bisect — not by a pattern sweep.
+An unmotivated pin that passes instantly on already-correct code means
+keep hunting; that shape produced this program's weakest rounds.
 
 **Every third round starts in the logs.** Before touching code, read the
-latest `logs/client*.log` and the newest session JSONL tail. The
-highest-value fixes in this program (health-echo artifact, POS JUMP
-false-positive, creature hash desync) came from observed behavior, not
-audits — a round that never looks at evidence is hunting blind.
+latest `logs/client*.log` and the newest session JSONL tail. The best
+fixes here (health-echo artifact, POS JUMP, creature hash desync) came
+from observed behavior — a round that never looks at evidence hunts blind.
 
 ## Rules
 
@@ -166,10 +160,8 @@ audits — a round that never looks at evidence is hunting blind.
   failure does this prevent" bar and respect the §5 invariants.
 - **The log is the product.** Run a live bot-populated game
   (`_tools/sweeps/matchSim.ts`, `neutralSoak.ts`, or a real GameBot room)
-  and read the output stream. Per-hit/per-tick INFO spam, warns refiring
-  without hysteresis, debug payloads at info tier, unformatted floats in
-  status lines — noise floods are findings. If a human can't spot an
-  anomaly in the stream, the observability lane isn't done.
+  and read the stream: per-tick INFO spam, warns refiring without
+  hysteresis, debug payloads at info tier — noise floods are findings.
 
 ## Verify before stopping
 
