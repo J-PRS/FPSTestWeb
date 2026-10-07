@@ -2926,3 +2926,16 @@ Fabricated inputs can never match the server's real fields -- strictly
 a false-positive generator. Client now hashes d.owner ?? '' / d.team ??
 '' mirroring the server exactly; missing data hashes honestly as ''.
 (stateDebug.ts)
+
+## 2.157 SnapshotBuffer.clear() leaked the render-clock epoch
+
+clear() recycled the snapshot list but kept latestT/latestArrive -- the
+render-clock anchor. Server time is PER-ROOM (tickSeq x 50ms), so a
+room hop or match restart rewinds it to ~0: every subsequent push then
+compared against the stale epoch as "not newest", the anchor never
+moved, renderTime stayed pinned past the buffer, and remotes rendered
+on the extrapolation clamp instead of interpolating -- permanently
+jittery remote motion until the new room's tick count passed the old
+one's. clear() now resets the anchor pair + the arrival stamp (the
+adaptive delay/jitter stats stay -- they describe the transport, not
+the timeline). (remoteSnapshots.ts)

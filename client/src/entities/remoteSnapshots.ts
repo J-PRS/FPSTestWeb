@@ -186,10 +186,16 @@ export class SnapshotBuffer {
     outRot.pitch = s0.pitch + (s1.pitch - s0.pitch) * a;
   }
 
-  /** Recycle the whole buffer (teleport/disconnect reset). */
+  /** Recycle the whole buffer (teleport/disconnect reset). The render-
+   *  clock anchor goes too: server time is per-room (tickSeq×50), and a
+   *  room hop/match restart rewinds it — a stale latestT would swallow
+   *  every push as "not newest" and freeze renderTime on the old epoch. */
   clear(): void {
     this.pool.push(...this.snapshots);
     this.snapshots.length = 0;
+    this.latestT = 0;
+    this.latestArrive = 0;
+    this.lastArrive = 0;
   }
 
   get size(): number { return this.snapshots.length; }
