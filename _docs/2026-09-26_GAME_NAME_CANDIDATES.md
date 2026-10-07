@@ -45,10 +45,10 @@ game fills with meaning beats an epic title.
 | **Couloir** | steep mountain chute you ski down | On-theme like Katabatic; skiers know it. Maybe the winner. |
 | ~~Hoodoo~~ | desert rock spire + "a curse" | DEAD 2026-10-01: it's not just 'a curse' - it's the African-diaspora folk-magic tradition (voodoo's cousin); loaded/appropriation-adjacent baggage |
 | ~~Katabatic~~ | gravity-driven downslope wind; also a Tribes map | DEAD 2026-10-01: it IS Tribes' most-played map (T2 original + Ascend remake) - naming the game after their crown jewel reads as squatting, not homage |
-| **Inselberg** | lone mountain rising from a plain | German; perfect for a desert map |
+| ~~Inselberg~~ | lone mountain rising from a plain | DEAD 2026-10-01: sounds like a surname (JP) - not a place-word to the ear |
 | **Haboob** | Arabic: the giant dust wall that eats cities | Funny but legit; .io energy |
 | **Fusillade** | simultaneous volley of fire | Unused artillery word |
-| **Sukhovey** | Russian: scorching killing steppe wind | Desert's Katabatic; foreign so no autocorrect |
+| ~~Sukhovey~~ | Russian: scorching killing steppe wind | DEAD 2026-10-01: reads too Russian (JP) - nationality carries the name instead of the game |
 | **Auster** | Roman south wind; root of "austere" (dry, harsh) | Clean 6 letters, Quake register |
 | **Syrtis** | Roman sand-graveyard + Mars region | Sounds AAA already |
 | **Ammo/Ammos** | Greek *ammos* = sand; pun on ammunition | Probably claimed; if free it's cheating |
@@ -175,7 +175,7 @@ couloir/hoodoo/katabatic/inselberg; .dev taken for all checked.
 Scratch list folded in from `_scratch/names.md`; katantē(s)/orthobamōn
 fail the diacritics filter as written but ASCII forms stay listed.
 
-Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo struck per JP 2026-10-01 (folk-magic baggage); ranking: Couloir > Syrtis > Anabatic > Sukhovey/Inselberg/Jebel.
+Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo struck per JP 2026-10-01 (folk-magic baggage); Sukhovey + Inselberg struck per JP 2026-10-01. Final ranking: Couloir > Syrtis > Anabatic.
 
 ### Anabatic check 2026-10-01
 
