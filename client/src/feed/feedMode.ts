@@ -6,8 +6,16 @@ const loc = typeof window === 'undefined' ? undefined : window.location;
 const seg = loc?.pathname?.match(/^\/clips(?:\/([\w.-]+))?$/) ?? null;
 const q = new URLSearchParams(loc?.search ?? '');
 const requested = seg?.[1] ?? (q.get('feed') || null);
+// Touch-only devices can't play — the onboarding gate would bounce them —
+// so phones/tablets land on the feed instead. ?play opts back into the
+// game for anything with enough input (hybrids, plugged-in peripherals).
+const coarse = typeof window === 'undefined' ? false
+  : (window.matchMedia?.('(pointer: coarse)').matches ?? false) && navigator.maxTouchPoints > 0;
 export const feedMode = {
-  on: seg !== null || q.has('feed'),
+  on: (seg !== null || q.has('feed') || (coarse && !q.has('play') && !q.has('mode'))),
+  // True when the route came from device detection, not a URL flag —
+  // exit then lands on /?play so it doesn't loop back into the feed.
+  auto: seg === null && !q.has('feed') && coarse,
   // Deep-link target: a demo filename with or without the .demo suffix.
   startAt: requested ? (requested.endsWith('.demo') ? requested : `${requested}.demo`) : null,
 };

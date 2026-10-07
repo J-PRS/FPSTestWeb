@@ -67,6 +67,12 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   const btnExit = el('button', 'feed-btn', rail, '✕');
   const progress = el('div', 'feed-progress', root);
   const progressFill = el('div', 'feed-progress-fill', progress);
+  progress.addEventListener('click', (ev) => {
+    const dur = dm.player.duration;
+    if (dur <= 0) {return;}
+    const rect = progress.getBoundingClientRect();
+    dm.player.seek(((ev.clientX - rect.left) / rect.width) * dur);
+  });
   const empty = el('div', 'feed-empty', root, 'No clips yet — play a round, hit a shot, come back.');
 
   btnUp.title = 'Previous (↑)';
@@ -184,7 +190,10 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     root.classList.toggle('feed-clear', clearScreen);
   };
   btnClear.addEventListener('click', toggleClear);
-  btnExit.addEventListener('click', () => { window.location.href = '/'; });
+  // Auto-routed (touch) exits keep the ?play opt-out so they don't loop
+  // back into the feed; URL-routed exits drop to / normally.
+  const exitTo = feedMode.auto ? '/?play' : '/';
+  btnExit.addEventListener('click', () => { window.location.href = exitTo; });
 
   window.addEventListener('wheel', (ev) => {
     const now = performance.now();
@@ -199,7 +208,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       case 'ArrowUp': void go(-1); break;
       case 'Space': ev.preventDefault(); dm.togglePlayPause(); break;
       case 'KeyC': toggleClear(); break;
-      case 'Escape': window.location.href = '/'; break;
+      case 'Escape': window.location.href = exitTo; break;
     }
   });
 

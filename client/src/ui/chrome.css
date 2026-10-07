@@ -535,7 +535,8 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   background: rgba(8,14,24,0.6); backdrop-filter: blur(3px); }
 .feed-btn:hover { background: rgba(58,167,255,0.25); border-color: #3aa7ff; }
 .feed-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
-  background: rgba(140,170,195,0.18); }
+  background: rgba(140,170,195,0.18); pointer-events: auto; cursor: pointer; }
+.feed-progress:hover { height: 6px; }
 .feed-progress-fill { height: 100%; width: 0%; background: #3aa7ff;
   transition: width 0.1s linear; }
 .feed-empty { position: absolute; inset: 0; display: none; align-items: center;
