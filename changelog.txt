@@ -1,3 +1,4 @@
+2026-10-07 - robustify §2.68: sense-pool slot alias — sounds clobbered by threats, rewind removed
 2026-10-07 - robustify §2.67: separation-sense bodyScratch pooled — kill ~3 allocs/bot/frame
 2026-10-07 - robustify §2.66: flags tick prevPos field-wise — last snapshot-alloc site, lane closed
 2026-10-07 - robustify §2.65: pickups tick — live-map iteration + field-wise prevPos, kill N+1 allocs/tick

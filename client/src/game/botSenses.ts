@@ -84,7 +84,6 @@ export class BotSenses {
    *  (50m radius). Gunshots stay unheard, same as the server. */
   recentNoises(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
     const out: { x: number; y: number; z: number }[] = [];
-    const vecBase = _vecUsed;
     for (const e of this.host.world().explosions) {
       if (e.age > 1.5) {continue;}
       const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
@@ -94,7 +93,9 @@ export class BotSenses {
         out.push(v);
       }
     }
-    _vecUsed = vecBase; // out entries keep pool slots until the caller's next read
+    // _vecUsed is NOT rewound here — incomingNear runs right after and
+    // must land in fresh slots, else it overwrites these entries while
+    // ctx.sounds still references them.
     return out;
   }
 

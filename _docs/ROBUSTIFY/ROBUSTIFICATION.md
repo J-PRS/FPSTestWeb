@@ -233,6 +233,18 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.68 Sense-pool slot aliasing (2026-10-07)
+
+Real bug, pooled-scratch class. `recentNoises` rewound `_vecUsed` after
+writing, so `incomingNear` — called immediately after in `fillSenses` —
+reallocated the SAME pool slots, mutating the vec objects `ctx.sounds`
+still referenced: a bot with a nearby threat heard blasts at the
+projectile's position instead of the true noise. The rewind is gone;
+`_vecUsed` resets per-think in `enemyList`, so sounds/threats entries
+now occupy distinct slots for the whole synchronous consume. Other
+sense arrays audited clean: `enemyList`/`alliesOf`/`bodyScratch`/`ctxCache`
+all pool correctly.
+
 ### 2.67 Separation-sense capsule churn (2026-10-07)
 
 Class 10, client frame loop. `Bots.update` rebuilt `bodyScratch` with a
