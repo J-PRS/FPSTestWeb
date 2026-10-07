@@ -286,6 +286,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- WEAPONS: one numbered cell per slot. No group head — every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
+  // Two chips per row — four wide cells left dead air beside the picks.
+  weaponCells.classList.add('lo-grid2');
   // Filter by armorClass — the tier the menu edits (a banked class swap
   // edits that tier's kit, so its legal picks must show). lazyPlayer can
   // be unborn at wire-up — default the flag pass to medium.

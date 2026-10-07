@@ -1,3 +1,4 @@
+2026-10-07 - loadout weapon slots as 2x2 grid (less dead width)
 2026-10-07 - hub: server ping readout in MATCHES header (RTT of /rooms fetch, green/amber/red)
 2026-10-07 - remove legacy MODE dropdown from ESC menu (superseded by hub OFFLINE tab)
 2026-10-07 - hub review fixes: offline-join dead-end (isConnected dep), auto-open edge-trigger, stale leave btn, centered hub window, empty-state row
