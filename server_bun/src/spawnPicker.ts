@@ -20,8 +20,9 @@ export interface SpawnPickerHost {
   teamBases(): { alpha: Vec3; bravo: Vec3 } | null;
   /** Per-player pull toward the home sphere — a posted defender
    *  respawning 400m forward spends a minute hiking instead of holding
-   *  the stand; runners keep 0 so front-line spheres stay theirs. */
-  homeBias?(playerId: string): number;
+   *  the stand. undefined = unaffiliated → the flat-pool fallback
+   *  (bias 2 toward own base) applies; 0 would suppress it. */
+  homeBias?(playerId: string): number | undefined;
   /** A tasked member's job position + pull — overrides home scoring: the
    *  flood that respawns at base re-runs the transit that killed it. */
   objective?(playerId: string): { pos: Vec3; w: number } | null;

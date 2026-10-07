@@ -50,12 +50,14 @@ export class RespawnManager {
   hold(playerId: string): void { this.held.add(playerId); }
   isHeld(playerId: string): boolean { return this.held.has(playerId); }
 
-  /** Dead-state respawn press — release the hold (if any) and respawn
-   *  immediately rather than waiting out the timer. */
+  /** Dead-state respawn press — releases a die-and-spectate hold. A
+   *  pending unheld timer is NOT skippable: clicking through the
+   *  countdown would make respawnDelay decorative, so the press waits
+   *  for the fire like everyone else. */
   respawnNow(playerId: string): void {
     this.held.delete(playerId);
     const pending = this.timers.get(playerId);
-    if (pending) { clearTimeout(pending); this.timers.delete(playerId); }
+    if (pending) return; // countdown still owed — the timer fires
     this.dueAt.delete(playerId);
     this.fire(playerId, wallNow());
   }

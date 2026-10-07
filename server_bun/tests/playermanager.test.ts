@@ -169,4 +169,22 @@ describe('PlayerManager', () => {
     // though b1 stands at +70.
     expect(a2.position.x).toBeLessThan(0);
   });
+
+  it('unaffiliated ids keep the own-base pull — a Room-installed spawnHomeBias returning undefined must not mask the flat-pool fallback', () => {
+    const pm = new PlayerManager();
+    pm.spawnPoints = [{ x: -70, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 70, y: 0, z: 0 }];
+    pm.teamBases = { alpha: { x: -70, y: 0, z: 0 }, bravo: { x: 70, y: 0, z: 0 } };
+    // Room wires this for the bot roster; a 0/undefined-returning human
+    // used to collapse the picker's `?? (teamPool ? 0 : 2)` fallback to 0,
+    // making scoring pure foe-clearance (bastion far-base spawns).
+    pm.spawnHomeBias = () => undefined;
+    pm.addPlayer('a1', 'alpha');
+    pm.addPlayer('b1', 'bravo');
+    const b1 = pm.getPlayer('b1')!;
+    // Enemy camps alpha's base — clearance-only scoring would push the
+    // next alpha join to bravo's side 140m from his flag.
+    b1.position.x = -70; b1.position.z = 0;
+    const a2 = pm.addPlayer('a2', 'alpha');
+    expect(a2.position.x).toBeLessThan(0);
+  });
 });

@@ -32,6 +32,24 @@ describe('respawn hold', () => {
     expect(p.isDead).toBe(false);
   });
 
+  it('a dead press during the countdown does not skip the timer', () => {
+    const room = mkRoom({});
+    room.players.addPlayer('p3');
+    const p = room.players.getPlayer('p3');
+    if (!p) throw new Error('no p3');
+    pin(room, 'p3', { x: 0, y: 60, z: 0 });
+
+    room.messages.combat.respawnRequest('p3');
+    expect(p.isDead).toBe(true);
+
+    // Click-spam mid-countdown — must not revive early.
+    for (let i = 0; i < 3; i++) room.messages.combat.respawnRequest('p3');
+    expect(p.isDead).toBe(true);
+
+    runTicks(room, CONFIG.respawnDelayMs / 1000 + 1);
+    expect(p.isDead).toBe(false);
+  });
+
   it('a plain suicide still auto-respawns on schedule', () => {
     const room = mkRoom({});
     room.players.addPlayer('p2');
