@@ -2839,3 +2839,12 @@ playAt's vault.get is async - rapid tile clicks resolved out of order,
 so a slower earlier request's playDemoData stomped the clip the user
 actually picked last. playSeq generation guard: a superseded resolve
 returns before touching playback. (coolShots.ts)
+
+## 2.150 Feed wheel: per-event threshold dead to trackpads
+
+The wheel listener required |deltaY| >= 40 per event. Mouse notches
+arrive as ~120 so they worked, but precision trackpads stream many
+small deltas (5-30px) that each failed the check - the feed could never
+advance on a laptop touchpad. Wheel deltas now accumulate per direction
+and commit at 40 total; acc resets on sign flip and cooldown.
+(clipFeed.ts)

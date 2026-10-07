@@ -323,11 +323,20 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   const exitTo = feedMode.auto ? '/?play' : '/';
   btnExit.addEventListener('click', () => { window.location.href = exitTo; });
 
+  // Wheel deltas accumulate — a mouse notch arrives as one big event,
+  // but precision trackpads stream many small ones that never reach a
+  // per-event threshold (the feed would never move on a laptop pad).
+  let wheelAcc = 0;
   window.addEventListener('wheel', (ev) => {
     const now = performance.now();
-    if (Math.abs(ev.deltaY) < 40 || now < wheelLock) {return;}
+    if (now < wheelLock) {wheelAcc = 0; return;}
+    if (Math.sign(ev.deltaY) !== Math.sign(wheelAcc)) {wheelAcc = 0;}
+    wheelAcc += ev.deltaY;
+    if (Math.abs(wheelAcc) < 40) {return;}
     wheelLock = now + WHEEL_COOLDOWN;
-    void go(ev.deltaY > 0 ? 1 : -1);
+    const dir = wheelAcc > 0 ? 1 : -1;
+    wheelAcc = 0;
+    void go(dir as 1 | -1);
   }, { passive: true });
 
   window.addEventListener('keydown', (ev) => {
