@@ -2332,3 +2332,16 @@ everything green except the known soakChaos p95 from the committed
 moveJudge WIP.
 
 ### 2.108 - end
+
+### 2.109 Join-deadline extracted + pinned (2026-10-08)
+
+The onOpen 15s join deadline — the bound that keeps a connected-but-
+never-joined socket from sitting forever — was a bare 15000 literal,
+untestable. Now CONFIG.joinTimeoutMs (FPS_JOIN_TIMEOUT_MS), and
+joinDeadline.test.ts pins both halves: an idle socket closes
+1000/'join timeout', a joined one rides through. Room-scoped
+accumulator sweep alongside: outsideSince / RoomPickups.prevPos /
+RoomFlags.prevPos all prune against the live roster per tick;
+lastSentPositions / chatPace / wireIds purge inside removePlayer.
+
+### 2.109 - end

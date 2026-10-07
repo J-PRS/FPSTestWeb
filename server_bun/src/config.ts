@@ -35,6 +35,9 @@ export const CONFIG = {
    *  eldest audience-less room is recycled; a full roster of LIVE rooms
    *  rejects new mints outright. */
   maxRooms: envNum('FPS_MAX_ROOMS', 256),
+  /** A socket that connects but never completes the join handshake would
+   *  otherwise sit forever (QUIC/RTC peers don't die quickly). */
+  joinTimeoutMs: envNum('FPS_JOIN_TIMEOUT_MS', 15000),
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,
