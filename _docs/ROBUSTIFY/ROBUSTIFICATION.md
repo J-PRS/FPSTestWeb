@@ -2077,14 +2077,16 @@ capture.)
 
 ### 2.89 - end
 
-### 2.89 Flag event logs grew for the room's life (2026-10-08)
+### 2.90 Rekey fan-out pinned component-by-component (2026-10-08)
 
-Stale-buffer class: capLog/grabLog/retLog accrete one entry per flag
-grab/cap/return forever — matches are seamless so a long-lived room
-never bounds them. Every reader windows by `at >= runStart`, so the
-match-end reset now wipes all three: prior-match rows only ever read
-as noise anyway. (Old logs also hid a subtler issue — a test reading
-`capLog` across rounds could silently pass on a previous match's
-capture.)
+Pin class: §2.88 proved rekeyBot's fan-out rots — four id-keyed
+registries had drifted out of it — but the fix itself had zero test
+coverage, so the next map added without a `rekey` hop would fail
+silently the same way. `botRekey.test.ts` now asserts each component's
+rekey migrates its private maps (BotFire cadence, BotWatchdog
+samples/anchors/warn sets, BotSenses foeSeen cache, CtfFlags roles,
+FlagRun touch meters, RoomNoticer receipts + pending actor). Server
+side was already pinned by botUntrack.test.ts; this closes the client
+mirror.
 
-### 2.89 - end
+### 2.90 - end
