@@ -1,3 +1,4 @@
+2026-10-08 - pre-beta audit: legal assets, dev-surface leaks, missing features ranked (_docs/2026-10-08_BETA_AUDIT.md)
 2026-10-08 - robustify §2.81: tick record encodes pooled — fresh buffer per record per tick; stale untrack pin fixed
 2026-10-08 - robustify §2.80: RoomNoticer missed rekeyBot's id migration — double notice + stale key
 2026-10-08 - robustify §2.79: binary send lanes bypassed the drown drain — stalled binary-only sockets never closed
