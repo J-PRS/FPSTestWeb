@@ -8,8 +8,7 @@ import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponS
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { ClaimLedger, clampPing, rewindPos, CLAIM_DEFER_MS, type ClaimDefer } from './claimLedger.ts';
-export type { ClaimDefer };
+import { clampPing, rewindPos } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
@@ -27,15 +26,6 @@ import { tauntRand } from '../../shared/botRand.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
-
-interface PendingClaim {
-  playerId: string;
-  kind: string;
-  d: ClaimDefer;
-  run: (d: ClaimDefer) => void;
-  targetId?: string;
-  weaponType?: number;
-}
 
 /** Optional room wiring — mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
@@ -99,7 +89,6 @@ export interface CombatDeps {
  * in claimLedger — this file keeps the damage policy.
  */
 export class CombatHandler {
-  ledger = new ClaimLedger(); // public — claim families read it via hosts
   /** The blast sweep — claimed AOE resolutions, trusted server blasts,
    *  plating sweeps, mine pops. Own file (combatBlast.ts) via BlastHost. */
   blast: BlastRunner; // public — aoeClaims drives it via AoeHost
@@ -138,38 +127,6 @@ export class CombatHandler {
   killFeed: KillFeed;
   private hitLedger = new HitLedger();
   respawner: RespawnManager;
-
-  /** Claims that name a projectile the ledger doesn't know yet — on
-   *  unordered transports (WT/RTC datagrams) the hit can land BEFORE the
-   *  spawn registration. They wait here for the next register() for that
-   *  player; expiry or exhaustion is a LOUD reject, never a silent drop.
-   *  This is the fix for "half the damage instances don't work": a
-   *  reordered shot/aoeShot pair used to bounce as 'no known projectile'. */
-  private pendingClaims: PendingClaim[] = [];
-  private static CLAIM_DEFER_CAP = 64;
-
-  deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void {
-    if (d.left <= 0 || wallNow() - d.at > CLAIM_DEFER_MS) {
-      this.reject(playerId, kind, 'no known projectile — spawn claim never arrived', targetId, weaponType);
-      return;
-    }
-    if (this.pendingClaims.length >= CombatHandler.CLAIM_DEFER_CAP) {
-      this.reject(playerId, kind, 'defer queue full', targetId, weaponType);
-      return;
-    }
-    this.hb('defer');
-    this.pendingClaims.push({ playerId, kind, d, run, targetId, weaponType });
-  }
-
-  /** Retry this player's deferred claims — call right after a new
-   *  projectile registers so out-of-order claim→spawn pairs resolve. */
-  flushClaims(playerId: string): void {
-    if (!this.pendingClaims.length) return;
-    const mine: PendingClaim[] = [];
-    this.pendingClaims = this.pendingClaims.filter(p =>
-      p.playerId === playerId ? (mine.push(p), false) : true);
-    for (const p of mine) p.run({ at: p.d.at, left: p.d.left - 1 });
-  }
 
   /** AoeHost surface — seeded rng rides deps so bomblet scatter replays
    *  under scenario seeds; ambient dice when uninjected. */
@@ -273,7 +230,7 @@ export class CombatHandler {
   /** Drop live projectiles when a player is fully removed (grace timeout /
    *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
   onPlayerRemoved(playerId: string): void {
-    this.ledger.removePlayer(playerId);
+
     this.killFeed.forget(playerId);
     // A pending respawn is part of the player's teardown too — removal
     // paths that skip onPlayerDisconnected (kick, room hop, admin reload)
@@ -305,12 +262,6 @@ export class CombatHandler {
     }
     for (const key of this.lastRejectWarn.keys()) {
       if (key.startsWith(`${playerId}:`)) this.lastRejectWarn.delete(key);
-    }
-    const held = this.pendingClaims.filter(p => p.playerId === playerId).length;
-    if (held) {
-      this.hb('drop.claim', held);
-      logger.warn(`dropped ${held} deferred claim(s) on disconnect: ${playerId}`);
-      this.pendingClaims = this.pendingClaims.filter(p => p.playerId !== playerId);
     }
   }
 
@@ -399,7 +350,6 @@ export class CombatHandler {
       this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return;
     }
-    this.flushClaims(playerId);
     this.deps.emit?.({ type: 'fire', playerId });
     this.aoe.handleAOEShot(playerId, msg);
   }
@@ -426,33 +376,11 @@ export class CombatHandler {
   }
 
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
-    // Ownership check: any client could otherwise destroy every other
-    // player's in-flight projectiles (grief vector — silently suppresses
-    // weapons). Unknown IDs now drop entirely: a replica can only exist
-    // for a ledger-minted id, so destroying one nobody knows just relayed
-    // fake pops — including for server-owned 'sp-' shells, which live
-    // outside the ledger by design and must never be client-destroyable.
-    let pid: string | undefined = msg.projectileId || undefined;
-    if (pid === undefined || this.ledger.ownerOf(pid) === undefined) {
-      pid = msg.shotId ? this.ledger.idForClientShot(playerId, msg.shotId) : pid;
-    }
-    if (pid === undefined || this.ledger.ownerOf(pid) === undefined) {
-      this.hb('drop.destroy');
-      logger.debug(`projectileDestroy for unknown id`, { playerId, projectileId: msg.projectileId, shotId: msg.shotId });
-      return;
-    }
-    const owner = this.ledger.ownerOf(pid);
-    if (owner !== playerId) {
-      this.rejectWarn(`${playerId}:destroy`, `projectileDestroy rejected: ${playerId} doesn't own ${pid}`);
-      return;
-    }
-    this.ledger.destroy(pid);
-
-    this.broadcast({
-      type: 'projectileDestroyed',
-      projectileId: pid,
-      shotId: msg.shotId,
-    });
+    // Every shell is server-simmed — the sim owns its lifecycle end to
+    // end, so a client projectileDestroy can never be legal. Drop it
+    // (heartbeat so a forged client shows in the health map).
+    this.hb('drop.destroy');
+    logger.debug(`projectileDestroy dropped — shells are server-owned`, { playerId, projectileId: msg.projectileId, shotId: msg.shotId });
   }
 
   // One funnel for the hit-or-kill outcome: broadcast the damage, or credit

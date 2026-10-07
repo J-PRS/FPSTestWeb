@@ -1,3 +1,4 @@
+2026-10-01 - C5 demolition: ClaimLedger class deleted - zero register() callers after intent migration; claimLedger.ts is now only rewindPos/clampPing lag-comp; defer/flush queue + disconnect drain gone; projectileDestroy is an unconditional drop (server owns shells); ledger test files retired to .old
 2026-10-01 - C5 demolition: aoeProjectile claim path deleted - every shelled weapon is server-simmed so a projectile aoeShot is always a reject; cluster scatter lives in RoomProjectiles.detonate for all shells; aoeShot keeps melee/slam/beam only
 2026-10-01 - C5 demolition: 'shot' wire claim deleted end-to-end (codec/protocol/handler/client/netbot) - shotFired intent is the only path; server-simmed shells refuse all projectileDestroy incl. owner; scenario+netbot tests converted
 2026-10-07 - F1 toggles the visuals-only DEBUG flag (same settings.fps-debug the menu button writes; live flip, no reload) with a toast reporting the effective state
