@@ -121,10 +121,10 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     // those skips since spawn, so even a far client that missed edges
     // catches every skipped quantum on the next edge it sees; per-edge
     // guessing would under-correct it by FAR_SKIP-1 (§2.38/§2.39 desync).
-    if (m.sk !== undefined) {
+    if (m.sk !== undefined && Number.isFinite(m.sk)) {
       c.netAcc -= SIM_TICK_DT * (m.sk - (appliedSkips.get(m.id) ?? 0));
       appliedSkips.set(m.id, m.sk);
-    } else if (m.kind === 'retarget') {
+    } else if (m.sk === undefined && m.kind === 'retarget') {
       c.netAcc -= SIM_TICK_DT; // pre-sk server: one skip per retarget edge seen
     }
     c.applyNetEdge({ ...m, kind: m.kind });

@@ -95,6 +95,11 @@ export function updateNetSim<S extends NetSimState>(
   const s = e.sim;
   const field = getHeightfield();
   if (!s || !field) {return;}
+  // A non-finite accumulator wedges the replay loop permanently —
+  // NaN >= SIM_TICK_DT is always false, so one corrupt edge/dt freezes
+  // the replica in its last state until it dies (the soak's persistent
+  // blinkOut desyncs). Reset rather than strand it.
+  if (!Number.isFinite(e.netAcc)) {e.netAcc = 0;}
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= SIM_TICK_DT) {
@@ -180,6 +185,7 @@ export function updateNetTotem(
   const s = e.sim;
   const field = getHeightfield();
   if (!s || !field) {return;}
+  if (!Number.isFinite(e.netAcc)) {e.netAcc = 0;} // see updateNetSim — NaN wedges the loop permanently
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= SIM_TICK_DT) {

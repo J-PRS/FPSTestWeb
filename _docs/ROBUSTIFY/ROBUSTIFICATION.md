@@ -2896,3 +2896,20 @@ only on the newest t (jitter stats track raw arrivals via a separate
 stamp), snapshots splice into sorted position, and pruning keys off
 latestT instead of the pushed t. Regression test covers the reorder.
 (remoteSnapshots.ts)
+
+## 2.155 NaN in netAcc froze net replicas in their last state forever
+
+Both netDriven replay loops (updateNetSim + updateNetTotem) accumulate
+frame dt into e.netAcc and step while netAcc >= SIM_TICK_DT. A non-
+finite accumulator wedges that loop permanently -- NaN >= anything is
+false, so one corrupt value freezes the replica's state machine in
+whatever it last held until the entity dies. That is the exact
+signature the soak's StateHash audit kept flagging: CREATURE DESYNC
+with the client pinned in blinkOut for 30+ checks (~60s) while the
+server cycled normally. The poison vectors were real: m.sk (the
+server's retarget-skip counter) reached netAcc arithmetic with no
+finite check -- only position/velocity/tp were sanitized -- and one
+NaN dt was fatal the same way. Both loops now reset a non-finite
+netAcc to 0 (self-heal, one bad edge costs at most a skipped window),
+and the sk edge is gated by Number.isFinite before touching the
+accumulator. (netMelee.ts, netCrawlers.ts)
