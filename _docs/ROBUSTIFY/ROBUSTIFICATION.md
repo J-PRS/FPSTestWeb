@@ -2848,3 +2848,12 @@ small deltas (5-30px) that each failed the check - the feed could never
 advance on a laptop touchpad. Wheel deltas now accumulate per direction
 and commit at 40 total; acc resets on sign flip and cooldown.
 (clipFeed.ts)
+
+## 2.151 Clip appears twice when upload resolves after a server merge
+
+fetchFromServer dedups server entries against coolShots by filename -
+but a fresh local clip still carries its client-minted name while its
+upload is in flight, so a server merge landing mid-flight merged the
+uploaded copy as a second entry. The same clip rendered twice: once
+local, once from server. On upload resolution the local entry now
+filters any server entry carrying the assigned filename. (coolShots.ts)

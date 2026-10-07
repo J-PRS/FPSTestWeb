@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.151: duplicate clip in best-shots panel - server merge landing before upload resolution deduped on stale local filename; now deduped when the server filename is assigned
 2026-10-01 - robustify 2.150: clip feed wheel works on trackpads - per-event deltaY>=40 dropped every small trackpad tick; deltas now accumulate to the threshold
 2026-10-01 - robustify 2.149: cool-shot play race fixed - rapid clicks could let a slower earlier vault resolve stomp the last-picked clip (generation guard)
 2026-10-01 - robustify 2.148: vault rehydrate no longer pulls ~35MB through getAll - meta store keyed by clip id serves list(); both stores write/evict in one tx, v2 rows backfill lazily

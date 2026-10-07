@@ -180,6 +180,11 @@ export class CoolShotManager {
       if (serverFilename) {
         entry.filename = serverFilename;
         entry.clipData = undefined;
+        // A fetchFromServer that ran before this upload resolved already
+        // merged the server-side copy under the server filename (the
+        // local entry still carried its minted name, so dedup missed
+        // it) — the same clip would render twice in the panel.
+        this.coolShots = this.coolShots.filter(s => s === entry || s.filename !== serverFilename);
         this.onChanged?.(this.coolShots);
       }
     }).catch((error) => {
