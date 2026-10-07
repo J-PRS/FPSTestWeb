@@ -2090,3 +2090,15 @@ side was already pinned by botUntrack.test.ts; this closes the client
 mirror.
 
 ### 2.90 - end
+
+### 2.91 Depart funnel pinned — room registries purge on removal (2026-10-08)
+
+Pin class, server mirror of §2.90: removePlayerCompletely is THE
+player-depart funnel (kick, idle reap, room hop, bot retire all land
+here) but only the BOT half was pinned — wireIds/sessionTokens/
+lastSentPositions/chatPace/rateLimiter cleanup had no test. A new
+player-keyed map added without a delete would re-leak silently the
+same class §2.58-§2.90 kept fixing. departFunnel.test.ts seeds the
+receipts then asserts every registry purges on removal.
+
+### 2.91 - end
