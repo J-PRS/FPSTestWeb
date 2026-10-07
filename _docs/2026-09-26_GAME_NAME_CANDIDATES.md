@@ -56,7 +56,7 @@ game fills with meaning beats an epic title.
 | **Dreg** | the dregs/leftover sediment | Short, nasty, deadpan |
 | **Brood** | the swarm (game literally has baneling broods) | Dark, real, maybe collides w/ StarCraft usage |
 | **Defile** | narrow mountain pass armies get ambushed in | Chokepoint + sounds like destruction |
-| **Jebel** | Arabic: mountain | Clean 5 letters |
+| ~~Jebel~~ | Arabic: mountain | DEAD 2026-10-01: reads Hebrew to the ear (JP) - wrong connotation cluster |
 
 ### Desert / wind
 
