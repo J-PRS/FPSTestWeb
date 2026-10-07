@@ -60,9 +60,11 @@ export function wireProjectiles(ctx: NetCtx): void {
   // Bind a server id echo to the local shell that spawned it — the spawn
   // claim's shotId nonce comes back verbatim, so the link is exact (no
   // FIFO, no position inference, immune to rejected/dropped claims).
-  const linkOwnProjectile = (projectileId: string, shotId?: string): void => {
+  const linkOwnProjectile = (projectileId: string, shotId?: string, pellet?: number): void => {
     const registry = deps.world.projectileRegistry;
-    const localProjectile = shotId ? registry.byShotId.get(shotId) : undefined;
+    const localProjectile = shotId
+      ? (pellet !== undefined ? registry.byFanSlot.get(`${shotId}#${pellet}`) : registry.byShotId.get(shotId))
+      : undefined;
     if (!localProjectile) {
       // A missing entry after the nonce mint is either an echo that
       // outlived a fast-popping shell (nonce pruned at death — benign)
@@ -76,14 +78,19 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     localProjectile.serverProjectileId = projectileId;
     registry.byId.set(projectileId, localProjectile);
+    // Burst pellet binding is one-shot — the slot frees once linked.
+    if (localProjectile.fanSlot) {
+      registry.byFanSlot.delete(localProjectile.fanSlot);
+      localProjectile.fanSlot = null;
+    }
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string) => {
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number) => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
-      linkOwnProjectile(projectileId, shotId);
+      linkOwnProjectile(projectileId, shotId, pellet);
       return;
     }
 
@@ -100,6 +107,9 @@ export function wireProjectiles(ctx: NetCtx): void {
     // scale) and would even let a remote shell sendShot-claim its hits
     // under my id. Stamp the real owner.
     remoteProjectile.shooterId = ownerId;
+    // Roster team — team-filtered solids (shield gates) pass an owner's
+    // shell through when it matches, same as the server sim.
+    remoteProjectile.shooterTeam = nm().getPlayers().get(ownerId)?.team ?? null;
     // Fuse jitter seeds from this id — the replica pops at the server's age.
     remoteProjectile.serverProjectileId = projectileId;
     // Ray-burst replicas discharge deterministically (delay/dir/range are
@@ -174,6 +184,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
+      if (localProjectile.fanSlot) {registry.byFanSlot.delete(localProjectile.fanSlot);}
     }
   };
 }

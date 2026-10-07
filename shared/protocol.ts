@@ -196,7 +196,7 @@ export type ServerMessage =
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string }
   | { type: 'jump'; playerId: string; position: Vec3 }
   | { type: 'jetpack'; playerId: string; position: Vec3 }
-  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number; shotId?: string }
+  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number; shotId?: string; pellet?: number }
   // Cosmetic relay of a hitscan trigger-pull: pos is server-stamped
   // (rewind to fire time), dir is the shooter's claimed aim — never
   // trusted for damage, only for muzzle audio/visual on observers.

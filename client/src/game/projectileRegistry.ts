@@ -14,10 +14,14 @@ export interface ProjectileRegistry {
   byShotId: Map<string, Projectile>;
   /** server projectileId → local Projectile (server-ordered destroys) */
   byId: Map<string, Projectile>;
+  /** Burst fans send ONE intent per pull; the server echoes the same
+   *  shotId on every pellet with a `pellet` index — this map binds
+   *  `${pullId}#${pelletIdx}` to the predicted pellet. */
+  byFanSlot: Map<string, Projectile>;
   /** Monotonic counter minting shotId nonces for this session. */
   seq: number;
 }
 
 export function createProjectileRegistry(): ProjectileRegistry {
-  return { byShotId: new Map(), byId: new Map(), seq: 0 };
+  return { byShotId: new Map(), byId: new Map(), byFanSlot: new Map(), seq: 0 };
 }

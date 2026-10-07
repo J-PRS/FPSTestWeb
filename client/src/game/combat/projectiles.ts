@@ -143,6 +143,9 @@ function pruneShots(c: CombatCtx): void {
   for (const [id, p] of registry.byId) {
     if (p.dead) registry.byId.delete(id);
   }
+  for (const [slot, p] of registry.byFanSlot) {
+    if (p.dead) registry.byFanSlot.delete(slot);
+  }
 }
 
 // Mid-air interception: the projectile's sweep tagged a turret shell —

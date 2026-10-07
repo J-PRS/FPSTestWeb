@@ -151,7 +151,7 @@ export class WireIn {
     knockback: (data) => this.h.onKnockback?.(data.position, data.force, data.pull),
     jump: (data) => this.h.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data) => this.h.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data) => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId),
+    projectileCreated: (data) => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet),
     playerShot: (data) => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data) => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),

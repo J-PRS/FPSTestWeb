@@ -95,9 +95,16 @@ export class Projectile {
    *  claim naming this shell — binds claims before/independent of the
    *  serverProjectileId round-trip. */
   shotId: string | null = null;
+  /** Burst fans bind server echoes by `${pullId}#${pelletIdx}` — the key
+   *  under which this pellet sits in registry.byFanSlot, so death and
+   *  destroy cleanup can drop it. Single shells leave it unset. */
+  fanSlot: string | null = null;
   /** Whose shell this is — kill attribution for local-authority shots
    *  (offline GameBots; null = the local player). */
   shooterId: string | null = null;
+  /** Shooter's team — team-filtered solids (shield gates) let this shell
+   *  through when it matches theirs. null = teamless/unresolvable. */
+  shooterTeam: string | null = null;
   /** Local-player sweep override: offline bot shells include the local
    *  player as a hittable body — they're the only projectiles whose
    *  shooter ISN'T the local player, so self-hits can't happen. Returns
@@ -411,9 +418,13 @@ export class Projectile {
   private tickArmedFx(): void {
     if (this.armedFxDone || !this.armed || this.config.armTime === undefined) {return;}
     this.armedFxDone = true;
-    this.ribbons.push(RibbonTrail.acquire(this.scene, {
+    const armed = RibbonTrail.acquire(this.scene, {
       color: 0xFFBB33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
-    }));
+    });
+    // Late-join ribbons miss the driver's ctor follow-bind — without this
+    // the armed streak's tip trails the shell by a frame of travel.
+    armed.follow = this.pos;
+    this.ribbons.push(armed);
   }
 
   // GL/flak shells always bounce; a mortar only bounces while unarmed —

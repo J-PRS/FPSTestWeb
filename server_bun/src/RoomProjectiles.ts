@@ -53,6 +53,9 @@ export interface LiveProj {
   stuck?: { playerId?: string; off: Vec3 };
   /** Terrain hits taken — maxBounces ends the shell on the Nth. */
   bounces?: number;
+  /** Owner's team at spawn — team-filtered solids (shield gates) let the
+   *  shell through when it matches. undefined = teamless/owner gone. */
+  ownerTeam?: string;
 }
 
 // Player aim height — matches where the client sweeps the capsule center.
@@ -156,13 +159,13 @@ export class RoomProjectiles {
       const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
       const dx = dir.x + rx * ox + ux * oy, dy = dir.y + ry * ox + uy * oy, dz = dir.z + rz * ox + uz * oy;
       const l = Math.hypot(dx, dy, dz) || 1;
-      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel);
+      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, shotId, i);
       if (first === null) first = id;
     }
     return first;
   }
 
-  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string): string | null {
+  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number): string | null {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.speed <= 0) return null; // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
@@ -179,14 +182,16 @@ export class RoomProjectiles {
     const terrainAt = this.field ? timeToCeiling(origin.y, vel.y, g, this.fieldMax + stats.bodyRadius) : 0;
     this.projs.set(id, {
       id, ownerId, weaponType, stats, p: { pos: { ...origin }, vel, age: 0 }, terrainAt,
+      ownerTeam: owner.team,
       ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
     });
     this.room.broadcast({
       type: 'projectileCreated', projectileId: id, ownerId,
       position: { ...origin }, velocity: vel, weaponType,
       // The intent's nonce — the shooter's predicted shell binds its
-      // server identity off this echo (linkOwnProjectile).
-      shotId,
+      // server identity off this echo (linkOwnProjectile). pellet picks
+      // which predicted shell inside a burst fan.
+      shotId, pellet,
     });
     return id;
   }

@@ -59,9 +59,9 @@ const MUZZLE_LEAD = 1;
 const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
 
-function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): void {
-  if (deps.inputTracking.isTabHidden()) {return;}
-  if (deps.lazyDemoManager()?.isPlaying) {return;}
+function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
+  if (deps.inputTracking.isTabHidden()) {return undefined;}
+  if (deps.lazyDemoManager()?.isPlaying) {return undefined;}
 
   if (!quiet) {sfx.shoot(config.weaponType);}
   // Decloak-on-fire: bot senses mask this player's cloak for the reveal
@@ -79,6 +79,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // registering server-side with no id to link: 'no local shell' warns.
   // needsServerTracking keeps governing the damage-claim path; the nonce
   // costs a map entry, pruned on death.
+  p.shooterTeam = deps.world.localTeam ?? null;
   p.shotId = `s${++deps.world.projectileRegistry.seq}`;
   deps.world.projectileRegistry.byShotId.set(p.shotId, p);
 
@@ -119,13 +120,17 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     // own authoritative shell and echoes shotId on projectileCreated,
     // which linkOwnProjectile binds to this predicted shell. Contact
     // and blast outcomes arrive as broadcasts; nothing is claimed here.
-    deps.lazyNetworkManager().sendShotFired({
-      weaponType: config.weaponType,
-      dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
-      pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
-      shotId: p.shotId ?? undefined,
-    });
-    return;
+    // quiet = one pellet of a burst fan: the pull sends ONE intent and
+    // the server fans the whole spread itself, echoing a pellet index.
+    if (!quiet) {
+      deps.lazyNetworkManager().sendShotFired({
+        weaponType: config.weaponType,
+        dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+        pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
+        shotId: p.shotId ?? undefined,
+      });
+    }
+    return p;
   }
   deps.lazyNetworkManager().sendShot({
     targetId: null, // no target yet
@@ -138,6 +143,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     // otherwise makes two legal shots arrive inside one window.
     timestamp: Date.now(),
   });
+  return p;
 }
 
 // Belt items release mid-throw-anim; compute fresh aim at release time
@@ -207,6 +213,13 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
   _flakRight.crossVectors(e.dir, _flakUp0);
   if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
   _flakUp.crossVectors(_flakRight, e.dir);
+  // Simmed fans ride ONE intent per pull — the server fans the spread
+  // itself and echoes pellet indices, so each predicted pellet registers
+  // under its own `${pullId}#${idx}` slot for the echo bind.
+  const simmed = serverSimmed(config.weaponType);
+  const pullId = simmed ? `s${++deps.world.projectileRegistry.seq}` : '';
+  const registry = deps.world.projectileRegistry;
+  let i = 0;
   for (const pt of pts) {
     const ox = (pt.x * cs - pt.y * sn) * spread;
     const oy = (pt.x * sn + pt.y * cs) * spread;
@@ -214,7 +227,20 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
       .addScaledVector(_flakRight, ox)
       .addScaledVector(_flakUp, oy)
       .normalize();
-    spawnProjectile(deps, config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
+    const p = spawnProjectile(deps, config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
+    if (p && simmed) {
+      p.fanSlot = `${pullId}#${i}`;
+      registry.byFanSlot.set(p.fanSlot, p);
+    }
+    i++;
+  }
+  if (simmed) {
+    deps.lazyNetworkManager().sendShotFired({
+      weaponType: config.weaponType,
+      dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+      pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      shotId: pullId,
+    });
   }
 }
 

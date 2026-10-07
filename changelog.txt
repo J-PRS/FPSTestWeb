@@ -1,3 +1,5 @@
+2026-10-01 - C5: burst weapons claimless - one intent per pull, pellet-index echo binding (flak + shotgun join SERVER_SIMMED_WEAPONS)
+2026-10-07 - perf/trails: remote contact-fused shells (plasma/bolt/disc) now sweep terrain — a lost destroy edge no longer streaks ~870m to the 10s backstop; resync splices world.projectiles in place (rebind froze diag ctx.projectiles at 0); Alt+Q gains perf: EMA+GPU+draws, worst-frame phase split (5s window), fxdecay/budget flattening
 2026-10-01 - C5 phase 2: SERVER_SIMMED_WEAPONS covers all modeled ballistics (disc/plasma/grenade/GL/mortar/sticky/cluster/MRV/rail-belt/heal-armor); intent gate gets belt-charge + 20/s flood checks, bypasses cosmetic throttle
 2026-10-01 - robustify 2.173: DemoStorage index dedupe - ctor reconcile vs saveDemo race double-indexed files
 2026-10-01 - robustify 2.172: snapshot heals creature sim.state/targetId drift (lost crawlEvt no longer warns forever)
