@@ -233,6 +233,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.75 Courage dropped from the offline pick (2026-10-08)
+
+Same block, residual drift the §2.74 factory couldn't see: the senses'
+`pickBotWeapon` call omitted `courage`, so every offline bot drew as if
+its nerve were the default 0.5 — fearless heavies played timid and
+skittish lights played brave. `botFire.resolveShot` (the actual draw)
+already passed `bot.skill?.courage`, making the drift a senses-vs-gun
+mismatch, not a shared default. Both pick closures now pass
+`this.brain.skill.courage` — the senses' pick, the aim-skill pick, and
+the fired pick all agree on the bot's nerve.
+
 ### 2.74 Weapon-sense hook mirror (2026-10-08)
 
 Fourth mirror-drift find, the most concrete yet. The server senses feed

@@ -259,11 +259,11 @@ export class GameBot extends RemotePlayer {
       // (this is where beams used to lead like shells: `speed || 60`
       // erased the hitscan 0).
       ...botWeaponHooks(
-        (d) => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)) as WeaponType,
+        (d) => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
         this.loadout ?? BOT_LOADOUTS[0]!,
       ),
       aimSkill: (d, targetSpeed) =>
-        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0)), targetSpeed),
+        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage), targetSpeed),
     });
     const {dest} = out;
     this.lastDest.set(dest.x, dest.y, dest.z);
