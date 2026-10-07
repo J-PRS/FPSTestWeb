@@ -2822,3 +2822,13 @@ startClipFeed shuffled getCoolShots() in place - that returns the
 manager's LIVE array, so every feed visit permanently re-shuffled the
 Best Shots panel's best-first ordering. The feed now copies the array
 before shuffling. (clipFeed.ts)
+
+## 2.148 Vault list() structured-cloned every clip at boot
+
+DemoVault.list() ran getAll on the clips store - ~35MB of DemoFile
+payloads through structured clone on every rehydrate just to render
+tile meta (id/timestamp/desc/lifetime/weapon/distance). New meta store
+(keyPath id, ts index) written in the same tx as the clip row; list()
+reads it; evict deletes from both in one tx. v2 rows backfill lazily on
+first list() via a count drift check - async backfill inside the IDB
+upgrade transaction would race its auto-commit. (demoVault.ts)

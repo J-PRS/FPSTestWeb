@@ -1,3 +1,4 @@
+2026-10-01 - robustify 2.148: vault rehydrate no longer pulls ~35MB through getAll - meta store keyed by clip id serves list(); both stores write/evict in one tx, v2 rows backfill lazily
 2026-10-01 - robustify 2.147: feed shuffle no longer scrambles the Best Shots panel - getCoolShots() returns the live array; feed copies before shuffling
 2026-10-01 - robustify 2.146: clip feed - wheel/keys/auto-advance during a swipe no longer double-advances (drag is cancelled when go() takes over)
 2026-10-01 - clip feed: outgoing clip keeps playing through the swipe - canvas stays on the live clip while the neighbor pane (meta placeholder, real frame at commit) slides over
