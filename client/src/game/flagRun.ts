@@ -24,6 +24,7 @@ import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';
 import { Explosion } from '../effects/explosion.js';
 import { urlParams } from '../core/params.js';
+import { noteLocalSnap } from './gameLoop.js';
 import { MoveSim, type MoveSurface } from '../../../shared/movement.js';
 
 const FLAG_BASE_GEO = new THREE.IcosahedronGeometry(0.4, 0);
@@ -165,6 +166,15 @@ export class FlagRunBridge {
     if (urlParams.has('tas')) this.loadTasGhost();
   }
 
+  /** Scene teardown — same leak class as CtfFlags: orphaned stand+flag
+   *  meshes keep rendering after the offline match retires. */
+  dispose(): void {
+    const scene = this.deps.lazyScene();
+    for (const f of this.flags) scene.remove(f.mesh, f.stand);
+    this.flags.length = 0;
+    if (this.tasGhost) { scene.remove(this.tasGhost); this.tasGhost = undefined; }
+  }
+
   /** TAS ghost — replays a searched optimal leg trajectory (the yellow
    *  ribbon + flying marker) so the arc is watchable in-engine.
    *  ?tas=0->1 picks a leg; ?tas=1 plays the first found. */
@@ -303,6 +313,7 @@ export class FlagRunBridge {
         if (dir.lengthSq() > 0.001) {
           dir.normalize();
           p.pos.copy(dot.position).addScaledVector(dir, -28).add(_filmUp);
+          noteLocalSnap(); // chase-cam seat is a designed teleport
           p.vel?.set(0, 0, 0);
           p.yaw = Math.atan2(dir.x, dir.z);
           p.pitch = Math.atan2(dir.y, Math.hypot(dir.x, dir.z));
