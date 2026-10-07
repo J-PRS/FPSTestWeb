@@ -1,3 +1,4 @@
+2026-10-01 - robustify: widen botUntrack pin to arsenal+roster delegated teardowns (26 maps)
 2026-10-01 - robustify: pin MapCatalog.specFor resolution order + mode legality gate
 2026-10-01 - robustify: collapse rateLimitWarnings purge loops into dropWarnKeys
 2026-10-01 - robustify: pin /demos download path-traversal guard (public route)

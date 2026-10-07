@@ -2582,3 +2582,13 @@ map keeps flag rules, never sprouts stands), bots override, and the
 no-spec default. Also ran the FULL server suite: 1249/1250, only failure
 the known soakChaos p95 regression from moveJudge WIP 00bc1f32.
 ### 2.129 - end
+
+### 2.130 - botUntrack pin widened to delegated teardowns
+`ServerBots.untrack` drains 19 structures but the pin only checked 17 -
+the delegated arsenal (trigger/propelT/wasCarrying/lastShot/propels...)
+and roster (roles/classes) teardowns were unverified; a dropped delete
+inside `BotArsenal.untrack` or `BotRoster.forget` would leak silently.
+The pin now seeds and asserts every delegated map too (26 structures).
+Full map census: all remaining keyed maps audited clean (TeamId-keyed
+senses maps bounded by team count; groundMemo bounded by stand count).
+### 2.130 - end
