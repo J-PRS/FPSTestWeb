@@ -314,4 +314,22 @@ describe('RoomMoveSim', () => {
     // A real teleport still flags.
     expect(m.reconcile('p1', { x: s.pos.x + 200, y: s.pos.y, z: s.pos.z }, 0, s.vel)).not.toBeNull();
   });
+
+  test('forged high-velocity reports cannot buy teleport tolerance', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.reconcile('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0); // seed
+    // Wire admits ≤1000 m/s claims; a 500 m/s report used to scale
+    // lag/transit tolerance by ~4× before the judge clamped adoption
+    // at the plausible ceiling (REPORT_VEL_CAP 200).
+    const warp = { x: 900, y: 0, z: 0 }; // 900 > 200 — forged
+    const blink = { x: 150, y: 0, z: 0 }; // past SEVERE_M even alone
+    // First forged-vel report: correction must still fire (the claim
+    // buys clamped-200 tolerance, not claimed-900).
+    expect(m.reconcile('p1', blink, 0, warp)).not.toBeNull();
+    // Shadow must not adopt the full forged velocity either — adoption
+    // of ~900 m/s would compound into later tolerance windows.
+    const v = m.simState('p1')!.vel;
+    expect(Math.hypot(v.x, v.y, v.z)).toBeLessThanOrEqual(200 + 1e-6);
+  });
 });

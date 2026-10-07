@@ -159,6 +159,14 @@ const GAP_SEVERE_CREDIT_S = 2;
  *  forged multi-second ping widens the divergence budget by at most
  *  speed×RTT_CAP/2 (~6m at ski speed), far under the SEVERE_M trip. */
 const RTT_TOL_CAP_MS = 300;
+/** The wire's 1000 m/s velocity bound is codec generosity — it stops
+ *  coordinate-infinity poisoning but a claim past ~200 is still forged
+ *  (terminal fall caps at 100; disc+ski momentum tops out ~150). The
+ *  judge adopts reported vel into the shadow AND scales lag/transit
+ *  tolerance by it, so an unclamped 1000 m/s claim buys ~150m of free
+ *  transit tolerance plus ~900m of throttled-client lag tolerance.
+ *  Clamping keeps both anchored to plausible motion. */
+const REPORT_VEL_CAP = 200;
 
 export class MoveJudge {
   constructor(private host: JudgeHost) {}
@@ -169,6 +177,15 @@ export class MoveJudge {
   reconcile(sh: Shadow, playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const s = sh.sim.state;
     const reportNow = wallNow();
+    // Clamp the claimed velocity before it touches the shadow or the
+    // tolerance math (see REPORT_VEL_CAP).
+    if (vel) {
+      const m = Math.hypot(vel.x, vel.y, vel.z);
+      if (m > REPORT_VEL_CAP) {
+        const k = REPORT_VEL_CAP / m;
+        vel = { x: vel.x * k, y: vel.y * k, z: vel.z * k };
+      }
+    }
     if (sh.lastReportAt > 0) {
       const dt = reportNow - sh.lastReportAt;
       if (dt > 0 && dt < 5000) sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;

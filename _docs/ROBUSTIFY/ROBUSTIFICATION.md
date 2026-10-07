@@ -2710,3 +2710,21 @@ second row pointing at the one surviving file. Two players at the
 name is free on disk and in the index. New test freezes the clock to
 prove the rename path deterministically.
 ### 2.137 - end
+
+### 2.138 - moveJudge report-velocity clamp (authority hole)
+
+Determinism probe found the ambient-draw boundary already test-guarded
+(sharedAmbient.test.ts) - clean. Pivoted to a trust-boundary read of
+moveJudge.reconcile and found a class-2 hole: the judge adopts the
+client-claimed `vel` into the shadow (line ~195) BEFORE speed3d is
+computed, and both lagTol and transitTol scale on it. The wire's
+1000 m/s codec bound admits claims that buy ~150m of free transit
+tolerance plus ~900m of throttled-client lag tolerance - a forged
+report covers a real teleport. New REPORT_VEL_CAP=200 (terminal fall
+caps at 100, disc+ski momentum tops ~150) clamps the claim before it
+touches the shadow or the tolerance math. New test: 900 m/s claim +
+150m blink still corrects and the shadow never absorbs >200 m/s.
+(Full suite: one netbot wsFight flake - bots dealt 0 shots in 21s,
+passes isolated; unrelated to the clamp, which only touches >200 m/s
+reports netbots never make.)
+### 2.138 - end
