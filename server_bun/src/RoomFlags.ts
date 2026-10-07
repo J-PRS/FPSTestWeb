@@ -118,6 +118,12 @@ export class RoomFlags {
       f.airborneBy = null;
     }
     this.dirty = true;
+    // Match-boundary wipe — consumers window by `at >= runStart`, so a
+    // prior match's entries only ever read as noise while growing for
+    // the room's life.
+    this.capLog.length = 0;
+    this.grabLog.length = 0;
+    this.retLog.length = 0;
   }
 
   /** Snapshot for gameState joins and the flagUpdate broadcast. */

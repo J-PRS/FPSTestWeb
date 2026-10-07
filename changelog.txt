@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.89: flag event logs wiped at match reset - cap/grab/ret logs grew for the room's life
 2026-10-08 - robustify §2.88: rekeyBot fan-out completed — fire cadence, watchdog, CTF roles, flag-run touch meters now migrate on jersey swap
 2026-10-08 - robustify §2.87: rubberband warn-receipt maps capped at 512 — id-keyed receipts grew unbounded across a long match
 2026-10-08 - robustify §2.86: dir3 owns the guarded 3D normalize — creatureFlyer/totem collapsed; their ||0.001 guard scaled unit vectors on tiny gaps

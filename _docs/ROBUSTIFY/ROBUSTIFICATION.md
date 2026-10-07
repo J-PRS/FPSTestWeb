@@ -2064,3 +2064,27 @@ rekeyBot fans out to all of them — the migration can't drift a
 fourth time.
 
 ### 2.88 - end
+
+### 2.89 Flag event logs grew for the room's life (2026-10-08)
+
+Stale-buffer class: capLog/grabLog/retLog accrete one entry per flag
+grab/cap/return forever — matches are seamless so a long-lived room
+never bounds them. Every reader windows by `at >= runStart`, so the
+match-end reset now wipes all three: prior-match rows only ever read
+as noise anyway. (Old logs also hid a subtler issue — a test reading
+`capLog` across rounds could silently pass on a previous match's
+capture.)
+
+### 2.89 - end
+
+### 2.89 Flag event logs grew for the room's life (2026-10-08)
+
+Stale-buffer class: capLog/grabLog/retLog accrete one entry per flag
+grab/cap/return forever — matches are seamless so a long-lived room
+never bounds them. Every reader windows by `at >= runStart`, so the
+match-end reset now wipes all three: prior-match rows only ever read
+as noise anyway. (Old logs also hid a subtler issue — a test reading
+`capLog` across rounds could silently pass on a previous match's
+capture.)
+
+### 2.89 - end
