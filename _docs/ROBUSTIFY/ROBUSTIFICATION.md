@@ -2547,3 +2547,12 @@ terminate out, re-begin releasing the OLD room's count, and
 independent counting across multiple ghosts.
 
 ### 2.125 - end
+
+### 2.126 - Display names: strip unicode format chars
+`nameSpec` scrubbed C0/C1 control bytes but left unicode format (Cf) chars
+live: bidi overrides (`\u202a`-`\u202e`) render reversed text in
+scoreboard/chat (name spoofing), zero-width chars (`\u200b`-`\u200f`,
+`\u2060`-`\u2064`, `\u2066`-`\u2069`, `\ufeff`) make names invisible or
+visually impersonable. The sanitize now strips them too. `nameSpec.test.ts`
+pins the spoof cases + all-invisible stays `undefined`.
+### 2.126 - end

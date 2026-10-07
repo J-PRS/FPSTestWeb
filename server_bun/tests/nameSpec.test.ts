@@ -58,4 +58,14 @@ describe('display-name sanitize', () => {
     expect(joinName(mgr, room, 'p2', 42)).toBeUndefined();
     expect(joinName(mgr, room, 'p3', undefined)).toBeUndefined();
   });
+
+  it('strips bidi overrides and zero-width chars — name spoofing', () => {
+    const room = mkRoom({}, 'tdm');
+    const { mgr } = mkSessions(room);
+    // bidi override (\u202e/\u202c) renders reversed text in scoreboard/chat;
+    // zero-width chars make names invisible or visually impersonated.
+    expect(joinName(mgr, room, 'p1', 'a\u202eevil\u202cb')).toBe('aevilb');
+    expect(joinName(mgr, room, 'p2', 'ad\u200bmin')).toBe('admin');
+    expect(joinName(mgr, room, 'p3', '\u200b\u2060\ufeff')).toBeUndefined();
+  });
 });

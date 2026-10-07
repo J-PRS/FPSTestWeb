@@ -260,8 +260,11 @@ export class SessionManager {
    *  bytes and cap length (markup dies at textContent rendering). */
   private static nameSpec(v: unknown): string | undefined {
     if (typeof v !== 'string') return undefined;
-    // eslint-disable-next-line no-control-regex -- intentional strip of C0/C1 controls
-    const n = v.replace(/[\x00-\x1f\x7f-\x9f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    // Control bytes die, and so do unicode format chars — a bidi
+    // override renders reversed text in scoreboard/chat (name
+    // spoofing), zero-width chars make names invisible/impersonable.
+    // eslint-disable-next-line no-control-regex -- intentional strip of C0/C1 + Cf
+    const n = v.replace(/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
     return n || undefined;
   }
 
