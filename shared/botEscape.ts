@@ -8,7 +8,7 @@
 import type { BrainCtx } from './botBrain.ts';
 import { BOT_EYE } from './botHunt.ts';
 
-import { dist3, distSq, type BotVec } from './botVec.ts';
+import { dist3, distSq, dirXZ, type BotVec } from './botVec.ts';
 
 const DODGE_RANGE = 12;  // m — only react to shells already inbound
 const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
@@ -71,8 +71,8 @@ function routeSlope(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, dist: nu
  *  routes onto a structure instead of jetting the nearest face. */
 function pickDetour(s: EscapeState, ctx: BrainCtx, pos: BotVec, dist: number): BotVec {
   const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
-  const gl = Math.hypot(gx, gz) || 1;
-  const gdx = gx / gl, gdz = gz / gl;
+  const g = dirXZ(gx, gz);
+  const gdx = g.x, gdz = g.z;
   let best: BotVec | null = null;
   let bestScore = Infinity;
   for (let a = -5; a <= 5; a++) {
@@ -199,7 +199,7 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
   // the 3-15m ring instead of back on the pole between shells.
   const dodgeStep = (hero ? DODGE_STEP * 1.4 : DODGE_STEP) * (ctx.posted ? 0.5 : 1);
   const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
-  const tl = Math.hypot(tx, tz) || 1;
+  const tl = Math.hypot(tx, tz) || 1; // |t| is reused as a scalar below
   const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
   const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
   const dx = pos.x + (-tz / tl) * side * dodgeStep;

@@ -1,3 +1,4 @@
+2026-10-08 - robustify §2.85: dirXZ owns the zero-guarded XZ normalize — five clones collapsed, one was silently dividing by 3D distance
 2026-10-08 - robustify §2.84: RTC adapter bufferedAmount now reports worst of game/ctrl lanes — stalled tick lane no longer evades the drown drain
 2026-10-08 - robustify §2.83: distSq drift — botGoals/botHunt shadowed the shared botVec helpers; hunt 2D copy renamed distSqXZ
 2026-10-08 - robustify §2.82: OLD/ rotated-log archive cap (16) + _rootcheck.mjs root-clutter gate wired into npm run check

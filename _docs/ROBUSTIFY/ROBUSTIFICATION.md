@@ -2007,3 +2007,15 @@ sendMessageBinary copied the whole frame for nothing (~20Hz � peers �
 ~200B of pure churn on the tick fanout). Passes the buffer through now.
 
 ### 2.84 - end
+
+### 2.85 Zero-guarded XZ normalize — five hand-rolled copies (2026-10-08)
+
+Class 9, same family as §2.83: the `Math.hypot(dx, dz) || 1` →
+`dx/l, dz/l` pattern was hand-rolled in five places (botDisposition ×3,
+botEscape ×2). `dirXZ` now owns it in botVec. One site was quietly
+WRONG beyond duplication: the pickup-projection divided an XZ vector
+by a 3D distance (`dist3`), so a pickup on a different floor shrank
+the unit vector and made the onRoute gate stricter than intended —
+the shared helper normalizes properly on XZ, a mild semantic fix.
+
+### 2.85 - end

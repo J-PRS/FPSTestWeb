@@ -18,3 +18,11 @@ export function distSq(a: BotVec, b: BotVec): number {
 export function distSqXZ(a: Pick<BotVec, 'x' | 'z'>, b: Pick<BotVec, 'x' | 'z'>): number {
   return (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 }
+
+/** Zero-guarded XZ normalize — {x,z} is zeroed on zero input (the old
+ *  `|| 1` sites produced the same). Hand-rolled copies of this lived
+ *  in five places across botDisposition/botEscape. */
+export function dirXZ(dx: number, dz: number): { x: number; z: number } {
+  const l = Math.hypot(dx, dz) || 1;
+  return { x: dx / l, z: dz / l };
+}

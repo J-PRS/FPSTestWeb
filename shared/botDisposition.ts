@@ -4,7 +4,7 @@ import { ENERGY } from './movement.ts';
 import { REPAIR_RANGE } from './weapons.ts';
 import { retreatDest } from './botHunt.ts';
 import type { BotVec, BrainCtx, BrainOut, BotBrain } from './botBrain.ts';
-import { dist3 } from './botVec.ts';
+import { dist3, dirXZ } from './botVec.ts';
 
 const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const FLINCH_DIST = 8;
@@ -21,11 +21,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     if (b.flinchT > 0) {
       b.flinchT -= dt;
       const fx = pos.x - b.flinchFrom.x, fz = pos.z - b.flinchFrom.z;
-      const l = Math.hypot(fx, fz) || 1;
+      const f = dirXZ(fx, fz);
       // The flinch dest says where it WANTS to knock the bot — the
       // steering field decides how far feet may actually travel (a
       // posted leash already masks outward slots).
-      const dx = pos.x + (fx / l) * FLINCH_DIST, dz = pos.z + (fz / l) * FLINCH_DIST;
+      const dx = pos.x + f.x * FLINCH_DIST, dz = pos.z + f.z * FLINCH_DIST;
       return { x: dx, y: pos.y, z: dz };
     }
     // Carrying the objective: the run is the job — engaging whoever the
@@ -115,11 +115,12 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         const spd = Math.hypot(ctx.vel.x, ctx.vel.z);
         if (spd > 1) {
           const fall = Math.sqrt(2 * dy / 28);
-          const od = Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) || 1;
+          const odx = ctx.objective.x - pos.x, odz = ctx.objective.z - pos.z;
+          const od = Math.hypot(odx, odz) || 1;
           const pull = spd * fall - od;
           if (pull > 0) {
-            const ux = (ctx.objective.x - pos.x) / od, uz = (ctx.objective.z - pos.z) / od;
-            return { x: ctx.objective.x - ux * pull, y: ctx.objective.y, z: ctx.objective.z - uz * pull };
+            const u = dirXZ(odx, odz);
+            return { x: ctx.objective.x - u.x * pull, y: ctx.objective.y, z: ctx.objective.z - u.z * pull };
           }
         }
       }
@@ -195,10 +196,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // commit uses).
     if (ctx.pickup && dist3(b.goalS.goal, ctx.pickup) < 30) {
       const pd = dist3(pos, ctx.pickup);
-      const pgx = (ctx.pickup.x - pos.x) / (pd || 1), pgz = (ctx.pickup.z - pos.z) / (pd || 1);
+      const pg = dirXZ(ctx.pickup.x - pos.x, ctx.pickup.z - pos.z);
       const ptx = t.pos.x - pos.x, ptz = t.pos.z - pos.z;
       const ptd = Math.hypot(ptx, ptz) || 1;
-      const onRoute = d <= b.h.orbitFar && (ptx * pgx + ptz * pgz) / ptd > 0.4;
+      const onRoute = d <= b.h.orbitFar && (ptx * pg.x + ptz * pg.z) / ptd > 0.4;
       if (!onRoute || pd < 12) return { ...ctx.pickup };
     }
     // The committed-route and crash-the-point rules live above the hunt
