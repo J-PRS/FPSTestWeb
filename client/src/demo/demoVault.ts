@@ -13,7 +13,7 @@ const logger = new ChildLogger('DemoVault');
 
 const DB_NAME = 'fps-demos';
 const STORE = 'clips';
-const CAP = 50;
+const CAP = 100;
 
 export interface VaultEntry {
   id: string;
