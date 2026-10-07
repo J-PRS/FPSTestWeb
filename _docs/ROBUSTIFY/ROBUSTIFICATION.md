@@ -217,6 +217,23 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.52 sk monotonicity pinned + class-8 sweep clean (2026-10-07)
+
+Ordering/skip-tick lane: audited every `continue`/early-return inside
+the sims' step loops. `creatureBrain.stepAll` — retarget is the ONLY
+quantum-consuming path (windup/pounce/bite/fire edges emit after
+`stepBody` ran; detonate kills so nothing accrues). `movement.ts` and
+`ballCollide.ts` continues are symmetric broadphase guards, identical
+computation on both ends.
+
+Pin catch worth noting: the first draft asserted `sk` increments +1 per
+observed retarget edge and *failed* — sk hit 4 before any edge was
+seen. Not a code bug: with `sendTo` set, non-4th edges go only to near
+players (FAR_SKIP), so watchers legitimately see sk jump by up to 4 per
+broadcast. The shipped pin asserts the real contract — `sk` is
+cumulative and non-decreasing per creature across FAR_SKIP gaps, which
+is exactly what makes far-client replay deltas idempotent.
+
 ### 2.51 Tick-record quantization pinned (2026-10-07)
 
 Boundary-value-drift lane probe: tick player records encode positions

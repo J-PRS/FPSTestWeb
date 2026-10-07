@@ -30,4 +30,30 @@ describe('scenario: retarget edge marks the skipped sim step', () => {
     }
     throw new Error('no retarget edge emitted in 200 ticks');
   });
+
+  it('sk is cumulative and non-decreasing across FAR_SKIP gaps', () => {
+    // Watchers (and far players) only see every FAR_SKIP-th edge; the
+    // sendTo-only retargets in between still consume ticks, so a
+    // broadcast edge legitimately jumps sk by >1. The wire contract the
+    // replay relies on is: sk never decreases within a creature's life —
+    // a reset, wrap, or per-edge recount would corrupt netAcc deltas.
+    const room = mkRoom({ creatures: { crawler: 3 }, bots: 1 });
+    const w = watch(room);
+    const lastSk = new Map<number, number>();
+    const kinds = new Set<string>();
+    for (let i = 0; i < 400; i++) {
+      room.creatureSim.step(0.05);
+      for (const m of w.msgs) {
+        if (m.type !== 'crawlEvt') continue;
+        const e = m as { id: number; kind: string; sk?: number };
+        const prev = lastSk.get(e.id) ?? 0;
+        const cur = e.sk ?? 0;
+        expect(cur).toBeGreaterThanOrEqual(prev);
+        lastSk.set(e.id, cur);
+        kinds.add(e.kind);
+      }
+      w.msgs.length = 0;
+    }
+    expect(kinds.has('retarget')).toBe(true);
+  });
 });
