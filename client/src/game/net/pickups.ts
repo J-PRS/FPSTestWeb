@@ -3,6 +3,7 @@
 // all rules (radius, TTL, team credit) live in RoomPickups server-side.
 
 import type { NetCtx } from './ctx.js';
+import { reconcileReplicas } from '../replicas.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 import { BELT_MAX } from '../../../../shared/weapons.js';
 import { pickupBurst, PICKUP_ACCENT, pickupParts } from '../../entities/PickupModel.js';
@@ -45,12 +46,16 @@ export function wirePickups(ctx: NetCtx): void {
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
   ctx.reconcilePickups = (liveIds) => {
-    for (const [id, e] of pickupMeshes) {
-      if (liveIds.has(id)) {continue;}
-      deps.lazyDemoManager?.()?.recordPickupGone(id);
-      e.nugget.serverCollect(); // fade; updateNuggets reaps
-      pickupMeshes.delete(id);
-    }
+    // Ensure is a no-op — the caller feeds each row through addPickup
+    // first (spawn edges keep their burst FX), this only reaps ghosts.
+    reconcileReplicas(pickupMeshes, [...liveIds], {
+      rowId: (id) => id,
+      ensure: () => undefined,
+      reap: (e, id) => {
+        deps.lazyDemoManager?.()?.recordPickupGone(id);
+        e.nugget.serverCollect(); // fade; updateNuggets reaps
+      },
+    });
   };
 
   networkManager.onPickupSpawn = (id, pos, kind) => {

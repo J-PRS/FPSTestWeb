@@ -1,3 +1,4 @@
+2026-10-01 - C5 #1b: pickup lane folded into reconcileReplicas - the last hand-rolled roster reap loop; all number-keyed roster culls now share one body
 2026-10-01 - C5 #1: replicas.ts - one roster-reconcile lifecycle (live set, dead-evict, ensure, apply, reap) replaces per-lane copies in netCrawlers + netBalls; membership stays roster-owned
 2026-10-01 - C5: dead simFields dropped - declaration was test-only while channel tags carry the semantic; new pin locks hashed fields to edge-channel (caught player.health mislabeled sim)
 2026-10-01 - Mannequin throw clip - UAL_OverhandThrow is UAL2-only and Punch doesn't exist on the rig; throw now resolves to UAL_Pistol_Shoot like cybersoldier
