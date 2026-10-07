@@ -210,6 +210,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.34 Empty-room guard pinned (2026-10-07)
+
+`roomEmpty.test` pins the guard that drives TickLoop teardown: a
+bots-only room is empty (bots exist to serve humans — they'd otherwise
+tick forever), but a spectator keeps it alive (disposing under a watcher
+would strand the replica feed). The rooms lifecycle audit that prompted
+it verified every map cleans up: empty named rooms dispose+delete,
+`tickErrStreak`/`tickQuarantined`/`playerRoom`/`specRooms`/`spectators`
+all evict on their teardown paths.
+
 ### 2.33 Claim-sweep warns flooded under sustained ack loss (2026-10-07)
 
 `claimLedger.sweep()` warned per expired pending claim — with acks dead,
