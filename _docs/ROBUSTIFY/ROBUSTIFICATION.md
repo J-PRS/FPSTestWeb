@@ -2870,3 +2870,16 @@ dominant damage-error spam seen at 40-60ms ping, and it scaled with
 shooter speed (worst while skiing). The sendShot claim now carries the
 identical inherited velocity the Projectile sim runs (same expression
 as the demo record two lines above). (fire.ts)
+
+## 2.153 Corrections hard-snapped while holding steady keys
+
+The input journal is change-only: an edge lands once and is pruned the
+moment the server acks it. inputsAfter(after) therefore returned EMPTY
+whenever the player was holding a constant input (the common case -
+holding W, skiing a line) because the held edge was already consumed.
+The correction handler saw journal.length===0 and took the blunt hard-
+snap path with zero replay: full teleport-back every correction instead
+of a converged re-sim. inputsAfter now takes gapMs (the correction's
+round-trip window, passed as ping) and re-seeds the still-held input at
+(now - gapMs) so it governs the gap - the CFWK replay finally covers
+the steady-input case it was built for. (inputStream.ts, players.ts)

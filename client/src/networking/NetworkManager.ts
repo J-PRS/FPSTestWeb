@@ -601,8 +601,8 @@ export class NetworkManager {
 
   /** Journal entries with seq > `after` — what the server hadn't consumed
    *  when it issued a correction. Also prunes consumed entries. */
-  inputsAfter(after: number): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
-    return this.inputs.inputsAfter(after);
+  inputsAfter(after: number, gapMs = 0): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
+    return this.inputs.inputsAfter(after, gapMs);
   }
 
   /**

@@ -55,9 +55,21 @@ export class InputStream {
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed
-   *  when it issued a correction. Also prunes consumed entries. */
-  inputsAfter(after: number): { t: number; input: MoveInput }[] {
+   *  when it issued a correction. Also prunes consumed entries.
+   *  `gapMs` (the correction's round-trip window): the journal is
+   *  change-only, so the input HELD since the last edge is nowhere in
+   *  it — without re-seeding it, a correction while holding steady keys
+   *  finds an empty journal and hard-snaps instead of replaying. The
+   *  held input is re-entered at (now - gapMs) so it governs the gap. */
+  inputsAfter(after: number, gapMs = 0): { t: number; input: MoveInput }[] {
     while (this.inputJournal.length > 0 && this.inputJournal[0].seq <= after) {this.inputJournal.shift();}
+    if (gapMs > 0 && this.lastInputState) {
+      const gapStart = performance.now() - gapMs;
+      const first = this.inputJournal[0];
+      if (!first || first.t > gapStart) {
+        this.inputJournal.unshift({ seq: after, t: gapStart, input: { ...this.lastInputState } });
+      }
+    }
     return this.inputJournal;
   }
 
