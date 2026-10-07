@@ -233,6 +233,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.70 Test writes into live logs (2026-10-08)
+
+Found via the every-3rd-round log read: `client_warning.log` was
+1300+ lines of identical `[WARN] probe` — `clientLogThrottle.test.ts`
+drove the real route, which appended ~1400 probe lines per suite run
+into the ops logs. Real warns were unreadable inside the flood (the
+route worked correctly; the test just aimed at the live dir). The
+route's log dir is now injectable and the test writes to a temp dir.
+fastSoak audited clean — its appends only fire under FPS_SHEEP_LOG.
+
 ### 2.69 Threat-sense result arrays (2026-10-07)
 
 Class 10, server think loop. `shellsNear` rebuilt `idx` + `idx.map(...)`

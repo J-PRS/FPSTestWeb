@@ -49,17 +49,18 @@ function postThrottleAllow(ip: string): boolean {
 }
 
 // Bodies are plain text lines (WARN/ERROR only by client convention).
-export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response, ip = ''): Promise<Response> {
+// `dir` is injectable so tests can redirect appends off the live logs/.
+export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response, ip = '', dir = LOGS_DIR): Promise<Response> {
   try {
     if (!postThrottleAllow(ip)) return cors('Too many posts', { status: 429 });
     const body = await req.text();
     if (body.length > 512 * 1024) {
       return cors('Too large', { status: 413 });
     }
-    mkdirSync(LOGS_DIR, { recursive: true });
+    mkdirSync(dir, { recursive: true });
     // Boot-time rotate leaves a long-lived server with one forever log —
     // roll it mid-run too. statSync per post is fine: posts are IP-throttled.
-    const logPath = join(LOGS_DIR, 'client.log');
+    const logPath = join(dir, 'client.log');
     rotateLogIfBig(logPath);
     appendFileSync(logPath, body);
     const warnLines: string[] = [];
@@ -70,12 +71,12 @@ export async function clientLogRoute(req: Request, cors: (body: BodyInit | null,
       else if (line.includes('[WARN]')) warnLines.push(line);
     }
     if (warnLines.length) {
-      const warnPath = join(LOGS_DIR, 'client_warning.log');
+      const warnPath = join(dir, 'client_warning.log');
       rotateLogIfBig(warnPath);
       appendFileSync(warnPath, warnLines.join('\n') + '\n');
     }
     if (errLines.length) {
-      const errPath = join(LOGS_DIR, 'client_error.log');
+      const errPath = join(dir, 'client_error.log');
       rotateLogIfBig(errPath);
       appendFileSync(errPath, errLines.join('\n') + '\n');
     }
