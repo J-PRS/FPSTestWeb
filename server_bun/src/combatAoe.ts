@@ -2,35 +2,30 @@ import type { ClientMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { PlayerState } from './types.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
-import { validateAoeClaim, lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
+import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import { lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, type ColliderIndex } from '../../shared/solidWorld.ts';
-import type { ClaimLedger, ClaimDefer } from './claimLedger.ts';
-import { freshDefer } from './claimLedger.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { wallNow } from './wallClock.ts';
 
-// AOE claim adjudication — the blast detonation a client claims: pop the
-// named shell, sanity-check the blast point per weapon contract (named
-// projectile, self-positioned swing, or clear-of-structures beam), then
-// hand the resolved stats to the blast funnel. Split out of
-// CombatHandler so the claim-ledger surface stays the only join.
+// AOE claim adjudication — what remains after the server took over
+// projectiles: self-positioned skills (melee arc, slam, clear-of-
+// structures beams) whose "shot" has no shell to sim. Sanity-check the
+// swing point per skill contract, then hand the resolved stats to the
+// blast funnel.
 
 export interface AoeHost {
   playerManager: PlayerManager;
   blast: BlastRunner;
-  ledger: ClaimLedger;
   chargeBank: ChargeBank;
   readonly solids: readonly StructureCollider[];
   solidIndex: ColliderIndex | null;
   hb(key: string, n?: number): void;
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void;
-  deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
   /** Seeded room rng — bomblet scatter must replay under scenario seeds. */
@@ -66,56 +61,11 @@ export class AoeClaims {
       return;
     }
 
-    this.aoeProjectile(playerId, player, msg, stats);
-  }
-
-  /** Projectile detonation claim: the blast must name the tracked shell
-   *  that popped (same fallback resolution as direct-hit claims — the
-   *  hit can race the server's projectileCreated). */
-  private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats, defer?: ClaimDefer): void {
-    const proj = this.h.ledger.resolve(playerId, { projectileId: msg.projectileId, clientShotId: msg.shotId, weaponType: msg.weaponType, claim: 'aoe' });
-    if (!proj) {
-      // Same reorder window as direct hits — the blast can beat the
-      // spawn claim on unordered transports; defer for the next
-      // register() rather than eating a legit splash.
-      const d = defer ?? freshDefer();
-      this.h.deferClaim(playerId, 'AOE', d,
-        (nd) => this.aoeProjectile(playerId, player, msg, stats, nd), undefined, msg.weaponType);
-      return;
-    }
-    if (msg.airtime === undefined) {
-      this.h.reject(playerId, 'AOE', 'blast claim missing airtime', undefined, msg.weaponType);
-      return;
-    }
-    // Reorder case: same age-vs-airtime fix as direct hits — the spawn
-    // stamp understates true flight age when the claim beat the spawn
-    // registration, so bound it by the claimed airtime instead.
-    if (defer) proj.spawnAt = Math.min(proj.spawnAt, wallNow() - msg.airtime * 1000);
-    const verdict = validateAoeClaim({
-      projectile: proj,
-      blastPos: msg.position,
-      airtime: msg.airtime,
-      shooterVel: player.velocity,
-      now: wallNow(),
-      solids: this.h.solids,
-    });
-    if (!verdict.ok) {
-      this.h.reject(playerId, 'AOE', verdict.reason, undefined, msg.weaponType);
-      return;
-    }
-    // (The id stays resolvable in spentProjectiles for the paired claim —
-    // deletion happens via projectileDestroy, the 5s staleness cap, or
-    // the eviction sweep.)
-
-    // Canonical launchers (Bolt/Disc): a claimed direct hit blooms the
-    // blast. Server re-derives the bonus from the shared table — the
-    // client can't widen the radius past what the weapon allows.
-    const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
-    const projId = msg.projectileId ?? (msg.shotId ? this.h.ledger.idForClientShot(playerId, msg.shotId) : undefined);
-    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, { weapon: msg.weaponType, shotId: projId, bound: true, air: msg.airtime });
-
-    if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster, projId);
+    // Every weapon with a real shell is server-simmed — a projectile
+    // aoeShot can't arrive legitimately anymore; the authority's shell
+    // declares its own detonation.
+    this.h.hb('aoe.legacyProj');
+    this.h.reject(playerId, 'AOE', 'projectile blasts are server-simmed', undefined, msg.weaponType);
   }
 
   /** Swing distance to the player — self-positioned skills (melee, slam)
@@ -174,7 +124,7 @@ export class AoeClaims {
       this.h.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
       return;
     }
-    if (this.h.solids.length && segSolidHit(eye, msg.position, this.h.solids, this.h.solidIndex ?? undefined)) {
+    if (this.h.solids.length && segSolidHit(eye, msg.position, this.h.solids, this.h.solidIndex ?? undefined, player.team)) {
       this.h.hb('aoe.beam.occluded');
       this.h.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
       return;
@@ -209,28 +159,4 @@ export class AoeClaims {
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, { weapon: msg.weaponType });
   }
 
-  /** Cluster carrier: the carrier's blast is only the delivery pop — the
-   *  real damage is `count` bomblet blasts scattered inside `radius`, each
-   *  rolled with ClusterBomblet stats. Client bomblets are visual-only. */
-  private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }, shotId?: string): void {
-    // Each carrier names its own child stats — the belt's ClusterBomb
-    // scatters ClusterBomblets, the MRVLauncher scatters MRVBomblets.
-    const bomblet = getWeaponStats(
-      msg.weaponType === WeaponType.MRVLauncher ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet);
-    for (let i = 0; i < cluster.count; i++) {
-      const ang = this.h.rng() * Math.PI * 2;
-      const r = this.h.rng() * cluster.radius;
-      const bx = msg.position.x + Math.cos(ang) * r;
-      const bz = msg.position.z + Math.sin(ang) * r;
-      // Bomblets are contact bombs — the blast lands where the rain
-      // lands, not on the carrier's mid-air burst plane.
-      this.h.blast.processAOE(playerId, {
-        x: bx,
-        // Bomblets are contact bombs — the blast lands where the rain
-        // lands, not on the carrier's mid-air burst plane.
-        y: this.h.playerManager.groundAt?.(bx, bz) ?? msg.position.y,
-        z: bz,
-      }, msg.excludeTargetId, bomblet, { weapon: msg.weaponType, shotId, bound: true });
-    }
-  }
 }
