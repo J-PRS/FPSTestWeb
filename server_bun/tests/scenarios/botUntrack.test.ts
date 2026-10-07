@@ -17,7 +17,7 @@ interface BotsPeek {
   healBeamT: Map<string, unknown>;
   healNadeT: Map<string, unknown>;
   sense: {
-    noticed: Map<string, unknown>;
+    notices: { seen: Map<string, unknown> };
     routeHold: Map<string, unknown>;
     routeFailed: Map<string, unknown>;
     routePrefs: Map<string, unknown>;
@@ -39,7 +39,7 @@ describe('scenario: bot untrack purges all per-bot state', () => {
     for (const m of [bots.brains, bots.loadouts, bots.foeNear, bots.lastOut, bots.thinkPhase,
       bots.gearLobT, bots.suppressT, bots.quiet, bots.skillOffAt, bots.supportT,
       bots.healBeamT, bots.healNadeT,
-      bots.sense.noticed, bots.sense.routeHold, bots.sense.routeFailed,
+      bots.sense.notices.seen, bots.sense.routeHold, bots.sense.routeFailed,
       bots.sense.routePrefs, bots.sense.waitSpot]) {
       expect(m.has(p.id)).toBe(false);
     }

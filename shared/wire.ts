@@ -189,11 +189,19 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   return new Uint8Array(buf, 0, o);
 }
 
+/** v3 record byte length — u16 wireId replaces the idLen+string prefix. */
+export const TICK_PLAYER_V3_BYTES = 2 + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1;
+/** Reusable encode target for hot paths (one per pooled record slot):
+ *  the returned Uint8Array aliases `into.buf` until the next encode. */
+export interface TickEncodeScratch { buf: ArrayBuffer; u8: Uint8Array; d: DataView }
+export function tickEncodeScratch(): TickEncodeScratch {
+  const buf = new ArrayBuffer(TICK_PLAYER_V3_BYTES);
+  return { buf, u8: new Uint8Array(buf), d: new DataView(buf) };
+}
+
 /** v3 record: u16 wireId replaces the idLen+string prefix (23B total). */
-export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer): Uint8Array {
-  const buf = new ArrayBuffer(2 + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer, into?: TickEncodeScratch): Uint8Array {
+  const { buf, u8, d } = into ?? tickEncodeScratch();
   let o = 0;
   d.setUint16(o, wireId, true); o += 2;
   o = packPos(d, o, p.position.x, p.position.y, p.position.z);

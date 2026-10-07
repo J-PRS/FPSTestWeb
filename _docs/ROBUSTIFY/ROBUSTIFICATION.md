@@ -290,6 +290,20 @@ notice kept pointing at the dead actor id. `RoomNoticer` gained
 `pending.actorId`) and `rekeyBot` calls it — pinned at the shared-owner
 level since serverSenses shares the class.
 
+### 2.81 Per-tick record encode allocations (2026-10-08)
+
+The last steady-state alloc in the tick fanout: `encodeTickPlayerV3`
+built a fresh ArrayBuffer + two views per record per tick (~640 tiny
+allocs/s at 32 players). `encodeTickPlayerV3` now takes an optional
+`TickEncodeScratch` (exported `tickEncodeScratch()` factory +
+`TICK_PLAYER_V3_BYTES`); each pooled `scratchRecords` slot owns one and
+the returned view aliases it until the next encode — safe because
+records are consumed by `encodeTickFrame` inside the same tick.
+
+Same suite run surfaced a stale pin from §2.73: `botUntrack.test.ts`
+still read `sense.noticed` (the map RoomNoticer replaced) — updated to
+peek `notices.seen` so the untrack purge covers the new owner.
+
 ### 2.79 Drowned-client drain never triggered on binary-only traffic (2026-10-08)
 
 Bad-network find (class 10): the drown drain only ran inside the JSON

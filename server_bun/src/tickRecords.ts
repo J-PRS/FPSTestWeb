@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3 } from '../../shared/wire.ts';
+import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3, tickEncodeScratch, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
@@ -18,6 +18,7 @@ import { simNow } from './simClock.ts';
 import { wallNow } from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
+type PooledRecord = TickRecord & { enc: TickEncodeScratch };
 
 /** A retired wireId is reissued only after this much dead time — any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
@@ -66,9 +67,10 @@ export class TickFanout {
    *  iterates. */
   private readonly scratchOthers: Uint8Array[] = [];
   // Record pool: build→fanout is synchronous within one tick, so the
-  // array and its wrappers recycle — a fresh array + N wrapper objects
-  // per room per tick was the last steady-state alloc in the fanout path.
-  private readonly scratchRecords: TickRecord[] = [];
+  // array, its wrappers, and their encode buffers all recycle — fresh
+  // allocations per room per tick were the last steady-state allocs in
+  // the fanout path.
+  private readonly scratchRecords: PooledRecord[] = [];
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
@@ -127,7 +129,7 @@ export class TickFanout {
       }
       let rec = records[recN];
       if (!rec) {
-        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false };
+        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch() };
         records.push(rec);
       }
       rec.playerId = playerId;
@@ -147,7 +149,7 @@ export class TickFanout {
           ski: p.skiing,
           status: snap.status,
           sheep,
-        });
+        }, rec.enc);
       recN++;
       this.metrics.recordsBuilt++;
     }
