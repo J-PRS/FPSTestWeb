@@ -2397,3 +2397,17 @@ a 10KB name caps at 24, and empty-after-sanitize stays undefined rather
 than storing '' that downstream would render as a blank row.
 
 ### 2.113 - end
+
+### 2.114 Private-room hop pinned (2026-10-11)
+
+The unlisted contract had one unverified edge left: switchRoom carries
+msg.unlisted into roomFor — a private-minting hop that dropped the flag
+would leak the room into /rooms the moment it formed, and a regression
+in targeted joins would strand friends outside. unlisted.test.ts now
+drives a real hop: minting with unlisted:true yields a room hidden from
+/rooms, and a second player hopping BY NAME lands inside — the flag
+hides from browse, never from a targeted join. Reclaim/onClose gen-check
+lanes audited already-pinned (reconnect.test.ts covers token reject,
+zombie evict, replay window).
+
+### 2.114 - end

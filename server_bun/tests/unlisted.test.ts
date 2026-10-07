@@ -2,6 +2,19 @@ import { describe, it, expect } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import type { Room } from '../src/Room.ts';
 
+function fakeWs() {
+  const sent: string[] = [];
+  return {
+    sent,
+    data: {} as { playerId?: string },
+    remoteAddress: '127.0.0.1',
+    readyState: 1,
+    send(m: string) { sent.push(m); return m.length; },
+    close() { /* test double */ },
+    // oxlint-disable-next-line no-explicit-any
+  } as any;
+}
+
 interface Peek {
   factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
            quickRoom(mode: string, map?: string, bots?: number): Room | null };
@@ -31,6 +44,31 @@ describe('unlisted rooms', () => {
 
       // But naming it still joins — that is the whole feature.
       expect(peek.factory.roomFor('secret')).toBe(priv);
+    } finally {
+      peek.tickLoop.stop();
+    }
+  });
+
+  it('a switchRoom hop mints unlisted when asked, and can join one by name', () => {
+    const gs = new GameServer();
+    const peek = gs as unknown as Peek;
+    try {
+      const ws = fakeWs();
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'lobby' }));
+
+      // Hop minting a private room — the flag must survive the hop or the
+      // hosted match leaks into /rooms the moment it forms.
+      gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'vip', unlisted: true }));
+      const vip = peek.rooms.get('vip')!;
+      expect(vip.unlisted).toBe(true);
+      expect((peek.listRooms() as { name: string }[]).map(r => r.name)).not.toContain('vip');
+
+      // A friend hopping BY NAME lands inside it — unlisted hides the room
+      // from browse, never from a targeted join.
+      const ws2 = fakeWs();
+      gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'lobby' }));
+      gs.onMessage(ws2, JSON.stringify({ type: 'switchRoom', room: 'vip' }));
+      expect(vip.players.getPlayer('p2')).toBeTruthy();
     } finally {
       peek.tickLoop.stop();
     }
