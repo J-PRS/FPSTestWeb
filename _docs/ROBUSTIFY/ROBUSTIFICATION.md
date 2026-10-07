@@ -210,6 +210,15 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.37 Bot-chatter cooldown churn amnesty (2026-10-07)
+
+`lastSpoke` (per-bot speak cooldown) and `lastKillOn` (per victim-pair
+repeat-kill mute) capped at >256 with wholesale `clear()` — one boundary
+crossing under bot churn reset every bot's cooldown at once, a
+mass-chatter burst exactly when a crowd of fresh bots was speaking most.
+Both now eldest-evict. `losMemo`'s clear() is a pure LOS cache (recompute
+only — benign by design); `wire.ts`'s id reset is lifecycle, not a cap.
+
 ### 2.36 envSeen first-claim dedupe amnesty (2026-10-07)
 
 `envClaims.envSeen` (the first-env-claim-per-player warn dedupe) capped

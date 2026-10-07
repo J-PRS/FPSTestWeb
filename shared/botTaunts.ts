@@ -196,6 +196,13 @@ const CONTACT_LINES = [
   'there {t} is',
   'target up',
   'found you {t}',
+  'hostile in view',
+  'company',
+  'on my scope {t}',
+  'eyes up',
+  'thermal hit {t}',
+  'ping {t}',
+  'tango {t}',
 ];
 
 /** Hunt dropped — they broke LOS or died before the bot finished. */
@@ -206,6 +213,12 @@ const LOST_LINES = [
   'lost visual',
   'where did {t} go',
   'they ran',
+  'went dark',
+  'no visual',
+  'they dusted me',
+  'mirage',
+  'skied out of view',
+  'who was that',
 ];
 
 /** Committed to chasing the beacon-marked flag carrier. */
@@ -215,6 +228,11 @@ const THIEF_LINES = [
   'our flag is moving',
   'flag thief',
   'not letting {t} walk',
+  'runner marked',
+  'intercept the carrier',
+  'flag is outbound',
+  'chasing {t}',
+  'bring our flag back',
 ];
 
 /** Rising edge of fear — below FEAR_HP with no hero roll. */
@@ -224,6 +242,12 @@ const FEAR_LINES = [
   'breaking off',
   'im hit bad',
   'need a medic',
+  'im hurt',
+  'bailing',
+  'down to slivers',
+  'plating held, barely',
+  'taking evasive',
+  'need heals',
 ];
 
 /** Rising edge of a hero roll — low HP, last-stand mode instead. */
@@ -233,6 +257,11 @@ const HERO_LINES = [
   'last stand',
   'no retreat',
   'come get it',
+  'holding this spot',
+  'nothing left to lose',
+  'one way or another',
+  'send it',
+  'not dying quiet',
 ];
 
 /** Inbound shells detected — the dodge sense just fired. */
@@ -242,6 +271,12 @@ const UNDERFIRE_LINES = [
   'im hit',
   'suppressed',
   'shots inbound',
+  'getting shelled',
+  'heads down',
+  'shells coming in',
+  'under mortar',
+  'spamfusor inbound',
+  'eat dirt',
 ];
 
 /** Belt lob went out this step. */
@@ -250,6 +285,12 @@ const BELT_LINES = [
   'fire in the hole',
   'catch',
   'special delivery',
+  'catch this',
+  'present for you',
+  'belt gift',
+  'have a pine',
+  'special of the day',
+  'cooking this one',
 ];
 
 /** Deploy claim went out — a builder's emplacement landed. */
@@ -259,6 +300,11 @@ const DEPLOY_LINES = [
   'setting up shop',
   'fortifying',
   'hardware inbound',
+  'pumping iron',
+  'more guns up',
+  'builder diff',
+  'sprouting hardware',
+  'housekeeping',
 ];
 
 /** Long stretch with nothing seen — the quiet-match murmur. */
@@ -270,6 +316,13 @@ const BORED_LINES = [
   'crickets',
   'this map is huge',
   'just me and the wind',
+  'ghost town',
+  'echo echo echo',
+  'is the server alive',
+  'best lobby of 1999',
+  'loading took longer than this',
+  'someone wake the router',
+  'rolling a d20 alone',
 ];
 
 /** The bot's own flag play — grabbed the enemy flag. */
@@ -285,6 +338,10 @@ const FLAG_GRAB_LINES = [
   'scooped',
   'sanic\'d in',             // Ascend-era speed meme, era-adjacent
   'going home',
+  'yoink',
+  'coming through',
+  'meet me at the stand',
+  'this one is ours',
 ];
 
 /** The bot capped. */
@@ -297,6 +354,11 @@ const FLAG_CAP_LINES = [
   'CO watch',                 // cap-out/shutout — the stomp callout
   'shutout brewing',
   'cap out',
+  'bank that',
+  'count it',
+  'route paid',
+  'ding',
+  'another one',
 ];
 
 /** The bot returned a dropped flag by touch. */
@@ -305,6 +367,12 @@ const FLAG_RETURN_LINES = [
   'flag home',
   'not on my watch',
   'got it back',
+  'denied',
+  'recovered',
+  'flag reset',
+  'cleanup done',
+  'flag walks home',
+  'not today',
 ];
 
 /** The bot died carrying — the fumbled-flag lament. */
@@ -318,6 +386,10 @@ const FLAG_DROP_LINES = [
   'route diff',      // their route beat my route — capper honesty
   'HOF\'d',
   'inb4 return',
+  'it slipped',
+  'flag down flag down',
+  'i had it',
+  'cover the flag',
 ];
 
 /** A teammate just said something — the low-effort acknowledgment that
@@ -501,15 +573,22 @@ export function setMatchMuted(muted: boolean): void { matchMuted = muted; }
 
 const lastSpoke = new Map<string, number>();
 const pick = <T>(arr: readonly T[]): T => arr[Math.trunc(tauntRand() * arr.length)] as T;
-// Recently-spoken ring — the biggest tell of canned chatter is the same
-// line landing twice while it's still in short-term memory. One re-roll
-// keeps repeats legal but rare (a dice pick, not a queue).
-const recent: string[] = [];
-const pickLine = (pool: string[]): string => {
+// Recently-spoken ring PER POOL — the biggest tell of canned chatter is
+// the same line landing twice while it's still in short-term memory. A
+// window covering most of the pool approximates a shuffle-bag: a line
+// can't repeat until nearly every sibling has aired. A shared ring was
+// too weak — fire kinds evicted each other's memory and small pools
+// recycled within minutes. Re-draws are bounded so a degenerate rng
+// can't spin forever; a rare repeat stays legal.
+const recentByPool = new Map<readonly string[], string[]>();
+const pickLine = (pool: readonly string[]): string => {
+  let recent = recentByPool.get(pool);
+  if (!recent) {recent = []; recentByPool.set(pool, recent);}
+  const win = Math.min(pool.length - 1, 14);
   let line = pick(pool);
-  if (pool.length > 1 && recent.includes(line)) {line = pick(pool);}
+  for (let tries = 0; tries < 5 && recent.includes(line); tries += 1) {line = pick(pool);}
   recent.push(line);
-  if (recent.length > 12) {recent.shift();}
+  while (recent.length > win) {recent.shift();}
   return line;
 };
 
@@ -527,7 +606,9 @@ function maybe<T>(botId: string, line: () => T): T | null {
   const last = lastSpoke.get(botId) ?? 0;
   if (now - last < COOLDOWN_MS || tauntRand() > SPEAK_CHANCE) {return null;}
   lastSpoke.set(botId, now);
-  if (lastSpoke.size > 256) {lastSpoke.clear();}
+  // Eldest-evict, not clear(): a wholesale wipe under bot churn would
+  // reset every bot's cooldown at once — a mass-chatter burst.
+  if (lastSpoke.size > 256) {lastSpoke.delete(lastSpoke.keys().next().value!);}
   return line();
 }
 
@@ -568,6 +649,10 @@ const SALTY_LINES = [
   'bold words {t}',
   'clip it',
   'noted {t}',
+  'confidence {t}, i like it',
+  'famous last words',
+  'bookmark this {t}',
+  'r/nocontext {t}',
 ];
 
 /** A human is machine-gunning the feed — VGQ is the canon answer but
@@ -577,6 +662,10 @@ const QUIET_LINES = [
   'shut it {t}',
   'my ears {t}',
   'we get it {t}',
+  'chatty today {t}',
+  'we heard you the first time {t}',
+  'noted, loudly',
+  'vgq exists for a reason {t}',
 ];
 
 /** You died to a genuinely hard shot — the sportsmanship half of the
@@ -590,6 +679,10 @@ const PROPS_LINES = [
   'filthy shot {t}',
   'clean',
   'okay that was sick',
+  'clip that {t}',
+  'insane shot',
+  'how {t}',
+  'earned that one {t}',
 ];
 
 /** A bot watched someone crater or frag themselves nearby — the
@@ -620,6 +713,10 @@ const HELLO_LINES = [
   'heya',
   'yo {t}',
   'evening',
+  'morning {t}',
+  'welcome in',
+  'lobby grows',
+  'wb {t}',
 ];
 
 /** A human thanked the room or someone in it — the social contract
@@ -631,6 +728,9 @@ const THANKS_LINES = [
   'np {t}',
   'all good',
   'you earned it',
+  'always {t}',
+  'thats what im here for',
+  'np np',
 ];
 
 /** A human apologized — shrug it off, everybody whiffs. */
@@ -641,6 +741,9 @@ const SORRY_LINES = [
   'we have all been there',
   'shake it off',
   'dont sweat it',
+  'no harm {t}',
+  'forgiven',
+  'worse has happened',
 ];
 
 /** Earnest warmth about the game/map/lobby — the wholesome half of FPS
@@ -731,6 +834,9 @@ const BYE_LINES = [
   'gg, take care',
   'well be here',
   'safe travels',
+  'gn {t}',
+  'ggs, head out safe',
+  'one more for the road',
 ];
 
 /** A teammate called a command over VGS — the squad acknowledgment.
@@ -743,6 +849,10 @@ const ACK_LINES = [
   'covering',
   'wilco',
   'yes sir',
+  'loud and clear',
+  'moving',
+  'way ahead of you',
+  'ack',
 ];
 
 /** Someone said the bot's name — acknowledgment, nothing more. */
@@ -754,6 +864,10 @@ const MENTION_LINES = [
   'that\'s me',
   'who pinged me',
   'present',
+  'was afk, what',
+  'im here',
+  'you rang {t}',
+  'hm?',
 ];
 
 /** Shooter just fragged the one who fragged them last. */
@@ -763,6 +877,10 @@ const REVENGE_LINES = [
   'thats for earlier {v}',
   'told you {v}',
   'collected the debt',
+  'settled {v}',
+  'score settled',
+  'remember me {v}',
+  'receipts {v}',
 ];
 
 /** Shooter ended someone's 3+ streak. */
@@ -771,6 +889,10 @@ const STREAK_END_LINES = [
   'halted {v}',
   'youre welcome everyone',
   'someone had to',
+  'spree ended {v}',
+  'free at last',
+  'the run is done {v}',
+  'balanced the books',
 ];
 
 /** Room event went our way — teammates murmur approval. */
@@ -782,6 +904,12 @@ const CHEER_LINES = [
   'good route',
   'clean',
   'we eating',
+  'huge',
+  'big play',
+  'that was beautiful',
+  'chef kiss',
+  'roadkill',
+  'farmed em',
 ];
 
 /** The other team scored — the losers' side of the room. */
@@ -792,6 +920,11 @@ const GROAN_LINES = [
   'not again',
   'tragic',
   'come on',
+  'oof',
+  'wake up team',
+  'defense asleep',
+  'that hurt',
+  'theyre in again',
 ];
 
 /** Our flag just walked out the door — the defense alarm. */
@@ -804,6 +937,11 @@ const ALERT_LINES = [
   'flag thief inbound',
   'chaser needed',   // the role that hunts carriers
   'they ran a route on us',
+  'flag off the stand',
+  'runner inbound',
+  'stand is hot',
+  'flag outbound',
+  'DEFENSE',
 ];
 
 export type ChatterKind =
@@ -1025,7 +1163,7 @@ export function killTaunt(botId: string, victim: string): TauntLine | null {
   const key = `${botId}|${victim}`;
   const repeat = tauntNow() - (lastKillOn.get(key) ?? Number.NEGATIVE_INFINITY) < REPEAT_KILL_MS;
   lastKillOn.set(key, tauntNow());
-  if (lastKillOn.size > 256) {lastKillOn.clear();}
+  if (lastKillOn.size > 256) {lastKillOn.delete(lastKillOn.keys().next().value!);}
   return maybe(botId, () => repeat
     ? tauntPick(REPEAT_KILL_LINES, REPEAT_KILL_VGS, (l) => l.replace('{v}', victim))
     : tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
@@ -1094,6 +1232,6 @@ export function vgsCommandFor(chord: string): ChatterKind | null {
 export function resetTauntCooldowns(): void {
   lastSpoke.clear();
   lastKillOn.clear();
-  recent.length = 0;
+  recentByPool.clear();
   matchMuted = false;
 }
