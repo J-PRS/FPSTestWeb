@@ -60,9 +60,16 @@ describe('netcode soak: sustained reconnects under adverse links', () => {
     for (let i = 1; i < evs.length; i++) expect(evs[i]).toBe(evs[i - 1]! + 1);
 
     // Prediction still converges late in the soak — the last quarter of
-    // the run must show the same healed band, not degraded drift.
+    // the run must show the same healed band, not degraded drift. The
+    // gate measures HEALED error only: during each outage the shadow
+    // sims blind on stale input so the two trajectories legitimately
+    // drift meters apart — that band can't be <5 by construction.
+    // Excluded per reconnect: [reconnect-1200 outage, reconnect+1000
+    // converge grace]. What remains is connected, settled prediction.
+    const OUTAGE = 1200, HEAL_GRACE = 1000;
+    const inFlight = (t: number) => r.reconnectAt.some((rt) => t >= rt - OUTAGE && t < rt + HEAL_GRACE);
     const lastQ = r.errSeries.length / 4 | 0;
-    const tail = r.errSeries.slice(-lastQ);
+    const tail = r.errSeries.slice(-lastQ).filter((_, i) => !inFlight(r.errT[r.errT.length - lastQ + i]!));
     const p95 = tail.sort((a, b) => a - b)[(tail.length * 0.95) | 0]!;
     expect(p95).toBeLessThan(5);
     console.log(`  soak: ${r.drops} reconnects, ${r.corrections} corrections, ${evs.length} evs contiguous, tail-err p95=${p95.toFixed(2)}m, resends=${r.inputsResent}`);

@@ -113,6 +113,9 @@ export type BridgeResult = {
   durableEvs: number[];
   /** Reconnect cycles the profile asked for (dropEveryMs soak). */
   drops: number;
+  /** Sim-ms each dead socket came back — lets callers separate
+   *  unavoidable outage drift from post-reconnect heal error. */
+  reconnectAt: number[];
   /** Per-reclaim audit: {fromSeq, seqs replayed} — soak gap forensics. */
   replays: { fromSeq: number; seqs: number[] }[];
   /** Reseed cycles (reseedAtMs) — gameState-snapshot convergence audit. */
@@ -165,7 +168,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const r: BridgeResult = {
     preErr: [], postErr: [], corrections: 0, snaps: 0,
     reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [], errT: [],
-    durableEvs: [], drops: 0, replays: [], reseeds: 0, reseedResidual: [],
+    durableEvs: [], drops: 0, reconnectAt: [], replays: [], reseeds: 0, reseedResidual: [],
   };
   let lastEv = 0;
   let dead = false, dropped = false;
@@ -265,6 +268,7 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
         cm.unregister(PID);
       } else if (dead && tMs >= deadSince + outageMs) {
         dead = false; dropped = false;
+        r.reconnectAt.push(tMs);
         sws = new FakeWs(PID, undefined, () => simNow);
         cm.register(PID, asWs(sws));
         // Frames aimed at the dead socket are still in the journal —

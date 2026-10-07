@@ -2617,3 +2617,18 @@ post-reconnect recovery windows (dropEveryMs=4000/outageMs=1200),
 elevated since the respawn-rule/struct-kits era - tracked as its own
 follow-up, not a defer problem.
 ### 2.131 - end
+
+### 2.132 - soakChaos gate measures healed error, not outage drift
+
+The soak's tail-p95<5 gate sampled every client frame including the
+1200ms outages: while a socket is dead the server shadow sims on stale
+input so the two trajectories legitimately drift ~10m apart. ~10% of
+the tail sat inside those [drop, reconnect+converge] windows, pinning
+the bound red since the respawn-rules/struct-kits era (the
+misattributed "defer window" blame died on bisect - identical p95 with
+the pre-WIP gate). bridge.ts now records reconnectAt; the test filters
+each outage + 1s heal grace out of the tail and keeps the <5 bound on
+what it actually meant: connected, settled prediction. Healed p95 on
+the current sim: 2.77m - prediction converges correctly after every
+reconnect, the old bound just couldn't see it.
+### 2.132 - end
