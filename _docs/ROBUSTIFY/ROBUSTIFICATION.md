@@ -3043,3 +3043,18 @@ every state-hash check and sat on the scoreboard forever. Both handlers
 now guard on the roster actually holding the target; respawn keeps its
 create-on-unknown safety (a respawn edge legitimately reintroduces a
 player). (wireIn.ts)
+
+## 2.166 Missing-member heal for players the client never saw join
+
+The connect-time desync storm (all 9 bots "on server but not client" for
+10+ checks) had no repair path: the audit healed health/liveness only
+for client-present entries, and nothing else mints a roster record for
+a player whose join edge was lost or predates us. The audit now seeds a
+missing member's roster record from snapshot truth (position/health/
+isDead); the existing first-seen-update path spawns the entity when
+live records land, and dead members stay unspawned by design. Also
+explains the phantom 70-ball fleet in the same log: it was the client's
+own netDriven fleet counted correctly -- the membership print only
+lists local ids, so a field-level diff (enraged/targetId) still has no
+per-id breakdown; ball-fields diff is the follow-up lane.
+(stateDebug.ts)

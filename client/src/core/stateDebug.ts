@@ -520,6 +520,18 @@ export function wireStateDebug(ctx: StateDebugContext): void {
             continue;
           }
           const cp = clientPlayers.get(sp.id);
+          // Missing-member heal — a join edge lost before we ever saw the
+          // player leaves them hashing "server but not client" forever:
+          // nothing else mints the roster record. Seed it from snapshot
+          // truth; the first-seen-update path spawns the entity when the
+          // next live record lands (dead members stay unspawned by design).
+          if (!cp) {
+            networkManager.upsertRemotePlayer(sp.id, {
+              position: sp.position,
+              health: sp.health,
+              isDead: sp.isDead,
+            });
+          }
           if (cp && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
           // Liveness heal — kill/respawn events muted by a resync gap or
           // dropped elsewhere leave isDead divergent forever (health heals
