@@ -179,6 +179,26 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'respawnS', channel: 'edge' },
       ],
       deployUp: [],
+      // Deployable FX/outcome notifies — visual triggers; damage itself
+      // always arrives through the player outcome events.
+      turretShot: [
+        { name: 'owner', channel: 'edge' },
+        { name: 'targetId', channel: 'edge' },
+      ],
+      sentryShot: [
+        { name: 'owner', channel: 'edge' },
+        { name: 'x', channel: 'sim' },
+        { name: 'y', channel: 'sim' },
+        { name: 'z', channel: 'sim' },
+      ],
+      mineBoom: [
+        { name: 'owner', channel: 'edge' },
+        { name: 'pos', channel: 'sim' },
+      ],
+      sensorPing: [
+        { name: 'team', channel: 'edge', absent: null },
+        { name: 'targets', channel: 'edge' },
+      ],
     },
     simFields: [
       { name: 'pos', channel: 'sim' },
@@ -269,6 +289,27 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'isDead', channel: 'edge' },
     ],
     goneFields: [],
+    // Player outcome events — server-declared results. Optional wire
+    // fields carry `absent` so omission stays legal.
+    events: {
+      playerHit: [
+        { name: 'shooterId', channel: 'edge' },
+        { name: 'damage', channel: 'sim' },
+        { name: 'health', channel: 'sim' },
+        { name: 'armor', channel: 'sim', absent: null },
+        { name: 'seq', channel: 'echo', absent: null },
+        { name: 'shotId', channel: 'echo', absent: null },
+      ],
+      playerKill: [
+        { name: 'shooterId', channel: 'edge' },
+        { name: 'weapon', channel: 'edge', absent: null },
+        { name: 'streak', channel: 'edge', absent: null },
+        { name: 'air', channel: 'echo', absent: null },
+      ],
+      teamUpdate: [
+        { name: 'team', channel: 'edge' },
+      ],
+    },
     // tickUpdate record — id rides 'playerId'; the binary tick frame
     // packs the same fields.
     updateFields: [

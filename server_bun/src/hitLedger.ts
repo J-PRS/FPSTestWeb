@@ -25,6 +25,8 @@ function probePush<T>(arr: T[], v: T): void {
   if (arr.length > PROBE_CAP) arr.splice(0, arr.length - PROBE_CAP);
 }
 import { logger } from './logger.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
+import type { ServerMessage } from './types.ts';
 import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
 
@@ -64,7 +66,7 @@ export class HitLedger {
         }
       }
       logger.debug(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
-      c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq, shotId: opts.shotId });
+      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq, shotId: opts.shotId }) as ServerMessage);
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);
@@ -149,7 +151,7 @@ export class HitLedger {
     logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak, air: opts.air });
+    c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air }) as ServerMessage);
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label);
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);

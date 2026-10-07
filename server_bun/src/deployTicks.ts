@@ -1,5 +1,6 @@
-import type { Vec3 } from './types.ts';
+import type { Vec3, ServerMessage } from './types.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { Deployed, RoomDeployables } from './RoomDeployables.ts';
 import {
@@ -37,12 +38,12 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position)) continue;
+      if (!losClear(r, d.pos, p.position, dTeam)) continue;
       bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = 0.15; return; }
     d.fireCd = DRONE_FIRE_INTERVAL;
-    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target });
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'turretShot', 'id', d.id, { owner: d.owner, targetId: target }) as ServerMessage);
     r.room.messages.turretAttack(d.owner, target, DRONE_DAMAGE);
   }
 
@@ -62,7 +63,7 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
       if (p.protectedUntil > simNow()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
-        r.room.broadcast({ type: 'mineBoom', id: d.id, owner: d.owner, pos: { ...d.pos } });
+        r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos: { ...d.pos } }) as ServerMessage);
         r.remove(d.id);
         r.room.messages.mineBlast(d.owner, d.pos, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK);
         return;
@@ -92,13 +93,13 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
 
   /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
    *  players outside through the wall. Target at chest height. */
-export function losClear(r: RoomDeployables, from: Vec3, to: Vec3): boolean {
+export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string): boolean {
     const cols = r.room.ballSim.colliders;
     if (!cols.length) return true;
     return !segSolidHit(
       { x: from.x, y: from.y + 0.5, z: from.z },
       { x: to.x, y: to.y + 1.0, z: to.z },
-      cols, r.room.ballSim.colliderIndex ?? undefined,
+      cols, r.room.ballSim.colliderIndex ?? undefined, team,
     );
   }
 
@@ -119,12 +120,12 @@ export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position)) continue;
+      if (!losClear(r, d.pos, p.position, dTeam)) continue;
       bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = Math.min(d.fireCd + 0.15, 0.15); return; } // idle scan: cheap re-check
     d.fireCd = TURRET_FIRE_INTERVAL;
-    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target });
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'turretShot', 'id', d.id, { owner: d.owner, targetId: target }) as ServerMessage);
     r.room.messages.turretAttack(d.owner, target, TURRET_DAMAGE);}
 
 const SENTRY_RANGE = DEPLOY_ITEMS.sentry.range!;
@@ -155,7 +156,7 @@ export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position)) continue;
+      if (!losClear(r, d.pos, p.position, dTeam)) continue;
       bestD2 = d2; target = pid; tp = p.position;
       tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
     }
@@ -170,7 +171,7 @@ export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
       y: tp.y + 1.0 + tv.y * flight * 0.5, // partial vertical lead — bolts drop nothing anyway
       z: tp.z + tv.z * flight,
     };
-    r.room.broadcast({ type: 'sentryShot', id: d.id, owner: d.owner, x: aim.x, y: aim.y, z: aim.z });
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sentryShot', 'id', d.id, { owner: d.owner, x: aim.x, y: aim.y, z: aim.z }) as ServerMessage);
     r.bolts.push({ at: aim, ttl: flight, owner: d.owner, dmg: SENTRY_DAMAGE, rad: SENTRY_BLAST_RADIUS, kb: SENTRY_KNOCKBACK });
 }
 
@@ -195,5 +196,5 @@ export function tickSensor(r: RoomDeployables, d: Deployed, dt: number): void {
       targets.push({ id: pid, x: p.position.x, y: p.position.y, z: p.position.z });
     }
     if (!targets.length) return;
-    r.room.broadcast({ type: 'sensorPing', id: d.id, team: dTeam, targets });
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sensorPing', 'id', d.id, { team: dTeam, targets }) as ServerMessage);
 }

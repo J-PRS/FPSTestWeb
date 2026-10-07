@@ -22,6 +22,7 @@ import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightf
 import { NOISE_TTL_MS } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
+import { KIT_HULLS, KIT_STAND_TOP } from '../../shared/structKits.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
@@ -34,7 +35,7 @@ import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClas
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
-import { WORLD_MODEL, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
@@ -501,10 +502,24 @@ export class Room {
   private flagStandTop(x: number, z: number): number {
     let top = this.field ? hmHeight(this.field, x, z) : 0;
     for (const s of this.spec.structures ?? []) {
-      // Kit pieces carry a placeholder {1,1,1} size — their real footprint
-      // is the hull table. Counting the dummy box as a standable surface
-      // lifts flag homes ~1m whenever a compound is centered on the flag.
-      if (s.kind === 'kit') continue;
+      if (s.kind === 'kit') {
+        // Authored stand pieces ARE the platform — a base inside one's
+        // footprint homes onto its standing surface (KIT_STAND_TOP).
+        // Other kits' placeholder {1,1,1} size must never count.
+        const lift = KIT_STAND_TOP[s.piece ?? ''];
+        if (lift === undefined) continue;
+        const k = s.scale ?? 1;
+        let reach = 0;
+        for (const h of KIT_HULLS[s.piece!] ?? []) {
+          reach = Math.max(reach,
+            (Math.abs(h.pos.x) + h.size.x / 2) * k,
+            (Math.abs(h.pos.z) + h.size.z / 2) * k);
+        }
+        if (Math.abs(x - s.pos.x) <= reach && Math.abs(z - s.pos.z) <= reach) {
+          top = Math.max(top, s.pos.y + lift * k);
+        }
+        continue;
+      }
       if (Math.abs(x - s.pos.x) <= s.size.x / 2 && Math.abs(z - s.pos.z) <= s.size.z / 2) {
         top = Math.max(top, s.pos.y + s.size.y);
       }
@@ -539,11 +554,13 @@ export class Room {
 
   /** Highest walkable surface under a seeded deploy that isn't a climb
    *  away from its authored height — genhouse decks ride ~1m over the
-   *  max-seated base, walls/roofs sit higher and must not win. Returns
-   *  terrain-or-structure top; the caller still takes max() with the
-   *  authored y so a tower-top asset is never dragged down. */
+   *  seated base, walls/roofs sit higher and must not win. Returns the
+   *  authored y when nothing taller is under it, so tower-top assets
+   *  are never dragged down and terrain never hoists anything. */
   private deployFloor(x: number, z: number, authoredY: number): number {
-    let top = this.field ? hmHeight(this.field, x, z) : 0;
+    // No structure under it → authored y stands. Grounding to terrain
+    // lives in applySpec/seatKits, not here.
+    let top = authoredY;
     for (const c of this.ballSim?.colliders ?? []) {
       const dx = x - c.cx, dz = z - c.cz;
       const lx = dx * c.cos + dz * c.sin;
@@ -864,7 +881,7 @@ export class Room {
         bots.forEach((p, i) => { p.team = i % 2 === 0 ? 'alpha' : 'bravo'; });
         for (const p of bots) {
           this.players.respawnPlayer(p.id);
-          this.broadcast({ type: 'teamUpdate', playerId: p.id, team: p.team! });
+          this.broadcast(eventPayload(WORLD_MODEL.player!, 'teamUpdate', 'playerId', p.id, { team: p.team! }) as ServerMessage);
         }
       },
       rotate: () => this.onRotate?.() ?? null,
@@ -1119,7 +1136,7 @@ export class Room {
       this.flagCarrierDied(p.id);
       this.players.setTeam(p.id, small);
       this.moveSim.setTeam(p.id, small);
-      this.broadcast({ type: 'teamUpdate', playerId: p.id, team: small });
+      this.broadcast(eventPayload(WORLD_MODEL.player!, 'teamUpdate', 'playerId', p.id, { team: small }) as ServerMessage);
       counts[big]--;
       counts[small]++;
     }
