@@ -323,6 +323,9 @@ export class WireIdRoster {
  *  wall time — arrival stamps fold transport jitter into the render
  *  position itself (the rubberband source). */
 export const SERVER_TICK_MS = 50;
+/** One sim quantum in seconds — server stepAll loops and client replays
+ *  must agree or every edge/replay drifts one quantum per miss. */
+export const SIM_TICK_DT = SERVER_TICK_MS / 1000;
 
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 

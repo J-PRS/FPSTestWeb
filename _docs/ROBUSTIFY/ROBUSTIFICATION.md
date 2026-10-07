@@ -217,6 +217,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.53 Sim tick quantum unified (2026-10-07)
+
+Duplication lane: `0.05` (one sim quantum) was hardcoded in six places —
+`BallSim.TICK_DT`, `CreatureSim.TICK_DT`, `creatureBrain.TICK_DT`, plus
+client literals in `netCrawlers` (the `sk` skip deduction), `netBalls`
+(segment replay + rubberband probe phase), and `netMelee` (netAcc
+quantum). All now derive from `SIM_TICK_DT = SERVER_TICK_MS / 1000` in
+`shared/wire.ts` — a tick-rate change can't split server sim from
+client replay anymore (the exact class-8 drift the constant guards).
+
 ### 2.52 sk monotonicity pinned + class-8 sweep clean (2026-10-07)
 
 Ordering/skip-tick lane: audited every `continue`/early-return inside

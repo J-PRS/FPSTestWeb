@@ -15,8 +15,9 @@ import {
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { STATUS, shootRevealed } from '../../shared/status.ts';
+import { SIM_TICK_DT } from '../../shared/wire.ts';
 
-const TICK_DT = 0.05;
+const TICK_DT = SIM_TICK_DT;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
 // Silence desyncs a wanderer just like a long-flying ball — force a
 // resync edge (same committed snapshot) every few seconds.

@@ -6,6 +6,7 @@ import { stepBall, makeSimBall, type SimBall, type SimVec } from '../../../share
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
 import { predictAt } from '../entities/ballNet.js';
+import { SIM_TICK_DT } from '../../../shared/wire.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
 import type { ChildLogger } from '../core/Logger.js';
@@ -215,13 +216,13 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     if (m.tp) { s.tx = m.tp.x; s.ty = m.tp.y; s.tz = m.tp.z; s.tgtValid = true; } else {s.tgtValid = false;}
     s.radius = b.radius; s.gt = 0; s.dead = false;
     _rbTgt.x = s.tx; _rbTgt.y = s.ty; _rbTgt.z = s.tz;
-    const steps = Math.min(48, Math.floor(span / 0.05));
+    const steps = Math.min(48, Math.floor(span / SIM_TICK_DT));
     for (let i = 0; i < steps; i++) {
-      stepBall(s, 0.05, field, s.tgtValid ? _rbTgt : null, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
+      stepBall(s, SIM_TICK_DT, field, s.tgtValid ? _rbTgt : null, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
     }
     // Sub-cell remainder is ballistic — a partial step would leave the
-    // probe off the server's 0.05 phase (same rule stepNetLeg obeys).
-    const rem = span - steps * 0.05;
+    // probe off the server's tick phase (same rule stepNetLeg obeys).
+    const rem = span - steps * SIM_TICK_DT;
     _truthPos.set(s.x + s.vx * rem, s.y + s.vy * rem, s.z + s.vz * rem);
   }
 
@@ -241,7 +242,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     // measures segment spacing (~17m at ball speed), not prediction drift.
     // One cell of slack covers the sim resting mid-grid, not unreplayed.
     const simT = b.netDiag?.simT;
-    if (m.t !== undefined && simT !== undefined && simT < m.t - 0.05) {
+    if (m.t !== undefined && simT !== undefined && simT < m.t - SIM_TICK_DT) {
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on unreplayed stamp (simT ${simT.toFixed(2)} < t ${m.t.toFixed(2)})`);
       return true;
     }

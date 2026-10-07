@@ -29,8 +29,9 @@ import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { healPool } from './healPool.ts';
+import { SIM_TICK_DT } from '../../shared/wire.ts';
 
-const TICK_DT = 0.05;
+const TICK_DT = SIM_TICK_DT;
 // Distance-tiered send: committed edges only matter to players who can
 // see the crawler. Everyone still replays the same sim stream — far
 // clients just ride an older committed snapshot longer, which is safe

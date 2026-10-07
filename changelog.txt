@@ -1,3 +1,4 @@
+2026-10-07 - robustify: unify sim tick quantum as SIM_TICK_DT (6 duplicated 0.05 sites)
 2026-10-07 - robustify: pin sk monotonicity across FAR_SKIP; class-8 skip-tick sweep audited clean
 2026-10-07 - robustify: pin tick-record POS_Q quantization bound (<=2cm, interp-only verified)
 2026-10-07 - robustify: sheep log dedupe on identical max-line (soak-log oscillation noise)

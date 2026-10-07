@@ -14,6 +14,7 @@ import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
 import { screenShake } from '../effects/screenShake.js';
 import { EXPLOSION_VFX_RADIUS } from '../core/config.js';
+import { SIM_TICK_DT } from '../../../shared/wire.js';
 
 export interface NetCrawlersCtx {
   crawlers: Crawler[];
@@ -115,10 +116,10 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     // catches every skipped quantum on the next edge it sees; per-edge
     // guessing would under-correct it by FAR_SKIP-1 (§2.38/§2.39 desync).
     if (m.sk !== undefined) {
-      c.netAcc -= 0.05 * (m.sk - (appliedSkips.get(m.id) ?? 0));
+      c.netAcc -= SIM_TICK_DT * (m.sk - (appliedSkips.get(m.id) ?? 0));
       appliedSkips.set(m.id, m.sk);
     } else if (m.kind === 'retarget') {
-      c.netAcc -= 0.05; // pre-sk server: one skip per retarget edge seen
+      c.netAcc -= SIM_TICK_DT; // pre-sk server: one skip per retarget edge seen
     }
     c.applyNetEdge({ ...m, kind: m.kind });
     deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);

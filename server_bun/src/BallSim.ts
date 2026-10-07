@@ -29,7 +29,7 @@ import {
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
-import { encodeBallSegment } from '../../shared/wire.ts';
+import { encodeBallSegment, SIM_TICK_DT } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 import { BallCombat } from './ballCombat.ts';
@@ -39,7 +39,7 @@ import {
   RETARGET_INTERVAL, RESYNC_INTERVAL, DIVERGENCE_BUDGET_M, ENRAGED_DIVERGENCE_BUDGET_M,
 } from './ballSpawn.ts';
 
-const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
+const TICK_DT = SIM_TICK_DT;    // 20Hz — matches GameServer tick broadcast
 // Resync floor: a ball in long flat flight emits NO bounce events, and
 // client prediction diverges freely meanwhile — force a segment every
 // ~1.2s so the worst-case replay error is bounded by ~1.2s of drift, not

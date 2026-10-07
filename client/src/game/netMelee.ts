@@ -4,6 +4,7 @@ import { getHeightfield } from '../world/terrain.js';
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { commitTarget, type SimTotem } from '../../../shared/creatureSim.js';
 import type { SimVec, StructureCollider } from '../../../shared/ballSim.js';
+import { SIM_TICK_DT } from "../../../shared/wire.js";
 import { Projectile } from '../projectiles/Projectile.js';
 import type { Terrain } from '../world/terrain.js';
 
@@ -96,9 +97,9 @@ export function updateNetSim<S extends NetSimState>(
   if (!s || !field) {return;}
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
-  while (e.netAcc >= 0.05) {
-    e.netAcc -= 0.05;
-    step(s, 0.05, field, tgt, false, Projectile.solidColliders);
+  while (e.netAcc >= SIM_TICK_DT) {
+    e.netAcc -= SIM_TICK_DT;
+    step(s, SIM_TICK_DT, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
@@ -181,11 +182,11 @@ export function updateNetTotem(
   if (!s || !field) {return;}
   e.netAcc = Math.min(e.netAcc + dt, 0.5);
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
-  while (e.netAcc >= 0.05) {
-    e.netAcc -= 0.05;
+  while (e.netAcc >= SIM_TICK_DT) {
+    e.netAcc -= SIM_TICK_DT;
     // Solid colliders ride the projectile-static set — same list the
     // server sims, so the predictor clips the beam identically.
-    if (step(s, 0.05, field, tgt, false, Projectile.solidColliders) === 'fire') {e.onSimFire();}
+    if (step(s, SIM_TICK_DT, field, tgt, false, Projectile.solidColliders) === 'fire') {e.onSimFire();}
   }
   e.pos.set(s.x, s.y, s.z);
   e.health = s.health;
