@@ -126,8 +126,11 @@ export function claimDamageMelee(
   e: { netId: number },
   damage: number,
   claim: ((netId: number, damage: number) => void) | null,
+  serverPaid = false,
 ): boolean {
-  claim?.(e.netId, damage);
+  // serverPaid: the authority's sim already settles this damage (shell
+  // contact / shell splash) — claiming would double-dip the same hit.
+  if (!serverPaid) claim?.(e.netId, damage);
   return false;
 }
 

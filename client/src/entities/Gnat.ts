@@ -277,8 +277,8 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     getShadows()?.set(this, this.pos, r * 1.5, 0.2);
   }
 
-  takeDamage(damage: number): boolean {
-    if (this.netDriven) return claimDamageMelee(this, damage, Gnat.hitClaim);
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
+    if (this.netDriven) return claimDamageMelee(this, damage, Gnat.hitClaim, opts?.serverPaid);
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }

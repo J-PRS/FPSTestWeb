@@ -224,8 +224,8 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     if (Rakk.attackHeldBy === this.id) Rakk.attackHeldBy = null;
   }
 
-  takeDamage(damage: number): boolean {
-    if (this.netDriven) return claimDamageMelee(this, damage, Rakk.hitClaim);
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
+    if (this.netDriven) return claimDamageMelee(this, damage, Rakk.hitClaim, opts?.serverPaid);
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; this.releaseToken(); return true; }

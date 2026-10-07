@@ -194,8 +194,8 @@ export class Roller implements Targetable, SwarmSlotOwner {
     }
   }
 
-  takeDamage(damage: number): boolean {
-    if (this.netDriven) {return claimDamageMelee(this, damage, Roller.hitClaim);}
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
+    if (this.netDriven) {return claimDamageMelee(this, damage, Roller.hitClaim, opts?.serverPaid);}
     this.health -= damage;
     this.flash = 0.12;
     if (this.health <= 0) { this.dead = true; return true; }

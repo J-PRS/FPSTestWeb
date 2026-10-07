@@ -244,10 +244,10 @@ export class Scarab implements Targetable, SwarmSlotOwner {
 
   writeInstances(terrain: Terrain): void { writeInstances(this, terrain); }
 
-  takeDamage(damage: number): boolean {
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {
       this.flash = 0.15;
-      return claimDamageMelee(this, damage, Scarab.hitClaim);
+      return claimDamageMelee(this, damage, Scarab.hitClaim, opts?.serverPaid);
     }
     this.health -= damage;
     this.flash = 0.15;

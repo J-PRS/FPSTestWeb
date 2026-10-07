@@ -262,8 +262,8 @@ export class Snake implements Targetable, SwarmSlotOwner {
     writeInstances(this, terrain);
   }
 
-  takeDamage(damage: number): boolean {
-    if (this.netDriven) {return claimDamageMelee(this, damage, Snake.hitClaim);}
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
+    if (this.netDriven) {return claimDamageMelee(this, damage, Snake.hitClaim, opts?.serverPaid);}
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) {

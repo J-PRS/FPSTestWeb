@@ -496,7 +496,9 @@ export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js'
   if (!attackerId || attackerId === 'local') {
     deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
   }
-  if (t.takeDamage(dmg)) { onTargetDestroyed(c, t, t.vel, undefined, attackerId); return true; }
+  // Server-owned damage (bot swings, deployable attacks): the authority
+  // settles the same hit — claiming would double-dip.
+  if (t.takeDamage(dmg, { serverPaid: true })) { onTargetDestroyed(c, t, t.vel, undefined, attackerId); return true; }
   if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
   return false;
 }

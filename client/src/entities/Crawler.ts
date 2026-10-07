@@ -271,10 +271,10 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.writeInstances(terrain);
   }
 
-  takeDamage(damage: number): boolean {
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {
       this.flash = 0.15;
-      return claimDamageMelee(this, damage, Crawler.hitClaim);
+      return claimDamageMelee(this, damage, Crawler.hitClaim, opts?.serverPaid);
     }
     this.health -= damage;
     this.flash = 0.15;

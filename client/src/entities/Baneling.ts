@@ -239,10 +239,10 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     getShadows()?.set(this, this.pos, r * 1.05, 0.4);
   }
 
-  takeDamage(damage = 1): boolean {
+  takeDamage(damage = 1, opts?: { serverPaid?: boolean }): boolean {
     // netDriven is a claim, never a pop — the authority's detonate edge
     // + crawlDie decide, so a client can't fake-explode a sac.
-    if (this.netDriven) return claimDamageMelee(this, damage, Baneling.hitClaim);
+    if (this.netDriven) return claimDamageMelee(this, damage, Baneling.hitClaim, opts?.serverPaid);
     // Shooting it pops it — that IS the counterplay
     this.detonate();
     return true;

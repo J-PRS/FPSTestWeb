@@ -258,11 +258,11 @@ export class Totem implements Targetable, SwarmSlotOwner {
   applyKnockback(from: THREE.Vector3, force: number): void { blastPush(this, from, force); }
   applyPull(to: THREE.Vector3, force: number): void { blastPull(this, to, force); }
 
-  takeDamage(damage: number): boolean {
+  takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {
       // Claim-only — the authority decides; a local flash still telegraphs.
       this.flash = 0.12;
-      return claimDamageMelee(this, damage, Totem.hitClaim);
+      return claimDamageMelee(this, damage, Totem.hitClaim, opts?.serverPaid);
     }
     if (this.intangible) return false;
     this.health -= damage;
