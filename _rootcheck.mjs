@@ -28,8 +28,9 @@ const ALLOW = new Set([
 
 const ALLOW_RE = [
   /^\.gitignore$/, /^\.dockerignore$/, /^\.oxlintrc.*\.json$/,
-  /^_.*\.bat$/,          // run/deploy scripts are conventionally _-prefixed
-  /^run(_all)?\.(bat|ps1)?$/, /^run$/,
+  /^package(-lock)?\.json$/,
+  /\.(bat|ps1)$/,        // runner/deploy scripts conventionally live at root
+  /^run$/,
 ];
 
 const flagged = readdirSync(ROOT, { withFileTypes: true })
