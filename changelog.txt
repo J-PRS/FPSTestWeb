@@ -1,3 +1,4 @@
+2026-10-01 - robustify: collapse rateLimitWarnings purge loops into dropWarnKeys
 2026-10-01 - robustify: pin /demos download path-traversal guard (public route)
 2026-10-01 - robustify: display names strip unicode format chars (bidi/zero-width spoofing) + pin
 2026-10-11 - robustify 2.125: pin roomGrace ledger balance — every grace exit path releases the count

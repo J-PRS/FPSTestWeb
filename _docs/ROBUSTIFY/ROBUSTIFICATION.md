@@ -2564,3 +2564,11 @@ request and arbitrary local file reads. `demoDownload.test.ts` drives it
 with a planted `../outside.demo` + separator/absolute variants and a real
 clip load. A dropped guard fails the test instead of leaking disk files.
 ### 2.127 - end
+
+### 2.128 - dropWarnKeys collapse
+`MessageHandler` swept `rateLimitWarnings`' `${id}:${type}` keys with two
+identical inline loops (onPlayerDisconnected + onPlayerRemoved) - the
+second loop existed only because a comment explained why room-hops also
+need it. Extracted `dropWarnKeys(playerId)`; both teardown paths share it,
+so a future warn-key shape change has one owner.
+### 2.128 - end
