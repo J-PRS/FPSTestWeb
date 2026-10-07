@@ -25,6 +25,9 @@ export interface RoomFactoryHost {
   recordEnd(rec: Parameters<NonNullable<Room['onMatchEnd']>>[0]): void;
   /** Movement-judge cheat verdict → disconnect the player. */
   kickPlayer(playerId: string): boolean;
+  /** Name-keyed tick fault state dies with the room — a reminted name
+   *  must not inherit the corpse's error streak. */
+  forgetRoom(name: string): void;
 }
 
 export class RoomFactory {
@@ -92,6 +95,7 @@ export class RoomFactory {
           if (r.players.getHumanCount() > 0 || r.spectators.size > 0) continue;
           r.dispose();
           this.host.rooms.delete(n);
+          this.host.forgetRoom(n);
           logger.warn('Room cap recycled idle room', { room: n });
           break;
         }

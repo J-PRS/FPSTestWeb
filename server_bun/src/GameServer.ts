@@ -97,6 +97,7 @@ export class GameServer {
       field: () => this.field,
       recordEnd: (rec) => this.journal.recordEnd(rec),
       kickPlayer: (pid) => this.kickPlayer(pid),
+      forgetRoom: (name) => this.tickLoop.forgetRoom(name),
     });
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id) => this.roomOfPlayer(id),

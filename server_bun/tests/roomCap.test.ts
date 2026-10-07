@@ -16,7 +16,7 @@ function fakeWs() {
 interface Peek {
   factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null };
   rooms: Map<string, Room>;
-  tickLoop: { stop(): void };
+  tickLoop: { stop(): void; tickErrStreak: Map<string, number>; tickQuarantined: Set<string> };
   playerRoom: Map<string, Room>;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
 }
@@ -110,6 +110,22 @@ describe('room cap', () => {
 
     peek.removePlayerCompletely(room, 'p1', 'test');
     expect(peek.playerRoom.has('p1')).toBe(false);
+  });
+
+  it('a recycled name does not inherit the corpse\'s tick fault streak', () => {
+    ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 2;
+    const peek = mkServer();
+    peek.factory.roomFor('a');
+    // Fault history is keyed by name — left over a recycle, the remint
+    // starts one error away from quarantine (or born quarantined).
+    peek.tickLoop.tickErrStreak.set('a', 4);
+    peek.tickLoop.tickQuarantined.add('a');
+
+    peek.factory.roomFor('b');
+    peek.factory.roomFor('c'); // recycles 'a'
+
+    expect(peek.tickLoop.tickErrStreak.has('a')).toBe(false);
+    expect(peek.tickLoop.tickQuarantined.has('a')).toBe(false);
   });
 
   it('spectators count as audience — a watched room is not recyclable', () => {

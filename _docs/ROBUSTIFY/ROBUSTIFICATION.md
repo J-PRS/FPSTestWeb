@@ -2262,3 +2262,17 @@ CONFIG.maxRooms assignment → cast, commands msg:{} → as never) that
 surfaced under a full-project typecheck.
 
 ### 2.103 - end
+
+### 2.104 Recycled room name leaks tick fault state (2026-10-08)
+
+Correctness hole inside §2.98's room-cap recycle: TickLoop's
+tickErrStreak/tickQuarantined are keyed by room NAME, but the recycle
+path only deleted the rooms entry — a remint under the same name
+inherited the corpse's streak and could quarantine on its first tick
+error (or be born quarantined if the recycled room was mid-fault).
+RoomFactoryHost gained forgetRoom(name) delegating to a new
+TickLoop.forgetRoom that drops both maps; faultedRooms stays since
+that set is ops history, not sim gating. Pinned: a recycled 'a' with
+a live streak+quarantine mints clean.
+
+### 2.104 - end

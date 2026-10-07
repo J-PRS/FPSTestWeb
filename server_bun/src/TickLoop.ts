@@ -70,6 +70,16 @@ export class TickLoop {
    *  so a dead room is visible on the status page, not just in logs. */
   quarantinedRooms() { return [...this.faultedRooms]; }
 
+  /** Fault state is name-keyed, not instance-keyed — when a room leaves
+   *  the roster without a drain (room-cap recycle), a remint under the
+   *  same name must start clean or it inherits the corpse's streak and
+   *  can quarantine on its first tick error. faultedRooms stays: that
+   *  set is ops history, not sim gating. */
+  forgetRoom(name: string): void {
+    this.tickErrStreak.delete(name);
+    this.tickQuarantined.delete(name);
+  }
+
   private readonly fanout: TickFanout;
 
 

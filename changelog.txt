@@ -1,3 +1,4 @@
+2026-10-08 - robustify 2.104: room-cap recycle clears name-keyed tick fault state (no inherited streak/quarantine)
 2026-10-08 - robustify §2.103: collapse room-name grammar to wire.ts — join and hop share one sanitizer
 2026-10-08 - robustify §2.102: pin command-buffer 2000 backstop — flood drops, normal traffic lands
 2026-10-08 - robustify §2.101: pin per-room spectator cap — over-cap spectate join closes 1013 clean
