@@ -405,6 +405,11 @@ export class TickLoop {
       deployFields: deployRoster.length
         ? deployRoster.map((d) => [d.id, d.kind, d.owner, d.team ?? ''] as [number, string, string, string])
         : undefined,
+      // Ball fleet per-id fields — enraged/targetId churn mismatches the
+      // hash without touching membership; the diff names the field.
+      ballFields: roster.length
+        ? roster.map((b) => [b.id, b.variant, b.enraged, b.targetId] as [number, number, boolean, string | null])
+        : undefined,
     });
 
     // Periodic status summary - suppress duplicates, batch with count

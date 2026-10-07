@@ -120,7 +120,7 @@ export class NetworkManager {
    *  through this; armor is the repair-tool overheal pool. */
   public onDeployHp: ((id: number, hp: number, armor: number, src?: string) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
-  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number, ballHash?: string, creatureHash?: string, deployHash?: string, flagHash?: string, pickupHash?: string, creatureFields?: [number, string, string, boolean, string | null][], deployFields?: [number, string, string, string][]) => void) | null = null;
+  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number, ballHash?: string, creatureHash?: string, deployHash?: string, flagHash?: string, pickupHash?: string, creatureFields?: [number, string, string, boolean, string | null][], deployFields?: [number, string, string, string][], ballFields?: [number, number, boolean, string | null][]) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
   public onBallSpawn: ((data: Extract<ServerMessage, { type: 'ballSpawn' }>) => void) | null = null;
   public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;
@@ -485,6 +485,11 @@ export class NetworkManager {
   // Upsert a remote player's roster entry, preserving fields the message
   // doesn't carry: merge order is patch → existing → default, so partial
   // updates (hit = health only) never stomp unrelated roster state.
+  //
+  // Owns CREATE too — call only from membership feeds (tickUpdate, joined,
+  // respawn, roster/snapshot heal). One-off edges (hit, kill, teamUpdate)
+  // must use patchRemotePlayer: minting on an edge leaves phantom roster
+  // entries when the edge outlives its member (§2.165/§2.168).
   upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
     if (!playerId || playerId === this.localPlayerId) return;
     const existing = this.players.get(playerId);
@@ -510,6 +515,15 @@ export class NetworkManager {
     if (patch.rotation) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
     if (patch.velocity) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
     if (!existing) this.players.set(playerId, next);
+  }
+
+  // Patch-in-place-or-drop for one-off edges — returns false when the
+  // roster holds no such member (edge for a departed/never-joined player),
+  // so callers can't manufacture phantom entries by accident.
+  patchRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): boolean {
+    if (!this.players.has(playerId)) {return false;}
+    this.upsertRemotePlayer(playerId, patch);
+    return true;
   }
 
   /** Wire-feed seam for recorded streams (.rec): pushes one message

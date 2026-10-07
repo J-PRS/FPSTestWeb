@@ -141,7 +141,7 @@ export class WireIn {
       for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid);
       for (const id of data.remove ?? []) this.wireIds.delete(id);
     },
-    teamUpdate: (data) => this.h.upsertRemotePlayer(data.playerId, { team: data.team }),
+    teamUpdate: (data) => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
     playerRespawn: (data) => this.handlePlayerRespawn(data),
     playerHit: (data) => this.handlePlayerHit(data),
     buff: (data) => this.h.onBuff?.(data),
@@ -155,7 +155,7 @@ export class WireIn {
     playerShot: (data) => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data) => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
-    stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash, data.creatureHash, data.deployHash, data.flagHash, data.pickupHash, data.creatureFields, data.deployFields),
+    stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash, data.creatureHash, data.deployHash, data.flagHash, data.pickupHash, data.creatureFields, data.deployFields, data.ballFields),
     correction: (data) => this.handleCorrection(data),
     inputSync: (data) => this.h.resendInputs(data.lastSeq),
     claimAck: (data) => this.h.ackClaim(data),
@@ -375,10 +375,10 @@ export class WireIn {
     // by callback). A processed hit also proves the server holds the target
     // alive — it never lands a hit on a dead player — so a record still
     // marked dead from a lost respawn edge un-sticks here instead of
-    // waiting for the hash-diff heal. Guarded: upsert mints a stub row for
-    // unknown ids, and a hit for a departed target would otherwise leave a
+    // waiting for the hash-diff heal. patchRemotePlayer never mints: a
+    // hit for a departed/never-joined target drops instead of leaving a
     // phantom roster entry hashing client-only forever.
-    if (this.h.getPlayers().has(data.targetId)) {this.h.upsertRemotePlayer(data.targetId, { health: data.health, isDead: false });}
+    this.h.patchRemotePlayer(data.targetId, { health: data.health, isDead: false });
     this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
   }
 
@@ -389,7 +389,7 @@ export class WireIn {
     // Update REMOTE player state (local player death handled by callback).
     // Same phantom-row guard as hits — a kill for a departed target must
     // not mint a stub corpse.
-    if (this.h.getPlayers().has(data.targetId)) {this.h.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });}
+    this.h.patchRemotePlayer(data.targetId, { isDead: true, health: 0 });
     this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
   }
 

@@ -3058,3 +3058,28 @@ own netDriven fleet counted correctly -- the membership print only
 lists local ids, so a field-level diff (enraged/targetId) still has no
 per-id breakdown; ball-fields diff is the follow-up lane.
 (stateDebug.ts)
+
+## 2.167 ballFields per-id diff for the ball hash
+
+The BALL DESYNC warn printed only local ids, so a field-level mismatch
+(enraged/targetId churn on an identical roster) looked exactly like a
+membership desync and could not name the culprit. stateHash now carries
+ballFields [id, variant, enraged, targetId]; on mismatch the audit diffs
+per-id (#id:missing / #id:stranded / #id:enraged / #id:tgt a/b) like the
+creature and deploy lanes. (protocol.ts, TickLoop.ts, wireIn.ts,
+NetworkManager.ts, stateDebug.ts)
+
+## 2.168 Roster single-owner rule: edges patch-or-drop, feeds create
+
+Research-confirmed (Quake/Source snapshot model, Unity Netcode: "RPCs
+are one-off events, not persisted"): entity existence belongs to the
+snapshot/roster feed; one-off events must never create persistent
+state. upsertRemotePlayer minted a stub for ANY unknown id, so every
+edge handler was a potential phantom-row source. New patchRemotePlayer
+is the edge path -- patch-in-place-or-drop, returns false for unknown
+ids. playerHit / playerKill / teamUpdate migrated; healRemoteHealth/
+Life already refused to create. Create remains exclusively on the
+membership feeds: remoteReset (gameState), tickUpdate, playerJoined,
+playerRespawn, and the snapshot audit heal -- which is now the only
+path that can mint a member from truth. The phantom-stub class is
+closed by construction. (NetworkManager.ts, wireIn.ts)

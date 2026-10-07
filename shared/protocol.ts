@@ -206,7 +206,11 @@ export type ServerMessage =
       creatureFields?: [number, string, string, boolean, string | null][];
       /** Per-deployable [id, kind, owner, team] — same purpose as
        *  creatureFields, for the deploy roster. */
-      deployFields?: [number, string, string, string][] }
+      deployFields?: [number, string, string, string][];
+      /** Per-ball [id, variant, enraged, targetId] — same purpose, for
+       *  the ball fleet (the mismatched field is often enraged/targetId
+       *  churn, not membership). */
+      ballFields?: [number, number, boolean, string | null][] }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
       /** Last inputMove seq the server consumed — the client replays its

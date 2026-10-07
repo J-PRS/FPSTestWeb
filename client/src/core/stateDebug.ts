@@ -322,7 +322,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let flagDriftStreak = 0;
   let pickupDriftStreak = 0;
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][], serverDeployFields?: [number, string, string, string][]) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][], serverDeployFields?: [number, string, string, string][], serverBallFields?: [number, number, boolean, string | null][]) => {
     hashCheckCount++;
 
     if (serverFlagHash !== undefined && ctx.world) {
@@ -451,7 +451,26 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         ballDriftStreak = 0;
       } else {
         ballDriftStreak++;
-        const detail = `server=${serverBallHash} client=${localBallHash} ids=[${[...localBalls.keys()].join(',')}]`;
+        // Membership alone isn't the signal here — enraged/targetId churn
+        // mismatches the hash on identical rosters, so diff the server's
+        // per-id fields like the creature/deploy lanes do.
+        let detail = `server=${serverBallHash} client=${localBallHash} ids=[${[...localBalls.keys()].join(',')}]`;
+        if (serverBallFields) {
+          const diffs: string[] = [];
+          for (const [id, variant, enraged, targetId] of serverBallFields) {
+            const l = localBalls.get(id);
+            if (!l) {diffs.push(`#${id}:missing`); continue;}
+            const f: string[] = [];
+            if (l.variant !== variant) {f.push(`variant ${l.variant}/${variant}`);}
+            if (l.enraged !== enraged) {f.push(`enraged`);}
+            if ((l.targetId ?? null) !== (targetId ?? null)) {f.push(`tgt ${l.targetId ?? '-'}/${targetId ?? '-'}`);}
+            if (f.length) {diffs.push(`#${id}:${f.join(',')}`);}
+          }
+          for (const id of localBalls.keys()) {
+            if (!serverBallFields.some((r) => r[0] === id)) {diffs.push(`#${id}:stranded`);}
+          }
+          if (diffs.length) {detail += ` diff=${diffs.slice(0, 6).join(' ')}`;}
+        }
         if (ballDriftStreak >= 2) {
           logger.warn(`[StateHash] BALL DESYNC tick=${tick} ${detail} (persistent across ${ballDriftStreak} checks — stranded or stale replica)`);
         } else {
