@@ -2510,3 +2510,15 @@ window reset on fresh claim, expired-first sweep keeping live keys
 throttled, and oldest-evict with no mass reset under an all-live map.
 
 ### 2.122 - end
+
+### 2.123 /client-log body pre-cap (2026-10-11)
+
+The 512KB cap only ran AFTER req.text() buffered the whole body — an
+honest giant POST paid full memory before rejection, while
+/demos/upload already refused on the declared content-length first.
+The route now checks content-length up front (lied/missing headers
+still hit the real cap after buffering). clientLogThrottle.test.ts
+pins both halves: declared-giant 413 without ever reading the body,
+lied-header still 413 on the actual bytes.
+
+### 2.123 - end

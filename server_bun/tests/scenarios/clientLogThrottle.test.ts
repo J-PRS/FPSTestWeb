@@ -4,7 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { clientLogRoute } from '../../src/clientLogs.ts';
 
-const req = () => ({ text: async () => '[WARN] probe' }) as unknown as Request;
+const req = () => ({ headers: new Headers(), text: async () => '[WARN] probe' }) as unknown as Request;
 const cors = (_b: BodyInit | null, init?: ResponseInit) => new Response(null, init);
 // Appends go to a throwaway dir — the route's default LOGS_DIR is the
 // live logs/, and 1400 probe lines per suite run drowned real warns.
@@ -26,5 +26,26 @@ describe('clientLogRoute post throttle', () => {
     for (let i = 0; i < 200; i++) await call(`10.1.${(i >> 8) & 255}.${i & 255}`);
     const stillBlocked = await call('10.9.9.9');
     expect(stillBlocked.status).toBe(429);
+  });
+
+  test('a declared-giant body is refused before it buffers', async () => {
+    // content-length alone must 413 — waiting for the real size means
+    // an honest giant already buffered into memory.
+    let read = false;
+    const giant = {
+      headers: new Headers({ 'content-length': String(600 * 1024) }),
+      text: async () => { read = true; return ''; },
+    } as unknown as Request;
+    const res = await clientLogRoute(giant, cors, '10.5.5.5', dir);
+    expect(res.status).toBe(413);
+    expect(read).toBe(false);
+
+    // A lied header still hits the real cap after buffering.
+    const liar = {
+      headers: new Headers({ 'content-length': '10' }),
+      text: async () => 'x'.repeat(600 * 1024),
+    } as unknown as Request;
+    const res2 = await clientLogRoute(liar, cors, '10.5.5.6', dir);
+    expect(res2.status).toBe(413);
   });
 });

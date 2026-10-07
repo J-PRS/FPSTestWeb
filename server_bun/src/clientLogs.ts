@@ -53,6 +53,12 @@ function postThrottleAllow(ip: string): boolean {
 export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response, ip = '', dir = LOGS_DIR): Promise<Response> {
   try {
     if (!postThrottleAllow(ip)) return cors('Too many posts', { status: 429 });
+    // Declared size first — a lied/missing header still hits the real
+    // cap below, but an honest giant never buffers into memory.
+    const contentLength = Number(req.headers.get('content-length') ?? 0);
+    if (contentLength > 512 * 1024) {
+      return cors('Too large', { status: 413 });
+    }
     const body = await req.text();
     if (body.length > 512 * 1024) {
       return cors('Too large', { status: 413 });
