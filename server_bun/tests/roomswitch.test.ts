@@ -61,6 +61,25 @@ describe('switchRoom', () => {
     expect(gameStates(ws).length).toBe(before);
   });
 
+  it('the hop cooldown refuses a second hop inside the window', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'a' }));
+    gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
+    // Second hop lands inside 1500ms — denied. Name-spam at message rate
+    // must not mint/churn rooms via roomFor.
+    gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'c' }));
+    const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
+    expect(rooms.get('b')?.players.getPlayer('p1')).toBeTruthy();
+    expect(rooms.get('c')?.players.getPlayer('p1')).toBeUndefined();
+
+    // The cooldown is per-player — someone else hops freely.
+    const ws2 = fakeWs();
+    gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'a' }));
+    gs.onMessage(ws2, JSON.stringify({ type: 'switchRoom', room: 'c' }));
+    expect(rooms.get('c')?.players.getPlayer('p2')).toBeTruthy();
+  });
+
   it('reconnect tokens survive the hop — reclaim works in the new room', () => {
     gs = new GameServer();
     const ws = fakeWs();

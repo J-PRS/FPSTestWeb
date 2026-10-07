@@ -2450,3 +2450,15 @@ fully-throwing sessionStorage through the mismatch path — warns, bails,
 no crash.
 
 ### 2.117 - end
+
+### 2.118 Room-hop cooldown pinned (2026-10-11)
+
+The 1500ms per-player hop cooldown is the only bound between a client
+and room-mint spam: without it switchRoom name-spam churns roomFor at
+message rate. It was implemented (mark-on-attempt, per-player key,
+1024-cap evictEldest) but unverified — a dropped throttled() call would
+silently reopen the lane. roomswitch.test.ts now drives the wire path:
+a second hop inside the window is refused (player stays put, no room
+mint), and a different player hops freely under the per-player key.
+
+### 2.118 - end
