@@ -144,7 +144,7 @@ export class CoolShotsPanel {
     this.coolShotsRecent.innerHTML = '';
     
     if (shots.length === 0) {
-      this.coolShotsTop.innerHTML = '<div class="cool-shot-item empty">No cool shots yet</div>';
+      this.coolShotsTop.innerHTML = '<div class="cool-shot-item empty">No best shots yet</div>';
       this.coolShotsRecent.innerHTML = '<div class="cool-shot-item empty">No recent shots</div>';
       return;
     }

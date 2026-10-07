@@ -120,7 +120,7 @@ export class CoolShotManager {
     const clipStart = shotTime - bufferBefore;
     const clipEnd = actualHitTime + bufferAfter;
     const totalClipDuration = projectileLifetime + bufferBefore + bufferAfter;
-    const desc = `Cool shot (${projectileLifetime.toFixed(2)}s air, ${totalClipDuration.toFixed(1)}s clip)`;
+    const desc = `Best shot (${projectileLifetime.toFixed(2)}s air, ${totalClipDuration.toFixed(1)}s clip)`;
 
     // Defer extraction until bufferAfter seconds have elapsed so post-hit footage is in the buffer
     this.pendingClips.push({

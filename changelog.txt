@@ -1,3 +1,4 @@
+2026-10-01 - rename Cool Shots -> Best Shots (panel title, empty state, clip description)
 2026-10-01 - cool-shot tiles: abbreviate long weapon names to initials only when meta would truncate
 2026-10-01 - cool-shot tiles: drop direct tag, keep weapon + distance + airtime
 2026-10-01 - cool-shot tiles show weapon, shot-to-hit distance, direct-hit tag (meta flows to IDB vault)
