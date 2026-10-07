@@ -1,3 +1,4 @@
+2026-10-01 - C5: verbPayload warns on a missing declared field - an emit that forgets a wire field surfaces at send time instead of nulling out
 2026-10-01 - C5: gone/update emits generate from worldModel.verbPayload - ballDie/crawlDie/deployHp/projectileDestroyed join the declared wire shape
 2026-10-01 - C5: all six spawn emits generate from worldModel.spawnPayload - crawlSpawn/deploySpawn/pickupSpawn/projectileCreated join ballSpawn on the declared wire shape
 2026-10-01 - C5: ballSpawn emit driven by worldModel spawnFields - the wire field list comes from the declaration, not a hand-built object
