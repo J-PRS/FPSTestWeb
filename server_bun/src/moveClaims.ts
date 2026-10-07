@@ -74,7 +74,7 @@ export class MoveClaims {
         player.lastPosCheckPos = { ...simTruth.pos };
         this.muteJudges(player, playerId, now);
       }
-      player.rotation = { ...msg.rotation };
+      player.rotation.yaw = msg.rotation.yaw; player.rotation.pitch = msg.rotation.pitch;
       player.lastSeen = now;
       if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
       player.hasReceivedPosition = true;
@@ -113,12 +113,17 @@ export class MoveClaims {
       player.lastPosCheckPos = { ...msg.position };
       return true;
     }
+    // Field-wise anchor update — plausible() runs per position report
+    // (~20Hz/player), a spread per call is steady GC churn on the
+    // hottest ingest path (same class as §2.63).
     const dx = msg.position.x - player.lastPosCheckPos.x;
     const dy = msg.position.y - player.lastPosCheckPos.y;
     const dz = msg.position.z - player.lastPosCheckPos.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const speed = dist / dt;
-    player.lastPosCheckPos = { ...msg.position };
+    player.lastPosCheckPos.x = msg.position.x;
+    player.lastPosCheckPos.y = msg.position.y;
+    player.lastPosCheckPos.z = msg.position.z;
     // Reject only genuine impossibilities: >50m in one report, or speed
     // beyond any legit combination of skiing + knockback + jetpack.
     // The window has to be a REAL window — position reports stream at

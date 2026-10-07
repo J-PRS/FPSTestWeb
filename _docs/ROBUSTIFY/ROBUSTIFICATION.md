@@ -233,6 +233,14 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.64 Field-wise anchors in moveClaims (2026-10-07)
+
+Class 10, same shape as §2.63. `plausible()` spread-allocated
+`lastPosCheckPos` on EVERY position report (~20Hz/player) and the
+authority path spread `player.rotation` per report — field-wise
+writes now. Rare paths (teleport/resync/correction commits) keep
+their spreads for readability.
+
 ### 2.63 In-place writes on the position ingest (2026-10-07)
 
 Class 10 (future-cost debt). `PlayerManager.updatePosition` spread-
