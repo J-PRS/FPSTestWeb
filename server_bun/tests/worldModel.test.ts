@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { WORLD_MODEL } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, CLIENT_INTENTS } from '../../shared/worldModel.ts';
 import { encodeBallSegment, decodeBallSegment, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame, WIRE_TICK_V3 } from '../../shared/wire.ts';
 import type { WireTickPlayer } from '../../shared/wire.ts';
 
@@ -109,6 +109,28 @@ describe('world model <-> protocol conformance', () => {
     for (const f of WORLD_MODEL.ball!.updateFields!) {
       expect(back as unknown as Record<string, unknown>, `decoded segment missing '${f.name}'`)
         .toHaveProperty(f.name);
+    }
+  });
+
+  it('every ClientMessage union member has a declared intent — and its fields exist', () => {
+    // Slice just the ClientMessage union, split members on `| { type:` —
+    // members span lines, so a line scan can't isolate them.
+    const start = PROTOCOL.indexOf('export type ClientMessage');
+    const end = PROTOCOL.indexOf('export interface TickUpdatePlayer');
+    const union = PROTOCOL.slice(start, end);
+    const members = union.split(/\| \{ type: '/).slice(1);
+    for (const m of members) {
+      const type = m.slice(0, m.indexOf("'"));
+      const fields = CLIENT_INTENTS[type];
+      expect(fields, `ClientMessage '${type}' has no CLIENT_INTENTS declaration`).toBeDefined();
+      for (const f of fields ?? []) {
+        expect(m.includes(`${f.name}:`) || m.includes(`${f.name}?:`), `'${type}' union member carries no '${f.name}' field — declaration drifted`).toBe(true);
+      }
+    }
+    // And no declared intent names a type the union dropped.
+    const types = new Set(members.map((m) => m.slice(0, m.indexOf("'"))));
+    for (const t of Object.keys(CLIENT_INTENTS)) {
+      expect(types.has(t), `CLIENT_INTENTS declares '${t}' which no ClientMessage member carries`).toBe(true);
     }
   });
 

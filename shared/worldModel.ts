@@ -512,6 +512,55 @@ export function checkPacket(
   check(msg);
 }
 
+/** Inbound intent declarations — client→server required fields per
+ *  ClientMessage union member. Optional union fields are declared with
+ *  `absent` for documentation; only a field with NO absent marker warns
+ *  when missing, matching the emit-side contract. A hostile or buggy
+ *  client that drops a required field warns once at dispatch instead of
+ *  the handler reading `undefined.x` five frames later. */
+export interface IntentFieldDecl { name: string; absent?: unknown }
+export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
+  join: [{ name: 'playerId' }, { name: 'token', absent: null }, { name: 'room', absent: null }, { name: 'mode', absent: null }, { name: 'perk', absent: null }, { name: 'armorClass', absent: null }, { name: 'name', absent: null }, { name: 'map', absent: null }, { name: 'bots', absent: null }, { name: 'unlisted', absent: null }, { name: 'transport', absent: null }, { name: 'resumeSeq', absent: null }],
+  position: [{ name: 'position' }, { name: 'rotation' }, { name: 'velocity' }, { name: 'seq', absent: null }, { name: 'inputSeq', absent: null }, { name: 'ping', absent: null }],
+  teleport: [{ name: 'position' }, { name: 'rotation' }, { name: 'velocity' }],
+  ping: [{ name: 'timestamp' }],
+  clientStats: [{ name: 'fps' }, { name: 'jsMs' }, { name: 'ping' }, { name: 'loss' }, { name: 'jitter' }],
+  chat: [{ name: 'text' }, { name: 'team', absent: null }, { name: 'vgs', absent: null }],
+  aoeShot: [{ name: 'position' }, { name: 'weaponType', absent: null }, { name: 'excludeTargetId', absent: null }, { name: 'projectileId', absent: null }, { name: 'airtime', absent: null }, { name: 'power', absent: null }, { name: 'directHit', absent: null }, { name: 'shotId', absent: null }],
+  shotFired: [{ name: 'weaponType', absent: null }, { name: 'dir', absent: null }, { name: 'pos', absent: null }, { name: 'shotId', absent: null }],
+  jump: [{ name: 'position' }],
+  jetpack: [{ name: 'position' }],
+  inputMove: [{ name: 'input' }, { name: 'rotation' }, { name: 'seq', absent: null }],
+  projectileDestroy: [{ name: 'projectileId' }, { name: 'shotId', absent: null }],
+  environmentDamage: [{ name: 'amount' }, { name: 'attacker', absent: null }, { name: 'claimSeq', absent: null }],
+  heal: [{ name: 'amount' }, { name: 'claimSeq', absent: null }],
+  creatureHit: [{ name: 'id' }, { name: 'damage' }, { name: 'kx', absent: null }, { name: 'ky', absent: null }, { name: 'kz', absent: null }, { name: 'claimSeq', absent: null }],
+  crawlerHit: [{ name: 'id' }, { name: 'damage' }, { name: 'kx', absent: null }, { name: 'ky', absent: null }, { name: 'kz', absent: null }, { name: 'claimSeq', absent: null }],
+  deploy: [{ name: 'kind' }, { name: 'position' }, { name: 'claimSeq', absent: null }],
+  repair: [{ name: 'targetId' }, { name: 'claimSeq', absent: null }],
+  skillUse: [{ name: 'claimSeq', absent: null }],
+  respawn: [{ name: 'hold', absent: null }],
+  throwFlag: [],
+  snapshotRequest: [],
+  resync: [],
+  classUpdate: [{ name: 'armorClass' }],
+  perkUpdate: [{ name: 'perk' }],
+  switchRoom: [{ name: 'room', absent: null }, { name: 'mode', absent: null }, { name: 'map', absent: null }, { name: 'bots', absent: null }, { name: 'unlisted', absent: null }],
+};
+
+/** Inbound twin of checkPacket: required intent fields missing from a
+ *  client packet warn at dispatch. Message types with no declaration
+ *  stay unchecked (e.g. a union member added before its intent lands). */
+export function checkIntent(type: string, msg: Record<string, unknown>): void {
+  const fields = CLIENT_INTENTS[type];
+  if (!fields) return;
+  for (const f of fields) {
+    if (!(f.name in msg) && f.absent === undefined) {
+      console.warn(`[worldModel] inbound intent '${type}' missing required field '${f.name}'`);
+    }
+  }
+}
+
 /** Wire-verb → (kind, verb) index for inbound checking — the dispatcher
  *  looks a message type up here instead of mapping verbs by hand. */
 const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: string }>();

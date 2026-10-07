@@ -17,7 +17,7 @@ import type { PickupKind } from '../../shared/pickups.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
-import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -548,6 +548,7 @@ export class MessageHandler {
     // (inputMove in authority mode) starves the idle reaper mid-match.
     player.lastSeen = wallNow();
 
+    checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const handler = WIRE[msg.type]?.handle as ((h: MessageHandler, id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
       this.hb('unhandled');
