@@ -7,6 +7,7 @@ import { CONFIG } from './config.ts';
 import { simNow } from './simClock.ts';
 import { logger } from './logger.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { wallNow } from './wallClock.ts';
 
@@ -78,16 +79,14 @@ export class RespawnManager {
     // divergence against the reseated anchors. Same drain window a
     // correction gets.
     player.correctionGraceUntil = graceClock + CONFIG.reportGraceMs;
-    this.broadcast({
-      type: 'playerRespawn',
-      playerId,
+    // A banked classUpdate may have just applied — remotes rebuild
+    // the silhouette off armorClass rather than learning it on next join.
+    this.broadcast(eventPayload(WORLD_MODEL.player!, 'playerRespawn', 'playerId', playerId, {
       internalId: player.internalId,
       position: result.position,
       rotation: result.rotation,
-      // A banked classUpdate may have just applied — remotes rebuild
-      // the silhouette off this rather than learning it on next join.
       armorClass: result.armorClass,
-    });
+    }) as ServerMessage);
   }
 
   /** Reconnect restores state verbatim — including isDead. If the

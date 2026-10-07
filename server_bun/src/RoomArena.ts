@@ -7,6 +7,7 @@
  * inside the arena).
  */
 import type { Vec3 } from './types.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 
 const PUSH_INTERVAL_S = 0.5;   // how often an offender gets re-shoved
@@ -42,9 +43,9 @@ export class RoomArena {
       // same impulse or its trajectory diverges from the client's real one.
       const inv = 1 / (d || 1);
       const center: Vec3 = { x: cx, y: p.position.y, z: cz };
-      this.room.connections.sendToPlayer(p.id, {
-        type: 'knockback', targetId: p.id, position: center, force: PUSH_FORCE, pull: true,
-      } as Parameters<Room['broadcast']>[0]);
+      this.room.connections.sendToPlayer(p.id, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', p.id, {
+        position: center, force: PUSH_FORCE, pull: true,
+      }) as Parameters<Room['broadcast']>[0]);
       this.room.moveSim.applyImpulse(p.id, { x: -dx * inv * PUSH_FORCE, y: PUSH_FORCE * 0.3, z: -dz * inv * PUSH_FORCE });
       this.outsideSince.set(p.id, now + PUSH_INTERVAL_S);
     }

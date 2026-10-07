@@ -1,5 +1,6 @@
 import type { ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN } from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
@@ -132,7 +133,16 @@ export class BlastRunner {
    *  clients self-predict their own displacement and would double-apply. */
   private splashTargets(ctx: BlastCtx, playerId: string, excludeTargetId: string | null | undefined): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
-      if (targetId === excludeTargetId || target.isDead) continue;
+      if (target.isDead) continue;
+      // The direct-hit victim already paid direct damage through the hit
+      // claim — but the blast still launches them: every client predicted
+      // the shove on everyone in radius, so skipping the impulse left
+      // server-owned bodies unmoved (bots snapped back from the predicted
+      // arc) and a knocked human's reports read as divergence.
+      if (targetId === excludeTargetId) {
+        this.splashOne(ctx, targetId, target, false, undefined, true);
+        continue;
+      }
       this.splashOne(ctx, targetId, target, targetId === playerId);
     }
   }
@@ -179,7 +189,7 @@ export class BlastRunner {
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
-  splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number): void {
+  splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
     const tpos = rewindPos(target, clampPing(ctx.ping));
@@ -197,14 +207,22 @@ export class BlastRunner {
     // at t≈0 is stepped past rather than counted.
     if (this.h.solids.length && this.blastBlocked(ctx.pos, tpos)) return;
 
+    const impulseMag = Math.min(
+      aoeImpulseT1At(ctx.impulse, ctx.pos, tpos, ctx.radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
+      BLAST_IMPULSE_MAX);
+    // impulseOnly: the direct-hit victim — damage was paid through the
+    // hit claim, but the blast displacement is still owed (wire notify +
+    // shadow impulse + forceSend, same as a splash shove).
+    if (impulseOnly) {
+      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+      return;
+    }
+
     // shared/combat.ts — same formula the client predicts with; beam ticks
     // pass a flat figure (the ramp already IS the falloff)
     const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius, ctx.scales);
     if (damage <= 0) return;
 
-    const impulseMag = Math.min(
-      aoeImpulseT1At(ctx.impulse, ctx.pos, tpos, ctx.radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
-      BLAST_IMPULSE_MAX);
     // Humans self-predict their own displacement — server only shoves
     // the self-target when it's a bot (server velocity truth).
     if (!shoveOnly || target.isBot) {
@@ -269,10 +287,9 @@ export class BlastRunner {
     target.velocity.z += dv.z;
     this.h.deps.emit?.({ type: 'impulse', playerId: targetId, dv });
     target.forceSendUntil = wallNow() + FORCE_SEND_MS;
-    this.h.sendToPlayer(targetId, {
-      type: 'knockback', targetId, position: pos, force: impulseMag,
-      pull: pull || undefined,
-    });
+    this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
+      position: pos, force: impulseMag, pull: pull || undefined,
+    }) as ServerMessage);
   }
 
   /** The charge pop itself — a Lightning-stat blast scaled by the amount

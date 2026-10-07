@@ -309,6 +309,21 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       teamUpdate: [
         { name: 'team', channel: 'edge' },
       ],
+      knockback: [
+        { name: 'position', channel: 'sim' },
+        { name: 'force', channel: 'sim' },
+        { name: 'pull', channel: 'edge', absent: null },
+      ],
+      playerRespawn: [
+        { name: 'internalId', channel: 'edge' },
+        { name: 'position', channel: 'sim' },
+        { name: 'rotation', channel: 'sim' },
+        { name: 'armorClass', channel: 'edge', absent: null },
+      ],
+      teleport: [
+        { name: 'position', channel: 'sim' },
+        { name: 'velocity', channel: 'sim' },
+      ],
     },
     // tickUpdate record — id rides 'playerId'; the binary tick frame
     // packs the same fields.

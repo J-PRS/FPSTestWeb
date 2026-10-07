@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
@@ -226,7 +227,7 @@ export class MoveClaims {
     player.history.length = 0;
     pushRewindSample(player, now);
     // Relay so observers snap instead of interpolating across the gap
-    this.h.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
+    this.h.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', playerId, { position: msg.position, velocity: msg.velocity }) as ServerMessage, playerId);
   }
 
   /** Resync claim (alt-tab catch-up): the client is about to snap onto
