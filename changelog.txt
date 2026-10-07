@@ -1,3 +1,4 @@
+2026-10-01 - clip feed: true filmstrip drag - live canvas tracks as the second pane so both clips move together (was poster-only slide)
 2026-10-01 - robustify 2.142: p2p signalling - parse signal frame inside guard; malformed frame no longer aborts the handshake via unhandled rejection
 2026-10-01 - robustify 2.141: demo upload - bounds-checked header parse (malformed -> 400, no internal echo); reject non-finite/absurd lifetime that would pin index top
 2026-10-01 - clip feed: two-pane pager - outgoing frame snapshots to a 2D poster while the live canvas mounts the neighbor clip at frame 0 mid-drag (TikTok-style); wheel/arrow transitions use the same path

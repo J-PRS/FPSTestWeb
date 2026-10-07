@@ -133,18 +133,35 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     poster.style.display = 'block';
     poster.style.transition = 'none';
     poster.style.transform = 'translateY(0px)';
+    // Incoming pane: the live canvas parks just offscreen on the neighbor's
+    // side, then the whole strip translates — both clips move together.
+    d.canvas.style.transition = 'none';
+    d.canvas.style.transform = 'translateY(0px)';
+  }
+
+  // off = finger travel toward the neighbor (+ up/next, - down/prev).
+  function trackPanes(off: number, dir: 1 | -1): void {
+    poster.style.transform = `translateY(${-off}px)`;
+    d.canvas.style.transform = `translateY(${dir * window.innerHeight - off}px)`;
   }
 
   function hidePoster(): void {
     poster.style.display = 'none';
     poster.style.transform = '';
     poster.style.transition = '';
+    d.canvas.style.transform = '';
+    d.canvas.style.transition = '';
   }
 
-  function slidePoster(to: string, ms: number): Promise<void> {
+  // Spring/landing: both panes ease to their resting offsets together.
+  function slidePanes(dir: 1 | -1, commit: boolean, ms: number): Promise<void> {
     return new Promise((resolve) => {
-      poster.style.transition = `transform ${ms}ms ease-out`;
-      poster.style.transform = `translateY(${to})`;
+      const vh = window.innerHeight;
+      const ease = `transform ${ms}ms ease-out`;
+      poster.style.transition = ease;
+      d.canvas.style.transition = ease;
+      poster.style.transform = `translateY(${commit ? -dir * vh : 0}px)`;
+      d.canvas.style.transform = `translateY(${commit ? 0 : dir * vh}px)`;
       setTimeout(resolve, ms);
     });
   }
@@ -230,7 +247,8 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     const e = entries[wrapIdx(index + dir)]!;
     const data = await resolveClip(e);
     if (data) {mountPaused(data);}
-    await slidePoster(`${dir * -104}%`, SLIDE_MS);
+    trackPanes(0, dir);
+    await slidePanes(dir, true, SLIDE_MS);
     hidePoster();
     play(index + dir, data);
     advancing = 0;
@@ -338,7 +356,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     }
     if (drag.mounted) {
       const off = Math.max(-window.innerHeight, Math.min(window.innerHeight, dy));
-      poster.style.transform = `translateY(${-off}px)`;
+      trackPanes(off, drag.dir);
     }
   }, { passive: true });
   window.addEventListener('touchend', (ev) => {
@@ -359,7 +377,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       advancing = dir;
       const ni = d0.ni;
       void (async () => {
-        await slidePoster(`${dir * -104}%`, SLIDE_MS);
+        await slidePanes(dir, true, SLIDE_MS);
         hidePoster();
         const data = await d0.ready;
         play(ni, data);
@@ -368,7 +386,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     } else {
       // Spring back — restore the outgoing clip where the drag found it.
       void (async () => {
-        await slidePoster('0px', SLIDE_MS);
+        await slidePanes(d0.dir, false, SLIDE_MS);
         hidePoster();
         const e = current();
         const data = e ? await resolveClip(e) : null;
