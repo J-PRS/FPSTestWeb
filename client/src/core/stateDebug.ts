@@ -362,10 +362,13 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     }
 
     if (serverDeployHash !== undefined && ctx.netDeployables) {
-      const localId = networkManager.getLocalPlayerId();
       const local = new Map<number, { kind: string; owner: string; team: string }>();
       for (const [id, d] of ctx.netDeployables()) {
-        if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? localId ?? '', team: d.team ?? ctx.world?.localTeam ?? '' });}
+        // Hash inputs must mirror the server's semantics exactly — it
+        // feeds raw fields with '' for missing, never fabricated values:
+        // a teamless base asset hashed localTeam client-side vs ''
+        // server-side is a permanent false desync (the soak's ids=[2]).
+        if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? '', team: d.team ?? '' });}
       }
       const localDeployHash = computeDeployHash(local);
       if (localDeployHash === serverDeployHash) {

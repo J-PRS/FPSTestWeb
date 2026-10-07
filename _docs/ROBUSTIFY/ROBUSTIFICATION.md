@@ -2913,3 +2913,16 @@ NaN dt was fatal the same way. Both loops now reset a non-finite
 netAcc to 0 (self-heal, one bad edge costs at most a skipped window),
 and the sk edge is gated by Number.isFinite before touching the
 accumulator. (netMelee.ts, netCrawlers.ts)
+
+## 2.156 Deploy-hash false desync: fabricated hash inputs
+
+The soak's DEPLOY DESYNC persistent on ids=[2] was not a lost edge --
+it was a hash-input asymmetry. The server feeds raw fields with ''
+for missing (teamless base assets: owner 'base', team undefined via
+teamOf -> ''), while the client fabricated d.owner ?? localId and
+d.team ?? localTeam. A teamless seeded asset (the low ids are the
+seeded base set) hashed 'alpha' client-side vs '' server-side forever.
+Fabricated inputs can never match the server's real fields -- strictly
+a false-positive generator. Client now hashes d.owner ?? '' / d.team ??
+'' mirroring the server exactly; missing data hashes honestly as ''.
+(stateDebug.ts)
