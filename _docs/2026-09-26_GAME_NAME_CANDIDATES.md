@@ -43,7 +43,7 @@ game fills with meaning beats an epic title.
 | Name | Meaning | Notes |
 |------|---------|-------|
 | **Couloir** | steep mountain chute you ski down | On-theme like Katabatic; skiers know it. Maybe the winner. |
-| **Hoodoo** | desert rock spire + "a curse" | Double-loaded, memorable mouthfeel |
+| ~~Hoodoo~~ | desert rock spire + "a curse" | DEAD 2026-10-01: it's not just 'a curse' - it's the African-diaspora folk-magic tradition (voodoo's cousin); loaded/appropriation-adjacent baggage |
 | ~~Katabatic~~ | gravity-driven downslope wind; also a Tribes map | DEAD 2026-10-01: it IS Tribes' most-played map (T2 original + Ascend remake) - naming the game after their crown jewel reads as squatting, not homage |
 | **Inselberg** | lone mountain rising from a plain | German; perfect for a desert map |
 | **Haboob** | Arabic: the giant dust wall that eats cities | Funny but legit; .io energy |
@@ -175,7 +175,7 @@ couloir/hoodoo/katabatic/inselberg; .dev taken for all checked.
 Scratch list folded in from `_scratch/names.md`; katantē(s)/orthobamōn
 fail the diacritics filter as written but ASCII forms stay listed.
 
-Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo promoted to top pick.
+Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo struck per JP 2026-10-01 (folk-magic baggage); ranking: Couloir > Syrtis > Anabatic > Sukhovey/Inselberg/Jebel.
 
 ### Anabatic check 2026-10-01
 
