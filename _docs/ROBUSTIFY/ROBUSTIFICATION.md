@@ -2497,3 +2497,16 @@ denies the hop (SwitchHost gained specRooms). specDepart.test.ts pins
 both spectator refusals; roomswitch.test.ts pins the hop denial.
 
 ### 2.121 - end
+
+### 2.122 windowAllow primitive pinned (2026-10-11)
+
+The sliding-window throttle behind /join, /demos/upload, /client-log
+and the WS handshake had no direct coverage — endpoints pin the
+5/min behavior but not the subtle part: under cap pressure it sweeps
+EXPIRED windows first, then evicts oldest — a wholesale clear() would
+grant every live flooder a fresh budget at once (the amnesty bug the
+comment warns about). windowLimit.test.ts pins all three invariants:
+window reset on fresh claim, expired-first sweep keeping live keys
+throttled, and oldest-evict with no mass reset under an all-live map.
+
+### 2.122 - end
