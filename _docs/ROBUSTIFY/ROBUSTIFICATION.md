@@ -2592,3 +2592,28 @@ The pin now seeds and asserts every delegated map too (26 structures).
 Full map census: all remaining keyed maps audited clean (TeamId-keyed
 senses maps bounded by team count; groundMemo bounded by stand count).
 ### 2.130 - end
+
+### 2.131 - moveJudge young-gap defer: correct, do not starve
+
+Commit 00bc1f32 deferred the WHOLE judge (compare, divergence banking,
+and correction emit) while an uncovered input-seq gap was younger than
+INPUT_GAP_DEFER_MS. Deferring strike banking is the right instinct - a
+producing inputMove still in flight cannot be honestly judged - but
+deferring the correction itself starved convergence: a legitimately
+diverging client inside the window got no snap for up to 600ms.
+
+Now the gate splits the two: gapYoung reports still compare and still
+emit corrections (enforcement preserved, corrections anchor at
+lastInputSeq so the in-flight input replays client-side), but
+noteDivergence/noteSevere bank nothing until the edge is judged lost
+or recovered.
+
+Bisect note for the parked soakChaos regression: the defer was NOT the
+mover - pre-WIP gate code on HEAD deps produces the identical tail-err
+p95 (8.08). Commit 00bc1f32 itself measured 10.68; later commits
+(likely 2.97's respawn-timer double-fire fix) recovered it to 8.08.
+The residual vs the <5 bound is ~10% of the tail sitting in
+post-reconnect recovery windows (dropEveryMs=4000/outageMs=1200),
+elevated since the respawn-rule/struct-kits era - tracked as its own
+follow-up, not a defer problem.
+### 2.131 - end

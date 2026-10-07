@@ -89,8 +89,9 @@ export interface Shadow {
    *  a transient gap is just queue latency; a sustained one is a lost
    *  input edge (hard-tolerance trip). */
   gapStreak: number;
-  /** Wall time the current gapStreak began — raw judging resumes once
-   *  an uncovered gap outlives INPUT_GAP_DEFER_MS. */
+  /** Wall time the current gapStreak began — strike banking resumes
+   *  once an uncovered gap outlives INPUT_GAP_DEFER_MS (corrections
+   *  never stop; only divergences/severe hits defer). */
   gapAt: number;
   /** Consecutive reports deferred by the pending-coverage gate. Sparse
    *  edges defer one report while the producing inputMove sits parked;
@@ -193,19 +194,21 @@ export class MoveJudge {
     // RECEIVED is different: its input is lost (inputSync recovers it)
     // or forged to dodge the journal — judging it raw is the only
     // authority-preserving answer.
+    let gapYoung = false;
     if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
       const parked = reportInputSeq <= (sh.pending?.seq ?? 0);
       // Uncovered-but-young gap: the producing inputMove is plausibly
       // still in flight — join-burst clients push inputs on a change/
       // heartbeat lane slower than the report cadence (seen: netbots at
       // 30Hz burn gapStreak 3 in ~100ms, well inside their 400ms input
-      // heartbeat), and raw judging then banks teleport-scale strikes on
-      // pure queue latency. Defer for the gap window; a sustained gap
-      // (inputSync already fired, edge never recovered) resumes raw
-      // judging — a forger can't hold the frontier past it, and the
-      // window itself bounds how long corrections can be starved.
-      const young = !parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS;
-      if (parked ? ++sh.deferStreak < 3 : young) return null;
+      // heartbeat). Judging still runs (corrections must flow — starving
+      // them for the window is what let honest drift crest unboundedly),
+      // but nothing is BANKED: divergences/severe strikes wait until the
+      // edge is judged lost. A sustained gap past the window resumes
+      // banking — a forger can't hold the frontier past it, and the
+      // window itself bounds strike starvation.
+      gapYoung = !parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS;
+      if (parked && ++sh.deferStreak < 3) return null;
     } else {
       sh.deferStreak = 0;
     }
@@ -235,7 +238,11 @@ export class MoveJudge {
     const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol;
     if (dist <= tol) return null;
 
-    this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);
+    // Young-gap reports get corrected like any over-tolerance drift but
+    // bank nothing — the producing input may still be in flight, and a
+    // strike counted on a phantom gap is a false positive the client
+    // can't defend against.
+    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);
     const now = wallNow();
     if (now - sh.lastCorrection < this.host.correctMs()) return null;
     sh.lastCorrection = now;
