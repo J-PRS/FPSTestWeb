@@ -29,6 +29,10 @@ export interface WorldKindDecl {
   verbs: { spawn: string; update: string; gone: string };
   /** Lifecycle/mirrored fields a replica MUST agree on — hashed + diffed. */
   fields: KindFieldDecl[];
+  /** Spawn payload shape — the full field list a spawn message carries,
+   *  in wire order. Declared so the emit can't add a field the client's
+   *  spawn handler doesn't consume. */
+  spawnFields?: KindFieldDecl[];
   /** Streamed motion fields — the shared sim replays them, so they are
    *  presence-checked only (a stranded replica), never value-diffed. */
   simFields: KindFieldDecl[];
@@ -42,6 +46,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'variant', channel: 'edge' },
       { name: 'enraged', channel: 'edge' },
       { name: 'targetId', channel: 'edge' },
+    ],
+    spawnFields: [
+      { name: 'variant', channel: 'edge' },
+      { name: 'colorIdx', channel: 'edge' },
+      { name: 'position', channel: 'sim' },
+      { name: 'velocity', channel: 'sim' },
+      { name: 'targetId', channel: 'edge' },
+      { name: 'tp', channel: 'edge' },
+      { name: 't', channel: 'sim' },
     ],
     simFields: [
       { name: 'position', channel: 'sim' },

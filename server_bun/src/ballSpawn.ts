@@ -6,6 +6,7 @@
  * same aim point.
  */
 import { type SimBall, type SimVec, type BallVariant, makeSimBall } from '../../shared/ballSim.ts';
+import { WORLD_MODEL } from '../../shared/worldModel.ts';
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import { STATUS, shootRevealed } from '../../shared/status.ts';
 import { simNow } from './simClock.ts';
@@ -104,13 +105,19 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   h.retargetAcc.set(b.id, -RETARGET_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
   h.resyncAcc.set(b.id, -RESYNC_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
   h.balls.set(b.id, b);
-  h.broadcast({
-    type: 'ballSpawn', id: b.id, variant: b.variant, colorIdx: b.colorIdx,
+  // The payload's field names come from the declaration — adding a wire
+  // field means adding it to the table, so a spawn can't drift a key the
+  // client never consumes.
+  const spawnMsg: Record<string, unknown> = { type: 'ballSpawn', id: b.id };
+  const fieldVals: Record<string, unknown> = {
+    variant: b.variant, colorIdx: b.colorIdx,
     position: { x: b.x, y: b.y, z: b.z },
     velocity: { x: b.vx, y: b.vy, z: b.vz },
     targetId: b.targetId, tp: h.targetSnap(b),
     t: h.simTime,
-  });
+  };
+  for (const f of WORLD_MODEL.ball!.spawnFields!) spawnMsg[f.name] = fieldVals[f.name];
+  h.broadcast(spawnMsg as ServerMessage);
   return b;
 }
 
