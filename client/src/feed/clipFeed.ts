@@ -104,45 +104,56 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // Bumped by play() so stale auto-advance/watchdog timers aimed at the
   // previous clip can't act on the current one.
   let clipGen = 0;
-  // Finger-tracking drag state — the neighbor mounts at frame 0 under a
-  // poster of the outgoing frame; the ring buffer keeps the last ~120ms
+  // Finger-tracking drag state — the live canvas stays on the OUTGOING
+  // clip the whole gesture (it keeps playing, mid-slide included); the
+  // poster is the incoming pane. The ring buffer keeps the last ~120ms
   // of samples for flick velocity.
   let drag: {
     startY: number;
     samples: { t: number; y: number }[];
     mounted: boolean; dir: 1 | -1; ni: number;
-    savedT: number; wasPlaying: boolean;
     ready: Promise<DemoFile | null> | null;
   } | null = null;
 
   // ---- Two-pane pager ----
-  // TikTok mounts the neighbor's real first frame inside the drag; a
-  // single WebGL canvas can't hold two clips, so the outgoing frame is
-  // snapshotted to a 2D poster and the live canvas becomes the incoming
-  // pane as soon as the drag registers (loaded at frame 0, paused).
+  // A single WebGL canvas can't render two clips, so the pane roles are
+  // fixed: canvas = outgoing (live, translating as it exits), poster =
+  // incoming — a meta placeholder during the drag, then the real paused
+  // frame painted on it once the commit mounts the clip.
   const poster = document.createElement('canvas');
   poster.id = 'clipfeed-poster';
   document.body.appendChild(poster);
   const pctx = poster.getContext('2d')!;
 
-  function snapPoster(): void {
-    d.renderNow?.();
+  // Placeholder card for the incoming pane — a real frame would require
+  // swapping the world mid-drag, which is exactly the mount hitch the
+  // deferred-mirror design avoids. Meta reads like the feed's own card.
+  function paintPlaceholder(e: CoolShotEntry): void {
     poster.width = d.canvas.width;
     poster.height = d.canvas.height;
-    pctx.drawImage(d.canvas, 0, 0);
+    const w = poster.width, h = poster.height;
+    pctx.fillStyle = '#0a0e12';
+    pctx.fillRect(0, 0, w, h);
+    pctx.textAlign = 'center';
+    pctx.fillStyle = 'rgba(255,255,255,0.85)';
+    pctx.font = `${Math.round(h * 0.045)}px monospace`;
+    pctx.fillText(e.description || 'Best shot', w / 2, h / 2 - h * 0.03, w * 0.9);
+    const bits: string[] = [];
+    if (e.weapon) bits.push(e.weapon);
+    if (e.distance) bits.push(`${Math.round(e.distance)}m`);
+    bits.push(`${e.projectileLifetime.toFixed(2)}s air`);
+    pctx.fillStyle = 'rgba(120,200,255,0.8)';
+    pctx.font = `${Math.round(h * 0.032)}px monospace`;
+    pctx.fillText(bits.join('  ·  '), w / 2, h / 2 + h * 0.03, w * 0.9);
     poster.style.display = 'block';
     poster.style.transition = 'none';
-    poster.style.transform = 'translateY(0px)';
-    // Incoming pane: the live canvas parks just offscreen on the neighbor's
-    // side, then the whole strip translates — both clips move together.
     d.canvas.style.transition = 'none';
-    d.canvas.style.transform = 'translateY(0px)';
   }
 
   // off = finger travel toward the neighbor (+ up/next, - down/prev).
   function trackPanes(off: number, dir: 1 | -1): void {
-    poster.style.transform = `translateY(${-off}px)`;
-    d.canvas.style.transform = `translateY(${dir * window.innerHeight - off}px)`;
+    d.canvas.style.transform = `translateY(${-off}px)`;
+    poster.style.transform = `translateY(${dir * window.innerHeight - off}px)`;
   }
 
   function hidePoster(): void {
@@ -160,8 +171,8 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       const ease = `transform ${ms}ms ease-out`;
       poster.style.transition = ease;
       d.canvas.style.transition = ease;
-      poster.style.transform = `translateY(${commit ? -dir * vh : 0}px)`;
-      d.canvas.style.transform = `translateY(${commit ? 0 : dir * vh}px)`;
+      d.canvas.style.transform = `translateY(${commit ? -dir * vh : 0}px)`;
+      poster.style.transform = `translateY(${commit ? 0 : dir * vh}px)`;
       setTimeout(resolve, ms);
     });
   }
@@ -172,18 +183,6 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // `advancing` with the poster frozen over the feed.
   const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> =>
     dm.coolShotMgr.resolveClipData(e).catch(() => null);
-
-  // Neighbor parked at frame 0 — real pixels under the outgoing poster.
-  function mountPaused(data: DemoFile): boolean {
-    try {
-      dm.onPlaybackStart?.();
-      dm.player.load(data);
-      dm.player.seek(0);
-      dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
-      dm.setMode('paused');
-      return true;
-    } catch { return false; }
-  }
 
   function mountPlay(data: DemoFile): boolean {
     try {
@@ -250,18 +249,28 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     if (nxt?.filename) {void dm.coolShotMgr.prefetchClip(nxt.filename);}
   }
 
+  // Shared commit tail: slide the playing clip out, swap the canvas to
+  // the new clip behind the covering poster, then reveal.
+  async function commitAdvance(dir: 1 | -1, ni: number, ready: Promise<DemoFile | null>): Promise<void> {
+    await slidePanes(dir, true, SLIDE_MS);
+    // Canvas lands at 0 behind the placeholder poster — invisible swap.
+    d.canvas.style.transition = 'none';
+    d.canvas.style.transform = '';
+    const data = await ready;
+    play(ni, data);
+    // Let one real frame render beneath the placeholder before reveal.
+    requestAnimationFrame(() => hidePoster());
+  }
+
   async function go(dir: 1 | -1): Promise<void> {
     if (entries.length === 0 || advancing) {return;}
     advancing = dir;
-    snapPoster();
-    dm.player.pause();
-    const e = entries[wrapIdx(index + dir)]!;
-    const data = await resolveClip(e);
-    if (data) {void mountPaused(data);} // a failed mount just means no parked frame
-    trackPanes(0, dir);
-    await slidePanes(dir, true, SLIDE_MS);
-    hidePoster();
-    play(index + dir, data);
+    const ni = wrapIdx(index + dir);
+    const e = entries[ni]!;
+    paintPlaceholder(e);
+    poster.style.transform = `translateY(${dir * window.innerHeight}px)`;
+    d.canvas.style.transform = 'translateY(0px)';
+    await commitAdvance(dir, ni, resolveClip(e));
     advancing = 0;
   }
 
@@ -338,7 +347,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     drag = {
       startY: ev.touches[0]!.clientY,
       samples: [{ t: performance.now(), y: ev.touches[0]!.clientY }],
-      mounted: false, dir: 1, ni: index, savedT: 0, wasPlaying: false, ready: null,
+      mounted: false, dir: 1, ni: index, ready: null,
     };
   }, { passive: true });
   window.addEventListener('touchmove', (ev) => {
@@ -347,28 +356,16 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     drag.samples.push({ t: performance.now(), y });
     if (drag.samples.length > 8) {drag.samples.shift();}
     const dy = drag.startY - y; // + = swiping up = next clip
-    // Mount the neighbor on first meaningful travel — its frame-0 tracks
-    // in with the finger, like TikTok's pager, instead of sliding blank.
+    // Arm the neighbor on first meaningful travel — its placeholder card
+    // tracks in with the finger; the real frame lands at commit. The
+    // outgoing clip never pauses (one GL canvas = only it can animate).
     if (!drag.mounted && Math.abs(dy) > 12) {
       drag.mounted = true;
       drag.dir = dy >= 0 ? 1 : -1;
       drag.ni = wrapIdx(index + drag.dir);
-      drag.savedT = dm.player.currentTimeValue;
-      drag.wasPlaying = dm.mode === 'playing';
-      snapPoster();
-      dm.player.pause();
-      dm.setMode('paused');
-      const e = entries[drag.ni]!;
-      const mountedDrag = drag;
-      // The poster already covers the outgoing frame, so the neighbor mount
-      // doesn't have to land inside this touchmove — load+seek rebuilds the
-      // world and would otherwise block the tracked frame's paint (the lag).
-      drag.ready = resolveClip(e).then((data) => {
-        if (data && drag === mountedDrag) {
-          setTimeout(() => { if (drag === mountedDrag) {mountPaused(data);} }, 0);
-        }
-        return data;
-      });
+      paintPlaceholder(entries[drag.ni]!);
+      drag.ready = resolveClip(entries[drag.ni]!);
+      trackPanes(Math.max(-window.innerHeight, Math.min(window.innerHeight, dy)), drag.dir);
     }
     if (drag.mounted) {
       const off = Math.max(-window.innerHeight, Math.min(window.innerHeight, dy));
@@ -392,29 +389,17 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     if (commit && dir === d0.dir) {
       advancing = dir;
       const ni = d0.ni;
+      const ready = d0.ready ?? resolveClip(entries[ni]!);
       void (async () => {
-        await slidePanes(dir, true, SLIDE_MS);
-        hidePoster();
-        const data = await d0.ready;
-        play(ni, data);
+        await commitAdvance(dir, ni, ready);
         advancing = 0;
       })();
     } else {
-      // Spring back — restore the outgoing clip where the drag found it.
+      // Spring back — the outgoing clip never paused, so the restore is
+      // pure CSS: both panes ease home and the poster drops.
       void (async () => {
         await slidePanes(d0.dir, false, SLIDE_MS);
         hidePoster();
-        const e = current();
-        const data = e ? await resolveClip(e) : null;
-        if (data) {
-          dm.onPlaybackStart?.();
-          dm.player.load(data);
-          dm.player.seek(d0.savedT);
-          dm.onRemotePlayback?.(dm.player.getRemoteStates(), 0);
-          if (d0.wasPlaying) {dm.player.play(); dm.setMode('playing');}
-        } else {
-          play(index);
-        }
       })();
     }
   }, { passive: true });
