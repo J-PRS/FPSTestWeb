@@ -233,6 +233,16 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.72 huntCreatures mirror drift (2026-10-08)
+
+Class 9 again, same lane as §2.71. Server `huntCreatures` =
+`mode==='nuggets' || any creatureSim.pops>0` — any map declaring
+creature spawns turns the farm instinct on. The client mirror was
+`mode==='nuggets'` only, so offline bots on creature maps ignored
+wildlife entirely. Client now mirrors via a new `hasCreatures()` hook
+(`entities.targets.some(!t.scoreless)` — scoreless ambient decor and
+gnat fodder correctly don't count).
+
 ### 2.71 Noise-TTL mirror drift (2026-10-08)
 
 Class 9 (drifted mirror) — server `Room.NOISE_TTL` was 2000ms but the

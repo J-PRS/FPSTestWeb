@@ -66,6 +66,9 @@ interface BotHooks {
   nearestNugget(pos: THREE.Vector3, maxDist: number): Nugget | null;
   /** Nearest hostile creature (targets list entry) for a bot to fight. */
   nearestCreature(pos: THREE.Vector3, maxDist: number): Targetable | null;
+  /** This map spawns real (scored) creatures — mirrors the server's
+   *  creatureSim.pops check for huntCreatures. */
+  hasCreatures(): boolean;
   /** A bot's bolt connected with a creature — damage through the entity.
    *  Returns true on kill (DM credits the bot). */
   damageCreature(id: number, dmg: number, attackerId: string): boolean;
@@ -440,7 +443,7 @@ export class TeamBots {
   private fillSenses(ctx: Parameters<GameBot['think']>[1], bot: GameBot, others: THREE.Vector3[]): void {
     // Nuggets rooms farm wildlife for the objective — the server
     // flips the same flag only in economy modes.
-    ctx.huntCreatures = this.mode === 'nuggets';
+    ctx.huntCreatures = this.mode === 'nuggets' || this.hooks.hasCreatures();
     ctx.others = others;
     ctx.allies = this.alliesOf(bot);
     // Mortar heavies reach past the duel band — same reach rule the

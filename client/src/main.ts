@@ -433,6 +433,7 @@ function setupOfflineMode(mode: string): void {
         }
         return best;
       },
+      hasCreatures: () => entities.targets.some(t => !t.scoreless),
       damageCreature: (id, dmg, att) => {
         const t = entities.targets.find(x => x.id === id);
         if (!t || t.dead) {return false;}
