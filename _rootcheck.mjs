@@ -19,7 +19,7 @@ const ALLOW = new Set([
   'changelog.txt', 'Dockerfile', 'stryker.vitest.config.ts', '_rootcheck.mjs',
   // project dirs
   '.agents', '.devin', '.git', '.github',
-  '_DEMO', '_docs', '_ref', '_reference', '_reports', '_tmp', '_tools', '_zzz',
+  '_DEMO', '_docs', '_ref', '_reference', '_reports', '_scratch', '_tmp', '_tools', '_zzz',
   'ZZZ_ROOT', 'TEMP_WEBual', 'build', 'client', 'concepts', 'demo', 'demos_flag',
   'demos_rich', 'demos_out', 'combo_clips', 'docs', 'logs', 'maps', 'node_modules',
   'reference', 'screenshots', 'screenshots_legacy', 'screenshots_web',
