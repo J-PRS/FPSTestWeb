@@ -233,6 +233,17 @@ Soak residual finding (gameplay, not robustness): 3-min CTF sim, 12
 bots, **0 flag grabs** — kills happen (21) but cappers never reach the
 stand. Charged to §4.8 rather than silently absorbed.
 
+### 2.63 In-place writes on the position ingest (2026-10-07)
+
+Class 10 (future-cost debt). `PlayerManager.updatePosition` spread-
+allocated 3 objects per report + 3 more per seq advance — the
+server's hottest ingest (~N players × report Hz × 3-6 short-lived
+objects). Same shape as the §2.11 flag-carrier storm. Field-wise
+writes now mutate `position`/`rotation`/`velocity` and the
+`lastValid*` triple in place; no reference-identity consumers exist
+(swept). Verified by predictionChaos + reseedChaos, which drive this
+exact path.
+
 ### 2.62 Echo frames out of the reclaim journal (2026-10-07)
 
 Class 10 (future-cost debt). `sendToPlayer` journaled every frame —

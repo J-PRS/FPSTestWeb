@@ -49,8 +49,12 @@ export class PlayerManager {
 
   /** Room wires the bot roster here — posted roles get a strong pull
    *  toward the home sphere so they respawn at the stand they're meant
-   *  to hold; everyone else scores on foe clearance alone. */
-  spawnHomeBias?: (playerId: string) => number;
+   *  to hold. Must return undefined (not 0) for unaffiliated ids — the
+   *  picker's `homeBias ?? (teamPool ? 0 : 2)` fallback only engages on
+   *  undefined, and humans rely on that own-base pull on maps that ship
+   *  a flat `spawns` list (bastion: the flat-pool foe-clearance pick
+   *  once dropped joins on the far base). */
+  spawnHomeBias?: (playerId: string) => number | undefined;
   /** A tasked member's job position — when set, spawn scoring pulls
    *  toward the task instead of the home sphere (a wave member who
    *  respawns at base just re-runs the lethal transit). */
@@ -61,7 +65,7 @@ export class PlayerManager {
     spawnPoints: () => this.spawnPoints,
     teamSpawns: () => this.teamSpawns,
     teamBases: () => this.teamBases,
-    homeBias: (id) => this.spawnHomeBias?.(id) ?? 0,
+    homeBias: (id) => this.spawnHomeBias?.(id),
     objective: (id) => this.spawnObjective?.(id) ?? null,
     groundAt: () => this.groundAt,
     rng: () => this.spawnRng(),
@@ -208,15 +212,18 @@ export class PlayerManager {
     // ordered now, but a replayed or duplicated packet would otherwise
     // teleport the player backward through plausible() checks.
     if (player && (seq === undefined || seq > player.lastSeq || player.lastSeq === 0)) {
-      player.position = { ...position };
-      player.rotation = { ...rotation };
-      player.velocity = { ...velocity };
+      // Mutate in place — this is the server's hottest ingest (a spread
+      // per field per report was steady GC churn); field-wise writes
+      // also keep any alias of player.position coherent.
+      player.position.x = position.x; player.position.y = position.y; player.position.z = position.z;
+      player.rotation.yaw = rotation.yaw; player.rotation.pitch = rotation.pitch;
+      player.velocity.x = velocity.x; player.velocity.y = velocity.y; player.velocity.z = velocity.z;
       player.lastSeen = wallNow();
       if (seq !== undefined && seq > player.lastSeq) {
         player.lastSeq = seq;
-        player.lastValidPosition = { ...position };
-        player.lastValidVelocity = { ...velocity };
-        player.lastValidRotation = { ...rotation };
+        player.lastValidPosition.x = position.x; player.lastValidPosition.y = position.y; player.lastValidPosition.z = position.z;
+        player.lastValidVelocity.x = velocity.x; player.lastValidVelocity.y = velocity.y; player.lastValidVelocity.z = velocity.z;
+        player.lastValidRotation.yaw = rotation.yaw; player.lastValidRotation.pitch = rotation.pitch;
       }
     }
   }

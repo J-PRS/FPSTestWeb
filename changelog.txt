@@ -1,3 +1,4 @@
+2026-10-07 - robustify §2.63: updatePosition field-wise writes — kill per-report alloc churn on position ingest
 2026-10-07 - robustify §2.62: yourHealth/yourCharge out of reclaim journal (echo churn was evicting broadcast truth)
 2026-10-07 - robustify skill: class 10 future-cost debt (scale/low-end/bad-network lane)
 2026-10-07 - arch: fps-* keys funnel through settings registry — has()/remove(), identity keys migrated
