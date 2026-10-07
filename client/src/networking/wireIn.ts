@@ -327,19 +327,12 @@ export class WireIn {
     // would stomp the server-truth values tickUpdate already delivered, and
     // re-firing onPlayerJoined spam-recreates/logs the remote every time.
     const isNew = !this.h.remoteHas(data.playerId);
-    this.h.upsertRemotePlayer(data.playerId, {
-      name: data.name,
-      position: data.position,
-      rotation: data.rotation,
-      velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
-      // The announce carries real vitals — a grace rejoiner can return
-      // wounded or dead; fabricating 100/alive was the tick-N desync.
-      isDead: isNew ? (data.isDead ?? false) : undefined,
-      health: isNew ? (data.health ?? 100) : undefined,
-      team: data.team,
-      transport: data.transport,
-      armorClass: data.armorClass,
-    });
+    const patch = rowPatch(WORLD_MODEL.player.spawnFields!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>;
+    // Rejoins get identity fields but not vitals — a grace rejoiner
+    // keeps the wounded/dead truth tickUpdate already delivered.
+    if (!isNew) { delete patch.health; delete patch.isDead; }
+    else patch.velocity = { x: 0, y: 0, z: 0 };
+    this.h.upsertRemotePlayer(data.playerId, patch);
     if (isNew) this.h.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }
 
@@ -352,8 +345,7 @@ export class WireIn {
     // Update REMOTE player in storage (local player respawn handled by callback)
     if (data.position) {
       this.h.upsertRemotePlayer(data.playerId, {
-        position: data.position,
-        rotation: data.rotation,
+        ...(rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>),
         velocity: { x: 0, y: 0, z: 0 },
         isDead: false,
         health: 100,

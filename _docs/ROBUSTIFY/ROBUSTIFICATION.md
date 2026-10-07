@@ -3306,3 +3306,13 @@ claim-suppression sites — aoeShot/projectileDestroy for simmed weapons
 and slam — while authoritySims() stays the roster-species predicate
 (creatures/deployables/repair keep claiming, the host adjudicates).
 (tsc both sides + p2pHost 10/10: intent echo + beam kill pins)
+
+## 2.183 — playerJoined/playerRespawn patch by declaration too
+
+The last two hand-mapped member feeds: playerJoined listed its fields
+by hand and had already drifted — `internalId` was declared but never
+copied, so grace-rejoiner records missed it. Both handlers now rowPatch
+from the spawn/event field lists; the isNew vitals guard and the
+respawn revive (isDead=false/health=100/zero velocity) stay explicit
+because they're policy, not field mapping.
+(tsc + 22 focused tests green)
