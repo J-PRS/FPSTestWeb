@@ -176,3 +176,12 @@ Scratch list folded in from `_scratch/names.md`; katantē(s)/orthobamōn
 fail the diacritics filter as written but ASCII forms stay listed.
 
 Katabatic struck per JP 2026-10-01: homage -> squatting. Hoodoo promoted to top pick.
+
+### Anabatic check 2026-10-01
+
+Steam-clean, .io/.gg free - BUT two itch.io occupants already use it,
+incl. aimade.games' ANABATIC (a ridge-soaring glider sim - same
+terrain-wind-movement concept). Semantic sign is also inverted (anabatic
+= upslope wind; the game skis downslope). Viable but compromised;
+"anabolic" autocorrect risk unchecked. Ranking after grill:
+Hoodoo > Anabatic > Couloir > Syrtis.
