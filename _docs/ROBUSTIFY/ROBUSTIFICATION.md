@@ -2290,3 +2290,18 @@ dir, not live logs/. Pinned: unchanged file returns the same rows
 object; growth re-aggregates.
 
 ### 2.105 - end
+
+### 2.106 /demos listing stat-sweep bounded (2026-10-08)
+
+Same public-route class as §2.105: listDemos stat'ed every index entry
+(existsSync x up to 100) on EVERY request — synchronous stat calls block
+the loop, so a poll storm on /demos was real CPU DoS. A 5s listCache
+bounds it to one sweep per window; uploads/evictions invalidate through
+saveIndex so fresh clips still appear instantly. Pinned: repeat lists
+return the same rows (stat sweep proven absent — deleted file still
+serves until expiry), expiry re-sweeps, saveIndex invalidates. Rest of
+the ungated route table audited clean: /maps TTL-cached 30s, /matches
+ring in-memory, /rooms bounded by room cap, /join per-IP throttled,
+/wthash + /rtcconfig constants, /health in-memory.
+
+### 2.106 - end

@@ -26,6 +26,11 @@ function errMsg(e: unknown): string {
 export class DemoStorage {
   private demosDir: string;
   private index: DemoMeta[] = [];
+  /** /demos is a public route — the stale-file sweep below stats every
+   *  index entry per request. Cache the listing briefly; uploads and
+   *  evictions flow through saveIndex which invalidates it. */
+  private listCache: { at: number; rows: DemoMeta[] } | null = null;
+  private static LIST_TTL_MS = 5_000;
 
   constructor(demosDir: string) {
     this.demosDir = demosDir;
@@ -94,6 +99,7 @@ export class DemoStorage {
   }
 
   private async saveIndex(): Promise<void> {
+    this.listCache = null;
     try {
       const indexPath = join(this.demosDir, INDEX_FILE);
       await writeFile(indexPath, JSON.stringify(this.index, null, 2));
@@ -195,6 +201,8 @@ export class DemoStorage {
   }
 
   async listDemos(): Promise<DemoMeta[]> {
+    const c = this.listCache;
+    if (c && wallNow() - c.at < DemoStorage.LIST_TTL_MS) return c.rows;
     // Filter out stale entries whose files were deleted
     const valid = this.index.filter(m => existsSync(join(this.demosDir, m.filename)));
     if (valid.length !== this.index.length) {
@@ -205,6 +213,7 @@ export class DemoStorage {
     }
     // Only list demos that meet the minimum lifetime threshold for "cool shots"
     const cool = this.index.filter(m => m.projectileLifetime >= CONFIG.minDemoLifetime);
+    this.listCache = { at: wallNow(), rows: cool };
     return cool;
   }
 
