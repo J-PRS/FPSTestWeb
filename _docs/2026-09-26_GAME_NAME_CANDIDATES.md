@@ -192,3 +192,12 @@ Steam-clean: dromos, kauma, lailaps, eremos, psammo, thyella.
 DEAD: **kremnos** - a major Honkai: Star Rail location (Castrum Kremnos
 region/arena/mission arc, HSR 3.0, 2025) - owned by a big title (JP
 catch). **xeros** - Xerox brand adjacency.
+
+### Latin shelf check 2026-10-01
+
+Steam-clean: vallis, mensa, rupes, dorsum, torrens, solitudo, numidia,
+silex, sabulum, arduum, clivus, praeceps, saltus, procella, spiculum,
+fervor, aestus, hasta. Dead: discus (everyday Olympic word - squatting a
+common word reads presumptuous, JP 2026-10-01), calx, strata, vasto,
+auster, defile, harena, ardor, ignis, turbo, limes, velox (soap brand).
+The Mars-nomenclature seam (vallis/mensa/rupes/dorsum/syrtis) stays live.
