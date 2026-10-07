@@ -3083,3 +3083,13 @@ membership feeds: remoteReset (gameState), tickUpdate, playerJoined,
 playerRespawn, and the snapshot audit heal -- which is now the only
 path that can mint a member from truth. The phantom-stub class is
 closed by construction. (NetworkManager.ts, wireIn.ts)
+
+## 2.169 Mirror-direction heal: retire client-only roster members
+
+The audit healed health/liveness/missing members but a "client but not
+server" diff warned forever with no repair -- a lost playerLeft edge
+left a stale roster record (and its RemotePlayer entity) hashing
+client-only on every check. The snapshot pass now retires both the
+record (remoteDelete) and the entity (remotePlayers.remove) for any
+id the server snapshot doesn't list. Symmetric with the 2.166 mint;
+membership is now healed in both directions. (stateDebug.ts)

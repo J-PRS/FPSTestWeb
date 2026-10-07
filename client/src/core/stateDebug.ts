@@ -18,7 +18,7 @@ import type { Projectile } from '../projectiles/Projectile.js';
 export interface StateDebugContext {
   networkManager: NetworkManager;
   getPlayer(): Player;
-  remotePlayers: Map<string, RemotePlayer>;
+  remotePlayers: Map<string, RemotePlayer> & { remove?(id: string): boolean };
   projectiles: Projectile[];
   getLastSentPos(): { x: number; y: number; z: number };
   /** Match state — mode/team/scores/playback, for the diagnostics dump. */
@@ -562,6 +562,16 @@ export function wireStateDebug(ctx: StateDebugContext): void {
             if (flip === 'revived') {rp?.respawn(sp.position);}
             else if (flip === 'killed') {rp?.playDeath();}
           }
+        }
+        // Mirror-direction heal: a roster entry the server no longer has
+        // (lost playerLeft) warns "client but not server" on every check
+        // forever. The snapshot is the membership authority — retire both
+        // the record and the entity.
+        const serverIds = new Set(serverPlayers.map((sp) => sp.id));
+        for (const id of clientPlayers.keys()) {
+          if (id === localId || serverIds.has(id)) {continue;}
+          networkManager.remoteDelete(id);
+          ctx.remotePlayers.remove?.(id);
         }
       } else if (transientCount > 0) {
         logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} in-flight health echo(s), no persistent diffs (combat lag)`);
