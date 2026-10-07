@@ -406,7 +406,7 @@ export function verbPayload(
     // names an `absent` sentinel or the field is optional on the wire,
     // so only yell for undeclared-as-absent gaps.
     if (!(f.name in vals) && f.absent === undefined) {
-      console.warn(`[worldModel] ${kind.kind}.${kind.verbs[verb]} emit missing declared field '${f.name}'`);
+      warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit missing declared field '${f.name}'`);
     }
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -425,7 +425,7 @@ export function rosterRow(
   for (const f of kind.rosterFields ?? []) {
     if (f.name === idField) continue;
     if (!(f.name in vals) && f.absent === undefined) {
-      console.warn(`[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
+      warnOnce(`${kind.kind}.roster:${f.name}`, `[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
     }
     row[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -456,7 +456,7 @@ export function eventPayload(
   for (const f of fields ?? []) {
     if (f.name === idField) continue;
     if (!(f.name in vals) && f.absent === undefined) {
-      console.warn(`[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
+      warnOnce(`${kind.kind}.${type}:${f.name}`, `[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
     }
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -484,7 +484,7 @@ export function checkPacket(
   const check = (m: Record<string, unknown>) => {
     for (const f of fields ?? []) {
       if (!(f.name in m) && f.absent === undefined) {
-        console.warn(`[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
+        warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
       }
     }
   };
@@ -503,7 +503,7 @@ export function checkPacket(
         for (const r of extra) {
           for (const f of k.rosterFields) {
             if (!(f.name in (r as Record<string, unknown>)) && f.absent === undefined) {
-              console.warn(`[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
+              warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
             }
           }
         }
@@ -554,6 +554,19 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   switchRoom: [{ name: 'room', absent: null }, { name: 'mode', absent: null }, { name: 'map', absent: null }, { name: 'bots', absent: null }, { name: 'unlisted', absent: null }],
 };
 
+// Any warn here repeats per packet/emit — a hostile peer or a broken
+// emit inside a per-entity loop would flood the log. Throttle per key so
+// the signal survives without the flood.
+const WARN_ONCE_MS = 5000;
+const warnOnceSeen = new Map<string, number>();
+function warnOnce(key: string, text: string): void {
+  const now = Date.now();
+  const last = warnOnceSeen.get(key);
+  if (last !== undefined && now - last < WARN_ONCE_MS) return;
+  warnOnceSeen.set(key, now);
+  console.warn(text);
+}
+
 /** Inbound twin of checkPacket: required intent fields missing from a
  *  client packet warn at dispatch. Message types with no declaration
  *  stay unchecked (e.g. a union member added before its intent lands). */
@@ -562,7 +575,7 @@ export function checkIntent(type: string, msg: Record<string, unknown>): void {
   if (!fields) return;
   for (const f of fields) {
     if (!(f.name in msg) && f.absent === undefined) {
-      console.warn(`[worldModel] inbound intent '${type}' missing required field '${f.name}'`);
+      warnOnce(`${type}:${f.name}`, `[worldModel] inbound intent '${type}' missing required field '${f.name}'`);
     }
   }
 }
