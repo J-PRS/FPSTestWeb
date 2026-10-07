@@ -1,6 +1,6 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
-import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../shared/stateHash.ts';
+import { computeStateHash, replicaHash } from '../../shared/stateHash.ts';
 import { WORLD_MODEL, kindFields } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
@@ -359,29 +359,29 @@ export class TickLoop {
     // without balls don't emit a meaningless constant.
     const roster = room.ballSim.roster();
     const ballHash = roster.length
-      ? computeReplicaHash(roster.map((b) => [b.id, b] as [number, { variant: number; enraged: boolean; targetId: string | null }]))
+      ? replicaHash(WORLD_MODEL.ball!, roster.map((b) => [b.id, b] as [number, Record<string, unknown>]))
       : undefined;
     // Same fidelity hash for creatures — species/state/uber/targetId are
     // the mirrored lifecycle fields; a stranded or stale replica reads
     // here where nothing else looks (§4.7).
     const creatureRoster = room.creatureSim.roster();
     const creatureHash = creatureRoster.length
-      ? computeCreatureHash(creatureRoster.map((c) => [c.id, c] as [number, { species: string; state: string; uber: boolean; targetId: string | null }]))
+      ? replicaHash(WORLD_MODEL.creature!, creatureRoster.map((c) => [c.id, c] as [number, Record<string, unknown>]))
       : undefined;
     // Deployables too — kind/owner/team are spawn edges; hp/armor are
     // echo-channel (deployHp ticks) and stay out of the hash on purpose.
     const deployRoster = room.deployables.snapshot();
     const deployHash = deployRoster.length
-      ? computeDeployHash(deployRoster.map((d) => [d.id, { kind: d.kind, owner: d.owner, team: d.team ?? '' }] as [number, { kind: string; owner: string; team: string }]))
+      ? replicaHash(WORLD_MODEL.deploy!, deployRoster.map((d) => [d.id, d] as [number, Record<string, unknown>]))
       : undefined;
     // Flags + pickups — the last edge-driven rosters without a desync
     // signal (§4.7).
     const flagHash = room.flags?.flags.size
-      ? computeFlagHash(room.flags.flags)
+      ? replicaHash(WORLD_MODEL.flag!, room.flags.flags as Iterable<[string, Record<string, unknown>]>)
       : undefined;
     const pickupRoster = room.pickups?.snapshot() ?? [];
     const pickupHash = pickupRoster.length
-      ? computePickupHash(pickupRoster.map((p) => [p.id, p] as [number, { kind: string }]))
+      ? replicaHash(WORLD_MODEL.pickup!, pickupRoster.map((p) => [p.id, p] as [number, Record<string, unknown>]))
       : undefined;
     const timestamp = wallNow();
 

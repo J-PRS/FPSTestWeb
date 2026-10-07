@@ -66,123 +66,44 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
   return h.toString(16);
 }
 
-/** Replica-fidelity checksum for non-player state (balls): identity +
- *  mirrored lifecycle fields only — variant/enraged/targetId ride the
- *  same edge events, so wire latency can't phantom this channel the way
- *  a raw-position hash would (100ms × 40m/s = a permanent ~4m false
- *  diff). A stranded, dropped, duplicated, or stale replica reads here;
- *  trajectory drift stays the fleet rubberband metric's job. Same
- *  commutative FNV-sum so roster order can't alias. */
-export interface HashableReplica {
-  variant: number;
-  enraged: boolean;
-  targetId: string | null;
+/* ── Replica hashes — generated from the world model ──────────────────
+ * Every non-player kind hashes identity + the lifecycle fields it
+ * declares in shared/worldModel.ts (`kind.fields`). One mixer walks the
+ * declaration, so adding a hashed field is a one-line declaration —
+ * five near-identical bodies used to re-declare the same list and any
+ * skew between them was a silent phantom-desync. The player lane keeps
+ * its own hasher above: its hash shape (quantized sim/echo channels)
+ * isn't the declared `fields` list. */
+
+import type { WorldKindDecl } from './worldModel.ts';
+
+function mixValue(ph: number, v: unknown): number {
+  // null/undefined and '' mix identically (separator only) — an unset
+  // edge field and an empty one must not read as different state.
+  if (v == null) { ph ^= 0xff; return Math.imul(ph, 0x01000193) >>> 0; }
+  if (typeof v === 'number') { ph ^= v & 0xffff; return Math.imul(ph, 0x01000193) >>> 0; }
+  if (typeof v === 'boolean') { ph ^= v ? 1 : 0; return Math.imul(ph, 0x01000193) >>> 0; }
+  const s = String(v);
+  for (let i = 0; i < s.length; i++) {
+    ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+  }
+  // Field separator — concatenated strings alone can't tell
+  // ('chase','r') from ('cha','ser').
+  ph ^= 0xff; return Math.imul(ph, 0x01000193) >>> 0;
 }
 
-export function computeReplicaHash(replicas: Iterable<[number, HashableReplica]>): string {
+/** Identity + declared lifecycle fields, per kind. Hash inputs ride
+ *  edge events or the seeded spawn — wire latency can't phantom them;
+ *  a stranded/stale replica is exactly what surfaces. Echo-channel
+ *  fields (hp) stay OUT of `fields` by declaration, so nothing lagged
+ *  is ever hashed. Same commutative FNV-sum so roster order can't
+ *  alias. */
+export function replicaHash(kind: WorldKindDecl, replicas: Iterable<[number | string, Record<string, unknown>]>): string {
   let h = 0;
   for (const [id, r] of replicas) {
     let ph = 0x811c9dc5;
-    for (const v of [id, r.variant, r.enraged ? 1 : 0]) {
-      ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    const t = r.targetId ?? '';
-    for (let i = 0; i < t.length; i++) {
-      ph ^= t.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    h = (h + ph) >>> 0;
-  }
-  return h.toString(16);
-}
-
-/** Creature replicas hash the same way — identity + mirrored lifecycle:
- *  species/state/uber/targetId all ride wire edges or the seeded spawn,
- *  so a stranded or stale-state crawler replica surfaces here while
- *  position drift stays invisible to the check (the shared sim replays
- *  it identical by construction). */
-export interface HashableCreature {
-  species: string;
-  state: string;
-  uber: boolean;
-  targetId: string | null;
-}
-
-export function computeCreatureHash(replicas: Iterable<[number, HashableCreature]>): string {
-  let h = 0;
-  for (const [id, r] of replicas) {
-    let ph = 0x811c9dc5;
-    for (const v of [id, r.uber ? 1 : 0]) {
-      ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    // Field separator byte — concatenated strings alone can't tell
-    // ('chase','r') from ('cha','ser').
-    for (const s of [r.species, r.state, r.targetId ?? '']) {
-      for (let i = 0; i < s.length; i++) {
-        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
-      }
-      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    h = (h + ph) >>> 0;
-  }
-  return h.toString(16);
-}
-
-/** Deployables (turrets/stations/shields/mines) hash identity edges only:
- *  kind/owner/team arrive on spawn edges; hp and armor lag on the echo
- *  channel (deployHp ticks) so they stay OUT — a phantom-desync at heal
- *  cadence is exactly the failure this checksum exists to avoid. What
- *  it catches: a deploySpawn or deployGone edge that never landed. */
-export interface HashableDeploy {
-  kind: string;
-  owner: string;
-  team: string;
-}
-
-export function computeDeployHash(replicas: Iterable<[number, HashableDeploy]>): string {
-  let h = 0;
-  for (const [id, r] of replicas) {
-    let ph = 0x811c9dc5;
-    ph ^= id & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    for (const s of [r.kind, r.owner, r.team]) {
-      for (let i = 0; i < s.length; i++) {
-        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
-      }
-      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    h = (h + ph) >>> 0;
-  }
-  return h.toString(16);
-}
-
-/** Flags hash team + lifecycle state + carrier — the flagUpdate edge
- *  fields. A carried→home transition or a grab that never echoed leaves
- *  the client announcing a state the server already moved past. */
-export function computeFlagHash(flags: Iterable<[string, { state: string; carrier: string | null }]>): string {
-  let h = 0;
-  for (const [team, f] of flags) {
-    let ph = 0x811c9dc5;
-    for (const s of [team, f.state, f.carrier ?? '']) {
-      for (let i = 0; i < s.length; i++) {
-        ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
-      }
-      ph ^= 0xff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
-    h = (h + ph) >>> 0;
-  }
-  return h.toString(16);
-}
-
-/** Pickups hash id + kind — spawn/collect edges. A pickupSpawn or
- *  pickupGone that never landed leaves a gem the server collected still
- *  shimmering (or a hole where one should be) until the next reconcile. */
-export function computePickupHash(pickups: Iterable<[number, { kind: string }]>): string {
-  let h = 0;
-  for (const [id, p] of pickups) {
-    let ph = 0x811c9dc5;
-    ph ^= id & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
-    for (let i = 0; i < p.kind.length; i++) {
-      ph ^= p.kind.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
-    }
+    ph = mixValue(ph, id);
+    for (const f of kind.fields) ph = mixValue(ph, r[f.name]);
     h = (h + ph) >>> 0;
   }
   return h.toString(16);

@@ -6,7 +6,7 @@ import type { ChildLogger } from './Logger.js';
 import Logger from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
-import { computeStateHash, computeReplicaHash, computeCreatureHash, computeDeployHash, computeFlagHash, computePickupHash } from '../../../shared/stateHash.js';
+import { computeStateHash, replicaHash } from '../../../shared/stateHash.js';
 import { WORLD_MODEL, kindFieldDiffs } from '../../../shared/worldModel.js';
 import { Ball } from '../entities/balls.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
@@ -337,7 +337,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       for (const [team, state] of Object.entries(ctx.world.flagStates ?? {})) {
         if (state) {local.set(team, { state, carrier: ctx.world.flagMarkers?.get(team)?.carrier ?? null });}
       }
-      const localFlagHash = computeFlagHash(local);
+      const localFlagHash = replicaHash(WORLD_MODEL.flag!, local);
       if (localFlagHash === serverFlagHash) {
         flagDriftStreak = 0;
       } else {
@@ -354,7 +354,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     if (serverPickupHash !== undefined && ctx.world) {
       const local = new Map<number, { kind: string }>();
       for (const [id, p] of ctx.world.netPickups ?? []) {local.set(id, { kind: p.kind });}
-      const localPickupHash = computePickupHash(local);
+      const localPickupHash = replicaHash(WORLD_MODEL.pickup!, local);
       if (localPickupHash === serverPickupHash) {
         pickupDriftStreak = 0;
       } else {
@@ -377,7 +377,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         // server-side is a permanent false desync (the soak's ids=[2]).
         if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? '', team: d.team ?? '' });}
       }
-      const localDeployHash = computeDeployHash(local);
+      const localDeployHash = replicaHash(WORLD_MODEL.deploy!, local);
       if (localDeployHash === serverDeployHash) {
         deployDriftStreak = 0;
       } else {
@@ -410,7 +410,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           creatureById.set(c.netId, c);
         }
       }
-      const localCreatureHash = computeCreatureHash(local);
+      const localCreatureHash = replicaHash(WORLD_MODEL.creature!, local);
       if (localCreatureHash === serverCreatureHash) {
         creatureDriftStreak = 0;
       } else {
@@ -450,7 +450,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       for (const b of Ball.live) {
         if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.enraged, targetId: b.netS.netTargetId });}
       }
-      const localBallHash = computeReplicaHash(localBalls);
+      const localBallHash = replicaHash(WORLD_MODEL.ball!, localBalls);
       if (localBallHash === serverBallHash) {
         ballDriftStreak = 0;
         prevBallDiffs.clear();

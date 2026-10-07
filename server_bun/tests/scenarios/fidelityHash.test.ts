@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'bun:test';
-import { computeFlagHash, computePickupHash } from '../../../shared/stateHash.ts';
+import { replicaHash } from '../../../shared/stateHash.ts';
+import { WORLD_MODEL } from '../../../shared/worldModel.ts';
+
+const computeFlagHash = (m: Map<string, { state: string; carrier: string | null }>) =>
+  replicaHash(WORLD_MODEL.flag!, m as Map<string, Record<string, unknown>>);
+const computePickupHash = (m: Map<number, { kind: string }>) =>
+  replicaHash(WORLD_MODEL.pickup!, m as Map<number, Record<string, unknown>>);
 
 // §4.7 fidelity hashes — the desync signal is only as good as its
 // stability: same roster must hash the same regardless of map order,

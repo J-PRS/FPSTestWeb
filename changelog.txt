@@ -1,3 +1,4 @@
+2026-10-01 - C5: replica hashes generated - five per-kind FNV bodies collapsed to one replicaHash(kind, roster) walking kind.fields; hashed fields now change by declaration only
 2026-10-01 - C5: FX + player-outcome events declared - turretShot/mineBoom/sentryShot/sensorPing/playerHit/playerKill/teamUpdate emit via eventPayload; inbound-checked + union-pinned; no entity-adjacent message bypasses the model
 2026-10-01 - C5: roster verbs inbound-checked - ballRoster/crawlRoster/gameState/flagUpdate rows validated against declared rosterFields at dispatch (per-kind row container so gameState's mixed arrays check correctly)
 2026-10-01 - robustify skill: added 'never sit down early' rule - milestones never end a session; work continues into the next lane same-turn; only user stop or hard blocker ends a round
