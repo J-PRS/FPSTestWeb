@@ -7,7 +7,7 @@
  * was removed entirely since this path covers every legit bank.
  */
 import type { Vec3, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -66,7 +66,7 @@ export class RoomPickups {
   /** Match reset — clear the field and tell clients to drop the gems. */
   clear(): void {
     for (const id of this.pickups.keys()) {
-      this.room.broadcast({ type: 'pickupGone', id, by: null });
+      this.room.broadcast(verbPayload(WORLD_MODEL.pickup!, 'gone', 'id', id, { by: null }) as ServerMessage);
     }
     this.pickups.clear();
   }
@@ -109,7 +109,7 @@ export class RoomPickups {
 
   private remove(id: number, by: string | null): void {
     if (!this.pickups.delete(id)) return;
-    this.room.broadcast({ type: 'pickupGone', id, by });
+    this.room.broadcast(verbPayload(WORLD_MODEL.pickup!, 'gone', 'id', id, { by }) as ServerMessage);
   }
 
   tick(dt: number): void {

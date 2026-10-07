@@ -142,6 +142,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'armor', channel: 'echo' },
       { name: 'src', channel: 'echo' },
     ],
+    goneFields: [],
     simFields: [
       { name: 'pos', channel: 'sim' },
       { name: 'hp', channel: 'echo' },
@@ -167,6 +168,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     spawnFields: [
       { name: 'pos', channel: 'sim' },
       { name: 'kind', channel: 'edge' },
+    ],
+    goneFields: [
+      { name: 'by', channel: 'edge' },
     ],
     simFields: [
       { name: 'pos', channel: 'sim' },
