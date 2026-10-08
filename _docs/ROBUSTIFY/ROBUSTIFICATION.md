@@ -3557,3 +3557,5 @@ The gunlab hole was a class, not a page: 11 more standalone tool pages shipped o
 ## 2.217 — prod debug handles gated: __scene/__renderer/__renderScan/geoNaN
 
 The last ungated prod surface in the debug layer: wireDebugKeys installed every window handle unconditionally, so a public build exposed the whole scene graph (__scene), the renderer (__renderer), a render-cost scanner (__renderScan), and the geoNaN bounding-sphere watch. Those four now install only on dev hosts. __perf/__trailDump/__renderDump deliberately stay — the shipped watchdog diag dump reads them for crash-log context, so gating them would degrade production diagnostics.
+
+(Scope note on 2.215/2.216: vite's dist ships only index.html — the tool pages were never reachable on a dist deploy. The gates close the exposure on builds that serve client/ directly — LAN builds, tunnels, co-hosted static — i.e. defense-in-depth, not a live prod hole. The __scene/__renderer gate in 2.217 does ship in the main bundle.)
