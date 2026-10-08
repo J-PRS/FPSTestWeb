@@ -217,7 +217,18 @@ export class Room {
   readonly commands: { playerId: string; msg: ClientMessage; at: WallMs }[] = [];
   drainCommands(): void {
     if (!this.commands.length) return;
-    for (const c of this.commands) this.messages.handleMessage(c.playerId, c.msg, c.at);
+    for (const c of this.commands) {
+      // Contain per command: a throwing handler must not kill the rest
+      // of the drain (and the tick that hosts it) — the client's binary
+      // dispatch got the same treatment; one malformed input = one
+      // counted drop, never a stalled queue.
+      try { this.messages.handleMessage(c.playerId, c.msg, c.at); }
+      catch (err) {
+        this.messages.hb('handlerThrow');
+        this.messages.hb(`handlerThrow.${c.msg.type}`);
+        logger.warn('Handler threw — contained, counted', { room: this.name, playerId: c.playerId, type: c.msg.type, err });
+      }
+    }
     this.commands.length = 0;
   }
   /** Spatial memory — kills/fights/gems/flags leave decaying scent the
