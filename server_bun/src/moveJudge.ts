@@ -68,6 +68,10 @@ export interface Shadow {
   seqStates: Map<number, { st: MoveState; tick: number; inp: MoveInput; e: number }>;
   /** Number of 1/30 sim quanta the shadow has integrated. */
   simTicks: number;
+  /** EMA of uplink transit (rttMs/2 from position reports) — how stale
+   *  the shadow's input stream is. Feeds the broadcast lead so
+   *  observers aim at client-now, not client-transit-ago. */
+  transitEma: number;
   /** Input seq consumed at the last resync() — reports stamped at or below
    *  it are provably pre-respawn/pre-teleport traffic still in flight; the
    *  journal was cleared so they have no anchor to compare against and
@@ -110,6 +114,10 @@ export interface Shadow {
    *  only honest proxy for its sim rate the wire already carries. */
   reportEma: number;
 }
+
+/** Cap on the transit estimate — a lying ping over-leads the broadcast,
+ *  so bound it like REPORT_VEL_CAP bounds claimed velocity. */
+export const TRANSIT_EMA_CAP_MS = 300;
 
 export interface JudgeHost {
   /** Judge mode tolerates prediction noise; authority mode is truth —

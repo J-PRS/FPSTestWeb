@@ -4,7 +4,7 @@ import { perkMods } from '../../shared/perks.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballCollide.ts';
-import { FieldSurface, MoveJudge, type Shadow } from './moveJudge.ts';
+import { FieldSurface, MoveJudge, TRANSIT_EMA_CAP_MS, type Shadow } from './moveJudge.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
@@ -161,6 +161,7 @@ export class RoomMoveSim {
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
       gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
+      transitEma: 0,
     });
   }
 
@@ -324,6 +325,12 @@ export class RoomMoveSim {
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
+    // The report's own RTT estimate feeds the broadcast lead — the
+    // uplink half is how stale the shadow's input stream is.
+    if (rttMs !== undefined && rttMs > 0) {
+      const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
+      sh.transitEma = sh.transitEma === 0 ? tr : sh.transitEma * 0.9 + tr * 0.1;
+    }
     // reportInputSeq = the client's input counter at snapshot time. Only
     // a report stamped ahead of everything RECEIVED counts as a gap — a
     // seq parked in pending is covered, just not drained yet. ≥3
@@ -459,6 +466,12 @@ export class RoomMoveSim {
       sh.acc -= steps * MoveSim.STEP;
       sh.simTicks += steps;
     }
+  }
+
+  /** Uplink-transit estimate (ms) for the broadcast lead — the shadow
+   *  trails the client's authored stream by this much. */
+  transitOf(playerId: string): number {
+    return this.shadows.get(playerId)?.transitEma ?? 0;
   }
 
   /** Server-computed position — for future authoritative use. */

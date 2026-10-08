@@ -272,13 +272,20 @@ export class TickLoop {
     // Authority mode: the shadow sim's output is the broadcast truth.
     // Reports only fed it aim/liveness hints — what every other player
     // sees (and the rewind buffer stores) is the simulated position.
+    // The shadow trails each client by its uplink transit (inputs land
+    // transit late, so its boundary runs that much stale) — without the
+    // lead, every observer aims at where the player was ~ping ago:
+    // ghost targets, unregistered hits, correction snaps on the victim.
+    // A velocity-linear lead re-centers the systematic offset; turn
+    // error survives but stops being one-sided.
     this.errPhase = 'auth';
     if (room.moveAuthority) {
       for (const [playerId, p] of players) {
         if (p.isBot) continue;
         const s = room.moveSim.simState(playerId);
         if (!s) continue;
-        p.position = { x: s.pos.x, y: s.pos.y, z: s.pos.z };
+        const lead = Math.min(room.moveSim.transitOf(playerId) / 1000, 0.3);
+        p.position = { x: s.pos.x + s.vel.x * lead, y: s.pos.y + s.vel.y * lead, z: s.pos.z + s.vel.z * lead };
         p.velocity = { x: s.vel.x, y: s.vel.y, z: s.vel.z };
       }
     }
