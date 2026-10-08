@@ -3513,3 +3513,7 @@ distal-bone compute, far-clip track filtering, frozen matrixAutoUpdate,
 the same-phase action swap) moves to playerDistal.ts. PlayerModel keeps
 capture/delegate seams: setFrozen returns the next action instead of
 writing currentAction. tsc + 504 vitest green. PlayerModel 1204→1128.
+
+## 2.207 — playerAnim extraction: the anim state machine leaves PlayerModel
+
+The ~450-line clip-drive core (mixer, animations table, fade machinery, playAnimation, the locomotion-dir resolver, setAnimationState/forceAnimationState cascade, alignHipYaw, retargetUAL, the stalled-cover guard, and the pose.update call) moved to `client/src/entities/playerAnim.ts` verbatim. `PlayerAnim` reads the model through a `PlayerAnimHost` interface (variant/model/pose/distal/disposed — live getters, so the rig fallback's re-assignment stays visible); `pose`/`distal` went public as host surface. PlayerModel keeps thin delegates for every public signature and drops from 1128 to 755 lines (1456 at lane start). All behavior is identical code — callers (PlayerVisuals bracket `currentState`/`animations`, remoteAnim, gunlab, posedump) hit getters that forward to the controller.
