@@ -1,3 +1,4 @@
+2026-10-01 - Snap budget speed-scaled: server+client suppress corrections below max(tol, speed*0.1s) — a 5m cruise offset (0.1s of travel) is invisible, so it never snaps
 2026-10-01 - Snap budget: server suppresses corrections under max(tol,1.5m), client ignores them under 1.2m — invisible drifts stop jolting, convergence stays bounded
 2026-10-01 - Anchored compare replays to report authored time (transit-corrected) + broadcast lead halved to half-transit; errSeries measures vs led truth
 2026-10-01 - MoveSim snapshot/restore + seq-anchor forward-input fix: anchored replay no longer reads input edges as phantom divergence (soakChaos green, corrections quieter)

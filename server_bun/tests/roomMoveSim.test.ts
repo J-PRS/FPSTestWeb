@@ -187,8 +187,9 @@ describe('RoomMoveSim', () => {
     for (let i = 0; i < 10; i++) m.tick(0.05);
     // First report is the spawn-landing seed — snaps the sim, never judges.
     expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0)).toBeNull();
-    // 2m off — inside judge tolerance, past the authority bound: truth fires.
-    expect(m.reconcile('p1', { x: 2, y: 0, z: 0 }, 0)).not.toBeNull();
+    // 4m off — inside the correction snap budget (max(1.4×tol, 2m)),
+    // past it: truth fires.
+    expect(m.reconcile('p1', { x: 4, y: 0, z: 0 }, 0)).not.toBeNull();
     // Throttled at 100ms — an immediate second report doesn't refire.
     expect(m.reconcile('p1', { x: 2, y: 0, z: 0 }, 0)).toBeNull();
   });

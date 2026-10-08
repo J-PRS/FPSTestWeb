@@ -308,12 +308,12 @@ export class MoveJudge {
       ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
       : 0;
     if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, SEVERE_M + gapCredit);
-    // Snap budget: a sub-1.5m correction is a visible jolt for a drift
-    // nobody can see — feel over accuracy. Divergences still bank at tol
-    // (anti-cheat doesn't get the slack); the snap only ships past the
-    // floor. Bounded at tol, so drift can't grow past it — only the
-    // invisible band gets suppressed.
-    const snapTol = Math.max(tol, 1.5);
+    // Snap budget scales with speed: at cruise (~50m/s) a 5m offset is
+    // 0.1s of travel — invisible; at standstill even 1.5m reads. The
+    // snap ships only past the floor (feel over accuracy); divergences
+    // still bank at tol — anti-cheat doesn't get the slack — and the
+    // budget is bounded so drift can't grow past it.
+    const snapTol = Math.max(tol, Math.max(1.5, speed3d * 0.1));
     if (dist <= snapTol) return null;
     const now = wallNow();
     if (now - sh.lastCorrection < this.host.correctMs()) return null;
