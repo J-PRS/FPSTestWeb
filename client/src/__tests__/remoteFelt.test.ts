@@ -22,6 +22,7 @@ class Host implements InterpHost {
   playerId = 'felt-mover';
   armorClass = 'medium';
   wireSki = true; // cruise-speed mover rides the frictionless lane like the real sim
+  wireJet = false;
 }
 
 // Analytic mover — a big ski carve: position AND velocity known at every t.

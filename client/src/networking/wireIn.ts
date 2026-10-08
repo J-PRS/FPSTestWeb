@@ -58,6 +58,8 @@ export class WireIn {
   /** Highest server tickSeq applied — e2e probes poll it as the
    *  "binary lane alive" signal. */
   get tickSeq(): number { return this.lastTickSeq; }
+  /** Wire handlers that threw mid-message (contained, counted — see dispatch). */
+  handlerThrows = 0;
 
   recentEvents(): readonly { type: string; t: number; detail: string }[] {
     return this.recentHealthEvents;
@@ -107,7 +109,13 @@ export class WireIn {
       // A malformed-but-parseable message mustn't reach the connection's
       // onError path — one bad packet shouldn't cost a reconnect.
       try { handler(data); }
-      catch (e) { logger.warn(`Handler threw for ${data.type}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
+      catch (e) {
+        // Swallow containment isn't free: the handler may have half-applied
+        // state. The count surfaces in the Alt+Q dump so "feels off" reports
+        // can be checked for silent partial-apply storms.
+        this.handlerThrows++;
+        logger.warn(`Handler threw for ${data.type}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+      }
     } else {
       logger.warn(`Unknown message type: ${data.type}`);
     }
@@ -129,7 +137,8 @@ export class WireIn {
         const src = seg as unknown as Record<string, unknown>;
         const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
         for (const f of WORLD_MODEL.ball!.updateFields!) msg[f.name] = src[f.name];
-        this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>);
+        try { this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>); }
+        catch (e) { this.handlerThrows++; logger.warn(`Handler threw for ballSegment: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
       }
       return;
     }
@@ -140,7 +149,10 @@ export class WireIn {
     // trips (frames can't reorder); it exists for the UDP tiers.
     if (tick.tickSeq <= this.lastTickSeq) return;
     this.lastTickSeq = tick.tickSeq;
-    this.handleTickUpdate(tick);
+    // Same containment as the JSON path — a throwing tick handler at 20Hz
+    // would otherwise hit onError and reconnect the socket every frame.
+    try { this.handleTickUpdate(tick); }
+    catch (e) { this.handlerThrows++; logger.warn(`Handler threw for tickUpdate: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
   }
 
   private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {

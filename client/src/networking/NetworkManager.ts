@@ -152,6 +152,8 @@ export class NetworkManager {
   /** Highest server tick applied — e2e probes wait on it to prove the
    *  binary lane flows. Lives in wireIn after the dispatch extraction. */
   get lastTickSeq(): number { return this.wireIn.tickSeq; }
+  /** Contained wire-handler throws — the Alt+Q census reads it. */
+  get handlerThrows(): number { return this.wireIn.handlerThrows; }
   /** Server position correction — the dispatch lives in wireIn but is
    *  routed through here so tests can wrap/count it. */
   handleCorrection(data: Parameters<WireIn['handleCorrection']>[0]): void {

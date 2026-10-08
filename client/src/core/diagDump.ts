@@ -40,7 +40,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
   const lines: string[] = [
     `localId: ${nm.getLocalPlayerId()}`,
     `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
-    `net: up ${(nm.bandwidth().up / 1024).toFixed(1)}KB/s down ${(nm.bandwidth().down / 1024).toFixed(1)}KB/s${heapLine()}`,
+    `net: up ${(nm.bandwidth().up / 1024).toFixed(1)}KB/s down ${(nm.bandwidth().down / 1024).toFixed(1)}KB/s${nm.handlerThrows ? ` throws:${nm.handlerThrows}` : ''}${heapLine()}`,
     `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
