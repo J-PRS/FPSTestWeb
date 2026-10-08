@@ -91,6 +91,10 @@ export interface MoveState {
   yaw: number;
   pitch: number;
   onGround: boolean;
+  /** Team id when the host knows it — lets team-gated colliders (gate
+   *  shields) pass allies while blocking enemies. Absent = unaffiliated,
+   *  shields treat the body as hostile. */
+  team?: string;
 }
 
 export interface MoveInput {
@@ -210,7 +214,12 @@ export class MoveSim {
 
     // Jetpack thrust rides after collision resolution — same order the
     // client used to apply it post-sync — so ground clamping can't eat
-    // the lift and the trajectory stays identical on both ends. Mass is
+    // the lift and the trajectory stays identical on both ends. A held
+    // jet is treated as airborne everywhere it matters (applyGround's
+    // friction, the snap band, and the floor-clamp rising gate all
+    // exempt jetHeld): without that, the sim parked the body on the
+    // ground until vel.y accrued past the 3 m/s launch gate — a ~0.9s
+    // dead-zone of paid-for thrust that produced nothing. Mass is
     // real: the config values are force, accel = F/m — a heavy mech
     // climbs slower on the same burn, a light floats.
     if (this.input.jetHeld) {
@@ -281,8 +290,11 @@ export class MoveSim {
     // Ski preserves momentum but is not a motor: below walk speed a
     // grounded skier still needs ground physics to push off — otherwise a
     // stationary bot (or human holding ski at a standstill) never moves.
+    // A held jet is airborne physics full stop: ground friction would
+    // zero the thrust's small per-step velocity gain before it ever
+    // accumulated to a launch (the ~0.9s standstill dead-zone).
     const hSpeed = Math.hypot(s.vel.x, s.vel.z);
-    if (s.onGround && !this.wishJump && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround)) {
+    if (s.onGround && !this.wishJump && !this.input.jetHeld && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround)) {
       this.applyGround(dt, dir);
     }
     if (!s.onGround) {
@@ -436,7 +448,11 @@ export class MoveSim {
       // rising face (velDotN negative) while still climbing world-up
       // is a launch too — grounding it here bleeds the arc that a
       // pre-gate crest launch kept.
-      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel
+      // A held jet reads as a launch: thrust after this clamp is what
+      // generates the climb, but re-grounding here would eat the whole
+      // burn until vel crosses the 3 m/s gate (~0.9s of dead jet).
+      const rising = this.input.jetHeld
+        || velDotN > MOVEMENT_CONFIG.groundLaunchVel
         || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
       s.onGround = !rising;
       this.allowNextJump = !rising;
@@ -453,7 +469,7 @@ export class MoveSim {
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
       const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;
-      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, ty0, tz0) <= stickSpeed) {
+      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, ty0, tz0) <= stickSpeed && !this.input.jetHeld) {
         this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
         if (velDotN < 0) {
           s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;

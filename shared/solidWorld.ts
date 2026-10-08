@@ -78,6 +78,10 @@ export function segSolidHit(
   to: { x: number; y: number; z: number },
   cols: readonly StructureCollider[],
   index?: ColliderIndex,
+  /** Shooter/body team — gate shields with a matching passTeam are
+   *  air to this segment. Callers without team context omit it and
+   *  shields stay solid (balls, creatures, neutral LOS). */
+  passTeam?: string,
 ): { x: number; y: number; z: number; t: number } | null {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
   const segLen = Math.hypot(dx, dz);
@@ -89,10 +93,29 @@ export function segSolidHit(
   }
   let bestT = Infinity;
   for (const c of cands) {
+    if (passTeam && c.passTeam === passTeam) continue;
     const ox = from.x - c.cx, oz = from.z - c.cz;
     // Broadphase — skip boxes the segment can't approach.
     const rr = Math.max(c.hx, c.hz) + Math.hypot(dx, dz) + 1;
     if (ox * ox + oz * oz > rr * rr && (dx * ox + dz * oz) >= 0) continue;
+    if (c.dome) {
+      // Ray vs hemisphere — quadratic around the base center; a root
+      // only counts when the contact lands on the cap (above the
+      // spring line), the plinth hull handles the volume below.
+      const cy0 = c.cy - c.hy;
+      const sx = from.x - c.cx, sy = from.y - cy0, sz = from.z - c.cz;
+      const a = dx * dx + dy * dy + dz * dz;
+      const bq = sx * dx + sy * dy + sz * dz;
+      const cq = sx * sx + sy * sy + sz * sz - c.dome * c.dome;
+      const disc = bq * bq - a * cq;
+      if (a < 1e-9 || disc < 0) continue;
+      let t = (-bq - Math.sqrt(disc)) / a;
+      if (t < 0) t = cq < 0 ? 0 : Infinity; // start inside → contact at start
+      if (t > 1 || t >= bestT) continue;
+      if (from.y + dy * t < cy0 - 0.01) continue;             // below the cap
+      bestT = t;
+      continue;
+    }
     // Local frame: rotate origin + direction into the box's yaw space.
     const lx = ox * c.cos + oz * c.sin;
     const lz = -ox * c.sin + oz * c.cos;
@@ -118,11 +141,17 @@ export function segSolidHit(
 export class SolidWorld {
   private readonly index: ColliderIndex;
   private readonly cands: StructureCollider[] = [];
-  constructor(readonly cols: readonly StructureCollider[]) {
+  /** Live dynamic colliders (planted deployables, base assets) — a
+   *  caller-owned array mutated in place as gear comes and goes, so no
+   *  rebuild of the static index is ever needed. Scanned linearly; the
+   *  deployable census is small enough that a grid buys nothing. */
+  dyn?: readonly StructureCollider[];
+  constructor(readonly cols: readonly StructureCollider[], dyn?: readonly StructureCollider[]) {
     this.index = new ColliderIndex(cols);
+    this.dyn = dyn;
   }
-  static fromSpecs(list: readonly StructureSpec[] | undefined): SolidWorld {
-    return new SolidWorld(structureColliders(list));
+  static fromSpecs(list: readonly StructureSpec[] | undefined, dyn?: readonly StructureCollider[]): SolidWorld {
+    return new SolidWorld(structureColliders(list), dyn);
   }
 
   /** Highest structure top face under (x,z) within the footprint —
@@ -138,9 +167,25 @@ export class SolidWorld {
     for (const c of cands) {
       const dx = x - c.cx, dz = z - c.cz;
       if (Math.abs(dx) > c.hx + Math.abs(c.sin) * 2 + 1 && Math.abs(dz) > c.hz + Math.abs(c.cos) * 2 + 1) continue;
+      if (c.dome) {
+        // Walkable cap — closed-form dome height at the point; walking
+        // up the curve is the ground clamp reading this top each step.
+        const d2 = dx * dx + dz * dz;
+        if (d2 < c.dome * c.dome) {
+          const t = (c.cy - c.hy) + Math.sqrt(c.dome * c.dome - d2);
+          if (t > top && t <= maxTop) top = t;
+        }
+        continue;
+      }
       const lx = dx * c.cos + dz * c.sin;
       const lz = -dx * c.sin + dz * c.cos;
       if (lx < -c.hx || lx > c.hx || lz < -c.hz || lz > c.hz) continue;
+      const t = c.cy + c.hy;
+      if (t > top && t <= maxTop) top = t;
+    }
+    if (this.dyn) for (const c of this.dyn) {
+      // Axis-aligned only — deployable hulls never yaw.
+      if (Math.abs(x - c.cx) > c.hx || Math.abs(z - c.cz) > c.hz) continue;
       const t = c.cy + c.hy;
       if (t > top && t <= maxTop) top = t;
     }
@@ -156,7 +201,16 @@ export class SolidWorld {
     const cands = this.cands;
     cands.length = 0;
     this.index.queryPoint(s.pos.x, s.pos.z, r + 1, cands);
-    for (const c of cands) this.resolveOne(s, c, r, feet);
+    for (const c of cands) {
+      // Gate shields pass their own team — the body walks the pane as
+      // air while every other team hits it like a wall.
+      if (c.passTeam && c.passTeam === s.team) continue;
+      this.resolveOne(s, c, r, feet);
+    }
+    if (this.dyn) for (const c of this.dyn) {
+      if (c.passTeam && c.passTeam === s.team) continue;
+      this.resolveOne(s, c, r, feet);
+    }
   }
 
   /** One collider vs the capsule: ceiling drop or least-penetration
@@ -165,6 +219,25 @@ export class SolidWorld {
     const dx = s.pos.x - c.cx, dz = s.pos.z - c.cz;
     const rr = Math.max(c.hx, c.hz) + r + 1;
     if (dx * dx + dz * dz > rr * rr) return;
+    if (c.dome) {
+      // Solid fill under the cap: anything with feet below the local
+      // surface is inside the dome → shove radially to the rim. Feet at
+      // the surface mean the ground clamp owns the contact (walking the
+      // curve), same contract as box tops.
+      const base = c.cy - c.hy;
+      const d2 = dx * dx + dz * dz;
+      const surf = d2 < c.dome * c.dome ? base + Math.sqrt(c.dome * c.dome - d2) : base;
+      if (feet >= surf - STEP_UP || s.pos.y <= base - 0.01) return;
+      const d = Math.sqrt(d2) || 1e-6;
+      const push = c.dome + r - d;
+      if (push <= 0) return;
+      const nx = dx / d, nz = dz / d;
+      s.pos.x += nx * (push + SKIN);
+      s.pos.z += nz * (push + SKIN);
+      const dot = s.vel.x * nx + s.vel.z * nz;
+      if (dot < 0) { s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
+      return;
+    }
     const top = c.cy + c.hy, bot = c.cy - c.hy;
     if (feet >= top - STEP_UP) return;          // floor candidate — ground clamp owns it
     if (s.pos.y <= bot || feet >= top) return;   // entirely below or above
@@ -220,6 +293,7 @@ export function blastOccluded(
   targetPos: { x: number; y: number; z: number },
   cols: readonly StructureCollider[],
   index?: ColliderIndex,
+  passTeam?: string,
 ): boolean {
   const to = { x: targetPos.x, y: targetPos.y + 1.0, z: targetPos.z };
   let sx = blastPos.x, sy = blastPos.y, sz = blastPos.z;
@@ -227,7 +301,7 @@ export function blastOccluded(
     const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
     const d = Math.hypot(dx, dy, dz);
     if (d < 0.5) return false;
-    const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols, index);
+    const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols, index, passTeam);
     if (!hit) return false;
     if (hit.t > 0.001) return true;
     const step = 0.4 / d;

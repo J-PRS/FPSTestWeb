@@ -20,6 +20,14 @@ export interface StructureCollider {
   cx: number; cy: number; cz: number;
   hx: number; hy: number; hz: number;
   cos: number; sin: number;
+  /** Hemisphere radius — when set the shape is a dome whose spring line
+   *  sits at the bounding box's bottom (cy−hy): surface y(x,z) =
+   *  base + sqrt(r² − d²). Box fields stay the bounding box so
+   *  broadphase/index/layout lint need no shape awareness. */
+  dome?: number;
+  /** Team-gated shield pane: bodies/segments from this team pass
+   *  through (gate shields). Undefined = solid for everyone. */
+  passTeam?: string;
 }
 
 export function structureColliders(list: readonly StructureSpec[] | undefined): StructureCollider[] {
@@ -42,6 +50,7 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
           cz: s.pos.z - (h.pos.x * k) * sin + (h.pos.z * k) * cos,
           hx: h.size.x / 2 * k, hy: h.size.y / 2 * k, hz: h.size.z / 2 * k,
           cos: Math.cos(r + (h.rotY ?? 0)), sin: Math.sin(r + (h.rotY ?? 0)),
+          dome: h.dome ? h.dome * k : undefined,
         });
       }
       continue;
@@ -63,7 +72,63 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
       cx: s.pos.x, cy: s.pos.y + s.size.y / 2, cz: s.pos.z,
       hx: s.size.x / 2, hy: s.size.y / 2, hz: s.size.z / 2,
       cos, sin,
+      passTeam: s.kind === 'shield' ? s.team : undefined,
     });
+  }
+  return out;
+}
+
+/** Authored-layout lint: which pairs of spec entries interpenetrate.
+ *  Compares each entry's expanded collider set (kit hulls, not the
+ *  placeholder size) as yaw-OBBs approximated by their XZ AABB + Y span.
+ *  Per-entry self-overlap is ignored — compound folds pack tight by
+ *  design — and a 'shield' pane inside its own gatehouse slot is the
+ *  intended coincidence. `eps` is the skin depth that counts as
+ *  touching, not intersecting. */
+export function findStructureOverlaps(list: readonly StructureSpec[] | undefined, eps = 0.3): { a: number; b: number; x: number; y: number; z: number }[] {
+  const out: { a: number; b: number; x: number; y: number; z: number }[] = [];
+  if (!list?.length) return out;
+  const perSpec = list.map((s) => structureColliders([s]));
+  const gatePair = (i: number, j: number) =>
+    (list[i]!.kind === 'shield' && list[j]!.kind === 'kit' && list[j]!.piece === 'gatehouse') ||
+    (list[j]!.kind === 'shield' && list[i]!.kind === 'kit' && list[i]!.piece === 'gatehouse');
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (gatePair(i, j)) continue;
+      // Butted joints are authored everywhere (wall T-junctions, hull
+      // chains telescoping a few meters). The flag is *containment*:
+      // the overlap swallowing a real fraction of the smaller box.
+      // XZ is true 2D OBB SAT (project on all four face axes) — an
+      // AABB approx inflates yawed pieces into phantom containment.
+      let worst = 0;
+      let best: { x: number; y: number; z: number } | null = null;
+      for (const ca of perSpec[i]!) for (const cb of perSpec[j]!) {
+        const oy = Math.min(ca.cy + ca.hy, cb.cy + cb.hy) - Math.max(ca.cy - ca.hy, cb.cy - cb.hy);
+        if (oy <= eps) continue;
+        const dx = cb.cx - ca.cx, dz = cb.cz - ca.cz;
+        // Face axes of each box in world XZ: local x ↦ (cos,−sin), z ↦ (sin,cos).
+        const proj = (c: StructureCollider, ax: number, az: number) =>
+          c.hx * Math.abs(c.cos * ax - c.sin * az) + c.hz * Math.abs(c.sin * ax + c.cos * az);
+        const axes = [
+          [ca.cos, -ca.sin, ca.hx, proj(cb, ca.cos, -ca.sin)],
+          [ca.sin, ca.cos, ca.hz, proj(cb, ca.sin, ca.cos)],
+          [cb.cos, -cb.sin, cb.hx, proj(ca, cb.cos, -cb.sin)],
+          [cb.sin, cb.cos, cb.hz, proj(ca, cb.sin, cb.cos)],
+        ] as const;
+        let d0 = Infinity, d1 = Infinity;
+        for (const [ax, az, ra, rb] of axes) {
+          const dep = ra + rb - Math.abs(dx * ax + dz * az);
+          if (dep <= eps) { d0 = d1 = 0; break; }
+          if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) d1 = dep;
+        }
+        if (d0 <= eps) continue;
+        // The two shallowest SAT depths bound the intersection footprint.
+        const va = 8 * ca.hx * ca.hy * ca.hz, vb = 8 * cb.hx * cb.hy * cb.hz;
+        const frac = (d0 * d1 * oy) / Math.min(va, vb);
+        if (frac > worst) { worst = frac; best = { x: d0, y: oy, z: d1 }; }
+      }
+      if (best && worst > 0.35) out.push({ a: i, b: j, ...best });
+    }
   }
   return out;
 }
@@ -81,6 +146,25 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     // cheap broadphase — skip pieces nowhere near this ball
     const rr = Math.max(c.hx, c.hz) + b.radius + 0.5;
     if (dx * dx + dz * dz > rr * rr) continue;
+    if (c.dome) {
+      // Sphere vs hemisphere: contact normal runs from the dome's base
+      // center to the ball — the buried half never matters, the plinth
+      // hull owns the volume below the spring line.
+      const cy0 = c.cy - c.hy;
+      const sx = b.x - c.cx, sy = b.y - cy0, sz = b.z - c.cz;
+      const d2 = sx * sx + sy * sy + sz * sz;
+      const reach = c.dome + b.radius;
+      if (d2 >= reach * reach) continue;
+      const d = Math.sqrt(d2) || 1;
+      const push = reach - d;
+      b.x += (sx / d) * push; b.y += (sy / d) * push; b.z += (sz / d) * push;
+      const dot = (b.vx * sx + b.vy * sy + b.vz * sz) / d;
+      if (dot < 0) {
+        const k = -(1 + BALL_BOUNCE) * dot / d;
+        b.vx += sx * k; b.vy += sy * k; b.vz += sz * k;
+      }
+      return true;
+    }
     // into local yaw frame
     const lx = dx * c.cos + dz * c.sin;
     const lz = -dx * c.sin + dz * c.cos;

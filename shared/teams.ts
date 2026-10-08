@@ -66,6 +66,9 @@ export interface ModeSpec {
   ffa: boolean;
   /** Flag capture mode. */
   flags: boolean;
+  /** Gems bank a team point on touch — nuggets-only: in CTF a gem heals
+   *  and pays a belt charge but never moves the flag score. */
+  gems: boolean;
   /** Score that ends the match (nuggets banked, flag captures, or DM pts). */
   winAt: number;
   /** Match clock seconds — leader wins at the horn, tie = draw. Without
@@ -77,17 +80,17 @@ export interface ModeSpec {
 }
 
 export const MODES: Record<ModeId, ModeSpec> = {
-  nuggets: { label: 'NUGGET WARS', teams: true, ffa: false, flags: false, winAt: WIN_NUGGETS, timeLimitS: 900, ptsPlayerKill: 0, ptsCreatureKill: 0 },
-  ctf:     { label: 'CAPTURE THE FLAG', teams: true, ffa: false, flags: true, winAt: 5, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
-  dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, winAt: 100, timeLimitS: 600, ptsPlayerKill: 10, ptsCreatureKill: 1 },
-  tdm:     { label: 'TEAM DEATHMATCH', teams: true, ffa: false, flags: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  nuggets: { label: 'NUGGET WARS', teams: true, ffa: false, flags: false, gems: true, winAt: WIN_NUGGETS, timeLimitS: 900, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  ctf:     { label: 'CAPTURE THE FLAG', teams: true, ffa: false, flags: true, gems: false, winAt: 5, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, gems: false, winAt: 100, timeLimitS: 600, ptsPlayerKill: 10, ptsCreatureKill: 1 },
+  tdm:     { label: 'TEAM DEATHMATCH', teams: true, ffa: false, flags: false, gems: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
   // Rabbit: FFA around ONE neutral flag — the carrier is the only legal
   // target, hold time pays a point a second, kills pay one each.
-  rabbit:  { label: 'RABBIT', teams: false, ffa: true, flags: true, winAt: 60, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
-  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  rabbit:  { label: 'RABBIT', teams: false, ffa: true, flags: true, gems: false, winAt: 60, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, gems: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0 },
   // Flag Run: solo cap circuit — a square of stands alternating teams,
   // two flags a side; bank any enemy flag at either friendly stand.
-  flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, gems: false, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },
 };
 
 /** Flag carry rules — shared client/server. */

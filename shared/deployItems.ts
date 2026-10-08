@@ -9,7 +9,7 @@
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
-  | 'generator' | 'sensor' | 'sentry';
+  | 'generator' | 'sensor' | 'baseturret';
 
 export interface DeployItemDef {
   /** Menu + HUD name (title case; HUD uppercases where it wants caps). */
@@ -34,6 +34,13 @@ export interface DeployItemDef {
   fireInterval?: number;
   /** Per-shot damage (turret, drone). */
   damage?: number;
+  /** Contact body radius — a blast centered inside this counts as a
+   *  DIRECT hit (pays directDamage), outside pays the aoe splash line.
+   *  Bigger assets are easier to glue a bomb onto. Also the collider's
+   *  horizontal half-extent. */
+  bodyR: number;
+  /** Collider height — the solid box runs pos.y .. pos.y+bodyH. */
+  bodyH: number;
   /** Arm/unfold delay before the item acts (turret, mine, station). */
   armS?: number;
   /** Proximity fuse radius (mine). */
@@ -50,25 +57,34 @@ export interface DeployItemDef {
   shieldRadius?: number;
   /** Heal fraction of maxHealth per second (station). */
   healRate?: number;
-  /** Bolt speed m/s (sentry — real leadable projectile, not hitscan). */
+  /** Bolt speed m/s (baseturret — real leadable projectile, not hitscan). */
   projSpeed?: number;
 }
 
 export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
-  turret:  { label: 'Sentry',  cap: 2, hp: 60,  ttlS: 180, cost: 2, range: 42, fireInterval: 1.25, damage: 14, armS: 0.45 },
-  mine:    { label: 'Mine',    cap: 6, hp: 20,  ttlS: 120, cost: 2, armS: 1.0, triggerDist: 3.2, blastRadius: 6.0, blastDamage: 22, knockback: 12 },
-  station: { label: 'Pad',     cap: 1, hp: 80,  ttlS: 240, cost: 2, range: 9, fireInterval: 0.5, healRate: 0.09 },
-  drone:   { label: 'Drone',   cap: 2, hp: 40,  ttlS: 90,  cost: 2, range: 35, fireInterval: 1.6, damage: 9, hoverUp: 2.5 },
-  shield:  { label: 'Barrier', cap: 1, hp: 120, ttlS: 120, cost: 2, shieldRadius: 6 },
-  nugget:  { label: 'Nugget',  cap: 8, hp: 1,   ttlS: 0,   cost: 2 },
-  beacon:  { label: 'Beacon',  cap: 1, hp: 10,  ttlS: 300, cost: 2 },
+  turret:  { label: 'Sentry',  cap: 2, hp: 60,  ttlS: 180, cost: 2, range: 42, fireInterval: 1.25, damage: 14, armS: 0.45, bodyR: 0.9, bodyH: 1.7 },
+  mine:    { label: 'Mine',    cap: 6, hp: 20,  ttlS: 120, cost: 2, armS: 1.0, triggerDist: 3.2, blastRadius: 6.0, blastDamage: 22, knockback: 12, bodyR: 0.5, bodyH: 0.35 },
+  station: { label: 'Pad',     cap: 1, hp: 80,  ttlS: 240, cost: 2, range: 9, fireInterval: 0.5, healRate: 0.09, bodyR: 1.4, bodyH: 1.1 },
+  drone:   { label: 'Drone',   cap: 2, hp: 40,  ttlS: 90,  cost: 2, range: 35, fireInterval: 1.6, damage: 9, hoverUp: 2.5, bodyR: 0.7, bodyH: 0.6 },
+  // Barrier: the dome is an energy FIELD — it stops shells, not bodies.
+  // The bodyR/bodyH here is just the emitter post it unfolds from.
+  shield:  { label: 'Barrier', cap: 1, hp: 120, ttlS: 120, cost: 2, shieldRadius: 6, bodyR: 0.7, bodyH: 1.0 },
+  nugget:  { label: 'Nugget',  cap: 8, hp: 1,   ttlS: 0,   cost: 2, bodyR: 0.4, bodyH: 0.4 },
+  beacon:  { label: 'Beacon',  cap: 1, hp: 10,  ttlS: 300, cost: 2, bodyR: 0.6, bodyH: 2.4 },
   // Base assets are fat targets — a generator is the raid's main prize,
   // so it soaks far more splash than a field plant. Authored ttl is
   // ignored: base gear runs on the respawn clock, not the decay clock.
-  generator: { label: 'Generator', cap: 0, hp: 400, ttlS: 0, cost: 0 },
-  sensor:    { label: 'Sensor',    cap: 0, hp: 120, ttlS: 0, cost: 0, range: 120, fireInterval: 2.0 },
-  // Base sentry — heavier than a field turret: longer reach, and its
+  generator: { label: 'Generator', cap: 0, hp: 400, ttlS: 0, cost: 0, bodyR: 2.8, bodyH: 4.4 },
+  sensor:    { label: 'Sensor',    cap: 0, hp: 120, ttlS: 0, cost: 0, range: 120, fireInterval: 2.0, bodyR: 1.2, bodyH: 9.8 },
+  // Base turret — heavier than a field turret: longer reach, and its
   // shell is a real traveling bolt the victim can dodge (lead computed
   // at fire time, blast lands where the aim point was). NOT homing.
-  sentry:    { label: 'Base Gun',  cap: 0, hp: 160, ttlS: 0, cost: 0, range: 55, fireInterval: 1.5, damage: 40, blastRadius: 3, knockback: 6, projSpeed: 80 },
+  baseturret: { label: 'Base Turret', cap: 0, hp: 160, ttlS: 0, cost: 0, range: 55, fireInterval: 1.5, damage: 40, blastRadius: 3, knockback: 6, projSpeed: 80, bodyR: 1.3, bodyH: 3.0 },
 };
+
+// Solid kinds — drone and nugget are excluded on purpose: the drone
+// chases its owner (a static hull would punt the owner it shadows) and
+// the nugget never becomes an item. Everything else you can't walk
+// through; the barrier's dome stays walk-through by design above.
+const NOSOLID = new Set<DeployKind>(['drone', 'nugget']);
+export function deploySolid(kind: DeployKind): boolean { return !NOSOLID.has(kind); }

@@ -125,7 +125,11 @@ export interface StructureSpec {
    *  skips it — the visual is the real dais mesh; the spec is the hull. */
   /** 'hull' is collision-only like 'stand' — T2 interior convex-hull
    *  boxes emitted by the porter; the real mesh is the visual. */
-  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull' | 'kit';
+  /** 'shield' is a team-gated energy pane: collides for everyone EXCEPT
+   *  `team` — allies walk and shoot through, enemies hit a wall. The
+   *  client renders it as a translucent barrier; a team-less shield is
+   *  legal but pointless (blocks everyone, same as a wall). */
+  kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull' | 'kit' | 'shield';
   /** 'kit' pieces render through the structKit builders and collide via
    *  KIT_HULLS (shared/structKits) — `size` is ignored for them. */
   piece?: string;
@@ -181,6 +185,17 @@ const clampInt = (v: unknown, lo: number, hi: number, fallback: number, label: s
 };
 
 /** Merge a parsed JSON blob over the defaults — never trusts the file. */
+/** Strict-JSON.parse wrapper that tolerates // and block comments —
+ *  spec files are hand-authored, so inline notes are legitimate. The
+ *  regex walks string literals intact, so only real comment tokens are
+ *  stripped (a "//" inside a quoted value survives). Single chokepoint
+ *  for server catalog, client solo fetch and tests. */
+export function parseMapSpecJson(text: string): unknown {
+  return JSON.parse(text.replace(
+    /"(?:[^"\\]|\\.)*"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    (m) => (m.startsWith('/') ? '' : m)));
+}
+
 export function resolveMapSpec(raw: unknown): MapSpec {
   const src = (raw && typeof raw === 'object' ? raw : {}) as {
     mode?: unknown;
@@ -385,26 +400,14 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   return { x: a.x as number, z: a.z as number, radius };
 }
 
-const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull', 'kit']);
+const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull', 'kit', 'shield']);
 
-/** Flag-stand collision hull — a two-box trapezoid approximating the
- *  dais mesh (client/src/structures mkFlagStand): wide low skirt tier +
- *  narrower deck tier. pos.y is the piece BASE (collider centers itself
- *  at +size.y/2). The server injects these at flag homes so the echo to
- *  clients carries identical collision — keep dims in step with the
- *  mesh: skirt ≈12w×2.2h, deck ≈9w×0.85h, top ≈3.05m. */
-export function flagStandSpecs(home: Vec3like, team?: TeamId, scaleXZ = 1, scaleY = 1): StructureSpec[] {
-  return [
-    { kind: 'stand', pos: { ...home }, size: { x: 12 * scaleXZ, y: 2.2 * scaleY, z: 12 * scaleXZ }, team },
-    { kind: 'stand', pos: { x: home.x, y: home.y + 2.2 * scaleY, z: home.z }, size: { x: 9 * scaleXZ, y: 0.85 * scaleY, z: 9 * scaleXZ }, team },
-  ];
-}
-
-/** Deck top above the flag's home pos (skirt 2.2 + deck 0.85) — bot
- *  goals aimed at a home flag are lifted by this so pressers mount the
- *  dais instead of pinning on the skirt hull. Keep in step with the
- *  tier sizes above. */
-export const FLAG_STAND_LIFT = 3.05;
+/** Socket top above the flag's home pos — bot goals aimed at a home
+ *  flag lift by this so pressers meet the pole, not the dirt. The socket
+ *  itself is visual-only (mkFlagStand); a map that wants a platform
+ *  authors a stand kit piece (katastand/flagtower — standTop snaps the
+ *  home onto it) or an authored 'stand' box. */
+export const FLAG_STAND_LIFT = 0.85;
 const isVec = (s: unknown): s is Vec3like =>
   !!s && typeof s === 'object' &&
   Number.isFinite((s as Vec3like).x) &&
@@ -463,7 +466,7 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
  *  make sense unattended (no nuggets/drones chasing a phantom owner). */
 function parseDeploys(raw: unknown): DeploySpec[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const AUTHORED = new Set(['turret', 'mine', 'station', 'shield', 'beacon', 'generator', 'sensor', 'sentry']);
+  const AUTHORED = new Set(['turret', 'mine', 'station', 'shield', 'beacon', 'generator', 'sensor', 'baseturret']);
   const out: DeploySpec[] = [];
   let dropped = 0;
   for (const s of raw) {
