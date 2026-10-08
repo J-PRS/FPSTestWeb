@@ -9,7 +9,7 @@ const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
 const R = (yaw = 0, pitch = 0) => ({ yaw, pitch });
 const V = (x = 0, y = 0, z =0) => ({ x, y, z });
 
-function mk(): NetworkManager { return new NetworkManager('ws://x'); }
+function mk(): NetworkManager { return new NetworkManager(); }
 
 describe('roster heal primitives', () => {
   it('upsertRemotePlayer seeds a member lost to a dropped join edge', () => {

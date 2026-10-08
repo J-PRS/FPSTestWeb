@@ -68,6 +68,11 @@ export function makeDeps() {
         remoteRemove: (id: number) => calls.deployables.push(`gone:${id}`),
         remoteTurretShot: (id: number) => calls.deployables.push(`shot:${id}`),
         remoteMineBoom: (id: number) => calls.deployables.push(`boom:${id}`),
+        // reconcileDeployables (gameState roster path) reads these — a
+        // stub without them throws mid-handler and half-applies state.
+        remoteReplicas: () => new Map(),
+        applyDeployHp: () => {},
+        cullOwn: () => {},
       },
     }) as never,
   };

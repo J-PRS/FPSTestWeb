@@ -143,6 +143,10 @@ export function wireWorld(ctx: NetCtx): void {
     const wire = new Map(players.map(p => [p.id, p.position]));
     for (const [id, rp] of deps.world.remotePlayers) {
       const pos = wire.get(id);
+      // A room hop's roster replaces wholesale — an entity the snapshot
+      // doesn't name is from the old room: keeping it leaves a ghost body
+      // that renders and collides-feels real but can never update.
+      if (!pos) { deps.world.remotePlayers.remove(id); continue; }
       _reseatPos.set(pos?.x ?? rp.position.x, pos?.y ?? rp.position.y, pos?.z ?? rp.position.z);
       rp.teleportTo(_reseatPos);
     }

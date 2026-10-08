@@ -251,7 +251,10 @@ export class Chat {
     // path) still renders gray — never as a normal send.
     if (muted && from !== null) {Chat.grayMuted(line);}
     this.feed.append(line);
-    while (this.feed.children.length > MAX_LINES) {this.feed.firstChild?.remove();}
+    // Trim by ELEMENT child: firstChild may be a non-element node — removing
+    // it doesn't shrink `children`, and a null firstChild makes ?.remove()
+    // no-op forever (infinite loop once >MAX_LINES lines land within FADE_MS).
+    while (this.feed.children.length > MAX_LINES) {this.feed.children[0]?.remove();}
     setTimeout(() => line.remove(), FADE_MS);
     return line;
   }
