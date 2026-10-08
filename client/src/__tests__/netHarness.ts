@@ -22,7 +22,7 @@ export function makeDeps() {
   const nm = new NetworkManager();
   nm.setPlayerId('tester-local');
   const world = createWorldState();
-  const calls = { hud: [] as string[], frag: [] as string[], entities: [] as string[], deployables: [] as string[] };
+  const calls = { hud: [] as string[], frag: [] as string[], entities: [] as string[], deployables: [] as string[], renderSnap: [] as number[] };
   const player = {
     pos: new THREE.Vector3(0, 5, 0),
     vel: new THREE.Vector3(),
@@ -31,6 +31,9 @@ export function makeDeps() {
     buffUntil: { regen: 0, dd: 0 },
     absorbShieldDamage() {}, applyPull() {}, applyKnockback() {},
     heal() {}, grantJetBoost() {}, syncMovement() {}, markTeleport() {},
+    // Correction render-ease seam — a spy so tests can see the ease fired
+    // (and so a missing wiring throws instead of being swallowed).
+    noteRenderSnap(jump: THREE.Vector3) { calls.renderSnap.push(jump.length()); },
     movement: {
       setState() {}, setInput() {}, update() {}, setStructures() {},
       getState: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
@@ -46,7 +49,12 @@ export function makeDeps() {
     lazyHealthBarSystem: () => new Proxy({}, { get: () => () => {} }) as never,
     fragMessages: { show: (m: string) => calls.frag.push(m) } as never,
     explosionTracker: new ExplosionTracker(),
-    logger: { debug() {}, info() {}, warn() {}, error() {} } as never,
+    // dispatch() swallows handler throws into a warn — in tests a thrown
+    // handler is always a bug (partial state applied), so fail loudly.
+    logger: {
+      debug() {}, info() {}, error() {},
+      warn(m: string) { if (m.startsWith('Handler threw')) throw new Error(m); },
+    } as never,
     world,
     setLastSentPos() {},
     entities: () => ({

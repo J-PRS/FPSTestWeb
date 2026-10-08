@@ -86,6 +86,9 @@ describe('netHarness — real wire messages through real handlers', () => {
     expect(h.player.pos.x).toBe(0);
     feed(h.nm, { type: 'correction', seq: 2, position: { x: 10, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
     expect(h.player.pos.x).toBe(10);
+    // The sim snaps instantly but the camera eases — renderPos carries the
+    // pre-snap offset so the view glides ~100ms instead of teleporting.
+    expect(h.calls.renderSnap).toEqual([10]);
   });
 
   // hitSeq/tickSeq are per-room spaces. A room hop without reconnect must

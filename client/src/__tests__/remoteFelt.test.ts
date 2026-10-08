@@ -177,6 +177,26 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(h.position.distanceTo(spawn)).toBeLessThan(0.5);
   });
 
+  it('held jet bit keeps a DR remote climbing through a silence gap — no mid-air drop tell', () => {
+    const h = new Host();
+    h.wireJet = true; // the wire says this remote is burning
+    const interp = new RemoteInterp(h);
+    const FRAME = 1000 / 60;
+    vi.setSystemTime(0);
+    const start = { x: 0, y: 20, z: 0 };
+    interp.onUpdate(start, { yaw: 0, pitch: 0 }, 40, { x: 0, y: 8, z: 0 }, 0);
+    h.position.set(0, 20, 0);
+    // Wire goes silent past the DR threshold — the ghost must keep the
+    // jet burn going (gravity alone would visibly drop it mid-air).
+    for (let f = 1; f <= 60; f++) {
+      vi.setSystemTime(f * FRAME);
+      h.previousPosition.copy(h.position);
+      interp.step(FRAME / 1000, false);
+    }
+    expect(interp.simulating).toBe(true);
+    expect(h.position.y).toBeGreaterThan(15); // still aloft — never the "why did he drop" tell
+  });
+
   it('silence gap + reconnect: DR runs, rejoin converges with zero snaps', () => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.02, secs: 20, silentFrom: 8000, silentTo: 9200, seed: 4242 });
     expect(r.snaps, JSON.stringify(r)).toBe(0);
