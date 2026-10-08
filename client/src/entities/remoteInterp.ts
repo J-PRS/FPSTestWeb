@@ -47,9 +47,12 @@ export class RemoteInterp {
   /** Forced local prediction window — bridges the server round-trip after
    *  a predicted knockback so interpolation doesn't fight the launch. */
   private predictionTimer = 0;
-  /** Blends from predicted back to server position after sim resumes
-   *  (0 = done). */
-  private reconcileBlend = 0;
+  /** Physics-constrained rejoin window — instead of lerping the remote
+   *  back onto the buffered path (a visible slide), a steering controller
+   *  applies the acceleration a real player could produce to converge
+   *  onto it (the "simulate the fake input" approach: the correction is
+   *  an in-world maneuver, never a warp). Seconds remaining; 0 = off. */
+  private convergeTimer = 0;
   /** Last raw server position — velocity estimation must not read the
    *  extrapolated path or it feeds its own error forward. */
   private lastServerPosition = new THREE.Vector3();
@@ -78,8 +81,8 @@ export class RemoteInterp {
     // knockback yet, so the sim keeps running.
     if (this._simulating && this.predictionTimer <= 0) {
       this._simulating = false;
-      this.reconcileBlend = 0.1; // ~100ms ease — a snap reads as a teleport
-      logger.debug(`RESUMED updates, blending to server position`, { playerId: this.h.playerId });
+      this.convergeTimer = 0.45; // steer back onto the path, physically
+      logger.debug(`RESUMED updates, converging to server position`, { playerId: this.h.playerId });
     }
 
     this.ping = ping;
@@ -104,7 +107,7 @@ export class RemoteInterp {
     if (teleported) {
       this.net.clear();
       this._simulating = false;
-      this.reconcileBlend = 0;
+      this.convergeTimer = 0;
       this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
       if (serverVelocity) {
         this.simulatedVelocity.set(serverVelocity.x, serverVelocity.y, serverVelocity.z);
@@ -168,6 +171,8 @@ export class RemoteInterp {
         this.predictionTimer = Math.max(0, this.predictionTimer - dt);
       }
       this.simStep(dt);
+    } else if (this.convergeTimer > 0) {
+      this.convergeStep(dt);
     } else if (!localDriven) {
       this.interp(dt);
     }
@@ -182,6 +187,7 @@ export class RemoteInterp {
     this.net.clear();
     this.lastUpdateTime = Date.now();
     this._simulating = false;
+    this.convergeTimer = 0;
   }
 
   /** Respawn reset — the sim can't carry a corpse's state forward. */
@@ -189,7 +195,7 @@ export class RemoteInterp {
     this._simulating = false;
     this.net.clear();
     this.predictionTimer = 0;
-    this.reconcileBlend = 0;
+    this.convergeTimer = 0;
     this.lastServerPosition.copy(pos);
     this.lastServerUpdateMs = Date.now();
     this.lastUpdateTime = Date.now();
@@ -215,6 +221,7 @@ export class RemoteInterp {
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
     this.net.clear();
     this._simulating = true;
+    this.convergeTimer = 0;
     // Window: ping + one server tick + interp delay, clamped
     this.predictionTimer = Math.min(0.6, Math.max(0.15, (this.ping + 200) / 1000));
   }
@@ -235,16 +242,8 @@ export class RemoteInterp {
     this.sample(sampledPos, sampledRot);
     const p = this.h.position;
 
-    if (this.reconcileBlend > 0) {
-      // Reconciliation blend: recovering from simulation, ease onto the
-      // sampled path instead of snapping
-      this.reconcileBlend = Math.max(0, this.reconcileBlend - dt);
-      const blendStrength = Math.min(1, dt / Math.max(0.001, this.reconcileBlend + dt));
-      p.lerp(sampledPos, blendStrength);
-    } else {
-      // Directly place on the interpolated path — smooth by construction
-      p.copy(sampledPos);
-    }
+    // Directly place on the interpolated path — smooth by construction
+    p.copy(sampledPos);
 
     // Rotation comes straight from the sampled interpolation (already smoothed)
     this.h.rotation.yaw = sampledRot.yaw;
@@ -256,6 +255,50 @@ export class RemoteInterp {
       this.h.velocity.x = (p.x - this.h.previousPosition.x) / dt;
       this.h.velocity.y = (p.y - this.h.previousPosition.y) / dt;
       this.h.velocity.z = (p.z - this.h.previousPosition.z) / dt;
+    }
+  }
+
+  /** Steering convergence — the fake-input answer to a drifted remote:
+   *  instead of blending positions, a critically-damped controller picks
+   *  the acceleration that closes the gap to the buffered path within a
+   *  physical accel cap, so the rejoin reads as the remote steering, not
+   *  sliding. Ends early once close; a real teleport never comes through
+   *  here (onUpdate's plausibility gate wipes instead). */
+  private convergeStep(dt: number): void {
+    const p = this.h.position;
+    const target = _extrapolated;
+    const rot = _sampledRot;
+    this.sample(target, rot);
+
+    const horizon = 0.18; // s — how hard the convergence is allowed to chase
+    // desired velocity that reaches the target within ~horizon
+    const dvx = (target.x - p.x) / horizon;
+    const dvy = (target.y - p.y) / horizon;
+    const dvz = (target.z - p.z) / horizon;
+    // accel = (desiredVel - vel)/dt, critically damped, capped to what a
+    // jet-burning player could produce (~jetForceDir + gravity-class)
+    const ACCEL_CAP = 80;
+    let ax = (dvx - this.simulatedVelocity.x) / Math.max(dt, 0.001);
+    let ay = (dvy - this.simulatedVelocity.y) / Math.max(dt, 0.001);
+    let az = (dvz - this.simulatedVelocity.z) / Math.max(dt, 0.001);
+    const aMag = Math.hypot(ax, ay, az);
+    if (aMag > ACCEL_CAP) {
+      const s = ACCEL_CAP / aMag; ax *= s; ay *= s; az *= s;
+    }
+    this.simulatedVelocity.x += ax * dt;
+    this.simulatedVelocity.y += ay * dt;
+    this.simulatedVelocity.z += az * dt;
+    p.x += this.simulatedVelocity.x * dt;
+    p.y += this.simulatedVelocity.y * dt;
+    p.z += this.simulatedVelocity.z * dt;
+
+    this.h.rotation.yaw = rot.yaw;
+    this.h.rotation.pitch = rot.pitch;
+    this.convergeTimer = Math.max(0, this.convergeTimer - dt);
+    const close = p.distanceToSquared(target) < 0.04; // 0.2m
+    if (close || this.convergeTimer <= 0) {
+      this.convergeTimer = 0;
+      this.h.velocity.copy(this.simulatedVelocity);
     }
   }
 
