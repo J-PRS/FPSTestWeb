@@ -3607,3 +3607,7 @@ The fidelity lanes rode the stateHash message as eight parallel named slots (fiv
 ## 2.229 — binary lane exception containment
 
 onMessage's try/catch wrapped only the JSON branch — the binary hot path (28B position frames, the highest-frequency message on the wire) called handleGameMessage outside it, so a throwing handler on a binary frame escaped uncaught while the same throw on JSON cost only its sender's socket. The binary branch now runs the same containment: log player+type, close that socket with 1011. All three transports (WS, WebTransport datagrams/streams, RTC datachannel) funnel through onMessage, so the ingest edge is now uniformly contained.
+
+## 2.230 — P2P host dispatch containment
+
+Same gap as the dedicated binary lane, one tier down: P2PHost.dispatch called handleMessage unguarded, so a throwing handler escaped into the host's own event loop — on P2P the "socket layer" IS a player's game. A malformed-but-valid peer message could take down the host's session, not just their link. Dispatch now wraps the handler and closes only the offending peer's link on a throw. Ingest containment is now uniform across dedicated (JSON + binary) and P2P host.

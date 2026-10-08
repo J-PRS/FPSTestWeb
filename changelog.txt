@@ -1,3 +1,4 @@
+2026-10-09 - P2P host dispatch containment: a throwing handler drops the offending peer's link, not the host's game — ingest containment uniform across dedicated + P2P
 2026-10-09 - binary position lane gets the JSON lane's containment: a throwing handler drops that socket (1011), not the process — ingest edge now uniform across WS/WT/RTC
 2026-10-09 - stateHash wire shape: replica lanes ride a kind-keyed `replica` map instead of eight named slots — adding a lane no longer touches the wire type or handler signatures
 2026-10-09 - TickLoop: all replica fidelity lanes emit through one emitLane body — hash + per-id diff fields generated from the kind declaration (C4 server half)
