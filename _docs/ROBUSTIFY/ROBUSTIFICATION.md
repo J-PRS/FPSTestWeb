@@ -3449,3 +3449,11 @@ checkIntent ran server-side only, so a drifted send warned after the
 packet crossed the wire — in someone else's log. NetworkManager.send
 now runs the same check before serialize: the omit screams at the call
 site that made it. Same declaration, same warn contract, one line.
+
+## 2.199 — interface keys pinned to the declaration
+
+GameStatePlayer is hand-written beside a generated emit — a field added
+on either side drifted silently until a runtime warn caught it. The
+conformance test now parses the interface and asserts its keys equal
+the declared roster row (+id). Type-level drift fails at test time,
+not wire time.

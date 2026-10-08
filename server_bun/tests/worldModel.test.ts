@@ -205,4 +205,13 @@ describe('world model <-> protocol conformance', () => {
         'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep',
       ]));
   });
+
+  it('GameStatePlayer interface keys match the declared roster row', () => {
+    // The row type is hand-written next to the generated emit — a field
+    // added on either side drifts silently. Pin the source-level match.
+    const body = PROTOCOL.match(/export interface GameStatePlayer \{([^}]*)\}/)![1]!;
+    const keys = [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]);
+    const declared = new Set(['id', ...declaredFieldNames(WORLD_MODEL.player!, 'rosterFields')]);
+    expect(new Set(keys)).toEqual(declared);
+  });
 });
