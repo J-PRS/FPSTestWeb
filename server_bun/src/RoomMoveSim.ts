@@ -42,7 +42,7 @@ export class RoomMoveSim {
   private static readonly DIVERGENCE_M = 14;
   private static readonly AUTHORITY_DIVERGENCE_M = 1.5;
   private static readonly CORRECT_MS = 400;
-  private static readonly AUTHORITY_CORRECT_MS = 100;
+  private static readonly AUTHORITY_CORRECT_MS = 80;
   authoritative: boolean;
   private wantsAuthority: boolean;
   private judge: MoveJudge;
