@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
+import { MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -25,6 +26,9 @@ export interface InterpHost {
   playerId: string;
   /** Armor tier — dead reckoning grounds the eye at the class's height. */
   armorClass?: string;
+  /** Wire ski flag — a DR'd remote holding ski stays frictionless above
+   *  walk speed, same rule the shared sim applies. */
+  wireSki?: boolean;
 }
 
 // Scratch — shared across instances, never retained past the call
@@ -318,8 +322,14 @@ export class RemoteInterp {
       if (p.y < groundY + eye) { // keep EYE at eye height above feet
         p.y = groundY + eye;
         this.simulatedVelocity.y = 0;
-        this.simulatedVelocity.x *= 0.9; // Friction
-        this.simulatedVelocity.z *= 0.9;
+        // Ski is frictionless past walk speed — a remote holding ski
+        // keeps the slide, a walker bleeds the flat 0.9 ground drag.
+        const hSpeed = Math.hypot(this.simulatedVelocity.x, this.simulatedVelocity.z);
+        const skiing = this.h.wireSki === true && hSpeed > MOVEMENT_CONFIG.maxVelocityGround;
+        if (!skiing) {
+          this.simulatedVelocity.x *= 0.9;
+          this.simulatedVelocity.z *= 0.9;
+        }
       }
     }
   }

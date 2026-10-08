@@ -1,3 +1,4 @@
+2026-10-01 - Remote dead-reckon keeps ski momentum: grounded DR honors the wire ski flag — frictionless above walk speed like the shared sim, instead of a visible slide-to-stop mid-gap
 2026-10-01 - Remote rotation extrapolates through buffer gaps: yaw/pitch continue at the last pair's turn rate (clamped, 350ms cap) instead of freezing mid-swipe while the body extrapolates
 2026-10-01 - Held input rides every volatile position frame (+3B): a superseding datagram-style input stream on the unordered lane — a dropped packet costs zero, gated by position seq + inputSeq so stale frames can't resurrect released keys
 2026-10-01 - Remote rejoin convergence steers, not slides: when dead-reckoning hands back to the buffered path, a capped-accel controller converges onto it (fake-input correction — an in-world maneuver) instead of the old geometric blend
