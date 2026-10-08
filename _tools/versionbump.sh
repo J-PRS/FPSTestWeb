@@ -20,7 +20,7 @@ while IFS= read -r p; do
     client/*) client=1 ;;
     server_bun/*) server=1 ;;
     shared/*) client=1; server=1 ;;
-    *) client=1; server=1 ;;
+    *) ;;
   esac
 done <<< "$paths"
 [ "$client" = 1 ] && bump "$root/client/VERSION"
