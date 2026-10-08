@@ -6,7 +6,7 @@ import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shar
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { clampPing, rewindPos } from './claimLedger.ts';
-import { RENDER_LAG_MS } from './rewind.ts';
+import { renderLagOf } from './rewind.ts';
 
 type ContactHost = RoomProjectiles;
 
@@ -14,11 +14,11 @@ type ContactHost = RoomProjectiles;
  *  sim(t − ping − renderDelay + broadcast lead). Creature sims keep no
  *  history — their sweeps take the same window as a backMs velocity
  *  extrapolation (no lead: they broadcast raw). */
-function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean } | null | undefined, targetId: string): number {
+function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined, targetId: string): number {
   // Bots read live positions — no render pipeline, no ghost to chase.
   if (owner?.isBot) return 0;
   const lead = (r.room.moveSim?.transitOf?.(targetId) ?? 0) / 2;
-  return Math.max(0, clampPing(owner?.ping ?? 0) + RENDER_LAG_MS - lead);
+  return Math.max(0, clampPing(owner?.ping ?? 0) + renderLagOf(owner) - lead);
 }
 
 /** The body sweep tests distance to the capsule's axis MIDPOINT, so the
@@ -105,7 +105,7 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
 /** Player sweep — a cheap midpoint-sphere reject (server |vel|·dt bound
  *  plus teleport slack) skips anyone who cannot displace into reach this
  *  tick before the per-candidate segment solve runs. */
-function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean } | null | undefined): boolean {
+function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined): boolean {
     const p = proj.p;
     const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
     const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
@@ -133,9 +133,9 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
 
 /** Creature sweep — server shells connect with the swarm the same way a
  *  client's creatureHit claim does: earliest ball contact along the leg. */
-function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean } | null | undefined): boolean {
+function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined): boolean {
     const p = proj.p;
-    const backMs = owner?.isBot ? 0 : clampPing(owner?.ping ?? 0) + RENDER_LAG_MS;
+    const backMs = owner?.isBot ? 0 : clampPing(owner?.ping ?? 0) + renderLagOf(owner);
     const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
     // Species pops contest the same lane — earliest of ball/crawler
     // contact eats the shell, so a crawler body-blocks a shot meant

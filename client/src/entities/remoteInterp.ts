@@ -58,6 +58,10 @@ export class RemoteInterp {
 
   get simulating(): boolean { return this._simulating; }
   get lastUpdate(): number { return this.lastUpdateTime; }
+  /** The render delay this remote's buffer settled on — reported via
+   *  clientStats so lag-comp validates at the ghost the shooter saw,
+   *  not a fixed 200ms constant that understates jittered links. */
+  get interpDelay(): number { return this.net.interpDelay; }
 
   /** One server position update arrived — push the snapshot, refresh
    *  velocity estimates, and (when the DR window allows) blend back.

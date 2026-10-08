@@ -65,6 +65,8 @@ export class RemotePlayer {
   get isDead(): boolean { return this._isDead; }
   get scale(): number { return this.corpse.scale; }
   get isSimulating(): boolean { return this.interp.simulating; }
+  /** Adaptive render delay this remote rides — lag-comp honesty input. */
+  get renderDelayMs(): number { return this.interp.interpDelay; }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it — tick
    *  short-circuits to model+gizmo upkeep only. */

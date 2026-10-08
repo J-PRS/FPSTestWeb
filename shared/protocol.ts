@@ -66,7 +66,7 @@ export type ClientMessage =
   // Client-side ops telemetry the server can't see itself — self-reported
   // fps/frame cost and link quality, ~10s cadence, rolled into /metrics so
   // a client's bad connection or melting renderer surfaces server-side.
-  | { type: 'clientStats'; fps: number; jsMs: number; ping: number; loss: number; jitter: number }
+  | { type: 'clientStats'; fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number }
   | { type: 'chat'; text: string; team?: boolean; vgs?: string }
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not

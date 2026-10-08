@@ -705,7 +705,13 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!networkManager.statsSource) {
       networkManager.statsSource = () => {
         const s = perf.snapshot();
-        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame };
+        // Worst-case remote render delay — lag-comp needs the ghost lag
+        // the shooter actually rides, which stretches under bad links.
+        let renderLagMs = 0;
+        deps.world.remotePlayers.forEach((rp) => {
+          if (rp.renderDelayMs > renderLagMs) renderLagMs = rp.renderDelayMs;
+        });
+        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs };
       };
     }
     const demoPaused = simTick(deps, perf, frame, terrain);

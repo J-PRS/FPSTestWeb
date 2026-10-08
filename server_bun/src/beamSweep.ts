@@ -16,7 +16,7 @@ import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { clampPing, rewindPos } from './claimLedger.ts';
-import { RENDER_LAG_MS } from './rewind.ts';
+import { renderLagOf } from './rewind.ts';
 
 /** The sweep only reads positions/ids off the sims — structural slices
  *  keep Room's concrete sims and a P2P host's lighter set compatible. */
@@ -50,7 +50,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const shooter = world.players.getPlayer(shooterId);
   // Bots see server truth — no render pipeline, no ghost to chase.
   const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
-  const shooterLag = shooter?.isBot ? 0 : RENDER_LAG_MS;
+  const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter);
   let playerId: string | undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) continue;

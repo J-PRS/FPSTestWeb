@@ -615,13 +615,14 @@ export class NetworkManager {
         ping: this.telemetry.ping,
         loss: this.telemetry.packetLoss(now),
         jitter: this.telemetry.jitter(),
+        renderLagMs: s.renderLagMs,
       });
     }
   }
 
   /** GameLoop feeds live perf numbers — the uplink above can't read
    *  the perf HUD itself without an import cycle the other direction. */
-  statsSource: (() => { fps: number; jsMs: number }) | null = null;
+  statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number }) | null = null;
   private lastStatsSendTime = 0;
   private static readonly STATS_INTERVAL = 10_000;
 

@@ -580,7 +580,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   teleport: [{ name: 'position', wire: 'vec3' }, { name: 'rotation', wire: 'rot' }, { name: 'velocity', wire: 'vec3' }],
   ping: [{ name: 'timestamp', wire: 'num' }],
   pong: [{ name: 'timestamp', wire: 'num' }],
-  clientStats: [{ name: 'fps', wire: 'num' }, { name: 'jsMs', wire: 'num' }, { name: 'ping', wire: 'num' }, { name: 'loss', wire: 'num' }, { name: 'jitter', wire: 'num' }],
+  clientStats: [{ name: 'fps', wire: 'num' }, { name: 'jsMs', wire: 'num' }, { name: 'ping', wire: 'num' }, { name: 'loss', wire: 'num' }, { name: 'jitter', wire: 'num' }, { name: 'renderLagMs', wire: 'num', absent: null }],
   chat: [{ name: 'text', wire: 'str' }, { name: 'team', wire: 'bool', absent: null }, { name: 'vgs', wire: 'str', absent: null }],
   aoeShot: [{ name: 'position', wire: 'vec3' }, { name: 'weaponType', wire: 'num', absent: null }, { name: 'excludeTargetId', wire: 'str', absent: null }, { name: 'projectileId', wire: 'str', absent: null }, { name: 'airtime', wire: 'num', absent: null }, { name: 'power', wire: 'num', absent: null }, { name: 'directHit', wire: 'bool', absent: null }, { name: 'shotId', wire: 'str', absent: null }],
   shotFired: [{ name: 'weaponType', wire: 'num', absent: null }, { name: 'dir', wire: 'vec3', absent: null }, { name: 'pos', wire: 'vec3', absent: null }, { name: 'shotId', wire: 'str', absent: null }],

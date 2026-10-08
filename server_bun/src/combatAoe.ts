@@ -9,6 +9,7 @@ import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, type ColliderIndex } from '../../shared/solidWorld.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
+import { renderLagOf } from './rewind.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
 
 // AOE claim adjudication — what remains after the server took over
@@ -150,6 +151,7 @@ export class AoeClaims {
       this.h.hb('aoe.beam.hit');
       this.h.blast.splashOne({
         shooterId: playerId, ping: player.ping, bot: !!player.isBot, pos: msg.position,
+        lagMs: player.isBot ? 0 : renderLagOf(player),
         radius: stats.aoeRadius, baseDamage: dmg,
         impulse: stats.knockbackForce, pull: false,
         label: 'LG beam hit', weapon: msg.weaponType,
