@@ -46,6 +46,7 @@ export class VideoRecorder {
   private videoW = 0;
   private videoH = 0;
   private fpsNow = 60;
+  private lastFrameAt = 0;
 
   setCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -83,11 +84,15 @@ export class VideoRecorder {
     const src = (this.staged ? this.stage : this.canvas)!;
     // hardwarePreference predates TS's DOM lib — it selects NVENC/QSV/AMF
     // when the platform exposes a hardware encoder.
+    // Bitrate follows encode area (~8Mbps at 1080p) instead of a flat
+    // number — fast-motion game footage needs it at 1080p, but a small
+    // buffer shouldn't pay a 1080p-sized stream.
+    const bitrate = Math.round(src.width * src.height * 4);
     const config = {
       codec: 'avc1.640032', // H.264 High@5.0 — covers 1080p60
       width: src.width,
       height: src.height,
-      bitrate: 12_000_000,
+      bitrate: Math.min(Math.max(bitrate, 2_000_000), 12_000_000),
       framerate: fps,
       hardwarePreference: 'prefer-hardware',
       latencyMode: 'realtime',
@@ -200,6 +205,13 @@ export class VideoRecorder {
       // Backpressure: a stalled encoder drops frames rather than queueing
       // unbounded VideoFrames (each holds a full GPU readback).
       if (this.enc.encodeQueueSize > 30) {return;}
+      // Frames arrive at the DISPLAY rate — a 144Hz render would squeeze
+      // 144 stamps into 60fps timing (2.4x slow-mo clip). Gate on wall
+      // clock so the mp4 runs true-speed at the configured fps on any
+      // refresh rate.
+      const now = performance.now();
+      if (now - this.lastFrameAt < this.frameDur / 1000 * 0.9) {return;}
+      this.lastFrameAt = now;
       const frame = new VideoFrame(this.staged ? this.stage! : src, { timestamp: Math.round(this.frames * this.frameDur) });
       this.enc.encode(frame, { keyFrame: this.frames % this.keyEvery === 0 });
       frame.close();
