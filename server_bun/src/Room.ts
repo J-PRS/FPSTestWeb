@@ -538,8 +538,23 @@ export class Room {
     this.sims.push({ name: 'proj', tick: (dt) => this.projectiles.tick(dt) });
     this.sims.push({ name: 'move', tick: (dt) => this.moveSim.tick(dt) });
     this.sims.push({ name: 'health', tick: (dt) => this.healthTick(dt) });
+    // Server-side RTT probe: round-robin one human per cadence tick so
+    // the move shadow's transit EMA has a channel the client can't
+    // fabricate (it cross-checks the ping riding position frames).
+    this.sims.push({ name: 'ping', tick: () => this.pingTick() });
     this.sims.push({ name: 'influence', tick: (dt) => this.influence.tick(dt) });
     this.moveSim.health = this.health;
+  }
+
+  /** Server-issued ping: one human per cadence window, round-robin, so
+   *  each player's transit EMA refreshes every ~500ms×roster. Bots are
+   *  skipped — their shadow lives on this box, transit is zero. */
+  private pingCycle = 0;
+  private pingTick(): void {
+    if (++this.pingCycle % 10 !== 0) return;
+    const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
+    if (!humans.length) return;
+    this.sendToPlayer(humans[(this.pingCycle / 10 | 0) % humans.length]!.id, { type: 'ping', timestamp: wallNow() });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
@@ -641,6 +656,7 @@ export class Room {
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
       transitOf: (pid) => this.moveSim.transitOf(pid),
+      transitNote: (pid, rtt) => this.moveSim.feedTransit(pid, rtt),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,

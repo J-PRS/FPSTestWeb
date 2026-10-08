@@ -518,6 +518,24 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       h.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
     },
   },
+
+  // Echo of the server's own ping — the measured RTT cross-checks the
+  // client-reported ping riding every position frame (forgery must fool
+  // both channels, and a delayed echo only shrinks what it could buy).
+  pong: {
+    validate: (obj) => {
+      if (!isFiniteNumber(obj.timestamp)) {
+        return { success: false, error: 'pong timestamp must be a finite number' };
+      }
+      return { success: true, data: { type: 'pong', timestamp: obj.timestamp } };
+    },
+    handle: (h, id, m) => {
+      const p = h.playerManager.getPlayer(id);
+      if (!p) return;
+      p.lastSeen = wallNow();
+      h.roomInfo.transitNote?.(id, wallNow() - m.timestamp);
+    },
+  },
 };
 
 export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {

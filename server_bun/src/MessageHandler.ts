@@ -131,6 +131,9 @@ export interface RoomInfo {
   /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
    *  broadcast lead so validation aims at the shooter's screen point. */
   transitOf?: (playerId: string) => number;
+  /** Server-measured RTT (ping/pong echo) — cross-checks the
+   *  client-reported transit inside the move shadow. */
+  transitNote?: (playerId: string, rttMs: number) => void;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'

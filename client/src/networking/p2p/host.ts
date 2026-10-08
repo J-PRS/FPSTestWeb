@@ -45,6 +45,7 @@ export class P2PHost {
   private messageHandler: MessageHandler;
   private links = new Map<P2PLink, string>(); // link → playerId
   private byPlayer = new Map<string, P2PLink>();
+  private pingCycle = 0;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private tickClock: Worker | null = null;
   tickSeq = 0;
@@ -88,6 +89,7 @@ export class P2PHost {
     moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
     inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
     transitOf: (pid) => this.moveShadows.transitOf(pid),
+    transitNote: (pid, rtt) => this.moveShadows.feedTransit(pid, rtt),
     drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
     onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
     energyOf: (pid) => this.moveShadows.energyOf(pid),
@@ -292,6 +294,13 @@ export class P2PHost {
     // Shells fly even with one player — the host fires before guests join.
     this.projectiles.tick(0.05);
     this.moveShadows.tick(0.05);
+    // Same RTT probe the dedicated Room runs — the move shadow's transit
+    // EMA needs a channel guests can't fabricate (their reported ping
+    // rides every position frame).
+    if (++this.pingCycle % 10 === 0 && this.byPlayer.size > 0) {
+      const ids = [...this.byPlayer.keys()];
+      this.sendJSON(ids[(this.pingCycle / 10 | 0) % ids.length]!, { type: 'ping', timestamp: Date.now() });
+    }
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
     for (const [recipientId] of players) {

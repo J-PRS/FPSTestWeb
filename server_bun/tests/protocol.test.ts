@@ -12,7 +12,7 @@ import { WIRE } from '../src/wire.ts';
 const ALL_CLIENT_TYPES = [
   'aoeShot', 'chat', 'classUpdate', 'clientStats', 'crawlerHit', 'creatureHit',
   'deploy', 'environmentDamage', 'heal', 'inputMove', 'jetpack', 'join', 'jump',
-  'perkUpdate', 'ping', 'position', 'projectileDestroy', 'repair', 'respawn',
+  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'repair', 'respawn',
   'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
   'teleport', 'throwFlag',
 ] as const satisfies readonly ClientMessage['type'][];

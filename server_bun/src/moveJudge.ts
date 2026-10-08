@@ -72,6 +72,12 @@ export interface Shadow {
    *  the shadow's input stream is. Feeds the broadcast lead so
    *  observers aim at client-now, not client-transit-ago. */
   transitEma: number;
+  /** Raw per-channel estimates behind transitEma: client-reported
+   *  (position-frame rttMs) and server-measured (ping/pong echo). The
+   *  effective value is min(client, server+slack) — a forged ping
+   *  can't buy tolerance since it must fool BOTH channels. */
+  clientTransitEma: number;
+  serverTransitEma: number;
   /** Input seq consumed at the last resync() — reports stamped at or below
    *  it are provably pre-respawn/pre-teleport traffic still in flight; the
    *  journal was cleared so they have no anchor to compare against and

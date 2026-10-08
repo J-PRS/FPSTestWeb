@@ -450,6 +450,12 @@ export class NetworkManager {
     this.telemetry.onPong(timestamp, Date.now());
   }
 
+  /** Server-side RTT probe — echo verbatim; the timestamp is the
+   *  server's clock, not ours. */
+  pingReceived(timestamp: number): void {
+    this.send({ type: 'pong', timestamp });
+  }
+
   resendInputs(lastSeq: number): void {
     this.inputs.resend(lastSeq, (m) => this.send(m), this.isConnected());
   }

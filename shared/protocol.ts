@@ -59,6 +59,10 @@ export type ClientMessage =
   // its check anchor here instead of rejecting it as a speedhack.
   | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
+  // Echo of a server-issued ping — the unforgeable RTT channel: the
+  // server measures round-trip itself instead of trusting the
+  // client-reported ping riding every position frame.
+  | { type: 'pong'; timestamp: number }
   // Client-side ops telemetry the server can't see itself — self-reported
   // fps/frame cost and link quality, ~10s cadence, rolled into /metrics so
   // a client's bad connection or melting renderer surfaces server-side.
@@ -252,6 +256,8 @@ export type ServerMessage =
   | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
+  // Server-issued RTT probe — the client echoes it back as 'pong'.
+  | { type: 'ping'; timestamp: number }
   | { type: 'pong'; timestamp: number }
   | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string; muted?: boolean }
   // --- Match scoreboard (team-mode rooms) --------------------------------

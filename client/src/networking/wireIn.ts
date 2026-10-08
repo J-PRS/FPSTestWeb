@@ -179,6 +179,9 @@ export class WireIn {
     crawlEvt: (data) => this.h.onCrawlEvt?.(data),
     crawlDie: (data) => this.h.onCrawlDie?.(data),
     crawlRoster: (data) => this.h.onCrawlRoster?.(data),
+    // Server-issued RTT probe — echo it back untouched so the server
+    // measures round-trip itself instead of trusting our reported ping.
+    ping: (data) => this.h.pingReceived(data.timestamp),
     pong: (data) => this.h.pongReceived(data.timestamp),
     chat: (data) => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
     flagUpdate: (data) => this.h.onFlagUpdate?.(data.flags),

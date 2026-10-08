@@ -161,7 +161,7 @@ export class RoomMoveSim {
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
       gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
-      transitEma: 0,
+      transitEma: 0, clientTransitEma: 0, serverTransitEma: 0,
     });
   }
 
@@ -328,10 +328,13 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
     // The report's own RTT estimate feeds the broadcast lead — the
-    // uplink half is how stale the shadow's input stream is.
+    // uplink half is how stale the shadow's input stream is. It's
+    // client-reported, so it's a lower bound on trust: server-measured
+    // ping/pong echoes cap it from above in syncTransit.
     if (rttMs !== undefined && rttMs > 0) {
       const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
-      sh.transitEma = sh.transitEma === 0 ? tr : sh.transitEma * 0.9 + tr * 0.1;
+      sh.clientTransitEma = sh.clientTransitEma === 0 ? tr : sh.clientTransitEma * 0.9 + tr * 0.1;
+      this.syncTransit(sh);
     }
     // reportInputSeq = the client's input counter at snapshot time. Only
     // a report stamped ahead of everything RECEIVED counts as a gap — a
@@ -468,6 +471,29 @@ export class RoomMoveSim {
       sh.acc -= steps * MoveSim.STEP;
       sh.simTicks += steps;
     }
+  }
+
+  /** Server-measured RTT (ping/pong echo) — the unforgeable channel.
+   *  A delayed pong inflates only this EMA, and min() in syncTransit
+   *  means it can never RAISE the effective estimate. */
+  feedTransit(playerId: string, rttMs: number): void {
+    const sh = this.shadows.get(playerId);
+    if (!sh || !(rttMs > 0)) return;
+    const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
+    sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
+    this.syncTransit(sh);
+  }
+
+  /** Effective uplink transit: the client's self-report capped by the
+   *  server's own measurement. Until the first pong lands the client
+   *  report stands alone (join grace — the echo path takes a tick to
+   *  converge). The server channel carries queue/jitter the client's
+   *  own ping doesn't, so it gets a small slack margin. */
+  private syncTransit(sh: Shadow): void {
+    const slack = sh.serverTransitEma * 0.25 + 10;
+    sh.transitEma = sh.clientTransitEma > 0 && sh.serverTransitEma > 0
+      ? Math.min(sh.clientTransitEma, sh.serverTransitEma + slack)
+      : sh.clientTransitEma > 0 ? sh.clientTransitEma : sh.serverTransitEma;
   }
 
   /** Uplink-transit estimate (ms) for the broadcast lead — the shadow
