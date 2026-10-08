@@ -4,9 +4,9 @@
 // handler. Validation happens pre-room (GameServer.validate), the limit
 // and handler run inside the room's command drain at tick phase 0.
 //
-// 'join' is absent on purpose — it never reaches a room (sessions.handle
-// owns the handshake). 'switchRoom' validates here but is intercepted by
-// GameServer before room dispatch, so it carries no handle.
+// 'join' has an entry only for the retry path — the handshake itself is
+// sessions.handle's job. 'switchRoom' validates here but is intercepted
+// by GameServer before room dispatch, so it carries no handle.
 
 import {
   type ValidationResult,
@@ -56,6 +56,21 @@ export interface WireEntry<K extends ClientMessage['type']> {
 export const WIRE_DEFAULT_LIMIT: RateLimit = { maxCount: 120, windowMs: 1000 };
 
 export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
+  // The handshake join never reaches a room — but a RETRY does: a client
+  // whose gameState reply was lost resends join on an already-seated
+  // socket. Resending world state heals that loop silently; a join
+  // naming a different playerId can't re-seat a live socket, so it dies
+  // here instead of warn-spamming every drained retry.
+  join: {
+    limit: { maxCount: 4, windowMs: 10000 },
+    validate: (obj) => typeof obj.playerId === 'string'
+      ? { success: true, data: { ...obj, type: 'join', playerId: obj.playerId } as Extract<ClientMessage, { type: 'join' }> }
+      : { success: false, error: 'join missing playerId' },
+    handle: (h, id, m) => {
+      if (m.playerId === id) h.sendWorldState(id);
+    },
+  },
+
   position: {
     limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
