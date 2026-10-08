@@ -23,6 +23,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const stack = await upStack();
 const client = await launchClient(stack.clientUrl('&room=e2evideo&bots=3'));
+// VIEWPORT=WxY pins a window size — overscan must still yield 16:9 frames.
+if (process.env.VIEWPORT) {
+  const [vw, vh] = process.env.VIEWPORT.split('x').map(Number);
+  await client.page.setViewport({ width: vw, height: vh });
+  await sleep(2000);
+}
 
 // Node-side mp4 top-level box walk — puppeteer can't return ArrayBuffers,
 // so the page hands back base64 and we inspect here.
@@ -85,6 +91,12 @@ try {
     const probe = Bun.spawnSync(['C:/Python313/Scripts/ffprobe.exe', '-v', 'error', '-show_entries', 'stream=codec_name,width,height,nb_frames,duration', '-of', 'json', '_tools/e2e/shots/videorec-cut.mp4']);
     const meta = JSON.parse(probe.stdout.toString()) as { streams?: { codec_name: string; width: number; height: number; nb_frames?: string; duration?: string }[] };
     const s = meta.streams?.[0];
+    // The encoder always emits 1920x1080 — the overscan canvas makes the
+    // CONTENT true 16:9 at any window shape, and NVENC/muxer pin the rest.
+    const canvasDims = await client.test<{ w: number; h: number }>(
+      `(() => { const c = t.rendererSetup.renderer.domElement; return { w: c.width, h: c.height }; })()`);
+    ok(Math.abs(canvasDims.w / canvasDims.h - 16 / 9) < 0.01,
+      `canvas buffer is 16:9 (${canvasDims.w}x${canvasDims.h})`);
     ok(s?.codec_name === 'h264' && s.width === 1920 && s.height === 1080,
       `ffprobe: ${s?.codec_name} ${s?.width}x${s?.height} ${s?.nb_frames ?? '?'}f ${s?.duration ?? '?'}s`);
   }

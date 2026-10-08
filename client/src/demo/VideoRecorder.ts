@@ -54,6 +54,7 @@ export class VideoRecorder {
   get hasCanvas(): boolean { return this.canvas !== null; }
 
   get isRecording(): boolean { return this.recorder !== null || this.enc !== null; }
+  get mimeType(): string { return this.mime; }
   get usingHardware(): boolean { return this.enc !== null; }
 
   static isSupported(): boolean {

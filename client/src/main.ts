@@ -334,6 +334,10 @@ async function initDemo(): Promise<void> {
   // The recorder needs the REAL render canvas — the DOM carries ~13
   // canvases (atlases, shadow buffers); "largest" picks a black texture.
   demoManager.video.setCanvas(renderer.domElement);
+  // Silently re-arm the previously-picked clips folder (no prompt — the
+  // handle reuses its stored permission until Chrome asks for a re-grant,
+  // which happens inside the next F9 gesture via pickClipsDir).
+  void import('./demo/clipSink.js').then(m => m.restoreClipsDir());
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 

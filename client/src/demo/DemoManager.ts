@@ -10,6 +10,7 @@ import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 import { CoolShotManager } from './coolShots.js';
 import type { CoolShotEntry } from './coolShots.js';
 import { VideoRecorder } from './VideoRecorder.js';
+import * as clipSink from './clipSink.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
 import { feedMode } from '../feed/feedMode.js';
@@ -20,6 +21,26 @@ import { buildDemoUI, wirePlayerCallbacks } from './demoWire.js';
 export type { CoolShotEntry } from './coolShots.js';
 
 const logger = new ChildLogger('Demo');
+
+// Visible armed indicator — the recorder rolls silently in the background
+// (ShadowPlay-style), so without a chip there was no on-screen cue at all.
+let recEl: HTMLElement | null = null;
+function recChip(on: boolean): void {
+  if (on && !recEl) {
+    recEl = document.createElement('div');
+    recEl.textContent = '● REC';
+    recEl.style.cssText = 'position:fixed;top:10px;right:12px;z-index:60;color:#f44;' +
+      'font:700 13px/1 monospace;background:rgba(0,0,0,.45);padding:4px 8px;' +
+      'border-radius:4px;pointer-events:none;animation:krec 1.2s infinite';
+    const st = document.createElement('style');
+    st.textContent = '@keyframes krec{0%,100%{opacity:1}50%{opacity:.35}}';
+    recEl.appendChild(st);
+    document.body.appendChild(recEl);
+  } else if (!on && recEl) {
+    recEl.remove();
+    recEl = null;
+  }
+}
 
 export class DemoManager implements demoIO.DemoIOHost {
   recorder: DemoRecorder;
@@ -129,13 +150,19 @@ export class DemoManager implements demoIO.DemoIOHost {
     if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
     if (this.video.isRecording) {
       this.ui.setVideoRecording(false);
+      recChip(false);
       const ctx = this.player.isLoaded ? 'demo' : 'live';
-      void this.video.stopAndDownload(`kribes_${ctx}_${demoIO.timestampStr()}`).then(ok => {
+      void this.video.stop().then(async blob => {
+        const ext = this.video.mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const ok = blob ? await clipSink.saveClip(`kribes_${ctx}_${demoIO.timestampStr()}.${ext}`, blob) : false;
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
       });
       this.releaseExportFullscreen();
       return;
     }
+    // First F9 on a Chromium build: pick the clips folder once and every
+    // save after that is silent. Cancelled pickers keep the anchor path.
+    if (!clipSink.hasClipsDir()) {void clipSink.pickClipsDir();}
     this.startVideoCapture();
   }
 
@@ -150,6 +177,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     void this.video.start(60).then((ok) => {
       if (!ok) { this.ui.setStatus('video unsupported'); return; }
       this.ui.setVideoRecording(true);
+      recChip(true);
       this.ui.setStatus(this.video.usingHardware ? 'rec video (gpu)' : 'rec video');
     });
     return true;
@@ -165,13 +193,9 @@ export class DemoManager implements demoIO.DemoIOHost {
     const wallBase = performance.now() - this.recorder.duration * 1000;
     const blob = this.video.cutWindow(wallBase + clipStart * 1000, wallBase + clipEnd * 1000);
     if (!blob) {return;}
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    this.ui.setStatus('cool shot mp4 saved');
+    void clipSink.saveClip(`kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`, blob).then(ok => {
+      if (ok) {this.ui.setStatus('cool shot mp4 saved');}
+    });
   }
 
   /** Armed by exportCoolShotMp4, consumed by playDemoData — the recorder
