@@ -2744,6 +2744,9 @@ feed meta all textContent - clean) found two class-4/6 feed bugs:
   Watchdog: 10s after play() with mode not playing/paused -> advance.
 Both are feed-lifecycle correctness, not chrome.
 ### 2.139 - end
+### 2.140 Broadcast transit lead - authority positions extrapolate by uplink-transit EMA (fixing ghost targets)
+The shadow sim trails each client by one uplink transit (inputs land transit late). TickLoop's authority commit copied raw simState into p.position, so every observer and the hit-validation rewind aimed at where the player was ~ping ago - the felt "hits not registering". The commit now advances the broadcast position by vel x min(transitEma,300ms): the systematic offset re-centers instead of always lagging, and the rewind buffer (which stores player.position) stays consistent with what shooters saw. Transit estimate comes from the rttMs the position reports already carry (uplink half, EMA at 0.1, capped at TRANSIT_EMA_CAP_MS).
+
 
 ## 2.140 Feed auto-advance - 'paused' is overloaded: natural end vs manual pause
 
