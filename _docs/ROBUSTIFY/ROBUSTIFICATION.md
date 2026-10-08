@@ -3614,3 +3614,5 @@ onMessage's try/catch wrapped only the JSON branch — the binary hot path (28B 
 ## 2.230 — P2P host dispatch containment
 
 Same gap as the dedicated binary lane, one tier down: P2PHost.dispatch called handleMessage unguarded, so a throwing handler escaped into the host's own event loop — on P2P the "socket layer" IS a player's game. A malformed-but-valid peer message could take down the host's session, not just their link. Dispatch now wraps the handler and closes only the offending peer's link on a throw. Ingest containment is now uniform across dedicated (JSON + binary) and P2P host.
+
+### 2.140 - end
