@@ -427,9 +427,34 @@ body.lobby-open #loadout-bar { display: none; }
 .cool-shot-item:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
 .cool-shot-item.recent { border-left-color: #4caf6d; }
 .cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
+/* Matches the settings-page .tog convention: a normal button off —
+   hollow state square; accent-filled square on. No grayed look, off
+   is as clickable as on. */
 #cool-shot-toggles { display: flex; gap: 6px; margin: 4px 0 8px; }
-#cool-shot-toggles .cs-toggle { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(140,170,195,0.25); color: rgba(140,170,195,0.6); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; padding: 4px 0; border-radius: 3px; cursor: pointer; }
-#cool-shot-toggles .cs-toggle.on { background: rgba(58,167,255,0.15); border-color: #3aa7ff; color: #9fd4ff; }
+#cool-shot-toggles .cs-toggle {
+  flex: 1; display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.07); color: #cdd9e5;
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 6px;
+  font-family: inherit; font-size: 0.65rem; font-weight: 600;
+  letter-spacing: 0.1em; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#cool-shot-toggles .cs-toggle:hover { background: rgba(255,255,255,0.14); color: #fff; }
+#cool-shot-toggles .cs-toggle::after {
+  content: ''; width: 9px; height: 9px; flex: none; margin-left: 8px;
+  border: 1px solid rgba(160,190,215,0.5); border-radius: 2px;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+#cool-shot-toggles .cs-toggle.on {
+  border-color: #3aa7ff; color: #fff;
+  background: rgba(58,167,255,0.22);
+  box-shadow: 0 0 10px rgba(58,167,255,0.2);
+}
+#cool-shot-toggles .cs-toggle.on::after {
+  background: #3aa7ff; border-color: #3aa7ff;
+  box-shadow: 0 0 6px rgba(58,167,255,0.55);
+}
 .cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgba(140,170,195,0.7); min-width: 16px; }
 .cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 .cool-shot-item .shot-meta { font-size: 0.65rem; color: rgba(140,170,195,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
