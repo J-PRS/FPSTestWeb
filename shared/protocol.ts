@@ -269,7 +269,7 @@ export type ServerMessage =
   | { type: 'crawlDie'; id: number; position: Vec3; by?: string | null }
   | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball
-  | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
+  | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; et?: number; slowT?: number; damp?: boolean; t: number }[] }
   // Server-issued RTT probe — the client echoes it back as 'pong'.
   | { type: 'ping'; timestamp: number }
   | { type: 'pong'; timestamp: number }

@@ -143,7 +143,7 @@ export class BallSim {
   }
 
   /** Current segment state of every live ball — sent to joiners. */
-  roster(): { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; t: number }[] {
+  roster(): { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; tp?: SimVec | null; et?: number; slowT?: number; damp?: boolean; t: number }[] {
     const out = [];
     for (const b of this.balls.values()) {
       if (b.dead) continue;
@@ -156,7 +156,7 @@ export class BallSim {
         t: this.simTime,
       }));
     }
-    return out as { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; t: number }[];
+    return out as { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; tp?: SimVec | null; et?: number; slowT?: number; damp?: boolean; t: number }[];
   }
 
   private spawnBall(variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
