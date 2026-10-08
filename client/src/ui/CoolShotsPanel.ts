@@ -63,7 +63,18 @@ export class CoolShotsPanel {
       weapon = weapon.split(/\s+/).map(w => w[0]).join('');
     }
     const meta = [weapon, dist].filter(Boolean).join(' · ');
-    item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span>${meta ? `<span class="shot-meta">${meta}</span>` : ''}<span class="time-ago">${this.timeAgo(shot.timestamp)}</span>`;
+    // Server-merged entries carry uploader-supplied strings (weapon) —
+    // textContent keeps a crafted name inert.
+    const span = (cls: string, text: string) => {
+      const s = document.createElement('span');
+      s.className = cls;
+      s.textContent = text;
+      item.appendChild(s);
+    };
+    span('rank', String(rank));
+    span('lifetime', `${shot.projectileLifetime.toFixed(2)}s`);
+    if (meta) {span('shot-meta', meta);}
+    span('time-ago', this.timeAgo(shot.timestamp));
     item.addEventListener('click', () => {
       this.demoManager.playCoolShotById(shot.id);
       this.overlay.style.display = 'none';
