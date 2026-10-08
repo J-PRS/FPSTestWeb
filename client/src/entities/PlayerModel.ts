@@ -538,33 +538,41 @@ export class PlayerModel {
     }
   }
 
-  // Ghost shimmer — translucent material override for the decloak-reveal.
-  // Baselines are captured once so restore hands every material its own
-  // state back (GLBs share materials across meshes).
-  private ghostBaseline: Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }> | null = null;
+  // Ghost shimmer — translucent material SWAP for the decloak-reveal.
+  // The meshes' real materials ride in ghostBaseline while each source
+  // mat resolves to one shared translucent variant, so nothing ever gets
+  // mutated — baked/GLB mats serve every model and the viewmodel palette
+  // alike, and mutating them would shimmer every gun in the client. This
+  // is also why hand-prop mats never need per-model clones.
+  private ghostBaseline: Map<THREE.Mesh, THREE.Material | THREE.Material[]> | null = null;
+  private static ghostVariants = new Map<THREE.Material, THREE.Material>();
+  private static ghostOf(m: THREE.Material): THREE.Material {
+    let g = this.ghostVariants.get(m);
+    if (!g) {
+      g = m.clone();
+      g.transparent = true;
+      g.opacity = 0.28;
+      g.depthWrite = false;
+      PlayerModel.ghostVariants.set(m, g);
+    }
+    return g;
+  }
   setGhost(on: boolean): void {
     if (!this.model) {return;}
     if (on) {
       if (this.ghostBaseline) {return;}
       this.ghostBaseline = new Map();
       this.model.traverse((child) => {
-        const mat = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        const mesh = child as THREE.Mesh;
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
         if (!mat) {return;}
-        for (const m of Array.isArray(mat) ? mat : [mat]) {
-          this.ghostBaseline!.set(m, { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
-          m.transparent = true;
-          m.opacity = 0.28;
-          m.depthWrite = false;
-        }
+        this.ghostBaseline!.set(mesh, mat);
+        mesh.material = Array.isArray(mat) ? mat.map((m) => PlayerModel.ghostOf(m)) : PlayerModel.ghostOf(mat);
       });
       return;
     }
     if (!this.ghostBaseline) {return;}
-    for (const [m, st] of this.ghostBaseline) {
-      m.transparent = st.transparent;
-      m.opacity = st.opacity;
-      m.depthWrite = st.depthWrite;
-    }
+    for (const [mesh, mat] of this.ghostBaseline) {mesh.material = mat;}
     this.ghostBaseline = null;
   }
 

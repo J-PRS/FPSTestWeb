@@ -72,8 +72,6 @@ export class PlayerGun {
   palmYaw = 0;
   palmUp = 0;
 
-  private handPropMats = new Map<number, THREE.Material[]>();
-
   private static geo: THREE.BufferGeometry | null = null;
   private static mat: THREE.MeshStandardMaterial | null = null;
 
@@ -287,11 +285,12 @@ export class PlayerGun {
       this.mesh.geometry = geo;
       // Baked models carry their own per-part materials; the generic prop
       // keeps its shared grey. The cached mats ARE the viewmodel's shared
-      // palette (bodyMat/darkMat) — assigning them raw lets this model's
-      // ghost shimmer (cloak/fire-reveal) fade every first-person gun in
-      // the client, and a despawn-mid-ghost sticks them translucent.
-      // Per-model clones keep setGhost's blast radius to this model only.
-      this.mesh.material = hit ? this.handMats(wt, hit.mats) : PlayerGun.mat!;
+      // palette (bodyMat/darkMat) — assigned raw because setGhost swaps
+      // material references instead of mutating them, so a shimmer can't
+      // leak into other models. Sharing also skips r184's clone() cost:
+      // Material.copy runs a full toJSON on textured mats (PNG-encodes
+      // every map), which profiled at ~20% of the frame during a fight.
+      this.mesh.material = hit ? hit.mats : PlayerGun.mat!;
       this.onGeoSwap?.();
       // Flash rides the baked model's real muzzle, not a fixed offset —
       // each baked geo already carries its bounding box from the baker.
@@ -299,13 +298,5 @@ export class PlayerGun {
         this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
       }
     }
-  }
-
-  // Per-weapon hand-prop material clones — see the setWeapon comment on
-  // why the shared palette can't be assigned raw.
-  private handMats(wt: number, src: THREE.Material[]): THREE.Material[] {
-    let mats = this.handPropMats.get(wt);
-    if (!mats) { mats = src.map((m) => m.clone()); this.handPropMats.set(wt, mats); }
-    return mats;
   }
 }
