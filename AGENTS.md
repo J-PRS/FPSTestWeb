@@ -22,8 +22,9 @@ bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs
 
 - `shared/` — sims + protocol used by BOTH ends (deterministic: no
   `Date.now()`/IO/unseeded random in sim code).
-- `server_bun/src/` — authority: Room, CombatHandler claims, CreatureSim/
-  BallSim, ServerBots, RoomMoveSim.
+- `server_bun/src/` — authority: Room, CombatHandler adjudication,
+  CreatureSim/BallSim, ServerBots, RoomMoveSim. `shared/worldModel.ts`
+  declares every entity kind's wire shape — new fields go there.
 - `client/src/` — render, prediction, HUD/menus, netHandlers, instanced species.
 - `maps/` spec JSONs · `_tools/` soaks + headless capture · `ROADMAP.md`
   is the living manifesto (read first, keep current) · `changelog.txt`

@@ -15,10 +15,16 @@ bun src/server.ts           # run (FPS_PORT, FPS_MAP, FPS_SBOTS,
 ## Map
 
 - `Room.ts` — match container; wires sims + the damage funnel.
-- `CombatHandler.ts` — every player-claim validator → `claimLedger`.
+- `CombatHandler.ts` — outcome adjudication (intents, respawn, killFeed).
+  Combat claims are refused on dedicated (`claimsAccepted=false`); the
+  residual `claimLedger` path stays for P2P hosts + ambient heals.
 - `RoomProjectiles/BallSim/CreatureSim/RoomMoveSim/RoomFlags/RoomPickups/
   RoomDeployables/ServerBots` — the authoritative sims; edges out.
 - `MessageHandler/connections` — validation → sim → broadcast.
+- `wire.ts` + `shared/worldModel.ts` — every entity kind declares its
+  wire shape once; emits generate, inbound packets/intents/envelopes
+  shape-check at dispatch. New fields go in the declaration, not
+  hand-built payloads.
 - `tests/scenarios/` + `harness.ts` — one staged interaction per file.
 
 ## Rules
