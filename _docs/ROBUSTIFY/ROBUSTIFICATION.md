@@ -3505,3 +3505,11 @@ debugSetGunRot) moves to playerGun.ts — 311 lines out of PlayerModel.
 ModelFx keeps reading through the unchanged ModelFxHost surface via
 delegating getters; onGeoSwap is the one back-edge (wireframe recapture).
 Dropped `socketGun` — write-only dead flag. tsc + 504 vitest green.
+
+## 2.206 — PlayerDistal extracted (PlayerModel bone-LOD block)
+
+The far-remote bone LOD (bone census, LIMB/HELPER expendable tables,
+distal-bone compute, far-clip track filtering, frozen matrixAutoUpdate,
+the same-phase action swap) moves to playerDistal.ts. PlayerModel keeps
+capture/delegate seams: setFrozen returns the next action instead of
+writing currentAction. tsc + 504 vitest green. PlayerModel 1204→1128.

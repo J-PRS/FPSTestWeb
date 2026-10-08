@@ -22,6 +22,7 @@ import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, AIM_TORSO_BONES, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { PlayerGun } from './playerGun.js';
+import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PoseControl } from './playerPose.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
@@ -403,101 +404,24 @@ export class PlayerModel {
     for (const m of this.skinnedMeshes) {m.castShadow = on;}
   }
 
-  // Offscreen remotes skip the mixer entirely, so their bones are static —
-  // freezing matrixAutoUpdate drops the whole rig out of updateMatrixWorld
-  // (the rig is ~40 of the ~700 bone nodes walked per frame).
-  private bones: THREE.Bone[] = [];
+  // Progressive bone LOD (distal-bone freeze + far-clip track filtering)
+  // lives in playerDistal.ts — the bone census feeds it, the action swap
+  // on freeze comes back through setDistalFrozen.
+  private readonly distal = new PlayerDistal();
 
   setBonesFrozen(frozen: boolean): void {
-    for (const b of this.bones) {
-      b.matrixAutoUpdate = !frozen;
-      if (frozen) {b.updateMatrix();}
-    }
+    this.distal.setBonesFrozen(frozen);
   }
-
-  /** Progressive bone LOD: distal bones are every bone NOT on an ancestor
-   *  chain of a key bone (aim chain, grip, steady dampers, IK feet). Their
-   *  subtrees — fingers, toes, rig end-markers, twist helpers — carry the
-   *  ~60% of the traversal nobody can read past ~60m, so freezing them
-   *  (matrixAutoUpdate off) cuts that work while the core pose still
-   *  animates. Engine rule applied: never freeze a bone an essential
-   *  bone hangs under — ancestors of key bones stay live by construction. */
-  private distalBones: THREE.Bone[] = [];
-  private distalFrozen = false;
-  private distalNameSet = new Set<string>();
-  private farActions = new Map<THREE.AnimationAction, THREE.AnimationAction>();
-
-  /** Clip variant with every distal-bone track removed — the mixer
-   *  skips evaluation entirely rather than writing values nobody reads.
-   *  Frozen bones hold their pose; core tracks stay bit-identical. */
-  private farAction(action: THREE.AnimationAction): THREE.AnimationAction {
-    let a = this.farActions.get(action);
-    if (!a) {
-      const src = action.getClip();
-      const tracks = src.tracks.filter(t =>
-        !this.distalNameSet.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-      a = this.mixer!.clipAction(new THREE.AnimationClip(`${src.name  }.far`, src.duration, tracks));
-      this.farActions.set(action, a);
-    }
-    return a;
-  }
-
-  // Primary-motion bones are never expendable — the ancestor-of-keys rule
-  // alone lets whole legs/arms lock mid-stride on rigs with no hand/foot
-  // key bones (polyart froze at bind pose → T-posed statue at distance).
-  private static readonly LIMB_BONES =
-    /thigh|shin|calf|foot|leg|upperarm|forearm|collar|shoulder|clavicle|pelvis|hips|spine|ribcage|chest|neck|head|hand|palm|arm|toetip/;
-  private static readonly HELPER_BONES =
-    /fing|digit|thumb|lash|brow|eye|jaw|tongue|twist|roll|_end|end$|marker|prop|magazine|trigger|pad|blade|belt|extra|proxy|pole|ik/;
 
   private computeDistalBones(): void {
-    const essential = new Set<THREE.Object3D>();
-    const keys: (THREE.Object3D | undefined)[] = [
-      this.handBone ?? undefined,
-      ...this.pose.keyBones(),
-    ];
-    for (const k of keys) {
-      for (let o = k; o && o !== this.model; o = o.parent!) {essential.add(o);}
-    }
-    this.distalBones = this.bones.filter(b => {
-      if (essential.has(b)) {return false;}
-      const nb = normBone(b.name);
-      return PlayerModel.HELPER_BONES.test(nb) || !PlayerModel.LIMB_BONES.test(nb);
-    });
-    this.distalNameSet = new Set(this.distalBones.map(b => normBone(b.name)));
+    this.distal.compute([this.handBone ?? undefined, ...this.pose.keyBones()], this.model);
     // Model may finish loading while a far LOD is already armed.
-    if (this.distalFrozen) {this.setDistalFrozen(true);}
+    if (this.distal.frozen) {this.setDistalFrozen(true);}
   }
 
   setDistalFrozen(frozen: boolean): void {
-    const was = this.distalFrozen;
-    this.distalFrozen = frozen;
-    for (const b of this.distalBones) {
-      b.matrixAutoUpdate = !frozen;
-      if (frozen) {b.updateMatrix();}
-    }
-    // Swap the running action onto the track-filtered (or full) variant —
-    // same phase so the core pose doesn't pop; distal bones simply hold
-    // (frozen) or resume (unfrozen) where the pose was.
-    if (was !== frozen && this.currentAction && this.currentClipName) {
-      const t = this.currentAction.time;
-      const cur = this.currentAction;
-      const next = frozen ? this.farAction(cur) : this.baseAction(cur);
-      cur.stop();
-      next.reset();
-      next.time = t % next.getClip().duration;
-      next.timeScale = cur.timeScale;
-      next.setLoop(cur.loop, cur.repetitions);
-      next.clampWhenFinished = cur.clampWhenFinished;
-      next.setEffectiveWeight(cur.getEffectiveWeight() || 1);
-      next.play();
-      this.currentAction = next;
-    }
-  }
-
-  private baseAction(a: THREE.AnimationAction): THREE.AnimationAction {
-    for (const [base, far] of this.farActions) {if (far === a) return base;}
-    return a;
+    const next = this.distal.setFrozen(frozen, { action: this.currentAction && this.currentClipName ? this.currentAction : null }, this.mixer!);
+    if (next) {this.currentAction = next;}
   }
 
   /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% —
@@ -564,7 +488,7 @@ export class PlayerModel {
   // Name-based since the model also has same-named plain nodes; only real
   // Bones qualify. Mannequin bones are DEF-* (normBone-stripped compare).
   private captureBone(child: THREE.Object3D): void {
-    this.bones.push(child as THREE.Bone);
+    this.distal.captureBone(child as THREE.Bone);
     const nb = normBone(child.name);
     // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R'); the
     // Quaternius rigs put the grip in FistR.
@@ -777,7 +701,7 @@ export class PlayerModel {
       }
       return;
     }
-    const action = this.distalFrozen ? this.farAction(base) : base;
+    const action = this.distal.action(base, this.mixer!);
     // Same clip re-requested (jump↔jet share clips on the class rigs) —
     // refading an already-running action dips its weight through 0 and
     // flashes the bind pose; oneshots still restart since a replay is
