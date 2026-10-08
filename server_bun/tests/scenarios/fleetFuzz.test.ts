@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'bun:test';
 import { FleetDirectory } from '../../src/fleetDir.ts';
 import { lcg } from './harness.ts';
-import { wallMs, wallNow, type WallMs } from '../../src/wallClock.ts';
+import { wallMs, wallNow } from '../../src/wallClock.ts';
 
 describe('fleet directory conformance fuzz', () => {
   it('claims, homes and liveness stay consistent under beat/resolve/time chaos', () => {

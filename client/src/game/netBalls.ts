@@ -357,7 +357,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }) =>
     finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
 
-  function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
+  function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null; et?: number; slowT?: number; damp?: boolean }): void {
     if (!finiteMsg(m)) {logger.warn(`ball spawn #${m.id} dropped: non-finite vector`); return;}
     if (netBallById.has(m.id)) {return;}
     Ball.initNetMode();
@@ -384,7 +384,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       px: m.position.x, py: m.position.y, pz: m.position.z,
       vx: m.velocity.x, vy: m.velocity.y, vz: m.velocity.z,
       enraged: m.enraged ?? false, targetId: m.targetId ?? null,
-      lead: ballEventAge(m.t), tp: m.tp, simT: m.t,
+      lead: ballEventAge(m.t), timers: { et: m.et, slowT: m.slowT, damp: m.damp }, tp: m.tp, simT: m.t,
     });
   }
 
@@ -424,7 +424,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // Roster is authoritative for membership, not just spawns: a ball that
   // died while we were reconnecting (or whose ballDie dropped on an
   // unreliable lane) would otherwise ghost forever — nothing else removes it.
-  function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }[] }): void {
+  function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null; et?: number; slowT?: number; damp?: boolean }[] }): void {
     reconcileReplicas(netBallById, m.balls, {
       rowId: (r) => r.id,
       ensure: (r) => { netBallSpawn(r); return netBallById.get(r.id); },

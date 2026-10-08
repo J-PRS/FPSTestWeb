@@ -152,6 +152,7 @@ export class BallSim {
         position: { x: b.x, y: b.y, z: b.z },
         velocity: { x: b.vx, y: b.vy, z: b.vz },
         enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
+        et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce ? 1 : 0,
         t: this.simTime,
       }));
     }

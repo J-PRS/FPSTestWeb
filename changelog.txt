@@ -1,3 +1,4 @@
+2026-10-08 - ballFuzz: seeded-chaos conformance over ball replay — real ballSegment wire stream through WAN jitter/dup/reorder into independent SimBall replicas + a roster-born joiner; caught a real wire gap: roster rows omitted et/slowT/damp timers that segments carry, so mid-flight joiners replayed zeroed enrage/stall timers (roster now emits them; client netBallSpawn/netBallRoster apply them)
 2026-10-08 - fleetFuzz: seeded-chaos conformance over the fleet directory — claims, homes, liveness and re-homing under beat/resolve/time chaos
 2026-10-08 - roomFuzz: seeded-chaos conformance over the room directory — cap recycling, unlisted visibility, switch hops, roster/index agreement
 2026-10-08 - moveFuzz: seeded-chaos conformance over the moveJudge shadow — honest stream converges, forged reports bank without moving the sim, stale seqs refused, deterministic replay

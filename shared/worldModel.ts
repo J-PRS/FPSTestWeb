@@ -105,6 +105,12 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'enraged', wire: 'bool', channel: 'edge' },
       { name: 'targetId', wire: 'str', channel: 'edge' },
       { name: 'tp', wire: 'vec3', channel: 'edge' },
+      // Segments carry these — a mid-flight joiner replays zeroed
+      // timers without them (enrage pull + stall-breaker timing diverge
+      // until the next segment lands).
+      { name: 'et', wire: 'num', channel: 'edge' },
+      { name: 'slowT', wire: 'num', channel: 'edge' },
+      { name: 'damp', wire: 'num', channel: 'edge' },
       { name: 't', wire: 'num', channel: 'sim' },
     ],
   },
