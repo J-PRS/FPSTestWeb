@@ -4,7 +4,12 @@
  * MUST agree on the window or they rewind different pasts for the
  * same check.
  */
-export const REWIND_MS = 400;
+import { wallNow } from './wallClock.ts';
+
+// Depth covers the worst rewind envelope: clampPing(~400) + adaptive
+// render lag (~800) — a shorter buffer would clamp deep rewinds to the
+// oldest sample and validate arbitrarily far behind the real ghost.
+export const REWIND_MS = 1200;
 
 /** Client remote-render delay: SnapshotBuffer holds ~BASE(100) +
  *  arrival interval (~50 at 20Hz) + jitter headroom (~50) behind the
@@ -20,9 +25,13 @@ export const RENDER_LAG_MS = 200;
  *  bad. The client reports its worst-case delay via clientStats; this
  *  clamps it to the buffer's own ceiling (SnapshotBuffer.MAX_INTERP_DELAY
  *  mirrored — a bigger claim can't rewind past the buffer anyway). */
-export function renderLagOf(p: { clientStats?: { renderLagMs?: number } } | null | undefined): number {
-  const v = p?.clientStats?.renderLagMs;
-  return v != null && v >= 0 ? Math.min(v, 800) : RENDER_LAG_MS;
+export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: number } } | null | undefined): number {
+  const st = p?.clientStats;
+  // A report older than ~3 uplink windows describes a link state that
+  // may no longer exist — fall back to the base constant rather than
+  // let a stale (or dead-session) number steer validation forever.
+  if (!st || st.renderLagMs == null || (st.at !== undefined && wallNow() - st.at > 30_000)) return RENDER_LAG_MS;
+  return Math.min(Math.max(st.renderLagMs, 0), 800);
 }
 
 export function pushRewindSample(
