@@ -242,12 +242,35 @@ export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer, into?: Tic
  *  inputAck is the tick-set confirm (Quantum-style): the highest inputMove
  *  seq the server has consumed for this recipient — the client prunes its
  *  input journal against it and detects a starving command stream. */
-export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[], type: number = WIRE_TICK): Uint8Array {
+/** Reusable frame target — the fanout builds every recipient's frame
+ *  into ONE arena because each transport's send() consumes the bytes
+ *  synchronously before the next recipient's encode overwrites them.
+ *  Do NOT retain the returned view past the send call. */
+export interface TickFrameScratch { buf: ArrayBuffer; u8: Uint8Array; d: DataView }
+export function tickFrameScratch(cap = 2048): TickFrameScratch {
+  const buf = new ArrayBuffer(cap);
+  return { buf, u8: new Uint8Array(buf), d: new DataView(buf) };
+}
+
+export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[], type: number = WIRE_TICK, into?: TickFrameScratch): Uint8Array {
   let total = 15;
   for (const r of records) total += r.length;
-  const buf = new ArrayBuffer(total);
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  let u8: Uint8Array, d: DataView;
+  if (into) {
+    if (into.buf.byteLength < total) {
+      // Grow to the next power-of-two above need — resize-once amortized.
+      let cap = into.buf.byteLength;
+      while (cap < total) cap *= 2;
+      into.buf = new ArrayBuffer(cap);
+      into.u8 = new Uint8Array(into.buf);
+      into.d = new DataView(into.buf);
+    }
+    u8 = into.u8; d = into.d;
+  } else {
+    const buf = new ArrayBuffer(total);
+    u8 = new Uint8Array(buf);
+    d = new DataView(buf);
+  }
   u8[0] = MAGIC;
   u8[1] = type;
   d.setUint32(2, ackSeq >>> 0, true);
@@ -259,7 +282,9 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
     u8.set(r, o);
     o += r.length;
   }
-  return u8;
+  // Scratch encodes hand back a view into the arena (cap-sized u8), not
+  // a fresh exact-fit array — senders must consume it before the next call.
+  return into ? u8.subarray(0, total) : u8;
 }
 
 /** Reusable decode pool — pass the SAME object every call and slot

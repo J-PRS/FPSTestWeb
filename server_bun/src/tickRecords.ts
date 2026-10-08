@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3, tickEncodeScratch, type TickEncodeScratch } from '../../shared/wire.ts';
+import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3, tickEncodeScratch, tickFrameScratch, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
@@ -71,6 +71,11 @@ export class TickFanout {
   // allocations per room per tick were the last steady-state allocs in
   // the fanout path.
   private readonly scratchRecords: PooledRecord[] = [];
+  /** One arena for EVERY recipient's frame this tick — send() consumes
+   *  the bytes synchronously (uWS cork copy / QUIC datagram copy), so a
+   *  fresh ArrayBuffer per player per tick was pure steady-state churn.
+   *  The returned view is only valid until the next encode call. */
+  private readonly frameArena = tickFrameScratch();
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
@@ -276,6 +281,7 @@ export class TickFanout {
         room.moveSim.inputSeqOf(recipientId),
         others,
         WIRE_TICK_V3,
+        this.frameArena,
       );
       this.metrics.recordsSent += others.length;
       this.metrics.bytesSent += frame.byteLength;
@@ -295,7 +301,7 @@ export class TickFanout {
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V3);
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V3, this.frameArena);
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }
