@@ -58,6 +58,26 @@ export class DemoManager implements demoIO.DemoIOHost {
   uiVisible = false;
   video: VideoRecorder = new VideoRecorder();
 
+  /** Cool-shot autorecord toggles (sidebar checkboxes, persisted). Demo
+   *  was unconditional before this was a choice; mp4 arms the rolling
+   *  canvas capture so a hit can cut a ShadowPlay-style replay. */
+  private autoDemo = localStorage.getItem('kribes.autorecord.demo') !== '0';
+  private autoMp4 = localStorage.getItem('kribes.autorecord.mp4') === '1';
+
+  get coolShotDemo(): boolean { return this.autoDemo; }
+  set coolShotDemo(on: boolean) {
+    this.autoDemo = on;
+    localStorage.setItem('kribes.autorecord.demo', on ? '1' : '0');
+  }
+  get coolShotMp4(): boolean { return this.autoMp4; }
+  set coolShotMp4(on: boolean) {
+    this.autoMp4 = on;
+    localStorage.setItem('kribes.autorecord.mp4', on ? '1' : '0');
+    // The mp4 lane has no buffer unless the canvas capture is rolling —
+    // arming here means the toggle alone is enough, no F9 detour.
+    if (on && !this.video.isRecording && VideoRecorder.isSupported()) {this.startVideoCapture();}
+  }
+
   // Callback when cool shots list changes
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
 
@@ -85,6 +105,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       downloadDemoFile: (d, f) => demoIO.downloadDemoFile(d, f),
       timestampStr: () => demoIO.timestampStr(),
       videoClip: (s, e, l) => this.videoAutoClip(s, e, l),
+      demoEnabled: () => this.autoDemo,
     });
     this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
     // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
@@ -188,14 +209,16 @@ export class DemoManager implements demoIO.DemoIOHost {
    *  no replay pass needed. Clip bounds are demo-recorder seconds, mapped
    *  to the video's wall clock via the recorder's own duration (±50ms —
    *  far inside the GOP slop the cut already tolerates). */
-  private videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): void {
-    if (!this.video.isRecording) {return;}
+  private videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): string | null {
+    if (!this.video.isRecording) {return null;}
     const wallBase = performance.now() - this.recorder.duration * 1000;
     const blob = this.video.cutWindow(wallBase + clipStart * 1000, wallBase + clipEnd * 1000);
-    if (!blob) {return;}
-    void clipSink.saveClip(`kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`, blob).then(ok => {
+    if (!blob) {return null;}
+    const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
+    void clipSink.saveClip(name, blob).then(ok => {
       if (ok) {this.ui.setStatus('cool shot mp4 saved');}
     });
+    return name;
   }
 
   /** Armed by exportCoolShotMp4, consumed by playDemoData — the recorder
@@ -249,6 +272,9 @@ export class DemoManager implements demoIO.DemoIOHost {
     }
     // Clear pending clips from previous recording (buffer is gone)
     this.coolShotMgr.clearPending();
+    // MP4 autorecord persisted on: arm the rolling capture now that the
+    // canvas exists (construction runs before main wires the renderer).
+    if (this.autoMp4 && !this.video.isRecording && VideoRecorder.isSupported()) {this.startVideoCapture();}
     this.recorder.start(this.playerData, this.inputData);
     this.mode = 'recording';
     this.ui.setRecording(true);

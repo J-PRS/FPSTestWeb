@@ -25,6 +25,7 @@ export interface VaultEntry {
   projectileLifetime: number;
   weapon?: string;
   distance?: number;
+  mp4Name?: string;
   data: DemoFile;
 }
 

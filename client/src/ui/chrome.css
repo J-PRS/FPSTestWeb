@@ -295,9 +295,11 @@ body.menu-open #frag-msg { display: none !important; }
   /* One group per row — the old row-wrap flowed kit rows together and
      let the wrap point scatter them across the sheet. */
   display: flex; flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 10px; padding: 12px 18px;
-  max-width: min(96vw, 900px);
+  /* Fill the sheet edge-to-edge — same contract as the settings rows:
+     every group/cell/chip stretches instead of shrink-wrapping text. */
+  width: min(96vw, 900px);
   background: rgba(10,16,26,0.85);
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 8px;
@@ -306,27 +308,28 @@ body.menu-open #frag-msg { display: none !important; }
 /* The play hub is a centered window now — it covers the same screen
    region as the loadout sheet, so the sheet steps aside while it's up. */
 body.lobby-open #loadout-bar { display: none; }
-#loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; }
+#loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 #loadout-bar .lo-head {
   font-size: 0.74rem; letter-spacing: 0.2em; font-weight: 700;
   color: rgba(140,170,195,0.6);
 }
 /* nowrap inside a group — a squeezed row wraps at the GROUP level
    (whole row drops together), never orphans a lone slot mid-wrap. */
-#loadout-bar .lo-cells { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-end; }
+#loadout-bar .lo-cells { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-end; width: 100%; }
 #loadout-bar .lo-cells.lo-grid2 { display: grid; grid-template-columns: 1fr 1fr; }
 #loadout-bar .lo-cells.lo-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
-#loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+#loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: stretch; flex: 1; min-width: 0; }
 #loadout-bar .lo-cap {
   font-size: 0.66rem; letter-spacing: 0.18em; font-weight: 600;
   color: rgba(140,170,195,0.55); text-align: center;
 }
 /* Armor-class tiles — the whole pick visible at once; stat line is the
    speed/HP tradeoff that makes the decision concrete. */
-#loadout-bar .lo-tiles { display: flex; gap: 6px; }
+#loadout-bar .lo-tiles { display: flex; gap: 6px; width: 100%; }
 #loadout-bar .lo-tile {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 7px 12px; min-width: 74px;
+  flex: 1; min-width: 0;
+  padding: 7px 12px;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.14); border-radius: 5px;
   color: #cdd9e5; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.08em;
@@ -365,7 +368,10 @@ body.lobby-open #loadout-bar { display: none; }
 /* Custom dropups — chip face + option list opening upward (the bar sits
    at the bottom edge). No native select chrome, stays in-game UI. */
 #loadout-bar .lo-drop {
-  position: relative; /* width set per-dropup by canvas-measured options */
+  position: relative;
+  /* Fill the cell — the canvas-measured options width stays on as
+     inline min-width, so a long option list still widens its column. */
+  width: 100%;
   display: flex; justify-content: space-between; align-items: center;
   gap: 8px;
 }
@@ -421,9 +427,15 @@ body.lobby-open #loadout-bar { display: none; }
 .cool-shot-item:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
 .cool-shot-item.recent { border-left-color: #4caf6d; }
 .cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
+#cool-shot-toggles { display: flex; gap: 6px; margin: 4px 0 8px; }
+#cool-shot-toggles .cs-toggle { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(140,170,195,0.25); color: rgba(140,170,195,0.6); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; padding: 4px 0; border-radius: 3px; cursor: pointer; }
+#cool-shot-toggles .cs-toggle.on { background: rgba(58,167,255,0.15); border-color: #3aa7ff; color: #9fd4ff; }
 .cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgba(140,170,195,0.7); min-width: 16px; }
 .cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 .cool-shot-item .shot-meta { font-size: 0.65rem; color: rgba(140,170,195,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cool-shot-item .fmt { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.06em; padding: 1px 4px; border-radius: 2px; }
+.cool-shot-item .fmt-demo { color: #9fd4ff; background: rgba(58,167,255,0.15); }
+.cool-shot-item .fmt-mp4 { color: #ffb86b; background: rgba(255,184,107,0.15); }
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
 .cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
 .cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }

@@ -1,4 +1,5 @@
 import type { CoolShotEntry, DemoManager } from '../demo/index.js';
+import { exportClip } from '../demo/clipSink.js';
 
 interface CoolShotsPanelDependencies {
   demoManager: DemoManager;
@@ -26,6 +27,18 @@ export class CoolShotsPanel {
 
   private setup(): void {
     this.demoManager.onCoolShotsChanged = (shots) => this.renderCoolShots(shots);
+
+    // Autorecord toggles — state lives in DemoManager (localStorage),
+    // the buttons only mirror it.
+    const bind = (id: string, get: () => boolean, set: (on: boolean) => void) => {
+      const btn = document.getElementById(id);
+      if (!btn) {return;}
+      const sync = () => btn.classList.toggle('on', get());
+      btn.addEventListener('click', () => { set(!get()); sync(); });
+      sync();
+    };
+    bind('cs-toggle-demo', () => this.demoManager.coolShotDemo, (v) => { this.demoManager.coolShotDemo = v; });
+    bind('cs-toggle-mp4', () => this.demoManager.coolShotMp4, (v) => { this.demoManager.coolShotMp4 = v; });
     
     // Refresh "time ago" labels every second — but only while the panel
     // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
@@ -74,6 +87,10 @@ export class CoolShotsPanel {
     span('rank', String(rank));
     span('lifetime', `${shot.projectileLifetime.toFixed(2)}s`);
     if (meta) {span('shot-meta', meta);}
+    // Every entry is a demo clip; the MP4 badge only shows when a
+    // rolling-capture cut actually landed for this shot.
+    span('fmt fmt-demo', 'DEMO');
+    if (shot.mp4Name) {span('fmt fmt-mp4', 'MP4');}
     span('time-ago', this.timeAgo(shot.timestamp));
     item.addEventListener('click', () => {
       this.demoManager.playCoolShotById(shot.id);
@@ -120,6 +137,11 @@ export class CoolShotsPanel {
     act('Download .demo', () => {
       void this.demoManager.downloadCoolShotById(shot.id);
     });
+    if (shot.mp4Name) {
+      act('Download MP4', () => {
+        void exportClip(shot.mp4Name!);
+      });
+    }
     act('Export MP4', () => {
       this.demoManager.exportCoolShotMp4(shot.id);
       this.overlay.style.display = 'none';

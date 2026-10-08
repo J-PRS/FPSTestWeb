@@ -21,6 +21,7 @@ export interface CoolShotEntry {
   description: string;
   weapon?: string;   // displayName of the weapon that scored the hit
   distance?: number; // shot-origin → hit-point travel distance (m)
+  mp4Name?: string;  // vault clip name when an mp4 was cut for this shot
   clipData?: DemoFile; // only set for locally-generated clips
 }
 
@@ -47,8 +48,12 @@ export interface CoolShotDeps {
   downloadDemoFile(data: DemoFile, filename: string): void;
   timestampStr(): string;
   /** Same clip window (demo-recorder seconds) cut from the rolling video
-   *  buffer — wired only while the canvas recorder is on. */
-  videoClip?(clipStart: number, clipEnd: number, lifetime: number): void;
+   *  buffer — wired only while the canvas recorder is on. Returns the
+   *  saved mp4's clip name so the entry can badge/menu-download it. */
+  videoClip?(clipStart: number, clipEnd: number, lifetime: number): string | null;
+  /** False when the cool-shot demo toggle is off — the pending clip still
+   *  extracts so the mp4 lane can cut, but no .demo entry is minted. */
+  demoEnabled?(): boolean;
 }
 
 export class CoolShotManager {
@@ -160,6 +165,8 @@ export class CoolShotManager {
   }
 
   private extractPendingClip(pending: PendingClip): void {
+    const mp4Name = this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
+    if (this.deps.demoEnabled && !this.deps.demoEnabled()) {return;}
     const clipData = this.deps.recorder().extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
     if (!clipData) {
       logger.warn('Auto-clip: not enough buffer for this clip');
@@ -176,6 +183,7 @@ export class CoolShotManager {
       description: pending.description,
       weapon: pending.weapon,
       distance: pending.distance,
+      mp4Name: mp4Name ?? undefined,
       clipData,
     };
     // Upload to server; on success, use the server-assigned filename and free local clipData
@@ -198,13 +206,12 @@ export class CoolShotManager {
     this.trimList();
     // Vault is the durable copy — memory clipData frees after upload,
     // vault keeps the clip downloadable/playbackable across sessions.
-    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, data: clipData });
+    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, mp4Name: entry.mp4Name, data: clipData });
     this.onChanged?.(this.coolShots);
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
     this.deps.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
     feedShot(pending.shotTime, pending.bestLifetime, pending.chainCount);
-    this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime);
   }
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
@@ -226,7 +233,7 @@ export class CoolShotManager {
     const have = new Set(this.coolShots.map(s => s.id));
     for (const m of meta) {
       if (have.has(m.id)) {continue;}
-      this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime, weapon: m.weapon, distance: m.distance });
+      this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime, weapon: m.weapon, distance: m.distance, mp4Name: m.mp4Name });
     }
     this.trimList();
     this.onChanged?.(this.coolShots);
