@@ -133,6 +133,11 @@ export class P2PHost {
     if (map.spawns) this.playerManager.spawnPoints = map.spawns;
     if (map.teamSpawns) this.playerManager.teamSpawns = map.teamSpawns;
     this.roomInfo.bases = map.bases;
+    // setMap arrives after construction — both collider sets must track
+    // the host's real map or beam sweeps + shell contacts adjudicate
+    // against a world the guests don't live in.
+    this.messageHandler.attachStructures(map.structures);
+    this.projectiles.attachStructures(map.structures);
   }
 
   constructor() {
