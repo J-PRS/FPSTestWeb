@@ -8,7 +8,7 @@ import type { DemoFile } from './types.js';
 import * as net from './coolShotsNet.js';
 import { DemoVault } from './demoVault.js';
 import { ChildLogger } from '../core/Logger.js';
-import { feedShot } from '../ui/shotFeed.js';
+import { feedShot, feedShotPending, type PendingFeed } from '../ui/shotFeed.js';
 
 const logger = new ChildLogger('Demo');
 
@@ -37,6 +37,8 @@ interface PendingClip {
   bestLifetime: number;
   weapon?: string;
   distance?: number;
+  /** Bottom-right toast whose fill bar tracks the remaining save wait. */
+  feed?: PendingFeed;
 }
 
 export interface CoolShotDeps {
@@ -87,6 +89,7 @@ export class CoolShotManager {
   clearPending(): void {
     if (this.pendingClips.length > 0) {
       logger.debug(`Clearing ${this.pendingClips.length} pending clip(s) from previous recording`);
+      for (const p of this.pendingClips) {p.feed?.discard();}
       this.pendingClips = [];
     }
   }
@@ -126,6 +129,7 @@ export class CoolShotManager {
         }
         const totalDur = pending.clipEnd - pending.clipStart;
         pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
+        pending.feed?.extend(bufferAfter);
         logger.debug(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
         return;
       }
@@ -144,6 +148,7 @@ export class CoolShotManager {
       projectileLifetime,
       shotTime,
       description: desc,
+      feed: feedShotPending(bufferAfter),
       chainCount: 1,
       bestLifetime: projectileLifetime,
       weapon: meta?.weapon,
@@ -211,7 +216,8 @@ export class CoolShotManager {
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
     this.deps.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
-    feedShot(pending.shotTime, pending.bestLifetime, pending.chainCount);
+    if (pending.feed) {pending.feed.done(pending.shotTime, pending.bestLifetime, pending.chainCount);}
+    else {feedShot(pending.shotTime, pending.bestLifetime, pending.chainCount);}
   }
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
