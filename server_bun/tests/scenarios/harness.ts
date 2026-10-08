@@ -267,7 +267,10 @@ export function replica(room: Room): Replica {
         if (Math.round(hp.x) !== Math.round(tp.position.x) || Math.round(hp.y) !== Math.round(tp.position.y) || Math.round(hp.z) !== Math.round(tp.position.z)) {
           out.push(`${id}: pos replica(${hp.x.toFixed(1)},${hp.y.toFixed(1)},${hp.z.toFixed(1)}) room(${tp.position.x.toFixed(1)},${tp.position.y.toFixed(1)},${tp.position.z.toFixed(1)})`);
         }
-        if (Math.floor(hp.health / 4) !== Math.floor(tp.health / 4)) {
+        // Compare through the wire transform — health lands as a u16
+        // (Math.round), so a float truth straddling a bucket edge is
+        // parity, not drift. Mirrors computeStateHash's quantization.
+        if (Math.floor(Math.round(hp.health) / 4) !== Math.floor(Math.round(tp.health) / 4)) {
           out.push(`${id}: health replica=${hp.health} room=${tp.health}`);
         }
         if (hp.isDead !== tp.isDead) out.push(`${id}: isDead replica=${hp.isDead} room=${tp.isDead}`);

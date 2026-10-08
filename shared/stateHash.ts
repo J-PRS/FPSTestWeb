@@ -56,7 +56,10 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
     }
     for (const v of [
       Math.round(p.x), Math.round(p.y), Math.round(p.z),
-      Math.floor(p.health / ECHO_QUANTUM),
+      // The wire carries health as a u16 — the replica can only ever hold
+      // Math.round(truth). Hash the wire value on both ends or a float hp
+      // straddling a bucket edge (35.9 room vs 36 wire) desyncs forever.
+      Math.floor(Math.round(p.health) / ECHO_QUANTUM),
       p.isDead ? 1 : 0,
     ]) {
       ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;

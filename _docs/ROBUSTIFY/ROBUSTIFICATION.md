@@ -3478,3 +3478,11 @@ The debug feed's row parallels the roster row + kill stats — it now
 pins as a subset of the declared row (kills/deaths whitelisted as the
 stats extras). Every hand-written wire row shape is pinned: join
 roster, inline containers, replica record, debug feed.
+
+## 2.203 — Health hash quantizes like the wire
+
+The u16 health field lands on the replica as Math.round(truth); the hash
+bucketed the raw float, so a truth straddling a 4hp bucket edge
+(35.9 room -> 36 wire) desynced forever on live clients. The hash now
+rounds before bucketing — the same transform the wire applies — and
+replicaParity's busy-room spec (a long-standing known-fail) goes green.
