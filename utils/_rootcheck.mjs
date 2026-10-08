@@ -11,7 +11,8 @@ import { readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = dirname(fileURLToPath(import.meta.url));
+// The gate lives in utils/ but polices the repo root above it.
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const ALLOW = new Set([
   // versioned project files
@@ -24,7 +25,7 @@ const ALLOW = new Set([
   'ZZZ_ROOT', 'TEMP_WEBual', 'build', 'client', 'concepts', 'demo', 'demos_flag',
   'demos_rich', 'demos_out', 'combo_clips', 'docs', 'logs', 'maps', 'node_modules',
   'reference', 'screenshots', 'screenshots_legacy', 'screenshots_web',
-  'server_bun', 'shared', 'terrain_gen', 'tools', 'traps', 'workflows', 'zzz',
+  'server_bun', 'shared', 'terrain_gen', 'tools', 'traps', 'utils', 'workflows', 'zzz',
 ]);
 
 const ALLOW_RE = [

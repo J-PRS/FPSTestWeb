@@ -86,6 +86,16 @@ for (let i = 0; i < simS * 20; i++) {
     }
     const flags = [...(room.flags?.flags.values() ?? [])].map((fl) => `${fl.team[0]}:${fl.state}`).join(' ');
     console.log(`  t=${clock.toFixed(0)}s score ${room.scores.alpha}-${room.scores.bravo} alive=${alive} flags ${flags}${info}`);
+    if (process.argv.includes('--sample')) {
+      // Who is where — role + position so "attackers never leave home"
+      // reads as a roster picture, not a hunch.
+      const roles = room.bots.roster?.roles as Map<string, string> | undefined;
+      const line = all
+        .filter((p) => p.isBot && !p.isDead)
+        .map((p) => `${p.id.slice(-4)}:${p.team[0]}:${roles?.get(p.id) ?? '?'}(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`)
+        .join(' ');
+      console.log(`    ${line}`);
+    }
   }
 }
 
@@ -140,6 +150,13 @@ const wallS = (Date.now() - t0) / 1000;
 console.log(`map=${FIELD || MAP} flagM=${flagM}m bots=${BOTS} sim=${MINS}min wall=${wallS.toFixed(0)}s (${(simS / wallS).toFixed(0)}x rt)`);
 console.log(`score alpha=${room.scores.alpha} bravo=${room.scores.bravo}  matchEnd=${w.count('matchEnd')}`);
 console.log(`kills=${kills} grabs=${carries.length} drops=${done.filter((c) => c.result === 'drop').length} (died=${died} threw=${threw}) caps=${done.filter((c) => c.result === 'cap').length} heldAtEnd=${carries.length - done.length} standReturns=${returns}`);
+console.log(`  pushCalls a=${room.bots?.debugPushCalls?.('alpha') ?? 0} b=${room.bots?.debugPushCalls?.('bravo') ?? 0}`);
+// Siege report: did the generator pair actually crack the grid?
+const gens = [...(room.deployables?.items.values() ?? [])]
+  .filter((d) => d.kind === 'generator')
+  .map((d) => `${d.team?.[0] ?? '?'}:${d.hp.toFixed(0)}${d.hp <= 0 ? ' DEAD' : ''}`)
+  .join(' ');
+if (gens) console.log(`  gens ${gens}`);
 if (dropDs.length) console.log(`  dropD-from-own-home: ${dropDs.map((d) => d.toFixed(0)).sort((a, b) => +a - +b).join(',')}m`);
 if (done.length) {
   console.log(`carry outcomes: med hold=${med(done.map((c) => (c.endT ?? 0) - c.grabT))}s`);

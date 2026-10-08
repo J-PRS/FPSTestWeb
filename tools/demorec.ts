@@ -210,7 +210,7 @@ for (let match = 0; match < MATCHES; match++) {
   if (PLANT) {
     planter = new NetClient(env.url, 'planter', new LatencyLink({ pingMs: 20, jitterMs: 10, lossRate: 0 }), roomOpts);
     await planter.connect();
-    const kinds = ['turret', 'sentry', 'mine', 'station', 'beacon', 'nugget'];
+    const kinds = ['turret', 'mine', 'station', 'beacon', 'nugget'];
     let ki = 0;
     plantTimer = setInterval(() => {
       if (!planter) return;
