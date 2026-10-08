@@ -3,6 +3,9 @@
  * Matches server Logger.ts implementation for consistency
  */
 
+import { settings } from './settings.js';
+import { urlParams } from './params.js';
+
 export enum LogLevel {
   DEBUG = 0,
   INFO = 1,
@@ -38,6 +41,10 @@ export namespace Logger {
     }
   }
   let writingToConsole = false; // suppress console wrapper re-entry
+  // Consecutive-repeat fold — see log(); key is level+tag+body (no
+  // timestamp), count resets on any different line.
+  let lastFoldKey = '';
+  let lastFoldCount = 0;
 
   /** Route stray console.warn/error through the buffer so Alt+Q sees
    *  EVERYTHING — a raw console call outside the logger is invisible to
@@ -143,10 +150,21 @@ export namespace Logger {
     }
 
     // Add to in-memory buffer for export
-    const logLine = context === undefined 
-      ? fullMessage
-      : `${fullMessage} ${JSON.stringify(context)}`;
-    logBuffer.push(logLine);
+    const ctxStr = context === undefined ? '' : ` ${JSON.stringify(context)}`;
+    const logLine = fullMessage + ctxStr;
+    // Consecutive identical bodies fold into `line (×N)` — spam bursts
+    // (desync warns, knockback stamps, "no live lane") used to evict
+    // real history from the 1000-line cap while saying nothing new.
+    // The fold key skips the timestamp so rapid repeats actually match.
+    const foldKey = `${levelStr}|${prefix}|${message}${ctxStr}`;
+    if (foldKey === lastFoldKey) {
+      lastFoldCount++;
+      logBuffer[logBuffer.length - 1] = `${logLine} (×${lastFoldCount + 1})`;
+    } else {
+      lastFoldKey = foldKey;
+      lastFoldCount = 0;
+      logBuffer.push(logLine);
+    }
 
     // WARN+ also queues for server shipping — the on-disk client.log
     if (level >= LogLevel.WARN) {queueForShip(logLine);}
@@ -407,6 +425,18 @@ if (typeof window !== 'undefined') {
     toastTimer = setTimeout(() => { toastEl!.style.opacity = '0'; }, 1500) as unknown as number;
   };
   document.addEventListener('keydown', (e) => {
+    // F1 — same visuals-only debug flag the menu DEBUG toggle writes
+    // (settings.fps-debug); every consumer reads urlParams.debug live,
+    // so no reload. Browsers own F1 for help — preventDefault keeps it.
+    if (e.code === 'F1') {
+      e.preventDefault();
+      const on = !settings.get('fps-debug');
+      settings.set('fps-debug', on ? 1 : 0);
+      // Toast the EFFECTIVE state — on an https deploy the flag is
+      // force-off, and "DEBUG ON" with no wireframes is a lie.
+      toast(urlParams.debug ? 'DEBUG ON' : 'DEBUG OFF');
+      return;
+    }
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
       Logger.copyLogs(300).then(n => {

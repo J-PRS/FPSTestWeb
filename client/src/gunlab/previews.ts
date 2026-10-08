@@ -173,7 +173,39 @@ export const PICKUPS: [label: string, build: () => THREE.Group][] =
 // on the compound center rather than the group origin.
 import { mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad, mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk, mkArch, mkShard } from '../structures/structures.js';
 import { ramp } from '../structures/structKit.js';
+import { KIT_BUILDERS } from '../world/mapStructures.js';
+import { resolveMapSpec, parseMapSpecJson } from '../../../shared/mapSpec.js';
+import bastionJson from '../../../maps/bastion.json';
 export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
+  // The deployed map verbatim — same bastion.json + resolveMapSpec +
+  // KIT_BUILDERS path the game renders, so the lab can never show a
+  // stale layout. Flat terrain here (no seatKits): authored y stands.
+  ['[MAP] bastion', () => {
+    const spec = resolveMapSpec(parseMapSpecJson(JSON.stringify(bastionJson)));
+    const g = new THREE.Group();
+    for (const s of spec.structures ?? []) {
+      if (s.kind === 'kit') {
+        const mk = KIT_BUILDERS[s.piece ?? ''];
+        if (!mk) continue;
+        const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59F2FF);
+        piece.position.set(s.pos.x, s.pos.y, s.pos.z);
+        piece.rotation.y = s.rotY ?? 0;
+        if (s.scale && s.scale !== 1) piece.scale.setScalar(s.scale);
+        g.add(piece);
+      } else if (s.kind === 'shield' && s.size) {
+        const color = s.team ? TEAM_COLORS[s.team] : 0x59F2FF;
+        const pane = new THREE.Mesh(
+          new THREE.BoxGeometry(s.size.x, s.size.y, Math.max(0.25, s.size.z)),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+        pane.position.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
+        pane.rotation.y = s.rotY ?? 0;
+        g.add(pane);
+      }
+    }
+    // Frame alpha's compound — the authored cluster center.
+    g.userData.liveFocus = () => new THREE.Vector3(-500, 40, 60);
+    return g;
+  }],
   ['bastion', () => {
     const g = mkBastion();
     g.userData.liveFocus = () => new THREE.Vector3(0, 4, -4);

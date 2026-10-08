@@ -88,7 +88,10 @@ export function claim(kind: 'reject' | 'drop', reason: string, weapon: string | 
 export function spawnDrift(dv: number): void {
   spawnDriftN++;
   spawnDriftMax = Math.max(spawnDriftMax, dv);
-  push('spawn', `spawn claim drift=${dv.toFixed(2)}m/s`);
+  // The journal is for anomalies — a 0.00 drift row is pure noise and
+  // used to flood every Alt+Q's recent-events tail. The summary line
+  // (spawnDrift max/N) still counts every sample.
+  if (dv >= 0.05) push('spawn', `spawn claim drift=${dv.toFixed(2)}m/s`);
   if (dv > 0.5) logger.error(`spawn claim drifts ${dv.toFixed(2)}m/s from real flight — server arc replay will diverge`);
 }
 

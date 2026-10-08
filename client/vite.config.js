@@ -129,7 +129,7 @@ export default defineConfig(({ mode }) => ({
       const files = modules.length
         ? modules.map(m => m.file).filter(Boolean)
         : [file];
-      server.ws.send({ type: 'custom', event: 'stale:changed', data: { count: files.length } });
+      server.ws.send({ type: 'custom', event: 'stale:changed', data: { count: files.length, files } });
       return []; // swallow — no HMR, no full-reload
     },
   }] : [])],

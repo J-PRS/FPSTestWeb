@@ -73,7 +73,7 @@ export function isCreatureTargetType(targetType: number): boolean {
 // creature ids. Ordered to match shared/deployItems.ts — keep stable.
 export const TARGETTYPE_DEPLOY_BASE = 128;
 export const DEPLOY_ID_FLAG = 0x4000;
-export const DEMO_DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'sentry'] as const;
+export const DEMO_DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'baseturret'] as const;
 export function demoDeployKindIndex(kind: string): number {
   const i = DEMO_DEPLOY_KINDS.indexOf(kind as (typeof DEMO_DEPLOY_KINDS)[number]);
   return i < 0 ? 0 : i;

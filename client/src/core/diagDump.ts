@@ -4,6 +4,7 @@
 // the rolling battle log sections read from.
 
 import { aimProbe } from './aimProbe.js';
+import { staleLine } from './staleFiles.js';
 import { diagLines as netProbeLines } from '../debug/netProbe.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { StateDebugContext } from './stateDebug.js';
@@ -45,6 +46,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
   ];
   pushWorld(lines, ctx.world);
   pushRender(lines);
+  pushPerf(lines);
   pushAimProbe(lines, ctx);
   // Netcode census — corrections/claim verdicts answer "why did it
   // rubberband / why didn't that hit land" before the row dumps.
@@ -66,6 +68,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
+    staleLine(),
   );
   pushTrailCensus(lines, ctx);
   pushProjectiles(lines, ctx);
@@ -112,6 +115,39 @@ function pushRender(lines: string[]): void {
   lines.push(`  passes: ${(rd['passes'] as string[]).join(' ')}`);
 }
 
+// Frame-cost section — window.__perf carries the per-phase EMA table
+// (gameLoop marks sim/balls/species/proj/fx/hud/render) plus draw calls
+// and the GPU timer. The watchdog log ships the same snapshot on
+// sustained <40fps; Alt+Q is the on-demand version. Unknown phases are
+// printed as-is so new marks never need wiring here.
+function pushPerf(lines: string[]): void {
+  const pd = window.__perf?.();
+  if (!pd) {return;}
+  const { gpu, draws, trisK, ...rest } = pd as Record<string, number>;
+  const phasePairs = Object.entries(rest)
+    .filter(([k, v]) => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')
+    .map(([k, v]) => `${k}=${v}`);
+  // budget stats arrive as {perFrame,worstItemMs,backlog} objects —
+  // flatten to k:field so they survive the number-only filter above.
+  for (const [k, v] of Object.entries(pd)) {
+    if (typeof v === 'object' && v) {
+      phasePairs.push(...Object.entries(v as Record<string, number>).map(([f, n]) => `${k}.${f}=${n}`));
+    }
+  }
+  lines.push(`perf: frame=${rest['frame']}ms gpu=${gpu?.toFixed(1) ?? '?'}ms draws=${draws} tris=${trisK}k`);
+  lines.push(`  ${phasePairs.join(' ')}`);
+  const maxPairs = Object.entries(rest).filter(([k]) => k.startsWith('max:'));
+  if (maxPairs.length) {
+    lines.push(`  spikes: ${maxPairs.map(([k, v]) => `${k.slice(4)}=${v}`).join(' ')}`);
+  }
+  // Worst frame in the last ~5s with its own phase split — catches the
+  // transient dips the EMA row smooths away.
+  const wPairs = Object.entries(rest).filter(([k]) => k.startsWith('w:'));
+  if (wPairs.length) {
+    lines.push(`  worst: ${wPairs.map(([k, v]) => `${k.slice(2)}=${v}`).join(' ')}`);
+  }
+}
+
 // Crosshair probe near the top — the point of the dump is usually "what
 // is THAT thing", so the answer shouldn't sit under the censuses.
 function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
@@ -149,11 +185,32 @@ interface TrailDump {
 // Row dumps are per-live-entity — bound them or a busy fight turns the
 // paste into a novel. Totals stay exact; rows beyond the cap get an
 // omitted count.
-function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24): void {
+function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24, def?: Record<string, unknown>): void {
   const rows = arr ?? [];
-  for (const r of rows.slice(0, cap)) lines.push(`  ${label} ${JSON.stringify(r)}`);
+  for (const r of rows.slice(0, cap)) lines.push(`  ${label} ${JSON.stringify(slim(r, def))}`);
   if (rows.length > cap) lines.push(`  … ${rows.length - cap} more ${label}s`);
 }
+
+// Default-value suppression — rows repeat ~10 fields that are always the
+// same (attached:true, stopped:false, starved:0 …), so a paste is 90%
+// boilerplate and the anomaly hides in it. Fields drop ONLY when they
+// equal the default; anything odd survives verbatim.
+function slim(r: Record<string, unknown>, def?: Record<string, unknown>): Record<string, unknown> {
+  if (!def) return r;
+  const o: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (k in def && v === def[k]) continue;
+    o[k] = v;
+  }
+  return o;
+}
+
+// Per-section defaults — chosen so the *interesting* state always prints.
+const TRAIL_ROW_DEF = { attached: true, paused: false, waiting: 0, ended: false, loop: true, emVis: true, emRoot: 'Scene', emScale: 1, inPool: false, hasPs: true };
+const RIB_ROW_DEF = { pushed: 0, stopped: false, bb: true, lit: false, starved: 0 };
+const BALL_ROW_DEF = { net: true };
+const BALL_RIB_DEF = { stopped: false, lit: false, starved: 0 };
+const BALL_DOTS_DEF = { timer: 0, lastLive: 0 };
 
 // Trail census — dead-trail bugs need attached/particles/slot per live
 // trail, not just the projectile count.
@@ -162,12 +219,12 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   if (!td) return;
   if (td.stats) lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   if (td.pools) lines.push(`pools: ${JSON.stringify(td.pools)}`);
-  pushCapped(lines, 'trail', td.trails);
+  pushCapped(lines, 'trail', td.trails, 24, TRAIL_ROW_DEF);
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
   const rs = (td.ribbons ?? []).slice().sort((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
-  for (const r of rs) lines.push(`  rib ${JSON.stringify(r)}`);
+  for (const r of rs) lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
     lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
@@ -219,7 +276,14 @@ function pushBallCensus(lines: string[], td: TrailDump): void {
   if (td.ballDots) lines.push(`ballDots: ${JSON.stringify(td.ballDots)}`);
   if (td.balls) {
     lines.push(`balls: ${td.balls.rows?.length ?? 0} live viewPos=${td.balls.viewPos ?? '?'}`);
-    for (const r of td.balls.rows ?? []) lines.push(`  ball ${JSON.stringify(r)}`);
+    for (const r of td.balls.rows ?? []) {
+      const s = slim(r, BALL_ROW_DEF);
+      // Nested rib/dots records get their own defaults — same idea as
+      // the flat slim, one level down.
+      if (Array.isArray(s.rib)) s.rib = (s.rib as Record<string, unknown>[]).map(x => slim(x, BALL_RIB_DEF));
+      if (s.dots && typeof s.dots === 'object') s.dots = slim(s.dots as Record<string, unknown>, BALL_DOTS_DEF);
+      lines.push(`  ball ${JSON.stringify(s)}`);
+    }
   }
 }
 

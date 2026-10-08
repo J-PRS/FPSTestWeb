@@ -148,7 +148,7 @@ field itself to end of file.
    in files):
 
    - species (64+): `crawler, scarab, rakk, gnat, roller, snake, baneling, totem`
-   - deploy kinds (128+): `turret, mine, station, drone, shield, nugget, beacon, generator, sensor, sentry`
+   - deploy kinds (128+): `turret, mine, station, drone, shield, nugget, beacon, generator, sensor, baseturret`
    - pickup kinds (226+): `gem, tag, heal, armor, regen, dd`
 
    Deployable-fired bolts appear in `projectileEvents` with the sentinel

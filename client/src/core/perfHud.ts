@@ -21,6 +21,11 @@ export function createPerfHud() {
   document.body.append(el);
 
   const phases = new Map<string, number>(); // EMA ms
+  const cur = new Map<string, number>();    // raw ms, current frame
+  // Worst frame in the last ~5s keeps its OWN phase breakdown — the EMA
+  // smooths a 25ms spike away long before anyone reaches Alt+Q.
+  let worstMs = 0, worstAt = 0;
+  let worstPhases = new Map<string, number>();
   let frameMs = 0, frameStart = 0, lastMark = 0, lastText = 0;
 
   /** `renderer.info.autoReset` makes each render pass wipe the counters —
@@ -42,12 +47,19 @@ export function createPerfHud() {
     const d = now - lastMark;
     lastMark = now;
     phases.set(name, (phases.get(name) ?? d) * 0.9 + d * 0.1);
+    cur.set(name, d);
   }
 
   /** Called once per frame after render; refreshes the text at 4Hz. */
   function end(renderer: WebGLRenderer, counts: () => string): void {
-    frameMs = frameMs * 0.9 + (performance.now() - frameStart) * 0.1;
+    const rawMs = performance.now() - frameStart;
+    frameMs = frameMs * 0.9 + rawMs * 0.1;
     const now = performance.now();
+    if (rawMs > worstMs || now - worstAt > 5000) {
+      worstMs = rawMs;
+      worstAt = now;
+      worstPhases = new Map(cur);
+    }
     if (el.style.display === 'none' || now - lastText < 250) {return;}
     lastText = now;
     const i = renderer.info;
@@ -68,6 +80,8 @@ export function createPerfHud() {
     const o: Record<string, number> = {};
     for (const [k, v] of phases) {o[k] = Number(v.toFixed(2));}
     o.frame = Number(frameMs.toFixed(2));
+    o['w:frame'] = Number(worstMs.toFixed(2));
+    for (const [k, v] of worstPhases) {o[`w:${k}`] = Number(v.toFixed(2));}
     return o;
   }
 
