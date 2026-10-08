@@ -49,6 +49,9 @@ export class P2PHost {
   private rateLimiter = new RateLimiter();
   private messageHandler: MessageHandler;
   private links = new Map<P2PLink, string>(); // link → playerId
+  /** Per-link decode slot — position frames are the host's hottest
+   *  inbound path; consumers copy field-wise within dispatch. */
+  private decodeScratch = new Map<P2PLink, import('../../../../shared/wire.js').WirePosition>();
   private byPlayer = new Map<string, P2PLink>();
   private pingCycle = 0;
   /** Stamp of the ping each guest last received — pongs that don't echo
@@ -210,7 +213,7 @@ export class P2PHost {
       if (!isWireFrame(data)) {return;}
       const playerId = this.links.get(link);
       if (!playerId) {return;} // binary before join — ignore
-      const pos = decodePosition(data);
+      const pos = decodePosition(data, this.decodeScratch.get(link) ?? this.freshPosSlot(link));
       if (pos) {this.dispatch(playerId, pos);}
       return;
     }
@@ -232,6 +235,7 @@ export class P2PHost {
     const playerId = this.links.get(link);
     if (!playerId) {return;}
     this.links.delete(link);
+    this.decodeScratch.delete(link);
     this.byPlayer.delete(playerId);
     this.lastPingStamp.delete(playerId);
     // No grace period on P2P — a dead socket is a leave, full stop.
@@ -244,6 +248,18 @@ export class P2PHost {
     this.playerManager.removePlayer(playerId);
     this.broadcast({ type: 'playerLeft', playerId });
     logger.info('P2P peer left', { playerId });
+  }
+
+  private freshPosSlot(link: P2PLink): import('../../../../shared/wire.js').WirePosition {
+    const slot = {
+      type: 'position',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { yaw: 0, pitch: 0 },
+      velocity: { x: 0, y: 0, z: 0 },
+      seq: 0, ping: 0,
+    } as import('../../../../shared/wire.js').WirePosition;
+    this.decodeScratch.set(link, slot);
+    return slot;
   }
 
   private handleJoin(link: P2PLink, rawId: unknown): void {

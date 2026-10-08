@@ -191,7 +191,16 @@ export class GameServer {
         const existingId = ws.data.playerId;
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
         if (!existingId || !room) return; // binary before join — ignore
-        const pos = decodePosition(u8);
+        // Per-socket decode slot: ~30Hz × n frames' worth of object churn
+        // becomes zero-alloc. Every consumer copies field-wise inside the
+        // handler — nothing may retain `pos` past this call.
+        const pos = decodePosition(u8, ws.data.posScratch ??= {
+          type: 'position',
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { yaw: 0, pitch: 0 },
+          velocity: { x: 0, y: 0, z: 0 },
+          seq: 0, ping: 0,
+        });
         if (pos) {
           // Same containment as the JSON lane — a throwing handler drops
           // this socket, not the process.

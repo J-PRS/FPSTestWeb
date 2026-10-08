@@ -136,7 +136,11 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
   return new Uint8Array(buf, 0, o);
 }
 
-export function decodePosition(u8: Uint8Array): WirePosition | null {
+/** Reusable decode target — position reports are the hottest inbound
+ *  message (~30Hz per player × every player), ~4 fresh objects each.
+ *  All consumers copy field-wise inside the handler, so a per-socket
+ *  slot is safe: the returned object aliases `into` until the next call. */
+export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePosition | null {
   if (u8.length < 30 || u8[0] !== MAGIC || u8[1] !== WIRE_POSITION) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let o = 2;
@@ -144,34 +148,38 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
   const px = d.getFloat32(o, true); o += 4;
   const py = d.getFloat32(o, true); o += 4;
   const pz = d.getFloat32(o, true); o += 4;
-  const velocity: WireVec3 = { x: 0, y: 0, z: 0 };
-  o = unpackVel(d, o, velocity);
-  const rotation: WireRot = { yaw: 0, pitch: 0 };
-  o = unpackRot(d, o, rotation);
+  const msg = into ?? {
+    type: 'position',
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { yaw: 0, pitch: 0 },
+    velocity: { x: 0, y: 0, z: 0 },
+    seq: 0, ping: 0,
+  } as WirePosition;
+  o = unpackVel(d, o, msg.velocity);
+  o = unpackRot(d, o, msg.rotation);
   const ping = d.getUint16(o, true); o += 2;
-  const inputSeq = u8.length >= 34 ? d.getUint32(o, true) : undefined;
+  msg.inputSeq = u8.length >= 34 ? d.getUint32(o, true) : undefined;
   o += u8.length >= 34 ? 4 : 0;
-  const input = u8.length >= 37 ? {
-    forward: d.getInt8(o), right: d.getInt8(o + 1),
-    jump: (d.getUint8(o + 2) & 1) ? 1 : 0, ski: (d.getUint8(o + 2) & 2) ? 1 : 0, jet: (d.getUint8(o + 2) & 4) ? 1 : 0,
-  } : undefined;
+  if (u8.length >= 37) {
+    // The input slot recycles too — a frame shorter than 37 must not
+    // inherit a prior message's held bits.
+    if (!msg.input) msg.input = { forward: 0, right: 0, jump: 0, ski: 0, jet: 0 } as NonNullable<WirePosition['input']>;
+    msg.input.forward = d.getInt8(o); msg.input.right = d.getInt8(o + 1);
+    msg.input.jump = (d.getUint8(o + 2) & 1) ? 1 : 0; msg.input.ski = (d.getUint8(o + 2) & 2) ? 1 : 0; msg.input.jet = (d.getUint8(o + 2) & 4) ? 1 : 0;
+  } else {
+    msg.input = undefined;
+  }
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz) ||
-      !Number.isFinite(velocity.x) || !Number.isFinite(velocity.y) || !Number.isFinite(velocity.z)) return null;
+      !Number.isFinite(msg.velocity.x) || !Number.isFinite(msg.velocity.y) || !Number.isFinite(msg.velocity.z)) return null;
   // Same bounds as the JSON validator's validateBody — the binary lane
   // must refuse what the JSON lane refuses, and position is judge-mode
   // truth, so an absurd claim would become broadcast state.
   if (px * px + py * py + pz * pz > 8192 * 8192) return null;
-  if (velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z > 1000 * 1000) return null;
-  return {
-    type: 'position',
-    position: { x: px, y: py, z: pz },
-    rotation,
-    velocity,
-    seq,
-    inputSeq,
-    input,
-    ping,
-  };
+  if (msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z > 1000 * 1000) return null;
+  msg.position.x = px; msg.position.y = py; msg.position.z = pz;
+  msg.seq = seq;
+  msg.ping = ping;
+  return msg;
 }
 
 // ---- S→C tickUpdate ----

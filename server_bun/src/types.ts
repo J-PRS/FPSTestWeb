@@ -29,6 +29,9 @@ export interface WebSocketData {
   /** Wall time the send buffer first crossed the drown limit — cleared on
    *  drain, closed after the hysteresis. */
   slowSince?: number;
+  /** Per-socket decode slot for binary position frames — decodePosition
+   *  mutates it in place, consumers copy field-wise within the handler. */
+  posScratch?: import('../../shared/wire.ts').WirePosition;
 }
 
 export interface PlayerState {
