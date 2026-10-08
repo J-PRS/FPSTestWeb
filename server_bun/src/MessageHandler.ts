@@ -594,8 +594,8 @@ export class MessageHandler {
   // MoveClaims host surface — the room's optional moveSim hooks arrive
   // as always-defined delegates so the funnel doesn't sprinkle ?.().
   moveAuthority(): boolean { return this.roomInfo.moveAuthority?.() ?? false; }
-  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) {
-    return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq) ?? null;
+  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) {
+    return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq, rttMs) ?? null;
   }
   moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }
   moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }

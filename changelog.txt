@@ -1,3 +1,4 @@
+2026-10-01 - rttMs dropped at MessageHandler delegate — transit EMA never fed; led broadcast/compare live for the first time on dedicated and P2P
 2026-10-01 - Correction cadence 100->80ms under authority: reconnect heals inside the residual band; reconnect-soak spec green
 2026-10-01 - Render ease on corrections: camera/body read renderPos (exponential ~100ms decay), sim stays converged — last visible snap hidden
 2026-10-01 - LAN-feel manifesto + audit docs; P2P host broadcasts led by uplink transit like dedicated
