@@ -54,6 +54,19 @@ export class SnapshotBuffer {
   /** Arrival stamp of the last push — jitter stats measure the wire, not
    *  the timeline order, so they track raw arrivals even when reordered. */
   private lastArrive = 0;
+  /** Small renderTime rewinds are tolerable — jitter under ~40ms shifts
+   *  the sampled window less than a stride. Big rewinds (delay inflating
+   *  on arrival spikes) walk the remote BACKWARD along its own path: the
+   *  visible rubberband. Those get pinned as bounded extrapolation and
+   *  resync when pushes raise the desired time again. */
+  private static readonly MAX_RENDER_REWIND = 40;
+  private lastRenderTime = -Infinity;
+  private lastSampleWall = 0;
+  /** The delay inflates instantly (a late packet must fit inside the
+   *  window) but deflates slowly — an arrival spike that relaxes a
+   *  +300ms delay in one push rewinds renderTime by that much and the
+   *  remote warps BACKWARD along its own path: the visible rubberband.
+   *  Slewed deflation turns the same adaptation into a glide. */
   interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
   /** EMA of the observed arrival interval — send suppression stretches it
    *  well past the nominal 20Hz without being jitter. */
@@ -91,10 +104,12 @@ export class SnapshotBuffer {
       // cap leaves renderTime permanently past the newest snapshot —
       // far remotes then freeze on the extrapolation clamp and step at
       // the send rate instead of interpolating.
-      this.interpDelay = Math.min(
+      const target = Math.min(
         SnapshotBuffer.MAX_INTERP_DELAY,
         SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalInterval + this.arrivalJitter * 2,
       );
+      // ~200ms/s deflate at push cadence — see the slew comment above.
+      this.interpDelay = target > this.interpDelay ? target : Math.max(target, this.interpDelay - 10);
     }
 
     const snap = this.pool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
@@ -121,7 +136,24 @@ export class SnapshotBuffer {
     // renderTime rides the server timeline: re-anchored by each push,
     // free-runs at wall rate between them. A jittered/late packet raises
     // elapsed — bounded extrapolation — instead of shifting the window.
-    const renderTime = this.latestT + (Date.now() - this.latestArrive) - this.interpDelay;
+    const now = Date.now();
+    const desired = this.latestT + (now - this.latestArrive) - this.interpDelay;
+    // Both directions bounded: pin on big rewinds (backward warp), glide
+    // forward at ~wall rate (the pin's own release otherwise snaps the
+    // remote ahead as desired reasserts).
+    let renderTime: number;
+    if (this.lastRenderTime === -Infinity) {
+      renderTime = desired;
+    } else {
+      const pin = desired < this.lastRenderTime - SnapshotBuffer.MAX_RENDER_REWIND;
+      // Absolute step cap matters at low fps: a wall-scaled cap alone lets a
+      // 750ms frame glide +860ms in one step — every remote snapping forward
+      // together. Real teleports re-seat via clear(), never through sample.
+      const cap = this.lastRenderTime + Math.min((now - this.lastSampleWall) * 1.15, 100);
+      renderTime = Math.min(pin ? this.lastRenderTime : desired, cap);
+    }
+    this.lastSampleWall = now;
+    this.lastRenderTime = renderTime;
     const snaps = this.snapshots;
 
     if (snaps.length === 0) {
@@ -209,6 +241,8 @@ export class SnapshotBuffer {
     this.latestT = 0;
     this.latestArrive = 0;
     this.lastArrive = 0;
+    this.lastRenderTime = -Infinity;
+    this.lastSampleWall = 0;
   }
 
   get size(): number { return this.snapshots.length; }
