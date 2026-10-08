@@ -331,6 +331,9 @@ async function initDemo(): Promise<void> {
   const {httpUrl} = (await serverEndpoints);
   Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
   demoManager.setServerUrl(httpUrl);
+  // The recorder needs the REAL render canvas — the DOM carries ~13
+  // canvases (atlases, shadow buffers); "largest" picks a black texture.
+  demoManager.video.setCanvas(renderer.domElement);
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 
@@ -834,6 +837,13 @@ init().then(async () => {
   // Fetch cool shots from server so they're shown in the initial overlay
   // (the feed path above fetches for itself and exits early).
   demoManager?.fetchCoolShotsFromServer();
+
+  // F9 = ShadowPlay-style canvas recorder: WebCodecs/NVENC when available,
+  // MediaRecorder fallback, canvas-only (HUD never enters the clip).
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'F9' || e.repeat) {return;}
+    demoManager?.toggleVideoRecord();
+  });
 
   // Desync debugging (snapshot/hash comparison + window debug functions) —
   // dev-only or ?debug, dynamically imported so it stays out of the prod

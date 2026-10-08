@@ -63,6 +63,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       playDemoData: (d) => this.playDemoData(d),
       downloadDemoFile: (d, f) => demoIO.downloadDemoFile(d, f),
       timestampStr: () => demoIO.timestampStr(),
+      videoClip: (s, e, l) => this.videoAutoClip(s, e, l),
     });
     this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
     // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
@@ -139,16 +140,38 @@ export class DemoManager implements demoIO.DemoIOHost {
   }
 
   private startVideoCapture(): boolean {
-    const canvas = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height)[0];
-    if (!canvas) { this.ui.setStatus('no canvas'); return false; }
-    this.video.setCanvas(canvas);
-    if (this.video.start(60)) {
-      this.ui.setVideoRecording(true);
-      this.ui.setStatus('rec video');
-      return true;
+    // main.ts hands us renderer.domElement up front; the largest-canvas
+    // probe only survives for contexts that never wired one (clip feed).
+    if (!this.video.hasCanvas) {
+      const canvas = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height)[0];
+      if (!canvas) { this.ui.setStatus('no canvas'); return false; }
+      this.video.setCanvas(canvas);
     }
-    this.ui.setStatus('video unsupported');
-    return false;
+    void this.video.start(60).then((ok) => {
+      if (!ok) { this.ui.setStatus('video unsupported'); return; }
+      this.ui.setVideoRecording(true);
+      this.ui.setStatus(this.video.usingHardware ? 'rec video (gpu)' : 'rec video');
+    });
+    return true;
+  }
+
+  /** Cool-shot auto-mp4: the rolling video buffer already holds the clip
+   *  window, so the mp4 materializes the moment the demo clip extracts —
+   *  no replay pass needed. Clip bounds are demo-recorder seconds, mapped
+   *  to the video's wall clock via the recorder's own duration (±50ms —
+   *  far inside the GOP slop the cut already tolerates). */
+  private videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): void {
+    if (!this.video.isRecording) {return;}
+    const wallBase = performance.now() - this.recorder.duration * 1000;
+    const blob = this.video.cutWindow(wallBase + clipStart * 1000, wallBase + clipEnd * 1000);
+    if (!blob) {return;}
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    this.ui.setStatus('cool shot mp4 saved');
   }
 
   /** Armed by exportCoolShotMp4, consumed by playDemoData — the recorder

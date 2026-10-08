@@ -46,6 +46,9 @@ export interface CoolShotDeps {
   playDemoData(data: DemoFile): void;
   downloadDemoFile(data: DemoFile, filename: string): void;
   timestampStr(): string;
+  /** Same clip window (demo-recorder seconds) cut from the rolling video
+   *  buffer — wired only while the canvas recorder is on. */
+  videoClip?(clipStart: number, clipEnd: number, lifetime: number): void;
 }
 
 export class CoolShotManager {
@@ -201,6 +204,7 @@ export class CoolShotManager {
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
     this.deps.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
     feedShot(pending.shotTime, pending.bestLifetime, pending.chainCount);
+    this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime);
   }
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
