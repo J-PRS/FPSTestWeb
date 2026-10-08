@@ -162,7 +162,11 @@ class SpeciesKitImpl {
         // on the attacker side: a netDriven creature/ball replaying at
         // ~40 m/s legitimately reads ~20m off the snapshot it bit on, so
         // a fast attacker whiffing is replay staleness, not a reach lie.
-        const moving = p.vel.lengthSq() > 30 * 30 || (attacker?.vel?.lengthSq() ?? 0) > 15 * 15;
+        // Sub-meter overshoot is replay jitter: the attacker's client-side
+        // replica trails its server truth by a tick or two, so a strike
+        // that was in reach server-side measures slightly out here. Warn
+        // only past an epsilon that jitter can't explain.
+        const moving = p.vel.lengthSq() > 30 * 30 || (attacker?.vel?.lengthSq() ?? 0) > 15 * 15 || d - reach < 2;
         const now = performance.now();
         const fold = this.whiffFold.get(deathText);
         if (fold && now - fold.at < this.WHIFF_FOLD_MS) {
