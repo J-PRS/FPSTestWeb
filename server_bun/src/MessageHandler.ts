@@ -134,6 +134,9 @@ export interface RoomInfo {
   /** Server-measured RTT (ping/pong echo) — cross-checks the
    *  client-reported transit inside the move shadow. */
   transitNote?: (playerId: string, rttMs: number, stamp: number) => void;
+  /** Claim-declared trigger instant — the shooter's server-clock estimate;
+   *  (arrival − fireAt) is that claim's measured uplink transit. */
+  uplinkNote?: (playerId: string, fireAt: number) => void;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
@@ -201,6 +204,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     repairTarget: roomInfo?.repairTarget,
     repair: roomInfo?.onRepair,
     transitOf: roomInfo?.transitOf,
+    uplinkNote: roomInfo?.uplinkNote,
   };
 }
 

@@ -333,4 +333,23 @@ describe('RoomMoveSim', () => {
     const v = m.simState('p1')!.vel;
     expect(Math.hypot(v.x, v.y, v.z)).toBeLessThanOrEqual(200 + 1e-6);
   });
+
+  test('claim-declared uplink feeds the transit estimate; garbage is ignored', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    expect(m.transitOf('p1')).toBe(0);
+    // A measured-uplink sample lands on the server channel directly.
+    m.feedUplink('p1', 80);
+    expect(m.transitOf('p1')).toBe(80);
+    // EMA converges toward the new stream's level.
+    for (let i = 0; i < 20; i++) m.feedUplink('p1', 40);
+    expect(m.transitOf('p1')).toBeLessThan(60);
+    // Negative / NaN samples never touch the channel.
+    m.feedUplink('p1', -5);
+    m.feedUplink('p1', NaN);
+    expect(m.transitOf('p1')).toBeLessThan(60);
+    // Untracked ids are a no-op.
+    m.feedUplink('ghost', 80);
+    expect(m.transitOf('ghost')).toBe(0);
+  });
 });

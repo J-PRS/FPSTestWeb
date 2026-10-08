@@ -454,10 +454,32 @@ export class NetworkManager {
     this.telemetry.onPong(timestamp, Date.now());
   }
 
+  /** Server-clock offset estimate — the 'ping' probe's timestamp is the
+   *  server's wall clock, so stamp + rtt/2 approximates server-now.
+   *  fireAt claims ride on this: the server measures (arrival − fireAt)
+   *  as the claim's true uplink transit instead of an EMA guess. */
+  private clockOffset = 0;
+  private clockSynced = false;
+
   /** Server-side RTT probe — echo verbatim; the timestamp is the
    *  server's clock, not ours. */
   pingReceived(timestamp: number): void {
     this.send({ type: 'pong', timestamp });
+    const sample = timestamp + this.telemetry.ping / 2 - Date.now();
+    // Big jumps re-seat outright (clock step / reconnect); small ones
+    // EMA so jitter doesn't wander the offset around.
+    if (!this.clockSynced || Math.abs(sample - this.clockOffset) > 200) {
+      this.clockOffset = sample;
+      this.clockSynced = true;
+    } else {
+      this.clockOffset += (sample - this.clockOffset) * 0.2;
+    }
+  }
+
+  /** Estimated server wall-clock right now — undefined until the first
+   *  probe lands (claims simply omit fireAt before that). */
+  serverNowMs(): number | undefined {
+    return this.clockSynced ? Date.now() + this.clockOffset : undefined;
   }
 
   resendInputs(lastSeq: number): void {
@@ -713,6 +735,7 @@ export class NetworkManager {
       ...a,
       excludeTargetId: a.excludeTargetId ?? null,
       projectileId: a.projectileId ?? undefined,
+      fireAt: this.serverNowMs(),
     });
   }
 
@@ -737,7 +760,7 @@ export class NetworkManager {
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) return;
-    this.send({ type: 'shotFired', ...a });
+    this.send({ type: 'shotFired', ...a, fireAt: this.serverNowMs() });
   }
 
   sendProjectileDestroy(projectileId: string, shotId?: string): void {

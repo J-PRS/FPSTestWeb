@@ -672,6 +672,13 @@ export class Room {
         if (this.lastPingStamp.get(pid) !== stamp) return;
         this.moveSim.feedTransit(pid, rtt);
       },
+      uplinkNote: (pid, fireAt) => {
+        // (arrival − declared instant) is this claim's uplink transit —
+        // bounded so a wildly off clock (or forged stamp) degrades to the
+        // ping/pong channel instead of poisoning the EMA.
+        const uplink = wallNow() - fireAt;
+        if (uplink >= 0 && uplink <= 2_000) this.moveSim.feedUplink(pid, uplink);
+      },
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,

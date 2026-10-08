@@ -75,7 +75,11 @@ export type ClientMessage =
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not
   // the echo-race/FIFO inference it replaced.
-  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string; claimSeq?: number }
+  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string; claimSeq?: number;
+      // fireAt: the shooter's server-clock estimate of the trigger
+      // instant — lets the server measure this claim's real uplink
+      // transit instead of estimating it from the ping/pong EMA.
+      fireAt?: number }
   // Q-skill Slam landing — the intent carries WHERE the dive landed;
   // the server derives blast power from its own velocity shadow (the
   // dive speed IS the payload — a claimed speed is just a number).
@@ -86,7 +90,7 @@ export type ClientMessage =
   // (SERVER_SIMMED_WEAPONS) it's the fire INTENT instead: the server
   // spawns an authoritative shell, echoes shotId on projectileCreated,
   // and declares all outcomes — pos/shotId only help binding, never truth.
-  | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; shotId?: string }
+  | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; shotId?: string; fireAt?: number }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   // inputMove is a change-only stream — on unordered transports (RTC/WT

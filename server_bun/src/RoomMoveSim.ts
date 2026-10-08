@@ -507,6 +507,20 @@ export class RoomMoveSim {
     this.syncTransit(sh);
   }
 
+  /** Claim-declared uplink sample: `fireAt` is the shooter's server-clock
+   *  estimate of its trigger instant, so (arrival − fireAt) is THIS
+   *  claim's real uplink transit — per-claim truth where the ping/pong
+   *  EMA is a smoothed guess. Feeds the same server channel: a forged
+   *  fireAt is bounded the same way a fabricated pong is (inflating it
+   *  only shrinks the forger's own rendered lead). */
+  feedUplink(playerId: string, uplinkMs: number): void {
+    const sh = this.shadows.get(playerId);
+    if (!sh || !(uplinkMs >= 0)) return;
+    const tr = Math.min(uplinkMs, TRANSIT_EMA_CAP_MS);
+    sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
+    this.syncTransit(sh);
+  }
+
   /** Effective uplink transit: the server's own measurement owns the
    *  estimate the moment it exists — the client channel stands alone
    *  only until the first pong lands (join grace). A fabricated report

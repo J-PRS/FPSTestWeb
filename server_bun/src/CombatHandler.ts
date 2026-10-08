@@ -112,6 +112,9 @@ export interface CombatDeps {
    *  same lead the tick broadcast shows shooters, so a point-blank-
    *  looking pop validates against the position actually rendered. */
   transitOf?: (playerId: string) => number;
+  /** Claim-declared trigger instant (server-clock estimate) — feeds the
+   *  measured-uplink channel the transit EMA approximates. */
+  uplinkNote?: (playerId: string, fireAt: number) => void;
 }
 
 /**
@@ -307,6 +310,7 @@ export class CombatHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     const now = wallNow();
+    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
     const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
     // Class lock applies to every fire intent — beams and melee skip the
@@ -437,6 +441,7 @@ export class CombatHandler {
       this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return;
     }
+    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
     this.deps.emit?.({ type: 'fire', playerId });
     this.aoe.handleAOEShot(playerId, msg);
   }

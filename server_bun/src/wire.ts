@@ -139,6 +139,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           directHit: obj.directHit === true ? true : undefined,
           shotId: optShotId(obj.shotId),
           claimSeq: optClaimSeq(obj.claimSeq),
+          fireAt: isFiniteNumber(obj.fireAt) ? obj.fireAt : undefined,
         },
       };
     },
@@ -168,6 +169,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           dir: dir.ok ? dir.data : undefined,
           pos: pos.ok ? pos.data : undefined,
           shotId: optShotId(obj.shotId),
+          fireAt: isFiniteNumber(obj.fireAt) ? obj.fireAt : undefined,
         },
       };
     },
