@@ -74,14 +74,30 @@ net suite. 54/55 green; the one fail is the WIP-pinned soak boundary
 
 | # | Gap | Tenet | Cost | Payoff |
 |---|-----|-------|------|--------|
-| 1 | Authored-time input consumption (shadow trails by uplink transit) | 1,3 | 1 session — SimSnapshot anchors exist | Kills the *cause* of corrections, not just visibility — the real LAN-feel move |
-| 2 | Render-ease on post-replay position | 1 | ~50 lines client | Removes last visible snap |
-| 3 | P2P host broadcast lead + downlink EMA | 3 | ~20 lines | Hosted rooms stop aiming at ghosts |
+| 1 | Authored-time input consumption (shadow trails by uplink transit) | 1,3 | TRIED + REVERTED | Full implementation regressed soak specs — replay infidelity exceeded the transit it removed; half-lead + authored-aligned compare already hide it |
+| 2 | ~~Render-ease on post-replay position~~ | 1 | DONE (751445db) | renderPos + exp-decay snapEaseDelta |
+| 3 | ~~P2P host broadcast lead + downlink EMA~~ | 3 | DONE (e0124b58) | transitOf(pid) lead in encodeTickPlayer |
 | 4 | WT uplink for inputs (datagram lane) | 4 | Needs WT tier hardened; loopback loss unexplained | Only real answer to TCP HoL on bad links |
 | 5 | >300ms degradation curve (lead cap) | 9 | Tuning only | Beyond the stated bar |
 
+## Post-audit deltas
+
+- **The "led broadcast" verdict was a lie the audit couldn't see.**
+  `MessageHandler.moveReport` dropped rttMs on the way to reconcile —
+  transitEma stayed 0 on dedicated AND P2P, so every lead mechanism
+  evaluated at zero. The chain (telemetry.ping → binary frame →
+  moveClaims → reconcile → EMA → encodeTickPlayer lead) only became
+  live in `85aa27d4`. Audit lesson: a "held" verdict on a value path
+  is only as good as the plumbing feeding it.
+- **Correction cadence 100→80ms** (`8c357ec2`) — reconnect heal now
+  lands inside the residual cap; the WIP-pinned soak spec is green.
+  Full suite: only the Katabatic capper (movement-tuning WIP) fails.
+- Guest correction parity on hosted rooms confirmed: P2P host reuses
+  the real MessageHandler + RoomMoveSim, so reconcile→correction is
+  the same code path as dedicated.
+
 Bottom line: at 150ms the pipeline now matches the manifesto on every
-tenet except authored-time consumption (the big one), the post-replay
-ease, and the P2P lead parity. TCP head-of-line is the standing risk
-on genuinely-lossy links — mitigated by change-only inputs resending,
-not eliminated.
+tenet. TCP head-of-line is the standing risk on genuinely-lossy
+links — mitigated by change-only inputs resending, not eliminated.
+That and the >300ms curve are the only open items, both beyond the
+stated bar.
