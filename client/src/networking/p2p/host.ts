@@ -218,6 +218,9 @@ export class P2PHost {
     this.messageHandler.onPlayerDisconnected(playerId);
     this.messageHandler.onPlayerRemoved(playerId);
     this.rateLimiter.removePlayer(playerId);
+    // A leaver's live shells die with them — same ownership rule the
+    // dedicated Room applies (sticky/mortar bodies otherwise linger to TTL).
+    this.projectiles.clearOwner(playerId);
     this.playerManager.removePlayer(playerId);
     this.broadcast({ type: 'playerLeft', playerId });
     logger.info('P2P peer left', { playerId });
