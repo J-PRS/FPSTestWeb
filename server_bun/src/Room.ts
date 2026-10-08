@@ -16,18 +16,18 @@ import { MessageHandler, type RoomInfo } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
-import { seatKits } from '../../shared/structKits.ts';
 import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import { NOISE_TTL_MS } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
-import { type MapSpec, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
+import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
 import { FlagPlacer } from './roomFlagPlacer.ts';
+import { RoomStructures } from './roomStructures.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
@@ -166,12 +166,17 @@ export class Room {
   // collider re-attach + skinny mapUpdate push; spawn-anchor re-seat).
   // Declared before the ctor's wireModeFeatures/flags init uses it.
   readonly flagPlacer = new FlagPlacer(this,
-    (broadcast) => { this.attachAllStructures(); if (broadcast) {this.pushStructureUpdate();} },
+    (broadcast) => { this.structs.attach(); if (broadcast) {this.structs.pushUpdate();} },
     (snapped) => {
       if (this.modeSpec?.teams) {
         this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
       }
     });
+  /** Effective structure set (authored + dais hulls) and everywhere it
+   *  feeds — colliders, join echo, skinny mapUpdate diff — lives in
+   *  roomStructures.ts. Reads live state through this, so declare it
+   *  after flagPlacer which the eff list consults. */
+  readonly structs = new RoomStructures(this);
 
   /** Direct carrier check — snapshot() clones every flag just to answer
    *  "is id carrying", and per-tick callers (checkStuck, propel gate)
@@ -295,7 +300,7 @@ export class Room {
     // A drowned socket is a client-side or path failure — count each
     // forced close so it shows in room health, not just the close log.
     this.connections.onDrowned = () => this.healthBump('drownedSock', 1);
-    this.moveSim.attachStructures(this.effStructures());
+    this.moveSim.attachStructures(this.structs.eff());
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
@@ -309,7 +314,7 @@ export class Room {
     );
     if (this.spec.balls) this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
-    this.ballSim.colliders = structureColliders(this.effStructures());
+    this.ballSim.colliders = structureColliders(this.structs.eff());
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.players.teamSpawns = this.spec.teamSpawns ?? null;
@@ -397,7 +402,7 @@ export class Room {
       })));
     }
     this.projectiles = new RoomProjectiles(this, field);
-    this.projectiles.attachStructures(this.effStructures());
+    this.projectiles.attachStructures(this.structs.eff());
     this.registerSims();
   }
 
@@ -494,9 +499,9 @@ export class Room {
       }
     }
     // What the wire currently carries — the join echo and every structure
-    // push both emit effStructures, so boot-time stands are the baseline
+    // push both emit eff(), so boot-time stands are the baseline
     // any later re-push compares against.
-    this.emittedStands = this.standsJson();
+    this.structs.baseline();
   }
 
   /** Re-snaps flag homes against the LIVE heightfield — terrain attach
@@ -505,86 +510,10 @@ export class Room {
     this.flagPlacer.refreshHomes(broadcastUpdate);
   }
 
-  /** The stand hulls as emitted — the baseline "every client holds"
-   *  approximation: gameState echoes and pushes both serialize
-   *  effStructures, so the last push's snapshot is what a stayer has. */
-  private emittedStands: string | null = null;
-  private standsJson(): string {
-    // Shields ride the diff too — a generator flip changes which panes emit.
-    return JSON.stringify(this.effStructures().filter((s) => s.kind === 'stand' || s.kind === 'shield'));
-  }
-
-  /** Re-push the merged structure list when the stand hulls moved — a
-   *  skinny mapUpdate (no terrain/name keys) so clients rebuild colliders
-   *  without a full map reload. */
-  private pushStructureUpdate(): void {
-    const stands = this.standsJson();
-    if (stands === this.emittedStands) return;
-    this.emittedStands = stands;
-    const spec = this.spec;
-    // Refresh the join-time echo too — setMap freezes whatever snap was
-    // live when applySpec ran (often the previous map's field), and
-    // gameState re-serves that stale list to every reconnect until the
-    // map reloads.
-    this.messages.setMap({ ...spec, structures: this.effStructures() });
-    this.broadcast({
-      type: 'mapUpdate',
-      silent: true,
-      structures: this.effStructures(),
-      arena: spec.arena ?? null,
-      ambient: spec.ambient,
-      fog: spec.fog,
-      terrainTex: spec.terrainTex,
-      sky: spec.sky,
-      interiors: spec.interiors,
-    });
-  }
-
-  /** The spec's authored structures PLUS collision hulls for the flag
-   *  daises — 'stand' entries collide everywhere (move sim, shells,
-   *  balls, blast LOS) and ride the wire echo, but the client never
-   *  draws them as generic boxes (the dais mesh is their visual). */
   /** Generator state flips which shield panes exist — colliders and the
    *  wire echo share this list, so one call re-syncs every client. */
   refreshPowerStructures(): void {
-    this.attachAllStructures();
-    this.pushStructureUpdate();
-  }
-
-  private effStructures(): StructureSpec[] {
-    // Team shield panes vanish while their grid is dark — no collider,
-    // no render, no blocker on either side.
-    // deployables construct after the first moveSim/ballSim attach —
-    // pre-seed the grid reads live, so a missing table means powered.
-    const out = (this.spec.structures ?? []).filter(
-      (s) => s.kind !== 'shield' || !s.team || (this.deployables?.teamPowered(s.team) ?? true),
-    );
-    if (!this.modeSpec?.flags) return out;
-    if (process.env.FPS_NOSTAND) return out; // soak A/B: measure approach cost of the dais hulls
-    if (this.mode === 'rabbit') {
-      out.push(...flagStandSpecs(this.flagPlacer.rabbitFlagHome()));
-      return out;
-    }
-    const bases = this.spec.bases;
-    if (bases?.alpha && bases?.bravo) {
-      const snapped = this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
-      out.push(...flagStandSpecs(snapped.alpha, 'alpha'), ...flagStandSpecs(snapped.bravo, 'bravo'));
-    }
-    return out;
-  }
-
-  /** Re-attach the merged structure list everywhere it feeds — called
-   *  at boot and whenever flag homes re-snap (terrain attach, map swap). */
-  private attachAllStructures(): void {
-    // Kit pieces ground-seat on the live heightfield — authored y in the
-    // map file can't know the terrain, and a floating/buried compound is
-    // worse than an advisory height. Spec objects are shared with the
-    // wire echo, so the mutation reaches clients as the real position.
-    if (this.field) seatKits(this.spec.structures, (x, z) => hmHeight(this.field!, x, z));
-    const list = this.effStructures();
-    this.moveSim.attachStructures(list);
-    this.projectiles?.attachStructures(list);
-    if (this.ballSim) this.ballSim.colliders = structureColliders(list);
+    this.structs.refreshPower();
   }
 
   // The tick registry — GameServer steps every entry per tick; new
@@ -674,7 +603,7 @@ export class Room {
       },
       simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
       bases: this.spec.bases,
-      structures: this.effStructures(),
+      structures: this.structs.eff(),
       arena: this.spec.arena,
       ambient: this.spec.ambient,
       // Authored spec title wins; the maps/<X>.json source filename is the
@@ -930,7 +859,7 @@ export class Room {
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.players.teamSpawns = spec.teamSpawns ?? null;
-    this.attachAllStructures(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
+    this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
     // Bases can move with a new spec — re-snap homes (no update push: the
     // mapUpdate below carries the post-snap list). If the terrain is
     // also rotating the attach below corrects them once it lands.
@@ -941,13 +870,13 @@ export class Room {
     this.creatureSim.colliders = this.ballSim.colliders;
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
-    this.messages.setMap({ ...spec, structures: this.effStructures() });
-    this.emittedStands = this.standsJson(); // the push below is what clients hold now
+    this.messages.setMap({ ...spec, structures: this.structs.eff() });
+    this.structs.baseline(); // the push below is what clients hold now
     this.broadcast({
       type: 'mapUpdate',
       mapName: spec.name ?? (this.mapSrc || undefined),
       bases: spec.bases,
-      structures: this.effStructures(),
+      structures: this.structs.eff(),
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       terrain: spec.terrain,

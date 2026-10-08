@@ -3529,3 +3529,7 @@ The mannequin reskin recipes (mannGunMat/mannJointMat module fns), the per-insta
 ## 2.210 — roomFlagPlacer extraction: the flag/deploy placement domain leaves Room
 
 The placement cluster (rabbitFlagHome, flagStandTop, flagDeShelf, deployFloor, snapFlagBases, refreshFlagHomes — ~160 lines of walkable-surface math) moved to `server_bun/src/roomFlagPlacer.ts` as `FlagPlacer`, reading spec/field/flags/ballSim/mode through a host object and returning the two room-level effects of a re-snap via callbacks (collider re-attach + skinny mapUpdate; spawn-anchor re-seat). Room keeps the public `refreshFlagHomes` signature for roomFactory/tests and drops to ~1060 lines. Flag-snap and stand-resnap scenario tests green.
+
+## 2.211 — roomStructures extraction: the structure-hull sync leaves Room
+
+The structure domain (effStructures' authored+dais merge, kit ground-seating, sim collider re-attach, the emittedStands diff baseline, the skinny mapUpdate push, the setMap echo refresh) moved to `server_bun/src/roomStructures.ts` as `RoomStructures` — `eff`/`attach`/`pushUpdate`/`refreshPower`/`baseline`. The three sinks of "which stand hulls exist" (colliders, join echo, mapUpdate diff) now share one owner, so a re-snap can't update one and skip another. Room keeps the public `refreshPowerStructures` delegate for RoomDeployables. Room drops to ~989 lines.
