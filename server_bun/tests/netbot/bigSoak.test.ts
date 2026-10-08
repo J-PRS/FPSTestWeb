@@ -1,0 +1,76 @@
+import { describe, it, expect } from 'bun:test';
+import { CONFIG } from '../../src/config.ts';
+import { mkNetbots } from './helpers.ts';
+
+// 32v32 stress soak — 64 real socket clients against one room, link
+// quality quartiled LAN→beyond-bar adverse. The suite's other specs
+// prove mechanics with 4-8 clients; this one proves the fanout itself
+// sustained: 64×20Hz tick frames + 64 input streams + claim contention
+// at real match density, measured over a sustained combat window — every
+// client's stream must stay live, every legit claim must resolve.
+
+describe('netbot — 32v32 stress soak', () => {
+  const { spawn, bots, sleep, until } = mkNetbots();
+
+  it('64 clients on mixed links — sustained fanout, claims resolve, zero rejects', async () => {
+    // Link quartiles rotate over the roster — every bot class sees every
+    // other class, so a degrade tied to one link profile can't hide.
+    const LINKS = [
+      { pingMs: 20, jitterMs: 5, lossRate: 0 },        // LAN-class
+      { pingMs: 60, jitterMs: 20, lossRate: 0 },       // good broadband
+      { pingMs: 150, jitterMs: 60, lossRate: 0.01 },   // the stated bar
+      { pingMs: 300, jitterMs: 120, lossRate: 0.05 },  // beyond-bar adverse
+    ];
+    // Production cap is 32 — this room is deliberately over. CONFIG is a
+    // shared module object in this process, so restore it on the way out.
+    const savedCap = CONFIG.maxPlayers;
+    CONFIG.maxPlayers = 80;
+    await spawn(64, LINKS, { room: 'big-soak', mode: 'ctf', bots: 0 });
+
+    const t = () => bots.map((b) => b.nc.tel);
+    // Everyone must join first — a silent ghost at this scale is a
+    // roster bug, not a flake, so gate on per-client handshake.
+    if (!await until(() => bots.every((b) => b.nc.tel.gameStates > 0), 60000)) {
+      const joined = bots.filter((b) => b.nc.tel.gameStates > 0).length;
+      const closed = bots.filter((b) => b.nc.closed).map((b) => `${b.nc.id}:${b.nc.closeInfo}`);
+      console.log(`bigSoak join gate: ${joined}/64 joined, closed=[${closed.join(', ')}]`);
+      expect.unreachable(`${64 - joined} clients never received gameState`);
+    }
+
+    // Sustained combat: six 8s windows. Every client must keep accepting
+    // tick frames in EVERY window — a stalled stream at 64-fanout reads
+    // as frozen remotes, the failure this soak exists to catch.
+    for (let w = 0; w < 6; w++) {
+      const before = t().map((x) => x.ticks);
+      await sleep(8000);
+      const after = t().map((x) => x.ticks);
+      for (let i = 0; i < bots.length; i++) {
+        const rate = (after[i]! - before[i]!) / 8; // ticks per second this window
+        expect(rate, `bot ${i} tick stream stalled in window ${w} (link=${JSON.stringify(LINKS[i % LINKS.length])})`).toBeGreaterThan(8);
+      }
+    }
+
+    const t1 = t();
+    const sum = (k: 'shots' | 'fireIntents' | 'hitsDealt' | 'kills' | 'deaths' | 'corrections') =>
+      t1.reduce((a, x) => a + (x[k] ?? 0), 0);
+    const rejects = t1.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
+    const corr = t1.map((x) => x.corrections).sort((a, b) => a - b);
+    console.log(`bigSoak: shots=${sum('shots')} hits=${sum('hitsDealt')} kills=${sum('kills')} deaths=${sum('deaths')} rejects=${rejects} ticks min=${Math.min(...t1.map((x) => x.ticks))} max=${Math.max(...t1.map((x) => x.ticks))} corrections p50=${corr[32]} p95=${corr[61]} max=${corr[63]}`);
+
+    // The war happened at density: sustained combat across 64 clients.
+    expect(sum('shots')).toBeGreaterThan(64);
+    expect(sum('hitsDealt')).toBeGreaterThan(0);
+    expect(sum('kills')).toBeGreaterThan(0);
+    // The property the harness exists for — deferred claims absorb
+    // reorders even at 64-client fanout; a healthy session has none.
+    expect(rejects).toBe(0);
+    // Nobody sat a ghost: every client kept receiving the tick stream.
+    for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
+    // Roster convergence: every observer sees essentially the whole
+    // lobby (a straggler join can legitimately lag one slot).
+    for (const b of bots) {
+      expect(b.nc.roster.size).toBeGreaterThanOrEqual(62);
+    }
+    CONFIG.maxPlayers = savedCap;
+  }, 240000);
+});

@@ -22,6 +22,7 @@ const TESTS = join(ROOT, 'tests');
 
 const WEIGHTS: Record<string, number> = {
   // netbot/ is real-socket + wall-paced — the heaviest shard material.
+  'netbot/bigSoak.test.ts': 60,
   'netbot/ctfFlag.test.ts': 30,
   'netbot/rtcLanes.test.ts': 15,
   'netbot/roomHop.test.ts': 12,

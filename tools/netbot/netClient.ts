@@ -35,6 +35,8 @@ export interface NetTelemetry {
   rejects: Map<string, number>;
   corrections: number;
   gameStates: number;
+  /** Accepted tick frames — stream-liveness signal per client. */
+  ticks: number;
   hops: number;
   dedupDrops: number;
   /** Brain fire intents and which gate each died on — the difference
@@ -62,7 +64,7 @@ export class NetClient {
   tel: NetTelemetry = {
     hitsDealt: 0, hitsTaken: 0, kills: 0, deaths: 0,
     shots: 0, claims: 0, rejects: new Map(), corrections: 0,
-    gameStates: 0, hops: 0, dedupDrops: 0,
+    gameStates: 0, ticks: 0, hops: 0, dedupDrops: 0,
     fireIntents: 0, fireBlocked: new Map(),
   };
 
@@ -246,6 +248,7 @@ export class NetClient {
     if (!tick) return;
     if (tick.tickSeq <= this.lastTickSeq) return; // stale frame, same rule as the client
     this.lastTickSeq = tick.tickSeq;
+    this.tel.ticks++;
     this.applyTick(tick.updates);
   }
 

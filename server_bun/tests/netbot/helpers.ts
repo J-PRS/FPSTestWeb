@@ -103,14 +103,15 @@ export function mkNetbots() {
     env = null;
   });
 
-  const spawn = async (n: number, link: LatencyOpts, opts: SpawnOpts = {}) => {
+  const spawn = async (n: number, link: LatencyOpts | LatencyOpts[], opts: SpawnOpts = {}) => {
     env = bootServer();
     for (let i = 0; i < n; i++) {
       const transport = opts.transports?.[i % opts.transports.length] ?? 'ws';
       // Kit and tier declared up front like a real loadout pick — the
       // squad-role weighting reads armorClass off roster entries.
       const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
-      const nc = new NetClient(env.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
+      const li = Array.isArray(link) ? link[i % link.length]! : link;
+      const nc = new NetClient(env.url, `nb_${i}`, new LatencyLink(li), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
       const bot = new NetBot(nc, { ...opts, loadout: lo });
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
