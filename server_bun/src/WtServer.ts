@@ -3,6 +3,14 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import type { GameServer } from './GameServer.ts';
 import { wallNow } from './wallClock.ts';
+import { WIRE_TICK, WIRE_TICK_V3 } from '../../shared/wire.ts';
+
+// QUIC datagrams have no fragmentation — frames past the path MTU are
+// dropped wholesale (measured: 1400B datagrams → 0% delivered on
+// loopback while 32B frames landed 100%; the old "47% loss" reading was
+// exactly this size cliff). Only volatile seq'd frames below the cap may
+// ride the datagram lane; anything else takes the reliable stream.
+export const WT_MAX_DATAGRAM = 1200;
 
 // @webtransport-bun/webtransport is a native (napi-rs/wtransport) module.
 // Loaded lazily like node-datachannel — if the native addon fails, WT is
@@ -32,10 +40,12 @@ type WtModule = {
 
 /**
  * Socket adapter: a WT session's first bidi stream carries the reliable
- * JSON lane (newline-delimited, matching the client transport) — ALL
- * outbound traffic rides it: measured datagram loss on loopback was
- * ~47%, so the unreliable lane buys nothing. Presents the
- * ServerWebSocket shape GameServer uses — send/close/readyState/data.
+ * JSON lane (newline-delimited, matching the client transport). Lane
+ * route mirrors the RTC adapter: seq'd WIRE_TICK frames small enough for
+ * a datagram take the unreliable lane (a superseded tick must not stall
+ * the reliable stream behind it), everything else is reliable.
+ * Presents the ServerWebSocket shape GameServer uses —
+ * send/close/readyState/data.
  */
 export class WtSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: wallNow() };
@@ -129,7 +139,20 @@ export class WtSocketAdapter {
   getBufferedAmount(): number { return Math.max(0, -(this.writer?.desiredSize ?? 0)); }
 
   send(msg: string | Uint8Array): number {
-    if (!this.open || !this.writer) return 0;
+    if (!this.open) return 0;
+    // Volatile seq'd tick frames → datagram lane when they fit the MTU.
+    // An oversized tick stays reliable: datagrams over the path MTU are
+    // dropped ENTIRELY, so "best effort" there is actually "never".
+    // This lane must not wait on the reliable writer — the streams are
+    // independent and the tick fanout starts before the bidi attaches.
+    if (typeof msg !== 'string' &&
+        msg.length >= 2 && msg[0] === 0x54 &&
+        (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3) &&
+        msg.byteLength <= WT_MAX_DATAGRAM) {
+      void this.session.sendDatagram(msg).catch(() => {});
+      return msg.byteLength;
+    }
+    if (!this.writer) return 0;
     // The reliable stream is newline-delimited TEXT — raw binary has no
     // '\n' and corrupts the framing (it glued onto the next JSON line and
     // ate ballSpawn messages — creatures that existed but never spawned).

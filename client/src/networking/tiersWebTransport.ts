@@ -2,16 +2,22 @@ import type { ConnectionConfig } from './WebSocketConnection.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 import type { GameTransport } from './transport.js';
 
+// QUIC datagrams don't fragment — anything past the path MTU (~1200B) is
+// dropped ENTIRELY, so "unreliable" there means "never arrives". Small
+// binary frames (position reports) are safe to send unreliably; anything
+// bigger must ride the reliable stream. Matches the server's cap.
+const WT_MAX_DATAGRAM = 1200;
+
 /**
  * WebTransport tier — QUIC session, two lanes mapped to the seam:
  * datagrams carry unreliable binary (position frames), a single
- * bidirectional stream carries reliable JSON text. The server's HTTP/3
- * endpoint doesn't exist yet — the handshake just fails and we fall through.
+ * bidirectional stream carries reliable JSON text.
  */
 export class WebTransportGameTransport implements GameTransport {
   readonly tier = 'wt' as const;
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private preOpen: string[] = [];
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
@@ -25,6 +31,9 @@ export class WebTransportGameTransport implements GameTransport {
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
       const stream = await wt.createBidirectionalStream();
       this.writer = stream.writable.getWriter();
+      // Datagram uplink is an optimization — a session whose writable is
+      // unavailable still works fully reliable.
+      try { this.dgWriter = wt.datagrams.writable?.getWriter() ?? null; } catch { this.dgWriter = null; }
       void this.pumpReliable(stream.readable.getReader());
       void this.pumpDatagrams(wt.datagrams.readable.getReader());
       for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n')).catch(() => {});
@@ -104,6 +113,17 @@ export class WebTransportGameTransport implements GameTransport {
 
   send(data: string | Uint8Array): boolean {
     if (!this.open) return false;
+    // Seq'd binary frames (position reports) that fit a datagram take the
+    // unreliable lane — each is superseding state, so a drop costs the
+    // next frame's worth of staleness, never a stall. Oversized frames
+    // would be dropped WHOLESALE past the path MTU — they must stay on
+    // the reliable stream (enveloped).
+    if (data instanceof Uint8Array && data.byteLength <= WT_MAX_DATAGRAM) {
+      if (this.dgWriter) {
+        void this.dgWriter.write(data).catch(() => {});
+        return true;
+      }
+    }
     // Binary must be enveloped too — decoding arbitrary bytes as UTF-8
     // mangled them before this ever worked.
     const payload = typeof data === 'string' ? data
