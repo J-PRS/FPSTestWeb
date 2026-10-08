@@ -327,7 +327,10 @@ export class PlayerManager {
     player.charge = 0;
     player.beltCharges = BELT_MAX;
     player.pendingRespawn = false;
-    player.lastSeq = 0;
+    // lastSeq survives: the client's frame counter is monotone per
+    // connection, and zeroing it re-opens the seq gate to stale
+    // pre-death frames (seq>0) — they'd regress position to the corpse
+    // spot and re-arm held keys.
     player.lastValidPosition = { ...spawn };
     player.lastValidVelocity = { x: 0, y: 0, z: 0 };
     player.lastValidRotation = { yaw: 0, pitch: 0 };
