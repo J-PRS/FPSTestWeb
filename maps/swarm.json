@@ -11,5 +11,6 @@
     "perPlayer": 6,
     "max": 120
   },
-  "terrain": "swarm.bin"
+  "terrain": "swarm.bin",
+  "hidden": true
 }

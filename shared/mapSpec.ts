@@ -26,10 +26,13 @@ export interface MapSpec {
   name?: string;
   /** Default mode when the host doesn't pick one. */
   mode?: string;
+  /** Excluded from the menu map list but still joinable by name —
+   *  test grounds and half-built maps live here. */
+  hidden?: boolean;
   /** Modes this map can host — map = geometry+spawns+bases, mode = the
-   *  ruleset on top. ctf-capable maps carry bases; modes not listed here
-   *  fall back to the map's own `mode` (the map wins). Absent = only
-   *  `mode` is legal, preserving the old one-mode-per-map semantics. */
+   *  ruleset on top. Absent = own `mode` + every self-provisioning
+   *  ruleset (ctf additionally requires `bases`); declared = exact list,
+   *  for maps that need to narrow the default. */
   modes?: string[];
   balls: BallPopulation;
   /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
@@ -213,6 +216,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
   const spec: MapSpec = {
     name: parseName((src as { name?: unknown }).name),
     mode: parseMode((src as { mode?: unknown }).mode),
+    hidden: (src as { hidden?: unknown }).hidden === true ? true : undefined,
     modes: parseModes((src as { modes?: unknown }).modes),
     balls,
     spawns: parseSpawns((src as { spawns?: unknown }).spawns),
@@ -285,10 +289,18 @@ function parseModes(raw: unknown): string[] | undefined {
   return out.length ? out : undefined;
 }
 
-/** Modes a spec can legally host: the declared list, else its own mode,
- *  else anything (a mode-less spec is a bare arena). */
+/** Modes a spec can legally host: the declared list; else its own mode
+ *  plus every ruleset the geometry can actually serve. `ctf` is the only
+ *  mode with authored requirements (two bases) — every other ruleset
+ *  self-provisions (spawns fall back to the flat pool, rabbit mints its
+ *  own neutral stand), so map = geometry and mode = ruleset on top.
+ *  A mode-less spec remains "anything" (empty = unconstrained). */
 export function specModes(spec: MapSpec | undefined): string[] {
-  return spec?.modes ?? (spec?.mode ? [spec.mode] : []);
+  if (spec?.modes) return spec.modes;
+  if (!spec?.mode) return [];
+  const legal = ['tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
+  if (spec.bases?.alpha && spec.bases?.bravo) legal.unshift('ctf');
+  return [...new Set([spec.mode, ...legal])];
 }
 
 function parseTerrain(raw: unknown): string | undefined {

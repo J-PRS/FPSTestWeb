@@ -193,8 +193,10 @@ export class MapCatalog {
             modes: specModes(spec),
             bots: spec?.bots ?? spec?.botFill ?? 0,
             t2: this.t2Flags.has(f.slice(0, -5)),
+            hidden: spec?.hidden === true,
           };
         })
+        .filter((r) => !r.hidden)
         .toSorted((a, b) => a.name.localeCompare(b.name));
     } catch {
       return [];

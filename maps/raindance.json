@@ -536,5 +536,6 @@
       },
       "team": "bravo"
     }
-  ]
+  ],
+  "hidden": true
 }

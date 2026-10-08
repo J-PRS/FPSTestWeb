@@ -408,5 +408,6 @@
       "rotY": 6.3
     }
   ],
-  "terrain": "quicksand.bin"
+  "terrain": "quicksand.bin",
+  "hidden": true
 }

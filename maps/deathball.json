@@ -19,5 +19,6 @@
     "perPlayer": 6,
     "max": 60
   },
-  "terrain": "deathball.bin"
+  "terrain": "deathball.bin",
+  "hidden": true
 }

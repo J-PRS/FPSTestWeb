@@ -95,5 +95,6 @@
     "perPlayer": 0,
     "max": 0
   },
-  "terrain": "pit.bin"
+  "terrain": "pit.bin",
+  "hidden": true
 }

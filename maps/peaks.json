@@ -1,6 +1,8 @@
 {
   "mode": "ctf",
-  "modes": ["ctf"],
+  "modes": [
+    "ctf"
+  ],
   "bots": 8,
   "botFill": 10,
   "bases": {

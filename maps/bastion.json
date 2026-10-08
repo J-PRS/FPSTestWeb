@@ -70,195 +70,821 @@
   "deploys": [
     {
       "kind": "generator",
-      "pos": { "x": -500, "y": 24.4, "z": -48 },
+      "pos": {
+        "x": -500,
+        "y": 24.4,
+        "z": -48
+      },
       "team": "alpha"
     },
     {
       "kind": "generator",
-      "pos": { "x": -320, "y": 24.4, "z": 508 },
+      "pos": {
+        "x": -320,
+        "y": 24.4,
+        "z": 508
+      },
       "team": "bravo"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -570, "y": 38, "z": 120 },
+      "pos": {
+        "x": -570,
+        "y": 38,
+        "z": 120
+      },
       "team": "alpha"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -430, "y": 22.9, "z": 120 },
+      "pos": {
+        "x": -430,
+        "y": 22.9,
+        "z": 120
+      },
       "team": "alpha"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -570, "y": 23.8, "z": -38 },
+      "pos": {
+        "x": -570,
+        "y": 23.8,
+        "z": -38
+      },
       "team": "alpha"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -430, "y": 20.9, "z": -38 },
+      "pos": {
+        "x": -430,
+        "y": 20.9,
+        "z": -38
+      },
       "team": "alpha"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -250, "y": 28, "z": 340 },
+      "pos": {
+        "x": -250,
+        "y": 28,
+        "z": 340
+      },
       "team": "bravo"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -390, "y": 21.5, "z": 340 },
+      "pos": {
+        "x": -390,
+        "y": 21.5,
+        "z": 340
+      },
       "team": "bravo"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -250, "y": 25.5, "z": 498 },
+      "pos": {
+        "x": -250,
+        "y": 25.5,
+        "z": 498
+      },
       "team": "bravo"
     },
     {
       "kind": "baseturret",
-      "pos": { "x": -390, "y": 15.7, "z": 498 },
+      "pos": {
+        "x": -390,
+        "y": 15.7,
+        "z": 498
+      },
       "team": "bravo"
     }
   ],
   "structures": [
-    { "kind": "kit", "piece": "genhouse", "pos": { "x": -500, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "katastand", "pos": { "x": -500, "y": 20.4, "z": 60 }, "scale": 2, "team": "alpha" },
-    { "kind": "kit", "piece": "tower", "pos": { "x": -640, "y": 20.4, "z": 60 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "gendome", "pos": { "x": -400, "y": 20.4, "z": 180 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -380, "y": 20.4, "z": 100 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -500, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -564, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -436, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -580, "y": 20.4, "z": 56 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -420, "y": 20.4, "z": 56 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -580, "y": 20.4, "z": -6 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -580, "y": 20.4, "z": 118 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -420, "y": 20.4, "z": -6 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -420, "y": 20.4, "z": 118 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -558, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -442, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -608, "y": 20.4, "z": 154 }, "rotY": 0.6, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -412, "y": 20.4, "z": 154 }, "rotY": -0.6, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -608, "y": 20.4, "z": -34 }, "rotY": -0.6, "scale": 4, "team": "alpha" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -412, "y": 20.4, "z": -34 }, "rotY": 0.6, "scale": 4, "team": "alpha" },
+    {
+      "kind": "kit",
+      "piece": "genhouse",
+      "pos": {
+        "x": -500,
+        "y": 20.4,
+        "z": -48
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "katastand",
+      "pos": {
+        "x": -500,
+        "y": 20.4,
+        "z": 60
+      },
+      "scale": 2,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "tower",
+      "pos": {
+        "x": -640,
+        "y": 20.4,
+        "z": 60
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "gendome",
+      "pos": {
+        "x": -400,
+        "y": 20.4,
+        "z": 180
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -380,
+        "y": 20.4,
+        "z": 100
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -500,
+        "y": 20.4,
+        "z": 132
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -564,
+        "y": 20.4,
+        "z": 132
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -436,
+        "y": 20.4,
+        "z": 132
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -580,
+        "y": 20.4,
+        "z": 56
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -420,
+        "y": 20.4,
+        "z": 56
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -580,
+        "y": 20.4,
+        "z": -6
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -580,
+        "y": 20.4,
+        "z": 118
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -420,
+        "y": 20.4,
+        "z": -6
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -420,
+        "y": 20.4,
+        "z": 118
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -558,
+        "y": 20.4,
+        "z": -48
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -442,
+        "y": 20.4,
+        "z": -48
+      },
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -608,
+        "y": 20.4,
+        "z": 154
+      },
+      "rotY": 0.6,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -412,
+        "y": 20.4,
+        "z": 154
+      },
+      "rotY": -0.6,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -608,
+        "y": 20.4,
+        "z": -34
+      },
+      "rotY": -0.6,
+      "scale": 4,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -412,
+        "y": 20.4,
+        "z": -34
+      },
+      "rotY": 0.6,
+      "scale": 4,
+      "team": "alpha"
+    },
     {
       "kind": "kit",
       "piece": "bunker",
-      "pos": { "x": -638, "y": 20.4, "z": 186 },
+      "pos": {
+        "x": -638,
+        "y": 20.4,
+        "z": 186
+      },
       "rotY": -1.5708,
       "scale": 2,
       "team": "alpha"
     },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -570, "y": 20.4, "z": 120 }, "scale": 1, "team": "alpha" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -430, "y": 20.4, "z": 120 }, "scale": 1, "team": "alpha" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -570, "y": 20.4, "z": -38 }, "scale": 1, "team": "alpha" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -430, "y": 20.4, "z": -38 }, "scale": 1, "team": "alpha" },
-    { "kind": "kit", "piece": "genhouse", "pos": { "x": -320, "y": 20.4, "z": 508 }, "rotY": 3.1416, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "katastand", "pos": { "x": -320, "y": 20.4, "z": 400 }, "scale": 2, "team": "bravo" },
-    { "kind": "kit", "piece": "tower", "pos": { "x": -180, "y": 20.4, "z": 400 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "gendome", "pos": { "x": -420, "y": 20.4, "z": 280 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -440, "y": 20.4, "z": 360 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -320, "y": 20.4, "z": 328 }, "rotY": 3.1416, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -256, "y": 20.4, "z": 328 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -384, "y": 20.4, "z": 328 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -240, "y": 20.4, "z": 404 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -400, "y": 20.4, "z": 404 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -240, "y": 20.4, "z": 466 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -240, "y": 20.4, "z": 342 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -400, "y": 20.4, "z": 466 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "curtain", "pos": { "x": -400, "y": 20.4, "z": 342 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -262, "y": 20.4, "z": 508 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "wallstub", "pos": { "x": -378, "y": 20.4, "z": 508 }, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -212, "y": 20.4, "z": 306 }, "rotY": 3.74, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -408, "y": 20.4, "z": 306 }, "rotY": 2.54, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -212, "y": 20.4, "z": 494 }, "rotY": 2.54, "scale": 4, "team": "bravo" },
-    { "kind": "kit", "piece": "lowwall", "pos": { "x": -408, "y": 20.4, "z": 494 }, "rotY": 3.74, "scale": 4, "team": "bravo" },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -570,
+        "y": 20.4,
+        "z": 120
+      },
+      "scale": 1,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -430,
+        "y": 20.4,
+        "z": 120
+      },
+      "scale": 1,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -570,
+        "y": 20.4,
+        "z": -38
+      },
+      "scale": 1,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -430,
+        "y": 20.4,
+        "z": -38
+      },
+      "scale": 1,
+      "team": "alpha"
+    },
+    {
+      "kind": "kit",
+      "piece": "genhouse",
+      "pos": {
+        "x": -320,
+        "y": 20.4,
+        "z": 508
+      },
+      "rotY": 3.1416,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "katastand",
+      "pos": {
+        "x": -320,
+        "y": 20.4,
+        "z": 400
+      },
+      "scale": 2,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "tower",
+      "pos": {
+        "x": -180,
+        "y": 20.4,
+        "z": 400
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "gendome",
+      "pos": {
+        "x": -420,
+        "y": 20.4,
+        "z": 280
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -440,
+        "y": 20.4,
+        "z": 360
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -320,
+        "y": 20.4,
+        "z": 328
+      },
+      "rotY": 3.1416,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -256,
+        "y": 20.4,
+        "z": 328
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -384,
+        "y": 20.4,
+        "z": 328
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -240,
+        "y": 20.4,
+        "z": 404
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "gatehouse",
+      "pos": {
+        "x": -400,
+        "y": 20.4,
+        "z": 404
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -240,
+        "y": 20.4,
+        "z": 466
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -240,
+        "y": 20.4,
+        "z": 342
+      },
+      "rotY": 1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -400,
+        "y": 20.4,
+        "z": 466
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "curtain",
+      "pos": {
+        "x": -400,
+        "y": 20.4,
+        "z": 342
+      },
+      "rotY": -1.5708,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -262,
+        "y": 20.4,
+        "z": 508
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "wallstub",
+      "pos": {
+        "x": -378,
+        "y": 20.4,
+        "z": 508
+      },
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -212,
+        "y": 20.4,
+        "z": 306
+      },
+      "rotY": 3.74,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -408,
+        "y": 20.4,
+        "z": 306
+      },
+      "rotY": 2.54,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -212,
+        "y": 20.4,
+        "z": 494
+      },
+      "rotY": 2.54,
+      "scale": 4,
+      "team": "bravo"
+    },
+    {
+      "kind": "kit",
+      "piece": "lowwall",
+      "pos": {
+        "x": -408,
+        "y": 20.4,
+        "z": 494
+      },
+      "rotY": 3.74,
+      "scale": 4,
+      "team": "bravo"
+    },
     {
       "kind": "kit",
       "piece": "bunker",
-      "pos": { "x": -182, "y": 20.4, "z": 274 },
+      "pos": {
+        "x": -182,
+        "y": 20.4,
+        "z": 274
+      },
       "rotY": 1.5708,
       "scale": 2,
       "team": "bravo"
     },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -250, "y": 20.4, "z": 340 }, "scale": 1, "team": "bravo" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -390, "y": 20.4, "z": 340 }, "scale": 1, "team": "bravo" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -250, "y": 20.4, "z": 498 }, "scale": 1, "team": "bravo" },
-    { "kind": "kit", "piece": "landpad", "pos": { "x": -390, "y": 20.4, "z": 498 }, "scale": 1, "team": "bravo" },
     {
-      "kind": "shield",
-      "pos": { "x": -500, "y": 20.4, "z": 132 },
-      "size": { "x": 20, "y": 80, "z": 0.8 },
-      "team": "alpha"
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -250,
+        "y": 20.4,
+        "z": 340
+      },
+      "scale": 1,
+      "team": "bravo"
     },
     {
-      "kind": "shield",
-      "pos": { "x": -580, "y": 20.4, "z": 56 },
-      "rotY": 1.5708,
-      "size": { "x": 20, "y": 80, "z": 0.8 },
-      "team": "alpha"
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -390,
+        "y": 20.4,
+        "z": 340
+      },
+      "scale": 1,
+      "team": "bravo"
     },
     {
-      "kind": "shield",
-      "pos": { "x": -420, "y": 20.4, "z": 56 },
-      "rotY": 1.5708,
-      "size": { "x": 20, "y": 80, "z": 0.8 },
-      "team": "alpha"
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -250,
+        "y": 20.4,
+        "z": 498
+      },
+      "scale": 1,
+      "team": "bravo"
     },
     {
-      "kind": "shield",
-      "pos": { "x": -320, "y": 20.4, "z": 328 },
-      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "kind": "kit",
+      "piece": "landpad",
+      "pos": {
+        "x": -390,
+        "y": 20.4,
+        "z": 498
+      },
+      "scale": 1,
       "team": "bravo"
     },
     {
       "kind": "shield",
-      "pos": { "x": -240, "y": 20.4, "z": 404 },
+      "pos": {
+        "x": -500,
+        "y": 20.4,
+        "z": 132
+      },
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": {
+        "x": -580,
+        "y": 20.4,
+        "z": 56
+      },
       "rotY": 1.5708,
-      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": {
+        "x": -420,
+        "y": 20.4,
+        "z": 56
+      },
+      "rotY": 1.5708,
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": {
+        "x": -320,
+        "y": 20.4,
+        "z": 328
+      },
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
       "team": "bravo"
     },
     {
       "kind": "shield",
-      "pos": { "x": -400, "y": 20.4, "z": 404 },
+      "pos": {
+        "x": -240,
+        "y": 20.4,
+        "z": 404
+      },
       "rotY": 1.5708,
-      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "shield",
+      "pos": {
+        "x": -400,
+        "y": 20.4,
+        "z": 404
+      },
+      "rotY": 1.5708,
+      "size": {
+        "x": 20,
+        "y": 80,
+        "z": 0.8
+      },
       "team": "bravo"
     },
     {
       "kind": "kit",
       "piece": "pillar",
-      "pos": { "x": -427.3, "y": 21.07, "z": 183.9 }
+      "pos": {
+        "x": -427.3,
+        "y": 21.07,
+        "z": 183.9
+      }
     },
     {
       "kind": "kit",
       "piece": "obelisk",
-      "pos": { "x": -383.6, "y": 19.6, "z": 252.0 }
+      "pos": {
+        "x": -383.6,
+        "y": 19.6,
+        "z": 252.0
+      }
     },
     {
       "kind": "kit",
       "piece": "shard",
-      "pos": { "x": -370.9, "y": 22.54, "z": 292.5 }
+      "pos": {
+        "x": -370.9,
+        "y": 22.54,
+        "z": 292.5
+      }
     },
     {
       "kind": "kit",
       "piece": "arch",
-      "pos": { "x": -394.4, "y": 20.58, "z": 216.6 },
+      "pos": {
+        "x": -394.4,
+        "y": 20.58,
+        "z": 216.6
+      },
       "rotY": 0.55
     },
     {
       "kind": "kit",
       "piece": "pillar",
-      "pos": { "x": -432.8, "y": 24.99, "z": 255.3 }
+      "pos": {
+        "x": -432.8,
+        "y": 24.99,
+        "z": 255.3
+      }
     },
     {
       "kind": "kit",
       "piece": "shard",
-      "pos": { "x": -387.2, "y": 18.62, "z": 199.4 }
+      "pos": {
+        "x": -387.2,
+        "y": 18.62,
+        "z": 199.4
+      }
     },
     {
       "kind": "kit",
       "piece": "pillar",
-      "pos": { "x": -415.8, "y": 21.07, "z": 137.0 }
+      "pos": {
+        "x": -415.8,
+        "y": 21.07,
+        "z": 137.0
+      }
     }
   ]
 }

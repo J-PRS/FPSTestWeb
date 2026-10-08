@@ -1,6 +1,8 @@
 {
   "mode": "ctf",
-  "modes": ["ctf"],
+  "modes": [
+    "ctf"
+  ],
   "bots": 8,
   "terrain": "henge.bin",
   "bases": {
@@ -415,5 +417,6 @@
       },
       "rotY": 0.35
     }
-  ]
+  ],
+  "hidden": true
 }

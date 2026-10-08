@@ -279,5 +279,6 @@
     "perPlayer": 5,
     "max": 60
   },
-  "terrain": "slagheap.bin"
+  "terrain": "slagheap.bin",
+  "hidden": true
 }

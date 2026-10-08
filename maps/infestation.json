@@ -31,5 +31,6 @@
     "seeker": 6,
     "strifer": 4
   },
-  "_notes": "Species-mix proof map: ambient caps push a dense layered ecology (ground scarabs+crawlers under a gnat/rakk canopy). Same terrain as swarm so the difference is the population table, not the field."
+  "_notes": "Species-mix proof map: ambient caps push a dense layered ecology (ground scarabs+crawlers under a gnat/rakk canopy). Same terrain as swarm so the difference is the population table, not the field.",
+  "hidden": true
 }

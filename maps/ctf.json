@@ -1,6 +1,8 @@
 {
   "mode": "ctf",
-  "modes": ["ctf"],
+  "modes": [
+    "ctf"
+  ],
   "bots": 6,
   "bases": {
     "alpha": {
@@ -14,5 +16,6 @@
       "z": 0
     }
   },
-  "terrain": "ctf.bin"
+  "terrain": "ctf.bin",
+  "hidden": true
 }

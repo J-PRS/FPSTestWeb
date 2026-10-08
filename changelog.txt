@@ -1,3 +1,4 @@
+2026-10-01 - Map spec "hidden" flag — catalog menu list filters hidden specs (still joinable by name/rotation); lobby trimmed to bastion, nugwar, dunes, peaks.
 2026-10-01 - New map: dunes — slagheap terrain at 1.5x heightScale (steeper dunes), playable in all modes (dm/tdm/duel/nuggets/rabbit/ctf); flag homes borrow bastion positions and re-snap to the scaled ground.
 2026-10-01 - Cool-shot toast: feed entry appears at hit time as "saving clip..." with a background fill bar tracking the save wait (restarts on chain merges); flips to "clip saved" on extraction, discarded if the recording is abandoned mid-wait.
 2026-10-01 - VideoRecorder: instrumentation — encodeQueueSize max + pump() ms tracked per clip; sampled info line every 5s and a summary on stop (rec stats / rec done) so real gameplay logs show whether capture costs frames or the encoder stalls.
