@@ -151,7 +151,11 @@ export class BallSim {
         variant: b.variant, colorIdx: b.colorIdx,
         position: { x: b.x, y: b.y, z: b.z },
         velocity: { x: b.vx, y: b.vy, z: b.vz },
-        enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
+        // Roster doubles as the hash lane's heal: enraged/targetId must be
+        // the COMMITTED segment regime (same as contractRoster), not live
+        // — b.targetId retargets mid-leg, so a live value heals the client
+        // to a regime the hash then reads as divergent forever.
+        ...(this.segRegime.get(b.id) ?? { enraged: b.enraged, targetId: b.targetId }), tp: this.targetSnap(b),
         et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce ? 1 : 0,
         t: this.simTime,
       }));
