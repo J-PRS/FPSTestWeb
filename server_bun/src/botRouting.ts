@@ -730,7 +730,11 @@ export class BotRouting {
       // Returners too: a dropped flag in a kill pocket needs someone
       // whose feet don't reroute to the nearest contact — same stolen-
       // run failure, one task kind later.
-      wave: task?.kind === 'push' || task?.kind === 'escort' || task?.kind === 'chase' || task?.kind === 'return',
+      // Besiegers too: the generator walk is a 400m+ transit through the
+      // midfield war — without committed feet every contact steals the
+      // run and the grid never dies (probe: besiegers orbited ~400m for
+      // 10 minutes, nearest 107m).
+      wave: task?.kind === 'push' || task?.kind === 'escort' || task?.kind === 'chase' || task?.kind === 'return' || task?.kind === 'siege',
       // Push-only: the member mass-orbits ~110m out until the flood is
       // actually converging. Escorts share wave's committed feet but
       // must never hold off a moving carrier — that's just losing him.

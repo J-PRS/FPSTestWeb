@@ -473,8 +473,11 @@ export class BotArsenal implements BeamHost {
   /** Lob the belt weapon at an explicit point — used for hunt targets
    *  (the last-seen spot) and for hostile emplacements blocking the
    *  bot's objective. False when the throw was refused (belt dry or
-   *  the arc can't clear the shooter's own blast envelope). */
-  lobAt(p: BotBody, aim: Vec3): boolean {
+   *  the arc can't clear the shooter's own blast envelope). `riskSelf`
+   *  skips the self-splash veto: a besieger hugging a generator must
+   *  lob closer than its own blast envelope — eating falloff IS the
+   *  sabotage, humans disc a gen point-blank. */
+  lobAt(p: BotBody, aim: Vec3, riskSelf = false): boolean {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     if (!stats || stats.speed <= 0) return false;
@@ -506,7 +509,7 @@ export class BotArsenal implements BeamHost {
     const vl = Math.hypot(vx, vy, vz) || 1;
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dirN = { x: vx / vl, y: vy / vl, z: vz / vl };
-    if (this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) return false;
+    if (!riskSelf && this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) return false;
     if (body) body.beltCharges -= BELT_THROW_COST;
     this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
     return true;

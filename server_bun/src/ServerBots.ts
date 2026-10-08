@@ -332,16 +332,23 @@ export class ServerBots {
     // grenade on its own slow cadence — the same legal path humans use
     // to soften a stand, not a wallhack aim-assist.
     const saboteur = this.roster.roleInfo.get(id) === 'infiltrator';
+    // A named siege task is the job the same way sabotage is the
+    // infiltrator's role — the belt reserve can't starve it dry in a
+    // vault where no nugget economy exists.
+    const besieger = this.sense.taskGoalFor(id)?.kind === 'siege';
     const ready = (this.gearLobT.get(id) ?? 0) <= now;
-    const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur) : null;
+    const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur || besieger) : null;
     // Wrecking gear IS the infiltrator's job — high value for it,
     // opportunistic chip damage for everyone else.
-    if (gear && this.spendOk(id, BELT_THROW_COST, saboteur, nuggetNear)) {
-      this.arsenal.lobAt(p, gear);
+    if (gear && this.spendOk(id, BELT_THROW_COST, saboteur || besieger, nuggetNear)) {
+      // Sabotage lobs risk their own splash — a vault gen at 11m sits
+      // inside the 13m envelope, so the clearance veto would refuse
+      // the only shot the siege exists to take.
+      this.arsenal.lobAt(p, gear, saboteur || besieger);
       // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
       // At 8s a turret effectively outlived the lobber's attention.
       // A saboteur pushes harder — wrecking gear IS its objective.
-      this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
+      this.gearLobT.set(id, now + (saboteur || besieger ? 1800 : 3000));
       logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
     }
     // Stand siege: the bombardier's perch IS a shelling job — while it

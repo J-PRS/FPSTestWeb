@@ -95,7 +95,7 @@ function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, ra
   }
   const solids = h.room.projectiles.solidColliders;
   if (solids.length) {
-    const sh = segSolidHit(muzzle, end, solids);
+    const sh = segSolidHit(muzzle, end, solids, undefined, h.room.players.getPlayer(shooterId)?.team);
     if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
   }
   return beamEntityAt(h, shooterId, muzzle, end, bestT);

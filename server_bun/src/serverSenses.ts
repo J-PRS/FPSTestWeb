@@ -97,7 +97,9 @@ export class ServerBotSenses {
     let best: Vec3 | null = null;
     // Lob from the edge of turret sight (42m) — a bot that must first
     // survive to 30m never gets the shot off.
-    let bestD = 40;
+    // bestD caps past the widest limit below (generator) — per-kind
+    // limits do the rejecting, bestD just keeps the nearest winner.
+    let bestD = 56;
     // items.values() directly — snapshot() built per-item clones + a
     // redundant owner lookup per call (per think). Read-only iteration
     // is deletion-safe on this Map (clearOwner relies on it).
@@ -107,6 +109,10 @@ export class ServerBotSenses {
       if (p.team && owner?.team === p.team) continue;
       if (!p.team && d.owner === p.id) continue;
       const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
+      // The generator is a vault target — the lob must fly its doorway
+      // from outside the face, so it earns a wider envelope than a
+      // field turret you'd chip in passing.
+      const limit = d.kind === 'generator' ? 55 : 40;
       // A saboteur wrecks whatever gear it can reach — goal proximity
       // only gates the objective-driven lobbers.
       const gd = goal ? Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z) : 0;
@@ -115,7 +121,7 @@ export class ServerBotSenses {
       // alone would never admit it. Anything else must still shadow
       // what the bot is actually after.
       const nearGoal = d.kind === 'generator' ? gd < 160 : gd < 50;
-      if (bd < bestD && (sabotage || nearGoal)) { bestD = bd; best = d.pos; }
+      if (bd < limit && bd < bestD && (sabotage || nearGoal)) { bestD = bd; best = d.pos; }
     }
     return best;
   }

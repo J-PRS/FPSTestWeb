@@ -18,7 +18,7 @@
 import type { FlagSituation } from '../../shared/flagGoals.ts';
 import type { BotVec } from '../../shared/botBrain.ts';
 
-export type CommandKind = 'chase' | 'return' | 'escort' | 'push';
+export type CommandKind = 'chase' | 'return' | 'escort' | 'push' | 'siege';
 export interface CommandTask {
   kind: CommandKind;
   goal: BotVec;
@@ -57,6 +57,9 @@ const WANT: Record<CommandKind, number> = {
   // Long transit legs bleed members before arrival (katabatic's 500m
   // haul kills ~3 of 4 mid-field), so a far call floods deeper.
   push: 4,
+  // The enemy generator is one door-breach + lob job, not a flood —
+  // a pair cracks it while the rest of the offense keeps its roles.
+  siege: 2,
 };
 /** Extra bodies a push earns per ~350m the wave must transit — the
  *  transit is a death lottery, so a far call floods deeper to land
@@ -84,6 +87,9 @@ const AFFINITY: Record<CommandKind, Record<string, number>> = {
   return: { ldefense: 1.0, defense: 1.0, technician: 0.9, offense: 0.6 },
   escort: { capper: 1.0, offense: 1.0, medic: 0.8 },
   push: { offense: 1.0, infiltrator: 0.9, bombardier: 0.9 },
+  // Wrecking the grid IS the bombardier/infiltrator job description —
+  // offense volunteers as muscle but shouldn't crowd the named pair.
+  siege: { bombardier: 1.0, infiltrator: 0.9, offense: 0.5 },
 };
 /** Distance cost saturates past this transit — on a 1.5km map a 750m
  *  job already reads as "the far side". */
@@ -105,12 +111,12 @@ export class TeamCommand {
   /** Slow pass (~2s): the situation is only contested while its slots
    *  are live; each live slot names its K nearest eligible volunteers,
    *  nearest first, no bot holding two jobs. */
-  update(now: number, s: FlagSituation, members: CommandMember[]): void {
+  update(now: number, s: FlagSituation, members: CommandMember[], siege?: BotVec | null): void {
     if (now - this.reassignT < 2000) return;
     this.reassignT = now;
     this.contested.clear();
     const slots: Record<CommandKind, (BotVec & { vx?: number; vz?: number }) | null | undefined> = {
-      chase: s.thief, return: s.dropped, escort: s.escort, push: s.push };
+      chase: s.thief, return: s.dropped, escort: s.escort, push: s.push, siege };
     // Assignments PERSIST between passes — the nearest-eligible re-roll
     // every 2s kept swapping the job to whoever just respawned at home,
     // so the wave never finished a leg (soak: tasked members orbited
@@ -180,6 +186,9 @@ export class TeamCommand {
     // push split the offense after it.
     assign('chase', s.thief);
     assign('return', s.dropped);
+    // A live enemy generator is a standing order, not a call: the pair
+    // cracks it and the grid-dark gates open for everyone after.
+    assign('siege', siege);
     assign('escort', s.escort);
     assign('push', s.push);
   }
