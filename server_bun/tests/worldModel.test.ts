@@ -231,4 +231,16 @@ describe('world model <-> protocol conformance', () => {
       expect(keys, `${container} row keys drifted from ${kind}.rosterFields`).toEqual(declared);
     }
   });
+
+  it('RemotePlayerState keys stay inside the declared field union', () => {
+    // The replica record is the landing zone for roster/update patches —
+    // a key there with no declared field can never be written by wire
+    // data (dead slot); a declared field with no key can never land.
+    const nm = readFileSync(
+      resolve(import.meta.dir, '../../client/src/networking/NetworkManager.ts'), 'utf8');
+    const body = nm.match(/export interface RemotePlayerState \{([\s\S]*?)\n\}/)![1]!;
+    const keys = new Set([...body.matchAll(/^  (\w+)\??:/gm)].map((m) => m[1]));
+    const declared = new Set(['id', ...declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')]);
+    expect(keys).toEqual(declared);
+  });
 });

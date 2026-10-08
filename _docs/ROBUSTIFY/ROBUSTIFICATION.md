@@ -3464,3 +3464,10 @@ flags/pickups/deployables ride gameState as anonymous inline row types
 — the same drift surface as GameStatePlayer. The conformance pin now
 asserts each container's keys equal the kind's declared rosterFields
 (+idField). Every wire row shape is pinned against the model.
+
+## 2.201 — client replica record pinned too
+
+RemotePlayerState is the wire's landing zone: a key with no declared
+field is a dead slot, a declared field with no key can't land. Its
+keys now pin to the spawn∪update∪roster union (+id). The replica
+record, every roster row, and every interface is declaration-checked.
