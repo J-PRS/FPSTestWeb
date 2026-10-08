@@ -93,7 +93,7 @@ export class Room {
   readonly wireIdRetired = new Map<number, number>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
-  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }>();
+  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
 
   /** Rolling health counters for the room heartbeat — every subsystem
