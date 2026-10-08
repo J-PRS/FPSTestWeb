@@ -129,29 +129,6 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   buildMaxGrid();
 }
 
-export async function loadHeightmap(url: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.addEventListener('load', () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      hmSize = img.width;
-      if (img.width !== img.height) {
-        reject(new Error(`Heightmap must be square, got ${img.width}x${img.height}`));
-        return;
-      }
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      hmData = ctx.getImageData(0, 0, img.width, img.height).data; // RGBA
-      buildMaxGrid();
-      resolve();
-    });
-    img.addEventListener('error', () => reject(new Error(`heightmap load failed: ${url}`)));
-    img.src = url;
-  });
-}
-
 function hmSample(x: number, z: number): number {
   const idx = (z * hmSize + x) * 4;
   return hmData![idx] / TERRAIN_HEIGHTMAP_DIVISOR; // R channel 0..1
@@ -203,7 +180,7 @@ export function sampleHeightVisual(wx: number, wz: number): number {
 }
 
 /** Raw RGBA pixels for the GPU displacement texture — Terrain uploads this
- *  verbatim; null until loadHeightmap resolves. */
+ *  verbatim; null until the field arrives via injectHeightmapBytes. */
 export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | null {
   return hmData ? { data: hmData, size: hmSize } : null;
 }

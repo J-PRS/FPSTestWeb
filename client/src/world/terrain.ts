@@ -4,7 +4,7 @@ import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
 // re-export so existing '../world/terrain.js' imports stay valid.
-export { loadHeightmap, getHeightfield } from './heightmap.js';
+export { getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
@@ -119,7 +119,7 @@ export class Terrain {
 
     const hm = getHeightmapData();
     if (!hm) {
-      throw new Error('Terrain constructor called before loadHeightmap() completed');
+      throw new Error('Terrain constructor called before heightmap bytes arrived');
     }
 
     // Upload heightmap as a GPU texture for vertex shader displacement
