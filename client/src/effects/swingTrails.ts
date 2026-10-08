@@ -90,6 +90,16 @@ export function swingSwipeView(scene: THREE.Scene, cam: THREE.Camera, color = 0x
   }
 }
 
+/** Scene-teardown drain — these lists are module-global, so a scene
+ *  rebuild mid-swipe would otherwise strand ribbons against the dead
+ *  scene's batch (slots held until somebody noticed the frozen X). */
+export function disposeSwings(): void {
+  for (const s of camSwipes) {s.r.dispose();}
+  camSwipes.length = 0;
+  for (const r of list) {r.dispose();}
+  list.length = 0;
+}
+
 /** Per-frame drain — cam swipes re-trace from their camera until their
  *  life expires, then join the fading list like every other ribbon. */
 export function updateSwings(dt: number, camera?: THREE.Camera): void {

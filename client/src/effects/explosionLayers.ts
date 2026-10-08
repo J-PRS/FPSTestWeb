@@ -220,6 +220,10 @@ export class ExplosionLayers implements VariantHost {
     sw.mat.color.multiplyScalar(EMIT_GAIN); // HDR-hot so bloom catches it
     sw.mat.opacity = opacity;
     sw.mesh.position.copy(pos);
+    // Pooled meshes keep their last-frame scale — a reused dome at its
+    // old full radius renders as a screen-swallowing sphere for one
+    // frame before update() re-seats it. Reset at alloc.
+    sw.mesh.scale.setScalar(0);
     sw.life = life; sw.elapsed = 0; sw.maxRadius = maxRadius; sw.dead = false;
     this.shockwaves.push(sw);
   }

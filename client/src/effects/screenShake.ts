@@ -17,7 +17,9 @@ class ScreenShake {
 
   /** Add shake. `amount` ~0.2 = nearby small pop, 0.5 = point-blank rocket. */
   add(amount: number): void {
-    this.trauma = Math.min(1, this.trauma + amount);
+    // Hidden tab: trauma would bank up off-screen and land as one
+    // mystery jolt on return — nobody is watching, drop it.
+    if (!document.hidden) {this.trauma = Math.min(1, this.trauma + amount);}
   }
 
   /** Swing kick — `sign` follows the swipe direction (L→R punches roll

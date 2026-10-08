@@ -412,7 +412,7 @@ const puffOf = new WeakMap<ParticleSystem, PuffEmitter>();
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
  *  over life, gravity applied unless noGravity. */
 export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
-  if (!vfxReady()) return;
+  if (!vfxReady() || document.hidden) return; // off-screen bursts only pile up
   const pressure = vfxPressure();
   // Ambient emitters fire every frame — under pressure each call still
   // costs a ParticleSystem even at count 1, so skip emissions outright.

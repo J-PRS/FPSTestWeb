@@ -194,14 +194,26 @@ export class RibbonTrail {
     }
     return { count: rows.length, slots, rows };
   }
-  /** Done ribbons whose owner stopped updating them — a real slot leak
-   *  (unlike orphans(), which also flags live ones mid-frame stall).
-   *  sweepStale() reclaims them; reapedStale counts it in the census. */
+  /** Stale ribbons — owner dead or stalled. A stale ribbon's `time` is
+   *  frozen (update() is what advances it), so a reaper that waits for
+   *  `done` can never fire: the slot burns a lit streak on screen
+   *  forever. The sweep becomes the orphan's update loop instead — age
+   *  the samples on wall-clock, keep it flagged stale (lastUpdateAt=0)
+   *  so each pass drains further, then dispose once it goes done.
+   *  A merely stalled live ribbon (hidden tab, frame hitch) absorbs one
+   *  tick, its owner retakes update() the same frame, and lastUpdateAt
+   *  refreshes — nothing is lost. */
   static reapedStale = 0;
   static sweepStale(staleMs = 2000): void {
     const now = performance.now();
     for (const r of RibbonTrail.liveSet) {
-      if (!r.done || now - r.lastUpdateAt <= staleMs) {continue;}
+      const idleMs = now - r.lastUpdateAt;
+      if (idleMs <= staleMs) {continue;}
+      if (!r.done) {
+        r.update(Math.min(idleMs / 1000, 0.5));
+        r.lastUpdateAt = 0;
+        continue;
+      }
       r.dispose();
       RibbonTrail.reapedStale++;
     }
