@@ -20,6 +20,7 @@ import { CLASS_BODY_SPEC, RIG_MANIFEST,
 import { computeRootMotionNodes } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { PlayerAnim } from './playerAnim.js';
+import { PlayerCollider } from './playerCollider.js';
 import { PlayerGun } from './playerGun.js';
 import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
@@ -74,9 +75,9 @@ export class PlayerModel {
   get dirClipActive(): boolean { return this.anim.dirClipActive; }
   /** Clip table (posedump reaches it by bracket cast). */
   get animations(): Map<string, THREE.AnimationAction> { return this.anim.animations; }
-  private colliderGizmo: THREE.Mesh | null = null;
-  private colliderMat: THREE.MeshBasicMaterial | null = null;
-  private colliderHex = 0x00FF00;
+  // Debug hitbox wireframe (geometry, hex, debug/force visibility,
+  // class-capsule restash) lives in playerCollider.ts.
+  private readonly collider = new PlayerCollider();
   // Post-mixer pose corrections (aim pitch, hip-fire hold, spine lock,
   // IK foot snap) live in playerPose.ts — PoseControl owns the bone
   // lists it writes into.
@@ -300,36 +301,10 @@ export class PlayerModel {
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
 
-    // Create collider gizmo (wireframe capsule for hitbox visualization)
-    // Uses same constants as collision detection — single source of truth in config.ts
-    // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
-    // Divide by the FULL visual scale (rig fit × class bump) — the gizmo
-    // is a model child, so setScale() would otherwise inflate the wire
-    // past the real sim capsule.
-    const cap = this.colliderCap;
-    const vs = this.modelScale * this._visScale;
-    const colliderGeo = new THREE.CapsuleGeometry(
-      (cap ? cap.radius : PLAYER_RADIUS) / vs,
-      (cap ? 2 * cap.half : CAPSULE_CYLINDER_HEIGHT) / vs,
-      4, 16);
-    this.colliderMat = new THREE.MeshBasicMaterial({
-      color: this.colliderHex,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.3,
-      depthTest: false // Always render on top
-    });
-    this.colliderGizmo = new THREE.Mesh(colliderGeo, this.colliderMat);
-    // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT).
-    // feetOffsetY lifts the whole group for rigs not authored feet-at-origin
-    // — the gizmo counteracts it locally so it stays on the logical feet.
-    this.colliderGizmo.position.y = (cap ? cap.height / 2 : CAPSULE_CENTER_Y) / vs - this.feetOffsetY;
-    this.colliderGizmo.renderOrder = 999; // Render last (on top)
-    // Hitbox visualization is a debug overlay — same flag as the
-    // AOE blast wireframes (menu DEBUG toggle / ?debug).
-    this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);
-    this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
-    logger.debug('COLLIDER GIZMO ADDED to model', { children: this.scene.children.length });
+    // Collider gizmo (wireframe capsule for hitbox visualization) —
+    // playerCollider.ts builds it against the FULL visual scale so
+    // setScale() can't inflate the wire past the real sim capsule.
+    this.collider.attach(this.model, this.modelScale * this._visScale, this.feetOffsetY);
   }
 
   // Per-node load prep: mesh shadows/frustum fix + flash material capture,
@@ -349,9 +324,6 @@ export class PlayerModel {
       return geos;
     }));
 
-  /** Requested capsule — stashed because the gizmo only exists after the
-   *  async load(); applied at creation and on re-request. */
-  private colliderCap: { height: number; half: number; radius: number } | null = null;
   /** setScale() multiplier on top of the rig fit — the collider gizmo
    *  divides by this too so the debug wire stays at the sim capsule. */
   private _visScale = 1;
@@ -359,12 +331,7 @@ export class PlayerModel {
    *  built from the generic constants and never matched light/heavy sim
    *  capsules. */
   setColliderCapsule(cap: { height: number; half: number; radius: number }): void {
-    this.colliderCap = cap;
-    if (!this.colliderGizmo) {return;}
-    this.colliderGizmo.geometry.dispose();
-    const vs = this.modelScale * this._visScale;
-    this.colliderGizmo.geometry = new THREE.CapsuleGeometry(cap.radius / vs, (2 * cap.half) / vs, 4, 16);
-    this.colliderGizmo.position.y = (cap.height / 2) / vs - this.feetOffsetY;
+    this.collider.setCapsule(cap, this.modelScale * this._visScale, this.feetOffsetY);
   }
 
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
@@ -650,13 +617,7 @@ export class PlayerModel {
    *  assign; untouched models stay the default friendly green. The hex is
    *  cached so a call landing before the GLB load still tints the capsule
    *  when it's built. */
-  setColliderColor(hex: number): void {
-    this.colliderHex = hex;
-    this.colliderMat?.color.setHex(hex);
-    // This runs every frame per remote — piggyback the debug-visibility
-    // refresh so the menu DEBUG toggle applies without a reload.
-    if (this.colliderGizmo) {this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);}
-  }
+  setColliderColor(hex: number): void { this.collider.setColor(hex); }
 
   private wireframeMats: THREE.Material[] | null = null;
   private wireframeOn = false;
@@ -681,33 +642,16 @@ export class PlayerModel {
     for (const m of this.wireframeMats || []) {(m as THREE.MeshBasicMaterial).wireframe = on;}
   }
 
-  private colliderShown = true;
-  /** `force` bypasses the ?debug gate — lab/inspect surfaces drive the
-   *  gizmo directly, without flipping the global debug flag. Sticky so
-   *  a gizmo created later (async load) still honors the lab toggle. */
-  private colliderForce = false;
   setColliderVisible(visible: boolean, force = false): void {
-    this.colliderShown = visible;
-    this.colliderForce = force;
-    if (this.colliderGizmo) {
-      this.colliderGizmo.visible = visible && (force || urlParams.debug);
-    }
+    this.collider.setVisible(visible, force);
   }
 
   removeColliderGizmo(): void {
-    if (this.colliderGizmo && this.model) {
-      this.colliderGizmo.visible = false;
-      this.model.remove(this.colliderGizmo);
-      logger.debug('COLLIDER GIZMO REMOVED from model');
-    }
+    this.collider.remove(this.model);
   }
 
   addColliderGizmo(): void {
-    if (this.colliderGizmo && this.model && !this.model.children.includes(this.colliderGizmo)) {
-      this.model.add(this.colliderGizmo);
-      this.colliderGizmo.visible = this.colliderShown && (urlParams.debug || this.colliderForce);
-      logger.debug('COLLIDER GIZMO RE-ADDED to model');
-    }
+    if (this.model) {this.collider.reattach(this.model);}
   }
 
   setScale(scale: number): void {
@@ -721,8 +665,8 @@ export class PlayerModel {
       this.model.scale.setScalar((this.modelScale || 0.5) * scale);
       // The gizmo is a child of the scaled root — rebuild it so the wire
       // still traces the sim capsule, not the bumped silhouette.
-      if (this.colliderGizmo) {
-        this.setColliderCapsule(this.colliderCap ?? {
+      if (this.collider.attached) {
+        this.setColliderCapsule(this.collider.cap ?? {
           height: CAPSULE_CENTER_Y * 2, half: CAPSULE_CYLINDER_HEIGHT / 2, radius: PLAYER_RADIUS,
         });
       }
@@ -743,13 +687,6 @@ export class PlayerModel {
       this.matClones.forEach((m) => m.dispose());
       this.matClones.clear();
     }
-    if (this.colliderGizmo) {
-      // Collider gizmo is a child of the model, so it's already removed when model is removed
-      // Just dispose of resources
-      this.colliderGizmo.geometry.dispose();
-      (this.colliderGizmo.material as THREE.Material).dispose();
-      this.colliderGizmo = null;
-      this.colliderMat = null;
-    }
+    this.collider.dispose();
   }
 }
