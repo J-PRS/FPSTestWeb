@@ -383,7 +383,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   if (!classicMode && !soloMode && settings.get('fps-session-token')) {
     if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
   }
-  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler, bootMap: soloSpec?.map ?? savedMap });
+  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler, bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
   // Spec maps spawn you at an authored anchor (team spawn > generic

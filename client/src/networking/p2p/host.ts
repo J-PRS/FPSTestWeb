@@ -113,6 +113,9 @@ export class P2PHost {
     terrainTex?: string;
     sky?: string;
     interiors?: import('../../../../shared/mapSpec.js').InteriorSpec[];
+    spawns?: import('../../../../shared/mapSpec.js').MapSpec['spawns'];
+    teamSpawns?: import('../../../../shared/mapSpec.js').MapSpec['teamSpawns'];
+    bases?: RoomInfo['bases'];
   } | null): void {
     if (!map) {return;}
     this.roomInfo.structures = map.structures;
@@ -125,6 +128,11 @@ export class P2PHost {
     this.roomInfo.terrainTex = map.terrainTex;
     this.roomInfo.sky = map.sky;
     this.roomInfo.interiors = map.interiors;
+    // Authored spawn anchors — the host assigns spawn positions, so a
+    // spec map should land guests where the map says, not at origin.
+    if (map.spawns) this.playerManager.spawnPoints = map.spawns;
+    if (map.teamSpawns) this.playerManager.teamSpawns = map.teamSpawns;
+    this.roomInfo.bases = map.bases;
   }
 
   constructor() {
