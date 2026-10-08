@@ -306,7 +306,8 @@ export class P2PHost {
     // rides every position frame).
     if (++this.pingCycle % 10 === 0 && this.byPlayer.size > 0) {
       const ids = [...this.byPlayer.keys()];
-      const pid = ids[(this.pingCycle / 10 | 0) % ids.length]!;
+      const pid = ids.find((id) => !this.lastPingStamp.has(id))
+        ?? ids[(this.pingCycle / 10 | 0) % ids.length]!;
       const stamp = Date.now();
       this.lastPingStamp.set(pid, stamp);
       this.sendJSON(pid, { type: 'ping', timestamp: stamp });

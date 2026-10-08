@@ -559,7 +559,11 @@ export class Room {
     if (++this.pingCycle % 10 !== 0) return;
     const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
     if (!humans.length) return;
-    const target = humans[(this.pingCycle / 10 | 0) % humans.length]!;
+    // Unmeasured humans jump the queue — the client channel stands alone
+    // until the first pong lands, and join grace shouldn't outlast a
+    // full round-robin sweep in a big room.
+    const target = humans.find((p) => !this.lastPingStamp.has(p.id))
+      ?? humans[(this.pingCycle / 10 | 0) % humans.length]!;
     const stamp = wallNow();
     this.lastPingStamp.set(target.id, stamp);
     this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp });
