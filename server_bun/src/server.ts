@@ -176,6 +176,26 @@ console.log(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
 console.log(`Health:    http://localhost:${CONFIG.port}/health`);
 console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 
+// Fleet worker heartbeat — under fleet.ts this process is one of N
+// children; the matchmaker tracks room homes + per-worker ccu off these
+// beats and serves the aggregated /rooms lobby list from `list`.
+const fleetReport = process.env.FPS_FLEET_REPORT;
+if (fleetReport) {
+  setInterval(() => {
+    const rooms = [...gameServer.rooms.values()];
+    void fetch(fleetReport, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        port: CONFIG.port,
+        ccu: rooms.reduce((n, r) => n + r.playerCount() + r.spectators.size, 0),
+        rooms: rooms.map((r) => r.name),
+        list: gameServer.listRooms(),
+      }),
+    }).catch(() => { /* matchmaker restarting — the next beat retries */ });
+  }, 2_000);
+}
+
 // Last-resort catches: a stray timer callback (killFeed taunts, grace
 // sweeps) or a rejected promise must not drop every player in every room.
 // Room ticks have their own finer quarantine — whatever reaches here

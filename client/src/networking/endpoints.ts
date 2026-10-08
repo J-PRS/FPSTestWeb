@@ -3,6 +3,21 @@
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 
+// Fleet deployment: the matchmaker (fleet.ts) sits on the base port and
+// hands each client its room's worker — connect straight to the worker so
+// nothing relays frames. ?fleet or server.json {"fleet": true} opts in;
+// any failure falls back to treating the host as a standalone server.
+async function resolveFleet(httpUrl: string): Promise<{ wsUrl: string; httpUrl: string } | null> {
+  try {
+    const room = urlParams.get('room') ?? '';
+    const r = await fetch(`${httpUrl}/join?room=${encodeURIComponent(room)}`, { cache: 'no-cache' });
+    if (!r.ok) {return null;}
+    const j = await r.json() as { url?: string; http?: string };
+    if (!j.url || !j.http) {return null;}
+    return { wsUrl: j.url, httpUrl: j.http };
+  } catch { return null; }
+}
+
 export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl: string }> {
   const hn = window.location.hostname || 'localhost';
   // Served through the cloudflared preview tunnel: the API rides the same
@@ -16,21 +31,25 @@ export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl
   // ?server= wins (shareable link); the lobby's saved host is the
   // standing choice so nobody has to edit a URL to switch servers.
   let host = (urlParams.get('server')?.trim() || settings.get('fps-server').trim());
+  let fleet = urlParams.has('fleet');
   if (!host) {
     try {
-      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r) => r.json()) as { server?: string };
+      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r) => r.json()) as { server?: string; fleet?: boolean };
       host = cfg.server?.trim() ?? '';
+      if (cfg.fleet) {fleet = true;}
     } catch { /* no server.json — stay local */ }
   }
-  if (!host) {return local;}
+  if (!host) {return (fleet ? await resolveFleet(local.httpUrl) : null) ?? local;}
   // LAN/plain hosts — localhost, private IPs, anything with an explicit
   // port — can't ride the tunnel's wss/https rewrite; hitting them with
   // wss just fails the handshake silently (botwatch hit this on :8460).
   if (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host) || host.includes(':')) {
     const h = host.replace(/^https?:\/\//, '');
-    return { wsUrl: `ws://${h}/ws`, httpUrl: `http://${h}` };
+    const ep = { wsUrl: `ws://${h}/ws`, httpUrl: `http://${h}` };
+    return (fleet ? await resolveFleet(ep.httpUrl) : null) ?? ep;
   }
   // Bare name like ?server=foo-bar-baz → assume a trycloudflare quick tunnel
   if (!host.includes('.')) {host = `${host}.trycloudflare.com`;}
-  return { wsUrl: `wss://${host}/ws`, httpUrl: `https://${host}` };
+  const ep = { wsUrl: `wss://${host}/ws`, httpUrl: `https://${host}` };
+  return (fleet ? await resolveFleet(ep.httpUrl) : null) ?? ep;
 }

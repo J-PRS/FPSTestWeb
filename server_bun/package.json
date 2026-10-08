@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun dev-watch.ts",
     "start": "bun src/server.ts",
+    "fleet": "bun src/fleet.ts",
     "test": "bun test",
     "test:scenarios": "bun test tests/scenarios/",
     "check": "bun x tsc --noEmit && bun test",
