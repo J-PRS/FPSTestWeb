@@ -3553,3 +3553,7 @@ gunlab.html shipped ungated — anyone could open /gunlab.html on a public build
 ## 2.216 — the whole dev-page class gated: 11 more tool pages close on prod
 
 The gunlab hole was a class, not a page: 11 more standalone tool pages shipped open on a public build — aodump/posedump/sfxdump/vmdump (asset inspectors + headless-pipeline dump pages) and 7 inline-script pages (skytest, uvcheck, classlineup/fbxconv/modellineup/pickup_lineup/turretter tests). TS entries now bail on non-dev hosts with a closed sign; the inline pages guard their module with the same https-means-prod rule as isDevHost (no import needed). animgrid.html left alone — its /src/animgrid.ts entry doesn't exist anywhere, so the page is already inert; flagging it as a dead-file candidate for the owner's cleanup pass.
+
+## 2.217 — prod debug handles gated: __scene/__renderer/__renderScan/geoNaN
+
+The last ungated prod surface in the debug layer: wireDebugKeys installed every window handle unconditionally, so a public build exposed the whole scene graph (__scene), the renderer (__renderer), a render-cost scanner (__renderScan), and the geoNaN bounding-sphere watch. Those four now install only on dev hosts. __perf/__trailDump/__renderDump deliberately stay — the shipped watchdog diag dump reads them for crash-log context, so gating them would degrade production diagnostics.

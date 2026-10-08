@@ -1,3 +1,4 @@
+2026-10-08 - gate __scene/__renderer/__renderScan/geoNaN behind isDevHost
 2026-10-08 - gate 11 more dev-tool pages behind isDevHost/https-check (1cc481eb)
 2026-10-08 - gate gunlab.html + lab buttons behind isDevHost on prod (3cbdc204)
 2026-10-01 - God-object splits: flag/deploy placement to roomFlagPlacer.ts, structure-hull sync (colliders+echo+mapUpdate one owner) to roomStructures.ts (Room 1182->989), bot routing memory + the 528-line flagGoal evaluator to botRouting.ts (serverSenses 1035->345)
