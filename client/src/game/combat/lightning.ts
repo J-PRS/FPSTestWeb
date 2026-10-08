@@ -166,9 +166,10 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
   hooks.processExplosion({
     pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
     forceMultiplier: 1,
-    // Offline the pop still claims its blast; connected, the server's
-    // beam kill detonates the banked charge itself.
-    sendAOE: deps.lazyNetworkManager()?.authoritySims()
+    // Offline the pop still claims its blast; connected (dedicated OR
+    // p2p host — both run beamSweep→beamPay), the authority's beam kill
+    // detonates the banked charge itself.
+    sendAOE: deps.lazyNetworkManager()?.authorityShells()
       ? undefined
       : (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
     explosionTint: 0x8FDCFF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
