@@ -18,6 +18,20 @@ import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
+import type { TeamId } from '../../shared/teams.ts';
+
+interface RestoreSeat {
+  id: string; name?: string; team?: TeamId; perk?: string; armorClass?: string;
+  pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number };
+  yaw?: number; pitch?: number; health?: number; isDead?: boolean; token: string;
+}
+
+interface RestoreRoom {
+  name: string; mode?: string; map?: string; bots?: number; unlisted?: boolean;
+  players: RestoreSeat[];
+}
+
+interface RestoreState { v: 1; rooms: RestoreRoom[] }
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -333,6 +347,72 @@ export class GameServer {
 
   setBunServer(server: Server<WebSocketData>): void {
     this.bunServer = server;
+  }
+
+  /** Dev-restart seat snapshot — humans only, bots re-mint from spec.bots.
+   *  Handed to the dev-watch parent (in-memory, no disk) so a respawned
+   *  child can re-seat reconnecting clients where they were. */
+  exportRestore(): RestoreState {
+    const rooms: RestoreRoom[] = [];
+    for (const room of this.rooms.values()) {
+      const players: RestoreSeat[] = [];
+      for (const [id, p] of room.players.getAllPlayers()) {
+        if (p.isBot) continue;
+        const token = room.sessionTokens.get(id);
+        if (!token) continue; // pre-seat or bot — nothing to reclaim with
+        players.push({
+          id, name: p.name, team: p.team, perk: p.perk, armorClass: p.armorClass,
+          pos: { ...p.position }, vel: { ...p.velocity },
+          yaw: p.rotation.yaw, pitch: p.rotation.pitch,
+          health: p.health, isDead: p.isDead, token,
+        });
+      }
+      if (players.length) {
+        rooms.push({ name: room.name, mode: room.mode, map: room.mapSrc, bots: room.spec.bots, unlisted: room.unlisted, players });
+      }
+    }
+    return { v: 1, rooms };
+  }
+
+  /** Re-seat the exported snapshot: rebuild rooms, drop each human body
+   *  back at its saved spot, park the session in grace — the client's
+   *  normal reconnect then walks the existing reclaim path (token check,
+   *  resumeSeq replay, respawn re-arm) untouched. */
+  restoreFrom(raw: unknown): void {
+    const s = raw as RestoreState | null;
+    if (!s || s.v !== 1 || !Array.isArray(s.rooms)) return;
+    let seated = 0;
+    for (const rs of s.rooms) {
+      if (!rs || typeof rs.name !== 'string' || !Array.isArray(rs.players)) continue;
+      const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots, rs.unlisted === true);
+      if (!room) continue;
+      for (const ps of rs.players) {
+        if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') continue;
+        // A corrupt blob must not seed NaN bodies into a live room.
+        if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) continue;
+        if (room.players.getPlayer(ps.id)) continue;
+        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', ps.armorClass ?? 'medium');
+        p.position = { ...ps.pos };
+        p.velocity = { ...ps.vel };
+        p.rotation.yaw = ps.yaw ?? 0;
+        p.rotation.pitch = ps.pitch ?? 0;
+        p.lastValidPosition = { ...ps.pos };
+        if (typeof ps.health === 'number') p.health = ps.health;
+        p.isDead = ps.isDead === true;
+        p.pendingRespawn = p.isDead;
+        p.name = ps.name;
+        // A mid-fight seat, not a fresh spawn — no protection bubble.
+        p.protectedUntil = 0;
+        room.sessionTokens.set(ps.id, ps.token);
+        this.playerRoom.set(ps.id, room);
+        this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,
+          () => this.removePlayerCompletely(room, ps.id, 'grace period'));
+        room.messages.onPlayerDisconnected(ps.id);
+        seated++;
+      }
+      logger.info('Restored seats across restart', { room: room.name, players: rs.players.length });
+    }
+    if (seated) logger.info('Restart restore complete', { seats: seated });
   }
 
   stop(): void {

@@ -26,6 +26,17 @@ function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): 
   return new Response('Upgrade failed', { status: 400 });
 }
 
+// Dev-watch seat carryover: the watcher holds one blob in memory — a
+// restart restores seats so reconnecting players land where they were.
+// Production never sets FPS_STATE_URL; this lane is dev-only by env.
+const stateUrl = process.env.FPS_STATE_URL;
+if (stateUrl) {
+  try {
+    const res = await fetch(stateUrl, { signal: AbortSignal.timeout(1500) });
+    if (res.ok) gameServer.restoreFrom(await res.json());
+  } catch { /* watcher not serving — clean boot */ }
+}
+
 rotateLogs();
 
 let wtCertHash: string | null = null;
@@ -93,6 +104,19 @@ const server = Bun.serve<WebSocketData>({
     // the DataChannel becomes the game socket.
     if (url.pathname === '/rtcs') {
       return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtcs: true });
+    }
+
+    // Dev-watch graceful door: Windows kill() is TerminateProcess — no
+    // SIGTERM reaches the child, so restart would hard-drop every socket
+    // (1006, silent). Loopback-only: the caller asks, we run the normal
+    // shutdown() — players get their 'server restarting' close frames.
+    if (url.pathname === '/dev/shutdown') {
+      const ip = server.requestIP(req)?.address;
+      if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+        setImmediate(() => void shutdown());
+        return corsResponse('shutting down', { status: 200 });
+      }
+      return corsResponse('loopback only', { status: 403 });
     }
 
     const route = ROUTES[url.pathname];
@@ -167,17 +191,33 @@ process.on('uncaughtException', (e) => {
 // kills the sockets mid-handshake and players see a drop, not 1001.
 // The loop drains on its own once the server socket is down; the
 // fallback timer force-exits if a straggler socket lingers.
-function shutdown(): void {
-  gameServer.stop();
-  setTimeout(() => process.exit(0), 500).unref();
+async function shutdown(): Promise<void> {
+  try {
+    // Snapshot seats BEFORE stop() closes sockets — the restore is only
+    // useful if it still names live players. Awaited and abort-bounded:
+    // the handoff must land before exit, or there's nothing to hand off.
+    if (stateUrl) {
+      try {
+        await fetch(stateUrl, {
+          method: 'PUT',
+          body: JSON.stringify(gameServer.exportRestore()),
+          signal: AbortSignal.timeout(400),
+        });
+      } catch { /* watcher gone — nothing to hand off */ }
+    }
+    gameServer.stop();
+  } finally {
+    // Exit is the contract — a handoff/stop failure must still die.
+    setTimeout(() => process.exit(0), 500).unref();
+  }
 }
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down...');
-  shutdown();
+  void shutdown();
 });
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down...');
-  shutdown();
+  void shutdown();
 });
