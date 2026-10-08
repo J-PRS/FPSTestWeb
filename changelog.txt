@@ -1,3 +1,4 @@
+2026-10-08 - gate gunlab.html + lab buttons behind isDevHost on prod (3cbdc204)
 2026-10-01 - God-object splits: flag/deploy placement to roomFlagPlacer.ts, structure-hull sync (colliders+echo+mapUpdate one owner) to roomStructures.ts (Room 1182->989), bot routing memory + the 528-line flagGoal evaluator to botRouting.ts (serverSenses 1035->345)
 2026-10-01 - PlayerModel: far-LOD swap extracted to playerModelLod.ts - lod state, lod1 fetch, baseGeo round-trip and the smoothShade crease cache out of the 1456-line monolith; setLod delegates
 2026-10-01 - stateHash: health quantized like the wire - the replica can only hold u16 Math.round values, so a truth straddling a 4hp bucket edge (35.9 room vs 36 wire) hashed a permanent phantom DESYNC; bucket on the wire transform now, replicaParity green

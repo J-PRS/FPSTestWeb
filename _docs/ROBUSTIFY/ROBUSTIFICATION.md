@@ -3545,3 +3545,7 @@ The roomStructures extraction's whole point — colliders, the mapUpdate diff, a
 ## 2.214 — deploy claims ground at the surface server-side
 
 handleDeploy trusted the claim's y verbatim within the 40m plant ring: a forged or buggy pod could plant a turret/mine floating 30m up (or buried under the field) and the replica would echo it everywhere. Claims now snap to the supporting surface — highest structure top under the point via a downward solid cast, else terrain — inside a ±3m trust band so ramps and ledges keep their claimed y. Pinned: an airborne claim grounds at terrain, a band claim keeps its y, a genless shield survives refresh.
+
+## 2.215 — gunlab.html gated: dev surfaces close on prod hosts
+
+gunlab.html shipped ungated — anyone could open /gunlab.html on a public build and get the full weapon/asset inspector (scan tools, bake hot-swap polling, creature/deployable previews). The entry now bails on non-dev hosts (isDevHost — https means prod) with a closed sign, and the ESC-menu SIM LAB/GUN LAB buttons are removed on prod rather than left visible-but-dead. Same gate wireDebugTools and the spawn-script toggle already used; this was the last dev surface reachable without the flag.
