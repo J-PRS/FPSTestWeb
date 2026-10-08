@@ -277,11 +277,13 @@ describe('tick frame adversarial decode', () => {
     expect(d.updates[2]!.isDead).toBe(false);
   });
 
-  it('clamps positions to the i16 quantization range', () => {
+  it('round-trips positions past the old i16 bound', () => {
+    // i16×0.04 saturated at ±1310m and clamped skiers mid-map (the dunes
+    // z-freeze desync); i32 keeps the same step with ±85Mm of headroom.
     const frame = encodeTickFrame(0, 0, 0, [rec('far', { position: { x: 5000, y: -5000, z: 0 } })]);
     const d = decodeTickFrame(frame)!;
-    expect(d.updates[0]!.position.x).toBeCloseTo(32767 * 0.04, 1);
-    expect(d.updates[0]!.position.y).toBeCloseTo(-32768 * 0.04, 1);
+    expect(d.updates[0]!.position.x).toBeCloseTo(5000, 1);
+    expect(d.updates[0]!.position.y).toBeCloseTo(-5000, 1);
   });
 
   it('surfaces sheep only when non-zero', () => {
@@ -347,15 +349,15 @@ describe('v4 delta-masked records', () => {
     const p = base();
     // First encode is always full (fresh slot).
     const full = encodeTickPlayerV4(7, p, enc, last, false);
-    expect(full.length).toBe(24);
+    expect(full.length).toBe(30);
     const d1 = decodeTickFrame(encodeTickFrame(0, 1, 0, [full], WIRE_TICK_V4), r.pool)!;
     expect(d1.updates[0]!.velocity.x).toBeCloseTo(10);
     expect(d1.updates[0]!.health).toBe(100);
-    // Only position moves → record is mask + pos = 9B, and the decode
+    // Only position moves → record is mask + pos = 15B, and the decode
     // still reports the retained velocity/health.
     p.position.x = 2;
     const delta = encodeTickPlayerV4(7, p, enc, last, false);
-    expect(delta.length).toBe(9);
+    expect(delta.length).toBe(15);
     const d2 = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
     expect(d2.updates[0]!.position.x).toBeCloseTo(2);
     expect(d2.updates[0]!.velocity.x).toBeCloseTo(10);
@@ -372,7 +374,7 @@ describe('v4 delta-masked records', () => {
     encodeTickPlayerV4(7, p, enc, last, false);
     p.health = 30; // took damage between ticks — must surface on the wire
     const delta = encodeTickPlayerV4(7, p, enc, last, false);
-    expect(delta.length).toBe(9 + 3); // mask+pos + hpPing group
+    expect(delta.length).toBe(15 + 3); // mask+pos + hpPing group
     const d = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
     expect(d.updates[0]!.health).toBe(30);
   });
@@ -385,7 +387,7 @@ describe('v4 delta-masked records', () => {
     // must encode all groups or the decoder inherits the old owner's
     // fields.
     const rec = encodeTickPlayerV4(9, base(), enc, last, false);
-    expect(rec.length).toBe(24);
+    expect(rec.length).toBe(30);
   });
 
   it('a torn-then-healed link resyncs on the forced full record', () => {
@@ -419,7 +421,7 @@ describe('v4 delta-masked records', () => {
     encodeTickPlayerV4(7, p, enc, last, false); // the join burst this client missed
     p.position.x = 2;
     const delta = encodeTickPlayerV4(7, p, enc, last, false);
-    expect(delta.length).toBe(9);
+    expect(delta.length).toBe(15);
     const dropped = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
     expect(dropped.updates[0]!.playerId).toBe(''); // unresolvable → consumer skips
     const full = encodeTickPlayerV4(7, p, enc, last, true);
