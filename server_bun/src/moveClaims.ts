@@ -4,7 +4,7 @@ import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 
 // Movement-claim family — position reports, declared teleports, and the
@@ -134,7 +134,7 @@ export class MoveClaims {
    *  resync for a client persisting past corrections. */
   private plausible(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>, now: number): boolean {
     const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
-    player.lastPosCheckTime = now;
+    player.lastPosCheckTime = wallMs(now);
     if (!player.hasReceivedPosition || !player.lastPosCheckPos) {
       player.lastPosCheckPos = { ...msg.position };
       return true;
@@ -282,7 +282,7 @@ export class MoveClaims {
    *  pre-warp reports otherwise read as speedhacks on one judge or
    *  divergences on the other. */
   private muteJudges(player: PlayerState, playerId: string, now: number): void {
-    player.correctionGraceUntil = now + CONFIG.reportGraceMs;
+    player.correctionGraceUntil = wallMs(now + CONFIG.reportGraceMs);
     this.h.moveMute(playerId);
   }
 }

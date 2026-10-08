@@ -10,6 +10,10 @@
  * timers, bot housekeeping) belong to simNow — a fast-forwarded soak
  * must not accelerate real-client windows.
  */
+declare const wallBrand: unique symbol;
+export type WallMs = number & { [wallBrand]: 'wall' };
+export const wallMs = (n: number): WallMs => n as WallMs;
+
 let impl: () => number = Date.now;
 
 /** Test seam only — deterministic harnesses (net bridge, chaos) bind the
@@ -18,4 +22,4 @@ let impl: () => number = Date.now;
  *  on wall time. Production never calls this; tests must restore with
  *  setWallNow() when the run ends. */
 export const setWallNow = (fn?: () => number): void => { impl = fn ?? Date.now; };
-export const wallNow = (): number => impl();
+export const wallNow = (): WallMs => impl() as WallMs;

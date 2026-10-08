@@ -1,3 +1,4 @@
+import { simMs } from '../../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, pin, firstPlayer } from './harness.ts';
 import { healPerTick } from '../../src/TickLoop.ts';
@@ -31,16 +32,16 @@ describe('scenario: server-owned heal channels', () => {
     p.health = 10;
     p.status = 0;
     const now = Date.now();
-    p.regenUntil = now + 30_000;
+    p.regenUntil = simMs(now + 30_000);
     expect(healPerTick(p, now)).toBeCloseTo(POWERUP.regenHpPerSec / CONFIG.tickRate, 8);
 
     // Expired window — nothing.
-    p.regenUntil = now - 1;
+    p.regenUntil = simMs(now - 1);
     expect(healPerTick(p, now)).toBeCloseTo(perkMods(p.perk).regen / CONFIG.tickRate, 8);
 
     // Regenerator perk adds its passive rate on top of the powerup.
     p.perk = 'regenerator';
-    p.regenUntil = now + 30_000;
+    p.regenUntil = simMs(now + 30_000);
     expect(healPerTick(p, now)).toBeCloseTo(
       (POWERUP.regenHpPerSec + perkMods('regenerator').regen) / CONFIG.tickRate, 8,
     );

@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { mkRoom, pin } from './harness.ts';
@@ -18,7 +19,7 @@ describe('fanout cadence', () => {
     // Tick 1 builds the first record (lastSent absent); tick 2+ find the
     // bot still on its extrapolated path → suppressed → zero records.
     // The frame count must keep climbing regardless.
-    for (let i = 0; i < 4; i++) loop.tickRoomNow(room, Date.now() + i * 50);
+    for (let i = 0; i < 4; i++) loop.tickRoomNow(room, wallMs(Date.now() + i * 50));
     expect(frames).toBeGreaterThanOrEqual(4);
   });
 });

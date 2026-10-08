@@ -56,7 +56,7 @@ export interface BrainHost {
   /** Authoritative kill — detonate consumes the being. */
   kill(c: SimBeing): void;
   /** Live check for the committed target id. */
-  playerState(id: string): { isDead: boolean; status: number; lastFireSim: number; position: { x: number; y: number; z: number } } | null;
+  playerState(id: string): { isDead: boolean; status: number; lastFireSim: number; position: { x: number; y: number; z: number} } | null;
 }
 
 export class CreatureBrain {

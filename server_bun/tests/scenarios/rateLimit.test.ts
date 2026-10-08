@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
@@ -16,7 +17,7 @@ describe('scenario: per-type rate limits', () => {
     // window mid-test and flake the 4-cap assertion.
     const t0 = 1_000_000;
     for (let i = 0; i < 6; i++) {
-      room.messages.handleMessage(p.id, { type: 'chat', text: `msg ${i}` }, t0 + i * 10);
+      room.messages.handleMessage(p.id, { type: 'chat', text: `msg ${i}` }, wallMs(t0 + i * 10));
     }
     // Cap is 4/window — the 5th and 6th never reach the room. Filter to
     // the test's own lines: the 4th rapid chat also trips noteChatPace's

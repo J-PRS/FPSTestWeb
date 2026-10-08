@@ -12,7 +12,7 @@ import {
 import { healPool } from './healPool.ts';
 import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { simNow } from './simClock.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 
 // Per-kind deployable ticks — drone escort scan, proximity-mine fuse,
 // resupply-pad pulse, structure LOS, sentry fire. RoomDeployables owns
@@ -86,7 +86,7 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
       if (dx * dx + dy * dy + dz * dz > STATION_RANGE * STATION_RANGE) continue;
       if (p.health >= p.maxHealth) continue;
       healPool(p, p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
-      p.forceSendUntil = wallNow() + FORCE_SEND_MS;
+      p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
       void pid;
     }
   }

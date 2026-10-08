@@ -1,3 +1,4 @@
+import { simMs } from './simClock.ts';
 import type { ClientMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { PlayerState } from './types.ts';
@@ -44,7 +45,7 @@ export class AoeClaims {
       this.h.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
       return;
     }
-    player.protectedUntil = 0; // firing breaks your own spawn shield
+    player.protectedUntil = simMs(0); // firing breaks your own spawn shield
     const stats = getWeaponStats(msg.weaponType);
 
     if (msg.weaponType === WeaponType.Melee) {

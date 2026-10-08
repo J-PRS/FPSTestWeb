@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { mkRoom, freeze } from './harness.ts';
@@ -22,10 +23,10 @@ describe('scenario: state hash tags, never consumes, tickSeq', () => {
     const broadcastHash = () => (loop as unknown as { broadcastStateHash: (r: Room) => void }).broadcastStateHash(room);
 
     const seq0 = room.tickSeq;
-    loop.tickRoomNow(room, Date.now());
-    loop.tickRoomNow(room, Date.now() + 50);
+    loop.tickRoomNow(room, wallMs(Date.now()));
+    loop.tickRoomNow(room, wallMs(Date.now() + 50));
     broadcastHash();
-    loop.tickRoomNow(room, Date.now() + 100);
+    loop.tickRoomNow(room, wallMs(Date.now() + 100));
     broadcastHash();
 
     const hashes = sent.filter((m) => m.type === 'stateHash') as Extract<ServerMessage, { type: 'stateHash' }>[];

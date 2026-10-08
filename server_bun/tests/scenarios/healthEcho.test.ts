@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { STATUS } from '../../../shared/status.ts';
@@ -30,9 +31,9 @@ describe('yourHealth echo', () => {
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(1);
     expect(p.health).toBeGreaterThan(hurtHp);
     // Throttle: a tick 100ms later must NOT echo again; 600ms must.
-    loop.tickRoomNow(room, Date.now() + 100);
+    loop.tickRoomNow(room, wallMs(Date.now() + 100));
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(1);
-    loop.tickRoomNow(room, Date.now() + 600);
+    loop.tickRoomNow(room, wallMs(Date.now() + 600));
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(2);
   });
 

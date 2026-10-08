@@ -1,3 +1,4 @@
+import { wallMs } from '../src/wallClock.ts';
 import { describe, it, expect, afterEach } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import type { Room } from '../src/Room.ts';
@@ -36,7 +37,7 @@ describe('command buffer backstop', () => {
     const room = peek.playerRoom.get('p1')!;
 
     // Park the buffer at the cap — a stalled tick's worst case.
-    for (let i = 0; i < 2000; i++) room.commands.push({ playerId: 'p1', msg: {} as never, at: 0 });
+    for (let i = 0; i < 2000; i++) room.commands.push({ playerId: 'p1', msg: {} as never, at: wallMs(0) });
     const rejectedBefore = peek.ops.msgsRejected;
 
     gs.onMessage(ws as never, JSON.stringify({ type: 'chat', text: 'flood' }));

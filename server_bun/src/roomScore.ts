@@ -1,3 +1,4 @@
+import { wallMs } from './wallClock.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { RoomPickups } from './RoomPickups.ts';
@@ -10,7 +11,7 @@ import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickup
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { healPool } from './healPool.ts';
-import { simNow } from './simClock.ts';
+import { simNow , simMs} from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 
 // Score/kill economy — every path that turns a death or a touch into
@@ -102,13 +103,13 @@ export class RoomScore {
       p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.armor);
       buff.armor = p.armor;
     } else if (kind === 'regen') {
-      p.regenUntil = now + POWERUP.regenMs;
+      p.regenUntil = simMs(now + POWERUP.regenMs);
       buff.until = p.regenUntil;
     } else {
-      p.ddUntil = now + POWERUP.ddMs;
+      p.ddUntil = simMs(now + POWERUP.ddMs);
       buff.until = p.ddUntil;
     }
-    p.forceSendUntil = now + 500; // buffed health/status rides the next ticks
+    p.forceSendUntil = wallMs(now + 500); // buffed health/status rides the next ticks
     this.h.sendToPlayer(p.id, buff);
   }
 

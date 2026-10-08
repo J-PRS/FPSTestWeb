@@ -13,7 +13,7 @@ import type { TransportKind } from '../../shared/protocol.ts';
 import { evictEldest } from './evictEldest.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 import { roomWord as word } from './wire.ts';
 
 export interface SwitchHost {
@@ -111,7 +111,7 @@ export class RoomSwitcher {
     // report then reads as an impossible 100m+ jump). Mute the
     // plausibility gate + shadow judge for the same drain window a
     // correction gets.
-    joined.correctionGraceUntil = wallNow() + CONFIG.reportGraceMs;
+    joined.correctionGraceUntil = wallMs(wallNow() + CONFIG.reportGraceMs);
     this.host.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);

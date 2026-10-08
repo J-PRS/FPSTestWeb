@@ -643,7 +643,9 @@ export class ServerBots {
       // Bots never send positions, so nothing else feeds their rewind
       // buffer — without samples, hit validation rewinds to the stale
       // spawn seed and legit shots at moving bots get rejected.
-      pushRewindSample(p, now);
+      // history.t is wall domain (receive-time) — simNow() would drift
+      // the samples away from what rewinds compare against under warp.
+      pushRewindSample(p, wallNow());
     }
     // The loop tail is the real number, not a guess: whole-loop wall
     // minus whatever the five stages already billed this tick.

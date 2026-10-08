@@ -1,3 +1,4 @@
+import { simMs } from './simClock.ts';
 import type { ServerWebSocket, Server } from 'bun';
 import { CONFIG } from './config.ts';
 import { Room } from './Room.ts';
@@ -402,7 +403,7 @@ export class GameServer {
         p.pendingRespawn = p.isDead;
         p.name = ps.name;
         // A mid-fight seat, not a fresh spawn — no protection bubble.
-        p.protectedUntil = 0;
+        p.protectedUntil = simMs(0);
         room.sessionTokens.set(ps.id, ps.token);
         this.playerRoom.set(ps.id, room);
         this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,

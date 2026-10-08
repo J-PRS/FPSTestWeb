@@ -1,3 +1,4 @@
+import { simMs } from '../../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer } from './harness.ts';
 
@@ -8,7 +9,7 @@ describe('scenario: heal claims on a sim authority', () => {
   it('the cadence admits one heal, not a stream', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     room.players.applyDamage(p.id, Math.min(80, p.maxHealth - 10));
     const before = p.health;
     for (let i = 0; i < 4; i++) room.messages.handleMessage(p.id, { type: 'heal', amount: 25 });

@@ -13,8 +13,15 @@
 let warpOffsetMs = 0;
 let frozenBaseMs: number | null = null;
 
-export const simNow = (): number =>
-  frozenBaseMs !== null ? frozenBaseMs + warpOffsetMs : Date.now() + warpOffsetMs;
+/** Branded sim-time ms — a `SimMs` can't pass where a `WallMs` (or plain
+ *  wall-epoch number field) is expected without an explicit cast, so a
+ *  sim/wall mix fails at tsc instead of desyncing a fast-forwarded soak. */
+declare const simBrand: unique symbol;
+export type SimMs = number & { [simBrand]: 'sim' };
+export const simMs = (n: number): SimMs => n as SimMs;
+
+export const simNow = (): SimMs =>
+  (frozenBaseMs !== null ? frozenBaseMs + warpOffsetMs : Date.now() + warpOffsetMs) as SimMs;
 export const simNowAdvance = (ms: number): void => { warpOffsetMs += ms; };
 /** Reset starts a frozen clock: sim time then moves ONLY via
  *  simNowAdvance — wall-time gaps between step() calls can't leak into

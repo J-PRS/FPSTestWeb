@@ -10,8 +10,8 @@ import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
-import { simNow } from './simClock.ts';
-import { wallNow } from './wallClock.ts';
+import { simNow, simMs } from './simClock.ts';
+import { wallNow, wallMs } from './wallClock.ts';
 
 let internalIdCounter = 0;
 
@@ -100,28 +100,28 @@ export class PlayerManager {
       lastValidRotation: { yaw: 0, pitch: 0 },
       hasReceivedPosition: false,
       joinAnnounced: false,
-      lastPosCheckTime: 0,
+      lastPosCheckTime: wallMs(0),
       lastPosCheckPos: { ...spawn },
       consecutiveRejects: 0,
-      correctionGraceUntil: 0,
+      correctionGraceUntil: wallMs(0),
       ping: 0,
       skiing: 0,
       jetting: 0,
       status: 0,
-      lastFireSim: -Infinity,
+      lastFireSim: simMs(-Infinity),
       history: [],
-      forceSendUntil: 0,
-      protectedUntil: simNow() + PlayerManager.SPAWN_PROTECT_MS,
+      forceSendUntil: wallMs(0),
+      protectedUntil: simMs(simNow() + PlayerManager.SPAWN_PROTECT_MS),
       healCredit: 0,
       beltCharges: BELT_MAX,
       armor: 0,
-      regenUntil: 0,
-      ddUntil: 0,
+      regenUntil: simMs(0),
+      ddUntil: simMs(0),
       charge: 0,
       chargeT: 0,
       chargeEchoed: 0,
-      chargeEchoAt: 0,
-      healthEchoAt: 0,
+      chargeEchoAt: wallMs(0),
+      healthEchoAt: wallMs(0),
     };
 
     // Bots stamp p.isBot after this returns — the counter must key on
@@ -146,7 +146,7 @@ export class PlayerManager {
    *  the damage path without sleeping 2s. */
   breakShield(playerId: string): void {
     const p = this.players.get(playerId);
-    if (p) p.protectedUntil = 0;
+    if (p) p.protectedUntil = simMs(0);
   }
 
   getPlayer(playerId: string): PlayerState | undefined {
@@ -281,8 +281,8 @@ export class PlayerManager {
       target.deaths++;
       target.pendingRespawn = true;
       target.armor = 0;
-      target.regenUntil = 0;
-      target.ddUntil = 0;
+      target.regenUntil = simMs(0);
+      target.ddUntil = simMs(0);
       // NOTE: `charge` survives the kill — applyHit pops the corpse's bank.
       return { killed: true, newHealth: 0, newArmor: 0 };
     }
@@ -320,10 +320,10 @@ export class PlayerManager {
     player.isDead = false;
     player.status = 0; // a corpse carries no channels — toggles died with them
     player.skiing = 0; player.jetting = 0; // respawn waits for a fresh inputMove — stale held bits would broadcast a ghost key until then
-    player.lastFireSim = -Infinity; // respawn is a fresh cloak, not the old one's reveal
+    player.lastFireSim = simMs(-Infinity); // respawn is a fresh cloak, not the old one's reveal
     player.armor = 0;
-    player.regenUntil = 0;
-    player.ddUntil = 0;
+    player.regenUntil = simMs(0);
+    player.ddUntil = simMs(0);
     player.charge = 0;
     player.beltCharges = BELT_MAX;
     player.pendingRespawn = false;
@@ -335,14 +335,14 @@ export class PlayerManager {
     player.lastValidVelocity = { x: 0, y: 0, z: 0 };
     player.lastValidRotation = { yaw: 0, pitch: 0 };
     player.hasReceivedPosition = false;
-    player.lastPosCheckTime = 0;
+    player.lastPosCheckTime = wallMs(0);
     player.lastPosCheckPos = { ...spawn };
     player.consecutiveRejects = 0;
     // Rewind buffer: corpse-side samples must not survive the respawn —
     // hit validation and muzzle checks would rewind to the death site.
     player.history.length = 0;
     player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z });
-    player.protectedUntil = simNow() + PlayerManager.SPAWN_PROTECT_MS;
+    player.protectedUntil = simMs(simNow() + PlayerManager.SPAWN_PROTECT_MS);
 
     return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };
   }

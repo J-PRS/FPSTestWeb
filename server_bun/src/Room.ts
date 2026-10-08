@@ -51,7 +51,7 @@ import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { simNow } from './simClock.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 
 export class Room {
   readonly name: string;
@@ -209,7 +209,7 @@ export class Room {
    *  the Quake/Valve command-buffer pattern: all input lands at phase 0
    *  so sims see a deterministic order (input → sim → fanout) instead of
    *  arrival-time mutations interleaving with bot/projectile ticks. */
-  readonly commands: { playerId: string; msg: ClientMessage; at: number }[] = [];
+  readonly commands: { playerId: string; msg: ClientMessage; at: WallMs }[] = [];
   drainCommands(): void {
     if (!this.commands.length) return;
     for (const c of this.commands) this.messages.handleMessage(c.playerId, c.msg, c.at);
@@ -477,7 +477,7 @@ export class Room {
         // drop could silently lose (credit stayed banked but unclaimed).
         if (kind === 'gem') {
           healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
-          p.forceSendUntil = wallNow() + FORCE_SEND_MS;
+          p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
           // Client refills half the energy tank on a gem — the shadow
           // must too or the next jet run diverges for honest reasons.
           this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);

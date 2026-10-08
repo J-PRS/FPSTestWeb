@@ -7,7 +7,7 @@ import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
 // purpose; an import-time arm would trip them instead).
 import { losMemoReset } from '../../../shared/botLos.ts';
 import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
-import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
+import { simNowAdvance, simNowReset , simMs} from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import { computeStateHash } from '../../../shared/stateHash.ts';
 import { decodeTickFrame, type WireTickPlayer } from '../../../shared/wire.ts';
@@ -146,7 +146,7 @@ export function pin(room: Room, playerId: string, pos: Vec3): void {
   if (!p) throw new Error(`pin: no player ${playerId}`);
   room.moveSim.resync(playerId, pos, 0);
   p.position = { ...pos };
-  p.protectedUntil = 0;
+  p.protectedUntil = simMs(0);
 }
 
 /** pin + silence the brain — pinned bots that keep thinking wander out of

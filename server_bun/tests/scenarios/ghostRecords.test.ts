@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { decodeTickFrame } from '../../../shared/wire.ts';
@@ -26,7 +27,7 @@ describe('ghost records', () => {
       return 'sent' as const;
     };
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
-    loop.tickRoomNow(room, Date.now());
+    loop.tickRoomNow(room, wallMs(Date.now()));
     // Binary frame — decode ids instead: easier to assert on record count
     // via the metrics path… simplest reliable check: the ghost's id never
     // appears in the encoded payload.
@@ -37,7 +38,7 @@ describe('ghost records', () => {
       if (s.includes(ghostId)) ghostMentions++;
       return 'sent' as const;
     };
-    loop.tickRoomNow(room, Date.now() + 50);
+    loop.tickRoomNow(room, wallMs(Date.now() + 50));
     expect(ghostMentions).toBe(0);
     expect(sent.length).toBeGreaterThanOrEqual(0); // frames did flow above
   });
@@ -49,12 +50,12 @@ describe('ghost records', () => {
     if (!p) throw new Error('no staleGhost');
     // Silenced far past the idle-kick window with NO position report —
     // hasReceivedPosition=false would normally short-circuit skipRecord.
-    p.lastSeen = Date.now() - 120_000;
+    p.lastSeen = wallMs(Date.now() - 120_000);
     // tickRoomNow's onRemove is normally GameServer.removePlayerCompletely —
     // assert the reap was delegated rather than checking the roster.
     let reaped = '';
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, (_room, id, reason) => { reaped = `${id}:${reason}`; });
-    loop.tickRoomNow(room, Date.now());
+    loop.tickRoomNow(room, wallMs(Date.now()));
     expect(reaped).toBe('staleGhost:idle');
   });
 
@@ -64,7 +65,7 @@ describe('ghost records', () => {
     const p = room.players.getPlayer('late');
     if (!p) throw new Error('no late');
     p.hasReceivedPosition = true;
-    p.lastSeen = Date.now();
+    p.lastSeen = wallMs(Date.now());
     let mentions = 0;
     // v3 frames carry u16 wire-ids — the playerId string lives in the
     // 'wireIds' roster event, so decode through the real path.
@@ -84,9 +85,9 @@ describe('ghost records', () => {
     const obs = room.players.getPlayer('observer');
     if (!obs) throw new Error('no observer');
     obs.hasReceivedPosition = true;
-    obs.lastSeen = Date.now();
+    obs.lastSeen = wallMs(Date.now());
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
-    loop.tickRoomNow(room, Date.now());
+    loop.tickRoomNow(room, wallMs(Date.now()));
     expect(mentions).toBeGreaterThan(0);
   });
 
@@ -96,19 +97,19 @@ describe('ghost records', () => {
     const p = room.players.getPlayer('churn');
     if (!p) throw new Error('no churn');
     p.hasReceivedPosition = true;
-    p.lastSeen = Date.now();
+    p.lastSeen = wallMs(Date.now());
     room.players.addPlayer('observer');
     const obs = room.players.getPlayer('observer');
     if (!obs) throw new Error('no observer');
     obs.hasReceivedPosition = true;
-    obs.lastSeen = Date.now();
+    obs.lastSeen = wallMs(Date.now());
     const removes: number[] = [];
     room.connections.broadcast = (msg) => {
       const m = msg as { type?: string; remove?: number[] };
       if (m.type === 'wireIds' && m.remove) removes.push(...m.remove);
     };
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
-    loop.tickRoomNow(room, Date.now()); // mints churn's wireId
+    loop.tickRoomNow(room, wallMs(Date.now())); // mints churn's wireId
     const wid = room.wireIds.get('churn');
     expect(wid).toBeDefined();
     room.removePlayerCompletely('churn', 'test', () => {});
@@ -122,8 +123,8 @@ describe('ghost records', () => {
     const p2 = room.players.getPlayer('churn2');
     if (!p2) throw new Error('no churn2');
     p2.hasReceivedPosition = true;
-    p2.lastSeen = Date.now();
-    loop.tickRoomNow(room, Date.now() + 100);
+    p2.lastSeen = wallMs(Date.now());
+    loop.tickRoomNow(room, wallMs(Date.now() + 100));
     expect(room.wireIds.get('churn2')).toBe(wid);
   });
 
@@ -138,9 +139,9 @@ describe('ghost records', () => {
     const p = room.players.getPlayer('late');
     if (!p) throw new Error('no late');
     p.hasReceivedPosition = true;
-    p.lastSeen = Date.now();
+    p.lastSeen = wallMs(Date.now());
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
-    loop.tickRoomNow(room, Date.now());
+    loop.tickRoomNow(room, wallMs(Date.now()));
     expect(room.wireIds.get('late')).toBe(7);
     expect(room.wireIdRetired.has(7)).toBe(false);
   });

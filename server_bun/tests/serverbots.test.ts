@@ -1,3 +1,4 @@
+import { wallMs } from '../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
@@ -54,7 +55,7 @@ describe('ServerBots', () => {
   it('heartbeats lastSeen so the idle reaper skips socketless bots', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
     const p = room.players.getPlayer('BOT-VEKTOR-01')!;
-    p.lastSeen = 0;
+    p.lastSeen = wallMs(0);
     room.bots.tick(0.05);
     expect(p.lastSeen).toBeGreaterThan(0);
   });

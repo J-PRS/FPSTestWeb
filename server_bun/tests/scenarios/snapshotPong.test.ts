@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer, twoPlayers } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
@@ -16,7 +17,7 @@ describe('scenario: ping/snapshot', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     const sent = wsSpy(room, p.id);
-    p.lastSeen = 0;
+    p.lastSeen = wallMs(0);
     room.messages.handleMessage(p.id, { type: 'ping', timestamp: 123456 });
     const pong = sent.find((m) => m.type === 'pong') as { timestamp: number } | undefined;
     expect(pong?.timestamp).toBe(123456);

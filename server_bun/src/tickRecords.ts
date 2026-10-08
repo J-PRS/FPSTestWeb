@@ -15,7 +15,7 @@ import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
 type PooledRecord = TickRecord & { enc: TickEncodeScratch };
@@ -211,7 +211,7 @@ export class TickFanout {
     // Capping out always echoes — the channel ends here, so the final
     // converged hp would otherwise wait on the next discrete event.
     if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {
-      p.healthEchoAt = now;
+      p.healthEchoAt = wallMs(now);
       room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
     }
   }
@@ -225,7 +225,7 @@ export class TickFanout {
     const live = acc > 0.5;
     if (!live && p.chargeEchoed <= 0) return;
     if (live && now - p.chargeEchoAt < 500) return;
-    p.chargeEchoAt = now;
+    p.chargeEchoAt = wallMs(now);
     p.chargeEchoed = live ? acc : 0;
     room.connections.sendToPlayer(playerId, { type: 'yourCharge', charge: p.chargeEchoed });
   }

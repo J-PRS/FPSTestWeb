@@ -13,7 +13,7 @@ import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 import { logger } from './logger.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
@@ -171,7 +171,7 @@ export class BlastRunner {
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
       target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
-      target.forceSendUntil = wallNow() + FORCE_SEND_MS;
+      target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
       this.h.hb('armor.nade');
       logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
     }
@@ -194,7 +194,7 @@ export class BlastRunner {
       // Center-of-blast heals full, the rim heals half — worth leading
       // the throw, not just tossing it over the wall.
       healPool(target, HEALNADE_HEAL * (1 - 0.5 * (d / radius)));
-      target.forceSendUntil = wallNow() + FORCE_SEND_MS;
+      target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
       this.h.hb('heal.nade');
       logger.debug('Heal grenade', { shooter: playerId, target: targetId, hp: target.health });
     }
@@ -314,7 +314,7 @@ export class BlastRunner {
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;
     this.h.deps.emit?.({ type: 'impulse', playerId: targetId, dv });
-    target.forceSendUntil = wallNow() + FORCE_SEND_MS;
+    target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
       position: pos, force: impulseMag, pull: pull || undefined,
     }) as ServerMessage);
@@ -380,7 +380,7 @@ export class BlastRunner {
       // Owner eats the blast too — mines don't pick friends.
       if (!this.h.friendly(ownerId, targetId) && damage > 0) {
         const result = this.h.playerManager.applyDamage(targetId, damage);
-        target.forceSendUntil = wallNow() + FORCE_SEND_MS;
+        target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
         this.h.applyHit(ownerId, targetId, damage, result, { label: 'Mine hit', extra: { dist: +dist.toFixed(2) } });
       }
     }

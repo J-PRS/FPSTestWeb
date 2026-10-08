@@ -9,7 +9,7 @@ import { logger } from './logger.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 
@@ -78,7 +78,7 @@ export class RespawnManager {
     // reports from the corpse spot) read as impossible speed/
     // divergence against the reseated anchors. Same drain window a
     // correction gets.
-    player.correctionGraceUntil = graceClock + CONFIG.reportGraceMs;
+    player.correctionGraceUntil = wallMs(graceClock + CONFIG.reportGraceMs);
     // A banked classUpdate may have just applied — remotes rebuild
     // the silhouette off armorClass rather than learning it on next join.
     this.broadcast(eventPayload(WORLD_MODEL.player!, 'playerRespawn', 'playerId', playerId, {

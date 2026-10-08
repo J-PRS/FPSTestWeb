@@ -10,6 +10,8 @@ export type {
 
 import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import type { SimMs } from './simClock.ts';
+import type { WallMs } from './wallClock.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
 export interface WebSocketData {
   playerId: string;
@@ -45,7 +47,7 @@ export interface PlayerState {
   // Consecutive kills without dying — drives spree announcements. Wiped by
   // resetStats like kills/deaths (per-match, not career).
   streak: number;
-  lastSeen: number;
+  lastSeen: WallMs;
   pendingRespawn: boolean;
   lastSeq: number;
   lastValidPosition: Vec3;
@@ -55,17 +57,17 @@ export interface PlayerState {
   joinAnnounced: boolean; // playerJoined broadcast fires once, at first report
   // Anti-cheat position tracking — updated on EVERY position message (even
   // rejected ones) so speed checks always compare consecutive reports
-  lastPosCheckTime: number;
+  lastPosCheckTime: WallMs;
   lastPosCheckPos: Vec3;
   consecutiveRejects: number; // escape hatch: client persisting past corrections gets force-resynced
   /** Plausibility check is muted until this time after a correction is
    *  sent — reports still in flight from the pre-snap trajectory would
    *  otherwise read as impossible speed. */
-  correctionGraceUntil: number;
+  correctionGraceUntil: WallMs;
   ping: number; // self-reported client RTT in ms
   /** Latest clientStats uplink — self-reported fps/jsMs + link quality.
    *  Stamped at receive so /metrics can drop stale reporters. */
-  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; at: number };
+  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; at: WallMs };
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: TransportKind;
   // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
@@ -83,7 +85,7 @@ export interface PlayerState {
   /** Sim-clock stamp of the player's last real shot — senses mask CLOAK
    *  for SHOOT_REVEAL_S after it (firing decloaks). -Infinity until the
    *  first shot; reset on respawn like the status bits it feeds. */
-  lastFireSim: number;
+  lastFireSim: SimMs;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
   armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
   /** Mid-match classUpdate pick — applied on the next respawn, never
@@ -96,17 +98,17 @@ export interface PlayerState {
   // receive time. Hit validation rewinds the target to the shooter's view
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not
   // the live position. Capped ~400ms / appended in handlePosition.
-  history: { t: number; x: number; y: number; z: number }[];
+  history: { t: WallMs; x: number; y: number; z: number }[];
   // Tick-send override: while wallNow() < forceSendUntil, this player is
   // included in every tick regardless of movement/distance suppression.
   // Set on hit/knockback — the victim's real trajectory MUST flow during
   // the shooter's ~0.6s predicted-knockback window, or remotes flap
   // between the predicted sim and the stale suppressed position.
-  forceSendUntil: number;
+  forceSendUntil: WallMs;
   // Spawn protection: while wallNow() < protectedUntil, applyDamage
   // no-ops on this player. Set on join/respawn; firing clears it —
   // shooting from inside your own shield is the standard trade.
-  protectedUntil: number;
+  protectedUntil: SimMs;
   // Heal credit: team-mode rooms only accept heal claims backed by a
   // server-observed gem touch (+25 per gem). Without it the self-heal
   // claim (clamped 25/call) is a free-invincibility lever.
@@ -117,8 +119,8 @@ export interface PlayerState {
   // Powerup state (creature drops): armor absorbs POWERUP.armorAbsorb of
   // incoming damage until depleted; regen/dd are expiry timestamps.
   armor: number;
-  regenUntil: number;
-  ddUntil: number;
+  regenUntil: SimMs;
+  ddUntil: SimMs;
   // LG pop-charge banked ON this victim by enemy beams — the walking bomb.
   // `charge` is the bank at `chargeT` (epoch s); reads decay lazily via
   // lgChargeAt (5× drain), so no ticking needed. Any non-LG hit detonates
@@ -127,11 +129,11 @@ export interface PlayerState {
   chargeT: number;
   // yourCharge echo bookkeeping — last sent value + throttle (ms).
   chargeEchoed: number;
-  chargeEchoAt: number;
+  chargeEchoAt: WallMs;
   /** Last time the owner was echoed their server-healed hp (yourHealth
    *  throttle — healPerTick runs every tick, one echo per 500ms is enough
    *  to keep the client's HUD and state-hash view converged). */
-  healthEchoAt: number;
+  healthEchoAt: WallMs;
 }
 
 /** Uniform claim verdict — `true` = applied/accepted, a string = the

@@ -5,7 +5,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { logger } from './logger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import { healPool } from './healPool.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
 
 // Structural slice, not the whole handler — the caller still passes
@@ -77,7 +77,7 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     }
     const damage = Math.min(attacker ? 80 : 40, Math.max(1, Math.round(msg.amount)));
     const result = h.playerManager.applyDamage(playerId, damage);
-    player.forceSendUntil = wallNow() + FORCE_SEND_MS;
+    player.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     h.applyHit(attacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
     return true;
   }
@@ -106,7 +106,7 @@ export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMess
       healPool(player, heal);
     }
     h.lastHeal.set(playerId, now + 1500); // a heal that landed sets the cadence; a refused one doesn't
-    player.forceSendUntil = wallNow() + FORCE_SEND_MS;
+    player.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     logger.info('Player healed', { playerId, heal, health: player.health });
     return true;
   }

@@ -1,3 +1,4 @@
+import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
@@ -21,7 +22,7 @@ describe('RoomPickups', () => {
   it('powerup collection grants armor and blocks scoreless gems for teamless players', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 10, 0);
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     room.pickups!.spawn({ x: 10, y: 0, z: 0 }, 'armor');
     room.pickups!.tick(0.05);
     expect(p.armor).toBe(100);
@@ -34,7 +35,7 @@ describe('RoomPickups', () => {
   it('armor soaks 80% of a hit, overflow leaks to health', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 10, 0);
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     p.armor = 100;
     const hp0 = p.health;
     const r = room.players.applyDamage('p1', 100);
@@ -49,9 +50,9 @@ describe('RoomPickups', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const shooter = addAt(room, 's1', undefined, 0, 0);
     const target = addAt(room, 't1', undefined, 10, 0);
-    shooter.protectedUntil = 0;
-    target.protectedUntil = 0;
-    shooter.ddUntil = Date.now() + 10_000;
+    shooter.protectedUntil = simMs(0);
+    target.protectedUntil = simMs(0);
+    shooter.ddUntil = simMs(Date.now() + 10_000);
     const base = 25;
     const dmg = base * (shooter.ddUntil > Date.now() ? 2 : 1);
     room.players.applyDamage('t1', dmg);
@@ -61,14 +62,14 @@ describe('RoomPickups', () => {
   it('death strips powerups', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 10, 0);
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     p.armor = 100;
-    p.regenUntil = Date.now() + 10_000;
-    p.ddUntil = Date.now() + 10_000;
+    p.regenUntil = simMs(Date.now() + 10_000);
+    p.ddUntil = simMs(Date.now() + 10_000);
     room.players.applyDamage('p1', 9999);
     expect(p.armor).toBe(0);
-    expect(p.regenUntil).toBe(0);
-    expect(p.ddUntil).toBe(0);
+    expect(p.regenUntil).toBe(simMs(0));
+    expect(p.ddUntil).toBe(simMs(0));
   });
 
   it('touching a gem banks a team point', () => {
@@ -114,7 +115,7 @@ describe('RoomPickups', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     const p = addAt(room, 'p1', 'alpha', 10, 0);
     p.health = 50;
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
     expect(p.health).toBe(50); // no credit, no heal
     room.pickups!.spawn({ x: 10, y: 0, z: 0 });
@@ -128,7 +129,7 @@ describe('RoomPickups', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 0, 0);
     p.health = 50;
-    p.protectedUntil = 0;
+    p.protectedUntil = simMs(0);
     room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
     expect(p.health).toBe(75); // no server pickups in ffa — the bounded claim is the lane
   });

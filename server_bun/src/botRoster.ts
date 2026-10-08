@@ -15,7 +15,7 @@ import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
-import { simNow } from './simClock.ts';
+import { wallNow } from './wallClock.ts';
 import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 
@@ -77,7 +77,7 @@ export class BotRoster {
       this.applyClass(p, cls);
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
-      p.lastSeen = simNow();
+      p.lastSeen = wallNow();
       this.room.assignTeam(p);
       this.room.broadcast(spawnPayload(WORLD_MODEL.player!, id, 'playerId', {
         name: p.name,

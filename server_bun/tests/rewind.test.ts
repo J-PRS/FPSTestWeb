@@ -1,3 +1,4 @@
+import { wallMs } from '../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { pushRewindSample, REWIND_MS } from '../src/rewind.ts';
 import { clampPing, rewindPos } from '../src/claimLedger.ts';
@@ -17,17 +18,17 @@ describe('pushRewindSample', () => {
   it('appends position snapshots at the sample time', () => {
     const p = fakePlayer();
     p.position = P(1, 2, 3);
-    pushRewindSample(p, 1000);
-    expect(p.history).toEqual([{ t: 1000, x: 1, y: 2, z: 3 }]);
+    pushRewindSample(p, wallMs(1000));
+    expect(p.history).toEqual([{ t: wallMs(1000), x: 1, y: 2, z: 3 }]);
   });
 
   it('trims samples older than the rewind window', () => {
     const p = fakePlayer();
-    pushRewindSample(p, 1000);
-    pushRewindSample(p, 1000 + REWIND_MS);      // edge: exactly at window — kept
-    pushRewindSample(p, 1000 + REWIND_MS + 1);  // pushes the first out
+    pushRewindSample(p, wallMs(1000));
+    pushRewindSample(p, wallMs(1000 + REWIND_MS));      // edge: exactly at window — kept
+    pushRewindSample(p, wallMs(1000 + REWIND_MS + 1));  // pushes the first out
     expect(p.history.length).toBe(2);
-    expect(p.history[0]!.t).toBe(1000 + REWIND_MS);
+    expect(p.history[0]!.t).toBe(wallMs(1000 + REWIND_MS));
   });
 
   it('never keeps more than the window worth of samples', () => {
@@ -36,7 +37,7 @@ describe('pushRewindSample', () => {
     // a static buffer keeps whatever was within-window at its last push.
     const t0 = Date.now() - 5000;
     let last = t0;
-    for (let i = 0; i < 100; i++) { last = t0 + i * 20; pushRewindSample(p, last); }
+    for (let i = 0; i < 100; i++) { last = t0 + i * 20; pushRewindSample(p, wallMs(last)); }
     for (const s of p.history) expect(last - s.t).toBeLessThanOrEqual(REWIND_MS);
     expect(p.history.length).toBeGreaterThan(0);
     expect(p.history.length).toBeLessThanOrEqual(REWIND_MS / 20 + 1);
@@ -54,8 +55,8 @@ describe('rewindPos', () => {
     const p = fakePlayer();
     const now = Date.now();
     p.history = [
-      { t: now - 200, x: 0, y: 0, z: 0 },
-      { t: now - 100, x: 10, y: 0, z: 0 },
+      { t: wallMs(now - 200), x: 0, y: 0, z: 0 },
+      { t: wallMs(now - 100), x: 10, y: 0, z: 0 },
     ];
     p.position = P(20, 0, 0);
     const r = rewindPos(p, 150); // halfway between the two samples
@@ -65,7 +66,7 @@ describe('rewindPos', () => {
   it('clamps to buffer edges instead of extrapolating', () => {
     const p = fakePlayer();
     const now = Date.now();
-    p.history = [{ t: now - 300, x: 7, y: 0, z: 0 }];
+    p.history = [{ t: wallMs(now - 300), x: 7, y: 0, z: 0 }];
     p.position = P(20, 0, 0);
     // Older than the oldest sample → the oldest sample, not a guess.
     expect(rewindPos(p, 500).x).toBe(7);

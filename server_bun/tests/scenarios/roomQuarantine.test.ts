@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { mkRoom } from './harness.ts';
@@ -19,11 +20,11 @@ describe('room quarantine', () => {
     const rooms = new Map([['t', room]]);
     const loop = new TickLoop(rooms, ops(), (_room, id, reason) => { removed.push(`${id}:${reason}`); });
 
-    for (let i = 0; i < 9; i++) loop.tickRoomGuarded(room, Date.now() + i * 50);
+    for (let i = 0; i < 9; i++) loop.tickRoomGuarded(room, wallMs(Date.now() + i * 50));
     expect(rooms.has('t')).toBe(true);   // streak below threshold: still hosted
     expect(removed.length).toBe(0);
 
-    loop.tickRoomGuarded(room, Date.now() + 500); // the 10th consecutive failure
+    loop.tickRoomGuarded(room, wallMs(Date.now() + 500)); // the 10th consecutive failure
     expect(loop.quarantinedRooms()).toContain('t');
     expect(removed).toContain('victim:quarantine');
     expect(rooms.has('t')).toBe(false);   // name freed for a live instance
@@ -42,8 +43,8 @@ describe('room quarantine', () => {
     const rooms = new Map([['t', sick], ['well', well]]);
     const loop = new TickLoop(rooms, ops(), () => {});
     for (let i = 0; i < 12; i++) {
-      loop.tickRoomGuarded(sick, Date.now() + i * 50);
-      loop.tickRoomGuarded(well, Date.now() + i * 50);
+      loop.tickRoomGuarded(sick, wallMs(Date.now() + i * 50));
+      loop.tickRoomGuarded(well, wallMs(Date.now() + i * 50));
     }
     expect(rooms.has('t')).toBe(false);
     expect(rooms.get('well')).toBe(well); // untouched, still simulating
@@ -57,9 +58,9 @@ describe('room quarantine', () => {
     room.sims.push({ name: 'bang', tick() { if (armed) throw new Error('boom'); } });
     const rooms = new Map([['t', room]]);
     const loop = new TickLoop(rooms, ops(), () => {});
-    for (let i = 0; i < 9; i++) loop.tickRoomGuarded(room, Date.now() + i * 50);
+    for (let i = 0; i < 9; i++) loop.tickRoomGuarded(room, wallMs(Date.now() + i * 50));
     armed = false; // root cause clears — the room should live on
-    for (let i = 9; i < 20; i++) loop.tickRoomGuarded(room, Date.now() + i * 50);
+    for (let i = 9; i < 20; i++) loop.tickRoomGuarded(room, wallMs(Date.now() + i * 50));
     expect(loop.quarantinedRooms().length).toBe(0);
     expect(rooms.has('t')).toBe(true);
   });

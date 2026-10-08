@@ -18,10 +18,10 @@ import type { RoomEventSink } from './roomEvents.ts';
 import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
-import { simNow } from './simClock.ts';
+import { simNow , simMs} from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 import { tauntRand } from '../../shared/botRand.ts';
 import { lgTickDamage, lgChargeAt, LG_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -347,7 +347,7 @@ export class CombatHandler {
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
-      player.protectedUntil = 0;
+      player.protectedUntil = simMs(0);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
@@ -396,7 +396,7 @@ export class CombatHandler {
         if (player.beltCharges < cost) { this.hb('drop.beltDry'); return; }
         player.beltCharges -= cost;
       }
-      player.protectedUntil = 0; // firing breaks your own spawn shield
+      player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = Math.hypot(dir!.x, dir!.y, dir!.z) || 1;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y + 1.6, z: at.z },
@@ -502,7 +502,7 @@ export class CombatHandler {
     const owner = ownerId === 'environment' ? null : this.playerManager.getPlayer(ownerId);
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
-    target.forceSendUntil = wallNow() + FORCE_SEND_MS;
+    target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId, air: opts.air });
   }
 

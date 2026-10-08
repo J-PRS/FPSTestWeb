@@ -1,3 +1,4 @@
+import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { CombatHandler } from '../src/CombatHandler.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
@@ -26,10 +27,10 @@ function harness(friendlyFire = false) {
   const shooter = players.addPlayer('a1', 'alpha');
   shooter.position = { x: 0, y: 10, z: 0 };
   shooter.armorClass = 'light'; // Lightning is light-tier — the class-lock gate otherwise refuses the tick
-  shooter.protectedUntil = 0;
+  shooter.protectedUntil = simMs(0);
   const target = players.addPlayer('a2', 'alpha');
   target.position = { x: 0, y: 10, z: -3 };
-  target.protectedUntil = 0;
+  target.protectedUntil = simMs(0);
   return { players, combat, sentTo, target };
 }
 

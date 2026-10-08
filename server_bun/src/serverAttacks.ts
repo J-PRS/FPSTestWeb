@@ -1,10 +1,11 @@
+import { simMs } from './simClock.ts';
 import { getWeaponStats, WeaponType, scaledDirectDamage, HEALBEAM_ENERGY, HEALBEAM_PER_TICK, HEALBEAM_RANGE } from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow , wallMs} from './wallClock.ts';
 
 // Server-owned attacks — no client claim to validate because the sim
 // (creature AI, server bots) IS the attacker. They still route through
@@ -44,11 +45,11 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
       if (tank.energyOf && (tank.energyOf(shooterId) ?? 0) < HEALBEAM_ENERGY) return;
       tank.drainEnergy?.(shooterId, HEALBEAM_ENERGY);
       healPool(target, HEALBEAM_PER_TICK);
-      target.forceSendUntil = wallNow() + 900;
+      target.forceSendUntil = wallMs(wallNow() + 900);
       h.hb('heal.beam');
       return;
     }
-    shooter.protectedUntil = 0; // firing breaks your own spawn shield
+    shooter.protectedUntil = simMs(0); // firing breaks your own spawn shield
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
     // — falling back to it keeps bot punches non-zero. airtime feeds the
     // skillshot ramp for sim shells (melee/beam callers pass none).

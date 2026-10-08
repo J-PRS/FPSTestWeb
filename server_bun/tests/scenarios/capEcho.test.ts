@@ -1,3 +1,4 @@
+import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
 import { STATUS } from '../../../shared/status.ts';
@@ -22,14 +23,14 @@ describe('yourHealth cap-out echo', () => {
     const t0 = Date.now();
     // First tick: heal applies (no cap yet — heals are < 1hp per tick),
     // cadence echo fires.
-    loop.tickRoomNow(room, t0);
+    loop.tickRoomNow(room, wallMs(t0));
     const firstEchoes = sent.filter((m) => m.type === 'yourHealth').length;
     expect(firstEchoes).toBe(1);
     // Drive ticks until hp caps — the cap tick must echo even though
     // it's ~50ms after the last echo (cadence alone would suppress it).
     let capTick = -1;
     for (let i = 1; i < 60 && capTick < 0; i++) {
-      loop.tickRoomNow(room, t0 + i * 50);
+      loop.tickRoomNow(room, wallMs(t0 + i * 50));
       if (p.health >= p.maxHealth) capTick = i;
     }
     expect(capTick).toBeGreaterThan(0);
@@ -38,7 +39,7 @@ describe('yourHealth cap-out echo', () => {
     expect(echoes[echoes.length - 1]).toMatchObject({ type: 'yourHealth', health: p.maxHealth });
     // No spam: once capped, healPerTick returns 0 — further ticks echo nothing.
     const countAtCap = echoes.length;
-    loop.tickRoomNow(room, t0 + (capTick + 2) * 50);
+    loop.tickRoomNow(room, wallMs(t0 + (capTick + 2) * 50));
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(countAtCap);
   });
 });

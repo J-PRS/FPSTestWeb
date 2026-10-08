@@ -1,3 +1,4 @@
+import { simMs } from '../../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
@@ -17,7 +18,7 @@ function arena() {
 
 function addStanding(room: ReturnType<typeof mkRoom>, id: string, cls: 'light' | 'medium' | 'heavy', x: number, z = 0) {
   const p = room.players.addPlayer(id, undefined, 'none', cls);
-  p.protectedUntil = 0;
+  p.protectedUntil = simMs(0);
   p.position = { x, y: eye(cls), z };
   return p;
 }
@@ -27,7 +28,7 @@ describe('scenario: class bodies', () => {
     const room = arena();
     const shooter = room.players.addPlayer('shooter');
     shooter.isBot = true;
-    shooter.protectedUntil = 0;
+    shooter.protectedUntil = simMs(0);
     shooter.position = { x: 0, y: eye('medium'), z: 0 };
     // Far apart so each blast touches only its own target; each blast sits
     // 5m off at the target's own eye level, so both eat the same raw
@@ -55,7 +56,7 @@ describe('scenario: class bodies', () => {
     const room = arena();
     const shooter = room.players.addPlayer('shooter');
     shooter.isBot = true;
-    shooter.protectedUntil = 0;
+    shooter.protectedUntil = simMs(0);
     const medium = addStanding(room, 'medium', 'medium', 20);
     const heavy = addStanding(room, 'heavy', 'heavy', 40);
     // Railgun at FLOOR+2.9: the midpoint-sphere reach (radius+wake+half)
@@ -72,7 +73,7 @@ describe('scenario: class bodies', () => {
     const room = arena();
     const shooter = room.players.addPlayer('shooter');
     shooter.isBot = true;
-    shooter.protectedUntil = 0;
+    shooter.protectedUntil = simMs(0);
     const light = addStanding(room, 'light', 'light', 20);
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: eye('light') - 0.85, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });

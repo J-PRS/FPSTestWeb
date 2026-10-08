@@ -359,7 +359,9 @@ export class RoomMoveSim {
     // reportInputSeq = the client's input counter at snapshot time. Only
     // a report stamped ahead of everything RECEIVED counts as a gap — a
     // seq parked in pending is covered, just not drained yet. ≥3
-    // consecutive uncovered reports means events were lost, not queued.
+    // consecutive uncovered reports means events were lost, not queued
+    // (≥2 measured worse: the early hint's resend re-anchored the client
+    // mid-flight and corrections tripled on the adverse soak).
     if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) {
       if (sh.gapStreak === 0) sh.gapAt = wallNow(); // streak start — the judge's in-flight grace window
       sh.gapStreak++;

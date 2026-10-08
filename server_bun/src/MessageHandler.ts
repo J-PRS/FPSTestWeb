@@ -19,7 +19,7 @@ import type { TeamId } from '../../shared/teams.ts';
 import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
-import { wallNow } from './wallClock.ts';
+import { wallNow, type WallMs } from './wallClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -546,7 +546,7 @@ export class MessageHandler {
   /** `at` = socket-arrival time — the command drain runs it against the
    *  rate limiter so a tick-lag backlog is windowed by when it came in,
    *  not by when the stalled tick caught up. */
-  handleMessage(playerId: string, msg: ClientMessage, at?: number): void {
+  handleMessage(playerId: string, msg: ClientMessage, at?: WallMs): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 

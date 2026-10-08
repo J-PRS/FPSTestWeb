@@ -1,3 +1,4 @@
+import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
@@ -9,7 +10,7 @@ const FFA_SPEC = resolveMapSpec({ mode: 'dm' });
 function addAt(room: Room, id: string, team: 'alpha' | 'bravo' | undefined, x: number) {
   const p = room.players.addPlayer(id, team);
   p.position = { x, y: 0, z: 0 };
-  p.protectedUntil = 0; // spawn protection would mask the damage we're testing
+  p.protectedUntil = simMs(0); // spawn protection would mask the damage we're testing
   return p;
 }
 

@@ -1,3 +1,4 @@
+import { simMs } from '../../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom } from './harness.ts';
 
@@ -10,7 +11,7 @@ describe('scenario: baneling detonates on its victim', () => {
     // distance to the retarget snapshot, so the bot's y has to be real by
     // the time the sim next commits a target position.
     bot.position = { x: 0, y: 31, z: 0 };
-    bot.protectedUntil = 0; // wall-clock shield — never lapses inside a test
+    bot.protectedUntil = simMs(0); // wall-clock shield — never lapses inside a test
     room.creatureSim.step(0.05);
     const bug = room.creatureSim.roster().find((c) => c.species === 'baneling')!;
     // crawlEvt edges ride the sendTo distance-tiered fanout, not

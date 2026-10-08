@@ -1,3 +1,4 @@
+import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
@@ -16,8 +17,8 @@ function arena() {
   const shooter = room.players.addPlayer('BOT-VEKTOR-01');
   shooter.isBot = true;
   const target = room.players.addPlayer('human');
-  shooter.protectedUntil = 0;
-  target.protectedUntil = 0;
+  shooter.protectedUntil = simMs(0);
+  target.protectedUntil = simMs(0);
   return { room, shooter, target };
 }
 
@@ -95,7 +96,7 @@ describe('RoomProjectiles', () => {
     const room2 = new Room('t2', berm, '', resolveMapSpec({ mode: 'dm' }));
     const s2 = room2.players.addPlayer('BOT-VEKTOR-01'); s2.isBot = true;
     const t2 = room2.players.addPlayer('human');
-    s2.protectedUntil = 0; t2.protectedUntil = 0;
+    s2.protectedUntil = simMs(0); t2.protectedUntil = simMs(0);
     t2.position = { x: 40, y: hmHeight(berm, 40, 0) + CLASS_STATS.medium.eyeHeight, z: 0 };
     room2.projectiles.spawn(s2.id, WeaponType.RemoteRailgun,
       { x: 0, y: hmHeight(berm, 0, 0) + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });

@@ -1,3 +1,4 @@
+import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { CombatHandler } from '../src/CombatHandler.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
@@ -30,7 +31,7 @@ describe('skill claims', () => {
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 1, y: 10, z: -0.5 };
-    target.protectedUntil = 0;
+    target.protectedUntil = simMs(0);
 
     combat.handleAOEShot('p1', {
       type: 'aoeShot',
@@ -53,7 +54,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10.5 }; // inside the 1.6m shaft of a tip at -10
-    target.protectedUntil = 0;
+    target.protectedUntil = simMs(0);
 
     combat.handleAOEShot('p1', {
       type: 'aoeShot',
@@ -85,7 +86,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10 };
-    target.protectedUntil = 0;
+    target.protectedUntil = simMs(0);
 
     // Exactly what the client sends while welding a player: tip at the
     // victim, victim in excludeTargetId (projectile semantics: "already
@@ -108,7 +109,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
     p1.position = { x: 0, y: 10, z: 0 };
     const target = players.addPlayer('p2');
     target.position = { x: 0, y: 10, z: -10 };
-    target.protectedUntil = 0;
+    target.protectedUntil = simMs(0);
     target.armor = 0; // health deltas read clean against lgTickDamage
 
     const claim = () => combat.handleAOEShot('p1', {
@@ -205,7 +206,7 @@ describe('spree announcements', () => {
       const t = players.getPlayer(target)!;
       t.health = 1;
       t.armor = 0;
-      t.protectedUntil = 0;
+      t.protectedUntil = simMs(0);
       combat.botAttack(shooter, target, 0);
     };
     const kills = () => broadcasts
@@ -275,7 +276,7 @@ describe('bot fire legality', () => {
     const bot = players.getPlayer('BOT-1')!;
     expect(bot.protectedUntil).toBeGreaterThan(Date.now());
     combat.botAttack('BOT-1', 'v1', WeaponType.BoltLauncher);
-    expect(bot.protectedUntil).toBe(0);
+    expect(bot.protectedUntil).toBe(simMs(0));
   });
 });
 

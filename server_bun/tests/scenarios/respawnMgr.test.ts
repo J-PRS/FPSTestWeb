@@ -3,7 +3,7 @@ import { RespawnManager } from '../../src/respawn.ts';
 import { CONFIG } from '../../src/config.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 
-interface FakePlayer { isDead: boolean; correctionGraceUntil: number; internalId: string }
+interface FakePlayer { isDead: boolean; correctionGraceUntil: number; internalId: string}
 
 function mkManager() {
   const players = new Map<string, FakePlayer>();

@@ -4,7 +4,7 @@
  * MUST agree on the window or they rewind different pasts for the
  * same check.
  */
-import { wallNow } from './wallClock.ts';
+import { wallNow, type WallMs } from './wallClock.ts';
 
 // Depth covers the worst rewind envelope: clampPing(~400) + adaptive
 // render lag (~800) — a shorter buffer would clamp deep rewinds to the
@@ -35,8 +35,8 @@ export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: numb
 }
 
 export function pushRewindSample(
-  p: { history: { t: number; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
-  now: number,
+  p: { history: { t: WallMs; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
+  now: WallMs,
 ): void {
   p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
   while (p.history.length > 0 && p.history[0]!.t < now - REWIND_MS) p.history.shift();

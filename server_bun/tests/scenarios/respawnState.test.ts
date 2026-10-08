@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, pin, twoPlayers } from './harness.ts';
 import { STATUS } from '../../../shared/status.ts';
-import { simNow } from '../../src/simClock.ts';
+import { simNow , simMs} from '../../src/simClock.ts';
 
 describe('scenario: respawn is a clean life', () => {
   it('death strips channels; respawn restores health, protection, and a legal spot', () => {
@@ -13,7 +13,7 @@ describe('scenario: respawn is a clean life', () => {
     a.team = 'alpha'; b.team = 'bravo';
     pin(room, b.id, { x: 20, y: 31, z: 0 });
     b.status = STATUS.CLOAK | STATUS.MEND;
-    b.protectedUntil = 0;
+    b.protectedUntil = simMs(0);
     room.players.applyDamage(b.id, 9999);
     expect(b.isDead).toBe(true);
     expect(b.status).toBe(0); // death strips cloak/mend — no ghost buffs

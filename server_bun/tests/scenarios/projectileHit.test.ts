@@ -1,3 +1,4 @@
+import { simMs } from '../../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { WeaponType } from '../../../shared/weapons.ts';
 import { mkRoom, step, pin, freeze, watch } from './harness.ts';
@@ -37,7 +38,7 @@ describe('scenario: direct projectile', () => {
     const [shooter, target] = bots;
     // Keep the wall-clock shield UP — a hit inside the window must not
     // touch health (spawn campers shouldn't get free frags).
-    target!.protectedUntil = Date.now() + 60_000;
+    target!.protectedUntil = simMs(Date.now() + 60_000);
     pin(room, shooter!.id, { x: 0, y: 32, z: 0 });
     target!.position = { x: 20, y: 32, z: 0 };
     room.moveSim.resync(target!.id, { x: 20, y: 32, z: 0 }, 0);
