@@ -48,6 +48,9 @@ export interface BlastHost {
     /** Jet-tank access — the concussion payload saps victim energy. */
     drainEnergy?: (playerId: string, amount: number) => void;
     health?: Map<string, number>;
+    /** Target uplink-transit estimate (ms) — the same value the tick
+     *  broadcast leads remote positions by. */
+    transitOf?: (playerId: string) => number;
   };
   sendToPlayer: (playerId: string, msg: ServerMessage) => void;
   solids: readonly StructureCollider[];
@@ -159,7 +162,7 @@ export class BlastRunner {
   private plateAll(playerId: string, position: Vec3, radius: number, ping: number): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
-      const tpos = rewindPos(target, clampPing(ping));
+      const tpos = this.rewindTarget(target, targetId, ping);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -180,7 +183,7 @@ export class BlastRunner {
   private healAll(playerId: string, position: Vec3, radius: number, ping: number): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) continue;
-      const tpos = rewindPos(target, clampPing(ping));
+      const tpos = this.rewindTarget(target, targetId, ping);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -193,12 +196,23 @@ export class BlastRunner {
     }
   }
 
+  /** Rewind a victim to where it sat on the SHOOTER's screen. The tick
+   *  broadcast leads every remote by half its uplink transit, so the
+   *  ghost the shooter aimed at ran transit/2 ahead of raw history —
+   *  rewinding the un-led buffer by the full ping validates a point
+   *  ~transit/2·speed behind the screen point (a visible hit reading
+   *  as a clean miss at cruise). Subtract the same lead. */
+  private rewindTarget(target: PlayerState, targetId: string, ping: number): Vec3 {
+    const back = Math.max(0, clampPing(ping) - (this.h.deps.transitOf?.(targetId) ?? 0) / 2);
+    return rewindPos(target, back);
+  }
+
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
-    const tpos = rewindPos(target, clampPing(ctx.ping));
+    const tpos = this.rewindTarget(target, targetId, ctx.ping);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;

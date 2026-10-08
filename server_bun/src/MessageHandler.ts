@@ -128,6 +128,9 @@ export interface RoomInfo {
   rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — energy is server truth. */
   drainEnergy?: (playerId: string, amount: number) => void;
+  /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
+   *  broadcast lead so validation aims at the shooter's screen point. */
+  transitOf?: (playerId: string) => number;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
@@ -194,6 +197,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     crawlerHit: roomInfo?.crawlerHit,
     repairTarget: roomInfo?.repairTarget,
     repair: roomInfo?.onRepair,
+    transitOf: roomInfo?.transitOf,
   };
 }
 

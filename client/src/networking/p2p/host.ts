@@ -86,6 +86,7 @@ export class P2PHost {
     }, status, seq),
     moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
     inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
+    transitOf: (pid) => this.moveShadows.transitOf(pid),
     drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
     onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
     energyOf: (pid) => this.moveShadows.energyOf(pid),

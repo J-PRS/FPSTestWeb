@@ -108,6 +108,10 @@ export interface CombatDeps {
    *  ray touches, then `repair` pays it (Room.deployables.repair). */
   repairTarget?: (playerId: string, muzzle: Vec3, dir: Vec3, range: number) => number | null;
   repair?: (playerId: string, targetId: number) => ClaimVerdict | void;
+  /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
+   *  same lead the tick broadcast shows shooters, so a point-blank-
+   *  looking pop validates against the position actually rendered. */
+  transitOf?: (playerId: string) => number;
 }
 
 /**

@@ -639,6 +639,7 @@ export class Room {
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
+      transitOf: (pid) => this.moveSim.transitOf(pid),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
