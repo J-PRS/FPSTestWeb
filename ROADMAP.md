@@ -16,8 +16,16 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   same modules embedded. Any logic that exists in two languages/places is debt.
 - **Rooms are matches.** (Landed 2026-09-26.) `Room` owns all per-match state;
   `GameServer` dispatches. Lobbies/matchmaking = `roomFor(name)` + a lobby API.
-- **Authority split is explicit.** Server: hit claims, health/death, respawns,
-  movement plausibility. Client: presentation, prediction, cosmetics.
+- **Authority split is one model.** Server sims/decides every interactive
+  outcome; client predicts everything locally visible (shells, FX,
+  hitmarkers — WYSIWYG feel) and server declares results. Combat claims
+  are refused on dedicated (`claimsAccepted=false`) — fire is an intent,
+  not a claim. Client: presentation, prediction, cosmetics.
+- **One world model.** (Landed 2026-10-08, `shared/worldModel.ts`.) Every
+  entity kind declares its wire shape once; emits generate, decode
+  consumes, inbound packets/intents/envelopes are shape-checked, replica
+  hashes generate from the same table, and a conformance suite pins the
+  three together. Drift between lanes is unrepresentable.
 - **Cheap to run.** Binary wire everywhere hot; delta suppression + interest
   tiers already proven (~6-8Hz effective at 20Hz tick). Every cost decision
   should survive 32 players on a $5 VPS.
@@ -78,6 +86,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   fast tests; raw position writes get stomped by moveSim — pin() instead.
 - Agent docs (2026-10-03): AGENTS.md (verify commands, invariants,
   boundaries) + .devin/rules/{netcode,testing,determinism-perf}.md.
+- One-world-model refactor (2026-10-08): `shared/worldModel.ts` declares
+  every entity kind's wire shape once — generated emits/hashes,
+  shape-checked inbound packets+intents+envelopes, conformance suite
+  (44 checks) pinning declaration↔union↔codec. Combat claims refused on
+  dedicated; fire is an intent + server-side rewind/spawn. P2P hosts run
+  RoomMoveSim + RoomWeaponSim so peer reports are judged. God-object
+  splits in the same stretch: Room 1182→989, serverSenses 1035→345,
+  PlayerModel 1456→625 (gun/anim/mats/collider/LOD controllers).
 
 ### Perf review 2026-10-01 — heaviest paths, ranked plan
 
