@@ -120,10 +120,15 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
-    if (map.terrain || map.heightScale || map.tileSize) {applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize);}
+    if (map.terrain || map.heightScale || map.tileSize) {
+      applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize)
+        .catch((error) => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
+    }
     applyMapFog(ctx, map.fog);
-    applyInteriors(ctx, map.interiors);
-    resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
+    applyInteriors(ctx, map.interiors)
+      .catch((error) => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
+    resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map))
+      .catch((error) => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
     if (!map.silent) {chat.add(null, 'map updated by admin');}
   };
 
@@ -161,7 +166,8 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   applyMapSnapshot(ctx, roomInfo.map);
   // Remember this room's map — F5 boots straight into it while the
   // socket round-trips instead of flashing the default field.
-  resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map));
+  resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map))
+    .catch((error) => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
   // An empty/absent list on a room hop must also clear the old room's
   // banners and HUD chips, so fire it either way.
@@ -232,7 +238,8 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   }
   setAmbientCaps(map?.ambient);
   applyMapFog(ctx, map?.fog);
-  applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize);
+  applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize)
+    .catch((error) => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
   applyInteriors(ctx, map?.interiors)
     .catch((error) => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
 }

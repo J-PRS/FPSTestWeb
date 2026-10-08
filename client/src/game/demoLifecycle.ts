@@ -277,7 +277,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     document.body.classList.remove('menu-open');
     // The feed plays clips without a user gesture — pointer lock would
     // throw (and is meaningless there: no aiming, no input).
-    if (!feedMode.on) {d.rendererCanvas.requestPointerLock();}
+    if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.(() => {});}
     // Live remote players would otherwise stand ghosted inside the replay
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
     // Dispose all non-playback balls (live game balls)

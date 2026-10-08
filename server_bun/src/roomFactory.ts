@@ -75,6 +75,10 @@ export class RoomFactory {
       // host had then (often null) — re-snap now that the real one is in.
       room.refreshFlagHomes();
       logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
+    }).catch((error) => {
+      // Room stays up on the null field rather than crashing the boot —
+      // without this log a bad terrain file reads as invisible terrain.
+      logger.warn('Room terrain load failed — running without heightfield', { room: roomName, error });
     });
   }
 
