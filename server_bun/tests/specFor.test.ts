@@ -10,8 +10,10 @@ const cat = new MapCatalog();
 
 describe('MapCatalog.specFor', () => {
   it('the room name resolves its own spec first', () => {
+    // Modes are map-agnostic — a legal mode claim still swaps in over
+    // the resolved spec's default.
     const { spec, src } = cat.specFor('ctf', 'dm', '');
-    expect(spec?.mode).toBe('ctf');
+    expect(spec?.mode).toBe('dm');
     expect(src).toBe('ctf');
   });
 
@@ -33,9 +35,10 @@ describe('MapCatalog.specFor', () => {
     expect(spec?.mode).toBe('duel');
   });
 
-  it('an illegal mode leaves the spec default — a dm map never sprouts flag stands', () => {
-    // ctf.json hosts only 'ctf' — asking for duel keeps ctf rules.
-    const { spec } = cat.specFor('x', 'duel', 'ctf');
+  it('an unrecognized mode leaves the spec default', () => {
+    // Modes are map-agnostic — every real ruleset is legal everywhere,
+    // so only a bogus mode name falls through to the spec default.
+    const { spec } = cat.specFor('x', 'zzz', 'ctf');
     expect(spec?.mode).toBe('ctf');
     expect(spec?.bases).toBeDefined();
   });

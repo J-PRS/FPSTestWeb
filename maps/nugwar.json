@@ -1,10 +1,5 @@
 {
   "mode": "nuggets",
-  "modes": [
-    "nuggets",
-    "dm",
-    "tdm"
-  ],
   "bots": 6,
   "terrain": "nugwar.bin"
 }

@@ -1,12 +1,5 @@
 {
   "mode": "dm",
-  "modes": [
-    "dm",
-    "tdm",
-    "duel",
-    "nuggets",
-    "rabbit"
-  ],
   "bots": 8,
   "ballMix": [
     0.2,

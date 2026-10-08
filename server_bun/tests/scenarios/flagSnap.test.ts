@@ -60,3 +60,35 @@ describe('scenario: flag stand snapping', () => {
     expect(room.flags!.flags.get('bravo')!.home.y).toBeCloseTo(0, 1);
   });
 });
+
+describe('scenario: auto flag placement (no authored bases)', () => {
+  it('ctf on a spawn-only spec puts both flags on the farthest pair', () => {
+    const room = mkRoom({
+      mode: 'ctf',
+      spawns: [{ x: -110, y: 0, z: 0 }, { x: 110, y: 0, z: 0 }, { x: 0, y: 0, z: 40 }],
+    }, 'ctf');
+    const a = room.flags!.flags.get('alpha')!;
+    const b = room.flags!.flags.get('bravo')!;
+    expect(new Set([a.home.x, b.home.x])).toEqual(new Set([-110, 110]));
+  });
+
+  it('bare spec still yields two stands (arena/fallback pair)', () => {
+    const room = mkRoom({ mode: 'ctf' }, 'ctf');
+    expect(room.flags!.flags.has('alpha')).toBe(true);
+    expect(room.flags!.flags.has('bravo')).toBe(true);
+    const a = room.flags!.flags.get('alpha')!, b = room.flags!.flags.get('bravo')!;
+    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeGreaterThan(50);
+  });
+
+  it('auto stands re-snap when the real terrain lands', () => {
+    const room = mkRoom({
+      mode: 'ctf',
+      spawns: [{ x: -110, y: 0, z: 0 }, { x: 110, y: 0, z: 0 }],
+    }, 'ctf', 1337, false, H(60));
+    room.field = H(120);
+    room.refreshFlagHomes();
+    for (const team of ['alpha', 'bravo'] as const) {
+      expect(room.flags!.flags.get(team)!.home.y).toBeCloseTo(Y120, 1);
+    }
+  });
+});

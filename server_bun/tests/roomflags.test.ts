@@ -20,10 +20,13 @@ function addAt(room: Room, id: string, team: 'alpha' | 'bravo', x: number, z = 0
 }
 
 describe('RoomFlags', () => {
-  it('only exists when mode has flags AND map has bases', () => {
+  it('exists for every flag mode — baseless maps auto-place both stands', () => {
     expect(ctfRoom().flags).not.toBeNull();
     expect(new Room('n', null, '', resolveMapSpec({ mode: 'nuggets' })).flags).toBeNull();
-    expect(new Room('m', null, '', resolveMapSpec({ mode: 'ctf' })).flags).toBeNull();
+    const bare = new Room('m', null, '', resolveMapSpec({ mode: 'ctf' })).flags;
+    expect(bare).not.toBeNull();
+    expect(bare!.flags.has('alpha')).toBe(true);
+    expect(bare!.flags.has('bravo')).toBe(true);
   });
 
   it('enemy touching a home flag picks it up', () => {

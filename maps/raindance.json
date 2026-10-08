@@ -1,8 +1,5 @@
 {
   "mode": "ctf",
-  "modes": [
-    "ctf"
-  ],
   "bots": 8,
   "terrain": "raindance.bin",
   "bases": {

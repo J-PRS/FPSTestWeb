@@ -51,7 +51,10 @@ describe('resolveMapSpec — clamps and defaults', () => {
 describe('specModes', () => {
   it('declared modes win; bare mode degrades to itself; nothing = any', () => {
     expect(specModes(resolveMapSpec({ modes: ['ctf', 'nuggets'] }))).toEqual(['ctf', 'nuggets']);
-    expect(specModes(resolveMapSpec({ mode: 'dm' }))).toEqual(['dm']);
+    // Modes are map-agnostic — a bare dm arena can host every ruleset,
+    // ctf included (stands auto-place on geometry without authored bases).
+    expect(specModes(resolveMapSpec({ mode: 'dm' }))).toEqual(
+      expect.arrayContaining(['dm', 'ctf', 'tdm', 'nuggets', 'rabbit', 'duel']));
     expect(specModes(resolveMapSpec({}))).toEqual([]);
     expect(specModes(undefined)).toEqual([]);
   });

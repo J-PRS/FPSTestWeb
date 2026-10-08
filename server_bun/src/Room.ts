@@ -512,8 +512,12 @@ export class Room {
     if (this.modeSpec?.flags) {
       if (this.mode === 'rabbit') {
         this.flags = new RoomFlags(this, { alpha: this.flagPlacer.rabbitFlagHome() });
-      } else if (bases?.alpha && bases?.bravo) {
-        this.flags = new RoomFlags(this, this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
+      } else {
+        // No authored bases — modes are map-agnostic: auto-place both
+        // stands so any geometry can host a flag game.
+        this.flags = new RoomFlags(this, bases?.alpha && bases?.bravo
+          ? this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo })
+          : this.flagPlacer.autoFlagBases());
       }
     }
     // What the wire currently carries — the join echo and every structure

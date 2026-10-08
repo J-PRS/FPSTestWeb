@@ -290,16 +290,14 @@ function parseModes(raw: unknown): string[] | undefined {
 }
 
 /** Modes a spec can legally host: the declared list; else its own mode
- *  plus every ruleset the geometry can actually serve. `ctf` is the only
- *  mode with authored requirements (two bases) — every other ruleset
- *  self-provisions (spawns fall back to the flat pool, rabbit mints its
- *  own neutral stand), so map = geometry and mode = ruleset on top.
+ *  plus every ruleset — modes are map-agnostic: spawns fall back to the
+ *  flat pool, rabbit mints its own neutral stand, and ctf auto-places
+ *  stands on geometry without authored bases (farthest spawn pair).
  *  A mode-less spec remains "anything" (empty = unconstrained). */
 export function specModes(spec: MapSpec | undefined): string[] {
   if (spec?.modes) return spec.modes;
   if (!spec?.mode) return [];
-  const legal = ['tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
-  if (spec.bases?.alpha && spec.bases?.bravo) legal.unshift('ctf');
+  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
   return [...new Set([spec.mode, ...legal])];
 }
 

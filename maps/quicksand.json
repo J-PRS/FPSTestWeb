@@ -1,12 +1,6 @@
 {
   "name": "Quicksand",
   "mode": "tdm",
-  "modes": [
-    "tdm",
-    "dm",
-    "duel",
-    "rabbit"
-  ],
   "bots": 8,
   "arena": {
     "x": 0,

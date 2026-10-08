@@ -132,6 +132,33 @@ export class FlagPlacer {
     return floor === Infinity ? authoredY : floor;
   }
 
+  /** CTF on a map with no authored bases: flags go to the two spawn
+   *  anchors farthest apart (arena diameter / a ±50m fallback when the
+   *  spec is bare). Keeps the modes table honest — any geometry can
+   *  host a flag game. */
+  autoFlagBases(): { alpha: Vec3; bravo: Vec3 } {
+    const spec = this.host.spec;
+    const pts = spec.spawns?.length ? spec.spawns : null;
+    let a: Vec3like, b: Vec3like;
+    if (pts && pts.length >= 2) {
+      let best = -1;
+      a = pts[0]!; b = pts[1]!;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const d = (pts[i]!.x - pts[j]!.x) ** 2 + (pts[i]!.z - pts[j]!.z) ** 2;
+          if (d > best) { best = d; a = pts[i]!; b = pts[j]!; }
+        }
+      }
+    } else if (spec.arena) {
+      const r = spec.arena.radius * 0.6;
+      a = { x: spec.arena.x - r, y: 0, z: spec.arena.z };
+      b = { x: spec.arena.x + r, y: 0, z: spec.arena.z };
+    } else {
+      a = { x: -50, y: 0, z: 0 }; b = { x: 50, y: 0, z: 0 };
+    }
+    return this.snapFlagBases({ alpha: a, bravo: b });
+  }
+
   snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
     const snapBase = (v: Vec3like): Vec3 => {
       const p = this.deShelf(v);
@@ -155,8 +182,12 @@ export class FlagPlacer {
       return;
     }
     const bases = host.spec.bases;
-    if (!bases?.alpha || !bases?.bravo) return;
-    const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
+    if (!host.flags.flags.has('bravo')) return;
+    // Auto-placed homes (bare spec) re-derive the same way — terrain
+    // lands after the ctor, so the first snap was against null ground.
+    const snapped = bases?.alpha && bases?.bravo
+      ? this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo })
+      : this.autoFlagBases();
     host.flags.retargetHomes(snapped);
     this.syncTeamBases(snapped);
     this.relayout(broadcastUpdate);

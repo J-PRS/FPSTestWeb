@@ -1,10 +1,5 @@
 {
   "mode": "dm",
-  "modes": [
-    "dm",
-    "duel",
-    "rabbit"
-  ],
   "balls": {
     "base": 0,
     "perPlayer": 0,
