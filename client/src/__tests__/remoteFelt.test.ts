@@ -124,6 +124,59 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(25);
   });
 
+  it('undeclared big jump snaps in one frame — never a multi-frame slide', () => {
+    const h = new Host();
+    const interp = new RemoteInterp(h);
+    const FRAME = 1000 / 60;
+    vi.setSystemTime(0);
+    const t0 = truth(0);
+    interp.onUpdate(t0, { yaw: 0, pitch: 0 }, 40, { x: t0.vx, y: t0.vy, z: t0.vz }, 0);
+    h.position.set(t0.x, t0.y, t0.z);
+    // Two normal updates so the buffer has a pair.
+    for (let f = 1; f <= 6; f++) {
+      vi.setSystemTime(f * FRAME);
+      if (f % 3 === 0) {
+        const s = truth(f * FRAME);
+        interp.onUpdate(s, { yaw: 0, pitch: 0 }, 40, { x: s.vx, y: s.vy, z: s.vz }, f * FRAME);
+      }
+      h.previousPosition.copy(h.position);
+      interp.step(FRAME / 1000, false);
+    }
+    // Stale post-reconnect frame lands 100m away — the plausibility gate
+    // must wipe and re-seat, not steer across the map.
+    vi.setSystemTime(200);
+    const tp = { x: t0.x + 100, y: t0.y + 10, z: t0.z };
+    interp.onUpdate(tp, { yaw: 0, pitch: 0 }, 40, { x: t0.vx, y: t0.vy, z: t0.vz }, 200);
+    h.previousPosition.copy(h.position);
+    interp.step(FRAME / 1000, false);
+    expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(0.5);
+    // And it must not drift on the next frames either.
+    for (let f = 0; f < 5; f++) {
+      vi.setSystemTime(216 + f * FRAME);
+      h.previousPosition.copy(h.position);
+      interp.step(FRAME / 1000, false);
+    }
+    expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(1.0);
+  });
+
+  it('respawn reset re-seats instantly on the corpse-free position', () => {
+    const h = new Host();
+    const interp = new RemoteInterp(h);
+    vi.setSystemTime(0);
+    const t0 = truth(0);
+    interp.onUpdate(t0, { yaw: 0, pitch: 0 }, 40, { x: t0.vx, y: t0.vy, z: t0.vz }, 0);
+    h.position.set(t0.x, t0.y, t0.z);
+    const spawn = new THREE.Vector3(500, 20, 500);
+    vi.setSystemTime(100);
+    interp.reset(spawn);
+    h.position.copy(spawn); // host re-seats the body, sim must not fight it
+    h.previousPosition.copy(h.position);
+    interp.step(1 / 60, false);
+    // Buffer is wiped — with no new truth the interp must hold the seat,
+    // not interpolate back toward the corpse's path.
+    expect(h.position.distanceTo(spawn)).toBeLessThan(0.5);
+  });
+
   it('silence gap + reconnect: DR runs, rejoin converges with zero snaps', () => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.02, secs: 20, silentFrom: 8000, silentTo: 9200, seed: 4242 });
     expect(r.snaps, JSON.stringify(r)).toBe(0);

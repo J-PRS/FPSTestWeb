@@ -592,7 +592,9 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   environmentDamage: [{ name: 'amount', wire: 'num' }, { name: 'attacker', wire: 'str', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
   heal: [{ name: 'amount', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
   creatureHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'kx', wire: 'num', absent: null }, { name: 'ky', wire: 'num', absent: null }, { name: 'kz', wire: 'num', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
-  crawlerHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'kx', wire: 'num', absent: null }, { name: 'ky', wire: 'num', absent: null }, { name: 'kz', wire: 'num', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
+  // crawlerHit carries no knockback — the crawler channel is melee-PvE
+  // and the validator drops kx/ky/kz on purpose (see wire.ts).
+  crawlerHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
   deploy: [{ name: 'kind', wire: 'str' }, { name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
   repair: [{ name: 'targetId', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
   skillUse: [{ name: 'claimSeq', wire: 'num', absent: null }],

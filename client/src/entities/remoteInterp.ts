@@ -197,12 +197,15 @@ export class RemoteInterp {
     this.convergeTimer = 0;
   }
 
-  /** Respawn reset — the sim can't carry a corpse's state forward. */
+  /** Respawn reset — the sim can't carry a corpse's state forward. The
+   *  empty-buffer fallback samples targetPosition, so it must move to the
+   *  spawn seat too or the next frame drags the render back to the corpse. */
   reset(pos: THREE.Vector3): void {
     this._simulating = false;
     this.net.clear();
     this.predictionTimer = 0;
     this.convergeTimer = 0;
+    this.targetPosition.copy(pos);
     this.lastServerPosition.copy(pos);
     this.lastServerUpdateMs = Date.now();
     this.lastUpdateTime = Date.now();

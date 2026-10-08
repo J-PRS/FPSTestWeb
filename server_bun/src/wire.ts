@@ -464,7 +464,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const bots = isFiniteNumber(obj.bots)
         ? Math.max(0, Math.min(24, Math.floor(obj.bots as number)))
         : undefined;
-      return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots } };
+      return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots, unlisted: obj.unlisted === true ? true : undefined } };
     },
   },
 
