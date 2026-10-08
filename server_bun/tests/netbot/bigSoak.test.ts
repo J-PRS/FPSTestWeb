@@ -9,10 +9,14 @@ import { mkNetbots } from './helpers.ts';
 // at real match density, measured over a sustained combat window — every
 // client's stream must stay live, every legit claim must resolve.
 
-describe('netbot — 32v32 stress soak', () => {
+const N_BOTS = Number(process.env.FPS_SOAK_BOTS ?? 64);
+const WINDOWS = Number(process.env.FPS_SOAK_WINDOWS ?? 6);
+const JOIN_GATE_MS = Number(process.env.FPS_SOAK_JOIN_MS ?? 60000);
+
+describe('netbot — stress soak', () => {
   const { spawn, bots, sleep, until } = mkNetbots();
 
-  it('64 clients on mixed links — sustained fanout, claims resolve, zero rejects', async () => {
+  it(`${N_BOTS} clients on mixed links — sustained fanout, claims resolve, zero rejects`, async () => {
     // Link quartiles rotate over the roster — every bot class sees every
     // other class, so a degrade tied to one link profile can't hide.
     const LINKS = [
@@ -21,26 +25,29 @@ describe('netbot — 32v32 stress soak', () => {
       { pingMs: 150, jitterMs: 60, lossRate: 0.01 },   // the stated bar
       { pingMs: 300, jitterMs: 120, lossRate: 0.05 },  // beyond-bar adverse
     ];
-    // Production cap is 32 — this room is deliberately over. CONFIG is a
-    // shared module object in this process, so restore it on the way out.
+    // Production caps are per-room 32 / global 128 — this room is
+    // deliberately over both. CONFIG is a shared module object in this
+    // process, so restore on the way out.
     const savedCap = CONFIG.maxPlayers;
-    CONFIG.maxPlayers = 80;
-    await spawn(64, LINKS, { room: 'big-soak', mode: 'ctf', bots: 0 });
+    const savedGlobal = CONFIG.globalMaxPlayers;
+    CONFIG.maxPlayers = N_BOTS + 8;
+    CONFIG.globalMaxPlayers = N_BOTS + 8;
+    await spawn(N_BOTS, LINKS, { room: 'big-soak', mode: 'ctf', bots: 0 });
 
     const t = () => bots.map((b) => b.nc.tel);
     // Everyone must join first — a silent ghost at this scale is a
     // roster bug, not a flake, so gate on per-client handshake.
-    if (!await until(() => bots.every((b) => b.nc.tel.gameStates > 0), 60000)) {
+    if (!await until(() => bots.every((b) => b.nc.tel.gameStates > 0), JOIN_GATE_MS)) {
       const joined = bots.filter((b) => b.nc.tel.gameStates > 0).length;
       const closed = bots.filter((b) => b.nc.closed).map((b) => `${b.nc.id}:${b.nc.closeInfo}`);
-      console.log(`bigSoak join gate: ${joined}/64 joined, closed=[${closed.join(', ')}]`);
-      expect.unreachable(`${64 - joined} clients never received gameState`);
+      console.log(`bigSoak join gate: ${joined}/${N_BOTS} joined, closed=[${closed.join(', ')}]`);
+      expect.unreachable(`${N_BOTS - joined} clients never received gameState`);
     }
 
     // Sustained combat: six 8s windows. Every client must keep accepting
     // tick frames in EVERY window — a stalled stream at 64-fanout reads
     // as frozen remotes, the failure this soak exists to catch.
-    for (let w = 0; w < 6; w++) {
+    for (let w = 0; w < WINDOWS; w++) {
       const before = t().map((x) => x.ticks);
       await sleep(8000);
       const after = t().map((x) => x.ticks);
@@ -55,10 +62,11 @@ describe('netbot — 32v32 stress soak', () => {
       t1.reduce((a, x) => a + (x[k] ?? 0), 0);
     const rejects = t1.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
     const corr = t1.map((x) => x.corrections).sort((a, b) => a - b);
-    console.log(`bigSoak: shots=${sum('shots')} hits=${sum('hitsDealt')} kills=${sum('kills')} deaths=${sum('deaths')} rejects=${rejects} ticks min=${Math.min(...t1.map((x) => x.ticks))} max=${Math.max(...t1.map((x) => x.ticks))} corrections p50=${corr[32]} p95=${corr[61]} max=${corr[63]}`);
+    const pick = (q: number) => corr[Math.min(corr.length - 1, Math.floor(corr.length * q))];
+    console.log(`bigSoak: n=${N_BOTS} shots=${sum('shots')} hits=${sum('hitsDealt')} kills=${sum('kills')} deaths=${sum('deaths')} rejects=${rejects} ticks min=${Math.min(...t1.map((x) => x.ticks))} max=${Math.max(...t1.map((x) => x.ticks))} corrections p50=${pick(0.5)} p95=${pick(0.95)} max=${corr[corr.length - 1]}`);
 
     // The war happened at density: sustained combat across 64 clients.
-    expect(sum('shots')).toBeGreaterThan(64);
+    expect(sum('shots')).toBeGreaterThan(N_BOTS);
     expect(sum('hitsDealt')).toBeGreaterThan(0);
     expect(sum('kills')).toBeGreaterThan(0);
     // The property the harness exists for — deferred claims absorb
@@ -69,8 +77,9 @@ describe('netbot — 32v32 stress soak', () => {
     // Roster convergence: every observer sees essentially the whole
     // lobby (a straggler join can legitimately lag one slot).
     for (const b of bots) {
-      expect(b.nc.roster.size).toBeGreaterThanOrEqual(62);
+      expect(b.nc.roster.size).toBeGreaterThanOrEqual(N_BOTS - 2);
     }
     CONFIG.maxPlayers = savedCap;
-  }, 240000);
+    CONFIG.globalMaxPlayers = savedGlobal;
+  }, 600000);
 });
