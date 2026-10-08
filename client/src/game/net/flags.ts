@@ -226,14 +226,6 @@ export function wireFlags(ctx: NetCtx): void {
     if (marker.homeKnown) {
       vis.stand.visible = true;
       vis.stand.position.copy(marker.home);
-      if (!marker.homeLogged) {
-        marker.homeLogged = true;
-        // Collider-vs-mesh float probe: the stand OBBs base at the wire
-        // home's y — a mesh seated elsewhere means the snap that emitted
-        // `home` disagrees with the snap that emitted the stand specs.
-        const ty = deps.lazyTerrain().getHeight(marker.home.x, marker.home.z);
-        console.log(`[standPlant] ${f.team} home=(${marker.home.x.toFixed(2)},${marker.home.y.toFixed(2)},${marker.home.z.toFixed(2)}) terrain=${ty.toFixed(2)} dy=${(marker.home.y - ty).toFixed(2)}`);
-      }
     }
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
     // The wire's home is ground level; the pole seats ON the platform

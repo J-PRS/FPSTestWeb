@@ -80,6 +80,17 @@ export interface WorldState {
   selfCharge: number;
 }
 
+/** FX pools that refuse spawns while the tab is hidden — wire handlers
+ *  run per-message regardless of rAF throttling, so bursts queued
+ *  off-screen decay at hidden-crawl speed and all detonate on return as
+ *  a wall of stale explosions. Gating at the array covers every spawn
+ *  site (a blast nobody can see is never worth keeping). */
+class HiddenFxArray<T> extends Array<T> {
+  override push(...items: T[]): number {
+    return document.hidden ? this.length : super.push(...items);
+  }
+}
+
 export function createWorldState(): WorldState {
   return {
     // Stub hooks — real ones need scene/terrain/nm which don't exist at
@@ -91,10 +102,10 @@ export function createWorldState(): WorldState {
     projectileRegistry: createProjectileRegistry(),
     debrisList: [],
     playerDebrisList: [],
-    explosions: [],
+    explosions: new HiddenFxArray<Explosion>(),
     scorches: [],
     splats: [],
-    implosions: [],
+    implosions: new HiddenFxArray<Implosion>(),
     aoeGizmos: [],
     ffaScores: new Map(),
     teamScores: null,
