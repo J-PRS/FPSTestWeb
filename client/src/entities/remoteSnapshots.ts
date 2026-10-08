@@ -1,5 +1,9 @@
 import type * as THREE from 'three';
-import { lerpAngle } from '../../../shared/angles.ts';
+import { lerpAngle, wrapAngleDelta } from '../../../shared/angles.ts';
+
+function clampNum(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
 
 /**
  * SnapshotBuffer — the remote-player interpolation core.
@@ -135,8 +139,17 @@ export class SnapshotBuffer {
       const cap = Math.min(0.6, Math.max(SnapshotBuffer.MAX_EXTRAPOLATE, (this.arrivalInterval / 1000) * 0.6));
       const ext = Math.min(cap, (renderTime - newest.t) / 1000);
       outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
-      outRot.yaw = newest.yaw;
-      outRot.pitch = newest.pitch;
+      // Rotation extrapolates too — a turning remote's head would otherwise
+      // freeze mid-swipe while the body keeps coasting. The rate comes from
+      // the last pair (shortest-arc yaw delta / span), capped so a freak
+      // 180° flick can't spin the model forever.
+      const prev = snaps.length >= 2 ? snaps[snaps.length - 2]! : newest;
+      const rotSpan = Math.max(0.05, (newest.t - prev.t) / 1000);
+      const yawRate = clampNum(wrapAngleDelta(newest.yaw - prev.yaw) / rotSpan, -6, 6);
+      const pitchRate = clampNum((newest.pitch - prev.pitch) / rotSpan, -4, 4);
+      const rotExt = Math.min(ext, 0.35); // heading prediction stales fast — stop well inside the position cap
+      outRot.yaw = newest.yaw + yawRate * rotExt;
+      outRot.pitch = newest.pitch + pitchRate * rotExt;
       return;
     }
 
