@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { tickUnfold, unfoldDone, damageDeploy } from './deployBody.js';
 import type { Terrain } from '../world/terrain.js';
 
 // Targeting beacon pack — a thrown puck that plants a holo emitter. Its
@@ -47,7 +48,7 @@ export class DeployBeacon {
   private readonly aimDir = new THREE.Vector3(0, 1, 0);
   private aimLen = 40;
   private animT = Math.random() * 10;
-  private unfoldT = 0;
+  unfoldT = 0;
   private scene: THREE.Scene;
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
@@ -116,26 +117,18 @@ export class DeployBeacon {
   }
 
   tickUnfold(dt: number): void {
-    if (this.unfoldT >= 1) {return;}
-    this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
-    const k = this.unfoldT - 1;
-    this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k));
+    tickUnfold(this, dt);
   }
 
   unfoldDone(): void {
-    this.unfoldT = 1;
-    this.group.scale.setScalar(1);
+    unfoldDone(this);
     this.pillar.visible = true;
     this.holo.visible = true;
     this.holoGlow.visible = true;
   }
 
   takeDamage(dmg: number): void {
-    if (this.dead) {return;}
-    const soak = Math.min(this.armor, dmg);
-    this.armor -= soak;
-    this.health -= dmg - soak;
-    if (this.health <= 0) {this.dead = true;}
+    damageDeploy(this, dmg);
   }
 
   dispose(scene: THREE.Scene): void {

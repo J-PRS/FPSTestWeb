@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { markProbe } from '../core/fxDiag.js';
+import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import type { Terrain, FieldRing } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
@@ -49,7 +50,7 @@ export class DeployStation {
   private motes: THREE.Points | null = null;
   private moteData: { x: number; z: number; y: number; sp: number }[] = [];
   private animT = Math.random() * 10;
-  private unfoldT = 0;
+  unfoldT = 0;
   private scene: THREE.Scene;
   private terrain: Terrain;
 
@@ -190,29 +191,19 @@ export class DeployStation {
   /** Unfold beat while the thrown pod is airborne — same contract as
    *  DeployTurret so the pod path can treat them identically. */
   tickUnfold(dt: number): void {
-    if (this.unfoldT >= 1) return;
-    this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
-    const k = this.unfoldT - 1;
-    this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k)); // easeOutBack
+    tickUnfold(this, dt);
   }
 
   unfoldDone(): void {
-    this.unfoldT = 1;
-    this.group.scale.setScalar(1);
+    unfoldDone(this);
   }
 
   heal(n: number): void {
-    const over = Math.max(0, this.health + n - this.maxHealth);
-    this.health = Math.min(this.maxHealth, this.health + n);
-    this.armor = Math.min(this.maxHealth * 2, this.armor + over);
+    healDeploy(this, n);
   }
 
   takeDamage(dmg: number): void {
-    if (this.dead) return;
-    const soak = Math.min(this.armor, dmg);
-    this.armor -= soak;
-    this.health -= dmg - soak;
-    if (this.health <= 0) this.dead = true;
+    damageDeploy(this, dmg);
   }
 
   dispose(scene: THREE.Scene): void {

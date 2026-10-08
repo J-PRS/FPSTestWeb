@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import type { Terrain } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
@@ -61,7 +62,7 @@ export class DeployTurret {
   // Unfold beat: the thrown pod carries a folded sentry that assembles
   // mid-air — group scales up with a back-ease overshoot, mast rises.
   // Firing is gated until it finishes.
-  private unfoldT = 0;
+  unfoldT = 0;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, pos: THREE.Vector3) {
     this.id = nextTargetId();
@@ -208,32 +209,22 @@ export class DeployTurret {
   /** Advance the unfold anim. The throw pod drives this while airborne so
    *  the sentry lands already deployed — not springing up post-touchdown. */
   tickUnfold(dt: number): void {
-    if (this.unfoldT >= 1) return;
-    this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
-    const k = this.unfoldT - 1;
-    this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k)); // easeOutBack
+    tickUnfold(this, dt);
     this.head.position.y = 0.6 + this.unfoldT * 0.8; // mast rises out of the base
   }
 
   unfoldDone(): void {
-    this.unfoldT = 1;
-    this.group.scale.setScalar(1);
+    unfoldDone(this);
     this.head.position.y = 1.4;
   }
 
   /** Repair beam: heal refills health first, overflow banks as armor. */
   heal(n: number): void {
-    const over = Math.max(0, this.health + n - this.maxHealth);
-    this.health = Math.min(this.maxHealth, this.health + n);
-    this.armor = Math.min(this.maxHealth * 2, this.armor + over);
+    healDeploy(this, n);
   }
 
   takeDamage(dmg: number): void {
-    if (this.dead) return;
-    const soak = Math.min(this.armor, dmg);
-    this.armor -= soak;
-    this.health -= dmg - soak;
-    if (this.health <= 0) this.dead = true;
+    damageDeploy(this, dmg);
   }
 
   dispose(scene: THREE.Scene): void {
