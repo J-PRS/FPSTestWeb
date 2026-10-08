@@ -3,7 +3,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import type { GameServer } from './GameServer.ts';
 import { wallNow } from './wallClock.ts';
-import { WIRE_TICK, WIRE_TICK_V3 } from '../../shared/wire.ts';
+import { WIRE_TICK, WIRE_TICK_V3, WIRE_TICK_V4 } from '../../shared/wire.ts';
 
 // QUIC datagrams have no fragmentation — frames past the path MTU are
 // dropped wholesale (measured: 1400B datagrams → 0% delivered on
@@ -147,7 +147,7 @@ export class WtSocketAdapter {
     // independent and the tick fanout starts before the bidi attaches.
     if (typeof msg !== 'string' &&
         msg.length >= 2 && msg[0] === 0x54 &&
-        (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3) &&
+        (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
         msg.byteLength <= WT_MAX_DATAGRAM) {
       void this.session.sendDatagram(msg).catch(() => {});
       return msg.byteLength;

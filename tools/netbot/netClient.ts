@@ -246,7 +246,7 @@ export class NetClient {
 
   /** v3 roster: u16 -> playerId — gameState snapshot + 'wireIds' deltas. */
   private readonly wireIds = new Map<number, string>();
-  private readonly tickPool = { slots: [] as never[], resolveId: (id: number) => this.wireIds.get(id) };
+  private readonly tickPool = { slots: [] as never[], byId: new Map(), resolveId: (id: number) => this.wireIds.get(id) };
 
   private onBinary(u8: Uint8Array): void {
     if (!isWireFrame(u8)) return;
@@ -276,6 +276,7 @@ export class NetClient {
         this.tel.gameStates++;
         this.joined = true;
         this.wireIds.clear();
+        this.tickPool.byId.clear(); // v4 masked state must not cross room epochs
         if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds)) this.wireIds.set(Number(id), pid);
         this.pendingRoom = false;
         // Per-room seq spaces restart at 1 — the bug class this whole

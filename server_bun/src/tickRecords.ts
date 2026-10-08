@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV3, encodeTickFrame, WIRE_TICK_V3, tickEncodeScratch, tickFrameScratch, type TickEncodeScratch } from '../../shared/wire.ts';
+import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, type TickEncodeScratch, type V4Last } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
@@ -18,7 +18,7 @@ import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
-type PooledRecord = TickRecord & { enc: TickEncodeScratch };
+type PooledRecord = TickRecord & { enc: TickEncodeScratch; last: V4Last };
 
 /** A retired wireId is reissued only after this much dead time — any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
@@ -78,6 +78,10 @@ export class TickFanout {
   private readonly frameArena = tickFrameScratch();
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
+  /** v4 masks delta against last-encoded state — a masked field a lost
+   *  frame carried stays stale until it changes again or this forces a
+   *  full record (15 ticks = 750ms worst-case drift on a torn link). */
+  private static readonly FULL_RECORD_EVERY = 15;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -138,13 +142,16 @@ export class TickFanout {
       }
       let rec = records[recN];
       if (!rec) {
-        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch() };
+        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch(), last: v4Last() };
         records.push(rec);
       }
       rec.playerId = playerId;
       rec.pos = p.position;
       rec.force = forceSend;
-      rec.data = encodeTickPlayerV3(wireId, {
+      // Delta-masked v4 record: only field groups that changed since this
+      // slot's last encode ride the wire; a periodic full record bounds
+      // the staleness a lost masked frame can leave behind.
+      rec.data = encodeTickPlayerV4(wireId, {
           playerId,
           position: p.position,
           rotation: p.rotation,
@@ -159,7 +166,7 @@ export class TickFanout {
           jet: p.jetting,
           status: snap.status,
           sheep,
-        }, rec.enc);
+        }, rec.enc, rec.last, room.tickSeq % TickFanout.FULL_RECORD_EVERY === 0);
       recN++;
       this.metrics.recordsBuilt++;
     }
@@ -280,7 +287,7 @@ export class TickFanout {
         // the client prunes its input journal and sees a starving stream.
         room.moveSim.inputSeqOf(recipientId),
         others,
-        WIRE_TICK_V3,
+        WIRE_TICK_V4,
         this.frameArena,
       );
       this.metrics.recordsSent += others.length;
@@ -301,7 +308,7 @@ export class TickFanout {
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V3, this.frameArena);
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V4, this.frameArena);
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }

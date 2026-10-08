@@ -24,6 +24,12 @@ export const WIRE_TICK_V1 = 0x02; // legacy f32 positions — decode-only,
 // roster arrives on the reliable JSON lane ('wireIds') before any frame
 // can reference it — same-socket ordering makes the dance free.
 export const WIRE_TICK_V3 = 0x06;
+/** v4 = v3 records + per-field delta mask. Masked groups inherit the
+ *  receiver's last-decoded value for that wireId; encode-side compares
+ *  against last-ENCODED (not last-delivered) values, so a lost frame
+ *  degrades to the staleness loss already tolerated, and periodic full
+ *  records bound it. */
+export const WIRE_TICK_V4 = 0x07;
                                 // keeps recorded .rec captures playing
 export const WIRE_BALLSEG = 0x03;
 
@@ -225,7 +231,9 @@ export const TICK_PLAYER_V3_BYTES = 2 + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1;
  *  the returned Uint8Array aliases `into.buf` until the next encode. */
 export interface TickEncodeScratch { buf: ArrayBuffer; u8: Uint8Array; d: DataView }
 export function tickEncodeScratch(): TickEncodeScratch {
-  const buf = new ArrayBuffer(TICK_PLAYER_V3_BYTES);
+  // Sized for the largest record any encoder writes — v4's mask byte
+  // pushes a full record to 24B (one over v3's fixed 23).
+  const buf = new ArrayBuffer(TICK_PLAYER_V3_BYTES + 1);
   return { buf, u8: new Uint8Array(buf), d: new DataView(buf) };
 }
 
@@ -302,14 +310,19 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
  *  they retain. */
 export interface TickDecodePool {
   slots: WireTickPlayer[];
-  /** v3 frames resolve numeric ids through the room roster the 'wireIds'
+  /** v3/v4 frames resolve numeric ids through the room roster the 'wireIds'
    *  JSON events maintain; unresolved ids decode with playerId ''. */
   resolveId?: (wireId: number) => string | undefined;
+  /** v4 masked fields inherit per-wireId state decoded here — the SAME
+   *  slots the updates view hands out, so retention stays on the pool's
+   *  "valid until next decode" contract. Cleared by WireIdRoster on a
+   *  fresh gameState. */
+  byId?: Map<number, WireTickPlayer>;
 }
 
 export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq: number; tickSeq: number; inputAck: number; updates: WireTickPlayer[]; count: number } | null {
   if (u8.length < 15 || u8[0] !== MAGIC ||
-      (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1 && u8[1] !== WIRE_TICK_V3)) return null;
+      (u8[1] !== WIRE_TICK && u8[1] !== WIRE_TICK_V1 && u8[1] !== WIRE_TICK_V3 && u8[1] !== WIRE_TICK_V4)) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const ackSeq = d.getUint32(2, true);
   const tickSeq = d.getUint32(6, true);
@@ -317,6 +330,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   const count = u8[14]!;
   const v1 = u8[1] === WIRE_TICK_V1;
   const v3 = u8[1] === WIRE_TICK_V3;
+  const v4 = u8[1] === WIRE_TICK_V4;
   // Minimum guaranteed bytes after the id — v1's old check under-counted
   // sheep, so it stays at its historic 26; v3 has no id string, the whole
   // record is a fixed 23 bytes.
@@ -331,10 +345,67 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       if (o + 23 > u8.length) return null;
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
+    } else if (v4) {
+      // Variable-length record: bounds-check each present group as it
+      // decodes — a truncated frame must die, not read past the buffer.
+      if (o + 9 > u8.length) return null;
+      wireId = d.getUint16(o, true); o += 2;
+      playerId = pool?.resolveId?.(wireId) ?? '';
     } else {
       const idLen = u8[o++]!;
       if (o + idLen + tail > u8.length) return null;
       playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
+    }
+    // v4 decodes into the per-wireId slot so masked groups inherit the
+    // last-decoded values; flat slots stay for v1/v3 frames.
+    let u: WireTickPlayer | undefined;
+    if (v4) {
+      u = pool?.byId?.get(wireId);
+      if (!u) {
+        u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
+        if (pool?.byId) pool.byId.set(wireId, u);
+      }
+      slots[i] = u;
+    } else {
+      u = slots[i] as WireTickPlayer | undefined;
+      if (!u) {
+        u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
+        slots[i] = u;
+      }
+    }
+    u.playerId = playerId;
+    u.wireId = wireId;
+    if (v4) {
+      const mask = u8[o++]!;
+      if (o + 6 > u8.length) return null;
+      u.position.x = d.getInt16(o, true) * POS_Q; o += 2;
+      u.position.y = d.getInt16(o, true) * POS_Q; o += 2;
+      u.position.z = d.getInt16(o, true) * POS_Q; o += 2;
+      if (mask & V4_MASK_VEL) {
+        if (o + 6 > u8.length) return null;
+        o = unpackVel(d, o, u.velocity);
+      }
+      if (mask & V4_MASK_ROT) {
+        if (o + 4 > u8.length) return null;
+        o = unpackRot(d, o, u.rotation);
+      }
+      if (mask & V4_MASK_HP_PING) {
+        if (o + 3 > u8.length) return null;
+        u.health = d.getUint16(o, true); o += 2;
+        const pingRaw = u8[o++]!;
+        u.ping = pingRaw > 0 ? pingRaw : undefined;
+      }
+      if (mask & V4_MASK_FLAGS_SHEEP) {
+        if (o + 2 > u8.length) return null;
+        const flags = u8[o++]!;
+        const sheep = u8[o++]!;
+        u.isDead = (flags & 1) !== 0;
+        u.ski = (flags & 2) !== 0 ? 1 : 0;
+        u.status = flags & STATUS_MASK;
+        u.jet = (sheep & 0x80) !== 0 ? 1 : 0;
+        u.sheep = (sheep & 0x7f) > 0 ? sheep & 0x7f : undefined;
+      }
+      continue;
     }
     let px: number, py: number, pz: number;
     if (v1) {
@@ -346,13 +417,6 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       py = d.getInt16(o, true) * POS_Q; o += 2;
       pz = d.getInt16(o, true) * POS_Q; o += 2;
     }
-    let u = slots[i] as WireTickPlayer | undefined;
-    if (!u) {
-      u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
-      slots[i] = u;
-    }
-    u.playerId = playerId;
-    u.wireId = wireId;
     u.position.x = px; u.position.y = py; u.position.z = pz;
     o = unpackVel(d, o, u.velocity);
     o = unpackRot(d, o, u.rotation);
@@ -377,12 +441,16 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
  *  'wireIds' deltas in one place (probes, netbot, replay tools). */
 export class WireIdRoster {
   readonly ids = new Map<number, string>();
-  readonly pool: TickDecodePool = { slots: [], resolveId: (id) => this.ids.get(id) };
+  readonly pool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id) => this.ids.get(id) };
   feed(m: { type?: string; add?: Record<number, string>; wireIds?: Record<number, string> }): void {
     if (m.type === 'wireIds' && m.add) {
       for (const [id, pid] of Object.entries(m.add)) this.ids.set(Number(id), pid);
     } else if (m.type === 'gameState') {
       this.ids.clear();
+      // Fresh epoch: masked deltas must not inherit fields a previous
+      // room's wireId left decoded (a reassigned id would inherit stale
+      // health/vel until its next change).
+      this.pool.byId?.clear();
       if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds)) this.ids.set(Number(id), pid);
     }
   }
@@ -400,6 +468,62 @@ export const SIM_TICK_DT = SERVER_TICK_MS / 1000;
 /** Combat noise ring TTL — server `noises` and the client senses mirror
  *  must agree or offline bots hear less than online ones. */
 export const NOISE_TTL_MS = 2000;
+
+/** v4 record delta mask bits (position is unconditional — a record only
+ *  exists when its carrier moved enough to matter, and pos is the load-
+ *  bearing field interp can never inherit). */
+export const V4_MASK_VEL = 0x02;
+export const V4_MASK_ROT = 0x04;
+export const V4_MASK_HP_PING = 0x08;
+export const V4_MASK_FLAGS_SHEEP = 0x10;
+
+/** Encoder-side retained state per record slot — holds the last
+ *  wire-QUANTIZED values so the mask decision matches what the receiver
+ *  will have, not the pre-quantization floats. `wireId` detects slot
+ *  reuse: a reassigned wireId forces a full record. */
+export interface V4Last {
+  wireId: number;
+  velX: number; velY: number; velZ: number;
+  yaw: number; pitch: number;
+  hp: number; flags: number; sheepJet: number;
+}
+export function v4Last(): V4Last {
+  return { wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, hp: -1, flags: -1, sheepJet: -1 };
+}
+
+/** v4 record: wireId(2) + mask(1) + pos(6) + present groups.
+ *  Full record = 24B (one more than v3), fully-masked = 9B. */
+export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: TickEncodeScratch, last: V4Last, forceFull: boolean): Uint8Array {
+  const { buf, u8, d } = into;
+  // Quantize first — the mask compares wire values, so sub-LSB wiggle
+  // doesn't churn bytes for nothing.
+  const velX = Math.round(p.velocity.x * 10), velY = Math.round(p.velocity.y * 10), velZ = Math.round(p.velocity.z * 10);
+  const yaw = Math.round(((p.rotation.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) * (65535 / (Math.PI * 2)));
+  const pitch = Math.round(Math.max(-Math.PI, Math.min(Math.PI, p.rotation.pitch)) * (32767 / Math.PI));
+  const hp = Math.max(0, Math.min(65535, Math.round(p.health)));
+  const pingB = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
+  const flags = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
+  const sheepJet = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
+  const fresh = forceFull || last.wireId !== wireId || last.hp < 0;
+  let mask = 0;
+  if (fresh || last.velX !== velX || last.velY !== velY || last.velZ !== velZ) mask |= V4_MASK_VEL;
+  if (fresh || last.yaw !== yaw || last.pitch !== pitch) mask |= V4_MASK_ROT;
+  if (fresh || last.hp !== hp) mask |= V4_MASK_HP_PING;
+  // flags and sheepJet share the group: one byte each, splitting buys 1B
+  // at the cost of another mask bit.
+  if (fresh || last.flags !== flags || last.sheepJet !== sheepJet) mask |= V4_MASK_FLAGS_SHEEP;
+  let o = 0;
+  d.setUint16(o, wireId, true); o += 2;
+  u8[o++] = mask;
+  o = packPos(d, o, p.position.x, p.position.y, p.position.z);
+  if (mask & V4_MASK_VEL) { d.setInt16(o, velX, true); o += 2; d.setInt16(o, velY, true); o += 2; d.setInt16(o, velZ, true); o += 2; }
+  if (mask & V4_MASK_ROT) { d.setUint16(o, yaw, true); o += 2; d.setInt16(o, pitch, true); o += 2; }
+  if (mask & V4_MASK_HP_PING) { d.setUint16(o, hp, true); o += 2; u8[o++] = pingB; }
+  if (mask & V4_MASK_FLAGS_SHEEP) { u8[o++] = flags; u8[o++] = sheepJet; }
+  last.wireId = wireId; last.velX = velX; last.velY = velY; last.velZ = velZ;
+  last.yaw = yaw; last.pitch = pitch; last.hp = hp; last.flags = flags; last.sheepJet = sheepJet;
+  return new Uint8Array(buf, 0, o);
+}
 
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 

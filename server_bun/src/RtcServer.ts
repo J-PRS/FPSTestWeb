@@ -3,7 +3,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { GameServer } from './GameServer.ts';
-import { WIRE_TICK } from '../../shared/wire.ts';
+import { WIRE_TICK, WIRE_TICK_V3, WIRE_TICK_V4 } from '../../shared/wire.ts';
 import { wallNow } from './wallClock.ts';
 
 // node-datachannel's IceServer record is {hostname, port, relayer?}, not
@@ -107,7 +107,7 @@ class RtcSocketAdapter {
     // strings and everything else (ball segments) must arrive → ctrl.
     // Each lane falls back to the other when closed so a lane that isn't
     // up yet can't blackhole traffic.
-    const fast = typeof msg !== 'string' && msg[0] === 0x54 && msg[1] === WIRE_TICK;
+    const fast = typeof msg !== 'string' && msg[0] === 0x54 && (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4);
     const lane = fast ? this.game : this.ctrl;
     const alt = fast ? this.ctrl : this.game;
     const dc = lane?.isOpen() ? lane : alt?.isOpen() ? alt : null;

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   encodePosition, decodePosition,
-  encodeTickPlayer, encodeTickPlayerV3, encodeTickFrame, decodeTickFrame,
-  isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WireIdRoster,
+  encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
+  isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WIRE_TICK_V4, WireIdRoster,
+  tickEncodeScratch, v4Last,
 } from '../../../shared/wire';
 
 describe('position frame round-trip', () => {
@@ -329,5 +330,80 @@ describe('v3 wireId frames', () => {
     r.feed({ type: 'gameState', wireIds: { 1: 'fresh_one' } });
     expect(r.ids.get(7)).toBeUndefined();
     expect(r.ids.get(1)).toBe('fresh_one');
+  });
+});
+
+describe('v4 delta-masked records', () => {
+  const base = (): import('../../../shared/wire.js').WireTickPlayer => ({
+    playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
+    velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
+  });
+
+  it('unchanged groups mask out; decode inherits the retained values', () => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    const p = base();
+    // First encode is always full (fresh slot).
+    const full = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(full.length).toBe(24);
+    const d1 = decodeTickFrame(encodeTickFrame(0, 1, 0, [full], WIRE_TICK_V4), r.pool)!;
+    expect(d1.updates[0]!.velocity.x).toBeCloseTo(10);
+    expect(d1.updates[0]!.health).toBe(100);
+    // Only position moves → record is mask + pos = 9B, and the decode
+    // still reports the retained velocity/health.
+    p.position.x = 2;
+    const delta = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(delta.length).toBe(9);
+    const d2 = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
+    expect(d2.updates[0]!.position.x).toBeCloseTo(2);
+    expect(d2.updates[0]!.velocity.x).toBeCloseTo(10);
+    expect(d2.updates[0]!.health).toBe(100);
+    expect(d2.updates[0]!.sheep).toBe(40);
+  });
+
+  it('a changed field rides the wire even when others mask out', () => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    const p = base();
+    encodeTickPlayerV4(7, p, enc, last, false);
+    p.health = 30; // took damage between ticks — must surface on the wire
+    const delta = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(delta.length).toBe(9 + 3); // mask+pos + hpPing group
+    const d = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
+    expect(d.updates[0]!.health).toBe(30);
+  });
+
+  it('wireId reuse forces a full record — no field inheritance across players', () => {
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    encodeTickPlayerV4(7, base(), enc, last, false);
+    // Slot's wireId was 7; a new player reusing the slot with wireId 9
+    // must encode all groups or the decoder inherits the old owner's
+    // fields.
+    const rec = encodeTickPlayerV4(9, base(), enc, last, false);
+    expect(rec.length).toBe(24);
+  });
+
+  it('a torn-then-healed link resyncs on the forced full record', () => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    const p = base();
+    decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
+    // Health changes on a frame the link "loses" (never decoded).
+    p.health = 12;
+    encodeTickPlayerV4(7, p, enc, last, false);
+    // Subsequent deltas keep the stale 100 until the full record lands.
+    p.position.x = 5;
+    decodeTickFrame(encodeTickFrame(0, 3, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
+    const stale = decodeTickFrame(encodeTickFrame(0, 4, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
+    expect(stale.updates[0]!.health).toBe(100);
+    const healed = decodeTickFrame(encodeTickFrame(0, 5, 0, [encodeTickPlayerV4(7, p, enc, last, true)], WIRE_TICK_V4), r.pool)!;
+    expect(healed.updates[0]!.health).toBe(12);
   });
 });

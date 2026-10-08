@@ -31,7 +31,7 @@ export class WireIn {
   private readonly wireIds = new Map<number, string>();
   /** Decode slots reused every tick — upsert deep-fills roster vecs so
    *  rostered values never alias a slot (see decodeTickFrame pool docs). */
-  private readonly tickPool: TickDecodePool = { slots: [], resolveId: (id) => this.wireIds.get(id) };
+  private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id) => this.wireIds.get(id) };
 
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
   /** Last processed reliable `ev` seq — the host presents it as
@@ -291,6 +291,9 @@ export class WireIn {
     // entries for players who left during our disconnect, then add the
     // current set. v3 ids are per-room: the snapshot replaces, not merges.
     this.wireIds.clear();
+    // v4 masked deltas inherit per-wireId state — a new room epoch must
+    // not let a reassigned id keep the old player's last-decoded fields.
+    this.tickPool.byId?.clear();
     if (data.wireIds) for (const [id, pid] of Object.entries(data.wireIds)) this.wireIds.set(Number(id), pid);
     this.h.remoteReset(data.players);
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
