@@ -12,6 +12,9 @@ export interface ConnectCtx {
   logger: ChildLogger;
   fragMessages?: { show(text: string): void } | null;
   profiler: LoadProfiler;
+  /** The map this client built — a p2p host must hand it to guests through
+   *  gameState or both ends silently live in different worlds. */
+  bootMap?: import('../game/net/mapAssets.js').MapSnapshot | null;
 }
 
 /** ?p2p=quick — ask the relay for an open lobby and join the oldest. */
@@ -55,6 +58,7 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
     sig.search = `?room=${encodeURIComponent(room)}${open}`;
     if (role === 'host') {
       const host = new P2PHost();
+      host.setMap(ctx.bootMap ?? null);
       const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel opens
       // Host plays immediately over loopback — no need to wait for a guest
       await networkManager.connect(serverUrl, (cfg) => new LoopbackTransport(host, cfg));

@@ -11,6 +11,7 @@ import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
 import { feedMode } from './feed/feedMode.js';
 import { watchDeployVersion } from './core/deployWatch.js';
+import { noteStale, staleCount } from './core/staleFiles.js';
 import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
 
@@ -50,6 +51,10 @@ import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
 import { MODES } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
+import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
+import { seatKits } from '../../shared/structKits.js';
+import { structureColliders } from '../../shared/ballCollide.js';
+import { setTeamGridDown } from './game/structureSpecs.js';
 import { pingServer } from './game/net/lastRoom.js';
 import type { NetCtx } from './game/net/ctx.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
@@ -154,6 +159,10 @@ let gameLoop: ReturnType<typeof createGameLoop>;
 
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
+/** SOLO tab's ?map= pick, resolved client-side before init's heightmap
+ *  step — module scope because connectPhase consumes it after init's
+ *  locals are gone. */
+let soloSpec: { spec: MapSpec; map: MapSnapshot } | null = null;
 
 async function init(): Promise<void> {
   profiler.markTime('initStart');
@@ -161,10 +170,17 @@ async function init(): Promise<void> {
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
   // never resident — no default-field flash on F5.
-  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p) ||
-    (Boolean(urlParams.mode) && urlParams.mode !== 'classic' && urlParams.mode !== 'flagrun');
+  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p);
+  // Solo-with-a-map: ?map= without a room is the SOLO tab's pick — fetch
+  // the spec JSON off the same static /maps route the wire path uses and
+  // resolve it client-side (resolveMapSpec is shared/, pure).
+  soloSpec = !onlineBoot && urlParams.map
+    ? await loadSoloSpec(urlParams.map) : null;
   const bootSaved = onlineBoot ? await probeBootMap() : null;
-  if (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map))) {
+  const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
+    ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch(() => false)
+    : false;
+  if (!soloPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
     await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
   }
   profiler.markTime('heightmapLoaded');
@@ -209,10 +225,10 @@ async function init(): Promise<void> {
   // arrives a few seconds after connect, and bots seeded on the boot
   // heightmap first would spawn → re-seat in the same breath. Offline
   // (no gameState ever) falls back to the boot field after 8s.
-  if (mode) {
+  if (mode || soloSpec) {
     world.onTerrainApplied = () => teamBots?.reseatAll();
     Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
-      .then(() => { if (!teamBots && !networkManager.isConnected()) {setupOfflineMode(mode);} });
+      .then(() => { if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
@@ -292,6 +308,22 @@ async function init(): Promise<void> {
   gameLoop.start();
 }
 
+/** SOLO map pick: fetch maps/<name>.json off the static route and resolve
+ *  it locally — the same spec the server would load for a hosted room.
+ *  Returns null on any miss; the boot falls back to the default field. */
+async function loadSoloSpec(name: string): Promise<{ spec: MapSpec; map: MapSnapshot } | null> {
+  if (!/^[\w-]{1,32}$/.test(name)) {return null;}
+  try {
+    const { httpUrl } = await serverEndpoints;
+    const res = await fetch(`${httpUrl}/maps/${name}.json`, { cache: 'no-cache' });
+    if (!res.ok) {return null;}
+    const spec = resolveMapSpec(parseMapSpecJson(await res.text()));
+    // The wire sends the resolved spec's world fields verbatim — a solo
+    // boot applies the same subset (spawns/bases feed TeamBots instead).
+    return { spec, map: spec };
+  } catch { return null; }
+}
+
 /** Demo recorder + cool-shots panel + playback lifecycle — everything
  *  capture-related hangs off this one wiring pass. */
 async function initDemo(): Promise<void> {
@@ -327,10 +359,21 @@ async function initDemo(): Promise<void> {
  *  connecting joined the server's default room and the player spawned
  *  into a live nuggets match instead of the lap. */
 async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classicMode: boolean, mode: string | undefined): Promise<void> {
-  const soloMode = (!mode || mode === 'flagrun') && !urlParams.room && !urlParams.p2p;
+  // No ?room and no ?p2p = solo, full stop. A mode pick alone must NOT
+  // connect — the SOLO tab's whole job is an offline match, and the old
+  // mode-means-online rule silently dropped solo players into the
+  // server's default room.
+  const soloMode = !urlParams.room && !urlParams.p2p;
   // The probed saved map was already primed as boot terrain — apply its
-  // structures/arena/interiors/sky now that the net ctx exists.
-  if (!classicMode && !soloMode) {bootApplySavedMap(netCtx, savedMap);}
+  // structures/arena/interiors/sky now that the net ctx exists. Solo's
+  // own spec takes the same path so a SOLO-picked map is identical —
+  // including seatKits, which the server normally runs before broadcast:
+  // without it every piece stands at authored y and dirt pokes through
+  // decks (bastion terrain varies ~15m under a genhouse footprint).
+  if (!classicMode && soloMode && soloSpec) {
+    seatKits(soloSpec.spec.structures, (x, z) => terrain.getHeight(x, z));
+  }
+  if (!classicMode) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // F5 with a stored session token = the server may hand back our old
@@ -340,8 +383,47 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   if (!classicMode && !soloMode && settings.get('fps-session-token')) {
     if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
   }
-  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
+  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler, bootMap: soloSpec?.map ?? savedMap });
   player.serverOwnsHealth = () => networkManager.isConnected();
+
+  // Spec maps spawn you at an authored anchor (team spawn > generic
+  // spawn > own base) — origin on a T2 port can be kilometers from play.
+  if (soloMode && soloSpec) {
+    const s = soloSpec.spec;
+    const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
+    if (anchor) {
+      player.pos.set(anchor.x, terrain.getHeight(anchor.x, anchor.z) + 2, anchor.z);
+      noteLocalSnap();
+      player.syncMovement();
+      player.markTeleport();
+    }
+    if (s.name) {world.mapName = s.name;}
+    else {world.mapName = urlParams.map ?? undefined;}
+    world.mode = mode ?? s.mode;
+    // Deploys — generators/sentries are server-seeded in rooms; offline
+    // they spawn as remote items (same visuals + repair/weld paths).
+    // pos.y rides the lowest structure top above authored Y within 12m —
+    // Room.deployFloor's rule, so the generator lands on the vault deck.
+    const cols = structureColliders(s.structures);
+    let depId = 9000;
+    for (const d of s.deploys ?? []) {
+      let floor = Infinity;
+      for (const c of cols) {
+        const lx = (d.pos.x - c.cx) * c.cos + (d.pos.z - c.cz) * c.sin;
+        const lz = -(d.pos.x - c.cx) * c.sin + (d.pos.z - c.cz) * c.cos;
+        if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
+        const t = c.cy + c.hy;
+        if (t > d.pos.y && t < floor && t <= d.pos.y + 12) floor = t;
+      }
+      const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
+      entities.deployables.remoteSpawn(depId++, {
+        owner: d.team ? `base:${d.team}` : 'base',
+        kind: d.kind as import('../../shared/deployables.js').DeployKind,
+        pos: { ...d.pos, y },
+        team: d.team,
+      });
+    }
+  }
 
   // Initial balls — offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
@@ -379,8 +461,13 @@ function killLocal(source: string): void {
 function reviveLocal(): void {
   player.resetLifeState();
   const spot = teamBots?.flagrun?.spawnPoint();
+  // Spec maps respawn at authored anchors (team spawn > generic spawn >
+  // own base) — same priority as the solo boot spawn.
+  const specAnchor = soloSpec?.spec.teamSpawns?.alpha?.[0] ?? soloSpec?.spec.spawns?.[0] ?? soloSpec?.spec.bases?.alpha;
   if (spot) {
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+  } else if (specAnchor) {
+    player.pos.set(specAnchor.x, terrain.getHeight(specAnchor.x, specAnchor.z) + 2, specAnchor.z);
   } else {
     const a = Math.random() * Math.PI * 2;
     player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
@@ -395,10 +482,17 @@ function reviveLocal(): void {
 // ?mode=<mode> offline-vs-bots roster — no server, so the TeamBots
 // sim drives both teams and world.localTeam marks the player's side
 // (normally roomInfo.team, which never arrives offline).
-function setupOfflineMode(mode: string): void {
+function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   const spec = MODES[mode as keyof typeof MODES];
   if (!spec) {return;}
   if (!spec.ffa) {world.localTeam = 'alpha';}
+  // Bot roster: explicit ?bots wins, then the map's own count, then the
+  // mode's classic spread. Non-flagrun modes split N across both sides
+  // (the player occupies one alpha slot already).
+  const want = urlParams.bots ?? mapSpec?.bots ?? mapSpec?.botFill;
+  const counts = mode === 'flagrun' ? { alpha: want ?? 0, bravo: 0 }
+    : want !== undefined ? { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) }
+    : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 };
   teamBots = new TeamBots(
     {
       lazyPlayer: () => player,
@@ -453,10 +547,9 @@ function setupOfflineMode(mode: string): void {
       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
-    // flagrun is a solo lap — no roster unless ?bots=N asks for bot
-    // cappers on your team (spectate-and-learn: RMB orbits them).
-    mode === 'flagrun' ? { alpha: urlParams.bots ?? 0, bravo: 0 } : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+    counts,
     mode as import('../../shared/teams.js').ModeId,
+    mapSpec,
   );
   // Flag Run starts you beside the nearest enemy flag — the ring is
   // built around your spawn pos, so the first grab is one hop away.
@@ -490,6 +583,9 @@ function makeEntities(): ReturnType<typeof createEntities> {
     deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
     deployBotFoes: (team) => teamBots?.enemyBotsForTeam(team) ?? [],
     deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
+    // Offline base grid — a shelled generator drops its team's gate
+    // panes (colliders + visuals), revive puts them back.
+    deployBasePower: (team, on) => setTeamGridDown(team, !on),
   });
 }
 
@@ -697,12 +793,12 @@ const { requestLock } = wireOverlayInput({
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads
 // and pushes 'stale:changed' events — we count them so you know how much
 // new code is waiting behind Ctrl+R.
-const {hot} = (import.meta as { hot?: { on(e: string, cb: (d: { count: number }) => void): void } });
+const {hot} = (import.meta as { hot?: { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } });
 if (hot) {
-  let stale = 0;
   let badge: HTMLDivElement | null = null;
   hot.on('stale:changed', (d) => {
-    stale += d.count;
+    noteStale(d.files, d.count);
+    const stale = staleCount();
     if (!badge) {
       badge = document.createElement('div');
       badge.id = 'stale-badge';

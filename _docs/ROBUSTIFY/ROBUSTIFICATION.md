@@ -3338,3 +3338,12 @@ covers only combat-outcome claims (aoeShot, projectileDestroy, ballHit,
 creatureHit, repair — all of which have real sim/intent paths); heal
 runs handleHeal on every tier. Three tests re-pinned to the bounded-
 accept semantics.
+
+## 2.186 — P2P gameState carries the host's map
+
+The host's roomInfo never filled map fields, so a guest's gameState
+had map:undefined and the guest built its own saved map — host and
+peer could silently live in different terrains. setMap() now feeds
+the boot map (soloSpec ?? savedMap) into the host's RoomInfo, which
+moved to a mutable field so the snapshot lands before any handshake.
+(tsc + p2pHost 10/10 green)

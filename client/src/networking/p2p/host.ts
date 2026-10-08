@@ -17,7 +17,7 @@
  */
 
 import { PlayerManager } from '../../../../server_bun/src/PlayerManager.js';
-import { MessageHandler } from '../../../../server_bun/src/MessageHandler.js';
+import { MessageHandler, type RoomInfo } from '../../../../server_bun/src/MessageHandler.js';
 import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
 import { validateMessage } from '../../../../server_bun/src/wire.js';
 import { validatePlayerId } from '../../../../server_bun/src/validation.js';
@@ -63,6 +63,69 @@ export class P2PHost {
   /** Peer moveReports reconcile against a shadow sim — the host judges
    *  teleports instead of relaying them verbatim. */
   private readonly moveShadows = new RoomMoveSim(null, true);
+  private readonly roomInfo: RoomInfo = {
+    room: 'p2p',
+    mode: 'p2p',
+    // Peers send the same fire/beam intents a dedicated server takes.
+    // claimsAccepted stays true — the roster surfaces this host can't
+    // sim (creatures, deployables, repair) still adjudicate claims.
+    fireProjectile: (pid, wt, origin, dir, vel, shotId) =>
+      this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+    beamSweep: (pid, muzzle, dir, range) =>
+      beamSweepRay({
+        players: this.playerManager,
+        field: getHeightfield(),
+        solids: this.projectiles.solidColliders,
+      }, pid, muzzle, dir, range),
+    // Movement reconciles like dedicated: inputs queue on the shadow,
+    // reports judge it, resync/energy ride the same hooks.
+    moveInput: (pid, i, status, seq) => this.moveShadows.queueInput(pid, {
+      forward: i.forward, right: i.right,
+      jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
+      jetHeld: !!i.jet,
+    }, status, seq),
+    moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
+    inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
+    drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
+    onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+    energyOf: (pid) => this.moveShadows.energyOf(pid),
+    moveResync: (pid, pos, yaw, fullEnergy) => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
+    moveTrack: (pid, pos, yaw) => {
+      const p = this.playerManager.getPlayer(pid);
+      this.moveShadows.track(pid, pos, yaw, p?.perk, p?.team);
+      this.moveShadows.markReseated(pid);
+    },
+    moveMute: (pid) => this.moveShadows.markReseated(pid),
+    moveUntrack: (pid) => this.moveShadows.untrack(pid),
+  };
+
+  /** The host's own world — guests must build THIS terrain/structures,
+   *  not whatever map they last saved. Called once the boot map resolves;
+   *  gameState map fields read it at handshake. */
+  setMap(map: {
+    structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
+    arena?: { x: number; z: number; radius: number } | null;
+    ambient?: Record<string, number>;
+    terrain?: string;
+    heightScale?: number;
+    tileSize?: number;
+    fog?: { color: [number, number, number]; distance?: number; visible?: number };
+    terrainTex?: string;
+    sky?: string;
+    interiors?: import('../../../../shared/mapSpec.js').InteriorSpec[];
+  } | null): void {
+    if (!map) {return;}
+    this.roomInfo.structures = map.structures;
+    this.roomInfo.arena = map.arena ?? undefined;
+    this.roomInfo.ambient = map.ambient;
+    this.roomInfo.terrain = map.terrain;
+    this.roomInfo.heightScale = map.heightScale;
+    this.roomInfo.tileSize = map.tileSize;
+    this.roomInfo.fog = map.fog;
+    this.roomInfo.terrainTex = map.terrainTex;
+    this.roomInfo.sky = map.sky;
+    this.roomInfo.interiors = map.interiors;
+  }
 
   constructor() {
     this.projectiles = new RoomProjectiles(this, null);
@@ -72,42 +135,9 @@ export class P2PHost {
       this.rateLimiter,
       (msg, exclude) => this.broadcast(msg, exclude),
       (pid, msg) => this.sendJSON(pid, msg),
-      {
-        room: 'p2p',
-        mode: 'p2p',
-        // Peers send the same fire/beam intents a dedicated server takes.
-        // claimsAccepted stays true — the roster surfaces this host can't
-        // sim (creatures, deployables, repair) still adjudicate claims.
-        fireProjectile: (pid, wt, origin, dir, vel, shotId) =>
-          this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
-        beamSweep: (pid, muzzle, dir, range) =>
-          beamSweepRay({
-            players: this.playerManager,
-            field: getHeightfield(),
-            solids: this.projectiles.solidColliders,
-          }, pid, muzzle, dir, range),
-        // Movement reconciles like dedicated: inputs queue on the shadow,
-        // reports judge it, resync/energy ride the same hooks.
-        moveInput: (pid, i, status, seq) => this.moveShadows.queueInput(pid, {
-          forward: i.forward, right: i.right,
-          jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
-          jetHeld: !!i.jet,
-        }, status, seq),
-        moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
-        inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
-        drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
-        onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
-        energyOf: (pid) => this.moveShadows.energyOf(pid),
-        moveResync: (pid, pos, yaw, fullEnergy) => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
-        moveTrack: (pid, pos, yaw) => {
-          const p = this.playerManager.getPlayer(pid);
-          this.moveShadows.track(pid, pos, yaw, p?.perk, p?.team);
-          this.moveShadows.markReseated(pid);
-        },
-        moveMute: (pid) => this.moveShadows.markReseated(pid),
-        moveUntrack: (pid) => this.moveShadows.untrack(pid),
-      },
+      this.roomInfo,
     );
+
     // 20Hz to match the dedicated server's tick cadence. With two players
     // there's no interest management — every frame carries the one peer.
     // The beat comes from a Worker: window setInterval throttles to ~1Hz
