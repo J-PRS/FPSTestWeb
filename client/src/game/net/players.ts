@@ -179,6 +179,9 @@ function wirePlayerCombat(ctx: NetCtx): void {
       probeCorr(err, _seq, 0, Math.hypot(player.vel.x, player.vel.y, player.vel.z), true);
       player.pos.set(position.x, position.y, position.z);
       player.vel.set(velocity.x, velocity.y, velocity.z);
+      // Render ease hides the jolt — the camera eases the jump over
+      // ~100ms while the sim is already converged.
+      player.noteRenderSnap(new THREE.Vector3(position.x - prePos.x, position.y - prePos.y, position.z - prePos.z));
       noteLocalSnap();
       // NEVER touch yaw/pitch — the server echoes our last *accepted*
       // rotation, which can be seconds stale. Aim is client-authoritative;
@@ -212,6 +215,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     player.pos.set(st.pos.x, st.pos.y, st.pos.z);
     player.vel.set(st.vel.x, st.vel.y, st.vel.z);
     player.onGround = st.onGround;
+    player.noteRenderSnap(new THREE.Vector3(st.pos.x - prePos.x, st.pos.y - prePos.y, st.pos.z - prePos.z));
     noteLocalSnap();
     player.syncMovement();
     probeCorr(err, _seq, journal.length, Math.hypot(st.vel.x, st.vel.y, st.vel.z), false);

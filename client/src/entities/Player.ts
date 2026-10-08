@@ -204,6 +204,15 @@ export class Player {
   // message so the server reseats its plausibility anchor instead of
   // rejecting the jump as a speedhack (the >50m rubber-band loop).
   pendingTeleport = false;
+  /** Render-only correction ease: a server snap moves `pos` instantly
+   *  (the sim must converge), but the camera reads `renderPos` which
+   *  eases the jump over ~100ms. Feel over accuracy — the sim state is
+   *  honest, only the view hides the jolt. */
+  readonly renderPos = new THREE.Vector3();
+  private snapEaseDelta = new THREE.Vector3();
+  noteRenderSnap(jump: THREE.Vector3): void {
+    this.snapEaseDelta.sub(jump);
+  }
   markTeleport(): void {
     this.pendingTeleport = true;
     // Declared snaps also re-arm the spinout detector — a respawn/skill
@@ -485,6 +494,12 @@ export class Player {
     this.stepMovement(dt, input);
     const isJetting = this.tickEnergy(dt);
 
+    // Snap ease: the offset decays exponentially (~100ms to sub-mm); the
+    // camera + own body read renderPos, the sim/reports read pos.
+    this.snapEaseDelta.multiplyScalar(Math.exp(-dt / 0.045));
+    if (this.snapEaseDelta.lengthSq() < 1e-4) { this.snapEaseDelta.set(0, 0, 0); }
+    this.renderPos.copy(this.pos).add(this.snapEaseDelta);
+
     // ---- All visual/event spawns below use the final post-physics position ----
 
     const orbiting = this.input.midHeld;
@@ -492,7 +507,7 @@ export class Player {
     if (orbiting && !this.wasMidHeld) { this.orbit.yaw = this.yaw; this.orbit.pitch = this.pitch; }
     this.wasMidHeld = orbiting;
     this.visuals.updateCamera(this.camera, this.terrain, {
-      pos: this.pos, yaw: this.yaw, pitch: this.pitch,
+      pos: this.renderPos, yaw: this.yaw, pitch: this.pitch,
       thirdPerson: this.thirdPerson,
       orbit: orbiting ? this.orbit : undefined,
     });
@@ -505,11 +520,11 @@ export class Player {
     this.model?.setVisible((this.thirdPerson || orbiting) && !this.isDead);
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
-    this.visuals.updateFeetMarker(this.terrain, this.pos);
+    this.visuals.updateFeetMarker(this.terrain, this.renderPos);
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
-    this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight, this.throwLockT);
+    this.visuals.updateShadowBlob(this.terrain, this.renderPos);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.renderPos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight, this.throwLockT);
   }
 
   private tickTimers(dt: number): void {
