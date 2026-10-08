@@ -80,6 +80,31 @@ it('route() returns null only when the start can\'t reach — connected grids al
   expect(f.route(-140, -140, 140, 140, 80)).not.toBeNull();
 });
 
+it('a structure wall spanning the beeline gets routed around — the flood threads real openings', () => {
+  // Wall band at x=0, z∈[-100,100], chest-high slab — flat terrain so
+  // only the structure toll can deflect the route.
+  const wall = { cx: 0, cy: 10, cz: 0, hx: 1, hy: 10, hz: 100, cos: 1, sin: 0 };
+  const f = new TerrainFlow(FLAT, 300, 10, [wall]);
+  const wp = f.route(-100, 0, 120, 0, 80)!;
+  expect(Math.abs(wp.z)).toBeGreaterThan(30);
+  // A door gap in the same wall is a lane, not a detour.
+  const door = [
+    { cx: 0, cy: 10, cz: -55, hx: 1, hy: 10, hz: 45, cos: 1, sin: 0 },
+    { cx: 0, cy: 10, cz: 55, hx: 1, hy: 10, hz: 45, cos: 1, sin: 0 },
+  ];
+  const g = new TerrainFlow(FLAT, 300, 10, door);
+  expect(Math.abs(g.route(-100, 0, 120, 0, 80)!.z)).toBeLessThan(30);
+});
+
+it('gate shields are air to their own team — enemies route around them', () => {
+  const gate = { cx: 0, cy: 10, cz: 0, hx: 1, hy: 10, hz: 100, cos: 1, sin: 0, passTeam: 'alpha' };
+  const f = new TerrainFlow(FLAT, 300, 10, [gate]);
+  // Alpha owns the pane: the beeline stays open.
+  expect(Math.abs(f.route(-100, 0, 120, 0, 80, undefined, 'alpha')!.z)).toBeLessThan(30);
+  // Bravo pays the wall toll: the route leaves the axis.
+  expect(Math.abs(f.route(-100, 0, 120, 0, 80, undefined, 'bravo')!.z)).toBeGreaterThan(30);
+});
+
 it('two identical floods route identically — the field is pure function of the height fn', () => {
   const a = new TerrainFlow(WALL, 300, 10);
   const b = new TerrainFlow(WALL, 300, 10);

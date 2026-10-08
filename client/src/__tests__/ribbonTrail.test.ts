@@ -146,4 +146,22 @@ describe('RibbonTrail pooling + slots', () => {
     RibbonTrail.sweepStale(1);
     expect(RibbonTrail.reapedStale).toBe(before + 1);
   });
+
+  it('sweepStale drains a stopped orphan mid-fade instead of waiting on done forever', () => {
+    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, life: 0.05 });
+    r.push(pos(0), vel());
+    r.push(pos(1), vel());
+    r.stop();
+    // Owner died between stop() and drain — nobody ever calls update()
+    // again, so its internal clock is frozen and done can never trip.
+    (r as unknown as { lastUpdateAt: number }).lastUpdateAt = 0;
+    expect(r.done).toBe(false);
+    const before = RibbonTrail.reapedStale;
+    // The sweep ages it on wall-clock; done → dispose on a later pass.
+    for (let i = 0; i < 10 && RibbonTrail.reapedStale === before; i++) {
+      RibbonTrail.sweepStale(1);
+    }
+    expect(r.done).toBe(true);
+    expect(RibbonTrail.reapedStale).toBe(before + 1);
+  });
 });

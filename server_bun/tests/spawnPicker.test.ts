@@ -59,6 +59,35 @@ describe('SpawnPicker.pick', () => {
     expect(new SpawnPicker(h).pick('me').y).toBe(12);
   });
 
+  it('objective pull cannot claim a camped point — the enemy-base sphere stays off-limits', () => {
+    // Bastion: flat pool, two points glued to each base. A bravo push
+    // member's goal is the alpha stand — uncapped pull would respawn
+    // him inside the defended base.
+    const pool = [pt(0, 0), pt(250, 0)]; // alpha-side, bravo-side
+    const players = new Map([foeAt(10, 0, 'alpha')]);
+    const h = host({
+      spawnPoints: () => pool,
+      players: () => players,
+      teamBases: () => ({ alpha: { x: 0, y: 0, z: 0 }, bravo: { x: 250, y: 0, z: 0 } }),
+      objective: () => ({ pos: { x: 0, y: 0, z: 0 }, w: 1.6 }),
+    });
+    const p = new SpawnPicker(h).pick('me', 'bravo');
+    expect(p.x).toBe(250);
+  });
+
+  it('objective pull still wins when the enemy-side point is safe', () => {
+    const pool = [pt(0, 0), pt(250, 0)];
+    const players = new Map([foeAt(125, 0, 'alpha')]); // midfield — both safe
+    const h = host({
+      spawnPoints: () => pool,
+      players: () => players,
+      teamBases: () => ({ alpha: { x: 0, y: 0, z: 0 }, bravo: { x: 250, y: 0, z: 0 } }),
+      objective: () => ({ pos: { x: 0, y: 0, z: 0 }, w: 1.6 }),
+    });
+    const p = new SpawnPicker(h).pick('me', 'bravo');
+    expect(p.x).toBe(0); // nearest the task goal, and nobody home to camp it
+  });
+
   it('sphere volumes scatter inside r, not at the center', () => {
     const sphere = [pt(0, 0, { r: 30 })];
     let rolls: number[] = [0.25, 0.9]; // angle, radius-fraction

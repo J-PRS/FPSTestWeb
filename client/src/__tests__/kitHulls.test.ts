@@ -26,6 +26,7 @@ describe('kit hull parity', () => {
           expect(h.size[axis], `${piece}[${i}].size.${axis}`).toBeCloseTo(t.size[axis], 5);
         }
         expect(h.rotY ?? 0, `${piece}[${i}].rotY`).toBeCloseTo(t.rotY ?? 0, 5);
+        expect(h.dome ?? 0, `${piece}[${i}].dome`).toBeCloseTo(t.dome ?? 0, 5);
       });
     }
   });

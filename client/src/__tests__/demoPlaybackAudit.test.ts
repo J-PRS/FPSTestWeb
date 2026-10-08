@@ -374,7 +374,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
         violations.push(`ball ${id} born at y=${born.y.toFixed(0)} frozen at y=${ball.pos.y.toFixed(0)} (vel ${ball.vel.length().toFixed(2)})`);
       }
     }
-    expect(violations, violations.join('\n')).toHaveLength(0);
+    expect(violations.join('\n')).toBe('');
     expect(birthPos.size).toBeGreaterThan(10); // clip actually had balls
   });
 
@@ -458,7 +458,7 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
         violations.push(`creature ${id} frozen at ${c.pos.y.toFixed(1)}`);
       }
     }
-    expect(violations, violations.join('\n')).toHaveLength(0);
+    expect(violations.join('\n')).toBe('');
   });
 
   it('marker lanes land: flag events rebuild proxies, pickups spawn, kills burst', () => {

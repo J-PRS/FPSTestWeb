@@ -55,7 +55,6 @@ const mkFlagRun = () => new FlagRunBridge({
   scores: makeScores(),
   onFeed: vi.fn(),
   onCapture: vi.fn(),
-  applyStandSpecs: vi.fn(),
 } as unknown as FlagRunWiring, new THREE.Vector3());
 
 describe('rekey migrates every id-keyed meter', () => {
