@@ -526,19 +526,24 @@ export function checkPacket(
     verb === 'roster' ? kind.rosterFields :
     kind.events?.[verb];
   const label = verb in kind.verbs ? (kind.verbs as Record<string, string>)[verb]! : verb;
-  const check = (m: Record<string, unknown>) => {
-    for (const f of fields ?? []) {
+  // One field-list check for every surface — rows, cross-kind roster
+  // containers, and envelopes share the contract: absent-declared fields
+  // may be missing, null is the wire's absent sentinel, anything else
+  // must satisfy wireOk.
+  const checkFields = (fs: KindFieldDecl[] | undefined, m: Record<string, unknown>, tag: string) => {
+    for (const f of fs ?? []) {
       if (!(f.name in m)) {
         if (f.absent === undefined) {
-          warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
+          warnOnce(`${kind.kind}.${label}:${tag}${f.name}`, `[worldModel] inbound ${kind.kind}.${label} ${tag}missing declared field '${f.name}'`);
         }
         continue;
       }
       if (m[f.name] != null && !wireOk(f.wire, m[f.name])) {
-        warnOnce(`${kind.kind}.${label}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} field '${f.name}' wrong type (want ${f.wire})`);
+        warnOnce(`${kind.kind}.${label}:${tag}${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} ${tag}field '${f.name}' wrong type (want ${f.wire})`);
       }
     }
   };
+  const check = (m: Record<string, unknown>) => checkFields(fields, m, '');
   // Row-wrapped verbs (tickUpdate's updates[], roster arrays) check each
   // row — the fields live there, not at message level. Roster feeds pick
   // the container for THEIR kind: gameState carries every roster, so a
@@ -551,18 +556,7 @@ export function checkPacket(
       if (!k.rosterFields || k === kind) continue;
       const extra = msg[ROSTER_ROWS[k.kind]!];
       if (Array.isArray(extra)) {
-        for (const r of extra) {
-          for (const f of k.rosterFields) {
-            const row = r as Record<string, unknown>;
-            if (!(f.name in row)) {
-              if (f.absent === undefined) {
-                warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
-              }
-            } else if (row[f.name] != null && !wireOk(f.wire, row[f.name])) {
-              warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row field '${f.name}' wrong type (want ${f.wire})`);
-            }
-          }
-        }
+        for (const r of extra) checkFields(k.rosterFields, r as Record<string, unknown>, `${k.kind} `);
       }
     }
     const rows = ROSTER_ROWS[kind.kind] ? msg[ROSTER_ROWS[kind.kind]!] : undefined;
@@ -570,32 +564,12 @@ export function checkPacket(
     // The envelope's own fields — the roster containers get row-checked
     // above; this verifies the message-level payload (players[],
     // protocolVersion, map, scores, ...) carries its declared shape.
-    if (kind.envelope) {
-      for (const f of kind.envelope) {
-        if (!(f.name in msg)) {
-          if (f.absent === undefined) {
-            warnOnce(`${kind.kind}.${label}:env:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing envelope field '${f.name}'`);
-          }
-        } else if (msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
-          warnOnce(`${kind.kind}.${label}:env:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} envelope field '${f.name}' wrong type (want ${f.wire})`);
-        }
-      }
-    }
+    if (kind.envelope) checkFields(kind.envelope, msg, 'env:');
     return;
   }
   // Update envelopes (tickUpdate's ack/count keys) wrap the row list —
   // checked before the row branch since updates[] returns early.
-  if (verb === 'update' && kind.updateEnvelope) {
-    for (const f of kind.updateEnvelope) {
-      if (!(f.name in msg)) {
-        if (f.absent === undefined) {
-          warnOnce(`${kind.kind}.${label}:env:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing envelope field '${f.name}'`);
-        }
-      } else if (msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
-        warnOnce(`${kind.kind}.${label}:env:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} envelope field '${f.name}' wrong type (want ${f.wire})`);
-      }
-    }
-  }
+  if (verb === 'update' && kind.updateEnvelope) checkFields(kind.updateEnvelope, msg, 'env:');
   const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
   if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
   check(msg);

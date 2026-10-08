@@ -3425,3 +3425,12 @@ fields ride as explicit null) — every check site now guards `!= null`
 uniformly (packets, roster sweeps, envelopes, intents). And a genuine
 decl bug: projectileId is a STRING id on the wire, declared 'num'.
 The check caught it within one smoke run.
+
+## 2.196 — one checkFields for every inbound surface
+
+checkPacket had grown four copies of the field-check loop (packet,
+cross-kind roster rows, roster envelope, update envelope) — the exact
+shape the world model exists to delete. checkFields takes (fields,
+packet, tag); the tag distinguishes rows/env in the warn key. Same
+contract everywhere: absent-declared may omit, null is the sentinel,
+else wireOk.
