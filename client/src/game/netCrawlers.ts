@@ -163,6 +163,18 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
         return netCrawlerById.get(r.id);
       },
       apply: (c, r) => {
+        // Species+uber are constructor-fixed: a wrong replica (id
+        // recycled, corrupt spawn edge) can never patch its way to truth
+        // — the roster is authoritative, so kill it and respawn the
+        // server's row instead of desyncing forever.
+        if ((r.species && r.species !== speciesOf(c)) || r.uber !== c.uber) {
+          netCrawlerById.delete(r.id);
+          appliedSkips.delete(r.id);
+          c.dead = true; // updateSpecies' disposed check sweeps it out
+          netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
+          if (r.sk !== undefined && Number.isFinite(r.sk)) {appliedSkips.set(r.id, r.sk);}
+          return;
+        }
         // sk heals the skip budget edges would have incremented — a
         // roster row carries the server's absolute count, so missed
         // retarget edges re-credit the quanta here instead of drifting

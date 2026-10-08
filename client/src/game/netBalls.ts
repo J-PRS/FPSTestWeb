@@ -437,6 +437,15 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     for (const r of m.balls) {
       const b = netBallById.get(r.id);
       if (!b) {continue;} // just spawned — seeded already
+      // Variant is constructor-fixed — a wrong-variant replica (recycled
+      // id, corrupt spawn edge) can't patch its way to truth, it can only
+      // desync the lane on every hash check. Roster wins: kill + respawn.
+      if (b.variant !== r.variant) {
+        b.netKill();
+        netBallById.delete(r.id);
+        netBallSpawn(r);
+        continue;
+      }
       b.applyNetSegment({
         px: r.position.x, py: r.position.y, pz: r.position.z,
         vx: r.velocity.x, vy: r.velocity.y, vz: r.velocity.z,
