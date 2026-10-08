@@ -14,6 +14,7 @@ import type { BotVec, BrainCtx } from './botBrain.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import { sharedEnv } from './env.ts';
 import { dirXZ } from './botVec.ts';
+import { segSolidHit } from './solidWorld.ts';
 
           // fan of candidate directions around the goal
         // rad — half-angle of the fan
@@ -71,6 +72,14 @@ export class BotLines {
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     const gd = Math.hypot(dest.x - pos.x, dest.z - pos.z);
+    // A structure on the goal ray is invisible to the terrain fan —
+    // the flood is the only layer that priced the walls. One probe per
+    // plan buys two things: short legs still consult the route, and the
+    // close-in homing squash can't flatten a real detour into a hull.
+    const solidAhead = !!ctx.solids?.length && gd > 1 && !!segSolidHit(
+      { x: pos.x, y: pos.y + 1, z: pos.z },
+      { x: dest.x, y: pos.y + 1, z: dest.z },
+      ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
     this.lineT -= dt;
     // A leg that moved real altitude is worth remembering: the ramp
     // down is the ramp up in reverse, and only terrain the bot itself
@@ -83,7 +92,7 @@ export class BotLines {
     // Runner close-out reaches further than minGd: inside the stand's
     // apron a pocket waypoint is just another lap of the ring — aim the
     // pole itself and let the moves layer own the touch.
-    if (gd < (ctx.runner ? T.lines.runnerDirectGd : T.lines.minGd)) {
+    if (gd < (ctx.runner ? T.lines.runnerDirectGd : T.lines.minGd) && !solidAhead) {
       this.wp = null; this.lastGd = Infinity; this.stale = 0;
       this.traverseDir = null; this.orbitGd = Infinity; this.orbitFails = 0; this.orbitGoal = null;
       return dest;
@@ -165,7 +174,7 @@ export class BotLines {
       }
       const reach = Math.min(40, gd);
       let wp = bestPass;
-      if (!wp && ctx.route && gd > T.graph.minGd) {
+      if (!wp && ctx.route && (gd > T.graph.minGd || solidAhead)) {
         // The flood already priced every saddle map-wide — a myopic
         // traverse guesses at the exit direction while the route walks
         // the pass it found. Consult it inside the escape, not just on
@@ -258,14 +267,15 @@ export class BotLines {
     // its energy scoring reads what a coarse grid can't.
     tp = prof ? sharedEnv.wallPerf!() : 0;
     let routed: BotVec | null = null;
-    if (ctx.route && gd > T.graph.minGd) {
+    if (ctx.route && (gd > T.graph.minGd || solidAhead)) {
       routed = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
       // Inside the homing band a bending polyline overshoots: the route
       // aim rides the flood's terrain-following bend PAST the goal and
       // the bot spends the next 20s climbing back. When the goal ray
       // itself is clear, cut to it — the human line is nearly straight
-      // in close, jets absorb the small stuff.
-      if (routed && gd < 150 && !faceAhead) {
+      // in close, jets absorb the small stuff. A solid on the ray makes
+      // the bend real: the flood is detouring a wall, not terrain.
+      if (routed && gd < 150 && !faceAhead && !solidAhead) {
         const r = dirXZ(routed.x - pos.x, routed.z - pos.z);
         const offLine = r.x * ((dest.x - pos.x) / gd)
           + r.z * ((dest.z - pos.z) / gd);

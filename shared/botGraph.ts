@@ -17,6 +17,8 @@
  * them when nothing else reaches).
  */
 import type { BotVec } from './botBrain.ts';
+import type { StructureCollider } from './ballSim.ts';
+import { ColliderIndex, segSolidHit } from './solidWorld.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 
 export class TerrainFlow {
@@ -24,8 +26,11 @@ export class TerrainFlow {
   private readonly h: Float32Array;
   private readonly fields = new Map<number, { parent: Int32Array; dist: Float32Array }>();
 
-  /** `height` must be terrain-only (structures move; routes shouldn't). */
-  constructor(height: (x: number, z: number) => number, extent = T.graph.extent, cell = T.graph.cell) {
+  /** `height` must be terrain-only (structure heights live in `solids`). */
+  constructor(height: (x: number, z: number) => number, extent = T.graph.extent, cell = T.graph.cell,
+    solids?: readonly StructureCollider[]) {
+    this.solids = solids;
+    this.solidIndex = solids?.length ? new ColliderIndex(solids) : null;
     this.n = Math.max(8, Math.round(extent / cell));
     this.cell = cell;
     this.h = new Float32Array(this.n * this.n);
@@ -36,6 +41,8 @@ export class TerrainFlow {
   }
 
   private readonly cell: number;
+  private readonly solids?: readonly StructureCollider[];
+  private readonly solidIndex: ColliderIndex | null;
 
   /** World coord of grid index i (grid centered on the origin). */
   private w(i: number): number {
@@ -50,9 +57,13 @@ export class TerrainFlow {
 
   /** Dijkstra flood from a goal cell — parent[] points downhill along
    *  the cheapest-cost route, so walking parents from any start cell
-   *  yields the path to the goal. Cached per goal cell. */
-  private fieldFor(goal: number): { parent: Int32Array; dist: Float32Array } {
-    const hit = this.fields.get(goal);
+   *  yields the path to the goal. Cached per (goal cell × team) — gate
+   *  shields are air to their own team, so each side floods its own
+   *  base differently. */
+  private fieldFor(goal: number, team?: string): { parent: Int32Array; dist: Float32Array } {
+    const ti = team === 'alpha' ? 0 : team === 'bravo' ? 1 : 2;
+    const key = goal * 3 + ti;
+    const hit = this.fields.get(key);
     if (hit) return hit;
     const n2 = this.n * this.n;
     const parent = new Int32Array(n2).fill(-1);
@@ -134,6 +145,17 @@ export class TerrainFlow {
           }
           const slope = rise / d;
           if (slope > T.graph.wallSlope) k += (slope - T.graph.wallSlope) * T.graph.wallTax;
+          if (this.solidIndex) {
+            // Does the traveller's leg actually cross a structure? The
+            // probe runs at chest height over the higher endpoint — a
+            // wall slab registers, a door gap doesn't. Shields with a
+            // matching passTeam are air to this flood.
+            const y = Math.max(this.h[u]!, this.h[v]!) + 1.2;
+            if (segSolidHit(
+              { x: this.w(vx), y, z: this.w(vz) },
+              { x: this.w(ux), y, z: this.w(uz) },
+              this.solids!, this.solidIndex, team)) k += T.graph.solidTax;
+          }
           const nd = dist[u]! + d * k;
           if (nd < dist[v]!) {
             dist[v] = nd;
@@ -143,21 +165,21 @@ export class TerrainFlow {
         }
       }
     }
-    this.fields.set(goal, { parent, dist: Float32Array.from(dist) });
+    this.fields.set(key, { parent, dist: Float32Array.from(dist) });
     if (this.fields.size > T.graph.fieldCache) {
       // Goals are stable (stands); bound the cache so a wander-bot's
       // random cells can't grow it without limit — evict oldest.
       const oldest = this.fields.keys().next().value!;
       this.fields.delete(oldest);
     }
-    return this.fields.get(goal)!;
+    return this.fields.get(key)!;
   }
 
   /** The next waypoint on the cheapest route `to`, about `ahead` meters
    *  along the flow from `from`. Null when the start cell can't reach
    *  the goal (only when the caller's height fn differs from the
    *  grid's). The steerer stays authoritative under ~9m. */
-  route(fx: number, fz: number, tx: number, tz: number, ahead: number, danger?: (x: number, z: number) => number): BotVec | null {
+  route(fx: number, fz: number, tx: number, tz: number, ahead: number, danger?: (x: number, z: number) => number, team?: string): BotVec | null {
     // Bucket the goal to a coarse cell: a flood is n² work, and live
     // targets (a carrier at 30m/s) cross a 15m cell every half second —
     // without bucketing every think re-floods the whole grid and churns
@@ -166,11 +188,18 @@ export class TerrainFlow {
     // ~90m-shifted flood goal shares the same mid-field basin anyway.
     const qb = this.cell * 12;
     const goal = this.cellOf(Math.round(tx / qb) * qb, Math.round(tz / qb) * qb);
-    const field = this.fieldFor(goal);
+    const field = this.fieldFor(goal, team);
     const parent = field.parent;
-    let c = this.cellOf(fx, fz);
-    if (parent[c] === -1 && c !== goal) return null;
+    const c0 = this.cellOf(fx, fz);
+    if (parent[c0] === -1 && c0 !== goal) return null;
+    let c = c0;
     let walked = 0, prev = c;
+    // Cells the chain actually walked, so a goal inside the horizon can
+    // still emit the path's middle instead of the goal itself — a beeline
+    // to a cell the flood reached through a doorway just grinds the wall
+    // the door was threaded around (bastion genhouse: the goal cell is
+    // inside the vault, the door is 15m off-axis).
+    const chain: number[] = [];
     while (c !== goal) {
       // Danger deflection: among strictly-descending neighbors pick the
       // least costly by dist + live danger. Descent-only keeps the walk
@@ -197,9 +226,24 @@ export class TerrainFlow {
       walked += Math.hypot(dx, dz) * this.cell;
       prev = c;
       c = p;
+      chain.push(c);
       if (walked >= ahead) break;
     }
-    const target = walked >= ahead ? c : goal === c ? goal : prev;
+    let target: number;
+    if (walked >= ahead) target = c;
+    else if (c === goal && chain.length > 1 && this.solidIndex
+      // Goal inside the horizon AND a wall on the beeline: emit the
+      // chain's midpoint — on a bent path it's the doorway/funnel the
+      // flood actually used. A clear line still gets the raw goal.
+      && segSolidHit(
+        { x: fx, y: this.h[c0]! + 1.2, z: fz },
+        { x: tx, y: this.h[c0]! + 1.2, z: tz },
+        this.solids!, this.solidIndex, team)) {
+      // len 2 wants the cell before the goal (index 0 is the penultimate
+      // hop); longer chains emit their middle — the doorway the flood
+      // threaded, not a beeline at the wall face.
+      target = chain[chain.length > 2 ? chain.length >> 1 : chain.length - 2]!;
+    } else target = c === goal ? goal : prev;
     const tx2 = target === goal ? tx : this.w(target % this.n);
     const tz2 = target === goal ? tz : this.w((target / this.n) | 0);
     return { x: tx2, y: this.h[target]!, z: tz2 };
@@ -208,9 +252,9 @@ export class TerrainFlow {
   /** The point on the flood route `backM` meters BEFORE the goal — the
    *  flow-sourced stand entry: the saddle the cheapest path funnels
    *  through instead of a myopic ring candidate. Null when unrouted. */
-  routeNearGoal(fx: number, fz: number, tx: number, tz: number, backM: number): BotVec | null {
+  routeNearGoal(fx: number, fz: number, tx: number, tz: number, backM: number, team?: string): BotVec | null {
     const goal = this.cellOf(tx, tz);
-    const parent = this.fieldFor(goal).parent;
+    const parent = this.fieldFor(goal, team).parent;
     const start = this.cellOf(fx, fz);
     if (parent[start] === -1 && start !== goal) return null;
     // Measure the whole chain once, then re-walk to total-backM.

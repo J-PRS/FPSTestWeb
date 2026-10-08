@@ -9,6 +9,7 @@ import type { BrainCtx } from './botBrain.ts';
 import { BOT_EYE } from './botHunt.ts';
 
 import { dist3, distSq, dirXZ, type BotVec } from './botVec.ts';
+import { segSolidHit } from './solidWorld.ts';
 
 const DODGE_RANGE = 12;  // m — only react to shells already inbound
 const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
@@ -42,6 +43,11 @@ export interface EscapeState {
   pinX: number;
   pinZ: number;
   pinT: number;
+  /** Consecutive 4s windows with <2m net displacement — unlike
+   *  stuckStreak this never resets on micro-progress, so a bot the
+   *  escapes keep wobbling inside a pocket still accumulates. Two
+   *  windows ≈ the mobility watchdog's 5s/2m alarm. */
+  pinStreak: number;
   /** goal is read-only here — the sidestep orbits it. */
   goal: BotVec;
 }
@@ -68,18 +74,31 @@ function routeSlope(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, dist: nu
  *  headings centered on the goal, scored walkable-first / goal-aligned-
  *  second. A wall pocket sends the bot down the side where the ground
  *  stays climbable — the ramp or the low rim — which is how a player
- *  routes onto a structure instead of jetting the nearest face. */
+ *  routes onto a structure instead of jetting the nearest face.
+ *  Structure-aware when the map carries solids: terrain alone can't see
+ *  a 17m curtain, so a heading that enters a hull within the hop distance
+ *  pays a heavy penalty scaled by how soon it hits — the fan slides the
+ *  bot along the wall face toward the opening instead of picking the
+ *  "gently sloped" direction straight through the bastion kit. */
 function pickDetour(s: EscapeState, ctx: BrainCtx, pos: BotVec, dist: number): BotVec {
   const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
   const g = dirXZ(gx, gz);
   const gdx = g.x, gdz = g.z;
+  const solids = ctx.solids?.length ? ctx.solids : null;
   let best: BotVec | null = null;
   let bestScore = Infinity;
-  for (let a = -5; a <= 5; a++) {
+  for (let a = -5; a <= 5; a += 1) {
     const ang = a * (Math.PI / 6);
     const c = Math.cos(ang), sn = Math.sin(ang);
     const dx = gdx * c - gdz * sn, dz = gdx * sn + gdz * c;
-    const score = routeSlope(ctx, pos, dx, dz, dist) * 2 - c;
+    let score = routeSlope(ctx, pos, dx, dz, dist) * 2 - c;
+    if (solids) {
+      const hit = segSolidHit(
+        { x: pos.x, y: pos.y + 1, z: pos.z },
+        { x: pos.x + dx * dist, y: pos.y + 1, z: pos.z + dz * dist },
+        solids, ctx.solidIndex ?? undefined, ctx.team);
+      if (hit) {score += 10 - hit.t * dist;}
+    }
     if (score < bestScore) {
       bestScore = score;
       best = { x: pos.x + dx * dist, y: ctx.groundY(pos.x + dx * dist, pos.z + dz * dist) + BOT_EYE, z: pos.z + dz * dist };
@@ -115,12 +134,15 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     s.pinZ = pos.z;
     if (net < 2 && !arrived) {
       s.stuckStreak++;
+      s.pinStreak++;
       if (s.detourT <= 0) {
         s.detour = pickDetour(s, ctx, pos, 14);
         s.detourT = 1.2;
       }
       // Pinned through a detour = every sideways probe is a face.
       if (s.stuckStreak >= 2) s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+    } else {
+      s.pinStreak = 0;
     }
   }
   // Slow window: goal-distance gain over ~4s. Circling in place covers
@@ -218,3 +240,113 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
 }
 
 // dist3/distSq imported from botVec.ts — shared by the brain family.
+
+/** First structure hit on the straight path pos→goal → the tallest
+ *  collider top covering that impact point, or null when the path is
+ *  clear. Wall-top lookup (not just "blocked?") is what decides whether
+ *  a full-tank climb can crest the face or the waypoint should be
+ *  forfeited. Linear scan — runs only on a matured stall (~once/4s). */
+export function wallTopOnPath(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): number | null {
+  if (!ctx.solids?.length || !goal) return null;
+  const hit = segSolidHit(
+    { x: pos.x, y: pos.y + 1, z: pos.z },
+    { x: goal.x, y: goal.y, z: goal.z },
+    ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+  if (!hit) return null;
+  return topCovering(ctx, hit.x, hit.z);
+}
+
+/** Tallest collider top covering (x,z), or null when open ground. */
+function topCovering(ctx: BrainCtx, x: number, z: number): number | null {
+  let top = -Infinity;
+  for (const c of ctx.solids!) {
+    const dx = x - c.cx, dz = z - c.cz;
+    const lx = dx * c.cos + dz * c.sin;
+    const lz = -dx * c.sin + dz * c.cos;
+    if (Math.abs(lx) <= c.hx + 0.5 && Math.abs(lz) <= c.hz + 0.5) {
+      const t = c.cy + c.hy;
+      if (t > top) top = t;
+    }
+  }
+  return top === -Infinity ? null : top;
+}
+
+/** Nearest own-team gate shield in reach → a waypoint a few meters
+ *  past the pane so walking the waypoint threads the door. Direction
+ *  doesn't matter — when the goal line is walled, a pane that's air
+ *  to us is the exit even if it means backtracking across the base.
+ *  The colliders answer "which hole in the wall is mine" themselves —
+ *  no authored gate metadata needed. */
+export function ownGate(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): BotVec | null {
+  if (!ctx.solids?.length || !goal || !ctx.team) return null;
+  const gx = goal.x - pos.x, gz = goal.z - pos.z;
+  const g = Math.hypot(gx, gz) || 1;
+  const ix = gx / g, iz = gz / g;
+  let best: BotVec | null = null;
+  let bestD = Infinity;
+  let bestBlocked = Infinity;
+  for (const c of ctx.solids) {
+    if (c.passTeam !== ctx.team) continue;
+    const dx = c.cx - pos.x, dz = c.cz - pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 140) continue;                             // no door in reach — climb/breach instead
+    // The pane is only an exit if the bot can WALK to it: a compound
+    // interior structure (genhouse, tower) between the bot and the pane
+    // makes the nearest gate a waypoint nobody reaches — prefer a gate
+    // whose approach lane is clear over a closer walled one (bastion:
+    // capper lapped his own courtyard for minutes chasing a pane with
+    // the genhouse in the way).
+    const blocked = segSolidHit(
+      { x: pos.x, y: pos.y + 1, z: pos.z },
+      { x: c.cx, y: pos.y + 1, z: c.cz },
+      ctx.solids, ctx.solidIndex ?? undefined, ctx.team) !== null;
+    if (!blocked && d < bestD) {
+      bestD = d;
+      best = { x: c.cx + ix * 6, y: ctx.groundY(c.cx + ix * 6, c.cz + iz * 6) + 1, z: c.cz + iz * 6 };
+    } else if (blocked && d < bestBlocked) {
+      bestBlocked = d;
+      if (!best) {
+        best = { x: c.cx + ix * 6, y: ctx.groundY(c.cx + ix * 6, c.cz + iz * 6) + 1, z: c.cz + iz * 6 };
+      }
+    }
+  }
+  return best;
+}
+
+/** The wall on the goal line is too tall to climb — slide along the
+ *  face instead. Probe laterally from the impact point: an open slot
+ *  (no collider past the wall plane) is a gap to walk through; a
+ *  section under the climb envelope is the hop spot. Returns the point
+ *  the feet should visit next, or null when the face runs >60m both
+ *  ways (fortress seam — forfeit is honest there). */
+export function breachAlongWall(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): BotVec | null {
+  if (!ctx.solids?.length || !goal) return null;
+  const from = { x: pos.x, y: pos.y + 1, z: pos.z };
+  const hit = segSolidHit(from, goal, ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+  if (!hit) return null;
+  const gx = goal.x - pos.x, gz = goal.z - pos.z;
+  const g = Math.hypot(gx, gz) || 1;
+  const ix = gx / g, iz = gz / g;         // inward — toward the goal
+  const tx = -iz, tz = ix;                // wall tangent
+  for (let s = 4; s <= 60; s += 4) {
+    for (const sign of [1, -1] as const) {
+      const px = hit.x + tx * sign * s, pz = hit.z + tz * sign * s;
+      const qx = px + ix * 8, qz = pz + iz * 8;
+      const h2 = segSolidHit({ x: px, y: pos.y + 1, z: pz }, { x: qx, y: pos.y + 1, z: qz },
+        ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+      if (!h2) return { x: qx, y: ctx.groundY(qx, qz) + 1, z: qz }; // open gap — walk through
+      const top = topCovering(ctx, h2.x, h2.z);
+      if (top !== null && top - pos.y < 24) {
+        // Deck-grade lip (raised floor behind a door mouth — genhouse):
+        // the waypoint belongs ON the deck inside the opening, not at
+        // the face — a face waypoint lands inside the doorpost hull and
+        // the stall loop re-arms forever (bastion besiegers parked at
+        // the vault door for minutes).
+        if (top - pos.y < 12) return { x: qx, y: top + 0.5, z: qz };
+        // Low section — stand at the face and let the climb arm it.
+        return { x: px + ix * 2, y: ctx.groundY(px, pz) + 1, z: pz + iz * 2 };
+      }
+    }
+  }
+  return null;
+}

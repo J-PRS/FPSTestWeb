@@ -18,13 +18,13 @@ import { BotSteer } from './botSteer.ts';
 import { BotLines } from './botLines.ts';
 import { BotGoals } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
-import type { ColliderIndex } from './solidWorld.ts';
+import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
 import {
-  newHuntState, pickHunt, pickFire,
+  newHuntState, pickHunt, pickFire, preyUnreachable,
   STALE_MS, type HuntState,
 } from './botHunt.ts';
-import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
+import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type EscapeState } from './botEscape.ts';
 import { driftForm, type BotSkill } from './botSkill.ts';
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
@@ -33,7 +33,7 @@ export { losClear, losMemoReset, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
 import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
 
 export type { BotVec } from './botVec.ts';
-import { dist3, type BotVec } from './botVec.ts';
+import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
 
 /** Brawl range — the "a live enemy is right here" evidence the sheep
  *  meter's ignore debit and every foeNear check measure by. One radius
@@ -164,6 +164,9 @@ export interface BrainCtx {
    *  without one fall back to terrain-only LOS like before. */
   solids?: readonly StructureCollider[];
   solidIndex?: ColliderIndex | null;
+  /** The bot's team — team-filtered solids (shield gates) don't block
+   *  its own LOS/aim probes. */
+  team?: string;
   /** Host hook: muzzle speed of the weapon the bot would pick at `dist`
    *  — aim lead divides range by real flight speed instead of a fixed
    *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
@@ -282,6 +285,16 @@ export class BotBrain {
   }
 
   private thinkT = T.brain.thinkS;
+  // Hunt-stall window — see the comment at the probe site below. Tracks
+  // whether a chase is actually closing; the escape counters can't see
+  // the treadmill shape (wobble resets them every window).
+  private huntWin = { id: '', t: 0, ax: 0, az: 0, d0: 0, fails: 0 };
+  private goalClimbs = 0;
+  private goalWin = { t: 0, d: Infinity, ax: 0, az: 0 };
+  /** Wall-walk waypoint — armed when the goal line hits an unclimbable
+   *  face; pickDest steers feet to the gap/low section the probe found. */
+  breachGoal: BotVec = { x: 0, y: 0, z: 0 };
+  breachUntil = 0;
   readonly h: HuntState;
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
@@ -300,6 +313,7 @@ export class BotBrain {
     pinX: 0,
     pinZ: 0,
     pinT: 0,
+    pinStreak: 0,
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
   private readonly steerer = new BotSteer();
@@ -446,6 +460,7 @@ export class BotBrain {
       holding: this.holding,
       ss: this.escapeS.stuckStreak,
       os: this.escapeS.orbitStreak,
+      ps: this.escapeS.pinStreak,
       det: +this.escapeS.detourT.toFixed(2),
       ej: +this.escapeS.escapeJetT.toFixed(2),
       park: this.lastPark,
@@ -605,8 +620,19 @@ export class BotBrain {
     // purpose (downhill bias, side-valley energy plays), which pulls a
     // defender off the stand he's meant to be planted on. Straight
     // home is the right route when the route is 50m.
+    // An armed breach skips it too — the waypoint IS the door/gap the
+    // wall machinery found; re-planning it against the objective pulls
+    // the feet straight back into the face it exists to walk around
+    // (bastion trace: bg=-326,328 → d1=-323,368 → d2=-301,339, bot
+    // pinned at the wall 160s+).
+    // An armed breach skips it too — but only the LOCAL wall-walk. A
+    // far flow-hop breach is still a route leg, and blanket-skipping
+    // both planning layers for the whole 25s window disarmed every
+    // fight on the way (bastion soak: kills ~90 → ~30).
+    const breaching = this.breachUntil > now
+      && Math.hypot(pos.x - this.breachGoal.x, pos.z - this.breachGoal.z) < 45;
     tp = pf();
-    const d1 = ctx.posted ? dest : this.lines.plan(dt, ctx, pos, dest);
+    const d1 = ctx.posted || breaching ? dest : this.lines.plan(dt, ctx, pos, dest);
     dest = d1;
     P('lines', tp);
 
@@ -614,7 +640,7 @@ export class BotBrain {
     tp = pf();
     this.steerer.setStandoff(this.standoff);
     this.steerer.setWeave(this.weave);
-    const d2 = this.steerer.steer(dt, ctx, pos, dest);
+    const d2 = breaching ? dest : this.steerer.steer(dt, ctx, pos, dest);
     dest = d2;
     P('steer', tp);
     // Env-gated decision-chain trace: which stage rewrites the step.
@@ -624,7 +650,8 @@ export class BotBrain {
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
-      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
+      const bg = this.breachUntil > now ? ` bg=${f(this.breachGoal)}` : '';
+      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}${bg}`);
     }
 
     // A deliberate stand-still must not arm the treadmill window inside
@@ -637,15 +664,143 @@ export class BotBrain {
     }
     tp = pf();
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
+    // Hunting is exempt from the waypoint forfeit — but a prey the bot
+    // demonstrably can't reach is a wall-grind, not a chase. Windowed
+    // streaks can't catch it (the detour/jet escapes wobble a walled
+    // bot ≥2m a window, resetting every counter), so measure the hunt
+    // itself: a 5s window where the bot neither moved 4m nor closed 4m
+    // on the prey is a stall; if the straight line is blocked (roof
+    // perch above the climb envelope, wall or enemy shield gate) the
+    // target goes on a 30s blacklist. Blacklisting, not clearing:
+    // pickHunt's LOS scan would re-acquire the same visible target on
+    // the very next think, and the 'lost' edge fires through the
+    // normal transition once the filter drops it.
+    if (this.h.hunt) {
+      const hp = this.h.hunt.pos;
+      // The window survives target flips — a defended pocket holds
+      // several visible enemies and pickHunt rotates between them, so
+      // anchoring per-id resets the clock before it can ever mature.
+      // The stall is the POCKET: only real movement or a target swap
+      // that actually got closer re-arms it.
+      this.huntWin.t += dt;
+      // Target swap mid-window: keep the clock, re-anchor the distance
+      // (closed-vs-d0 would otherwise measure the previous prey).
+      if (this.huntWin.id !== this.h.hunt.id) {
+        this.huntWin.id = this.h.hunt.id;
+        this.huntWin.d0 = Math.hypot(hp.x - pos.x, hp.z - pos.z);
+      }
+      if (this.huntWin.t >= 5) {
+        const moved = Math.hypot(pos.x - this.huntWin.ax, pos.z - this.huntWin.az);
+        const closed = this.huntWin.d0 - Math.hypot(hp.x - pos.x, hp.z - pos.z);
+        const stalled = moved < 4 && closed < 4;
+        if (stalled && preyUnreachable(ctx, pos, hp) && this.huntWin.fails === 0) {
+          // First verdict on a walled pocket isn't a blacklist — it's the
+          // designed breach: spend the TANK scaling the face (3s ≈ 27m,
+          // clears bastion's 21m gate where the 1.1s escape sips can't).
+          // The dest still drives INTO the wall, so the burn climbs it.
+          // Only a second consecutive stall earns the blacklist below.
+          this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3.0);
+          this.huntWin.fails = 1;
+        } else if (stalled && (preyUnreachable(ctx, pos, hp) || ++this.huntWin.fails >= 3)) {
+          // The pocket is unreachable, not just this prey — a defended
+          // gate holds several enemies, and blacklisting one at a time
+          // re-arms the stall on each next-nearest. Everything huddled
+          // near the unreachable target goes on the list together.
+          // (Probe-false three-strikes: the geometry says a route exists
+          // but the escape kit can't find it — same grind, same fix.)
+          for (const e of ctx.enemies) {
+            if (e.alive && distSqXZ(e.pos, hp) < 35 * 35) this.h.unreachUntil.set(e.id, now + 30_000);
+          }
+          this.h.unreachUntil.set(this.h.hunt.id, now + 30_000);
+          this.huntWin.fails = 0;
+        } else if (!stalled) {
+          this.huntWin.fails = 0;
+        }
+        this.huntWin.t = 0; this.huntWin.ax = pos.x; this.huntWin.az = pos.z;
+        this.huntWin.d0 = Math.hypot(hp.x - pos.x, hp.z - pos.z);
+      }
+    } else {
+      this.huntWin.t = 0; this.huntWin.fails = 0;
+    }
     // A goal the escape senses can't reach after ~4 failures is a bad
     // roll, not a challenge — forfeit the wander waypoint so the next
     // roll picks a new line instead of grinding the same wall forever.
     // Either streak counts: pinned grind or the orbit treadmill that
-    // displaces without closing. Hunting bots keep their target.
-    if ((this.escapeS.stuckStreak >= 4 || this.escapeS.orbitStreak >= 4) && !this.h.hunt) {
-      this.goalS.wanderT = 0;
+    // displaces without closing. But first, one designed-breach check:
+    // if a structure wall sits on the straight path and its top is
+    // inside the full-tank climb envelope (curtains ~17m, not 85m gate
+    // towers), spend the tank scaling it before giving up the waypoint.
+    const streak = Math.max(this.escapeS.stuckStreak, this.escapeS.orbitStreak);
+    // Committed tasks outrank the hunt exemption: a besieger/runner
+    // stalled on a vault wall with a live foe in sight still needs the
+    // breach machinery — inside an enemy base there is ALWAYS a hunt
+    // target, so `!this.h.hunt` would silence wallResponse exactly where
+    // it's needed (siege probe: besieger parked at the door face 100s+).
+    const committed = !!(ctx.wave || ctx.runner || ctx.running);
+    if (streak >= 4 && (!this.h.hunt || committed)) {
+      this.wallResponse(ctx, pos, now);
       this.escapeS.stuckStreak = 0;
       this.escapeS.orbitStreak = 0;
+    } else if (streak === 0) {
+      this.goalClimbs = 0;
+    }
+    // Proactive egress: a wall right in front of the bot on a long-range
+    // goal line means it's pressing its own compound's interior — the
+    // authored passTeam gate is air to it. Don't wait for a stall to
+    // mature before finding the door; spawning inside a fortress burns
+    // ~6s a life otherwise. ownGate only matches MY team's panes, so it
+    // can never route an attacker through a defender's door.
+    if ((!this.h.hunt || committed) && this.goalS.goal && this.breachUntil <= now && ctx.solids?.length) {
+      const gd = Math.hypot(this.goalS.goal.x - pos.x, this.goalS.goal.z - pos.z);
+      if (gd > 60) {
+        const hit = segSolidHit(
+          { x: pos.x, y: pos.y + 1, z: pos.z },
+          { x: this.goalS.goal.x, y: pos.y + 1, z: this.goalS.goal.z },
+          ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+        if (hit && Math.hypot(hit.x - pos.x, hit.z - pos.z) < 45) {
+          const gate = ownGate(ctx, pos, this.goalS.goal);
+          if (gate) {
+            this.breachGoal = gate;
+            this.breachUntil = now + 20_000;
+          }
+        }
+      }
+    }
+    // Macro progress check — the detector the motion counters can't
+    // fake: a bot lapping a compound interior at 15m/s moves plenty but
+    // never closes on the goal. Six seconds older and no nearer, with a
+    // wall still on the goal line, gets the same climb-or-breach as a
+    // hard pin. d anchored per window; a fresh goal just means the
+    // first window re-anchors.
+    if ((!this.h.hunt || committed) && this.goalS.goal) {
+      this.goalWin.t += dt;
+      if (this.goalWin.t >= 6) {
+        const d = Math.hypot(this.goalS.goal.x - pos.x, this.goalS.goal.z - pos.z);
+        const moved = Math.hypot(pos.x - this.goalWin.ax, pos.z - this.goalWin.az);
+        if (d > 12 && this.goalWin.d - d < 8) {
+          if (moved < 1.5) {
+            // v≈0 with jets armed isn't a stall, it's a wedge — the bot
+            // is folded into a structure pocket and every tangent probe
+            // still reads wall. Back straight out of the pocket, then
+            // let the next window route again.
+            const g = dirXZ(this.goalS.goal.x - pos.x, this.goalS.goal.z - pos.z);
+            this.breachGoal = { x: pos.x - g.x * 14, y: pos.y, z: pos.z - g.z * 14 };
+            this.breachUntil = now + 4_000;
+            this.goalClimbs = 0;
+          } else {
+            this.wallResponse(ctx, pos, now);
+          }
+        }
+        this.goalWin.t = 0;
+        this.goalWin.d = d;
+        this.goalWin.ax = pos.x;
+        this.goalWin.az = pos.z;
+      }
+    } else {
+      this.goalWin.t = 0;
+      this.goalWin.d = Infinity;
+      this.goalWin.ax = pos.x;
+      this.goalWin.az = pos.z;
     }
 
     // --- dodge: sidestep the nearest closing shell ---
@@ -681,8 +836,51 @@ export class BotBrain {
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
 
-  
-  
+  /** Stall verdict for a goal the bot can't walk to: climbable face →
+   *  spend the tank scaling it; unclimbable → waypoint the gap/low
+   *  section the wall probe found; no structure at all → plain waypoint
+   *  forfeit (terrain stall, not a wall problem). */
+  private wallResponse(ctx: BrainCtx, pos: BotVec, now: number): void {
+    // The authored exit first: a passTeam pane is our team's door — it
+    // reads as air to us and solid to enemies, so walking THROUGH it is
+    // always cheaper than climbing curtains. Only relevant when the
+    // goal is on the far side of the walls; the pane must lie roughly
+    // between the bot and its goal to be the exit, not a scenic detour.
+    const gate = ownGate(ctx, pos, this.goalS.goal);
+    if (gate) {
+      this.breachGoal = gate;
+      this.breachUntil = now + 20_000;
+      this.goalClimbs = 0;
+      return;
+    }
+    const wallTop = wallTopOnPath(ctx, pos, this.goalS.goal);
+    if (wallTop !== null && wallTop - pos.y < 26 && this.goalClimbs < 2) {
+      this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3.0);
+      this.goalClimbs++;
+    } else {
+      let breach = wallTop !== null ? breachAlongWall(ctx, pos, this.goalS.goal) : null;
+      if (!breach && ctx.route && this.goalS.goal) {
+        // The face probe only scans ±60m — a fortress wall's real
+        // opening can sit farther along. The structure-aware flood
+        // already threads it; take the next hop as the waypoint rather
+        // than forfeiting to a re-approach loop — but only a hop the
+        // bot can actually walk to: a cell center sitting behind wall
+        // geometry re-arms the same pin it was meant to break.
+        const hop = ctx.route(pos.x, pos.z, this.goalS.goal.x, this.goalS.goal.z, 90);
+        if (hop && !segSolidHit(
+          { x: pos.x, y: pos.y + 1, z: pos.z },
+          { x: hop.x, y: pos.y + 1, z: hop.z },
+          ctx.solids ?? [], ctx.solidIndex ?? undefined, ctx.team)) breach = hop;
+      }
+      if (breach) {
+        this.breachGoal = breach;
+        this.breachUntil = now + 25_000;
+      } else {
+        this.goalS.wanderT = 0;
+      }
+      this.goalClimbs = 0;
+    }
+  }
 }
 
 // dist3/distSq live in botVec.ts — shared by the brain family.

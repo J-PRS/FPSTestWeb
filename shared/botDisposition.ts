@@ -28,6 +28,14 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const dx = pos.x + f.x * FLINCH_DIST, dz = pos.z + f.z * FLINCH_DIST;
       return { x: dx, y: pos.y, z: dz };
     }
+    // Wall-walk override: a breach waypoint armed by the stall path
+    // outranks even the objective commit — inside 40m of the flag the
+    // committed route IS what pinned the bot on the tower face. Feet
+    // walk to the gap/low section; fire and aim stay live elsewhere.
+    if (b.breachUntil > ctx.now) {
+      if (Math.hypot(pos.x - b.breachGoal.x, pos.z - b.breachGoal.z) < 6) b.breachUntil = 0;
+      else return { ...b.breachGoal };
+    }
     // Carrying the objective: the run is the job — engaging whoever the
     // hunt found converts the carrier into a duelist mid-route (orbit
     // fights won fights but lost flags). fire stays live elsewhere in

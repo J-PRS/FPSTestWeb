@@ -15,6 +15,7 @@ import { wrapAngleDelta } from './angles.ts';
 import { botRand } from './botRand.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import { dirXZ, distSqXZ } from './botVec.ts';
+import { segSolidHit } from './solidWorld.ts';
 
 // --- context steering senses ---
         // directions sampled around the circle
@@ -79,7 +80,16 @@ export class BotSteer {
     // turn cap makes a fast arrival circle the point instead of
     // correcting (soak: 37m/s flybys orbiting at ~20-60m, zero touches).
     const objD = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
-    if (objD < (ctx.runner ? 60 : 40) || ctx.posted) {
+    // Beeline only when the line is actually clear — a shield pane or
+    // wall between the bot and the objective used to be invisible here,
+    // so the commit drove dead-straight into the glass until the stall
+    // machinery noticed. Blocked → fall through to slot scoring, which
+    // now prices the solid face itself.
+    const beelineClear = !ctx.solids?.length || !segSolidHit(
+      { x: pos.x, y: pos.y + 1, z: pos.z },
+      { x: dest.x, y: pos.y + 1, z: dest.z },
+      ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+    if (beelineClear && (objD < (ctx.runner ? 60 : 40) || ctx.posted)) {
       // Posted anchors take the beeline at any range: slot scoring can
       // mask every goalward slot (slope probes on a ridgeline stand) and
       // the least-dangerous fallback walks the defender hundreds of
@@ -215,6 +225,19 @@ export class BotSteer {
     const slope = Math.max(boundedStep ? 0 : riseA / T.steer.probeA, riseB / T.steer.probeB);
     if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
     if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
+
+    // Solid faces price like terrain — the steerer used to see only the
+    // heightfield, so a shield pane or curtain was clear air until the
+    // body bounced off it. Probed at body height so a jetting bot still
+    // flies OVER a low wall (the pane's 80m face blocks anyway); own-team
+    // gate panes pass through ctx.team and cost nothing.
+    if (ctx.solids?.length) {
+      const hit = segSolidHit(
+        { x: pos.x, y: pos.y + 1, z: pos.z },
+        { x: pos.x + dx * pa, y: pos.y + 1, z: pos.z + dz * pa },
+        ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+      if (hit) danger = Math.min(1, danger + 1.2 - hit.t);
+    }
 
     // Commitment leash: a posted anchor's field is bounded by its post —
     // steps that would carry it out of the leash read as danger, so the

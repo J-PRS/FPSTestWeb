@@ -32,17 +32,20 @@ export function losMemoReset(): void { losMemo.clear(); }
 /** Test seam: the bound is the only thing a scenario can assert. */
 export function losMemoSize(): number { return losMemo.size; }
 
-function losKey(from: BotVec, to: BotVec): number {
+function losKey(ctx: BrainCtx, from: BotVec, to: BotVec): number {
   const ax = Math.round(from.x / LOS_CELL) + 2048;
   const az = Math.round(from.z / LOS_CELL) + 2048;
   const bx = Math.round(to.x / LOS_CELL) + 2048;
   const bz = Math.round(to.z / LOS_CELL) + 2048;
   // 12 bits per axis: 4096-cell range ≈ 6km — covers any field span.
-  return ((ax * 4096 + az) * 4096 + bx) * 4096 + bz;
+  // Team rides the key: a gate transparent to its owners is opaque to
+  // everyone else, so a shared answer would leak across sides.
+  const t = ctx.team === 'alpha' ? 1 : ctx.team === 'bravo' ? 2 : 0;
+  return (((ax * 4096 + az) * 4096 + bx) * 4096 + bz) * 4 + t;
 }
 
 export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
-  const key = losKey(from, to);
+  const key = losKey(ctx, from, to);
   const hit = losMemo.get(key);
   if (hit && hit.until > ctx.now) return hit.clear;
   const clear = losMarch(ctx, from, to);
@@ -79,6 +82,6 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   }
   if (ctx.solids?.length &&
       segSolidHit({ x: from.x, y: y0, z: from.z }, { x: to.x, y: y1, z: to.z },
-                  ctx.solids, ctx.solidIndex ?? undefined)) return false;
+                  ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) return false;
   return true;
 }

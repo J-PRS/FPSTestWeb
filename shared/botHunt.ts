@@ -90,6 +90,12 @@ export interface HuntState {
    *  reaction time; flickered re-acquires keep their original stamp).
    *  lastHitAt feeds the flinch error spike. */
   acquiredAt: Map<string, number>;
+  /** Per-target blacklist: prey the escape kit can't reach (a roof
+   *  camper the bot grinds a wall under) is ignored for a window —
+   *  otherwise the next think's LOS scan re-acquires the same target
+   *  and the pin is permanent. Cleared entries are a filter, not a
+   *  wallhack change: the enemy is still shootable, just not chased. */
+  unreachUntil: Map<string, number>;
   huntTick: number;
   lastHitAt: number;
   readonly reactTicks: number; // acquisition → first shot, per-bot nerves
@@ -122,6 +128,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
     fightPos: null,
     fightHold: 0,
     acquiredAt: new Map(),
+    unreachUntil: new Map(),
     huntTick: 0,
     lastHitAt: -1e9,
     // Personality rolls ride the skill's spawn-seeded private stream, not
@@ -171,8 +178,19 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const base = Math.max(BOT_FIRE_RANGE, ctx.engageRange ?? 0);
   const range = Math.max(hero ? base * 1.4 : base, SIGHT_M);
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
+  // Blacklist filter: prey that defeated the escape kit is invisible to
+  // acquisition for its window — chasing it again is the wall-grind
+  // loop this map exists to break.
+  let ectx = ctx;
+  if (st.unreachUntil.size) {
+    const enemies = ctx.enemies.filter((e) => (st.unreachUntil.get(e.id) ?? 0) <= now);
+    if (st.unreachUntil.size > 6) {
+      for (const [id, until] of st.unreachUntil) if (until <= now) st.unreachUntil.delete(id);
+    }
+    ectx = { ...ctx, enemies };
+  }
   const seenAll: BotEnemy[] = [];
-  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ctx, pos, range, beastRange, seenAll);
+  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll);
   st.seenEnemies = seenAll;
   // In economy rooms, only an actual nearby player threat outranks
   // the harvest — otherwise the bot keeps farming past a firefight
@@ -195,6 +213,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // targets never ghost (their corpse stops moving but the chase
   // shouldn't follow it to the respawn).
   const ghost = !next && st.hunt?.alive
+    && (st.unreachUntil.get(st.hunt.id) ?? 0) <= now
     && now - st.lastSeenAt < PURSUE_MS && dist3(pos, st.lastSeen) < PURSUE_M
     ? {
         ...st.hunt,
@@ -283,6 +302,22 @@ function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
     if (d < bd) { bd = d; best = e; }
   }
   return best;
+}
+
+/** Is this prey geometrically un-chaseable right now? Two shapes:
+ *  - a perch above the jet-climb envelope (roof campers on bastion's
+ *    towers — 20+m of sheer face the escape-jet can't scale);
+ *  - a solid between us and the prey (wall, or a shield gate the
+ *    OTHER team holds — passTeam honors who the pane lets through).
+ *  Called only after the escape streaks prove the pin, so the cheap
+ *  answer just has to be right in the already-stuck case. */
+export function preyUnreachable(ctx: BrainCtx, pos: BotVec, prey: BotVec): boolean {
+  if (prey.y - pos.y > 8) return true;
+  if (!ctx.solids?.length) return false;
+  return !!segSolidHit(
+    { x: pos.x, y: pos.y + 1, z: pos.z },
+    { x: prey.x, y: prey.y + 1, z: prey.z },
+    ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
 }
 
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */
@@ -474,7 +509,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
           >= muzzle.y + (nearAim.y - muzzle.y) * t + 0.3) { blocked = true; break; }
     }
     if (!blocked && ctx.solids?.length &&
-        segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined)) blocked = true;
+        segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) blocked = true;
     if (blocked) {
       st.fireT = 0.3;
       return undefined;

@@ -31,6 +31,11 @@ export const BOT_TUNING = {
     boostGdMin: 15,      // m — boost only with ground to cover
     boostEnergyMin: 34,  // energy — boost spends only above this (climb reserve)
     boostRise: 1.5,      // m — boost only on flat/downhill ahead
+    // transitGd REVERTED: feather-taps for any long-leg body dropped
+    // kills ~30% and cost seed-1 its grab — transit burns arrive dry at
+    // the wall that needs the tank. Walkers walking is honest; the
+    // sheep-max cases were wall-pocket stalls (cover channel), not
+    // speed.
     runInGdMin: 12,      // m — runner run-in burn inner window
     runInGdMax: 70,      // m — runner run-in burn outer window (sweep: past ~70m the hop chain owns the approach)
     strikeGd: 140,       // m — strike-dive window: inside this a runner drops the comfy gate and
@@ -152,6 +157,11 @@ export const BOT_TUNING = {
                          // bot can't climb should lose to a traverse it
                          // can walk, but not to a map-length detour it
                          // could jet over
+    solidTax: 30,        // extra cost k when a leg crosses a structure at
+                         // body height — ~300m of free walking per wall,
+                         // so routes thread gate lanes and door gaps;
+                         // still priced (not forbidden) so a sealed
+                         // pocket yields SOME route for the climb layer
     fieldCache: 24,      // live goal floods kept at once (~80KB each; goal
                          // bucketing means squads converge on few buckets,
                          // but wander rolls still scatter the space)
