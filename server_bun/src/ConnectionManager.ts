@@ -37,7 +37,11 @@ const VOLATILE_TYPES = new Set([
  *  ~8-16s and evict broadcast truth (kills, flag edges, chat) a reclaimer
  *  actually misses. A dead socket can't consume them anyway: gameState
  *  reseeds health on reclaim, and live echoes self-repeat at 2Hz. */
-const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge']);
+// stateHash joins the periodic-echo ban for a second reason: replaying
+// a seconds-old hash against a replica that kept moving reads as a
+// phantom desync + a spurious heal request, and the probe self-repeats
+// every 2s — nothing a reclaim needs journaled.
+const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash']);
 const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {

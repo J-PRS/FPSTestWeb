@@ -137,6 +137,23 @@ describe('grace reconnect', () => {
     expect((replayed[0] as { message?: string }).message).toBe('missed me?');
   });
 
+  it('stateHash never replays — a stale hash reads as phantom desync', () => {
+    // The probe self-repeats every 2s, so a journaled copy only ever
+    // delivers a seconds-old hash against a replica that kept moving.
+    const room = mkRoom({}, 'tdm');
+    const { mgr, registry } = mkSessions(room);
+    const ws1 = fakeWs();
+    join(mgr, ws1, 'p1');
+    dropToGrace(registry, 'p1');
+    const ev = (ws1.sent[ws1.sent.length - 1] as { ev?: number }).ev ?? 0;
+    room.connections.broadcast({ type: 'stateHash', hash: 'dead', tick: 1, playerCount: 1, timestamp: 0, replica: {} } as never);
+    room.connections.broadcast({ type: 'chat', playerId: 'p2', message: 'real' } as never);
+    const ws2 = fakeWs();
+    join(mgr, ws2, 'p1', room.sessionTokens.get('p1'), ev);
+    expect(ws2.sent.some((m) => (m as { type?: string }).type === 'stateHash')).toBe(false);
+    expect(ws2.sent.some((m) => (m as { type?: string }).type === 'chat')).toBe(true);
+  });
+
   it('a stale socket close is a no-op after reclaim (seat generation)', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
