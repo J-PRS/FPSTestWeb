@@ -149,7 +149,14 @@ export class TickFanout {
       }
       rec.playerId = playerId;
       rec.pos = p.position;
-      rec.force = forceSend;
+      // The delta basis is per-wireId and shared across recipients, but
+      // fanout skips records per-recipient by distance tier — a field the
+      // far client never received stays stale in its decode pool FOREVER
+      // (masked-out groups emit the retained slot value). A skipped full
+      // would leave that drift unbounded, so forced fulls must bypass
+      // tier skipping like hit-window forced sends.
+      const fullRecord = freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
+      rec.force = forceSend || fullRecord;
       // Delta basis follows the wireId, never the slot — a slot-carried
       // `last` encodes this player's mask against whoever held the slot
       // last tick after every roster shuffle.
@@ -182,7 +189,7 @@ export class TickFanout {
           // mint always fulls: a quiet-window-reissued wireId's `last`
           // could still hold the retired owner's basis, and a masked
           // record would hand receivers the departed owner's hp/flags.
-        }, rec.enc, last, freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
+        }, rec.enc, last, fullRecord);
       recN++;
       this.metrics.recordsBuilt++;
     }

@@ -267,7 +267,7 @@ export type ServerMessage =
        *  still converge the replay's step budget. */
       sk?: number }
   | { type: 'crawlDie'; id: number; position: Vec3; by?: string | null }
-  | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number; sk?: number }[] }
+  | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number; sk?: number; ph?: number; od?: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; et?: number; slowT?: number; damp?: boolean; t: number }[] }
   // Server-issued RTT probe — the client echoes it back as 'pong'.
