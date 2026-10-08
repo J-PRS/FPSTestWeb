@@ -380,8 +380,13 @@ export class TickLoop {
     const ballLane = emitLane(WORLD_MODEL.ball!, room.ballSim.contractRoster());
     const creatureLane = emitLane(WORLD_MODEL.creature!, room.creatureSim.roster());
     const deployLane = emitLane(WORLD_MODEL.deploy!, room.deployables.snapshot());
-    const flagHash = room.flags?.flags.size
-      ? replicaHash(WORLD_MODEL.flag!, room.flags.flags as Iterable<[string, Record<string, unknown>]>)
+    // Hash only what the wire carries — 'unspawned' never leaves the
+    // server (snapshot filters it), so hashing it desyncs every
+    // pre-blood rabbit room forever. Emitting an empty lane (not
+    // undefined) keeps a client ghost replica tripping the check.
+    const flagHash = room.flags
+      ? replicaHash(WORLD_MODEL.flag!, [...room.flags.flags].filter(
+          ([, f]) => f.state !== 'unspawned') as Iterable<[string, Record<string, unknown>]>)
       : undefined;
     const pickupLane = emitLane(WORLD_MODEL.pickup!, room.pickups?.snapshot() ?? []);
     const timestamp = wallNow();
