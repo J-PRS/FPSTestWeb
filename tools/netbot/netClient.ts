@@ -250,9 +250,11 @@ export class NetClient {
 
   private onBinary(u8: Uint8Array): void {
     if (!isWireFrame(u8)) return;
+    // Stale-check BEFORE decode — v4 decode mutates the byId baseline,
+    // so a reordered frame must never reach the decoder (see wireIn).
+    if (u8.byteLength >= 15 && new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
     const tick = decodeTickFrame(u8, this.tickPool as never);
     if (!tick) return;
-    if (tick.tickSeq <= this.lastTickSeq) return; // stale frame, same rule as the client
     this.lastTickSeq = tick.tickSeq;
     this.tel.ticks++;
     this.applyTick(tick.updates);

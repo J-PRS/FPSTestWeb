@@ -142,12 +142,12 @@ export class WireIn {
       }
       return;
     }
+    // Stale-drop BEFORE decode: v4 decode mutates the byId baseline — an
+    // out-of-order datagram frame would smuggle its stale fields into the
+    // retained slots even when dropped here. tickSeq sits at bytes 6-9.
+    if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
     const tick = decodeTickFrame(data, this.tickPool);
     if (!tick) return;
-    // Stale-drop: under an unordered transport a late frame carries an older
-    // tickSeq — interpolating it would rewind remotes. On TCP this never
-    // trips (frames can't reorder); it exists for the UDP tiers.
-    if (tick.tickSeq <= this.lastTickSeq) return;
     this.lastTickSeq = tick.tickSeq;
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.
