@@ -1,7 +1,7 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
 import { computeStateHash, replicaHash } from '../../shared/stateHash.ts';
-import { WORLD_MODEL, kindFields } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, kindFields, type WorldKindDecl } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
@@ -354,35 +354,23 @@ export class TickLoop {
     // client's loss telemetry counts that phantom skip as a dropped
     // frame (~3% bogus loss at the hash cadence).
     const hash = this.computeStateHash(room);
-    // Replica-fidelity hash over the ball fleet — identity + mirrored
-    // lifecycle fields (§4.7). Omitted where no ball sim runs so rooms
-    // without balls don't emit a meaningless constant.
-    const roster = room.ballSim.roster();
-    const ballHash = roster.length
-      ? replicaHash(WORLD_MODEL.ball!, roster.map((b) => [b.id, b] as [number, Record<string, unknown>]))
-      : undefined;
-    // Same fidelity hash for creatures — species/state/uber/targetId are
-    // the mirrored lifecycle fields; a stranded or stale replica reads
-    // here where nothing else looks (§4.7).
-    const creatureRoster = room.creatureSim.roster();
-    const creatureHash = creatureRoster.length
-      ? replicaHash(WORLD_MODEL.creature!, creatureRoster.map((c) => [c.id, c] as [number, Record<string, unknown>]))
-      : undefined;
-    // Deployables too — kind/owner/team are spawn edges; hp/armor are
-    // echo-channel (deployHp ticks) and stay out of the hash on purpose.
-    const deployRoster = room.deployables.snapshot();
-    const deployHash = deployRoster.length
-      ? replicaHash(WORLD_MODEL.deploy!, deployRoster.map((d) => [d.id, d] as [number, Record<string, unknown>]))
-      : undefined;
-    // Flags + pickups — the last edge-driven rosters without a desync
-    // signal (§4.7).
+    // §4.7 replica lanes — one emit body per kind instead of five copies:
+    // hash the roster + ship per-id fields for the client's diff pass,
+    // both generated from the kind's declaration so emit and diff can't
+    // drift apart. Omitted where the roster is empty — a room without
+    // that kind doesn't emit a meaningless constant.
+    const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]) =>
+      roster.length
+        ? { hash: replicaHash(kind, roster.map((e) => [e.id, e] as [number, Record<string, unknown>])),
+            fields: kindFields(kind, roster) }
+        : undefined;
+    const ballLane = emitLane(WORLD_MODEL.ball!, room.ballSim.roster());
+    const creatureLane = emitLane(WORLD_MODEL.creature!, room.creatureSim.roster());
+    const deployLane = emitLane(WORLD_MODEL.deploy!, room.deployables.snapshot());
     const flagHash = room.flags?.flags.size
       ? replicaHash(WORLD_MODEL.flag!, room.flags.flags as Iterable<[string, Record<string, unknown>]>)
       : undefined;
-    const pickupRoster = room.pickups?.snapshot() ?? [];
-    const pickupHash = pickupRoster.length
-      ? replicaHash(WORLD_MODEL.pickup!, pickupRoster.map((p) => [p.id, p] as [number, Record<string, unknown>]))
-      : undefined;
+    const pickupLane = emitLane(WORLD_MODEL.pickup!, room.pickups?.snapshot() ?? []);
     const timestamp = wallNow();
 
     room.broadcast({
@@ -391,29 +379,16 @@ export class TickLoop {
       tick: room.tickSeq,
       playerCount,
       timestamp,
-      ballHash,
-      creatureHash,
-      deployHash,
+      ballHash: ballLane?.hash,
+      creatureHash: creatureLane?.hash,
+      deployHash: deployLane?.hash,
       flagHash,
-      pickupHash,
-      // On a creature-hash miss the client diffs these per-id fields —
-      // the tuple order comes from the creature declaration so emit and
-      // diff can't drift apart.
-      creatureFields: creatureRoster.length
-        ? kindFields(WORLD_MODEL.creature!, creatureRoster) as [number, string, string, boolean, string | null][]
-        : undefined,
-      // Same per-id detail for the deploy lane — a phantom hash entry
-      // (a ghost item, a missing base asset) names itself in the warn.
-      // Team may be absent — kindFields nulls it like the literal did.
-      deployFields: deployRoster.length
-        ? kindFields(WORLD_MODEL.deploy!, deployRoster) as [number, string, string, string][]
-        : undefined,
-      // Ball fleet per-id fields — generated from the ball declaration
-      // so a new hashed field can't desync the emit/diff pair. The tuple
-      // shape is the declaration's field order, cast at the wire edge.
-      ballFields: roster.length
-        ? kindFields(WORLD_MODEL.ball!, roster) as [number, number, boolean, string | null][]
-        : undefined,
+      pickupHash: pickupLane?.hash,
+      // Per-id fields the client diffs on a hash miss — the tuple order
+      // is the declaration's field order, cast at the wire edge.
+      creatureFields: creatureLane?.fields as [number, string, string, boolean, string | null][] | undefined,
+      deployFields: deployLane?.fields as [number, string, string, string][] | undefined,
+      ballFields: ballLane?.fields as [number, number, boolean, string | null][] | undefined,
     });
 
     // Periodic status summary - suppress duplicates, batch with count
