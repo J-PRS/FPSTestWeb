@@ -379,16 +379,15 @@ export class TickLoop {
       tick: room.tickSeq,
       playerCount,
       timestamp,
-      ballHash: ballLane?.hash,
-      creatureHash: creatureLane?.hash,
-      deployHash: deployLane?.hash,
-      flagHash,
-      pickupHash: pickupLane?.hash,
       // Per-id fields the client diffs on a hash miss — the tuple order
-      // is the declaration's field order, cast at the wire edge.
-      creatureFields: creatureLane?.fields as [number, string, string, boolean, string | null][] | undefined,
-      deployFields: deployLane?.fields as [number, string, string, string][] | undefined,
-      ballFields: ballLane?.fields as [number, number, boolean, string | null][] | undefined,
+      // is the declaration's field order, so emit and diff can't drift.
+      replica: {
+        ball: ballLane,
+        creature: creatureLane,
+        deploy: deployLane,
+        flag: flagHash ? { hash: flagHash } : undefined,
+        pickup: pickupLane,
+      },
     });
 
     // Periodic status summary - suppress duplicates, batch with count

@@ -166,7 +166,7 @@ export class WireIn {
     playerShot: (data) => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data) => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
-    stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash, data.creatureHash, data.deployHash, data.flagHash, data.pickupHash, data.creatureFields, data.deployFields, data.ballFields),
+    stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
     correction: (data) => this.h.handleCorrection(data),
     inputSync: (data) => this.h.resendInputs(data.lastSeq),
     claimAck: (data) => this.h.ackClaim(data),

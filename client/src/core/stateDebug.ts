@@ -372,8 +372,18 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   const creatureLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
   const ballLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][], serverDeployFields?: [number, string, string, string][], serverBallFields?: [number, number, boolean, string | null][]) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined>) => {
     hashCheckCount++;
+    // Lane payloads unpack once at the edge — declared field order, so
+    // each tuple is cast at the lane it belongs to.
+    const serverFlagHash = replica?.flag?.hash;
+    const serverPickupHash = replica?.pickup?.hash;
+    const serverDeployHash = replica?.deploy?.hash;
+    const serverCreatureHash = replica?.creature?.hash;
+    const serverBallHash = replica?.ball?.hash;
+    const serverCreatureFields = replica?.creature?.fields as [number, string, string, boolean, string | null][] | undefined;
+    const serverDeployFields = replica?.deploy?.fields as [number, string, string, string][] | undefined;
+    const serverBallFields = replica?.ball?.fields as [number, number, boolean, string | null][] | undefined;
 
     if (serverFlagHash !== undefined && ctx.world) {
       const local = new Map<string, { state: string; carrier: string | null }>();

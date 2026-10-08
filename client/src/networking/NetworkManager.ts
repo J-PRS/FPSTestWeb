@@ -123,7 +123,7 @@ export class NetworkManager {
    *  through this; armor is the repair-tool overheal pool. */
   public onDeployHp: ((id: number, hp: number, armor: number, src?: string) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
-  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number, ballHash?: string, creatureHash?: string, deployHash?: string, flagHash?: string, pickupHash?: string, creatureFields?: [number, string, string, boolean, string | null][], deployFields?: [number, string, string, string][], ballFields?: [number, number, boolean, string | null][]) => void) | null = null;
+  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number, replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined>) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
   public onBallSpawn: ((data: Extract<ServerMessage, { type: 'ballSpawn' }>) => void) | null = null;
   public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;

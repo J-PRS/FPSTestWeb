@@ -206,17 +206,12 @@ export type ServerMessage =
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
-  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number; ballHash?: string; creatureHash?: string; deployHash?: string; flagHash?: string; pickupHash?: string;
-      /** Per-creature [id, species, state, uber, targetId] — lets a hash
-       *  mismatch name the diverging field instead of just listing ids. */
-      creatureFields?: [number, string, string, boolean, string | null][];
-      /** Per-deployable [id, kind, owner, team] — same purpose as
-       *  creatureFields, for the deploy roster. */
-      deployFields?: [number, string, string, string][];
-      /** Per-ball [id, variant, enraged, targetId] — same purpose, for
-       *  the ball fleet (the mismatched field is often enraged/targetId
-       *  churn, not membership). */
-      ballFields?: [number, number, boolean, string | null][] }
+  | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
+      /** §4.7 replica lanes keyed by kind name — `hash` the client
+       *  recomputes, optional per-id `fields` rows (declared field
+       *  order) it diffs on a miss to name the diverging entry.
+       *  Adding a fidelity lane is a key here, not new named slots. */
+      replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined> }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
       /** Last inputMove seq the server consumed — the client replays its
