@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import Stats from 'stats.js';
 
 import { MAX_DELTA_TIME } from '../core/config.js';
-import { urlParams } from '../core/params.js';
+import { urlParams, isDevHost } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
 import { updateGibs } from '../entities/swarms.js';
@@ -264,6 +264,9 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
   }
   _contactBodies.length = bodyN;
   player.movement.bodies = _contactBodies;
+  // Gate shields read team off the sim state — keep it synced to the
+  // wire team (rebalances/teamUpdate can flip it mid-match).
+  player.movement.getState().team = deps.world.localTeam;
   player.update(dt);
   if (_posPrimed) {
     const jump = player.pos.distanceTo(_posPrev);
@@ -529,17 +532,22 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       // previous frame (scene+shadow+composer+viewmodel), not just the last.
       draws: deps.rendererSetup.renderer.info.render.calls,
       trisK: Number((deps.rendererSetup.renderer.info.render.triangles / 1000).toFixed(0)) });
-  // window.__renderScan — staged render breakdown (scene / +shadow / full
-  // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
-  // renders extra frames on top of the loop.
-  window.__renderScan = createRenderScan(deps);
-  // __scene/__renderer — profiling handles for headless probes
-  // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
-  window.__scene = deps.sceneSetup.scene;
-  window.__renderer = deps.rendererSetup.renderer;
-  // geoNaN watch — names the owner of any buffer whose bounding sphere
-  // computes NaN (the spam was ownerless before this probe existed).
-  installGeoNaNWatch(deps.sceneSetup.scene);
+  // Debug-only handles (__renderScan/__scene/__renderer, geoNaN watch)
+  // stay off prod — __perf/__trailDump/__renderDump stay since the shipped
+  // watchdog dump reads them.
+  if (isDevHost()) {
+    // window.__renderScan — staged render breakdown (scene / +shadow / full
+    // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling
+    // hook; renders extra frames on top of the loop.
+    window.__renderScan = createRenderScan(deps);
+    // __scene/__renderer — profiling handles for headless probes
+    // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
+    window.__scene = deps.sceneSetup.scene;
+    window.__renderer = deps.rendererSetup.renderer;
+    // geoNaN watch — names the owner of any buffer whose bounding sphere
+    // computes NaN (the spam was ownerless before this probe existed).
+    installGeoNaNWatch(deps.sceneSetup.scene);
+  }
   // __trailDump — merged census of every self-registered FX diag section
   // (ribbons/vfx/inst/swarm…). Sections come from registerDiag() in the
   // owning modules, so new censuses never touch this wiring.
