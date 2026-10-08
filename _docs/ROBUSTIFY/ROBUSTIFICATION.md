@@ -3549,3 +3549,7 @@ handleDeploy trusted the claim's y verbatim within the 40m plant ring: a forged 
 ## 2.215 — gunlab.html gated: dev surfaces close on prod hosts
 
 gunlab.html shipped ungated — anyone could open /gunlab.html on a public build and get the full weapon/asset inspector (scan tools, bake hot-swap polling, creature/deployable previews). The entry now bails on non-dev hosts (isDevHost — https means prod) with a closed sign, and the ESC-menu SIM LAB/GUN LAB buttons are removed on prod rather than left visible-but-dead. Same gate wireDebugTools and the spawn-script toggle already used; this was the last dev surface reachable without the flag.
+
+## 2.216 — the whole dev-page class gated: 11 more tool pages close on prod
+
+The gunlab hole was a class, not a page: 11 more standalone tool pages shipped open on a public build — aodump/posedump/sfxdump/vmdump (asset inspectors + headless-pipeline dump pages) and 7 inline-script pages (skytest, uvcheck, classlineup/fbxconv/modellineup/pickup_lineup/turretter tests). TS entries now bail on non-dev hosts with a closed sign; the inline pages guard their module with the same https-means-prod rule as isDevHost (no import needed). animgrid.html left alone — its /src/animgrid.ts entry doesn't exist anywhere, so the page is already inert; flagging it as a dead-file candidate for the owner's cleanup pass.
