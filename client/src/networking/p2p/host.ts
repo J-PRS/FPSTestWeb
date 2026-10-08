@@ -46,6 +46,9 @@ export class P2PHost {
   private links = new Map<P2PLink, string>(); // link → playerId
   private byPlayer = new Map<string, P2PLink>();
   private pingCycle = 0;
+  /** Stamp of the ping each guest last received — pongs that don't echo
+   *  an issued stamp are dropped (spoofed-RTT gate, same as dedicated). */
+  private lastPingStamp = new Map<string, number>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private tickClock: Worker | null = null;
   tickSeq = 0;
@@ -89,7 +92,10 @@ export class P2PHost {
     moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
     inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
     transitOf: (pid) => this.moveShadows.transitOf(pid),
-    transitNote: (pid, rtt) => this.moveShadows.feedTransit(pid, rtt),
+    transitNote: (pid, rtt, stamp) => {
+      if (this.lastPingStamp.get(pid) !== stamp) return;
+      this.moveShadows.feedTransit(pid, rtt);
+    },
     drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
     onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
     energyOf: (pid) => this.moveShadows.energyOf(pid),
@@ -222,6 +228,7 @@ export class P2PHost {
     if (!playerId) {return;}
     this.links.delete(link);
     this.byPlayer.delete(playerId);
+    this.lastPingStamp.delete(playerId);
     // No grace period on P2P — a dead socket is a leave, full stop.
     this.messageHandler.onPlayerDisconnected(playerId);
     this.messageHandler.onPlayerRemoved(playerId);
@@ -299,7 +306,10 @@ export class P2PHost {
     // rides every position frame).
     if (++this.pingCycle % 10 === 0 && this.byPlayer.size > 0) {
       const ids = [...this.byPlayer.keys()];
-      this.sendJSON(ids[(this.pingCycle / 10 | 0) % ids.length]!, { type: 'ping', timestamp: Date.now() });
+      const pid = ids[(this.pingCycle / 10 | 0) % ids.length]!;
+      const stamp = Date.now();
+      this.lastPingStamp.set(pid, stamp);
+      this.sendJSON(pid, { type: 'ping', timestamp: stamp });
     }
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();

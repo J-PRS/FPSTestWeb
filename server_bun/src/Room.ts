@@ -550,11 +550,19 @@ export class Room {
    *  each player's transit EMA refreshes every ~500ms×roster. Bots are
    *  skipped — their shadow lives on this box, transit is zero. */
   private pingCycle = 0;
+  /** Stamp of the ping each player last received — the pong must echo
+   *  an actually-issued stamp or it could spoof an RTT (a client sending
+   *  `pong{timestamp: now}` unprompted measures rtt≈0 — the lowball
+   *  exploit through the trusted channel). */
+  private lastPingStamp = new Map<string, number>();
   private pingTick(): void {
     if (++this.pingCycle % 10 !== 0) return;
     const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
     if (!humans.length) return;
-    this.sendToPlayer(humans[(this.pingCycle / 10 | 0) % humans.length]!.id, { type: 'ping', timestamp: wallNow() });
+    const target = humans[(this.pingCycle / 10 | 0) % humans.length]!;
+    const stamp = wallNow();
+    this.lastPingStamp.set(target.id, stamp);
+    this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
@@ -656,7 +664,10 @@ export class Room {
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
       transitOf: (pid) => this.moveSim.transitOf(pid),
-      transitNote: (pid, rtt) => this.moveSim.feedTransit(pid, rtt),
+      transitNote: (pid, rtt, stamp) => {
+        if (this.lastPingStamp.get(pid) !== stamp) return;
+        this.moveSim.feedTransit(pid, rtt);
+      },
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
@@ -684,7 +695,10 @@ export class Room {
         this.applyClassScale(pid);
       },
       moveMute: (pid) => this.moveSim.markReseated(pid),
-      moveUntrack: (pid) => this.moveSim.untrack(pid),
+      moveUntrack: (pid) => {
+        this.moveSim.untrack(pid);
+        this.lastPingStamp.delete(pid);
+      },
       // A spoken line is itself an event worth a reply — the squad sees
       // it on their own think phases, so an answer (if any) lands a beat
       // later like real chat, not a scripted call-and-response.

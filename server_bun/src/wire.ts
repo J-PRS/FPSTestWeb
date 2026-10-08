@@ -533,7 +533,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const p = h.playerManager.getPlayer(id);
       if (!p) return;
       p.lastSeen = wallNow();
-      h.roomInfo.transitNote?.(id, wallNow() - m.timestamp);
+      h.roomInfo.transitNote?.(id, wallNow() - m.timestamp, m.timestamp);
     },
   },
 };

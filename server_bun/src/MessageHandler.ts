@@ -133,7 +133,7 @@ export interface RoomInfo {
   transitOf?: (playerId: string) => number;
   /** Server-measured RTT (ping/pong echo) — cross-checks the
    *  client-reported transit inside the move shadow. */
-  transitNote?: (playerId: string, rttMs: number) => void;
+  transitNote?: (playerId: string, rttMs: number, stamp: number) => void;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
