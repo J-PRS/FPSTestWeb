@@ -126,11 +126,15 @@ export class WebSocketConnection {
             logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
           }
           this.reconnectTimer = setTimeout(() => {
+            // Fleet: re-resolve through the matchmaker — the room may
+            // have re-homed onto a live worker since this URL died. Only
+            // async when a resolver exists: an unconditional await pushed
+            // plain-WS reconnects past the timer tick for no benefit.
+            const resolve = this.config.resolveUrl;
+            if (!resolve) { this.connect(); return; }
             void (async () => {
-              // Fleet: re-resolve through the matchmaker — the room may
-              // have re-homed onto a live worker since this URL died.
               try {
-                const next = await this.config.resolveUrl?.();
+                const next = await resolve();
                 if (next && next !== this.config.url) {
                   logger.info(`reconnect re-resolved ${this.config.url} -> ${next}`);
                   this.config.url = next;

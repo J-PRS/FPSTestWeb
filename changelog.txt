@@ -1,3 +1,4 @@
+2026-10-01 - WebSocketConnection: fleet resolveUrl hook no longer makes plain reconnects async — the unconditional await pushed every retry past its timer tick (2 wsReconnect regressions); only fleet sessions await the re-resolve
 2026-10-01 - netTelemetry: ping samples now carry timestamps and age out of the 5s window — a hidden-tab pong parked in the 10-sample mean read as 2458ms jitter; also roster-heal chain verified end to end
 2026-10-01 - protocol: ballRoster rows now declare et/slowT/damp/tp — the server already sent them, the contract just hid them; roster replay can now heal timers too
 2026-10-01 - VideoRecorder: firstTimestampBehavior=offset on the live muxer — wall-clock frame stamps land mid-interval, so mp4-muxer threw on every first chunk and no clip ever encoded
