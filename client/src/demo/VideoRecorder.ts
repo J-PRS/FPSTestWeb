@@ -43,6 +43,10 @@ export class VideoRecorder {
   // ~30MB at 12Mbps — stays RAM-only like Medal/ShadowPlay.
   private ring: { ts: number; c: EncodedVideoChunk; m?: EncodedVideoChunkMetadata }[] = [];
   private encWall = 0;
+  // Last decoderConfig the encoder emitted — cutWindow remuxes from ring
+  // chunks whose stored meta may not carry one, and the muxer crashes on
+  // finalize without a decoderConfig.
+  private decConf: EncodedVideoChunkMetadata['decoderConfig'] | null = null;
   private static RING_MS = 20_000;
   private videoW = 0;
   private videoH = 0;
@@ -116,6 +120,7 @@ export class VideoRecorder {
       this.fpsNow = fps;
       this.enc = new VideoEncoder({
         output: (c, meta) => {
+          if (meta?.decoderConfig) {this.decConf = meta.decoderConfig;}
           // stop() detaches the muxer while the encoder still drains its
           // queue — late chunks belong to no file; drop them, don't throw.
           if (this.mux) {this.mux.addVideoChunk(c, meta);}
@@ -252,7 +257,12 @@ export class VideoRecorder {
     for (let i = keyIdx; i <= endIdx; i++) {
       const r = this.ring[i]!;
       // Retimestamp relative to the leading keyframe so the clip starts at 0.
-      mux.addVideoChunk(r.c, i === keyIdx ? r.m : undefined, Math.round((r.ts - base) * 1000));
+      // The muxer only learns decoderConfig from a meta that carries it —
+      // the stored meta may lack one, so fall back to the last config seen.
+      const meta = i === keyIdx
+        ? (r.m?.decoderConfig ? r.m : this.decConf ? { decoderConfig: this.decConf } : r.m)
+        : undefined;
+      mux.addVideoChunk(r.c, meta, Math.round((r.ts - base) * 1000));
     }
     mux.finalize();
     return new Blob([mux.target.buffer], { type: 'video/mp4' });

@@ -1,3 +1,4 @@
+2026-10-01 - VideoRecorder: cutWindow crashed mp4-muxer finalize (null decoderConfig) when the leading keyframe's stored meta lacked one — stash the last decoderConfig the encoder emits and synthesize it at the cut
 2026-10-01 - VideoRecorder pump skips encode when the codec is closed (error callback leaves this.enc set — encode threw InvalidStateError per frame); ballwatch soak now gates on zero persistent StateHash lane desyncs
 2026-10-01 - stateHash ball lane hashes the COMMITTED wire regime: enraged/targetId re-derive inside each integrator and churned on every healthy check; server keeps per-ball last-segment state (contractRoster), client tracks committed netEnraged in the NetBag — only a real missed edge diffs now
 2026-10-01 - cool-shot toggles: settings-page .tog convention — normal button off (hollow state square), accent-filled on; off no longer reads as disabled
