@@ -3442,3 +3442,10 @@ eventPayload each carried the same warn-or-fill loop. emitFields owns
 the contract now (skip idField, warn undeclared-missing, guard null,
 fill sentinel). worldModel.ts is down to two field walkers total — one
 per direction — over the same declarations.
+
+## 2.198 — intents checked at send too, not just at dispatch
+
+checkIntent ran server-side only, so a drifted send warned after the
+packet crossed the wire — in someone else's log. NetworkManager.send
+now runs the same check before serialize: the omit screams at the call
+site that made it. Same declaration, same warn contract, one line.

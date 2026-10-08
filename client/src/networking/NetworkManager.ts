@@ -12,7 +12,7 @@ import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
 import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
-import { WORLD_MODEL, declaredFieldNames } from '../../../shared/worldModel.js';
+import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -358,6 +358,10 @@ export class NetworkManager {
       this.noteDrop(msg.type);
       return;
     }
+    // Symmetric send-side check: the server checkIntent-warns a drifted
+    // intent AFTER it crossed the wire — running the same check here
+    // catches the omit at the call site instead.
+    checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const s = JSON.stringify(msg);
     this.txBytes += s.length;
     if (this.ws.send(s) === false) this.noteDrop(msg.type);
