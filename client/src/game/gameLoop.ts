@@ -171,6 +171,11 @@ export interface LoopState {
    *  (interiors, rigs) land in the scene before compileAsync runs. */
   warmN: number;
   warmed: boolean;
+  /** Post-warmup recompile countdown — arms when the remote roster
+   *  changes so late-loading rigs still get a parallel compile pass
+   *  instead of hitching their first visible frame. */
+  rewarmT?: number;
+  lastRemoteCount?: number;
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -606,9 +611,22 @@ function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Ca
 // Shader warmup — programs used to compile lazily mid-frame and hitch the
 // first ~10s after join (render 116-134ms measured). Once the world content
 // has landed, compileAsync parallel-compiles every scene material instead
-// of stalling individual draws.
+// of stalling individual draws. Post-warmup stragglers (a remote's rig
+// lands after join) get the same pass debounced — a profile of a live
+// fight showed per-program onFirstUse validation burning ~10% of the
+// frame while new materials trickled in.
 function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
-  if (st.warmed || ++st.warmN <= 60) {return;}
+  if (st.warmed) {
+    const rewarm = st.rewarmT ?? 0;
+    if (rewarm > 0) {
+      st.rewarmT = rewarm - 1;
+      if (st.rewarmT === 0) {deps.rendererSetup.warmup();}
+    }
+    const count = deps.world.remotePlayers.size;
+    if (count !== (st.lastRemoteCount ?? 0)) {st.lastRemoteCount = count; st.rewarmT = 90;}
+    return;
+  }
+  if (++st.warmN <= 60) {return;}
   if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) {return;}
   st.warmed = true;
   deps.rendererSetup.warmup();
