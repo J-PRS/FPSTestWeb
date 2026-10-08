@@ -108,21 +108,32 @@ export class VideoRecorder {
     const src = (this.staged ? this.stage : this.canvas)!;
     // hardwarePreference predates TS's DOM lib — it selects NVENC/QSV/AMF
     // when the platform exposes a hardware encoder.
-    // Bitrate follows encode area (~8Mbps at 1080p) instead of a flat
-    // number — fast-motion game footage needs it at 1080p, but a small
-    // buffer shouldn't pay a 1080p-sized stream.
-    const bitrate = Math.round(src.width * src.height * 4);
+    // Bitrate follows encode area: fast-motion footage is the worst case
+    // for block artifacts, so the multiplier is generous (~12Mbps at
+    // 1080p, capped at 25) — VBR only spends it on hard frames.
+    const bitrate = Math.round(src.width * src.height * 6);
     const config = {
       codec: 'avc1.640032', // H.264 High@5.0 — covers 1080p60
       width: src.width,
       height: src.height,
-      bitrate: Math.min(Math.max(bitrate, 2_000_000), 12_000_000),
+      bitrate: Math.min(Math.max(bitrate, 4_000_000), 25_000_000),
+      bitrateMode: 'variable',
       framerate: fps,
       hardwarePreference: 'prefer-hardware',
-      latencyMode: 'realtime',
+      // Quality over realtime: lookahead + B-frames are the difference
+      // between visible block artifacts and clean footage — the tiny
+      // encode latency doesn't matter for a ring buffer.
+      latencyMode: 'quality',
     } as unknown as VideoEncoderConfig;
     try {
-      const { supported } = await VideoEncoder.isConfigSupported(config);
+      let { supported } = await VideoEncoder.isConfigSupported(config);
+      if (!supported) {
+        // Quality mode + VBR are optional extras — realtime CBR is still
+        // NVENC, far better than dropping to the CPU fallback.
+        config.latencyMode = 'realtime';
+        delete (config as { bitrateMode?: string }).bitrateMode;
+        ({ supported } = await VideoEncoder.isConfigSupported(config));
+      }
       if (!supported) {return false;}
       const audioCfg = await this.probeAudio();
       this.mux = new Muxer({
@@ -258,7 +269,7 @@ export class VideoRecorder {
       }
       this.recorder = new MediaRecorder(stream, {
         mimeType: mime,
-        videoBitsPerSecond: 12_000_000, // ~12 Mbps: crisp motion, sane file size
+        videoBitsPerSecond: 25_000_000, // fast-motion needs headroom; browsers clamp what they can't do
       });
     } catch {
       return false;
