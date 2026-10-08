@@ -22,8 +22,8 @@ export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealt
   return heal;
 }
 
-interface SuppressablePlayer { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; status: number }
-interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }
+interface SuppressablePlayer { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; jetting: number; status: number }
+interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }
 
 /** Update suppression: if the player still sits where a dead-reckoning
  *  client would extrapolate them (linear pos+vel from the last sent
@@ -47,7 +47,7 @@ export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSe
   // lastSent.status is the wire value — REGEN/DD bits OR'd in at send time —
   // so mask it back to client bits before comparing or a buff defeats
   // suppression for its whole duration.
-  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== (lastSent.status & CLIENT_STATUS_MASK)
+  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.jetting !== lastSent.jet || p.status !== (lastSent.status & CLIENT_STATUS_MASK)
     // Sheep isn't a player field — it lives on the bot driver — so the
     // suppression check reads it off the record args (0 for humans).
     || sheep !== lastSent.sheep;

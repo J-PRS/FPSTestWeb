@@ -8,12 +8,12 @@ import { STATUS } from '../../../shared/status.ts';
 
 const sent = {
   x: 0, y: 0, z: 0, vx: 10, vy: 0, vz: 0,
-  yaw: 1, pitch: 0, hp: 100, dead: false, ski: 0, status: 0, sheep: 0, t: 1000,
+  yaw: 1, pitch: 0, hp: 100, dead: false, ski: 0, jet: 0, status: 0, sheep: 0, t: 1000,
 };
 const player = {
   position: { x: 0, y: 0, z: 0 },
   rotation: { yaw: 1, pitch: 0 },
-  health: 100, isDead: false, skiing: 0, status: 0,
+  health: 100, isDead: false, skiing: 0, jetting: 0, status: 0,
 };
 
 describe('recordSuppressed', () => {
@@ -39,6 +39,11 @@ describe('recordSuppressed', () => {
     player.isDead = true;
     expect(recordSuppressed(player, sent, 1100)).toBe(false);
     player.isDead = false;
+    // Jet is a wire state bit too — a flip while hovering must not be
+    // eaten or remotes keep burning thrust on the stale flag.
+    player.jetting = 1;
+    expect(recordSuppressed(player, sent, 1100)).toBe(false);
+    player.jetting = 0;
   });
 
   it('sends past the 250ms heartbeat window even when perfectly still', () => {

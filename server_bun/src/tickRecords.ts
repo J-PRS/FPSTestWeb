@@ -104,13 +104,13 @@ export class TickFanout {
       // was the last steady-state alloc in this loop.
       let snap = lastSent;
       if (!snap) {
-        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, status: 0, sheep: 0, t: 0 };
+        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, jet: 0, status: 0, sheep: 0, t: 0 };
         room.lastSentPositions.set(playerId, snap);
       }
       snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
-      snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing;
+      snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing; snap.jet = p.jetting;
       // Buff bits are server-owned (stripped from client claims at
       // inputMove) so they must be OR-ed on here, not read off p.status.
       snap.status = p.status

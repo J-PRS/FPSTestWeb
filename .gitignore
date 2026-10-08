@@ -67,3 +67,4 @@ _reports/*.mp4
 *.old
 *.blend
 client/assets/LensDirt/originals/
+server_bun/demos/archive/
