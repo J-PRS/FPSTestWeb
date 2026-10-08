@@ -3525,3 +3525,7 @@ The collider-gizmo block (capsule geometry against the full visual scale, friend
 ## 2.209 — playerMats extraction: the material pipeline leaves PlayerModel
 
 The mannequin reskin recipes (mannGunMat/mannJointMat module fns), the per-instance clone cache (ownMaterial/matClones — a shared-GLB material flash would tint the whole fleet), the flashMats emissive capture, and the debug wireframe set moved to `client/src/entities/playerMats.ts` as `PlayerMats`. `prep()` takes (mesh, mann, mannRev) at census time; `flashMats` stays reachable through a getter for ModelFx; `wireframeOn` went public on the controller for the gunCtl.onGeoSwap hook. PlayerModel: 625 lines — 43% of its 1456-line start.
+
+## 2.210 — roomFlagPlacer extraction: the flag/deploy placement domain leaves Room
+
+The placement cluster (rabbitFlagHome, flagStandTop, flagDeShelf, deployFloor, snapFlagBases, refreshFlagHomes — ~160 lines of walkable-surface math) moved to `server_bun/src/roomFlagPlacer.ts` as `FlagPlacer`, reading spec/field/flags/ballSim/mode through a host object and returning the two room-level effects of a re-snap via callbacks (collider re-attach + skinny mapUpdate; spawn-anchor re-seat). Room keeps the public `refreshFlagHomes` signature for roomFactory/tests and drops to ~1060 lines. Flag-snap and stand-resnap scenario tests green.

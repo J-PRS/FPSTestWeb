@@ -23,11 +23,11 @@ import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import { NOISE_TTL_MS } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
-import { type MapSpec, type Vec3like, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
-import { KIT_HULLS, KIT_STAND_TOP } from '../../shared/structKits.ts';
+import { type MapSpec, type StructureSpec, resolveMapSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
+import { FlagPlacer } from './roomFlagPlacer.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
@@ -160,6 +160,18 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
+  // Flag/deploy placement domain — standTop surfaces, shelf rescue,
+  // deploy floor, home re-snap — lives in roomFlagPlacer.ts. The
+  // callbacks carry the two room-level effects a re-snap has (structure
+  // collider re-attach + skinny mapUpdate push; spawn-anchor re-seat).
+  // Declared before the ctor's wireModeFeatures/flags init uses it.
+  readonly flagPlacer = new FlagPlacer(this,
+    (broadcast) => { this.attachAllStructures(); if (broadcast) {this.pushStructureUpdate();} },
+    (snapped) => {
+      if (this.modeSpec?.teams) {
+        this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
+      }
+    });
 
   /** Direct carrier check — snapshot() clones every flag just to answer
    *  "is id carrying", and per-tick callers (checkStuck, propel gate)
@@ -381,7 +393,7 @@ export class Room {
       // stand on its deck (seated high over terrain), not drown in it.
       // max() keeps authored elevations — tower sentries never descend.
       this.deployables.seedBase(this.spec.deploys.map(e => ({
-        ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.deployFloor(e.pos.x, e.pos.z, e.pos.y)) },
+        ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y)) },
       })));
     }
     this.projectiles = new RoomProjectiles(this, field);
@@ -447,7 +459,7 @@ export class Room {
       // Spawn anchoring uses the SNAPPED stand positions — a defender
       // bias toward a floating/under-terrain authored base sends players
       // to where the flag was authored, not where it actually is.
-      const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
+      const snapped = this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
       this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
     }
     this.pickups = new RoomPickups(this);
@@ -476,9 +488,9 @@ export class Room {
     };
     if (this.modeSpec?.flags) {
       if (this.mode === 'rabbit') {
-        this.flags = new RoomFlags(this, { alpha: this.rabbitFlagHome() });
+        this.flags = new RoomFlags(this, { alpha: this.flagPlacer.rabbitFlagHome() });
       } else if (bases?.alpha && bases?.bravo) {
-        this.flags = new RoomFlags(this, this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
+        this.flags = new RoomFlags(this, this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo }));
       }
     }
     // What the wire currently carries — the join echo and every structure
@@ -487,144 +499,10 @@ export class Room {
     this.emittedStands = this.standsJson();
   }
 
-  /** Rabbit's one stand: the midpoint of a two-base map (a team's own
-   *  stand would hand them free territory), else the arena center, else
-   *  the first spawn — always de-shelved + snapped to walkable ground. */
-  private rabbitFlagHome(): Vec3 {
-    const src = (this.spec.bases?.alpha && this.spec.bases?.bravo)
-      ? {
-        x: (this.spec.bases.alpha.x + this.spec.bases.bravo.x) / 2,
-        y: 0,
-        z: (this.spec.bases.alpha.z + this.spec.bases.bravo.z) / 2,
-      }
-      : this.spec.bases?.alpha
-        ?? (this.spec.arena ? { x: this.spec.arena.x, y: 0, z: this.spec.arena.z } : null)
-        ?? this.spec.spawns?.[0]
-        ?? { x: 0, y: 0, z: 0 };
-    const p = this.flagDeShelf(src);
-    return { x: p.x, y: this.flagStandTop(p.x, p.z), z: p.z };
-  }
-
-  // Spec y is advisory — flags live on the walkable surface, so touch
-  // checks measure feet-to-flag, not feet-to-arbitrary-height. Both error
-  // directions land the same: a flag authored under the terrain or inside
-  // a stand pad pops up to the pad's deck, and a flag authored floating
-  // drops onto it — max() of every surface the point could stand on IS
-  // the perfect spot either way.
-  private flagStandTop(x: number, z: number): number {
-    let top = this.field ? hmHeight(this.field, x, z) : 0;
-    for (const s of this.spec.structures ?? []) {
-      if (s.kind === 'kit') {
-        // Authored stand pieces ARE the platform — a base inside one's
-        // footprint homes onto its standing surface (KIT_STAND_TOP).
-        // Other kits' placeholder {1,1,1} size must never count.
-        const lift = KIT_STAND_TOP[s.piece ?? ''];
-        if (lift === undefined) continue;
-        const k = s.scale ?? 1;
-        let reach = 0;
-        for (const h of KIT_HULLS[s.piece!] ?? []) {
-          reach = Math.max(reach,
-            (Math.abs(h.pos.x) + h.size.x / 2) * k,
-            (Math.abs(h.pos.z) + h.size.z / 2) * k);
-        }
-        if (Math.abs(x - s.pos.x) <= reach && Math.abs(z - s.pos.z) <= reach) {
-          top = Math.max(top, s.pos.y + lift * k);
-        }
-        continue;
-      }
-      if (Math.abs(x - s.pos.x) <= s.size.x / 2 && Math.abs(z - s.pos.z) <= s.size.z / 2) {
-        top = Math.max(top, s.pos.y + s.size.y);
-      }
-    }
-    return top;
-  }
-
-  /** Unreachable-shelf rescue: a flag snapped onto a mesa or pad that
-   *  towers over every approach is a flag nobody can touch — walk it
-   *  downhill toward the gentlest ring neighbor until some side is a
-   *  jet-able climb (~18m over 60m) instead of a wall. */
-  private flagDeShelf(v: { x: number; z: number }): { x: number; z: number } {
-    let x = v.x, z = v.z;
-    for (let i = 0; i < 10; i++) {
-      const top = this.flagStandTop(x, z);
-      // Reachable when SOME side offers a jet-able approach (~18m over
-      // 60m); a big flat mesa reads correctly this way — local flatness
-      // doesn't fake accessibility, the far ring does.
-      let bestTop = -Infinity, bx = x, bz = z;
-      for (let a = 0; a < 8; a++) {
-        const px = x + Math.cos((a / 8) * Math.PI * 2) * 60;
-        const pz = z + Math.sin((a / 8) * Math.PI * 2) * 60;
-        const t = this.flagStandTop(px, pz);
-        if (t > bestTop) { bestTop = t; bx = px; bz = pz; }
-      }
-      if (top - bestTop <= 18) break;
-      const dx = bx - x, dz = bz - z, dd = Math.hypot(dx, dz) || 1;
-      x += (dx / dd) * 15; z += (dz / dd) * 15;
-    }
-    return { x, z };
-  }
-
-  /** Highest walkable surface under a seeded deploy that isn't a climb
-   *  away from its authored height — genhouse decks ride ~1m over the
-   *  seated base, walls/roofs sit higher and must not win. Returns the
-   *  authored y when nothing taller is under it, so tower-top assets
-   *  are never dragged down and terrain never hoists anything. */
-  private deployFloor(x: number, z: number, authoredY: number): number {
-    // No structure under it → authored y stands. Grounding to terrain
-    // lives in applySpec/seatKits, not here.
-    //
-    // The floor is the LOWEST solid top above the authored point, not
-    // the highest: a genhouse seats its foundation on max terrain, so
-    // the authored y often lands INSIDE the buried slab — taking the
-    // highest top in reach would plant the generator on the roof.
-    // The first surface up out of the fill is the deck.
-    let floor = Infinity;
-    for (const c of this.ballSim?.colliders ?? []) {
-      const dx = x - c.cx, dz = z - c.cz;
-      const lx = dx * c.cos + dz * c.sin;
-      const lz = -dx * c.sin + dz * c.cos;
-      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
-      const t = c.cy + c.hy;
-      if (t > authoredY && t < floor && t <= authoredY + 12) floor = t;
-    }
-    return floor === Infinity ? authoredY : floor;
-  }
-
-  private snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
-    const snapBase = (v: Vec3like): Vec3 => {
-      const p = this.flagDeShelf(v);
-      return { ...v, x: p.x, z: p.z, y: this.flagStandTop(p.x, p.z) };
-    };
-    return { alpha: snapBase(bases.alpha), bravo: snapBase(bases.bravo) };
-  }
-
-  /** Re-snaps flag homes against the LIVE heightfield. The ctor runs this
-   *  with whatever field the host had at boot (often null), and the real
-   *  per-map terrain lands later via the async attachTerrain promise —
-   *  without this refresh the homes stay snapped to the wrong ground.
-   *  Called again on every terrain attach and applySpec (bases can move
-   *  with the map). */
+  /** Re-snaps flag homes against the LIVE heightfield — terrain attach
+   *  and applySpec re-run it (bases can move with the map). */
   refreshFlagHomes(broadcastUpdate = true): void {
-    if (!this.flags) return;
-    if (this.mode === 'rabbit') {
-      this.flags.retargetHomes({ alpha: this.rabbitFlagHome() });
-      this.attachAllStructures();
-      if (broadcastUpdate) this.pushStructureUpdate();
-      return;
-    }
-    const bases = this.spec.bases;
-    if (!bases?.alpha || !bases?.bravo) return;
-    const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
-    this.flags.retargetHomes(snapped);
-    // Spawn anchors track the corrected stands too — a mid-match terrain
-    // attach can move them tens of meters.
-    if (this.modeSpec?.teams) {
-      this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
-    }
-    // Stands may have moved with the re-snap — their collision hulls
-    // are spec entries, so the sims must re-attach the merged list.
-    this.attachAllStructures();
-    if (broadcastUpdate) this.pushStructureUpdate();
+    this.flagPlacer.refreshHomes(broadcastUpdate);
   }
 
   /** The stand hulls as emitted — the baseline "every client holds"
@@ -684,12 +562,12 @@ export class Room {
     if (!this.modeSpec?.flags) return out;
     if (process.env.FPS_NOSTAND) return out; // soak A/B: measure approach cost of the dais hulls
     if (this.mode === 'rabbit') {
-      out.push(...flagStandSpecs(this.rabbitFlagHome()));
+      out.push(...flagStandSpecs(this.flagPlacer.rabbitFlagHome()));
       return out;
     }
     const bases = this.spec.bases;
     if (bases?.alpha && bases?.bravo) {
-      const snapped = this.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
+      const snapped = this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
       out.push(...flagStandSpecs(snapped.alpha, 'alpha'), ...flagStandSpecs(snapped.bravo, 'bravo'));
     }
     return out;
