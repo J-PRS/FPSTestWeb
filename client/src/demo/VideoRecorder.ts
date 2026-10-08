@@ -36,6 +36,7 @@ export class VideoRecorder {
   private frameDur = 0;
   private frames = 0;
   private keyEvery = 0;
+  private lastKeyAt = 0;
   private encFailed = false;
   // ShadowPlay-style rolling buffer: the last RING_MS of encoded chunks,
   // wall-clock keyed, so a clip window can be cut without re-encoding.
@@ -103,6 +104,10 @@ export class VideoRecorder {
       this.mux = new Muxer({
         target: new ArrayBufferTarget(),
         video: { codec: 'avc', width: src.width, height: src.height, frameRate: fps },
+        // Wall-clock frame stamps make the first chunk land at wherever
+        // the first pumped frame happened — offset rebases it to 0
+        // instead of throwing on non-zero DTS.
+        firstTimestampBehavior: 'offset',
         fastStart: 'in-memory',
       });
       this.encWall = performance.now();
@@ -205,15 +210,17 @@ export class VideoRecorder {
       // Backpressure: a stalled encoder drops frames rather than queueing
       // unbounded VideoFrames (each holds a full GPU readback).
       if (this.enc.encodeQueueSize > 30) {return;}
-      // Frames arrive at the DISPLAY rate — a 144Hz render would squeeze
-      // 144 stamps into 60fps timing (2.4x slow-mo clip). Gate on wall
-      // clock so the mp4 runs true-speed at the configured fps on any
-      // refresh rate.
+      // Frames arrive at the DISPLAY rate and must stamp at wall time,
+      // not counter*fps: 144Hz squeezes into 60fps timing (slow-mo clip),
+      // sub-60 stretches it (fast-forward). Wall stamps keep the mp4
+      // true-speed at any render rate; the cap just bounds encode work.
       const now = performance.now();
       if (now - this.lastFrameAt < this.frameDur / 1000 * 0.9) {return;}
       this.lastFrameAt = now;
-      const frame = new VideoFrame(this.staged ? this.stage! : src, { timestamp: Math.round(this.frames * this.frameDur) });
-      this.enc.encode(frame, { keyFrame: this.frames % this.keyEvery === 0 });
+      const ts = Math.round((now - this.encWall) * 1000); // µs
+      const frame = new VideoFrame(this.staged ? this.stage! : src, { timestamp: ts });
+      this.enc.encode(frame, { keyFrame: now - this.lastKeyAt >= 2000 });
+      if (now - this.lastKeyAt >= 2000) {this.lastKeyAt = now;}
       frame.close();
       this.frames++;
     }
