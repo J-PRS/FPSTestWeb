@@ -39,7 +39,30 @@ describe('scenario: ping/snapshot', () => {
     const them = snap!.players.find((pl) => pl.id === b.id)!;
     expect(me.kills).toBe(3);
     expect(them.health).toBe(42);
+    // World rosters ride along — the desync monitor heals object lanes
+    // here too, not just players.
+    expect(toA.some((m) => m.type === 'ballRoster')).toBe(true);
     expect(toB.length).toBe(0); // reply goes to the requester, never the room
+  });
+
+  it('snapshotRequest heals object lanes — flags/pickups/deploys replay like a fresh join', () => {
+    // A mid-game client that desynced its non-player state had no path
+    // back (only players healed): the stateHash monitor warned forever.
+    // The resync now replays the same world rosters a joiner gets.
+    const room = mkRoom({
+      mode: 'ctf',
+      bases: { alpha: { x: -70, y: 60, z: 0 }, bravo: { x: 70, y: 60, z: 0 } },
+    }, 'ctf');
+    room.players.addPlayer('A');
+    const a = room.players.getPlayer('A')!;
+    a.team = 'alpha';
+    room.pickups!.spawn({ x: 5, y: 31, z: 5 }, 'gem');
+    room.deployables.seedBase([{ kind: 'generator', pos: { x: 10, y: 30, z: 10 }, team: 'alpha' }]);
+    const toA = wsSpy(room, a.id);
+    room.messages.handleMessage(a.id, { type: 'snapshotRequest' });
+    expect(toA.some((m) => m.type === 'flagUpdate')).toBe(true);
+    expect(toA.some((m) => m.type === 'pickupSpawn')).toBe(true);
+    expect(toA.some((m) => m.type === 'deploySpawn')).toBe(true);
   });
 
   it('resync replays the join payload — gameState + local state, requester only', () => {

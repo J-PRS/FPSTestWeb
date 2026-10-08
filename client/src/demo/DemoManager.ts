@@ -24,18 +24,18 @@ const logger = new ChildLogger('Demo');
 
 // Visible armed indicator — the recorder rolls silently in the background
 // (ShadowPlay-style), so without a chip there was no on-screen cue at all.
+// Lives inside #hud-tr so it flows with the HUD's layout regions instead
+// of floating over arbitrary UI.
 let recEl: HTMLElement | null = null;
 function recChip(on: boolean): void {
   if (on && !recEl) {
-    recEl = document.createElement('div');
+    recEl = document.createElement('span');
     recEl.textContent = '● REC';
-    recEl.style.cssText = 'position:fixed;top:10px;right:12px;z-index:60;color:#f44;' +
-      'font:700 13px/1 monospace;background:rgba(0,0,0,.45);padding:4px 8px;' +
-      'border-radius:4px;pointer-events:none;animation:krec 1.2s infinite';
+    recEl.style.cssText = 'color:#f44;font-weight:700;animation:krec 1.2s infinite';
     const st = document.createElement('style');
     st.textContent = '@keyframes krec{0%,100%{opacity:1}50%{opacity:.35}}';
     recEl.appendChild(st);
-    document.body.appendChild(recEl);
+    (document.getElementById('hud-tr') ?? document.body).appendChild(recEl);
   } else if (!on && recEl) {
     recEl.remove();
     recEl = null;

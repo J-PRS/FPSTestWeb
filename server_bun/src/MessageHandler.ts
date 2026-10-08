@@ -655,6 +655,11 @@ export class MessageHandler {
       timestamp: wallNow(),
     });
 
+    // Players were the only healed lane — a desynced flag/pickup/deploy
+    // had no path back to truth and warned forever. Resync replays the
+    // same world rosters a fresh joiner gets.
+    this.sendSimWorldState(playerId);
+
     // Log full state for desync debugging
     const stateStr = players.map(p =>
       `${p.id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(2)},${p.position.y.toFixed(2)},${p.position.z.toFixed(2)})`

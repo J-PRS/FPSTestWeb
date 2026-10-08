@@ -543,14 +543,17 @@ export class Room {
     this.sims.push({ name: 'balls', tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
     this.sims.push({ name: 'crawl', tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
     this.sims.push({ name: 'bots', tick: (dt) => this.bots.tick(dt) });
-    if (this.flags) this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt) });
-    if (this.pickups) this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt) });
+    if (this.flags) this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });
+    if (this.pickups) this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt), worldState: () => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });
     this.sims.push({ name: 'unbury', tick: (dt) => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
       this.sims.push({ name: 'arena', tick: (dt) => arena.tick(dt) });
     }
-    this.sims.push({ name: 'deploy', tick: (dt) => this.deployables.tick(dt) });
+    // Deployables join the worldState replay: only edges streamed before,
+    // so a mid-game joiner saw a compound it never spawned — permanent
+    // DEPLOY/flag/pickup hash desyncs until something happened to change.
+    this.sims.push({ name: 'deploy', tick: (dt) => this.deployables.tick(dt), worldState: () => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });
     this.sims.push({ name: 'proj', tick: (dt) => this.projectiles.tick(dt) });
     this.sims.push({ name: 'move', tick: (dt) => this.moveSim.tick(dt) });
     this.sims.push({ name: 'health', tick: (dt) => this.healthTick(dt) });
