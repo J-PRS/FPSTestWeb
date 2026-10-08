@@ -207,6 +207,9 @@ export class VideoRecorder {
       this.stageCtx.drawImage(src, 0, 0, src.width, src.height, dx, dy, w, h);
     }
     if (this.enc) {
+      // The error callback closes the codec but keeps this.enc set —
+      // encode on a closed codec throws InvalidStateError.
+      if (this.enc.state !== 'configured') {return;}
       // Backpressure: a stalled encoder drops frames rather than queueing
       // unbounded VideoFrames (each holds a full GPU readback).
       if (this.enc.encodeQueueSize > 30) {return;}

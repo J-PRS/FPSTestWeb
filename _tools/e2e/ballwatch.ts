@@ -10,6 +10,8 @@
  *   2. tick frames advance (the client is live, not stalled)
  *   3. ZERO 'segment rubberband' warns and zero suppressed-fleet rollups —
  *      the metric is same-endpoint now, so any warn is real divergence.
+ *   4. ZERO persistent [StateHash] lane DESYNCs — after the committed-regime
+ *      fix every persistent desync is a genuinely missed edge, so it gates.
  */
 import { launchClient, closeClient } from './browser.ts';
 import { upStack } from './env.ts';
@@ -28,11 +30,18 @@ const client = await launchClient(stack.clientUrl('&room=ballwatch&bots=8'));
 let segWarns = 0;
 let fleetLines = 0;
 let bounceWarns = 0;
+let persistentDesyncs = 0;
+const desyncSamples: string[] = [];
 const samples: string[] = [];
 client.page.on('console', (m) => {
   if (m.type() !== 'warn') return;
   const t = m.text();
-  if (/segment rubberband/.test(t)) {
+  // Post committed-regime fix, a PERSISTENT lane desync is a genuinely
+  // missed edge — the transient one-check blip is still informational.
+  if (/\[StateHash\] \w+ DESYNC.*persistent/.test(t)) {
+    persistentDesyncs++;
+    if (desyncSamples.length < 6) desyncSamples.push(t.slice(0, 300));
+  } else if (/segment rubberband/.test(t)) {
     segWarns++;
     if (samples.length < 5) samples.push(t.slice(0, 400));
   } else if (/ball rubberbands: \d+ suppressed/.test(t)) {
@@ -61,7 +70,7 @@ try {
   while (Date.now() - t0 < SOAK_MS) {
     await sleep(5000);
     const seq = await client.test<number>(`t.networkManager.lastTickSeq`).catch(() => -1);
-    process.stdout.write(`  … ${((Date.now() - t0) / 1000).toFixed(0)}s tickSeq=${seq} segWarns=${segWarns} fleetRollups=${fleetLines} edgeWarns=${bounceWarns}\n`);
+    process.stdout.write(`  … ${((Date.now() - t0) / 1000).toFixed(0)}s tickSeq=${seq} segWarns=${segWarns} fleetRollups=${fleetLines} edgeWarns=${bounceWarns} desync=${persistentDesyncs}\n`);
   }
 
   ok(segWarns === 0, `zero segment-rubberband warns over ${SOAK_MS / 1000}s (saw ${segWarns})`);
@@ -70,7 +79,9 @@ try {
   // Informational only; a huge count would still hint at a resync storm.
   console.log(`  info: ${fleetLines} edge-fleet rollups, ${bounceWarns} edge-kind warns (corrections, by design)`);
   ok(fleetLines < 20, `fleet rollups bounded (${fleetLines})`);
+  ok(persistentDesyncs === 0, `zero persistent lane desyncs over ${SOAK_MS / 1000}s (saw ${persistentDesyncs})`);
   for (const s of samples) console.log(`  sample: ${s}`);
+  for (const s of desyncSamples) console.log(`  desync: ${s}`);
 } finally {
   await closeClient(client);
   stack.down();
