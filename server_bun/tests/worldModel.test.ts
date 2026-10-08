@@ -214,4 +214,21 @@ describe('world model <-> protocol conformance', () => {
     const declared = new Set(['id', ...declaredFieldNames(WORLD_MODEL.player!, 'rosterFields')]);
     expect(new Set(keys)).toEqual(declared);
   });
+
+  it('gameState inline roster rows match each kind\'s declared row', () => {
+    // flags/pickups/deployables ride gameState as inline anonymous row
+    // types — same drift surface as GameStatePlayer, same pin.
+    const cases: [string, string, string[]][] = [
+      // [container key, idField, kind]
+      ['flags', 'team', 'flag'],
+      ['pickups', 'id', 'pickup'],
+      ['deployables', 'id', 'deploy'],
+    ];
+    for (const [container, idField, kind] of cases) {
+      const inline = PROTOCOL.match(new RegExp(`${container}\\?:\\s*\\{([^}]*)\\}\\[\\]`))![1]!;
+      const keys = new Set([...inline.matchAll(/(\w+)\??:/g)].map((m) => m[1]));
+      const declared = new Set([idField, ...declaredFieldNames(WORLD_MODEL[kind]!, 'rosterFields')]);
+      expect(keys, `${container} row keys drifted from ${kind}.rosterFields`).toEqual(declared);
+    }
+  });
 });

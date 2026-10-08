@@ -3457,3 +3457,10 @@ on either side drifted silently until a runtime warn caught it. The
 conformance test now parses the interface and asserts its keys equal
 the declared roster row (+id). Type-level drift fails at test time,
 not wire time.
+
+## 2.200 — inline roster rows pinned too
+
+flags/pickups/deployables ride gameState as anonymous inline row types
+— the same drift surface as GameStatePlayer. The conformance pin now
+asserts each container's keys equal the kind's declared rosterFields
+(+idField). Every wire row shape is pinned against the model.
