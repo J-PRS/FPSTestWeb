@@ -30,6 +30,10 @@ async function persistDir(h: DirHandle): Promise<void> {
   } catch { /* persistence is a nicety, not a requirement */ }
 }
 
+// A stored handle that came back 'prompt' instead of 'granted' — kept so
+// the next user gesture can re-grant it instead of re-picking.
+let stored: DirHandle | null = null;
+
 export async function restoreClipsDir(): Promise<boolean> {
   try {
     const db = await idb();
@@ -38,10 +42,12 @@ export async function restoreClipsDir(): Promise<boolean> {
       q.onsuccess = () => res(q.result as DirHandle | undefined);
       q.onerror = () => res(undefined);
     });
-    if (h && (await h.queryPermission?.({ mode: 'readwrite' }) === 'granted')) {
+    if (!h) {return false;}
+    if ((await h.queryPermission?.({ mode: 'readwrite' })) === 'granted') {
       dir = h;
       return true;
     }
+    stored = h; // 'prompt' — armable again inside a gesture
   } catch { /* falls through to anchor downloads */ }
   return false;
 }
@@ -50,6 +56,18 @@ export function hasClipsDir(): boolean { return dir !== null; }
 
 /** Must run inside a user gesture. Returns true when a folder is armed. */
 export async function pickClipsDir(): Promise<boolean> {
+  // Stored handle awaiting a gesture re-grant? Chrome restores persisted
+  // dirs as 'prompt', not 'granted' — without this branch every save
+  // silently fell back to the anchor download = a prompt per clip.
+  if (!dir && stored) {
+    try {
+      if ((await stored.requestPermission?.({ mode: 'readwrite' })) === 'granted') {
+        dir = stored;
+        return true;
+      }
+    } catch { /* falls through to a fresh pick */ }
+    stored = null;
+  }
   const picker = (window as unknown as { showDirectoryPicker?: (o?: object) => Promise<DirHandle> }).showDirectoryPicker;
   if (!picker) {return false;}
   try {
