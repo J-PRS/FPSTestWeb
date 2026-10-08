@@ -1,3 +1,5 @@
+2026-10-01 - Lag-comp rewinds by the shooter's measured render delay (clientStats.renderLagMs), not a fixed 200ms — jittered-link ghosts validated ahead of screen point
+2026-10-01 - RTT channel hardened: server probe owns transit estimate; pongs must echo an issued stamp; joiners jump the ping queue
 2026-10-01 - Remote undeclared teleports snap, not smear: deltas beyond plausible travel since the last snapshot wipe the buffer + DR state instead of lerping a speed-ghost across the gap
 2026-10-01 - Pre-terrain joins parked as pendingTrack — players seating before a room's field landed stayed shadowless forever (no reconcile/corrections/transit)
 2026-10-01 - strictRng gate arms on botRng() injection and releases on botRngRelease() — import-time arm poisoned netbot in mixed runs

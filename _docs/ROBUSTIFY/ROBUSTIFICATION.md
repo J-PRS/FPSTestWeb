@@ -3711,3 +3711,19 @@ attachField replays it (markReseated arms the in-flight-frame grace);
 untrack() drops pending seats too. Caught by the rttProbe live test -
 server ping -> client echo -> wire pong -> feedTransit ->
 serverTransitEma, the full unforgeable channel proven end-to-end.
+
+## 2.237 Lag-comp trusted a constant the buffer does not keep
+
+Ghost-truth rewinds used a fixed RENDER_LAG_MS=200, but SnapshotBuffer's
+interp delay is adaptive (stretches to ~800ms under jitter/tier
+suppression). On bad links the envelope validated hundreds of ms of sim
+AHEAD of the ghost the shooter aimed at - the hit-reg class inverted:
+everything aimed right missed. The client now reports its worst-case
+remote interp delay via clientStats.renderLagMs; renderLagOf() clamps
+it to the buffer ceiling and every shooter-side validator (blast
+splashOne/plate, body + creature sweeps, beam) reads it. Bots still 0;
+unreported falls back to 200. Same stretch: server channel owns the
+transit estimate outright (forged lowball ping could not shrink a
+forger's lead), pongs must echo an issued stamp (unprompted pong{now}
+spoofed rtt=0), undeclared remote teleports snap instead of smearing
+across the interp window, and unmeasured joiners jump the ping queue.
