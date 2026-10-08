@@ -13,6 +13,7 @@ import type { createRenderer } from '../core/renderer.js';
 import type { WorldState } from '../game/worldState.js';
 import type { chatSink } from '../game/chat.js';
 import type { ViewModel } from '../entities/ViewModel.js';
+import type { createDemoLifecycle } from '../game/demoLifecycle.js';
 
 export interface TestHandle {
   player: Player;
@@ -24,6 +25,9 @@ export interface TestHandle {
   networkManager: NetworkManager;
   demoManager: DemoManager | null;
   rendererSetup: ReturnType<typeof createRenderer>;
+  /** Playback truth lives here during a replay (playbackRemotes/playbackBallById) —
+   *  probes must read it, not world.remotePlayers, to compare replay vs live. */
+  demoLifecycle: ReturnType<typeof createDemoLifecycle>;
   chatSink: typeof chatSink;
 }
 

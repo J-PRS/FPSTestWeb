@@ -373,6 +373,10 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   const ballLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
 
   networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined>) => {
+    // During demo playback the world shows the replay, not the live wire —
+    // every lane would compare server truth against the recorded past and
+    // report phantom desyncs.
+    if (ctx.world?.playbackMode) {return;}
     hashCheckCount++;
     // Lane payloads unpack once at the edge — declared field order, so
     // each tuple is cast at the lane it belongs to.
