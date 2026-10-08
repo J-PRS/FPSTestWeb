@@ -3,6 +3,7 @@ import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
+import { structureColliders, type StructureCollider } from '../../shared/ballCollide.ts';
 import { FieldSurface, MoveJudge, type Shadow } from './moveJudge.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
@@ -26,6 +27,10 @@ export class RoomMoveSim {
   /** Structures held independently of the surface — they can arrive
    *  before OR after the heightfield, and either order must work. */
   private solid: SolidWorld | null = null;
+  /** Live deployable hulls — the RoomDeployables array, passed by
+   *  reference so plants/removals mid-match hit every shadow without a
+   *  re-attach. */
+  private dyn?: readonly StructureCollider[];
   private shadows = new Map<string, Shadow>();
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
@@ -106,9 +111,21 @@ export class RoomMoveSim {
   /** Map structures layered over the field — solid walls and walkable
    *  tops for every sim already tracking (the surface object is shared). */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
-    this.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
+    this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
     if (this.surface) this.surface.solid = this.solid;
     this.structEpoch++;
+  }
+
+  /** Deployable hulls — one array, mutated in place by RoomDeployables.
+   *  When the map has no structures a first plant may arrive before any
+   *  attachStructures call, so mint the world lazily too. */
+  setDynamic(cols: readonly StructureCollider[]): void {
+    this.dyn = cols;
+    if (this.solid) this.solid.dyn = cols;
+    else if (cols.length) {
+      this.solid = new SolidWorld([], cols);
+      if (this.surface) this.surface.solid = this.solid;
+    }
   }
   /** Bumped on every attachStructures — structure-reading caches key on
    *  it so a map swap or flag re-snap can't serve stale tops. */
@@ -121,13 +138,15 @@ export class RoomMoveSim {
     return this.solid?.topAt(x, z) ?? -Infinity;
   }
 
-  /** Call on join/spawn — seeds the sim at the reported spot. */
-  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string): void {
+  /** Call on join/spawn — seeds the sim at the reported spot. `team`
+   *  feeds team-gated colliders (gate shields pass allies). */
+  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string): void {
     if (!this.surface) return;
     const state: MoveState = {
       pos: { x: pos.x, y: pos.y, z: pos.z },
       vel: { x: 0, y: 0, z: 0 },
       yaw, pitch: 0, onGround: true,
+      team,
     };
     const mods = perkMods(perk);
     this.shadows.set(playerId, {
@@ -146,6 +165,13 @@ export class RoomMoveSim {
   }
 
   untrack(playerId: string): void { this.shadows.delete(playerId); }
+
+  /** Mid-match team swap (rebalance) — the shadow's gate-shield access
+   *  flips with the jersey, not at the next respawn. */
+  setTeam(playerId: string, team: string | undefined): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) sh.sim.state.team = team;
+  }
 
   /** Arm the post-re-seat report grace — see the resyncAt comment on the
    *  shadow: pre-gameState frames still in flight are muted ~1 RTT. */

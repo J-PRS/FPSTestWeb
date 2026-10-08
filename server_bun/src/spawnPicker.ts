@@ -33,6 +33,12 @@ export interface SpawnPickerHost {
 }
 
 export class SpawnPicker {
+  /** A living enemy inside this radius marks a spawn camped — the
+   *  objective pull can't claim it (attack goals sit in enemy
+   *  territory; uncapped it materializes the respawner into the
+   *  defended base). Sized under typical stand-defense spacing. */
+  private static readonly CAMPED_R = 45;
+
   constructor(private host: SpawnPickerHost) {}
 
   pick(playerId: string, team?: TeamId): Vec3 {
@@ -83,15 +89,23 @@ export class SpawnPicker {
         ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
       if (!anyFoe) return { ...points[Math.floor(this.host.rng() * points.length)]! };
     }
-    const base = obj ? obj.pos
-      : bias > 0 && (team === 'alpha' || team === 'bravo')
-        ? this.host.teamBases()?.[team] : undefined;
+    // Home pull target for points that can't ride the objective pull.
+    const ownBase = bias > 0 && (team === 'alpha' || team === 'bravo')
+      ? this.host.teamBases()?.[team] : undefined;
     let best: SpawnPoint = { ...points[0]! };
     let bestScore = -Infinity;
     for (const spawn of points) {
       const minFoeDist = this.foeClearance(spawn, playerId, team);
-      const score = (base
-        ? minFoeDist - bias * Math.hypot(spawn.x - base.x, spawn.z - base.z)
+      // A camped point can't ride the objective pull — attack goals sit
+      // in enemy territory, and on maps with only base-adjacent spheres
+      // (bastion's flat pool) the w-term otherwise materializes the
+      // respawner inside the enemy's defended base. Unsafe points fall
+      // back to the home pull, which already penalizes the transit.
+      const objOk = !!obj && minFoeDist > SpawnPicker.CAMPED_R;
+      const pullPos = objOk ? obj!.pos : obj ? ownBase : (bias > 0 ? ownBase : undefined);
+      const pullW = objOk ? obj!.w : bias;
+      const score = (pullPos
+        ? minFoeDist - pullW * Math.hypot(spawn.x - pullPos.x, spawn.z - pullPos.z)
         : minFoeDist) * (spawn.w ?? 1) / 100;
       if (score > bestScore) {
         bestScore = score;

@@ -483,10 +483,12 @@ export class Room {
           this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
         }
         // Score pickups are the belt economy's income: one charge per
-        // nugget, capped at the spawn stock.
+        // nugget, capped at the spawn stock. Gems bank only in a gems
+        // mode — in CTF a gem is heal+credit, not a cap. Tags are tdm's
+        // kill-confirmation point; they only ever spawn there.
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
         const team = p.team;
-        if (team === 'alpha' || team === 'bravo') this.score(team);
+        if ((kind === 'tag' || this.modeSpec?.gems) && (team === 'alpha' || team === 'bravo')) this.score(team);
         return;
       }
       this.scoring.applyPowerup(p, kind);

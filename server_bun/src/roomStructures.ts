@@ -1,6 +1,6 @@
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
-import { type MapSpec, type StructureSpec, flagStandSpecs } from '../../shared/mapSpec.ts';
+import { type MapSpec, type StructureSpec } from '../../shared/mapSpec.ts';
 import type { ModeSpec } from '../../shared/teams.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { seatKits } from '../../shared/structKits.ts';
@@ -41,31 +41,18 @@ export class RoomStructures {
     return JSON.stringify(this.eff().filter((s) => s.kind === 'stand' || s.kind === 'shield'));
   }
 
-  /** The spec's authored structures PLUS collision hulls for the flag
-   *  daises — 'stand' entries collide everywhere (move sim, shells,
-   *  balls, blast LOS) and ride the wire echo, but the client never
-   *  draws them as generic boxes (the dais mesh is their visual). */
+  /** The spec's authored structures — the flag socket is visual-only
+   *  (mkFlagStand), so nothing is injected here; a map that wants a real
+   *  platform authors a 'stand' box or a katastand/flagtower kit piece. */
   eff(): StructureSpec[] {
     const host = this.host;
     // Team shield panes vanish while their grid is dark — no collider,
     // no render, no blocker on either side.
     // deployables construct after the first moveSim/ballSim attach —
     // pre-seed the grid reads live, so a missing table means powered.
-    const out = (host.spec.structures ?? []).filter(
+    return (host.spec.structures ?? []).filter(
       (s) => s.kind !== 'shield' || !s.team || (host.deployables?.teamPowered(s.team) ?? true),
     );
-    if (!host.modeSpec?.flags) return out;
-    if (process.env.FPS_NOSTAND) return out; // soak A/B: measure approach cost of the dais hulls
-    if (host.mode === 'rabbit') {
-      out.push(...flagStandSpecs(host.flagPlacer.rabbitFlagHome()));
-      return out;
-    }
-    const bases = host.spec.bases;
-    if (bases?.alpha && bases?.bravo) {
-      const snapped = host.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
-      out.push(...flagStandSpecs(snapped.alpha, 'alpha'), ...flagStandSpecs(snapped.bravo, 'bravo'));
-    }
-    return out;
   }
 
   /** Re-attach the merged structure list everywhere it feeds — called

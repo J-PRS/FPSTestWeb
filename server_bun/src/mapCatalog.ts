@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { CONFIG } from './config.ts';
-import { type MapSpec, resolveMapSpec, specModes } from '../../shared/mapSpec.ts';
+import { type MapSpec, resolveMapSpec, specModes, parseMapSpecJson } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
@@ -80,7 +80,7 @@ export class MapCatalog {
 
   private readSpec(name: string): MapSpec {
     const path = `${MAPS_DIR}/${name}.json`;
-    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    const parsed = parseMapSpecJson(readFileSync(path, 'utf8'));
     const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
     if (isT2 && CONFIG.publicBeta) throw new Error('t2 spec excluded by FPS_PUBLIC_BETA');
     if (isT2) this.t2Flags.add(name);

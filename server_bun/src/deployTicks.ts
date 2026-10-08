@@ -128,12 +128,12 @@ export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'turretShot', 'id', d.id, { owner: d.owner, targetId: target }) as ServerMessage);
     r.room.messages.turretAttack(d.owner, target, TURRET_DAMAGE);}
 
-const SENTRY_RANGE = DEPLOY_ITEMS.sentry.range!;
-const SENTRY_FIRE_INTERVAL = DEPLOY_ITEMS.sentry.fireInterval!;
-const SENTRY_DAMAGE = DEPLOY_ITEMS.sentry.damage!;
-const SENTRY_BOLT_SPEED = DEPLOY_ITEMS.sentry.projSpeed!;
-const SENTRY_BLAST_RADIUS = DEPLOY_ITEMS.sentry.blastRadius!;
-const SENTRY_KNOCKBACK = DEPLOY_ITEMS.sentry.knockback!;
+const SENTRY_RANGE = DEPLOY_ITEMS.baseturret.range!;
+const SENTRY_FIRE_INTERVAL = DEPLOY_ITEMS.baseturret.fireInterval!;
+const SENTRY_DAMAGE = DEPLOY_ITEMS.baseturret.damage!;
+const SENTRY_BOLT_SPEED = DEPLOY_ITEMS.baseturret.projSpeed!;
+const SENTRY_BLAST_RADIUS = DEPLOY_ITEMS.baseturret.blastRadius!;
+const SENTRY_KNOCKBACK = DEPLOY_ITEMS.baseturret.knockback!;
 
 /** Base sentry: same nearest-hostile scan as the field turret, but the
  *  shell is a REAL bolt — it aims at the target's lead point (pos +

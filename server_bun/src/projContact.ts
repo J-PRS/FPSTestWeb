@@ -48,8 +48,13 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     }
     // Wall sweep before the player check — a shell that clips a face
     // detonates there instead of phasing through to someone inside.
-    if (r.solids.length) {
-      const hit = segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined, proj.ownerTeam);
+    // Deployable hulls contest the same lane: earliest contact wins, so
+    // a generator body-blocks a shot meant for the vault wall behind it.
+    {
+      const sh = r.solids.length ? segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined, proj.ownerTeam) : null;
+      const dyn = r.room.deployables?.solidCols;
+      const dh = dyn?.length ? segSolidHit(from, p.pos, dyn, undefined, proj.ownerTeam) : null;
+      const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
       if (hit) { if (stats.stick) { r.attach(proj, hit); return true; } r.detonate(proj, hit); return true; }
     }
     // Shield sweep — an enemy dome eats the shell at the field's edge,
@@ -153,6 +158,11 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     if (r.solids.length) {
       const sh = segSolidHit(p.pos, end, r.solids, r.solidIndex ?? undefined, proj.ownerTeam);
       if (sh) bestT = Math.min(bestT, segPointT(p.pos, end, sh));
+    }
+    const dcols = r.room.deployables?.solidCols;
+    if (dcols?.length) {
+      const dh = segSolidHit(p.pos, end, dcols, undefined, proj.ownerTeam);
+      if (dh) bestT = Math.min(bestT, segPointT(p.pos, end, dh));
     }
     // A dome eats the discharged beam too — same rule as flight contact.
     const sht = r.room.deployables?.shieldBlock(p.pos, end, proj.ownerId) ?? null;

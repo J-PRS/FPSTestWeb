@@ -114,7 +114,12 @@ export interface ProjHost {
     splashDamage(ownerId: string, at: Vec3, radius: number, dmg: number, excludeId?: number): void;
     sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null;
   };
-  deployables?: { shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null };
+  deployables?: {
+    shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null;
+    /** Live gear hulls — a shell detonates on contact instead of
+     *  phasing through a generator and popping on the wall behind it. */
+    solidCols?: readonly import('../../shared/ballCollide.ts').StructureCollider[];
+  };
   moveSim?: { structureTop(x: number, z: number): number };
 }
 

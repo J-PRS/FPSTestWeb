@@ -163,6 +163,19 @@ export class SessionRegistry {
     return ok;
   }
 
+  /** Dev-restart restore: a process respawn rebuilds the orphaned seat
+   *  directly at 'grace' — same expiry a live disconnect would arm, so a
+   *  reclaimer gets the reclaim path and a no-show still reaps. */
+  seedGrace(playerId: string, room: string, graceMs: number, onExpire: () => void): void {
+    const s: Session = { state: 'grace', gen: ++this.genCounter, at: wallNow(), room };
+    this.sessions.set(playerId, s);
+    this.bumpGrace(room, +1);
+    s.graceTimer = setTimeout(() => {
+      try { onExpire(); }
+      catch (e) { logger.error('Grace expiry failed', { playerId, err: e instanceof Error ? e.message : String(e) }); }
+    }, graceMs);
+  }
+
   /** any → reaped: grace expiry, idle reap, kick, admin remove. Every
    *  lifecycle teardown funnels through removePlayerCompletely → here. */
   terminate(playerId: string, reason: string): boolean {
