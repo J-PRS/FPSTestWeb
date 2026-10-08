@@ -118,10 +118,20 @@ export class HealthBarSystem {
 
   /** Beam is touching this item right now — show/refresh its vitals. */
   showRepair(item: RepairTarget): void {
+    this.showVitals(item, true, REPAIR_LINGER); // welded things are friendly by definition
+  }
+
+  /** Took damage — same live-vitals bar, ally color only for our team's
+   *  gear; lingers like a hit popup, not the weld tick. */
+  showDamage(item: RepairTarget, ally: boolean): void {
+    this.showVitals(item, ally, BAR_LIFETIME);
+  }
+
+  private showVitals(item: RepairTarget, ally: boolean, linger: number): void {
     let r = this.repairBars.get(item);
     if (!r) {
       const el = this.createBarEl();
-      el.classList.add('ally'); // welded things are friendly by definition
+      el.classList.toggle('ally', ally);
       const armorEl = document.createElement('div');
       armorEl.className = 'armor';
       el.appendChild(armorEl);
@@ -136,7 +146,7 @@ export class HealthBarSystem {
       };
       this.repairBars.set(item, r);
     }
-    r.bar.life = REPAIR_LINGER;
+    r.bar.life = linger;
   }
 
   private removeRepair(item: RepairTarget): void {

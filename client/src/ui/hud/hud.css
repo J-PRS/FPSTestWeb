@@ -552,10 +552,13 @@ body:has(#hud.cm-open) #healthbar-container {
 #scoreboard tr.sb-alpha td:nth-child(2) { color: #7db8ff; }
 #scoreboard tr.sb-bravo td:nth-child(2) { color: #ff9a6a; }
 /* CLASS column — one hue per chassis so comp reads at a glance. */
-#scoreboard td.sb-cls-light { color: #9fe8a9; }
-#scoreboard td.sb-cls-medium { color: #ffd27f; }
-#scoreboard td.sb-cls-heavy { color: #ff8f8f; }
-#scoreboard td.sb-cls-none { color: #666; }
+/* tr prefix: tr.self td also reaches 0-1-2 specificity — without it the
+ *  self-row tint flattens the class color on your own row. Order alone
+ *  isn't enough (self is equally specific and the class rules must win). */
+#scoreboard tr td.sb-cls-light { color: #9fe8a9; }
+#scoreboard tr td.sb-cls-medium { color: #ffd27f; }
+#scoreboard tr td.sb-cls-heavy { color: #ff8f8f; }
+#scoreboard tr td.sb-cls-none { color: #666; }
 #team-score {
   position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;

@@ -9,6 +9,17 @@
   src: url('/fonts/rajdhani-bold.woff2') format('woff2');
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* Global scrollbars — thin, borderless, near-invisible until hovered.
+ *  Native scrollbar is a heavy OS widget; it visually wrecks the dark
+ *  chrome palette (seen: default 16px scrollbar on the lobby panel). */
+* { scrollbar-width: thin; scrollbar-color: rgba(140,170,195,0.35) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(140,170,195,0.28); border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(140,170,195,0.55); }
+::-webkit-scrollbar-corner { background: transparent; }
 body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
 canvas { display: block; }
 #overlay {
@@ -281,9 +292,11 @@ body.menu-open #frag-msg { display: none !important; }
 #loadout-bar {
   position: absolute; left: 50%; bottom: 26px;
   transform: translateX(-50%);
-  display: flex; flex-direction: row; flex-wrap: wrap;
-  justify-content: center; align-items: stretch;
-  gap: 10px 20px; padding: 12px 18px;
+  /* One group per row — the old row-wrap flowed kit rows together and
+     let the wrap point scatter them across the sheet. */
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 10px; padding: 12px 18px;
   max-width: min(96vw, 900px);
   background: rgba(10,16,26,0.85);
   border: 1px solid rgba(255,255,255,0.10);
@@ -450,7 +463,7 @@ body.lobby-open #loadout-bar { display: none; }
   /* Centered hub window — the classic server-browser card floats over
    *  the game view, not docked beside the settings column. */
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  z-index: 60; width: min(560px, 86vw); max-height: 82vh;
+  z-index: 60; width: min(760px, 90vw); max-height: 82vh;
   background: rgba(8,11,16,0.97); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 8px; box-shadow: 0 12px 48px rgba(0,0,0,0.6);
   color: #dde8f2; padding: 18px 20px; font-size: 0.72rem; overflow-y: auto;

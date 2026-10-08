@@ -85,6 +85,9 @@ export class Lobby {
   // 'custom' is our own spec. Both on = the full list.
   private mapFam = { t2: true, custom: true };
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** SOLO tab's pickers — same fill rules as HOST's, bound from the
+   *  panel builder once it exists. */
+  private soloSels: { mode: HTMLSelectElement; map: HTMLSelectElement } | null = null;
 
   currentRoom(): string {
     return urlParams.room ?? 'default';
@@ -123,50 +126,112 @@ export class Lobby {
       this.mapsFailed = true;
       Logger.warn('lobby: listMaps failed — map picker degraded');
     }
-    this.modeSelect.textContent = '';
+    // Mode order is a curated popularity ramp (team staples first, niche
+    // FFA last), not alphabetical — a mode picker is a recommendation.
+    const MODE_ORDER = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
+    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))]
+      .toSorted((a, b) => (MODE_ORDER.indexOf(a) + 1 || 99) - (MODE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+    this.fillModeSel(this.modeSelect, modes, 'ANY');
+    if (this.soloSels) {
+      // Solo modes: the same legal set plus the no-map rulesets —
+      // '' is free roam (no TeamBots), flagrun/classic host no spec.
+      // Trailing position: it's a real pick, not a "no filter" default.
+      this.fillModeSel(this.soloSels.mode, modes, 'FREE ROAM', false);
+      for (const [extra, label] of [['flagrun', 'FLAG RUN'], ['classic', 'BALLS']] as const) {
+        const o = document.createElement('option');
+        // 'classic' boots the original bounce-and-shoot sandbox — BALLS
+        // names what you actually do; "classic" is only its dev codename.
+        o.value = extra; o.textContent = label;
+        this.soloSels.mode.append(o);
+      }
+      // FREE ROAM dead last — sandbox entries sit at the tail of the ramp.
+      const fr = this.soloSels.mode.querySelector('option[value=""]');
+      if (fr) this.soloSels.mode.append(fr);
+    }
+    this.fillMapSelect();
+  }
+
+  /** Mode options into one select — HOST and SOLO share the list. The
+   *  '' option leads on HOST ("ANY" = no filter) but trails on SOLO
+   *  ("FREE ROAM" is a mode among peers, not a default). */
+  private fillModeSel(sel: HTMLSelectElement, modes: string[], firstLabel: string, leading = true): void {
+    const keep = sel.value;
+    sel.textContent = '';
     const any = document.createElement('option');
-    any.value = ''; any.textContent = 'ANY';
-    this.modeSelect.append(any);
-    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))].toSorted();
+    any.value = ''; any.textContent = firstLabel;
+    if (leading) sel.append(any);
     for (const mode of modes) {
       const o = document.createElement('option');
       o.value = mode;
       o.textContent = mode.toUpperCase();
-      this.modeSelect.append(o);
+      sel.append(o);
     }
-    this.fillMapSelect();
+    if (!leading) sel.append(any);
+    sel.value = keep;
+  }
+
+  bindSoloSelects(modeSel: HTMLSelectElement, mapSel: HTMLSelectElement): void {
+    this.soloSels = { mode: modeSel, map: mapSel };
+    modeSel.addEventListener('change', () => this.fillMapSel(this.soloSels!));
+    mapSel.addEventListener('change', () => {
+      // A map pick with no mode chosen adopts the spec's own ruleset —
+      // the label already advertises it ("BASTION · CTF · 8 bots").
+      const m = this.maps.find((x) => x.name === mapSel.value);
+      if (m?.mode && modeSel.value === '') {
+        modeSel.value = m.mode;
+        // Real change: the toggle row relights and the map list refilters
+        // to the adopted ruleset (which the map already declared legal).
+        modeSel.dispatchEvent(new Event('change'));
+      }
+    });
+    if (this.maps.length || this.mapsFailed) {this.refreshMaps();}
   }
 
   /** Refill MAP for the chosen MODE — a map only shows the modes it
    *  declares, so the list shrinks to the legal arenas. */
   fillMapSelect(): void {
-    const mode = this.modeSelect.value;
-    this.mapSelect.textContent = '';
+    this.fillMapSel({ mode: this.modeSelect, map: this.mapSelect });
+    if (this.soloSels) {this.fillMapSel(this.soloSels);}
+  }
+
+  private fillMapSel(sels: { mode: HTMLSelectElement; map: HTMLSelectElement }): void {
+    const mode = sels.mode.value;
+    const mapSelect = sels.map;
+    mapSelect.textContent = '';
     if (this.maps.length === 0) {
       const o = document.createElement('option');
       o.textContent = this.mapsFailed ? 'server offline' : 'server default';
       o.value = ''; o.dataset.mode = '';
-      this.mapSelect.append(o);
+      mapSelect.append(o);
       return;
     }
+    // Modes no spec declares (flagrun circuit, classic sandbox) aren't
+    // map rulesets at all — the mode stamps its own layout onto bare
+    // terrain. Restrict those to our own spec maps: an 800m circuit
+    // square wants a real core heightmap, not a T2 port's bounds.
+    const catalogModes = new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])));
+    const procedural = !!mode && !catalogModes.has(mode);
     const rows = this.maps.filter((m) =>
       this.mapFam[m.t2 ? 't2' : 'custom'] &&
-      (!mode || (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)));
+      (!procedural || !m.t2) &&
+      (!mode || procedural ||
+        (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)));
     if (rows.length === 0) {
       const o = document.createElement('option');
       o.textContent = `no ${mode} maps`;
       o.value = ''; o.dataset.mode = '';
-      this.mapSelect.append(o);
+      mapSelect.append(o);
       return;
     }
     for (const m of rows) {
       const o = document.createElement('option');
       o.value = m.name;
       o.dataset.mode = mode || m.mode;
-      // Label shows the default ruleset so a shared map doesn't pretend
-      // the pick is unique to the selected mode.
-      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
-      this.mapSelect.append(o);
+      // The ·MODE suffix is the map's DEFAULT ruleset — shown only on
+      // ANY/FREE ROAM where it disambiguates the pick. With a mode
+      // already chosen it would read as the map overriding that choice.
+      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}${!mode && m.mode ? ` · ${m.mode.toUpperCase()}` : ''}`;
+      mapSelect.append(o);
     }
   }
 
@@ -242,8 +307,16 @@ export class Lobby {
     rooms.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const cur = rooms.find((r) => r.name === this.currentRoom());
     const online = this.online();
+    // Dedupe: "ctf-1 · CTF · CTF" is three fields agreeing, not info —
+    // keep each token only when it adds something.
+    const hereExtras: string[] = [];
+    if (cur?.mode) hereExtras.push(cur.mode.toUpperCase());
+    if (cur?.map && cur.map.toUpperCase() !== cur.mode?.toUpperCase()
+      && !this.currentRoom().toUpperCase().includes(cur.map.toUpperCase())) {
+      hereExtras.push(cur.map.toUpperCase());
+    }
     this.here.textContent = online
-      ? `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`
+      ? `IN: ${this.currentRoom().toUpperCase()}${hereExtras.length ? ` · ${hereExtras.join(' · ')}` : ''}`
       : 'IN: OFFLINE';
     // Default lobby IS home — leaving it is a no-op; offline there's no
     // room to leave, but the button doubles as "go to the lobby".
@@ -253,7 +326,7 @@ export class Lobby {
     if (rooms.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'color:rgba(58,167,255,0.5);padding:6px 2px;';
-      empty.textContent = '— no matches — host one or create by name below';
+      empty.textContent = '— no matches — host one from the HOST tab';
       this.rows.append(empty);
     }
   }
@@ -282,7 +355,13 @@ export class Lobby {
     const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
       : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
     const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60_000)}m` : '';
-    meta.textContent = `${r.mode ? `${r.mode  } ` : ''}${r.map ? `${r.map  } ` : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
+    // Same dedupe as the header — a room named after its mode doesn't
+    // need "ctf" three times in one line.
+    const room = r.name.toUpperCase();
+    const modeTxt = r.mode && !room.includes(r.mode.toUpperCase()) ? `${r.mode} ` : '';
+    const mapTxt = r.map && r.map.toUpperCase() !== r.mode?.toUpperCase()
+      && !room.includes(r.map.toUpperCase()) ? `${r.map} ` : '';
+    meta.textContent = `${modeTxt}${mapTxt}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(star, name, meta);
     row.addEventListener('click', () => this.join(r.name));
     this.rows.append(row);

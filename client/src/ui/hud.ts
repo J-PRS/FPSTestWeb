@@ -306,10 +306,11 @@ export class HUD {
     if (down) {
       if (!this.connDownAt) {this.connDownAt = now;}
       const s = (now - this.connDownAt) / 1000;
-      // A reasoned close ('server restarting') names itself; a silent
-      // drop keeps the generic label.
+      // A reasoned close ('server restarting') names itself and reads
+      // amber — expected, transient. A silent 1006 keeps the generic red
+      // CONNECTION LOST — that's the one that means something broke.
       const label = reason ? reason.toUpperCase() : 'CONNECTION LOST';
-      this.paintConn(`${label} — reconnecting ${s.toFixed(1)}s`, 'down');
+      this.paintConn(`${label} — reconnecting ${s.toFixed(1)}s`, reason ? 'warn' : 'down');
       return;
     }
     if (this.connDownAt) {

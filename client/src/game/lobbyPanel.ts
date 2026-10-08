@@ -13,6 +13,9 @@ export interface LobbyPanelHost {
   mapFamOn(kind: 't2' | 'custom'): boolean;
   toggleMapFam(kind: 't2' | 'custom'): void;
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): void;
+  /** SOLO page's pickers — Lobby refills them from the same map list as
+   *  HOST's so both tabs agree on what's playable. */
+  bindSoloSelects(modeSel: HTMLSelectElement, mapSel: HTMLSelectElement): void;
   currentRoom(): string;
   /** Favorites persist across sessions — classic browser column. */
   isFav(name: string): boolean;
@@ -70,54 +73,61 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   const code = () => p2pIn.value.trim() || 'duel';
   const wrap = document.createElement('div');
   wrap.className = 'lb-quick';
+  wrap.style.cssText = 'align-items:center;';
+  // Public = listed on the relay so QUICK JOINers land here; off = the
+  // code is the only way in.
+  let pub = false;
+  // .tog styling is scoped to #overlay .btn-row — the wrapper is required
+  // for the tile + ON/OFF state box to render at all.
+  const pubRow = document.createElement('div');
+  pubRow.className = 'btn-row';
+  pubRow.style.cssText = 'flex:1;display:flex;';
+  const pubBtn = document.createElement('button');
+  pubBtn.className = 'tog';
+  // Row-height match: .btn-row's 9px padding is sized for the settings
+  // column, .lb-quick chips are shorter — slim it to the row's rhythm.
+  pubBtn.style.cssText = 'flex:1;padding:4px 8px;';
+  pubBtn.textContent = 'PUBLIC';
+  pubBtn.title = 'listed publicly — quick-joinable';
+  pubBtn.addEventListener('click', () => {
+    pub = !pub;
+    pubBtn.classList.toggle('on', pub);
+  });
+  pubRow.appendChild(pubBtn);
   const specs: [string, () => void][] = [
-    ['HOST PRIVATE', () => p2pGo(`host:${code()}`, 0)],
-    ['JOIN BY CODE', () => p2pGo(`join:${code()}`, 0)],
-    // Open lobby: listed publicly — anyone pressing QUICK DUEL lands here.
-    ['HOST PUBLIC', () => p2pGo(`host:${code()}`, 1)],
+    ['HOST', () => p2pGo(`host:${code()}`, pub ? 1 : 0)],
+    ['JOIN', () => p2pGo(`join:${code()}`, 0)],
     // Quick join: the relay hands back the oldest open lobby.
-    ['QUICK DUEL', () => p2pGo('quick', 0)],
+    ['QUICK JOIN', () => p2pGo('quick', 0)],
   ];
   for (const [text, fn] of specs) {
     const b = btn(text);
     b.addEventListener('click', fn);
     wrap.appendChild(b);
   }
+  wrap.appendChild(pubRow);
   return wrap;
 }
 
-/** Offline solo/bot modes — the same modes the ESC-menu MODE select
- *  exposes, as one-click entries (classic browser "create local game"). */
-const OFFLINE_MODES: [string, string][] = [
-  ['', 'SOLO — no bots'],
-  ['nuggets', 'NUGGET WARS 5v5'],
-  ['ctf', 'CTF 5v5'],
-  ['dm', 'DEATHMATCH ×10'],
-  ['flagrun', 'FLAG RUN (solo)'],
-  ['classic', 'CLASSIC'],
-];
-
-function playOffline(mode: string): void {
+/** Solo match setup — the offline twin of HOST's PLAY: reloads onto a
+ *  URL carrying ?mode/?map/?bots and NO ?room/?p2p, which is what keeps
+ *  the boot offline (see connectPhase: no room = no socket). '' mode is
+ *  free roam — pick a ruleset to get bots/flags/scoring. */
+function playOffline(mode: string, map: string, bots: number | undefined): void {
   settings.set('fps-mode', mode);
   settings.set('fps-p2p', '');
   settings.set('fps-lobby', 0);
   const q = new URLSearchParams(location.search);
-  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode']) q.delete(k);
+  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo']) q.delete(k);
+  if (mode) q.set('mode', mode);
+  if (map) q.set('map', map);
+  if (bots !== undefined) q.set('bots', String(bots));
+  // Marker param — a free-roam pick writes no mode/map/bots at all, but
+  // it is still a live session; without this the boot is indistinguishable
+  // from a fresh front-door load and the lobby would re-pop mid-game.
+  q.set('solo', '1');
   const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
   location.href = href;
-}
-
-function buildOfflineList(): HTMLDivElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'lb-rows';
-  for (const [mode, text] of OFFLINE_MODES) {
-    const row = btn(text);
-    row.classList.add('lb-room');
-    row.style.textAlign = 'left';
-    row.addEventListener('click', () => playOffline(mode));
-    wrap.appendChild(row);
-  }
-  return wrap;
 }
 
 
@@ -152,6 +162,71 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
   // option list so the preview tracks mode filtering too.
   new MutationObserver(update).observe(select, { childList: true });
   return { select, thumb };
+}
+
+/** Renders a select as a row of toggle buttons — the select stays the
+ *  value store (hidden), the row is the UI. Rebuilds on option-list
+ *  refills (refreshMaps lands post-open). */
+function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'lb-quick';
+  row.style.cssText = 'flex-wrap:wrap;margin-bottom:2px;';
+  const rebuild = () => {
+    row.textContent = '';
+    for (const o of sel.options) {
+      const b = btn(o.textContent ?? o.value);
+      b.dataset.v = o.value;
+      b.classList.toggle('active', o.value === sel.value);
+      b.addEventListener('click', () => {
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change'));
+      });
+      row.append(b);
+    }
+  };
+  // Programmatic picks (map auto-adopts its default ruleset) fire
+  // 'change' without touching the option list — resync actives on it.
+  const sync = () => {
+    for (const x of row.children) {
+      (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
+    }
+  };
+  sel.addEventListener('change', sync);
+  new MutationObserver(() => { rebuild(); }).observe(sel, { childList: true });
+  rebuild();
+  return row;
+}
+
+/** Map list picker — same contract as modeToggleRow: the hidden select
+ *  stays the value store (fillMapSelect/bindSoloSelects keep working),
+ *  this renders it as a scrollable column of rows. */
+function mapListBox(sel: HTMLSelectElement): HTMLDivElement {
+  const box = document.createElement('div');
+  box.className = 'lb-maplist';
+  box.style.cssText = 'flex:0 0 44%;min-width:0;max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;';
+  const rebuild = () => {
+    box.textContent = '';
+    for (const o of sel.options) {
+      const b = btn(o.textContent ?? o.value);
+      b.dataset.v = o.value;
+      b.style.cssText = 'flex:none;text-align:left;font-size:0.66rem;padding:7px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      b.classList.toggle('active', o.value === sel.value);
+      b.addEventListener('click', () => {
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change'));
+      });
+      box.append(b);
+    }
+  };
+  const sync = () => {
+    for (const x of box.children) {
+      (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
+    }
+  };
+  sel.addEventListener('change', sync);
+  new MutationObserver(rebuild).observe(sel, { childList: true });
+  rebuild();
+  return box;
 }
 
 export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
@@ -198,7 +273,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       for (const [n, el] of tabs) el.style.display = n === name ? 'block' : 'none';
       for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
     };
-    for (const name of ['JOIN', 'HOST', 'SOLO', 'P2P']) {
+    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
       const b = btn(name);
       b.dataset.tab = name;
       b.addEventListener('click', () => showTab(name));
@@ -258,24 +333,35 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const modeRow = field('MODE');
     const modeSelect = document.createElement('select');
     modeSelect.className = 'lb-input';
-    modeSelect.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
+    // Hidden store — the toggle row beside it is the actual UI; the
+    // select keeps serving fillMapSelect/handler reads.
+    modeSelect.style.display = 'none';
     modeSelect.addEventListener('change', () => h.fillMapSelect());
     modeRow.appendChild(modeSelect);
+    // Toggle row is a page-level block under the MODE field — inside the
+    // flex field it shares the row and wraps at half width.
+    const modeBtns = modeToggleRow(modeSelect);
     // Map-family toggles — T2 ports vs our own arenas. Both on = full
-    // list; each can be dropped to shrink the picker. Refills through
-    // the host so MODE and family compose.
-    const famRow = document.createElement('div');
-    famRow.className = 'lb-quick';
-    famRow.style.marginBottom = '2px';
-    for (const [kind, text] of [['t2', 'T2'], ['custom', 'CUSTOM']] as const) {
-      const b = btn(text);
-      b.classList.toggle('active', h.mapFamOn(kind));
-      b.addEventListener('click', () => {
-        h.toggleMapFam(kind);
+    // list; each can be dropped to shrink the picker. HOST and OFFLINE
+    // each get a row; clicks resync every button so the tabs can't drift.
+    const famBtns: { b: HTMLButtonElement; kind: 't2' | 'custom' }[] = [];
+    const famToggles = (): HTMLDivElement => {
+      const row = document.createElement('div');
+      row.className = 'lb-quick';
+      row.style.marginBottom = '2px';
+      for (const [kind, text] of [['t2', 'T2'], ['custom', 'CUSTOM']] as const) {
+        const b = btn(text);
         b.classList.toggle('active', h.mapFamOn(kind));
-      });
-      famRow.appendChild(b);
-    }
+        b.addEventListener('click', () => {
+          h.toggleMapFam(kind);
+          for (const f of famBtns) f.b.classList.toggle('active', h.mapFamOn(f.kind));
+        });
+        famBtns.push({ b, kind });
+        row.appendChild(b);
+      }
+      return row;
+    };
+    const famRow = famToggles();
     // PRIVATE rides the same toggle row — an unlisted room is off /rooms
     // and quick-join; friends get in by CREATE / JOIN BY NAME only.
     const privBtn = btn('PRIVATE');
@@ -287,9 +373,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       privBtn.classList.toggle('active', on);
     });
     famRow.appendChild(privBtn);
-    const mapRow = field('MAP');
     const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
-    mapRow.appendChild(mapSelect);
+    // Hidden store — the scrollable list beside the preview is the UI.
+    mapSelect.style.display = 'none';
     const botsRow = field('BOTS');
     const botsInput = document.createElement('input');
     botsInput.type = 'number';
@@ -322,7 +408,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const quickLbl = label('QUICK JOIN');
     const quick = document.createElement('div');
     quick.className = 'lb-quick';
-    for (const mode of ['nuggets', 'ctf', 'dm', 'tdm']) {
+    for (const mode of ['ctf', 'tdm', 'dm', 'nuggets']) {
       const b = btn(mode.toUpperCase());
       b.addEventListener('click', async () => {
         b.disabled = true;
@@ -371,25 +457,15 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); });
     srvRow.append(srvIn, srvBtn);
 
-    const plyRow = field('PLAYER');
-    const plyIn = document.createElement('input');
-    plyIn.maxLength = 24;
-    plyIn.placeholder = 'display name';
-    plyIn.value = settings.get('fps-name');
-    plyIn.className = 'lb-input';
-    plyIn.style.cssText = 'flex:1;min-width:0;';
-    plyIn.addEventListener('keydown', (e) => e.stopPropagation());
-    // Names ship on the next join handshake — no need to reload mid-edit.
-    plyIn.addEventListener('input', () => settings.set('fps-name', plyIn.value.trim()));
-    plyRow.appendChild(plyIn);
+    // Player name lives in the menu-side PROFILE row (#name-input) —
+    // an identity field, not a connection parameter.
 
     const p2pRow = field('P2P DUEL');
     const p2pIn = document.createElement('input');
     p2pIn.maxLength = 24;
     p2pIn.placeholder = 'code';
-    // Strip the role prefix for display; the saved value is 'role:code'.
-    const savedP2p = settings.get('fps-p2p');
-    p2pIn.value = savedP2p.includes(':') ? savedP2p.slice(savedP2p.indexOf(':') + 1) : '';
+    // No prefill: fps-p2p survives the session reload, but a join code is
+    // one-shot — a dead code sitting in the box reads as a feature.
     p2pIn.className = 'lb-input';
     p2pIn.style.cssText = 'flex:1;min-width:0;';
     p2pIn.addEventListener('keydown', (e) => e.stopPropagation());
@@ -420,27 +496,87 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const refreshLobs = () => { void refreshLobsFn(); };
     refreshLobs();
 
-    joinPage.append(headRow, hereRow, rows, quickLbl, quick, connLbl, plyRow, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
-    tabs.get('HOST')!.append(hostLbl, nameRow, modeRow, famRow, mapRow, mapThumb, botsRow, hostBtn);
-    tabs.get('SOLO')!.append(buildOfflineList());
+    // Advanced paths shelved for now — JOIN is browser + quick-join only.
+    // Kept mounted-but-hidden (not deleted): direct-server and
+    // name-join are real features we may resurface.
+    const joinExtra = document.createElement('div');
+    joinExtra.style.display = 'none';
+    joinExtra.append(connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
+    joinPage.append(headRow, hereRow, rows, quickLbl, quick, joinExtra);
+    // Same split as SOLO: scrollable map list left, preview + knobs right.
+    const hostBody = document.createElement('div');
+    hostBody.style.cssText = 'display:flex;gap:8px;align-items:flex-start;';
+    const hostRight = document.createElement('div');
+    hostRight.style.cssText = 'flex:1;min-width:0;';
+    mapThumb.style.marginTop = '0';
+    hostRight.append(mapThumb, botsRow, hostBtn);
+    hostBody.append(mapListBox(mapSelect), hostRight);
+    tabs.get('HOST')!.append(hostLbl, nameRow, modeRow, modeBtns, famRow, hostBody);
+    // ---- OFFLINE page: HOST's pickers, no server ---------------------
+    // Same mode/map/bots row layout — a solo match IS a hosted match
+    // minus the socket, so the page reads identically on purpose.
+    const soloPage = tabs.get('OFFLINE')!;
+    const soloLbl = label('OFFLINE MATCH');
+    const soloModeRow = field('MODE');
+    const soloModeSel = document.createElement('select');
+    soloModeSel.className = 'lb-input';
+    soloModeSel.style.display = 'none';
+    soloModeRow.appendChild(soloModeSel);
+    const soloModeBtns = modeToggleRow(soloModeSel);
+    const soloFamRow = famToggles();
+    const { select: soloMapSel, thumb: soloThumb } = mapPicker(h);
+    // Hidden store — the scrollable list beside the preview is the UI.
+    soloMapSel.style.display = 'none';
+    const soloBotsRow = field('BOTS');
+    const soloBotsIn = document.createElement('input');
+    soloBotsIn.type = 'number';
+    soloBotsIn.min = '0'; soloBotsIn.max = '24';
+    soloBotsIn.placeholder = 'map default';
+    soloBotsIn.className = 'lb-input';
+    soloBotsIn.style.cssText = 'width:110px;text-align:right;';
+    soloBotsIn.addEventListener('keydown', (e) => e.stopPropagation());
+    soloBotsRow.appendChild(soloBotsIn);
+    const soloBtn = btn('PLAY');
+    soloBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
+    soloBtn.addEventListener('click', () => {
+      const bots = soloBotsIn.value === '' ? undefined : Math.max(0, Math.min(24, Number(soloBotsIn.value) || 0));
+      playOffline(soloModeSel.value, soloMapSel.value, bots);
+    });
+    h.bindSoloSelects(soloModeSel, soloMapSel);
+    // Two-column pick: scrollable map list left, preview + knobs right —
+    // the old one-column layout let the 4:3 thumb push BOTS off-screen.
+    const soloBody = document.createElement('div');
+    soloBody.style.cssText = 'display:flex;gap:8px;align-items:flex-start;';
+    const soloRight = document.createElement('div');
+    soloRight.style.cssText = 'flex:1;min-width:0;';
+    soloThumb.style.marginTop = '0';
+    soloRight.append(soloThumb, soloBotsRow, soloBtn);
+    soloBody.append(mapListBox(soloMapSel), soloRight);
+    soloPage.append(soloLbl, soloModeRow, soloModeBtns, soloFamRow, soloBody);
     tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
 
-    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('SOLO')!, tabs.get('P2P')!);
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
     showTab('JOIN');
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
     let menuWasOpen = false;
+    let doorShown = false;
     new MutationObserver(() => {
       const menuOpen = document.body.classList.contains('menu-open');
       if (!menuOpen && panel.style.display !== 'none') h.toggle();
-      // Not in a game → the browser IS the front door: the menu OPEN
-      // transition lands on the room list. Edge-triggered only — a user
-      // who closed the panel while the menu stays open keeps it closed.
-      const offline = urlParams.room == null && urlParams.p2p == null && settings.get('fps-p2p') === '';
+      // No session at all → the browser IS the front door: the FIRST
+      // menu open lands on the room list. Any live session (room, p2p,
+      // or a solo boot — ?mode/?map/?bots/?solo) counts as "in a game":
+      // a mid-match menu open wants loadout/settings, not a popup.
+      const inGame = urlParams.room != null || urlParams.p2p != null
+        || settings.get('fps-p2p') !== ''
+        || urlParams.mode != null || urlParams.map != null
+        || urlParams.bots !== undefined || urlParams.has('solo');
       if (menuOpen && !menuWasOpen) {
         syncLeaveBtn();
-        if (offline && panel.style.display === 'none') h.toggle();
+        if (!doorShown && !inGame && panel.style.display === 'none') h.toggle();
+        doorShown = true;
       }
       menuWasOpen = menuOpen;
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
