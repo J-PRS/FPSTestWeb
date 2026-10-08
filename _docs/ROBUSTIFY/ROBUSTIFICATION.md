@@ -3495,3 +3495,13 @@ in the 1456-line monolith. setLod keeps its mannequin guard and delegates;
 the gun/clip/pose blocks stay because their state is the external API
 (setWeapon/gunMesh ride playerLoadout + modelFx callers). Mechanical
 extraction, zero behavior change — tsc clean.
+
+## 2.205 — PlayerGun extracted (PlayerModel gun block)
+
+The hand-prop controller (gun group, ~20 mount/base fields, the
+socket/palms/world/per-axis attach branches, the per-frame bone follow,
+the baked-weapon geo swap + per-model material clones, muzzle anchor,
+debugSetGunRot) moves to playerGun.ts — 311 lines out of PlayerModel.
+ModelFx keeps reading through the unchanged ModelFxHost surface via
+delegating getters; onGeoSwap is the one back-edge (wireframe recapture).
+Dropped `socketGun` — write-only dead flag. tsc + 504 vitest green.

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -10,16 +9,6 @@ import { ChildLogger } from '../core/Logger.js';
 import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
 const logger = new ChildLogger('PlayerModel');
-
-const _gunV = new THREE.Vector3();
-const _gunQ = new THREE.Quaternion();
-const _gunMQ = new THREE.Quaternion();
-const _gunPalmL = new THREE.Vector3();
-const _gunDir = new THREE.Vector3();
-const _gunUp = new THREE.Vector3(0, 1, 0);
-const _gunLook = new THREE.Matrix4();
-const _gunQ2 = new THREE.Quaternion();
-const _gunQYaw = new THREE.Quaternion();
 
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
@@ -32,10 +21,10 @@ import { ONESHOT_CLIPS, clipCandidates,
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, AIM_TORSO_BONES, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
+import { PlayerGun } from './playerGun.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PoseControl } from './playerPose.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
-import { handWeaponGeo } from './handWeapons.js';
 import { metalMat } from './procMetal.js';
 import { WeaponType } from '../../../shared/weapons.js';
 
@@ -117,7 +106,7 @@ export class PlayerModel {
 
   /** Live-tune the hand-bone mount rotation (posedump loop) — deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
-    this.gun?.rotation.set(x * Math.PI / 180, y * Math.PI / 180, z * Math.PI / 180);
+    this.gunCtl.setRotDeg(x, y, z);
   }
 
   /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
@@ -128,37 +117,23 @@ export class PlayerModel {
   // the held gun drops toward the hip and the muzzle tips down, then the
   // "new" weapon comes back up. Purely cosmetic on the body model (the
   // prop gun doesn't change), but the motion is the readable swap tell.
-  // Prop-gun transform + lean roll live on the model — the FX pass
-  // (modelFx.ts) reads/writes them through the ModelFxHost surface.
-  gunUnit = 1; // 1 world meter in bone-space units (1/ws.x)
-  gunBaseY = 0;
+  // Prop-gun transform + lean roll live on the gun controller
+  // (playerGun.ts) — the FX pass reads them through these delegates,
+  // which keep the ModelFxHost surface stable.
+  private readonly gunCtl = new PlayerGun();
+  get gun(): THREE.Group | null { return this.gunCtl.group; }
+  get muzzleFlash(): THREE.Sprite | null { return this.gunCtl.muzzleFlash; }
+  get gunUnit(): number { return this.gunCtl.unit; }
+  get gunBaseY(): number { return this.gunCtl.baseY; }
+  get gunBaseZ(): number { return this.gunCtl.baseZ; }
+  get gunRestX(): number { return this.gunCtl.restX; }
+  get gunBaseX(): number { return this.gunCtl.baseX; }
+  get gunKickZ(): number { return this.gunCtl.kickZ; }
+  get gunBaseQuat(): THREE.Quaternion | null { return this.gunCtl.baseQuat; }
   lastRoll = 0;
   private handBone: THREE.Bone | null = null;
   private mountBone: THREE.Bone | null = null;
-  // Bone-mounted gun: world scale is renormalized every update — rigs
-  // like polyart carry non-uniform armature scale that shifts with the
-  // pose, so a one-time per-axis divide still let the prop stretch
-  // needle-thin (the "sword" gun).
-  private gunMountBone: THREE.Object3D | null = null;
-  private gunSize = 0.7;
-  private gunMountPos: [number, number, number] = [0, 0, 0];
-  private gunMountQuat: THREE.Quaternion | null = null;
   private handBoneL: THREE.Bone | null = null;
-  private palmsMount = false;
-  private gunPalmFwd = 0;
-  private gunPalmFlip = false;
-  private gunPalmYaw = 0;
-  private gunPalmUp = 0;
-  gun: THREE.Group | null = null;
-  private gunMesh: THREE.Mesh | null = null;
-  private heldWeapon = -1;
-  gunBaseZ = 0;
-  gunRestX = 0; // socket-mounted guns park at a lateral offset
-  gunBaseX = 0; // mannequin attach pitch — recoil adds on top
-  gunKickZ = 0;
-  gunBaseQuat: THREE.Quaternion | null = null;
-  private socketGun = false;
-  muzzleFlash: THREE.Sprite | null = null;
   // Damage flash — same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
   // material's emissive toward white and back from a cached baseline.
@@ -206,6 +181,9 @@ export class PlayerModel {
     // muzzle (see PoseControl.wantSpineLock).
     const shootClip = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
     this.pose.wantSpineLock = !shootClip || shootClip.startsWith('UAL_');
+    // The gun controller owns the mesh; a baked-geo swap invalidates the
+    // wireframe capture, so it reaches back through this hook.
+    this.gunCtl.onGeoSwap = () => { if (this.wireframeOn) {this.captureWireframeMats();} };
   }
 
   async load(): Promise<void> {
@@ -611,10 +589,9 @@ export class PlayerModel {
   }
 
   // Procedural gun in the right hand — follows every animation.
-  // One merged geometry + shared material per remote: two meshes each
-  // used to cost a draw call apiece (~17 remotes = ~34 draws).
-  private static _gunGeo: THREE.BufferGeometry | null = null;
-  private static _gunMat: THREE.MeshStandardMaterial | null = null;
+  // The gun group/mount/follow all live in playerGun.ts; this wrapper
+  // only decides whether a mount exists and sets the pose flags the
+  // mount choice implies.
   private attachGun(): void {
     const classGun = CLASS_BODY_SPEC[this.variant]?.gunLocal;
     const handBone = this.mountBone ?? this.handBone;
@@ -627,132 +604,12 @@ export class PlayerModel {
     this.pose.wantHoldPose = (armedHold || !CLASS_BODY_SPEC[this.variant]?.anims) && Boolean(handBone);
     this.pose.holdShoots = armedHold;
     this.pose.holdIdle = Boolean(RIG_MANIFEST[this.variant]?.idleHold) && Boolean(handBone);
-    if (!PlayerModel._gunMat) {
-      PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a_2e_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
-    }
-    if (!PlayerModel._gunGeo) {
-      const body = new THREE.BoxGeometry(0.16, 0.26, 0.9);
-      body.translate(0, 0, 0.25);
-      const barrel = new THREE.CylinderGeometry(0.05, 0.05, 0.55);
-      barrel.rotateX(Math.PI / 2);
-      barrel.translate(0, 0.05, 0.75);
-      PlayerModel._gunGeo = mergeGeometries([body, barrel], false)!;
-      body.dispose(); barrel.dispose();
-    }
-    this.gun = new THREE.Group();
-    this.gunMesh = new THREE.Mesh(PlayerModel._gunGeo, PlayerModel._gunMat);
-    this.gun.add(this.gunMesh);
-    // Measure bone world scale AFTER model.scale so the gun lands
-    // real-world size (bones carry the armature's ~100x scale)
-    this.model!.updateMatrixWorld(true);
-    if (!handBone && classGun) {
-      // Socket fallback: class bodies keep bones in armature frames up to
-      // ~100 units off the rendered mesh (cyber's hips bind at -98Z), so
-      // rigs that never captured a hand bone park the gun on the model
-      // root at the per-variant socket instead.
-      const ws = this.modelScale;
-      this.gun.scale.setScalar(0.7 / ws);
-      this.gunUnit = 1 / ws;
-      this.gunKickZ = 0.15 * this.gunUnit;
-      // gunLocal is meters above the logical feet; the model root sits
-      // feetOffsetY below them on rigs not authored feet-at-origin. The
-      // FX update rewrites gun.position from these base fields each
-      // frame, so the socket lives in the bases, not a one-time set.
-      this.gunRestX = classGun[0] * this.gunUnit;
-      this.gunBaseY = (classGun[1] - this.feetOffsetY) * this.gunUnit;
-      this.gunBaseZ = classGun[2] * this.gunUnit;
-      this.gun.position.set(this.gunRestX, this.gunBaseY, this.gunBaseZ);
-      this.gun.rotation.y = Math.PI; // barrel -Z = the body's facing
-      this.muzzleFlash = ModelFx.buildMuzzleFlash();
-      this.gun.add(this.muzzleFlash);
-      this.model!.add(this.gun);
-      this.socketGun = true;
-      if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
-      return;
-    }
-    const ws = handBone!.getWorldScale(new THREE.Vector3());
-    const mount = RIG_MANIFEST[this.variant]?.mount;
-    logger.debug(`GUN ATTACH`, { hand: handBone!.name, worldScale: ws.x, aimBones: this.pose.aimBoneCount });
-    if (mount?.palms && this.handBoneL && this.model) {
-      // Palm-line mount: model-root prop driven per frame — position at
-      // the grip palm, +Z along grip→foregrip. No authored quat: the
-      // palm line IS the barrel axis the clip intends, so it survives
-      // every clip's differing hand basis.
-      this.palmsMount = true;
-      this.gunPalmFwd = mount.palmFwd ?? 0;
-      this.gunPalmFlip = Boolean(mount.palmsFlip);
-      this.gunPalmYaw = mount.palmYaw ?? 0;
-      this.gunPalmUp = mount.palmUp ?? 0;
-      this.gunMountPos = mount.pos ?? [0, 0, 0];
-      this.mountGunOnModel(handBone, mount);
-      return;
-    }
-    if (mount?.world && this.model) {
-      // World-frame mount: the prop parents to the model root and tracks
-      // the bone's world transform in update() — rigs with rotated
-      // non-uniform armature scale shear a bone-parented prop into a
-      // needle, which no per-axis scale compensation can undo.
-      this.gunMountPos = mount.pos ?? [0, 0, 0];
-      this.gunMountQuat = mount.quat ? new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]) : new THREE.Quaternion();
-      this.mountGunOnModel(handBone, mount);
-      return;
-    }
-    // Per-axis: some rigs (polyart) carry non-uniform bone scale that
-    // squeezes the prop into a needle when only ws.x is compensated.
-    const gunSize = mount?.size ?? 0.7;
-    this.gunSize = gunSize;
-    this.gun.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
-    if (mount?.fat) {this.gunMesh!.scale.set(mount.fat, mount.fat, 1);}
-    this.gunBaseZ = 0.05 / ws.x;
-    this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
-    this.gunUnit = 1 / ws.x;
-    this.gunBaseY = 0.05 * this.gunUnit;
-    if (mount?.pos) {
-      this.gunRestX = mount.pos[0];
-      this.gunBaseY = mount.pos[1];
-      this.gunBaseZ = mount.pos[2];
-    }
-    this.gun.position.set(this.gunRestX, this.gunBaseY, this.gunBaseZ);
-    // Orientation comes from the manifest: euler rigs (mannequin) roll
-    // recoil through gunBaseX; quat rigs write gunBaseQuat so fx
-    // envelopes compose on top instead of stomping rotation.x/z.
-    // Palm axes differ per rig family — quats were solved per rig on the
-    // posedump loop, tune via debugSetGunRot.
-    if (mount?.euler) {
-      this.gun.rotation.set(mount.euler[0], mount.euler[1], mount.euler[2]);
-      this.gunBaseX = mount.euler[0];
-    } else if (mount?.quat) {
-      this.gunBaseQuat = new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]);
-      this.gun.quaternion.copy(this.gunBaseQuat);
-    } else {
-      this.gun.rotation.y = Math.PI;
-    }
-
-    // Muzzle flash: additive sprite at the barrel tip, flashed on
-    // fire() and faded in update(). Cheap (one sprite per remote),
-    // blooms nicely at distance — this is what makes remote fire
-    // readable when tracking small targets in the sky.
-    this.muzzleFlash = ModelFx.buildMuzzleFlash();
-    this.gun.add(this.muzzleFlash);
-
-    handBone!.add(this.gun);
-    if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
-  }
-
-  // Model-root mount tail shared by the palms/world branches — the prop
-  // lives under the model, not the hand bone, so uniform modelScale is
-  // the only scale compensation needed.
-  private mountGunOnModel(bone: THREE.Bone | null, mount: { size?: number }): void {
-    this.gunMountBone = bone;
-    this.gunSize = mount.size ?? 0.7;
-    this.gunUnit = 1 / this.modelScale;
-    this.gunKickZ = 0.15 * this.gunUnit;
-    this.gunBaseQuat = new THREE.Quaternion();
-    this.gun!.scale.setScalar(this.gunSize / this.modelScale);
-    this.muzzleFlash = ModelFx.buildMuzzleFlash();
-    this.gun!.add(this.muzzleFlash);
-    this.model!.add(this.gun!);
-    if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
+    this.gunCtl.attach({
+      handBone, handBoneL: this.handBoneL,
+      mount: RIG_MANIFEST[this.variant]?.mount,
+      model: this.model!, modelScale: this.modelScale, feetOffsetY: this.feetOffsetY,
+      classGun,
+    });
   }
 
   // Nodes above the hips that authored rigs animate as root motion —
@@ -1121,58 +978,13 @@ export class PlayerModel {
       this.forceAnimationState(this.currentState);
     }
     this.pose.update(dt, this.mixer, this.currentAction, this.currentClipName, this.playingUAL, this.model ?? undefined, this.currentState);
-    if (this.gunMountBone && this.gun && this.model) {
-      // Refresh the fx base fields from the bone's live world transform —
-      // tickGunFx composes kick/swap/throw deltas on top of these.
-      const mb = this.gunMountBone;
-      mb.updateWorldMatrix(true, false);
-      mb.localToWorld(_gunV.set(this.gunMountPos[0], this.gunMountPos[1], this.gunMountPos[2]));
-      this.model.worldToLocal(_gunV);
-      this.gunRestX = _gunV.x; this.gunBaseY = _gunV.y; this.gunBaseZ = _gunV.z;
-      if (this.palmsMount && this.handBoneL) {
-        // Palm-line mount: the barrel axis is right-palm → left-palm.
-        // Degenerate (hands split for a one-hand clip) → keep the palm
-        // seat but aim model-forward (-Z) instead of a garbage line.
-        this.handBoneL.getWorldPosition(_gunPalmL);
-        this.model.worldToLocal(_gunPalmL);
-        _gunDir.subVectors(_gunPalmL, _gunV);
-        const len = _gunDir.length();
-        if (len > 0.03) {_gunDir.divideScalar(len);} else {_gunDir.set(0, 0, -1);}
-        // |z| guard: hand-splits (one-hand clips) give lateral axes —
-        // fall back to model forward. Either z sign is valid: rigs grip
-        // both handednesses (polyart's palm line runs +Z).
-        if (Math.abs(_gunDir.z) < 0.15) {_gunDir.set(0, 0, -1);}
-        if (this.gunPalmFlip) {_gunDir.negate();}
-        // Seat offset along the barrel — right-palm seat alone reads too
-        // far back on two-hand holds (polyart's marine grip).
-        if (this.gunPalmFwd || this.gunPalmUp) {
-          _gunV.addScaledVector(_gunDir, this.gunPalmFwd);
-          _gunV.y += this.gunPalmUp;
-          this.gunRestX = _gunV.x; this.gunBaseY = _gunV.y; this.gunBaseZ = _gunV.z;
-        }
-        // lookAt maps -Z to eye→target; eye=left palm, target=right →
-        // +Z = grip→foregrip = barrel dir. Slerp so clip jitter and
-        // state pops don't buzz the muzzle.
-        if (this.gunPalmFlip) {_gunLook.lookAt(_gunV, _gunPalmL, _gunUp);}
-        else {_gunLook.lookAt(_gunPalmL, _gunV, _gunUp);}
-        _gunQ2.setFromRotationMatrix(_gunLook);
-        if (this.gunPalmYaw) {_gunQ2.premultiply(_gunQYaw.setFromAxisAngle(_gunUp, this.gunPalmYaw));}
-        this.gunBaseQuat!.slerp(_gunQ2, Math.min(dt * 14, 1));
-      } else {
-        mb.getWorldQuaternion(_gunQ);
-        this.model.getWorldQuaternion(_gunMQ).invert();
-        this.gunBaseQuat!.copy(_gunMQ).multiply(_gunQ).multiply(this.gunMountQuat!);
-      }
-      this.gun.scale.setScalar(this.gunSize / this.modelScale);
-    }
+    this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL);
     this.fx.tick(dt);
   }
 
   /** Barrel-tip world point — third-person beam/tracer anchor. */
   muzzleWorld(out: THREE.Vector3): boolean {
-    if (!this.muzzleFlash) {return false;}
-    this.muzzleFlash.getWorldPosition(out);
-    return true;
+    return this.gunCtl.muzzleWorld(out);
   }
 
   // Recoil: exponential decay kick on the gun (position + muzzle flip);
@@ -1190,38 +1002,7 @@ export class PlayerModel {
    *  generic prop rather than guess wrong. */
   setWeapon(wt: number | undefined): void {
     if (wt === undefined) {return;}
-    // Weapon switches fire before the GLB loads (spawn loadout races the
-    // async mesh) — stash the pick on heldWeapon so attachGun's tail can
-    // re-apply it the moment a gun mount exists instead of dropping it.
-    this.heldWeapon = wt;
-    if (!this.gunMesh) {return;}
-    const hit = handWeaponGeo(wt);
-    const geo = hit?.geo ?? PlayerModel._gunGeo!;
-    if (this.gunMesh.geometry !== geo) {
-      this.gunMesh.geometry = geo;
-      // Baked models carry their own per-part materials; the generic prop
-      // keeps its shared grey. The cached mats ARE the viewmodel's shared
-      // palette (bodyMat/darkMat) — assigning them raw lets this model's
-      // ghost shimmer (cloak/fire-reveal) fade every first-person gun in
-      // the client, and a despawn-mid-ghost sticks them translucent.
-      // Per-model clones keep setGhost's blast radius to this model only.
-      this.gunMesh.material = hit ? this.handMats(wt, hit.mats) : PlayerModel._gunMat!;
-      if (this.wireframeOn) {this.captureWireframeMats();}
-      // Flash rides the baked model's real muzzle, not a fixed offset —
-      // each baked geo already carries its bounding box from the baker.
-      if (this.muzzleFlash && geo.boundingBox) {
-        this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
-      }
-    }
-  }
-
-  // Per-weapon hand-prop material clones — see the setWeapon comment on
-  // why the shared palette can't be assigned raw.
-  private handPropMats = new Map<number, THREE.Material[]>();
-  private handMats(wt: number, src: THREE.Material[]): THREE.Material[] {
-    let mats = this.handPropMats.get(wt);
-    if (!mats) { mats = src.map((m) => m.clone()); this.handPropMats.set(wt, mats); }
-    return mats;
+    this.gunCtl.setWeapon(wt);
   }
 
   /** Damage white-pop — creature-style hit readability on the robot body. */
