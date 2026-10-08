@@ -499,16 +499,14 @@ export class RoomMoveSim {
     this.syncTransit(sh);
   }
 
-  /** Effective uplink transit: the client's self-report capped by the
-   *  server's own measurement. Until the first pong lands the client
-   *  report stands alone (join grace — the echo path takes a tick to
-   *  converge). The server channel carries queue/jitter the client's
-   *  own ping doesn't, so it gets a small slack margin. */
+  /** Effective uplink transit: the server's own measurement owns the
+   *  estimate the moment it exists — the client channel stands alone
+   *  only until the first pong lands (join grace). A fabricated report
+   *  can't move it in EITHER direction: lowballing would shrink the
+   *  forger's broadcast lead (ghost trails truth — harder to hit), and
+   *  inflating bought tolerance/rewind before this channel existed. */
   private syncTransit(sh: Shadow): void {
-    const slack = sh.serverTransitEma * 0.25 + 10;
-    sh.transitEma = sh.clientTransitEma > 0 && sh.serverTransitEma > 0
-      ? Math.min(sh.clientTransitEma, sh.serverTransitEma + slack)
-      : sh.clientTransitEma > 0 ? sh.clientTransitEma : sh.serverTransitEma;
+    sh.transitEma = sh.serverTransitEma > 0 ? sh.serverTransitEma : sh.clientTransitEma;
   }
 
   /** Uplink-transit estimate (ms) for the broadcast lead — the shadow
