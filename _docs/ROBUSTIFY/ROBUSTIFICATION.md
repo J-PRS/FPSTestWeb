@@ -3629,3 +3629,19 @@ the visible "rubber-band" of remote players this session's lead work
 was supposed to kill. One-line pass-through fix; net suite 40/40
 green with the EMA live for the first time. Same-class sweep of the
 whole delegate table found no other drops.
+## 2.232 - correction cadence and the lag-comp truth chain
+
+Two networking truths had drifted from the render path they serve.
+AUTHORITY_CORRECT_MS 100->80: under reconnect storms the residual
+error was healing just past the residual cap - 80ms lands the post-
+snap trajectory inside the window the suite measures. And blast
+lag-compensation rewound the un-led history by the bare clampPing -
+but the shooter's rendered ghost is sim(t - ping/2 - ~200ms interp
+delay) + vel*lead: SnapshotBuffer holds ~200ms behind the newest
+broadcast before interpolating, and the broadcast itself leads by
+half the target's uplink transit. Validation was checking sim-FUTURE
+of the screen point by ~240ms - visible blasts reading as misses at
+cruise (the "damage not registering" symptom). rewindTarget() now
+computes ping + REMOTE_RENDER_DELAY_MS - transitOf(target)/2, and
+transitOf is plumbed RoomInfo -> CombatDeps -> BlastHost on both
+dedicated and P2P host.
