@@ -3666,3 +3666,34 @@ screen (~8m at 150ms cruise): the "hits not registering" class.
   by `speed×back` so a far-off ghost can't slip the prune.
 - All rewinds gate on `isBot`: bots aim at server truth, a rewind
   would make them miss (caught by beastDefense).
+
+## 2.234 Dual-channel transit EMA - the unforgeable RTT seam
+
+The transit EMA drove broadcast lead, correction tolerance, and lag-comp
+rewind - and it was fed by exactly one channel: client-reported rttMs on
+position frames. The server never measured round-trip itself, so a
+forged ping bought tolerance and rewind budget it never earned (and a
+misreported-but-honest one skewed every validator at once).
+
+- New wire pair: server 'ping' -> client 'pong' (protocol.ts, WIRE
+  entry with liveness + transitNote feed). Room round-robins one human
+  per 10 ticks (~500ms x roster cadence); the P2P host emits the same
+  probe over datachannels.
+- The shadow now keeps clientTransitEma + serverTransitEma; effective
+  transit = min(client, server + 25% slack + 10ms). A delayed or
+  inflated echo only lowers its own channel - raising the effective
+  estimate requires fooling both. Slack covers queue/jitter the client
+  ping doesn't see; client-only until the first pong (join grace).
+- RoomInfo.transitNote -> moveSim.feedTransit on dedicated;
+  host.ts wires the same hook so guest-forged pings buy nothing.
+
+## 2.235 strictRng gate inside the seeded window
+
+harness.ts armed sharedEnv.strictRng at module scope - a process-global
+that tripped netbot's real-socket bots (ambient draws are legal there;
+they aren't seeded scenarios) whenever a mixed bun test run shared the
+process: all 7 netbot specs died to 'ambient Math.random under
+strictRng'. botRng() now arms the gate on injection, botRngRelease()
+disarms it - the forgot-to-seed tripwire still throws inside seeded
+windows, ambient draws outside are legal by design. Same mixed run now
+40/40.
