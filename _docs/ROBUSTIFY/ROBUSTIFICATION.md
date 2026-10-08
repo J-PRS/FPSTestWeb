@@ -3697,3 +3697,17 @@ strictRng'. botRng() now arms the gate on injection, botRngRelease()
 disarms it - the forgot-to-seed tripwire still throws inside seeded
 windows, ambient draws outside are legal by design. Same mixed run now
 40/40.
+
+## 2.236 Pre-terrain joins stayed shadowless forever
+
+attachTerrain resolves async (per-map heightfield promise), so a player
+who seated before a room's field landed ran moveSim.track() with
+surface===null - which early-returned and left them with NO shadow for
+the entire session: no reconcile, no corrections, no move judging, no
+transit EMA, and the RTT probe's feedTransit dead-ended on them.
+attachField only re-simmed shadows that already existed, so the player
+never recovered. track() now parks the seat in pendingTrack and
+attachField replays it (markReseated arms the in-flight-frame grace);
+untrack() drops pending seats too. Caught by the rttProbe live test -
+server ping -> client echo -> wire pong -> feedTransit ->
+serverTransitEma, the full unforgeable channel proven end-to-end.

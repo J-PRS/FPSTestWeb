@@ -1,3 +1,4 @@
+2026-10-01 - Pre-terrain joins parked as pendingTrack — players seating before a room's field landed stayed shadowless forever (no reconcile/corrections/transit)
 2026-10-01 - strictRng gate arms on botRng() injection and releases on botRngRelease() — import-time arm poisoned netbot in mixed runs
 2026-10-01 - Transit EMA is dual-channel: server-issued ping/pong measures RTT itself; effective = min(client-report, server+slack) — forged ping buys nothing
 2026-10-01 - Projectile body sweeps lag-comp to the ghost (bodySweep/dischargeRay/creatureSweep); ghost rewinds gated on isBot — bots see server truth
