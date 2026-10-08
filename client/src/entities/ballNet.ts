@@ -128,12 +128,20 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
  *  whole resync interval (the 20-120m rubberband storm, legAge≈1.2).
  *  A stamp newer than the anchor is always fresher truth; the cursor
  *  itself never rewinds (applySeg maxes it). */
+/** A stamp this far behind the leg anchor can't be an in-flight stale
+ *  packet — it's a new timeline: the server restarted or the room
+ *  re-minted and its sim clock rewound to ~0 while our bags still anchor
+ *  to the old epoch. Accept those as fresh truth or every heal and
+ *  segment drops forever (the persistent ball-lane desync a server
+ *  bounce produced). */
+const TIMELINE_RESET_S = 30;
+
 export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
   // Strictly older only: stamps have 50ms granularity, so two segments in
   // the same server tick (edge + heartbeat, hit + resync) share a stamp —
   // the second is fresher truth in wire order and MUST apply. Dropping it
   // replayed a dead leg for a whole interval (the 5-15m heartbeat warns).
-  return t !== undefined && t < bag.legT0;
+  return t !== undefined && t < bag.legT0 && (bag.legT0 - t) <= TIMELINE_RESET_S;
 }
 
 /** Authoritative resync — a segment event lands mid-flight: snap the sim
