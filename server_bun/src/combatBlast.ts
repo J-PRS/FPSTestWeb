@@ -11,6 +11,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { clampPing, rewindPos } from './claimLedger.ts';
+import { RENDER_LAG_MS } from './rewind.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import type { RoomEventSink } from './roomEvents.ts';
@@ -196,12 +197,6 @@ export class BlastRunner {
     }
   }
 
-  /** Client remote-render delay: SnapshotBuffer holds ~BASE(100) +
-   *  arrival interval (~50 at 20Hz) + jitter headroom (~50) behind the
-   *  newest snapshot before interpolating — the visible ghost rides
-   *  ~200ms of simulation behind what the broadcast emitted. */
-  private static readonly REMOTE_RENDER_DELAY_MS = 200;
-
   /** Rewind a victim to where it sat on the SHOOTER's screen. The
    *  rendered ghost = broadcast(sim(t − ping/2 − interpDelay) +
    *  vel·lead), so the honest rewind is ping + interpDelay − lead:
@@ -210,7 +205,7 @@ export class BlastRunner {
    *  term credits back the half-transit the broadcast already leads. */
   private rewindTarget(target: PlayerState, targetId: string, ping: number): Vec3 {
     const lead = (this.h.deps.transitOf?.(targetId) ?? 0) / 2;
-    const back = clampPing(ping) + BlastRunner.REMOTE_RENDER_DELAY_MS - lead;
+    const back = clampPing(ping) + RENDER_LAG_MS - lead;
     return rewindPos(target, Math.max(0, back));
   }
 

@@ -15,6 +15,8 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
+import { clampPing, rewindPos } from './claimLedger.ts';
+import { RENDER_LAG_MS } from './rewind.ts';
 
 /** The sweep only reads positions/ids off the sims — structural slices
  *  keep Room's concrete sims and a P2P host's lighter set compatible. */
@@ -24,6 +26,9 @@ export interface BeamSweepWorld {
   solids: readonly StructureCollider[];
   ballSim?: { balls: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null };
   creatureSim?: { crawlers: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null };
+  /** Target uplink-transit estimate (ms) — the same lead the tick
+   *  broadcast applies. Absent = no lead knowledge. */
+  transitOf?: (playerId: string) => number;
 }
 
 export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: Vec3, dir: Vec3, range: number): BeamContact | null {
@@ -38,11 +43,19 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     const sh = segSolidHit(muzzle, end, world.solids, undefined, world.players.getPlayer(shooterId)?.team);
     if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
   }
+  // Ghost-truth lag-comp: the shooter's beam was aimed at the rendered
+  // ghost — sim(t − ping − renderDelay + broadcast lead) — so a ray
+  // tested against live positions reads visible hits as misses at
+  // cruise speed. Rewind each capsule to the shooter's screen point.
+  const shooterPing = world.players.getPlayer(shooterId)?.ping ?? 0;
   let playerId: string | undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) continue;
     const cap = classCapsule(t.armorClass);
-    const c = { x: t.position.x, y: t.position.y + cap.centerOff, z: t.position.z };
+    const lead = (world.transitOf?.(pid) ?? 0) / 2;
+    const back = Math.max(0, clampPing(shooterPing) + RENDER_LAG_MS - lead);
+    const tp = rewindPos(t, back);
+    const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
     if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }

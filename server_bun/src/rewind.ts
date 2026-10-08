@@ -6,6 +6,14 @@
  */
 export const REWIND_MS = 400;
 
+/** Client remote-render delay: SnapshotBuffer holds ~BASE(100) +
+ *  arrival interval (~50 at 20Hz) + jitter headroom (~50) behind the
+ *  newest snapshot before interpolating — every visible ghost rides
+ *  ~200ms of simulation behind what the broadcast emitted. Anything
+ *  validating against what the shooter SAW (blast sweeps, beam rays)
+ *  must rewind ping + this, minus the broadcast lead. */
+export const RENDER_LAG_MS = 200;
+
 export function pushRewindSample(
   p: { history: { t: number; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
   now: number,

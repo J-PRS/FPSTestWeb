@@ -76,6 +76,7 @@ export class P2PHost {
         players: this.playerManager,
         field: getHeightfield(),
         solids: this.projectiles.solidColliders,
+        transitOf: (tpid) => this.moveShadows.transitOf(tpid),
       }, pid, muzzle, dir, range),
     // Movement reconciles like dedicated: inputs queue on the shadow,
     // reports judge it, resync/energy ride the same hooks.

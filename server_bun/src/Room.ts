@@ -561,6 +561,7 @@ export class Room {
       players: this.players, field: this.field,
       solids: this.projectiles.solidColliders,
       ballSim: this.ballSim, creatureSim: this.creatureSim,
+      transitOf: (pid) => this.moveSim.transitOf(pid),
     }, shooterId, muzzle, dir, range);
   }
 
