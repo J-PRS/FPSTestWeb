@@ -149,7 +149,7 @@ export class AoeClaims {
       const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.h.ddMult(player);
       this.h.hb('aoe.beam.hit');
       this.h.blast.splashOne({
-        shooterId: playerId, ping: player.ping, pos: msg.position,
+        shooterId: playerId, ping: player.ping, bot: !!player.isBot, pos: msg.position,
         radius: stats.aoeRadius, baseDamage: dmg,
         impulse: stats.knockbackForce, pull: false,
         label: 'LG beam hit', weapon: msg.weaponType,

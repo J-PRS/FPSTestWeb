@@ -47,13 +47,16 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   // ghost — sim(t − ping − renderDelay + broadcast lead) — so a ray
   // tested against live positions reads visible hits as misses at
   // cruise speed. Rewind each capsule to the shooter's screen point.
-  const shooterPing = world.players.getPlayer(shooterId)?.ping ?? 0;
+  const shooter = world.players.getPlayer(shooterId);
+  // Bots see server truth — no render pipeline, no ghost to chase.
+  const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
+  const shooterLag = shooter?.isBot ? 0 : RENDER_LAG_MS;
   let playerId: string | undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) continue;
     const cap = classCapsule(t.armorClass);
     const lead = (world.transitOf?.(pid) ?? 0) / 2;
-    const back = Math.max(0, clampPing(shooterPing) + RENDER_LAG_MS - lead);
+    const back = Math.max(0, clampPing(shooterPing) + shooterLag - lead);
     const tp = rewindPos(t, back);
     const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
     if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
@@ -62,7 +65,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   }
   // Creatures broadcast raw positions (no lead), so their ghost is
   // a flat ping+renderDelay behind — no per-target lead to subtract.
-  const creatureBack = clampPing(shooterPing) + RENDER_LAG_MS;
+  const creatureBack = clampPing(shooterPing) + shooterLag;
   const bc = world.ballSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (bc && bc.t <= bestT) {
     return { ballId: bc.id, contact: at(bc.t), ...beamChain(world, at(bc.t), dir, bc.id, undefined) };

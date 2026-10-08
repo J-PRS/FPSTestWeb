@@ -5,8 +5,21 @@ import { hitRadiusAt } from '../../shared/combat.ts';
 import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
+import { clampPing, rewindPos } from './claimLedger.ts';
+import { RENDER_LAG_MS } from './rewind.ts';
 
 type ContactHost = RoomProjectiles;
+
+/** Rewind a body to where it sat on the shell-owner's screen: ghost =
+ *  sim(t − ping − renderDelay + broadcast lead). Creature sims keep no
+ *  history — their sweeps take the same window as a backMs velocity
+ *  extrapolation (no lead: they broadcast raw). */
+function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean } | null | undefined, targetId: string): number {
+  // Bots read live positions — no render pipeline, no ghost to chase.
+  if (owner?.isBot) return 0;
+  const lead = (r.room.moveSim?.transitOf?.(targetId) ?? 0) / 2;
+  return Math.max(0, clampPing(owner?.ping ?? 0) + RENDER_LAG_MS - lead);
+}
 
 /** The body sweep tests distance to the capsule's axis MIDPOINT, so the
  *  reach must cover the cylinder half-height or a heavy's helmet/knees
@@ -85,23 +98,28 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // the target's class radius (in capsuleReach) + the larger of
     // body/wake radius at this airtime.
     const reach = Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
-    return bodySweep(r, proj, stats, from, reach, dt) || creatureSweep(r, proj, stats, from, reach);
+    const owner = r.room.players.getPlayer(proj.ownerId);
+    return bodySweep(r, proj, stats, from, reach, dt, owner) || creatureSweep(r, proj, stats, from, reach, owner);
   }
 
 /** Player sweep — a cheap midpoint-sphere reject (server |vel|·dt bound
  *  plus teleport slack) skips anyone who cannot displace into reach this
  *  tick before the per-candidate segment solve runs. */
-function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number): boolean {
+function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean } | null | undefined): boolean {
     const p = proj.p;
     const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
     const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) continue;
-      const margin = capsuleReach(target, reach) + halfLen + (Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z) + 25) * dt;
+      const back = ghostBack(r, owner, pid);
+      const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
+      const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
       const center = capsuleCenter(target);
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) continue;
-      const pd = segPointDist(from, p.pos, center);
+      const tp = rewindPos(target, back);
+      const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
+      const pd = segPointDist(from, p.pos, pc);
       if (pd <= capsuleReach(target, reach)) {
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
@@ -115,13 +133,14 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
 
 /** Creature sweep — server shells connect with the swarm the same way a
  *  client's creatureHit claim does: earliest ball contact along the leg. */
-function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number): boolean {
+function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean } | null | undefined): boolean {
     const p = proj.p;
-    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach);
+    const backMs = owner?.isBot ? 0 : clampPing(owner?.ping ?? 0) + RENDER_LAG_MS;
+    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
     // Species pops contest the same lane — earliest of ball/crawler
     // contact eats the shell, so a crawler body-blocks a shot meant
     // for a ball behind it (and vice versa).
-    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach);
+    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach, backMs);
     const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
     if (!best) return false;
     const at: Vec3 = {
@@ -167,13 +186,15 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     // A dome eats the discharged beam too — same rule as flight contact.
     const sht = r.room.deployables?.shieldBlock(p.pos, end, proj.ownerId) ?? null;
     if (sht !== null) bestT = Math.min(bestT, sht);
+    const owner = r.room.players.getPlayer(proj.ownerId);
     const midX = (p.pos.x + end.x) / 2, midY = (p.pos.y + end.y) / 2, midZ = (p.pos.z + end.z) / 2;
     // +0.6: the reject is off the capsule MIDPOINT — a heavy's cylinder
     // half-height (0.55) would let head/foot hits fall outside the bound.
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) continue;
-      const center = capsuleCenter(target);
+      const tp = rewindPos(target, ghostBack(r, owner, pid));
+      const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) continue;
       const t = segPointT(p.pos, end, center);

@@ -26,6 +26,7 @@ export const FORCE_SEND_MS = 900;
 interface BlastCtx {
   shooterId: string;
   ping: number;
+  bot: boolean;
   pos: Vec3;
   radius: number;
   baseDamage: number;
@@ -90,7 +91,7 @@ export class BlastRunner {
     // Sharpshooter's rocket lands tighter, not weaker.
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
     const ctx: BlastCtx = {
-      shooterId: playerId, ping: player.ping, pos: position,
+      shooterId: playerId, ping: player.ping, bot: !!player.isBot, pos: position,
       // Splash pays a banded fraction of the DIRECT hit — aoeDamage on
       // the stat block only survives as the base for damage-only specials
       // (melee arc, injected LG pop charge) that have no directDamage.
@@ -117,10 +118,10 @@ export class BlastRunner {
     this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'flag' });
 
     // Armor grenade: the blast's payload is plating, not just damage.
-    if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
+    if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx);
     // Heal burst — allies caught get the strong heal; enemies got their
     // sting through the normal splash sweep above.
-    if (weapon === WeaponType.HealGrenade) this.healAll(playerId, position, radius, ctx.ping);
+    if (weapon === WeaponType.HealGrenade) this.healAll(playerId, position, radius, ctx);
   }
 
   /** Cheat prevention: bound the blast to plausible projectile range —
@@ -160,10 +161,10 @@ export class BlastRunner {
   /** Armor-grenade plating sweep: coats EVERY player caught — friend or
    *  foe (arming the enemy is the thrower's cost) — plus the creature
    *  sweep. Same lag-comp + occlusion rules as damage. */
-  private plateAll(playerId: string, position: Vec3, radius: number, ping: number): void {
+  private plateAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
-      const tpos = this.rewindTarget(target, targetId, ping);
+      const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -181,10 +182,10 @@ export class BlastRunner {
    *  thrower is admitted explicitly or a feet-heal — the kit's most
    *  common use — lands nothing. Heal fades with distance like damage
    *  does, same lag-comp + occlusion rules. */
-  private healAll(playerId: string, position: Vec3, radius: number, ping: number): void {
+  private healAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) continue;
-      const tpos = this.rewindTarget(target, targetId, ping);
+      const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -203,7 +204,10 @@ export class BlastRunner {
    *  skipping the interp term validates ~200ms·speed past the screen
    *  point (visible hits reading as clean misses at cruise); the lead
    *  term credits back the half-transit the broadcast already leads. */
-  private rewindTarget(target: PlayerState, targetId: string, ping: number): Vec3 {
+  private rewindTarget(target: PlayerState, targetId: string, ping: number, bot: boolean): Vec3 {
+    // Bots read live positions — a bot shooter has no render pipeline,
+    // so there is no ghost to rewind toward.
+    if (bot) return { x: target.position.x, y: target.position.y, z: target.position.z };
     const lead = (this.h.deps.transitOf?.(targetId) ?? 0) / 2;
     const back = clampPing(ping) + RENDER_LAG_MS - lead;
     return rewindPos(target, Math.max(0, back));
@@ -214,7 +218,7 @@ export class BlastRunner {
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
-    const tpos = this.rewindTarget(target, targetId, ctx.ping);
+    const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;

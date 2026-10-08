@@ -1,3 +1,4 @@
+2026-10-01 - Projectile body sweeps lag-comp to the ghost (bodySweep/dischargeRay/creatureSweep); ghost rewinds gated on isBot — bots see server truth
 2026-10-01 - Creature/ball beam contacts validate against the ghost: sweepHit gains backMs (velocity-rewound, gravity-corrected for balls)
 2026-10-01 - Hitscan beams lag-comp to the ghost: beamSweep rewinds each capsule to the shooter screen point; RENDER_LAG_MS shared via rewind.ts
 2026-10-01 - Lag-comp adds the remote-render delay: visible ghost rides ~200ms interp behind broadcast — rewind was validating sim-future of the screen point
