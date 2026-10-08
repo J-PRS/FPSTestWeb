@@ -290,7 +290,7 @@ export class MoveJudge {
       // window. Judging the worst of both comparisons flags honest hits;
       // the judge takes the better of the two — a cheat still reads far
       // from every reference.
-      const cmp = this.anchoredCompare(sh, s, reportInputSeq);
+      const cmp = this.anchoredCompare(sh, s, reportInputSeq, pos);
       const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
       if (d < dist) dist = d;
     }
@@ -417,7 +417,7 @@ export class MoveJudge {
    *  replay from the journal anchor at/below the report seq up to now:
    *  the live sim applied inputs the report predates, which reads as
    *  divergence otherwise. */
-  private anchoredCompare(sh: Shadow, s: MoveState, reportSeq: number): MoveState {
+  private anchoredCompare(sh: Shadow, s: MoveState, reportSeq: number, reportPos: Vec3Like): MoveState {
     // Entries after the anchor (sorted) define input segments: each runs
     // its recorded input until the next entry's sim tick — a jet toggle
     // mid-window then replays correctly instead of being applied to the
@@ -441,8 +441,22 @@ export class MoveJudge {
     // point and the excess reads as divergence at speed.
     const targetTick = sh.simTicks - Math.round(sh.transitEma / (MoveSim.STEP * 1000));
     const segs = [...after, { snap: anchor.snap, tick: Math.max(targetTick, anchor.tick), inp: sh.sim.input }];
-    this.replayWindow(sh, probe, anchor, segs);
-    return probe.state;
+    // transitEma is an EMA — on a jittery link the report's true age
+    // wanders ±tens of ms either side of it, which at speed reads as
+    // ±a meter of phantom divergence (and phantom corrections). Judge
+    // the report against the BEST alignment inside a ±1-tick window
+    // instead of the point estimate: a real divergence doesn't line up
+    // anywhere in the window; jitter just picks a different tick. (±2
+    // forgave a real post-reseed divergence in the soak.)
+    let best: MoveState | null = null;
+    let bestD = Infinity;
+    this.replayWindow(sh, probe, anchor, segs, (tick) => {
+      if (tick < targetTick - 1) return;
+      const st = probe.state;
+      const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);
+      if (d < bestD) { bestD = d; best = { ...st, pos: { ...st.pos }, vel: { ...st.vel } }; }
+    });
+    return best ?? probe.state;
   }
 
   /** Replay the anchor→now input segments through the probe, mirroring
@@ -453,6 +467,7 @@ export class MoveJudge {
     sh: Shadow, probe: MoveSim,
     anchor: { snap: SimSnapshot; tick: number; inp: MoveInput; e: number },
     segs: { tick: number; inp: MoveInput }[],
+    onStep?: (tick: number) => void,
   ): void {
     let tick = anchor.tick;
     let inp = anchor.inp;
@@ -476,6 +491,7 @@ export class MoveJudge {
           e = Math.max(0, e);
           if (e <= 0) lockT = ENERGY.jetLockout;
           probe.update(MoveSim.STEP);
+          onStep?.(tick + i + 1);
         }
         tick += steps;
         budget -= steps;
