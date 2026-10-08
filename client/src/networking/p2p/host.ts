@@ -252,7 +252,14 @@ export class P2PHost {
   private dispatch(playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {return;}
-    this.messageHandler.handleMessage(playerId, result.data);
+    // Same containment as GameServer.onMessage — a throwing handler must
+    // only cost the offending peer's link, never the host's own game.
+    try {
+      this.messageHandler.handleMessage(playerId, result.data);
+    } catch (e) {
+      logger.error('Handler failed', { playerId, type: (result.data as { type?: string })?.type ?? '?', err: e instanceof Error ? e.stack ?? e.message : String(e) });
+      this.byPlayer.get(playerId)?.close();
+    }
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
