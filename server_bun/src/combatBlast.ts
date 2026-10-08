@@ -196,15 +196,22 @@ export class BlastRunner {
     }
   }
 
-  /** Rewind a victim to where it sat on the SHOOTER's screen. The tick
-   *  broadcast leads every remote by half its uplink transit, so the
-   *  ghost the shooter aimed at ran transit/2 ahead of raw history —
-   *  rewinding the un-led buffer by the full ping validates a point
-   *  ~transit/2·speed behind the screen point (a visible hit reading
-   *  as a clean miss at cruise). Subtract the same lead. */
+  /** Client remote-render delay: SnapshotBuffer holds ~BASE(100) +
+   *  arrival interval (~50 at 20Hz) + jitter headroom (~50) behind the
+   *  newest snapshot before interpolating — the visible ghost rides
+   *  ~200ms of simulation behind what the broadcast emitted. */
+  private static readonly REMOTE_RENDER_DELAY_MS = 200;
+
+  /** Rewind a victim to where it sat on the SHOOTER's screen. The
+   *  rendered ghost = broadcast(sim(t − ping/2 − interpDelay) +
+   *  vel·lead), so the honest rewind is ping + interpDelay − lead:
+   *  skipping the interp term validates ~200ms·speed past the screen
+   *  point (visible hits reading as clean misses at cruise); the lead
+   *  term credits back the half-transit the broadcast already leads. */
   private rewindTarget(target: PlayerState, targetId: string, ping: number): Vec3 {
-    const back = Math.max(0, clampPing(ping) - (this.h.deps.transitOf?.(targetId) ?? 0) / 2);
-    return rewindPos(target, back);
+    const lead = (this.h.deps.transitOf?.(targetId) ?? 0) / 2;
+    const back = clampPing(ping) + BlastRunner.REMOTE_RENDER_DELAY_MS - lead;
+    return rewindPos(target, Math.max(0, back));
   }
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
