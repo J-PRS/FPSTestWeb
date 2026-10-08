@@ -13,7 +13,6 @@ const MAX_LINES = 150;
 let panel: HTMLDivElement | null = null;
 let body: HTMLDivElement | null = null;
 let overlay = false;   // backquote debug view drives this
-let revealed = false;  // Alt+Q peek — stays until hidden or debug turns off
 let stick = true;      // autoscroll tail unless the user scrolled up
 
 const LEVEL_CLASS: Partial<Record<LogLevel, string>> = {
@@ -56,7 +55,7 @@ function reseed(): void {
 
 function syncVisible(): void {
   if (!panel) return;
-  const show = overlay || revealed;
+  const show = overlay;
   const was = panel.classList.contains('show');
   panel.classList.toggle('show', show);
   if (show && !was) reseed();
@@ -86,14 +85,6 @@ function ensurePanel(): void {
 /** Backquote debug overlay — same visibility contract as stats/perfHud. */
 export function setLogOverlayVisible(show: boolean): void {
   overlay = show;
-  ensurePanel();
-  syncVisible();
-}
-
-/** Alt+Q peek — toggles the panel alongside the clipboard copy (there's
- *  no close button; the same chord that opened it shuts it). */
-export function toggleLogPanel(): void {
-  revealed = !revealed;
   ensurePanel();
   syncVisible();
 }
