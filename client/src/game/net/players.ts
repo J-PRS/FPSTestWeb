@@ -159,7 +159,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     const player = deps.lazyPlayer();
     const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
     const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (err < 0.5) {
+    // Feel over accuracy: a sub-1.2m snap is a visible jolt for a drift
+    // nobody can see — the server suppresses the same band; drift stays
+    // inside both budgets so convergence never starves.
+    if (err < 1.2) {
       logger.info(`Correction ignored: ${err.toFixed(2)}m below snap threshold`);
       return;
     }
