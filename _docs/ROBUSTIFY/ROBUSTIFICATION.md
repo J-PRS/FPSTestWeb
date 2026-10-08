@@ -3616,3 +3616,16 @@ onMessage's try/catch wrapped only the JSON branch — the binary hot path (28B 
 Same gap as the dedicated binary lane, one tier down: P2PHost.dispatch called handleMessage unguarded, so a throwing handler escaped into the host's own event loop — on P2P the "socket layer" IS a player's game. A malformed-but-valid peer message could take down the host's session, not just their link. Dispatch now wraps the handler and closes only the offending peer's link on a throw. Ingest containment is now uniform across dedicated (JSON + binary) and P2P host.
 
 ### 2.140 - end
+## 2.231 - rttMs dead at the delegate: transit EMA never fed
+
+MessageHandler.moveReport (the funnel moveClaims calls) accepted
+rttMs in its MoveHost signature but dropped it before the roomInfo
+hook - reconcile() only feeds transitEma when rttMs arrives, so the
+EMA stayed 0 on dedicated AND P2P host. Every led-position mechanism
+was running dead: encodeTickPlayer's broadcast lead, the correction
+half-lead, and the judge's transit tolerance all evaluated at lead=0.
+Observers were aiming at positions a full uplink-transit stale -
+the visible "rubber-band" of remote players this session's lead work
+was supposed to kill. One-line pass-through fix; net suite 40/40
+green with the EMA live for the first time. Same-class sweep of the
+whole delegate table found no other drops.
