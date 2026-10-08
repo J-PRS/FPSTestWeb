@@ -78,6 +78,15 @@ export interface Shadow {
    *  can't buy tolerance since it must fool BOTH channels. */
   clientTransitEma: number;
   serverTransitEma: number;
+  /** EMA of |sample − transitEma| on the active channel — link jitter.
+   *  The correction lead scales DOWN as variance rises: the EMA is the
+   *  best guess for a stable link, but on a jittery one the snap
+   *  overshoots as often as undershoots. */
+  transitVar: number;
+  /** EMA of |inter-report dt − reportEma| — report-arrival jitter, the
+   *  link-stability signal that's always populated (reported ping can be
+   *  constant on a jittery link). */
+  reportVar: number;
   /** Input seq consumed at the last resync() — reports stamped at or below
    *  it are provably pre-respawn/pre-teleport traffic still in flight; the
    *  journal was cleared so they have no anchor to compare against and
@@ -246,7 +255,10 @@ export class MoveJudge {
     }
     if (sh.lastReportAt > 0) {
       const dt = reportNow - sh.lastReportAt;
-      if (dt > 0 && dt < 5000) sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;
+      if (dt > 0 && dt < 5000) {
+        if (sh.reportEma > 0) sh.reportVar = sh.reportVar * 0.9 + Math.abs(dt - sh.reportEma) * 0.1;
+        sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;
+      }
     }
     sh.lastReportAt = reportNow;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
@@ -331,10 +343,17 @@ export class MoveJudge {
     // client to the raw sim pos bounces it back by that whole gap. The
     // same velocity-linear lead as the broadcast puts the correction
     // where the client actually is, so the snap is a nudge not a teleport.
-    // Half the transit: a bad snap resets the client's prediction base,
-    // so corrections take the conservative lead (broadcast keeps the
-    // full one — an observer-side overshoot only looks wrong).
-    const lead = Math.min(Math.max(sh.transitEma, 0), TRANSIT_EMA_CAP_MS) / 2000;
+    // Stability-scaled lead: a clean link gets the full one-way transit
+    // (the snap lands where the client will be at consumption); a
+    // jittery one falls back toward the conservative half — past the
+    // jitter, the EMA overshoots as often as it undershoots.
+    const transit = Math.min(Math.max(sh.transitEma, 0), TRANSIT_EMA_CAP_MS);
+    const jit = Math.max(
+      transit > 0 ? sh.transitVar / transit : 0,
+      sh.reportEma > 0 ? sh.reportVar / sh.reportEma : 0,
+    );
+    const stability = transit > 0 ? Math.max(0.5, 1 - 2 * jit) : 0.5;
+    const lead = transit * stability / 1000;
     const truth: MoveState & { inputSeq: number } = {
       pos: { x: s.pos.x + s.vel.x * lead, y: s.pos.y + s.vel.y * lead, z: s.pos.z + s.vel.z * lead },
       vel: { x: s.vel.x, y: s.vel.y, z: s.vel.z },

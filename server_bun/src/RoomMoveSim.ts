@@ -176,7 +176,7 @@ export class RoomMoveSim {
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
       gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
-      transitEma: 0, clientTransitEma: 0, serverTransitEma: 0,
+      transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
   }
 
@@ -352,6 +352,7 @@ export class RoomMoveSim {
     // ping/pong echoes cap it from above in syncTransit.
     if (rttMs !== undefined && rttMs > 0) {
       const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
+      if (sh.serverTransitEma === 0) sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;
       sh.clientTransitEma = sh.clientTransitEma === 0 ? tr : sh.clientTransitEma * 0.9 + tr * 0.1;
       this.syncTransit(sh);
     }
@@ -499,6 +500,7 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     if (!sh || !(rttMs > 0)) return;
     const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
+    sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
     this.syncTransit(sh);
   }
