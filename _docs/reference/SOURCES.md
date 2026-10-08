@@ -13,3 +13,11 @@
   rewind before collision eval, restore after. Details worth noting: ping
   bucket grouping (rewind once per unique ping per tick), 400ms compensation
   ceiling, 4ms minimum threshold, sub-tick lerp between buffer entries.
+- `tribesxt/` — Altimor's TribesXT netXT plugin (netcode-improvement DLL for
+  Tribes 1, github.com/AltimorTASDK/TribesXT). Server-side rewind done at
+  *client-declared* shot time: the client stamps each firing move with its
+  synced-clock time minus the interp offset (timeNudge) at subtick precision;
+  the server rewinds every other player to interpolated snapshots at that
+  instant during the projectile's spawn eval, then restores. Other constants:
+  ghostTimeout=250ms extrapolation cap, maxLagCompensation=250ms rewind
+  ceiling, clientClockCorrection=8ms drift tolerance.
