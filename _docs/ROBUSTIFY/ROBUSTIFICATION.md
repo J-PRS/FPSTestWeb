@@ -3603,3 +3603,7 @@ The server's five replicaHash/kindFields computations (ball/creature/deploy/flag
 ## 2.228 — stateHash wire shape folded: lanes ride a kind-keyed map
 
 The fidelity lanes rode the stateHash message as eight parallel named slots (five *Hash + three *Fields) — the last place adding a lane meant touching the wire type, the emit, the dispatch, the handler signature, and the consumer. The message now carries `replica: Record<kind, {hash, fields?}>`; emit writes lanes by key, wireIn passes the map through, and stateDebug unpacks it once at the edge with per-lane tuple casts. A new fidelity lane is now declaration + emitLane call + laneCheck call — the wire, dispatch, and handler signatures don't move. Protocol owned end-to-end so no compat story needed; 504 vitest + replicaParity/tickSeqHash green.
+
+## 2.229 — binary lane exception containment
+
+onMessage's try/catch wrapped only the JSON branch — the binary hot path (28B position frames, the highest-frequency message on the wire) called handleGameMessage outside it, so a throwing handler on a binary frame escaped uncaught while the same throw on JSON cost only its sender's socket. The binary branch now runs the same containment: log player+type, close that socket with 1011. All three transports (WS, WebTransport datagrams/streams, RTC datachannel) funnel through onMessage, so the ingest edge is now uniformly contained.
