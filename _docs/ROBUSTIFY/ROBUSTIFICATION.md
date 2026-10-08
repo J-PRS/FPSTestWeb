@@ -3407,3 +3407,12 @@ updateEnvelope covers the ack watermarks (ackSeq/inputAck/tickSeq/count)
 wrapping the row list — the last unchecked message-level surface after
 the gameState envelope. Every wire message now verifies both its rows
 and its envelope from one declaration.
+
+## 2.194 — one gameState builder
+
+sendWorldState and handleSpectatorHandshake each inlined the same
+envelope construction (players + protocolVersion + roomEcho). A shared
+sendGameState owns the base payload; the join path layers sessionToken/
+wireIds/team/localPlayerState on top as extras. Two copies of the
+envelope meant two places to drift — now the declaration and the
+builder are each written once.

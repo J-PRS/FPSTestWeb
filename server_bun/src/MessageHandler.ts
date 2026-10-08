@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict } from './types.ts';
+import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict, GameStatePlayer } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler, type CombatDeps, type BeamContact } from './CombatHandler.ts';
@@ -456,15 +456,11 @@ export class MessageHandler {
       .filter((p) => p.isBot || p.hasReceivedPosition)
       .map((p) => this.playerManager.toGameStatePlayer(p));
 
-    this.sendToPlayer(playerId, {
-      type: 'gameState',
-      players: playersData,
+    this.sendGameState(playerId, playersData, {
       sessionToken,
-      protocolVersion: PROTOCOL_VERSION,
       // v3 record-id roster — everyone minted before this joiner needs
       // their mapping shipped inline (deltas only reach live sockets).
       wireIds: this.roomInfo.wireIds?.() ?? {},
-      ...this.roomEcho(),
       team: player.team,
       localPlayerState: {
         position: { ...player.position },
@@ -483,6 +479,22 @@ export class MessageHandler {
     // Sim replay frames — each world sim reports its own roster
     // snapshot; anything spawned after arrives as a live event.
     this.sendSimWorldState(playerId);
+  }
+
+  /** The one gameState builder — spectator gets the bare envelope,
+   *  joiners layer identity/local-state fields on top via extras. */
+  private sendGameState(
+    playerId: string,
+    playersData: GameStatePlayer[],
+    extras?: Record<string, unknown>,
+  ): void {
+    this.sendToPlayer(playerId, {
+      type: 'gameState',
+      players: playersData,
+      protocolVersion: PROTOCOL_VERSION,
+      ...this.roomEcho(),
+      ...extras,
+    });
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
@@ -514,12 +526,7 @@ export class MessageHandler {
     const playersData = [...this.playerManager.getAllPlayers().values()]
       .filter((p) => p.isBot || p.hasReceivedPosition)
       .map((p) => this.playerManager.toGameStatePlayer(p));
-    this.sendToPlayer(playerId, {
-      type: 'gameState',
-      players: playersData,
-      protocolVersion: PROTOCOL_VERSION,
-      ...this.roomEcho(),
-    });
+    this.sendGameState(playerId, playersData);
     this.sendSimWorldState(playerId);
   }
 
