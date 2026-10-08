@@ -7,63 +7,45 @@ import {
   topDown, pad, dome, mast, hullMat, glowStrip, endPost, compound,
   type HullBox,
 } from './structKit';
-import { profOct, mkLoft, mkAnnulus, mkRevolve } from '../entities/viewmodel/weaponKit';
+import { profOct, mkLoft, mkAnnulus } from '../entities/viewmodel/weaponKit';
 
-/** Deck-top height of the flag dais — the flag's pole seats ON the
- *  platform, so 'home' seating adds this to the stand's ground pos. */
-export const FLAG_STAND_TOP = 3.13;
+/** Socket-rim height of the flag socket — the pole seats ON the plinth,
+ *  so 'home' seating adds this to the stand's ground pos. */
+export const FLAG_STAND_TOP = 0.85;
 
-/** Flag stand platform — the T:A read: a RAISED octagonal platform the
- *  flag sockets into. Scale is the detail: ~9m across, ~3m tall — you
- *  ski INTO it, not over it. Collision is a two-box spec stack the
- *  server injects at flag homes (shared/mapSpec flagStandSpecs) — keep
- *  these dims in step with it: skirt 12 wide × 2.2, deck 9 × 0.85. */
-export function mkFlagStand(teamGlow: number, r = 4.5): THREE.Group {
+/** Flag socket — just the permanent base the pole plugs into: a low
+ *  octagonal plinth with a team-lit ring and the socket well on top.
+ *  Platforms are the MAP's job now (author a katastand/flagtower piece
+ *  and the home snaps onto its deck) — a bare flag home is socket-on-
+ *  dirt, not an auto-dais. Visual only: no collision hull — walking the
+ *  socket is walking through a bolted-on prop, and a map that wants a
+ *  solid platform authors the piece itself. */
+export function mkFlagStand(teamGlow: number): THREE.Group {
   const g = new THREE.Group();
   const glow = new THREE.MeshBasicMaterial({ color: teamGlow });
   glow.side = THREE.DoubleSide; // thin trim reads from any face
-  // Truncated pyramid talus — wide foot BURIED ~4.5m so the mass reads
-  // grown out of the terrain (T:A stands are plinths, not platforms on
-  // stilts). The buried run necks down to a root plug, so even on a
-  // slope that undercuts the bury depth the exposed end reads as a
-  // foundation piling, not a floating slab. ~12m foot under a ~9m deck.
-  g.add(skirt(profOct(r * 2.15, r * 2.15, r * 0.3), 2.2, 1.25, undefined, 4.5));
-  // Deck tier — its own slight taper so the silhouette keeps stepping
-  // inward like a pyramid rather than reading as a floating slab.
-  const deck = mkLoft([
-    { z: 0.85, ring: profOct(r * 2, r * 2, r * 0.2) },
-    { z: 0, ring: profOct(r * 2.12, r * 2.12, r * 0.2) },
+  // Squat plinth — buried a hair so slopes never undercut it; the foot
+  // tapers in so the silhouette still reads machined, not a cylinder.
+  const plinth = mkLoft([
+    { z: 0.8, ring: profOct(2.1, 2.1, 0.35) },
+    { z: 0, ring: profOct(2.4, 2.4, 0.4) },
+    { z: -0.4, ring: profOct(2.0, 2.0, 0.3) },
   ], deckMat);
-  deck.rotation.x = -Math.PI / 2;
-  deck.position.y = 2.2;
-  g.add(deck);
-  // Team glow — a band wrapped around the deck's SIDE face (annulus
-  // spanning most of the slab's thickness, a hair proud — lit trim,
-  // not a floating outline).
-  const band = mkAnnulus(
-    profOct(r * 2.02, r * 2.02, r * 0.2),
-    profOct(r * 1.96, r * 1.96, r * 0.2),
-    0.15, 0.55, glow,
-  );
-  band.rotation.x = -Math.PI / 2;
-  band.position.y = 2.2;
-  g.add(band);
-  // 4 corner studs at the deck edge — the crown silhouette.
-  for (let i = 0; i < 4; i += 1) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const stud = mkLoft([
-      { z: 0.8, ring: profOct(0.55, 0.55, 0.1) },
-      { z: 0, ring: profOct(0.9, 0.9, 0.15) },
-    ], trimMat);
-    stud.rotation.x = -Math.PI / 2;
-    stud.position.set(Math.cos(a) * r * 0.94, 3.05, Math.sin(a) * r * 0.94);
-    g.add(stud);
-  }
-  // Matches flagStandSpecs (shared/mapSpec) — the same two-box stack.
-  g.userData.hulls = [
-    { pos: { x: 0, y: 1.1, z: 0 }, size: { x: 12, y: 2.2, z: 12 } },
-    { pos: { x: 0, y: 2.625, z: 0 }, size: { x: 9, y: 0.85, z: 9 } },
-  ] satisfies HullBox[];
+  plinth.rotation.x = -Math.PI / 2;
+  g.add(plinth);
+  // Team-lit ring around the socket mouth — the "flag lives here" read.
+  const ring = mkAnnulus(profOct(1.0, 1.0, 0.15), profOct(0.55, 0.55, 0.1), 0.12, 0.4, glow);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.8;
+  g.add(ring);
+  // Socket well — the dark throat the pommel seats into.
+  const well = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.4, 0.3, 8),
+    new THREE.MeshBasicMaterial({ color: 0x101418 }));
+  well.position.y = 0.82;
+  g.add(well);
+  // No hulls — the socket is a prop, not a platform. Knee-high plinths
+  // the player sinks through beat invisible curbs they stumble on.
   return g;
 }
 
@@ -233,6 +215,89 @@ export function mkBunker(w = 12, d = 10, h = 4.2, teamGlow = 0x59_F2_FF, door = 
   return g;
 }
 
+/** Generator house — the base's power vault: tower-mass walls (taller
+ *  and wider than mkBunker), a rear service door on the −Z face, and a
+ *  raised interior deck so the generator stands on structure, not dirt.
+ *  The stepped roof + glow monitor on top is the "power plant" tell —
+ *  from across the field it should read bigger than the bastion tower. */
+export function mkGenHouse(w = 16, d = 14, h = 7, teamGlow = 0x59_F2_FF, door = 5): THREE.Group {
+  const stub = (w - door) / 2;
+  const g = compound([
+    // Front wall solid; sides rotated; BACK wall (−Z) split by the door.
+    [mkWallRun(w, h, teamGlow),       0,  d / 2],
+    [mkWallRun(d, h, teamGlow), -w / 2, 0, Math.PI / 2],
+    [mkWallRun(d, h, teamGlow),  w / 2, 0, Math.PI / 2],
+    [mkWallRun(stub, h, teamGlow, false), -(door / 2 + stub / 2), -d / 2],
+    [mkWallRun(stub, h, teamGlow, false),  (door / 2 + stub / 2), -d / 2],
+    [endPost(h, 2), -(door / 2 + 0.5), -d / 2],
+    [endPost(h, 2),  (door / 2 + 0.5), -d / 2],
+  ]);
+  // The vault seats on the footprint's HIGH sample so the deck clears
+  // dirt — that leaves the downhill face hanging on slopes, so walls
+  // carry a ~22m foundation: mesh skirt below grade + deepened hulls.
+  // Buried on the upslope, exposed as the retaining plinth downslope.
+  for (const hb of g.userData.hulls as HullBox[]) {
+    hb.pos.y -= 11; hb.size.y += 22; // bottoms ~0 → −22, tops unchanged
+  }
+  const skirtBase = mkLoft(topDown(
+    { z: 22,  ring: profOct(w - 0.8, d - 0.8, 0.3) },
+    { z: 6,   ring: profOct(w - 0.2, d - 0.2, 0.4) },
+    // Foot necks inward — on a slope deeper than the skirt an exposed
+    // end reads as a driven piling, not a flat slab underside.
+    { z: 0,   ring: profOct(w * 0.6, d * 0.6, 0.4) },
+  ), hullMat);
+  skirtBase.rotation.x = -Math.PI / 2;
+  skirtBase.position.y = -22;
+  g.add(skirtBase);
+  // Interior deck — a real slab, top at y=1: the generator plinth rides
+  // on it and raiders never touch terrain inside the vault.
+  const floor = mkLoft(topDown(
+    { z: 1.0, ring: profOct(w - 1.2, d - 1.2, 0.3) },
+    { z: 0,   ring: profOct(w - 0.6, d - 0.6, 0.35) },
+  ), deckMat);
+  floor.rotation.x = -Math.PI / 2;
+  g.add(floor);
+  // Roof — a taller stepped crown than the bunker's flat cap so the
+  // vault outmasses everything else in the compound.
+  const roof = mkLoft(topDown(
+    { z: 1.2, ring: profOct(w - 0.6, d - 0.6, 0.5) },
+    { z: 0.5, ring: profOct(w + 0.5, d + 0.5, 0.6) },
+    { z: 0,   ring: profOct(w + 1.0, d + 1.0, 0.65) },
+  ), hullMat);
+  roof.rotation.x = -Math.PI / 2;
+  roof.position.y = h;
+  g.add(roof);
+  // Roof monitor — the lit exhaust stack; the glow is the team's power
+  // read from the field: lit = grid live.
+  const vent = mkLoft(topDown(
+    { z: 1.6, ring: profOct(4.4, 3.2, 0.4) },
+    { z: 0,   ring: profOct(5.0, 3.8, 0.5) },
+  ), trimMat);
+  vent.rotation.x = -Math.PI / 2;
+  vent.position.y = h + 1.2;
+  g.add(vent);
+  const ventGlow = glowStrip(3.6, 0.5, 0.12, new THREE.MeshBasicMaterial({ color: teamGlow }));
+  ventGlow.position.set(0, h + 1.9, 1.95);
+  g.add(ventGlow);
+  // Comms mast rises out of the vent stack — one centered crown: the
+  // stack reads as the mast's base, the spire as its antenna. Baked in
+  // (not a map piece) because seatKits pins every kit to terrain.
+  const antenna = mkCommsMast(5, teamGlow);
+  antenna.position.set(0, h + 2.8, 0);
+  g.add(antenna);
+  // Interior light line over the door — the only inside accent.
+  const strip = glowStrip(door * 0.8, 0.3, 0.1, new THREE.MeshBasicMaterial({ color: teamGlow }));
+  strip.position.set(0, h - 0.6, -d / 2 + 0.55);
+  g.add(strip);
+  (g.userData.hulls as HullBox[]).push(
+    { pos: { x: 0, y: -10.5, z: 0 }, size: { x: w - 1.2, y: 23.0, z: d - 1.2 } }, // deck + foundation fill (−22…1)
+    { pos: { x: 0, y: h + 0.5, z: 0 }, size: { x: w, y: 1.0, z: d } },          // roof
+    { pos: { x: 0, y: h + 2.8 + 3.2, z: 0 }, size: { x: 2.2, y: 6.4, z: 2.2 } }, // roof mast on the vent
+    { pos: { x: 0, y: h + 1.2 + 0.8, z: 0 }, size: { x: 4.4, y: 1.6, z: 3.2 } },   // vent stack
+  );
+  return g;
+}
+
 /** Flag tower — the classic Raindance/T2 form: a small enterable room
  *  at ground level, a wrap-around LEDGE platform at mid-height where
  *  the flag sits exposed on all four sides, and a tapered shaft rising
@@ -302,7 +367,15 @@ export function mkGenDome(r = 5, teamGlow = 0x59_F2_FF): THREE.Group {
   const band = windowBand(r * 1.98, 0.45, new THREE.MeshBasicMaterial({ color: teamGlow }));
   band.position.y = 2.1;
   g.add(band);
-  g.userData.hulls = [{ pos: { x: 0, y: (1.8 + r) / 2, z: 0 }, size: { x: r * 2, y: 1.8 + r, z: r * 2 } } satisfies HullBox];
+  // Plinth octagon + a REAL dome cap — the collider solves the sphere
+  // quadratic and reads the closed-form cap height, so no box
+  // approximation walls off the air over the slope.
+  const b = 1.8;
+  g.userData.hulls = [
+    { pos: { x: 0, y: b / 2, z: 0 }, size: { x: r * 1.94, y: b, z: r * 1.94 } },
+    { pos: { x: 0, y: b / 2, z: 0 }, size: { x: r * 1.94, y: b, z: r * 1.94 }, rotY: Math.PI / 4 },
+    { pos: { x: 0, y: b + r / 2, z: 0 }, size: { x: r * 2, y: r, z: r * 2 }, dome: r },
+  ] satisfies HullBox[];
   return g;
 }
 
@@ -325,12 +398,7 @@ export function mkCommsMast(h = 10, teamGlow = 0x59_F2_FF): THREE.Group {
   const m = mast(h, 0.3, trimMat, new THREE.MeshBasicMaterial({ color: teamGlow }));
   m.position.y = 1.4;
   g.add(m);
-  // Dish — a shallow lathe cone aimed out over the field.
-  const dish = mkRevolve([[0.05, -0.35], [1.1, 0], [0.05, 0.05]], trimMat, 10, true);
-  dish.position.set(0, 1.4 + h * 0.78, 0);
-  dish.rotation.set(-0.5, 0.5, 0);
-  g.add(dish);
-  // Skirt + shaft as one slim box — the dish is collision-exempt dress.
+  // Skirt + shaft as one slim box — bare mast, no dish dressing.
   g.userData.hulls = [{ pos: { x: 0, y: (1.4 + h) / 2, z: 0 }, size: { x: 2.2, y: 1.4 + h, z: 2.2 } } satisfies HullBox];
   return g;
 }
@@ -373,7 +441,11 @@ export function mkPillar(w = 3, h = 9, teamGlow = 0x59_F2_FF): THREE.Group {
  *  whole map. */
 export function mkObelisk(w = 2.4, h = 12, teamGlow = 0x59_F2_FF): THREE.Group {
   const g = new THREE.Group();
+  const glow = new THREE.MeshBasicMaterial({ color: teamGlow });
+  glow.side = THREE.DoubleSide;
   g.add(skirt(profOct(w * 2.6, w * 2.6, w * 0.4), 1.4, 1.25, hullMat, 2));
+  // Two-step plinth — the stepped crown is what sells "monument" vs
+  // "slab": a broad deck foot then a tighter seat under the needle.
   const step = mkLoft(topDown(
     { z: 0.8, ring: profOct(w * 1.9, w * 1.9, w * 0.3) },
     { z: 0,   ring: profOct(w * 2.2, w * 2.2, w * 0.35) },
@@ -381,22 +453,43 @@ export function mkObelisk(w = 2.4, h = 12, teamGlow = 0x59_F2_FF): THREE.Group {
   step.rotation.x = -Math.PI / 2;
   step.position.y = 1.4;
   g.add(step);
-  // Needle — a hard 4-sided taper (chamfer ~0 reads as a square; r=0
-  // collapses profOct's corner pairs and trips the degenerate-point lint),
-  // rotated 45° so a flat face greets each approach.
+  const seat = mkLoft(topDown(
+    { z: 0.5, ring: profOct(w * 1.25, w * 1.25, w * 0.2) },
+    { z: 0,   ring: profOct(w * 1.45, w * 1.45, w * 0.25) },
+  ), trimMat);
+  seat.rotation.x = -Math.PI / 2;
+  seat.position.y = 2.2;
+  g.add(seat);
+  // Needle — a curved taper in three sections: fat root haunch, long
+  // slender waist, hard point. A single 2-ring loft read as a plank;
+  // the mid rings bow the profile so light walks down the shaft.
   const needle = mkLoft(topDown(
-    { z: h,       ring: profOct(w * 0.35, w * 0.35, w * 0.02) },
-    { z: 0,       ring: profOct(w,        w,        w * 0.02) },
+    { z: h,        ring: profOct(w * 0.06, w * 0.06, w * 0.02) },
+    { z: h * 0.8,  ring: profOct(w * 0.3,  w * 0.3,  w * 0.05) },
+    { z: h * 0.35, ring: profOct(w * 0.62, w * 0.62, w * 0.08) },
+    { z: 0,        ring: profOct(w * 0.9,  w * 0.9,  w * 0.1) },
   ), hullMat);
   needle.rotation.x = -Math.PI / 2;
   needle.rotation.y = Math.PI / 4;
-  needle.position.y = 2.2;
+  needle.position.y = 2.7;
   g.add(needle);
-  const tip = new THREE.Mesh(
-    new THREE.OctahedronGeometry(w * 0.3),
-    new THREE.MeshBasicMaterial({ color: teamGlow }),
+  // Glow band cinching the waist — a lit collar breaks the silhouette
+  // where a real obelisk would carry an inscription seam.
+  const collar = mkAnnulus(
+    profOct(w * 0.4, w * 0.4, w * 0.06),
+    profOct(w * 0.34, w * 0.34, w * 0.05),
+    0.1, 0.5, glow,
   );
-  tip.position.y = 2.2 + h + w * 0.25;
+  collar.rotation.x = -Math.PI / 2;
+  collar.rotation.y = Math.PI / 4;
+  collar.position.y = 2.7 + h * 0.62;
+  g.add(collar);
+  // Tip gem seated INTO the apex — a floating diamond read as a bug.
+  const tip = new THREE.Mesh(
+    new THREE.OctahedronGeometry(w * 0.26),
+    glow,
+  );
+  tip.position.y = 2.7 + h + w * 0.1;
   g.add(tip);
   g.userData.hulls = [{ pos: { x: 0, y: (2.2 + h) / 2, z: 0 }, size: { x: w * 1.4, y: 2.2 + h, z: w * 1.4 } } satisfies HullBox];
   return g;
@@ -429,19 +522,35 @@ export function mkArch(span = 9, h = 7, w = 2.6): THREE.Group {
 export function mkShard(w = 3.4, h = 8, lean = 0.25): THREE.Group {
   const g = new THREE.Group();
   g.add(skirt(profOct(w * 1.5, w * 1.5, w * 0.3), 1.2, 1.2, hullMat, 2));
+  // Broken monolith — asymmetric sections: each ring swaps which axis is
+  // wide, so the silhouette twists as it rises instead of reading as a
+  // plank. The crown shears both ways (dx + dy) — a snapped corner, not
+  // a clean tip.
   const slab = mkLoft(topDown(
-    { z: h,       ring: profOct(w * 0.7, w * 1.05, w * 0.2), dx: lean * h },
-    { z: h * 0.6, ring: profOct(w * 0.85, w * 1.1, w * 0.22), dx: lean * h * 0.6 },
-    { z: 0,       ring: profOct(w, w * 1.2, w * 0.25) },
+    { z: h,        ring: profOct(w * 0.28, w * 0.5,  w * 0.08), dx: lean * h,       dy: -lean * h * 0.35 },
+    { z: h * 0.75, ring: profOct(w * 0.55, w * 0.85, w * 0.15), dx: lean * h * 0.7, dy: -lean * h * 0.2 },
+    { z: h * 0.45, ring: profOct(w * 0.95, w * 0.6,  w * 0.2),  dx: lean * h * 0.4 },
+    { z: h * 0.2,  ring: profOct(w * 0.8,  w * 1.1,  w * 0.22), dx: lean * h * 0.15 },
+    { z: 0,        ring: profOct(w,        w * 1.2,  w * 0.25) },
   ), hullMat);
   slab.rotation.x = -Math.PI / 2;
   slab.position.y = 1.2;
   g.add(slab);
+  // Fracture seam — a lit sliver rising up the shear face, the way the
+  // wallrun's parapet strip accents an edge. Seated just proud of the
+  // lean side so it reads as light bleeding out of the crack.
+  const seam = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.1, h * 0.55, w * 0.06),
+    new THREE.MeshBasicMaterial({ color: 0x9F_E8_FF }),
+  );
+  seam.position.set(lean * h * 0.45 + w * 0.28, 1.2 + h * 0.45, -w * 0.32);
+  seam.rotation.z = -lean * 0.9;
+  g.add(seam);
   g.userData.hulls = [{ pos: { x: lean * h * 0.5, y: (1.2 + h) / 2, z: 0 }, size: { x: w * 1.2, y: 1.2 + h, z: w * 1.2 } } satisfies HullBox];
   return g;
 }
 
-/** The bastion — a complete CTF base compound from the kit, ~46×34m.
+/** The bastion — a complete CTF base compound from the kit, ~46×44m.
  *  Composition rules (the parts that made hand-placed walls look wrong):
  *  every mass is axially aligned to the compound, heights step
  *  tower→wall→pad, one material story (gunmetal hull + dark trim + team
@@ -452,13 +561,76 @@ export function mkBastion(teamGlow = 0x59_F2_FF): THREE.Group {
   // Perimeter: two angled curtains form the courtyard gate mouth; the
   // rear run closes the compound. compound() folds every child's hulls
   // into bastion space — collision stays in step with layout for free.
+  // Rectangle ~40×36, a monumental gatehouse dead-center on the front
+  // and BOTH flanks, buildings inside the back row. The rear wall is
+  // split: the gap IS the generator house's back door — a raid enters
+  // the vault straight from midfield, never through the courtyard.
   return compound([
-    [mkBaseTower(10, 14, teamGlow),   0, -9],
-    [mkGenDome(4.6, teamGlow),       -13, 1],
-    [mkLandingPad(4.2, teamGlow),     11, 8],
-    [mkCommsMast(10, teamGlow),       15, -11],
-    [mkWallRun(15, 4.2, teamGlow),   -13, 13, -0.26],
-    [mkWallRun(15, 4.2, teamGlow),    13, 13, 0.26],
-    [mkWallRun(30, 4.2, teamGlow),     0, -18],
+    // Back row slides deep — the side-gate lane runs at z≈-1 and needs
+    // clear road between the two mouths; the vault, tower and dome all
+    // step back so nothing's face eats the corridor.
+    // The vault straddles the rear wall — half in the compound, half
+    // out: the breach is its door face poking into midfield.
+    [mkGenHouse(16, 14, 7, teamGlow),   0, -23],
+    // Courtyard reads as a plan, not a scatter: flag on the gate axis,
+    // west column tower+dome, east column bunker+pad, comms spire
+    // dead-center behind the stand.
+    [mkBaseTower(10, 14, teamGlow),     -13, -9],
+    [mkBunker(12, 10, 4.2, teamGlow),    13, -9, -Math.PI / 2],
+    [mkGenDome(4.6, teamGlow),          -13, 9],
+    [mkLandingPad(4.2, teamGlow),        13, 9],
+    [mkCommsMast(10, teamGlow),           0, -14],
+    // Front face: gatehouse mouth + curtains ending short of the corner —
+    // the corner towers own the joint, not three butted wall ends.
+    [mkGatehouse(teamGlow),             0, 18],
+    [mkWallRun(7, 4.2, teamGlow),   -15.5, 18],
+    [mkWallRun(7, 4.2, teamGlow),    15.5, 18],
+    // Side faces: gatehouse mouth each + curtains fore and aft.
+    [mkGatehouse(teamGlow), -20, -1, -Math.PI / 2],
+    [mkGatehouse(teamGlow),  20, -1,  Math.PI / 2],
+    [mkWallRun(6, 4.2, teamGlow), -20, -16.5, -Math.PI / 2],
+    [mkWallRun(6, 4.2, teamGlow), -20, 14.5, -Math.PI / 2],
+    [mkWallRun(6, 4.2, teamGlow), 20, -16.5, Math.PI / 2],
+    [mkWallRun(6, 4.2, teamGlow), 20, 14.5, Math.PI / 2],
+    // Rear: stubs flank the genhouse door gap (the vault breach) and run
+    // long enough to meet the side curtains — corners seal by wall, not
+    // by a floating nub.
+    [mkWallRun(12, 4.2, teamGlow),    -14, -23],
+    [mkWallRun(12, 4.2, teamGlow),     14, -23],
+    // Corner towers — a real bastion corner: one chunky post swallows
+    // every curtain/wall end so nothing pokes through the joint.
+    [endPost(5, 4.5), -20, 18],
+    [endPost(5, 4.5),  20, 18],
+    [endPost(5, 4.5), -20, -21.75],
+    [endPost(5, 4.5),  20, -21.75],
   ]);
+}
+
+/** Gatehouse — a TALL curtain pierced by ONE full-height slot. In a jet
+ *  game a low wall is decor, so the face climbs to ~20m: clearing it
+ *  costs a full tank of climb and a slow exposed arc, while the shielded
+ *  slot (a 'shield' spec seated in the mouth) is the practical door —
+ *  allies walk and shoot through, enemies eat a wall. The slot runs the
+ *  whole height on purpose: when the generator drops the shield, the
+ *  breach is big enough to matter. Battered stubs, gate towers flanking
+ *  the mouth. ~24m span, ~21m tall, slot 4.4w×20h. */
+export function mkGatehouse(teamGlow = 0x59_F2_FF): THREE.Group {
+  const H = 20, GAP = 4.6, STUB = 9.7;
+  const stubC = GAP / 2 + STUB / 2;
+  const g = compound([
+    [mkWallRun(STUB, H, teamGlow, false), -stubC, 0],
+    [mkWallRun(STUB, H, teamGlow, false),  stubC, 0],
+    [endPost(H + 1.2, 3.4), -3.9, 0],
+    [endPost(H + 1.2, 3.4),  3.9, 0],
+  ]);
+  // Gate mouth accents: one vertical slot on each tower face, a hair
+  // proud of the surface like the wallrun parapet strip. Kept to the
+  // lower half — full-height strips read as floating neon on a 30m face.
+  const glowMat = new THREE.MeshBasicMaterial({ color: teamGlow });
+  for (const side of [-1, 1]) {
+    const slot = glowStrip(0.3, H * 0.45, 0.1, glowMat);
+    slot.position.set(side * 3.9, H * 0.28, 1.72); // front face of the tower
+    g.add(slot);
+  }
+  return g;
 }

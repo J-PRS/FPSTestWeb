@@ -187,6 +187,8 @@ export interface HullBox {
   pos: { x: number; y: number; z: number };
   size: { x: number; y: number; z: number };
   rotY?: number;
+  /** Hemisphere radius — dome cap, not a box (see KitHull.dome). */
+  dome?: number;
 }
 
 /** Compound assembly — [piece, x, z, rotY?] entries placed in local
@@ -207,6 +209,7 @@ export function compound(
         pos: { x: h.pos.x * c + h.pos.z * s + x, y: h.pos.y, z: -h.pos.x * s + h.pos.z * c + z },
         size: h.size,
         rotY: rotY + (h.rotY ?? 0) || undefined,
+        dome: h.dome,
       });
     }
   }
