@@ -448,6 +448,22 @@ export class MessageHandler {
     }
   }
 
+  /** In-world roster as a join snapshot. Join storms reserialize the
+   *  same O(n) roster per joiner, so build once per TTL window and share
+   *  — the snapshot can lag ≤100ms, invisible under client interp which
+   *  converges to live updates within frames anyway. Callers must not
+   *  mutate the returned array (the cache hands it back out). */
+  private rosterCache: { at: WallMs; data: GameStatePlayer[] } | undefined;
+  private inWorldRoster(): GameStatePlayer[] {
+    const now = wallNow();
+    if (this.rosterCache && now - this.rosterCache.at < 100) return this.rosterCache.data;
+    const data = [...this.playerManager.getAllPlayers().values()]
+      .filter((p) => p.isBot || p.hasReceivedPosition)
+      .map((p) => this.playerManager.toGameStatePlayer(p));
+    this.rosterCache = { at: now, data };
+    return data;
+  }
+
   /** Full world-state replay for one player — the (re)join payload:
    *  gameState (roster/team/map/flags/pickups/deployables) plus the
    *  creature rosters. Shared by handshake and the resync request, so an
@@ -456,12 +472,9 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
-    const others = this.playerManager.getOtherPlayers(playerId);
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
-    const playersData = others
-      .filter((p) => p.isBot || p.hasReceivedPosition)
-      .map((p) => this.playerManager.toGameStatePlayer(p));
+    const playersData = this.inWorldRoster().filter((p) => p.id !== playerId);
 
     this.sendGameState(playerId, playersData, {
       sessionToken,
@@ -530,10 +543,7 @@ export class MessageHandler {
    *  no localPlayerState, and no playerJoined goes out. The socket still
    *  gets every broadcast + tick frame (sent to connections, not players). */
   handleSpectatorHandshake(playerId: string): void {
-    const playersData = [...this.playerManager.getAllPlayers().values()]
-      .filter((p) => p.isBot || p.hasReceivedPosition)
-      .map((p) => this.playerManager.toGameStatePlayer(p));
-    this.sendGameState(playerId, playersData);
+    this.sendGameState(playerId, this.inWorldRoster());
     this.sendSimWorldState(playerId);
   }
 

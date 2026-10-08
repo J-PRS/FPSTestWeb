@@ -28,10 +28,11 @@ describe('netbot — stress soak', () => {
     // Production caps are per-room 32 / global 128 — this room is
     // deliberately over both. CONFIG is a shared module object in this
     // process, so restore on the way out.
-    const savedCap = CONFIG.maxPlayers;
-    const savedGlobal = CONFIG.globalMaxPlayers;
-    CONFIG.maxPlayers = N_BOTS + 8;
-    CONFIG.globalMaxPlayers = N_BOTS + 8;
+    const mutableConfig = CONFIG as { maxPlayers: number; globalMaxPlayers: number };
+    const savedCap = mutableConfig.maxPlayers;
+    const savedGlobal = mutableConfig.globalMaxPlayers;
+    mutableConfig.maxPlayers = N_BOTS + 8;
+    mutableConfig.globalMaxPlayers = N_BOTS + 8;
     await spawn(N_BOTS, LINKS, { room: 'big-soak', mode: 'ctf', bots: 0 });
 
     const t = () => bots.map((b) => b.nc.tel);
@@ -79,7 +80,7 @@ describe('netbot — stress soak', () => {
     for (const b of bots) {
       expect(b.nc.roster.size).toBeGreaterThanOrEqual(N_BOTS - 2);
     }
-    CONFIG.maxPlayers = savedCap;
-    CONFIG.globalMaxPlayers = savedGlobal;
+    mutableConfig.maxPlayers = savedCap;
+    mutableConfig.globalMaxPlayers = savedGlobal;
   }, 600000);
 });
