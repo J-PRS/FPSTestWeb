@@ -314,8 +314,13 @@ export class MoveJudge {
     // The sim keeps its own position — resyncing onto the rejected report
     // would make the correction we just sent diverge from the next report
     // and ping-pong forever. Convergence comes from the client snapping.
+    // The shadow trails the client by its uplink transit — snapping the
+    // client to the raw sim pos bounces it back by that whole gap. The
+    // same velocity-linear lead as the broadcast puts the correction
+    // where the client actually is, so the snap is a nudge not a teleport.
+    const lead = Math.min(Math.max(sh.transitEma, 0), TRANSIT_EMA_CAP_MS) / 1000;
     const truth: MoveState & { inputSeq: number } = {
-      pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+      pos: { x: s.pos.x + s.vel.x * lead, y: s.pos.y + s.vel.y * lead, z: s.pos.z + s.vel.z * lead },
       vel: { x: s.vel.x, y: s.vel.y, z: s.vel.z },
       yaw, pitch: s.pitch, onGround: s.onGround,
       // Which client input event the sim consumed last — the correction
