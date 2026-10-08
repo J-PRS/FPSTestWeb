@@ -453,6 +453,9 @@ export class WireIdRoster {
   feed(m: { type?: string; add?: Record<number, string>; wireIds?: Record<number, string> }): void {
     if (m.type === 'wireIds' && m.add) {
       for (const [id, pid] of Object.entries(m.add)) this.ids.set(Number(id), pid);
+      // A retired id's decode baseline dies with it — a later reissue
+      // must seat a fresh full record, never inherit the old owner's.
+      for (const id of (m as { remove?: number[] }).remove ?? []) this.pool.byId?.delete(Number(id));
     } else if (m.type === 'gameState') {
       this.ids.clear();
       // Fresh epoch: masked deltas must not inherit fields a previous

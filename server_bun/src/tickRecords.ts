@@ -134,11 +134,13 @@ export class TickFanout {
       snap.t = now;
 
       let wireId = room.wireIds.get(playerId);
+      let freshWireId = false;
       if (wireId === undefined) {
         wireId = mintWireId(room);
         room.wireIds.set(playerId, wireId);
         (roster ??= {})[wireId] = playerId;
         rosterDirty = true;
+        freshWireId = true;
       }
       let rec = records[recN];
       if (!rec) {
@@ -168,8 +170,11 @@ export class TickFanout {
           sheep,
           // Stagger fulls by wireId — keying on tickSeq alone synced every
           // record into one egress spike per window; spreading them keeps
-          // the same 750ms drift bound with a flat send curve.
-        }, rec.enc, rec.last, (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
+          // the same 750ms drift bound with a flat send curve. A fresh
+          // mint always fulls: the pooled slot's `last` can still match a
+          // retired wireId, and a masked record would hand receivers the
+          // departed owner's hp/flags.
+        }, rec.enc, rec.last, freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
       recN++;
       this.metrics.recordsBuilt++;
     }

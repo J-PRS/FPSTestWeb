@@ -162,7 +162,12 @@ export class WireIn {
     playerLeft: (data) => this.handlePlayerLeft(data),
     wireIds: (data) => {
       for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid);
-      for (const id of data.remove ?? []) this.wireIds.delete(id);
+      for (const id of data.remove ?? []) {
+        this.wireIds.delete(id);
+        // A reissued id must seat a fresh baseline — never inherit the
+        // departed owner's retained fields (see WireIdRoster.feed).
+        this.tickPool.byId?.delete(id);
+      }
     },
     teamUpdate: (data) => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
     playerRespawn: (data) => this.handlePlayerRespawn(data),

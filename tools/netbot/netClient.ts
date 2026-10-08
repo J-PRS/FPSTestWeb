@@ -346,7 +346,10 @@ export class NetClient {
       case 'tickUpdate': this.applyTick(m.updates); break;
       case 'wireIds':
         for (const [id, pid] of Object.entries(m.add)) this.wireIds.set(Number(id), pid);
-        for (const id of (m.remove ?? []) as number[]) this.wireIds.delete(id);
+        for (const id of (m.remove ?? []) as number[]) {
+          this.wireIds.delete(id);
+          this.tickPool.byId.delete(id); // retired baseline dies with the id
+        }
         break;
       case 'playerHit': {
         if (m.seq !== undefined) {
