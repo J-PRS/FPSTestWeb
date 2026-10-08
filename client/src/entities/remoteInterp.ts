@@ -316,10 +316,19 @@ export class RemoteInterp {
     this.simulatedVelocity.y += GRAVITY * dt;
 
     // Held jet on the wire burns thrust — the shared sim's
-    // jetForceUp/mass, minus the steering share (no dir bits for remotes).
-    // Without it a jetting remote visibly falls during a packet gap.
+    // jetForceUp/mass plus the directional share along travel (remotes
+    // carry no WASD bits, so velocity is the honest input proxy; the
+    // forward-cap dropout keeps it under jetMaxFwdAccel like the real
+    // sim). Without it a jetting remote visibly falls during a gap.
     if (this.h.wireJet === true) {
-      this.simulatedVelocity.y += MOVEMENT_CONFIG.jetForceUp * (dt / classMass(this.h.armorClass));
+      const im = dt / classMass(this.h.armorClass);
+      this.simulatedVelocity.y += MOVEMENT_CONFIG.jetForceUp * im;
+      const hv = Math.hypot(this.simulatedVelocity.x, this.simulatedVelocity.z);
+      if (hv > 0 && hv < MOVEMENT_CONFIG.jetMaxFwdAccel) {
+        const ux = this.simulatedVelocity.x / hv, uz = this.simulatedVelocity.z / hv;
+        this.simulatedVelocity.x += ux * MOVEMENT_CONFIG.jetForceDir * im;
+        this.simulatedVelocity.z += uz * MOVEMENT_CONFIG.jetForceDir * im;
+      }
     }
 
     p.x += this.simulatedVelocity.x * dt;

@@ -1,3 +1,4 @@
+2026-10-01 - Remote jet DR gains directional thrust: the burn accelerates along travel under jetMaxFwdAccel (velocity = the only honest input proxy on the wire), matching the shared sim — a jetting remote no longer just climbs but keeps gaining speed
 2026-10-01 - Jet bit breaks record suppression: a jet flip while hovering forced no record (suppression only watched pos/health/ski/sheep) — remotes burned thrust up to 250ms stale; pinned by an end-to-end fanout scenario
 2026-10-01 - Held jet rides the wire (zero bytes — sheep byte's spare top bit): remote dead-reckoning now burns jet thrust so a jetting remote climbs through packet gaps instead of falling at raw gravity; jetpack audio/trail get the real button instead of the powered-climb heuristic
 2026-10-01 - Remote dead-reckon keeps ski momentum: grounded DR honors the wire ski flag — frictionless above walk speed like the shared sim, instead of a visible slide-to-stop mid-gap
