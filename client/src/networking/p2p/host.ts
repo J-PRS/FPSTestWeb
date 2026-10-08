@@ -338,6 +338,9 @@ export class P2PHost {
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
           jet: p.jetting,
+          // Without this guests' remotes decode status:0 — cloak/regen
+          // visuals never reach a hosted room.
+          status: p.status,
         }));
       }
       if (records.length === 0) {continue;}
