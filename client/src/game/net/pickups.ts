@@ -28,10 +28,20 @@ export function wirePickups(ctx: NetCtx): void {
   deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
-    // A re-spawn for a live id is a blast-knock rest spot — the server's
-    // truth lands where the tumble ended; converge the replica there.
     const live = pickupMeshes.get(id);
-    if (live) { live.nugget.serverRest(pos); return; }
+    if (live && live.kind !== kind) {
+      // kind is constructor-fixed (it chose the nugget's parts) — a
+      // recycled id hosting a different kind can never patch its way to
+      // truth and would desync the pickup hash lane forever.
+      live.nugget.serverCollect();
+      pickupMeshes.delete(id);
+    } else if (live) {
+      // A re-spawn for a live id is a blast-knock rest spot — the
+      // server's truth lands where the tumble ended; converge the
+      // replica there.
+      live.nugget.serverRest(pos);
+      return;
+    }
     const nugget = new Nugget(
       deps.lazyScene(),
       new THREE.Vector3(pos.x, pos.y, pos.z),
