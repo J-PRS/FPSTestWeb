@@ -148,6 +148,7 @@ export class ModelFx {
 
   private static _dq = new THREE.Quaternion();
   private static _de = new THREE.Euler();
+  private static _kick = new THREE.Vector3();
   private tickGunFx(dt: number): void {
     const swapDip = this.env('swapT', dt, 0.12, 0, 0.16);
     const throwE = this.env('throwT', dt, 0.14, 0.12, 0.26);
@@ -162,7 +163,12 @@ export class ModelFx {
       // throw drops + rolls out, punch shoves forward-right.
       gun.position.x = this.h.gunRestX + punchE * 0.18 * this.h.gunUnit;
       gun.position.y = this.h.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.h.gunUnit;
-      gun.position.z = this.h.gunBaseZ - k * this.h.gunKickZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.h.gunUnit;
+      gun.position.z = this.h.gunBaseZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.h.gunUnit;
+      // Recoil kicks back along the gun's REAL barrel axis (local +Z in
+      // parent space), not raw -Z — hand-bone mounts (mannequin) have
+      // arbitrary bone frames where -Z is lateral and the gun hopped left.
+      ModelFx._kick.set(0, 0, 1).applyQuaternion(gun.quaternion);
+      gun.position.addScaledVector(ModelFx._kick, -k * this.h.gunKickZ);
       const rx = this.h.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
       const rz = throwE * 0.45 + punchE * 0.5;
       if (this.h.gunBaseQuat) {

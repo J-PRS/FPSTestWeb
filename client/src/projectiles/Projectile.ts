@@ -171,6 +171,10 @@ export class Projectile {
    *  Ball.colliders so shells and balls bounce off the same geometry. */
   static solidColliders: readonly StructureCollider[] = [];
   static solidIndex: ColliderIndex | null = null;
+  /** Planted deployable hulls — the Deployables array by reference, so
+   *  shells detonate on contact instead of phasing through a generator
+   *  and popping on the wall behind it (server sweeps the same set). */
+  static dynColliders: readonly StructureCollider[] = [];
 
   get explosionRadius(): number { return this.config.explosionRadius; }
   get force(): number { return this.config.force; }
@@ -256,6 +260,7 @@ export class Projectile {
   collide = new ProjCollide(this);
   solids(): readonly StructureCollider[] { return Projectile.solidColliders; }
   solidIdx(): ColliderIndex | null { return Projectile.solidIndex; }
+  dynSolids(): readonly StructureCollider[] { return Projectile.dynColliders; }
 
   // Swept collision math lives in sweep.ts (SweepHost) — the checks are
   // free functions so they're testable without a scene-bound projectile.

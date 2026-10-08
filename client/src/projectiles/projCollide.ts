@@ -40,10 +40,14 @@ export interface CollideHost extends SweepHost {
   readonly bodiesLive: boolean;
   readonly canBounce: boolean;
   sweepLocal: (() => THREE.Vector3 | null) | null;
+  /** Shooter's team — team-filtered solids (shield gates) pass this
+   *  shell through when it matches. null = teamless. */
+  readonly shooterTeam: string | null;
   /** Local player's armor class — the sweep needs its capsule size. */
   localClass: (() => string | undefined) | null;
   solids(): readonly StructureCollider[];
   solidIdx(): ColliderIndex | null;
+  dynSolids(): readonly StructureCollider[];
   hitAt(x: number, y: number, z: number, t: number): void;
   stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
           remotePlayers?: Map<string, THREE.Vector3>): void;
@@ -72,8 +76,11 @@ export class ProjCollide {
     // Map structures next — walls stop shells like terrain does; without
     // this a mortar splashes the generator room straight through the roof.
     const solids = h.solids();
-    if (solids.length > 0) {
-      const hit = segSolidHit(h.prevPos, h.pos, solids, h.solidIdx() ?? undefined);
+    const dyn = h.dynSolids();
+    if (solids.length > 0 || dyn.length > 0) {
+      const sh = solids.length > 0 ? segSolidHit(h.prevPos, h.pos, solids, h.solidIdx() ?? undefined, h.shooterTeam ?? undefined) : null;
+      const dh = dyn.length > 0 ? segSolidHit(h.prevPos, h.pos, dyn, undefined, h.shooterTeam ?? undefined) : null;
+      const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
       if (hit) {
         h.hitAt(hit.x, hit.y, hit.z, hit.t);
         if (h.config.sticks) {

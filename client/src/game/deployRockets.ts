@@ -44,6 +44,9 @@ interface Rocket {
   /** Planter id — 'bot:*' for bot deployables, unset for the player's.
    *  Damage numbers only fire on unattributed (mine) hits. */
   owner?: string;
+  /** Base-turret bolt: its blast hits foes of THIS team — the local
+   *  player included — instead of the player's enemy list. */
+  team?: string;
   group: THREE.Group;
   ribbons: RibbonTrail[];
   /** Set right after the literal — the driver needs r itself as host. */
@@ -61,7 +64,7 @@ export class DeployRockets {
 
   constructor(private deps: DeployDeps) {}
 
-  spawn(muzzle: THREE.Vector3, target: Rocket['target'], dmgScale = 1, owner?: string): void {
+  spawn(muzzle: THREE.Vector3, target: Rocket['target'], dmgScale = 1, owner?: string, team?: string): void {
     const group = new THREE.Group();
     const body = new THREE.Mesh(_geoRktBody, _rktBodyMat);
     body.rotation.x = Math.PI / 2; // cylinder axis → +Z (flight dir)
@@ -76,7 +79,7 @@ export class DeployRockets {
     const r: Rocket = {
       pos: muzzle.clone(),
       vel: new THREE.Vector3(),
-      target, ttl: ROCKET_TTL, puff: 0, dmgScale, owner, group,
+      target, ttl: ROCKET_TTL, puff: 0, dmgScale, owner, team, group,
       // Same lane recipe as Projectile visuals: wide tint band + thin hot
       // core pair offset above/below the band's plane.
       ribbons: [
@@ -176,12 +179,19 @@ export class DeployRockets {
         if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);}
       }
     }
-    for (const b of this.deps.enemyBots?.() ?? []) {
+    for (const b of (r.team !== undefined ? this.deps.botFoes?.(r.team) : this.deps.enemyBots?.()) ?? []) {
       if (!b.alive) {continue;}
       const d = b.pos.distanceTo(r.pos);
-      if (d < ROCKET_AOE) {
-        const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) {this.deps.damageBot?.(b.playerId, dmg, r.pos);}
+      if (d >= ROCKET_AOE) {continue;}
+      const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
+      if (dmg <= 0) {continue;}
+      if (b.playerId === 'local') {
+        // Base-turret bolt caught the player — same authority funnel
+        // every offline hit uses (clamped, resist-scaled).
+        this.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, r.owner);
+        this.deps.lazyPlayer().lastDamageSource = 'a base turret';
+      } else {
+        this.deps.damageBot?.(b.playerId!, dmg, r.pos);
       }
     }
     this.deps.scene.remove(r.group);

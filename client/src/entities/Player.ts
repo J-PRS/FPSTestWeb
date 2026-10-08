@@ -498,11 +498,11 @@ export class Player {
     });
     this.checkCameraSpinout(dt, orbitTransition);
     // Model visibility follows the toggle AND death (observer cam is ghost
-    // flight â€” your corpse shouldn't fly with you). Debug and the middle-
-    // mouse orbit cam render the body (+collider under debug) in first
-    // person so the mesh can be eyeballed against the capsule.
+    // flight — your corpse shouldn't fly with you). Debug renders the body
+    // wireframe (+collider) — third person / orbit cam only; a capsule
+    // around your own camera in first person is noise, not information.
     const dbg = Boolean(urlParams.debug);
-    this.model?.setVisible((this.thirdPerson || orbiting || dbg) && !this.isDead);
+    this.model?.setVisible((this.thirdPerson || orbiting) && !this.isDead);
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
     this.visuals.updateFeetMarker(this.terrain, this.pos);

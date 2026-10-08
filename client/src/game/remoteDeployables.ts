@@ -14,7 +14,10 @@ import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { DEPLOY_HP } from '../../../shared/deployables.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import type { DeployKind } from '../../../shared/deployables.js';
+import { segSolidHit } from '../../../shared/solidWorld.js';
+import { Projectile } from '../projectiles/Projectile.js';
 import { fxPuff } from '../effects/vfx.js';
 import type { DeployDeps } from './deployables.js';
 import type { Item } from './deployables.js';
@@ -27,6 +30,14 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 const DEPLOY_V_CAP = DEPLOY_HP;
 
 const PING_TTL = 3;
+
+// Offline mirrors of RoomDeployables' base-asset clock and the base
+// turret's envelope — same numbers, read from the shared table.
+const BASE_RESPAWN_S = 120;
+const BT = DEPLOY_ITEMS.baseturret;
+const _aim = new THREE.Vector3();
+const _aim2 = new THREE.Vector3();
+const _zero = new THREE.Vector3();
 
 export class RemoteDeployables {
   private remote = new Map<number, Item>();
@@ -55,6 +66,7 @@ export class RemoteDeployables {
   entries(): IterableIterator<[number, Item]> { return this.remote.entries(); }
   get(id: number): Item | undefined { return this.byId.get(id); }
   ids(): ReadonlySet<number> { return new Set(this.remote.keys()); }
+  get size(): number { return this.remote.size; }
 
   /** deploySpawn echo for a plant we already rendered locally. */
   ackLocal(id: number, items: Item[]): void {
@@ -67,7 +79,15 @@ export class RemoteDeployables {
 
   spawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
     const { owner, kind, pos, hp, armor, team } = spec;
-    if (kind === 'nugget' || this.remote.has(id)) {return;} // mints pickups, never a deploySpawn
+    if (kind === 'nugget') {return;} // mints pickups, never a deploySpawn
+    // Server deploy ids are per-room counters — after a room hop a stale
+    // replica can sit on a reused id with a different kind/owner. Same-id
+    // same-kind is the normal spawn-echo dedupe; anything else is stale.
+    const held = this.remote.get(id);
+    if (held) {
+      if (held.kind === kind && held.owner === owner) {return;}
+      this.remove(id);
+    }
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     let item: Item;
@@ -98,7 +118,7 @@ export class RemoteDeployables {
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
-    } else if (kind === 'generator' || kind === 'sensor' || kind === 'sentry') {
+    } else if (kind === 'generator' || kind === 'sensor' || kind === 'baseturret') {
       item = this.baseAssetItem(kind, at, hp, armor, team);
       item.owner = owner;
     } else {
@@ -151,7 +171,7 @@ export class RemoteDeployables {
    *  without tearing the mesh. Wreck dims the emissive, slumps the hull,
    *  and breathes a thin smoke wisp until it's welded or respawns. The
    *  deck plinth stays lit either way — the socket reads even dead. */
-  private baseAssetItem(kind: 'generator' | 'sensor' | 'sentry', at: THREE.Vector3, hp?: number, armor?: number, team?: string): Item {
+  private baseAssetItem(kind: 'generator' | 'sensor' | 'baseturret', at: THREE.Vector3, hp?: number, armor?: number, team?: string): Item {
     const teamColor = team === 'alpha' ? 0x55AAFF : team === 'bravo' ? 0xff_88_55 : 0x99AABB;
     const group = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
@@ -160,7 +180,7 @@ export class RemoteDeployables {
     // Mounting plinth — a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
-    const plinthR = kind === 'generator' ? 3.4 : kind === 'sentry' ? 2.2 : 1.6;
+    const plinthR = kind === 'generator' ? 3.4 : kind === 'baseturret' ? 2.2 : 1.6;
     const plinth = new THREE.Mesh(
       new THREE.CylinderGeometry(plinthR, plinthR + 0.4, 0.35, 8), darkMat);
     plinth.position.y = 0.18;
@@ -184,7 +204,7 @@ export class RemoteDeployables {
         pylon.position.set(sx * 2.1, 2.2, sz * 2.1);
         group.add(pylon);
       }}
-    } else if (kind === 'sentry') {
+    } else if (kind === 'baseturret') {
       // Base defense gun — must read at 200m atop its pillar: tapered
       // armored collar, slab mantlet with a hood brow, twin heavy
       // barrels with muzzle sleeves, rear ammo drum. ~2x the thrown
@@ -240,7 +260,7 @@ export class RemoteDeployables {
     group.position.y = Math.max(at.y, this.deps.lazyTerrain().getHeight(at.x, at.z));
     this.deps.scene.add(group);
     const spin = kind === 'sensor' ? group.children[3]! : null;
-    const isSentry = kind === 'sentry';
+    const isSentry = kind === 'baseturret';
     let scanT = Math.random() * 6;
     // Joined mid-wreck: snapshot hp 0 → spawn it already dark.
     const wrecked = hp !== undefined && hp <= 0;
@@ -249,14 +269,16 @@ export class RemoteDeployables {
     if (wrecked) { glowMat.color.setHex(0x181C22); group.rotation.z = 0.07; group.scale.y = 0.82; }
     const item: Item = {
       kind, candId: `rdep:${at.x.toFixed(0)},${at.z.toFixed(0)}`, pos: group.position, dead: false,
-      hurt: () => {},
+      hurt: (dmg) => this.hurtItem(item, dmg),
       update: (dt) => {
         if (spin) {spin.rotation.y += dt * 0.8;}
         // Sentry watch sweep — a live base gun scans its arc; a downed
         // one freezes mid-bearing, which doubles as a dead giveaway.
         if (isSentry && !downed) {
           scanT += dt;
-          head.rotation.y = Math.sin(scanT * 0.5) * 0.7;
+          // Engaged yaw wins over the patrol sweep — the offline
+          // authority writes aimYaw when it has a firing solution.
+          head.rotation.y = item.aimYaw ?? Math.sin(scanT * 0.5) * 0.7;
         }
         // Burnout wisp — a downed asset smokes gently so the site reads
         // "weld me" from across the field, not just "darker box".
@@ -277,6 +299,7 @@ export class RemoteDeployables {
       dispose: () => this.deps.scene.remove(group),
       v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
       downed,
+      head: isSentry ? head : undefined,
       setDown: (down) => {
         downed = down;
         glowMat.color.setHex(down ? 0x18_1c_22 : teamColor);
@@ -287,11 +310,80 @@ export class RemoteDeployables {
     return item;
   }
 
+  /** No server, no wire — solo mode is the authority for map-seeded
+   *  assets, so their hurt/down/respawn mirror RoomDeployables here.
+   *  Connected, this whole layer stays render-only (hurt is a no-op). */
+  private offline(): boolean { return !this.deps.lazyNetworkManager().isConnected(); }
+
+  /** Offline damage funnel for a base asset — armor soaks, hp drains,
+   *  zero marks the wreck and starts the respawn clock (killItem is for
+   *  field plants; base gear hulks in place like the server's). */
+  private hurtItem(it: Item, dmg: number): void {
+    if (!this.offline()) {return;}
+    if (it.v.armor > 0) { const soaked = Math.min(it.v.armor, dmg); it.v.armor -= soaked; dmg -= soaked; }
+    if (it.v.health <= 0) {return;}
+    it.v.health -= dmg;
+    if (it.v.health <= 0 && it.serverId !== undefined) {
+      it.respawnT = BASE_RESPAWN_S;
+      this.down(it.serverId);
+      if (it.kind === 'generator' && it.team) {this.deps.basePower?.(it.team, false);}
+    }
+  }
+
+  /** Offline tickSentry — same nearest-hostile scan, structure LOS, lead
+   *  point, and a real bolt. Downed or unpowered (generator out) guns
+   *  hold fire, matching the server's powered() gate. */
+  private tickOfflineSentry(it: Item, dt: number): void {
+    it.fireCd = (it.fireCd ?? Math.random() * BT.fireInterval!) - dt;
+    if (it.fireCd > 0) {return;}
+    // Dead generator ⇒ the base grid is dark: turrets of that team idle.
+    if (it.team) {
+      for (const g of this.remote.values()) {
+        if (g.kind === 'generator' && g.team === it.team && g.downed) {it.fireCd = 0.5; return;}
+      }
+    }
+    let target: Foe | null = null;
+    let bestD2 = BT.range! * BT.range!;
+    for (const f of this.deps.botFoes?.(it.team ?? '') ?? []) {
+      if (!f.alive) {continue;}
+      const d2 = f.pos.distanceToSquared(it.pos);
+      if (d2 >= bestD2) {continue;}
+      // Server losClear: muzzle (+2.4) to chest (+1.0) against the
+      // structure hulls — a pad-edge ray would falsely clip its plinth.
+      if (segSolidHit(
+        { x: it.pos.x, y: it.pos.y + 2.4, z: it.pos.z },
+        { x: f.pos.x, y: f.pos.y + 1.0, z: f.pos.z },
+        Projectile.solidColliders, Projectile.solidIndex ?? undefined, it.team)) {continue;}
+      bestD2 = d2; target = f;
+    }
+    if (!target) {it.fireCd = 0.15; it.aimYaw = undefined; return;}
+    it.fireCd = BT.fireInterval!;
+    // Lead the runner — the bolt flies straight at the frozen aim point.
+    const dist = Math.sqrt(bestD2);
+    const flight = dist / BT.projSpeed!;
+    _aim.set(
+      target.pos.x + target.vel.x * flight,
+      target.pos.y + 1.0 + target.vel.y * flight * 0.5,
+      target.pos.z + target.vel.z * flight,
+    );
+    // Slew the head onto the firing solution — group yaw is 0 for map
+    // spawns, so world yaw is the head yaw.
+    if (it.head) {it.aimYaw = Math.atan2(_aim.x - it.pos.x, _aim.z - it.pos.z);}
+    this.rockets.spawn(_aim2.copy(it.pos).setY(it.pos.y + 2.2), { pos: _aim.clone(), vel: _zero, alive: true }, 1, it.owner, it.team);
+    sfx.shotAt(it.pos, WeaponType.RocketLauncher);
+  }
+
   /** deployHp broadcast — server is the vitals authority; the local
    *  beam's predicted heal gets corrected by this same write. */
   applyDeployHp(id: number, hp: number, armor: number): void {
     const it = this.byId.get(id);
-    if (it) { it.v.health = hp; it.v.armor = armor; }
+    if (!it) {return;}
+    // A drop means something just hit it — surface the same vitals bar a
+    // weld shows (rises come from repair claims and stay silent).
+    if (hp < it.v.health) {
+      this.deps.showItemBar?.(it, it.team !== undefined && it.team === this.deps.world.localTeam);
+    }
+    it.v.health = hp; it.v.armor = armor;
   }
 
   /** deployDown — a base asset got shelled into a hulk. It stays in the
@@ -314,6 +406,7 @@ export class RemoteDeployables {
     if (!it) {return;}
     it.downed = false;
     it.setDown?.(false);
+    if (this.offline() && it.kind === 'generator' && it.team) {this.deps.basePower?.(it.team, true);}
   }
 
   /** One weld tick from a remote player/bot — refreshes that welder's
@@ -405,7 +498,22 @@ export class RemoteDeployables {
   }
 
   update(dt: number): void {
-    for (const i of this.remote.values()) {i.update(dt);}
+    for (const i of this.remote.values()) {
+      i.update(dt);
+      // Offline base-asset clock — the server's respawn fuse mirrored:
+      // a hulk stands back up after BASE_RESPAWN_S (weld revival is a
+      // repair-beam path, not needed solo).
+      if (i.respawnT !== undefined && i.respawnT > 0) {
+        i.respawnT -= dt;
+        if (i.respawnT <= 0 && i.serverId !== undefined) {
+          i.respawnT = 0;
+          this.up(i.serverId);
+          i.v.health = i.v.maxHealth;
+        }
+        continue;
+      }
+      if (i.kind === 'baseturret' && !i.downed && this.offline()) {this.tickOfflineSentry(i, dt);}
+    }
     for (let i = this.pings.length - 1; i >= 0; i--) {
       const p = this.pings[i]!;
       p.t -= dt;

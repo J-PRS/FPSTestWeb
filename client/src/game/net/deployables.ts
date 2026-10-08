@@ -60,6 +60,14 @@ export function wireDeployables(ctx: NetCtx): void {
 export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }[] | undefined): void {
   const mgr = ctx.deps.entities().deployables;
   const localId = ctx.deps.lazyNetworkManager().getLocalPlayerId();
+  // Deploy ids are per-room counters — a stale replica from the previous
+  // room can sit on a reused id. reconcileReplicas only ensures absent
+  // ids, so evict kind/owner mismatches before it runs or they ghost
+  // the roster forever (the deploy-hash desync loop).
+  for (const d of roster ?? []) {
+    const e = mgr.remoteReplicas().get(d.id);
+    if (e && (e.kind !== d.kind || e.owner !== d.owner)) {mgr.remoteRemove(d.id);}
+  }
   const live = reconcileReplicas(mgr.remoteReplicas(), roster ?? [], {
     rowId: (d) => d.id,
     ensure: (d) => {

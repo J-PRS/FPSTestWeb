@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 
 import { MoveSim, MOVEMENT_CONFIG, type BodyCapsule, type MoveState, type MoveInput, type Vec3Like } from '../../../shared/movement.js';
 import { SolidWorld } from '../../../shared/solidWorld.js';
+import { structureColliders, type StructureCollider } from '../../../shared/ballCollide.js';
 import { FieldSurface } from '../../../shared/fieldSurface.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 
@@ -46,9 +47,23 @@ export class MovementController {
     this.sim = new MoveSim(this.surface, initialState);
   }
 
+  /** Live deployable hulls — the Deployables array, shared by reference
+   *  so mid-match plants/removals reach prediction without a re-attach. */
+  private dyn?: readonly StructureCollider[];
+
   /** Map structures for collision — swap on gameState/mapUpdate. */
   setStructures(list: readonly StructureSpec[] | undefined): void {
-    this.surface.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
+    this.surface.solid = (list?.length || this.dyn?.length)
+      ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
+  }
+
+  /** Server mirrors this through RoomMoveSim.setDynamic — the prediction
+   *  must collide with the same gear or every brush against a turret
+   *  reads as divergence. */
+  setDynamicCols(cols: readonly StructureCollider[]): void {
+    this.dyn = cols;
+    if (this.surface.solid) this.surface.solid.dyn = cols;
+    else if (cols.length) this.surface.solid = new SolidWorld([], cols);
   }
 
   setInput(input: Partial<MovementInput>): void { this.sim.setInput(input); }

@@ -88,6 +88,10 @@ export class PlayerInput {
     const {h} = this;
     if (this.frozen) {return;}
     this.keys[e.code] = true;
+    // Chords with modifiers belong to the browser/dev shortcuts, not the
+    // game — Alt+Q copies logs but matchCode only saw 'KeyQ' and toggled
+    // whatever skill was equipped (cloak → transparent gun).
+    if (e.ctrlKey || e.altKey || e.metaKey) {return;}
     if (matchCode('spectate', e.code) && !e.repeat) {h.toggleSpectator();}
     // Die+spectate works from the ghost cam too — suicide flips isDead,
     // which owns the cam and drops the spectating flag on its own.
@@ -193,6 +197,17 @@ export class PlayerInput {
   }
 
   private bindMenuControls(): void {
+    // Display name — cosmetic tag the join handshake ships; lives in the
+    // menu-side profile block, not the lobby (it's an identity, not a
+    // connection parameter).
+    const nameInput = document.querySelector('#name-input') as HTMLInputElement | null;
+    if (nameInput) {
+      nameInput.value = settings.get('fps-name');
+      nameInput.addEventListener('focus', () => nameInput.select());
+      nameInput.addEventListener('input', () => settings.set('fps-name', nameInput.value.trim()));
+      nameInput.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+
     // ESC-menu invert-Y toggle — .tog markup carries the state box;
     // the label writer flips .on (the box IS the state readout).
     const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;

@@ -20,6 +20,16 @@ export function tickRemote(h: Projectile, terrain: Terrain): boolean {
       h.explode(); // armed mortar shell touching terrain on a remote client
       return true;
     }
+    // Contact-fused shells (plasma/bolt/disc — no armTime, no bounce, no
+    // stick, no embed) die on terrain on remote clients too: the server's
+    // destroy edge is a loss-prone hint, and without this sweep a lost
+    // edge leaves the replica streaking 800m+ through the ground until
+    // ABSOLUTE_TTL_S pops it.
+    if (!h.canBounce && !h.config.sticks && h.config.armTime === undefined
+        && h.config.embeds === undefined && sweepTerrain(h, terrain)) {
+      h.explode();
+      return true;
+    }
     if (h.config.sticks && sweepTerrain(h, terrain)) {h.glue.stickAt(h.hitPoint);}
     // Embed-capable shells (javelin) die on contact everywhere — the server
     // never sends a destroy for a dirt hit, so the replica must sense it.

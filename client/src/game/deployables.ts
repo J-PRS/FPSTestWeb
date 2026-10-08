@@ -20,7 +20,7 @@ import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
-import type { SweepObstacle } from '../projectiles/Projectile.js';
+import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
 import { DeployAdopter } from './deployAdopt.js';
@@ -29,6 +29,7 @@ import * as sfx from '../core/sfx.js';
 import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { WeaponType, REPAIR_ARMOR_MULT, DEPLOY_COST } from '../../../shared/weapons.js';
+import { aoeDamage } from '../../../shared/combat.js';
 import { weaponDef } from '../weapons.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
@@ -39,7 +40,8 @@ import type { TargetCandidate } from './targeting.js';
 export type { DeployKind } from '../../../shared/deployables.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
-import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
+import type { StructureCollider } from '../../../shared/ballCollide.js';
 
 // Derived from the shared belt registry — caps/labels can no longer diverge
 // from the server authority (drone max 1 vs 2 did once).
@@ -109,6 +111,14 @@ export interface Item {
    *  be welded back or respawn on the server clock. */
   downed?: boolean;
   setDown?: (down: boolean) => void;
+  /** Offline-authority clocks — server owns both connected. */
+  fireCd?: number;
+  respawnT?: number;
+  /** Base-turret head group + the yaw the offline authority slews it to —
+   *  without this the gun sprays at a wall while its head sweeps a patrol
+   *  arc ("aiming improperly" is the cosmetic head lying). */
+  head?: THREE.Object3D;
+  aimYaw?: number;
 }
 
 
@@ -139,6 +149,14 @@ export interface DeployDeps extends GameContext {
   /** Offline nugget mint — connected play uses the server's pickup edge,
    *  disconnected drops a local nugget so the pack still works solo. */
   dropNugget?: (pos: THREE.Vector3) => void;
+  /** Damage numbers on remote-asset hits — without them a solo gen raid
+   *  reads as "nothing is happening" until the wreck. */
+  damageNumbers?: { spawn(pos: THREE.Vector3, amount: number, color: string, cam: THREE.Camera): void };
+  /** Live vitals bar over a damaged item — same channel weld bars use. */
+  showItemBar?: (item: Item, ally: boolean) => void;
+  /** Generator power edge — offline only: a downed base generator drops
+   *  its team's powered shield panes, revive restores them. */
+  basePower?: (team: string, on: boolean) => void;
   /** World camera — the beacon's HUD aim reticle projects through it. */
   camera: THREE.Camera;
 }
@@ -690,6 +708,29 @@ export class Deployables {
     return (shooterId ?? me) !== i.owner;
   }
 
+  /** Offline mirror of RoomDeployables.applyBlast — connected the server
+   *  owns item hp and this is dead code; solo the same funnel damages the
+   *  map's base assets. Direct inside bodyR pays `damage`, outside pays
+   *  the `splash` falloff; sticky pays 2x like the server. */
+  blastRemotes(pos: THREE.Vector3, damage: number, splash: number, radius: number, scales?: readonly number[], weapon?: number): void {
+    if (this.deps.lazyNetworkManager().isConnected()) {return;}
+    const mult = weapon === WeaponType.Sticky ? 2 : 1;
+    const aoe = splash || damage;
+    for (const i of this.remotes.values()) {
+      if (i.dead || i.downed) {continue;}
+      const dist = i.pos.distanceTo(pos);
+      if (dist > radius) {continue;}
+      const dmg = (dist <= DEPLOY_ITEMS[i.kind].bodyR
+        ? damage
+        : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;
+      if (dmg > 0) {
+        i.hurt(dmg);
+        this.deps.damageNumbers?.spawn(i.pos, Math.round(dmg), '#ffb066', this.deps.camera);
+        this.deps.showItemBar?.(i, i.team !== undefined && i.team === this.deps.world.localTeam);
+      }
+    }
+  }
+
   /** Creature-targeting candidates — deployed items aggro the wildlife. */
   candidates(): TargetCandidate[] {
     this._candList.length = 0;
@@ -700,6 +741,29 @@ export class Deployables {
   }
 
   get count(): number { return this.items.filter(i => !i.dead).length; }
+
+  /** Solid hulls for the prediction MoveSim — mirrors the server's
+   *  RoomDeployables.solidCols (same DEPLOY_ITEMS bodyR/bodyH boxes) so
+   *  brushing a turret resolves identically on both ends. The array is
+   *  handed to the MovementController once and rewritten in place when
+   *  the gear census changes. */
+  private readonly solidCols: StructureCollider[] = [];
+  private solidSig = -1;
+  private solidMv?: { setDynamicCols(c: readonly StructureCollider[]): void };
+
+  private refreshSolidCols(): void {
+    this.solidCols.length = 0;
+    const push = (i: Item) => {
+      if (i.dead || !deploySolid(i.kind)) {return;}
+      const def = DEPLOY_ITEMS[i.kind];
+      this.solidCols.push({
+        cx: i.pos.x, cy: i.pos.y + def.bodyH / 2, cz: i.pos.z,
+        hx: def.bodyR, hy: def.bodyH / 2, hz: def.bodyR, cos: 1, sin: 0,
+      });
+    };
+    for (const i of this.items) {push(i);}
+    for (const i of this.remotes.values()) {push(i);}
+  }
 
   update(dt: number): void {
     for (const i of this.items) {if (!i.dead) {i.update(dt);}}
@@ -722,6 +786,17 @@ export class Deployables {
     this.remotes.update(dt);
     this.rockets.update(dt);
     this.updateBeaconAim();
+    // Solid-hull sync: a census signature catches every add/remove/death;
+    // items never move once planted (drones are excluded by deploySolid).
+    let live = 0;
+    for (const i of this.items) {if (!i.dead) {live++;}}
+    const sig = this.items.length * 97 + live * 13 + this.remotes.size * 7;
+    if (sig !== this.solidSig) { this.solidSig = sig; this.refreshSolidCols(); }
+    const mv = this.deps.lazyPlayer()?.movement as unknown as { setDynamicCols(c: readonly StructureCollider[]): void } | undefined;
+    if (mv && mv !== this.solidMv) { mv.setDynamicCols(this.solidCols); this.solidMv = mv; }
+    // Same live array for the shell sweep — a planted generator stops a
+    // disc on contact instead of letting it phase through to the wall.
+    if (Projectile.dynColliders !== this.solidCols) {Projectile.dynColliders = this.solidCols;}
   }
 
   // --- Targeting beacon aim reticle -----------------------------------------
