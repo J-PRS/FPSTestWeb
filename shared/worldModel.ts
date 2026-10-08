@@ -255,8 +255,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'position', channel: 'sim' },
       { name: 'velocity', channel: 'sim' },
       { name: 'weaponType', channel: 'edge' },
-      { name: 'shotId', channel: 'echo' },
-      { name: 'pellet', channel: 'echo' },
+      // shotId/pellet echo back the client's intent nonce — bot-spawned
+      // shells have none, so omission is legal.
+      { name: 'shotId', channel: 'echo', absent: null },
+      { name: 'pellet', channel: 'echo', absent: null },
     ],
     goneFields: [],
   },
