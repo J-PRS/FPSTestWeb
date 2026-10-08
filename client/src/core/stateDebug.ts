@@ -201,7 +201,7 @@ function hashableEntry(
 function diffServerSnapshot(
   serverPlayers: SnapshotPlayer[],
   clientPlayers: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>,
-): { diffs: string[]; healthDriftIds: string[] } {
+): { diffs: string[]; healthDriftIds: string[]; deadDriftIds: string[] } {
   const serverMap = new Map<string, SnapshotPlayer>();
   for (const p of serverPlayers) {
     serverMap.set(p.id, p);
@@ -210,6 +210,7 @@ function diffServerSnapshot(
   const diffs: string[] = [];
   const allIds = new Set([...serverMap.keys(), ...clientPlayers.keys()]);
   const healthDriftIds: string[] = [];
+  const deadDriftIds: string[] = [];
 
   for (const id of allIds) {
     const cp = clientPlayers.get(id);
@@ -224,9 +225,9 @@ function diffServerSnapshot(
     // (missing on one end) still count; those have no grace story.
     if (youngId(id)) {continue;}
 
-    diffs.push(...diffPlayerFields(id, cp, sp, healthDriftIds));
+    diffs.push(...diffPlayerFields(id, cp, sp, healthDriftIds, deadDriftIds));
   }
-  return { diffs, healthDriftIds };
+  return { diffs, healthDriftIds, deadDriftIds };
 }
 
 function diffPlayerFields(
@@ -234,6 +235,7 @@ function diffPlayerFields(
   cp: { x: number; y: number; z: number; health: number; isDead: boolean },
   sp: { position: { x: number; y: number; z: number }; health: number; isDead: boolean },
   healthDriftIds: string[],
+  deadDriftIds: string[],
 ): string[] {
   const diffs: string[] = [];
   const dx = Math.abs(cp.x - sp.position.x);
@@ -253,6 +255,7 @@ function diffPlayerFields(
   }
   if (cp.isDead !== sp.isDead) {
     diffs.push(`[edge] Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
+    deadDriftIds.push(id);
   }
   return diffs;
 }
@@ -265,18 +268,22 @@ function diffPlayerFields(
  *  consecutive detailed checks — is the desync signal; a lone sighting
  *  is in-flight traffic, logged at debug. */
 const healthDriftStreak = new Map<string, number>();
+const deadDriftStreak = new Map<string, number>();
 const DRIFT_STREAK_WARN = 2;
 
-function noteHealthDrift(driftIds: string[]): { persistentIds: Set<string>; transientCount: number } {
+// Same streak rule for any echo-flavored field: persistence (same id on
+// consecutive detailed checks) is the desync signal; a lone sighting is
+// in-flight traffic or a heal the same snapshot already applied.
+function noteDrift(streaks: Map<string, number>, driftIds: string[]): { persistentIds: Set<string>; transientCount: number } {
   const drifting = new Set(driftIds);
   const persistentIds = new Set<string>();
   for (const id of driftIds) {
-    const streak = (healthDriftStreak.get(id) ?? 0) + 1;
-    healthDriftStreak.set(id, streak);
+    const streak = (streaks.get(id) ?? 0) + 1;
+    streaks.set(id, streak);
     if (streak >= DRIFT_STREAK_WARN) persistentIds.add(id);
   }
-  for (const id of healthDriftStreak.keys()) {
-    if (!drifting.has(id)) healthDriftStreak.delete(id);
+  for (const id of streaks.keys()) {
+    if (!drifting.has(id)) streaks.delete(id);
   }
   return { persistentIds, transientCount: drifting.size - persistentIds.size };
 }
@@ -564,14 +571,20 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     networkManager.sendSnapshotRequest();
 
     pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _ts: number) => {
-      const { diffs, healthDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
-      const { persistentIds, transientCount } = noteHealthDrift(healthDriftIds);
+      const { diffs, healthDriftIds, deadDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
+      const { persistentIds, transientCount } = noteDrift(healthDriftStreak, healthDriftIds);
+      const { persistentIds: persistentDeadIds, transientCount: transientDeadCount } = noteDrift(deadDriftStreak, deadDriftIds);
       // Transient health sightings stay out of the warn — a first-seen
-      // [echo] diff is expected while combat is in flight. Everything
-      // else (sim/edge diffs, persistent health drift) reports as before.
+      // [echo] diff is expected while combat is in flight. An [edge]
+      // isDead sighting is usually the liveness heal itself firing (the
+      // same snapshot that flags it also flips it back) — only a flip
+      // that persists across checks is real desync.
       const significantDiffs = diffs.filter(d => {
-        const m = /^\[echo\] Player (\S+) health/.exec(d);
-        return !m || persistentIds.has(m[1]!);
+        const h = /^\[echo\] Player (\S+) health/.exec(d);
+        if (h) {return persistentIds.has(h[1]!);}
+        const e = /^\[edge\] Player (\S+) isDead/.exec(d);
+        if (e) {return persistentDeadIds.has(e[1]!);}
+        return true;
       });
 
       if (significantDiffs.length > 0) {
@@ -583,6 +596,11 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           // a kill with no respawn following, a hit that never landed.
           recentEvents: networkManager.recentEvents().slice(-8),
         });
+      }
+      // Heal on ANY diff, warned or not — a transient isDead flip filtered
+      // out of the warn still needs this pass to converge, or it keeps
+      // diverging until another diff happens to trigger the block.
+      if (diffs.length > 0) {
         // Heal health divergence — the checker used to warn forever while
         // a silently-dropped hit left local hp divergent for the session.
         // Position stays correction-owned, isDead stays event-owned.
@@ -628,8 +646,8 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           networkManager.remoteDelete(id);
           ctx.remotePlayers.remove?.(id);
         }
-      } else if (transientCount > 0) {
-        logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} in-flight health echo(s), no persistent diffs (combat lag)`);
+      } else if (diffs.length > 0) {
+        logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} health echo(s) + ${transientDeadCount} liveness flip(s) in flight, no persistent diffs (combat lag)`);
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);
       }
