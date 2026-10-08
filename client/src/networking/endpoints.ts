@@ -7,18 +7,29 @@ import { settings } from '../core/settings.js';
 // hands each client its room's worker — connect straight to the worker so
 // nothing relays frames. ?fleet or server.json {"fleet": true} opts in;
 // any failure falls back to treating the host as a standalone server.
-async function resolveFleet(httpUrl: string): Promise<{ wsUrl: string; httpUrl: string } | null> {
+export interface ServerEndpoints {
+  wsUrl: string;
+  httpUrl: string;
+  /** Fleet only: the matchmaker's base — fleet-wide listings (/rooms,
+   *  quick-join) live there; httpUrl points at your room's worker. */
+  lobbyUrl?: string;
+  /** Fleet resolved — live in-worker room hops can't cross processes,
+   *  so room joins must go back through the matchmaker. */
+  fleet?: boolean;
+}
+
+async function resolveFleet(httpUrl: string): Promise<ServerEndpoints | null> {
   try {
     const room = urlParams.get('room') ?? '';
     const r = await fetch(`${httpUrl}/join?room=${encodeURIComponent(room)}`, { cache: 'no-cache' });
     if (!r.ok) {return null;}
     const j = await r.json() as { url?: string; http?: string };
     if (!j.url || !j.http) {return null;}
-    return { wsUrl: j.url, httpUrl: j.http };
+    return { wsUrl: j.url, httpUrl: j.http, lobbyUrl: httpUrl, fleet: true };
   } catch { return null; }
 }
 
-export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl: string }> {
+export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   const hn = window.location.hostname || 'localhost';
   // Served through the cloudflared preview tunnel: the API rides the same
   // origin via the vite proxy (see vite.config.js server.proxy).
@@ -40,6 +51,7 @@ export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl
     } catch { /* no server.json — stay local */ }
   }
   if (!host) {return (fleet ? await resolveFleet(local.httpUrl) : null) ?? local;}
+
   // LAN/plain hosts — localhost, private IPs, anything with an explicit
   // port — can't ride the tunnel's wss/https rewrite; hitting them with
   // wss just fails the handshake silently (botwatch hit this on :8460).

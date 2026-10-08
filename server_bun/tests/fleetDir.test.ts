@@ -72,4 +72,39 @@ describe('fleet directory', () => {
     d.beat('w1', [], 0, wallMs(2_000));
     expect(d.resolve('alpha', wallMs(2_100))?.id).toBe('w1');
   });
+
+  it('continued interest refreshes the claim — slow admission stays pinned', () => {
+    const d = mkDir();
+    d.beat('w0', [], 10, wallMs(1_000));
+    d.beat('w1', [], 1, wallMs(1_000));
+    d.resolve('beta', wallMs(1_100)); // claim → w1
+    // Joiners keep asking inside the TTL — each hit refreshes the pin so
+    // a slow join storm can't split the room across workers.
+    d.beat('w0', [], 0, wallMs(20_000)); // w0 now emptier
+    d.beat('w1', [], 1, wallMs(20_000));
+    d.resolve('beta', wallMs(20_100)); // refresh → still w1
+    d.beat('w0', [], 0, wallMs(45_000));
+    d.beat('w1', [], 1, wallMs(45_000));
+    expect(d.resolve('beta', wallMs(45_100))?.id).toBe('w1');
+  });
+
+  it('abandoned claims are garbage-collected — the map cannot grow unbounded', () => {
+    const d = mkDir();
+    d.beat('w0', [], 0, wallMs(1_000));
+    for (let i = 0; i < 500; i++) {d.resolve(`spam-${i}`, wallMs(1_100));}
+    // Past the TTL, one sweep frees every dead claim — a name flood is
+    // a memory event only while the names are live.
+    d.sweep(wallMs(100_000));
+    expect(d.roomNames().size).toBe(0);
+  });
+
+  it('roomNames() covers claims + confirmed homes for mint dedup', () => {
+    const d = mkDir();
+    d.beat('w0', ['arena-1'], 5, wallMs(1_000));
+    d.resolve('arena-3', wallMs(1_100)); // pending claim
+    const names = d.roomNames();
+    expect(names.has('arena-1')).toBe(true);
+    expect(names.has('arena-3')).toBe(true);
+    expect(names.has('arena-2')).toBe(false);
+  });
 });

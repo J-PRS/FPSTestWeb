@@ -24,9 +24,11 @@ export class FleetDirectory {
   /** A beat older than this marks the worker down — its rooms re-open
    *  for placement on the survivors (clients rejoin through /join). */
   static readonly BEAT_STALE_MS = 8_000;
-  /** A pending claim lives only until the beat confirms (or another
-   *  claim lands) — a crashed-join claim must not pin the room forever. */
-  static readonly CLAIM_TTL_MS = 10_000;
+  /** A pending claim lives only until the beat confirms — a join that
+   *  never completes must not pin the room forever. 30s covers slow
+   *  admission under join storms (the failure mode of a shorter TTL is
+   *  the same room minting on two workers and splitting the lobby). */
+  static readonly CLAIM_TTL_MS = 30_000;
 
   register(id: string, port: number): FleetWorker {
     const w: FleetWorker = { id, port, ccu: 0, rooms: new Set(), lastBeat: wallMs(0), up: false };
@@ -65,7 +67,12 @@ export class FleetDirectory {
       if (homeW?.up) {return homeW;}
       const claim = this.claims.get(room);
       const claimW = claim ? this.workers.get(claim.workerId) : undefined;
-      if (claim && now - claim.at < FleetDirectory.CLAIM_TTL_MS && claimW?.up) {return claimW;}
+      if (claim && now - claim.at < FleetDirectory.CLAIM_TTL_MS && claimW?.up) {
+        // Continued interest extends the pin — slow admission is still
+        // steering joiners to the same worker, only a dead claim expires.
+        claim.at = now;
+        return claimW;
+      }
     }
     let best: FleetWorker | null = null;
     for (const w of this.workers.values()) {
@@ -76,7 +83,9 @@ export class FleetDirectory {
     return best;
   }
 
-  private sweep(now: WallMs): void {
+  /** Liveness + claim GC. resolve() calls it; /rooms and /fleet call it
+   *  directly so stale workers can't leak into listings. */
+  sweep(now: WallMs): void {
     for (const w of this.workers.values()) {
       if (w.up && now - w.lastBeat > FleetDirectory.BEAT_STALE_MS) {
         w.up = false;
@@ -91,6 +100,19 @@ export class FleetDirectory {
         }
       }
     }
+    // Expired claims must be deleted, not just ignored — a flood of
+    // one-off room names would otherwise grow the map without bound.
+    for (const [room, c] of this.claims) {
+      if (now - c.at > FleetDirectory.CLAIM_TTL_MS) {this.claims.delete(room);}
+    }
+  }
+
+  /** Every name the fleet currently knows — confirmed rooms + pending
+   *  claims. The mint side of quick-join must not collide with either. */
+  roomNames(): Set<string> {
+    const names = new Set<string>(this.roomHome.keys());
+    for (const room of this.claims.keys()) {names.add(room);}
+    return names;
   }
 
   status() {

@@ -121,9 +121,11 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
 
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).
-  resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
+  resolveServerEndpoints().then(({ httpUrl, lobbyUrl, fleet }) => new Lobby({
     listRooms: async () => {
-      const res = await fetch(`${httpUrl}/rooms`);
+      // Fleet: the matchmaker aggregates every worker's /rooms — a
+      // worker-local fetch would hide the rest of the fleet.
+      const res = await fetch(`${lobbyUrl ?? httpUrl}/rooms`);
       if (!res.ok) {throw new Error(`rooms ${res.status}`);}
       return res.json() as Promise<import('./lobby.js').RoomRow[]>;
     },
@@ -136,11 +138,19 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       const q = new URLSearchParams({ mode });
       if (map) {q.set('map', map);}
       if (bots !== undefined) {q.set('bots', String(bots));}
-      const res = await fetch(`${httpUrl}/join?${q}`);
+      // Fleet: the matchmaker's /join picks the emptiest room FLEET-wide
+      // and pins its placement — a worker-local quickJoin would only see
+      // that worker's rooms.
+      const res = await fetch(`${lobbyUrl ?? httpUrl}/join?${q}`);
       if (!res.ok) {throw new Error(`join ${res.status}`);}
       return res.json() as Promise<{ room: string }>;
     },
-    switchRoom: (name, map, bots, mode, unlisted) => networkManager.switchRoom(name, map, bots, mode, unlisted),
+    // Fleet: an in-place switchRoom hops within THIS worker only — a room
+    // living on another process would silently mint a duplicate here.
+    // Returning undefined takes the ?room= reload path, which re-resolves
+    // through the matchmaker and lands on the owning worker.
+    switchRoom: fleet ? undefined
+      : (name, map, bots, mode, unlisted) => networkManager.switchRoom(name, map, bots, mode, unlisted),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
     isConnected: () => networkManager.isConnected(),
     listP2pLobbies: async () => {

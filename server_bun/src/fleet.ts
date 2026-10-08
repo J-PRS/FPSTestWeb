@@ -9,8 +9,11 @@
  *   FPS_FLEET_WORKERS=4         # default: cpuCount-1, clamped 1..16
  *
  * Routes:
- *   GET  /join?room=X   → { url, http, room, worker } — claim-by-name,
- *                         least-CCU placement; omit room for any seat.
+ *   GET  /join?room=X       → { url, http, room, worker } — claim-by-name,
+ *                             least-CCU placement; omit room for any seat.
+ *   GET  /join?mode=&map=   → { room, mode } — quick-join, same shape the
+ *                             workers answer standalone: emptiest matching
+ *                             room across the FLEET, else a minted name.
  *   GET  /rooms         → aggregated lobby rows across live workers.
  *   GET  /fleet         → worker/roster status JSON.
  *   POST /fleet/report  → worker heartbeat (loopback only).
@@ -20,6 +23,7 @@ import { join } from 'node:path';
 import { CONFIG } from './config.ts';
 import { FleetDirectory } from './fleetDir.ts';
 import { corsResponse } from './serverRoutes.ts';
+import { windowAllow } from './windowLimit.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 
@@ -27,14 +31,33 @@ const WORKERS = Math.max(1, Math.min(16, Number(process.env.FPS_FLEET_WORKERS) |
 const BASE = CONFIG.port;
 
 const dir = new FleetDirectory();
+interface LobbyRow {
+  name: string;
+  mode?: string;
+  map?: string;
+  players?: number;
+  maxPlayers?: number;
+}
+
 // Lobby rows the last heartbeat carried per worker — the directory only
-// tracks names/ccu; /rooms serves the richer rows verbatim.
-const lobbyRows = new Map<string, unknown[]>();
+// tracks names/ccu; /rooms and quick-join serve the richer rows verbatim.
+const lobbyRows = new Map<string, LobbyRow[]>();
+
+// /join per-IP throttle — same flood concern as the workers' own join
+// route: a GET spammer could mint unlimited pending claims / room names.
+const joinIps = new Map<string, { count: number; start: number }>();
+const JOIN_IP_LIMIT = 30; // every client load calls this once — looser than the workers' minting 5/min
+const JOIN_IP_WINDOW_MS = 60_000;
+function joinThrottleAllow(ip: string | undefined | null): boolean {
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
+}
 
 // ---- worker supervision -------------------------------------------------
 
 interface Child { id: string; port: number; proc: ReturnType<typeof Bun.spawn> }
 const children = new Map<string, Child>();
+const crashStreak = new Map<string, number>();
 
 function spawnWorker(id: string, port: number): void {
   const proc = Bun.spawn(['bun', join('src', 'server.ts')], {
@@ -48,12 +71,19 @@ function spawnWorker(id: string, port: number): void {
     stderr: 'inherit',
   });
   children.set(id, { id, port, proc });
+  const spawnedAt = wallNow();
   logger.info(`[fleet] worker ${id} spawned on :${port} (pid ${proc.pid})`);
+  // Surviving a beat interval counts as healthy — crash-looping children
+  // back off exponentially (cap 60s) instead of respawn-storming.
   void proc.exited.then((code) => {
-    logger.warn(`[fleet] worker ${id} exited (${code}) — respawning in 1s`);
+    const lived = wallNow() - spawnedAt;
+    const streak = (crashStreak.get(id) ?? 0);
+    crashStreak.set(id, lived > FleetDirectory.BEAT_STALE_MS ? 0 : streak + 1);
+    const delay = Math.min(60_000, 1_000 << Math.min(streak, 6));
+    logger.warn(`[fleet] worker ${id} exited (${code}) — respawning in ${delay}ms`);
     // The next beat gap flips it down in the directory; respawn quickly
     // so rooms it held re-open for placement rather than dangling.
-    setTimeout(() => spawnWorker(id, port), 1_000);
+    setTimeout(() => spawnWorker(id, port), delay);
   });
 }
 
@@ -92,15 +122,53 @@ Bun.serve({
         return json({ error: 'loopback only' }, { status: 403 });
       }
       const body = await req.json().catch(() => null) as
-        { port?: number; ccu?: number; rooms?: string[]; list?: unknown[] } | null;
+        { port?: number; ccu?: number; rooms?: unknown; list?: unknown } | null;
       const w = [...dir.workers.values()].find((x) => x.port === body?.port);
       if (!body || !w) {return json({ error: 'unknown worker' }, { status: 400 });}
-      dir.beat(w.id, Array.isArray(body.rooms) ? body.rooms : [], body.ccu ?? 0, now);
-      lobbyRows.set(w.id, Array.isArray(body.list) ? body.list : []);
+      const names = Array.isArray(body.rooms) ? body.rooms.filter((r): r is string => typeof r === 'string') : [];
+      dir.beat(w.id, names, typeof body.ccu === 'number' ? body.ccu : 0, now);
+      lobbyRows.set(w.id, Array.isArray(body.list) ? body.list as LobbyRow[] : []);
       return json({ ok: true });
     }
 
     if (url.pathname === '/join' && req.method === 'GET') {
+      if (!joinThrottleAllow(srv.requestIP(req)?.address)) {
+        return corsResponse('Too many joins', { status: 429 });
+      }
+      dir.sweep(now);
+      // Quick-join shape (the worker's /join answers this standalone):
+      // pick the emptiest matching room fleet-wide, else mint a name.
+      if (url.searchParams.has('mode') || url.searchParams.has('map')) {
+        const mode = url.searchParams.get('mode') ?? '';
+        const map = url.searchParams.get('map') ?? '';
+        if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
+          return corsResponse('Bad mode/map', { status: 400 });
+        }
+        let best: LobbyRow | undefined;
+        for (const [id, rows] of lobbyRows) {
+          if (!dir.workers.get(id)?.up) {continue;}
+          for (const r of rows) {
+            if (map && r.map !== map) {continue;}
+            if (mode && r.mode !== mode) {continue;}
+            if ((r.players ?? 0) >= (r.maxPlayers ?? CONFIG.maxPlayers)) {continue;}
+            if (!best || (r.players ?? 0) < (best.players ?? 0)) {best = r;}
+          }
+        }
+        let room = best?.name;
+        if (!room) {
+          // Mint fleet-wide-unique — a name that exists on ANY worker or
+          // sits in a pending claim would silently land joiners there.
+          const base = map || mode || 'arena';
+          const names = dir.roomNames();
+          for (const rows of lobbyRows.values()) {for (const r of rows) {names.add(r.name);}}
+          let n = 1;
+          while (names.has(`${base}-${n}`)) {n++;}
+          room = `${base}-${n}`;
+        }
+        const w = dir.resolve(room, now);
+        if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
+        return json({ room, mode });
+      }
       const room = url.searchParams.get('room') ?? undefined;
       const w = dir.resolve(room, now);
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
@@ -110,7 +178,7 @@ Bun.serve({
     }
 
     if (url.pathname === '/rooms' && req.method === 'GET') {
-      dir.resolve(undefined, now); // sweep stale workers first
+      dir.sweep(now);
       const rows = [...lobbyRows.entries()]
         .filter(([id]) => dir.workers.get(id)?.up)
         .flatMap(([, list]) => list);
@@ -118,7 +186,7 @@ Bun.serve({
     }
 
     if (url.pathname === '/fleet' && req.method === 'GET') {
-      dir.resolve(undefined, now);
+      dir.sweep(now);
       return json({ workers: dir.status() });
     }
 
