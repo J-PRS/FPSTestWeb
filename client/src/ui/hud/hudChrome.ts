@@ -33,7 +33,7 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     // effectively point-blank; the bracket would just be noise.
     const wName = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}]` : '';
     const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
-    w.textContent = wName || airTag ? `${wName}${airTag} ` : '';
+    w.textContent = wName || airTag ? ` ${wName}${airTag} ` : '';
     const t = document.createElement('span');
     t.className = 'kf-t' + (localIsTarget ? ' dead' : tTeam ? ` tm-${tTeam[0]}` : '');
     t.textContent = suicide ? 'self' : (tName ?? botDisplayName(target));
