@@ -1,3 +1,4 @@
+2026-10-08 - housekeeping: soft-delete 8 stale .devin_* probes + dead animgrid.html page (bf3a12, e77853)
 2026-10-08 - CoolShotsPanel: textContent rows (uploader-supplied weapon could XSS); drop [standPlant] console probe (665a55e7, 94d05a86)
 2026-10-08 - gate __scene/__renderer/__renderScan/geoNaN behind isDevHost
 2026-10-08 - gate 11 more dev-tool pages behind isDevHost/https-check (1cc481eb)
