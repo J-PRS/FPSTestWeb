@@ -3645,3 +3645,24 @@ cruise (the "damage not registering" symptom). rewindTarget() now
 computes ping + REMOTE_RENDER_DELAY_MS - transitOf(target)/2, and
 transitOf is plumbed RoomInfo -> CombatDeps -> BlastHost on both
 dedicated and P2P host.
+
+## 2.233 Ghost-truth lag-comp across every contact validator
+
+Once the transit-EMA feed was live (§2.231) the broadcast lead made
+ghosts honest — but every hit validator still tested sim-now
+positions, validating ~ping+200ms of sim ahead of the shooter's
+screen (~8m at 150ms cruise): the "hits not registering" class.
+
+- `rewind.ts` exports `RENDER_LAG_MS = 200` — the client's snapshot
+  interp delay (BASE 100 + arrival interval + jitter headroom), shared
+  by every validator so the buffer math and the constant can't drift.
+- `combatBlast.rewindTarget` rewinds victims `clampPing(ping) +
+  RENDER_LAG_MS ? transitOf(target)/2` for splash/plate/heal.
+- `beamSweepRay` rewinds each player capsule identically; creature
+  sweeps gained `backMs` (velocity-extrapolated, gravity-corrected for
+  balls) since creature sims keep no history.
+- `projContact` bodySweep/dischargeRay/creatureSweep rewind by the
+  shell owner's screen window; the cheap midpoint reject's margin grew
+  by `speed×back` so a far-off ghost can't slip the prune.
+- All rewinds gate on `isBot`: bots aim at server truth, a rewind
+  would make them miss (caught by beastDefense).
