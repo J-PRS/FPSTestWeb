@@ -220,7 +220,12 @@ export class BlastRunner {
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
-    const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs);
+    // The SHOOTER is exempt: their own blast already popped under their
+    // feet on their screen — rewinding their ghost ~lagMs behind a fast
+    // ski drops it outside the envelope, and self-damage silently dies.
+    const tpos = targetId === ctx.shooterId
+      ? { x: target.position.x, y: target.position.y, z: target.position.z }
+      : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;

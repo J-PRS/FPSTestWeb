@@ -1,3 +1,4 @@
+2026-10-01 - combatBlast: shooter exempt from lag-comp rewind on own blasts — your ghost lands ~lagMs behind a fast ski, outside the envelope, and self-damage silently died; live pos restores the feet-blast tax
 2026-10-01 - netCrawlers: crawlRoster now carries sk end to end — a client that missed retarget edges re-credits skipped sim quanta via the roster replay (and roster-born replicas inherit the absolute count) instead of drifting its replay clock ahead forever
 2026-10-01 - netBalls: coerce roster damp (wire num 1/0) to boolean at ingest — the replica stored the raw number in dampNextBounce
 2026-10-01 - WebSocketConnection: fleet resolveUrl hook no longer makes plain reconnects async — the unconditional await pushed every retry past its timer tick (2 wsReconnect regressions); only fleet sessions await the re-resolve
