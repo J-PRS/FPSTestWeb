@@ -358,6 +358,7 @@ export class NetBot {
       dir: { x: dir.x / dl, y: dir.y / dl, z: dir.z / dl },
       pos: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       shotId,
+      fireAt: nc.serverNowMs(),
     } as ClientMessage);
     nc.tel.shots++;
   }

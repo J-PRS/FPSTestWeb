@@ -130,6 +130,12 @@ export class NetClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private joinTimer: ReturnType<typeof setInterval> | null = null;
   pingMs = 0;
+  private clockOffset = 0;
+  private clockSynced = false;
+  /** Estimated server wall-clock now — the value fireAt claims carry. */
+  serverNowMs(): number | undefined {
+    return this.clockSynced ? Date.now() + this.clockOffset : undefined;
+  }
   closed = false;
   closeInfo = '';
 
@@ -389,7 +395,19 @@ export class NetClient {
       case 'pong': this.pingMs = Date.now() - m.timestamp; break;
       // Server-issued RTT probe — echo verbatim like the browser's
       // pingReceived; the timestamp is the server's clock, not ours.
-      case 'ping': this.send({ type: 'pong', timestamp: m.timestamp }); break;
+      // stamp + rtt/2 also seeds the clock offset fireAt rides on —
+      // same math as NetworkManager.pingReceived.
+      case 'ping': {
+        this.send({ type: 'pong', timestamp: m.timestamp });
+        const sample = m.timestamp + this.pingMs / 2 - Date.now();
+        if (!this.clockSynced || Math.abs(sample - this.clockOffset) > 200) {
+          this.clockOffset = sample;
+          this.clockSynced = true;
+        } else {
+          this.clockOffset += (sample - this.clockOffset) * 0.2;
+        }
+        break;
+      }
     }
     void EVENT_TYPES; // doc anchor for future event taps
   }

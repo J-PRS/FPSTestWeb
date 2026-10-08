@@ -81,6 +81,12 @@ export class GameServer {
             // The creature sim rides the same field — it sits dead
             // without it (step() early-returns on !field).
             if (!room.creatureSim.hasField) room.creatureSim.attachField(this.field);
+            // moveSim + projectiles got null at construction the same
+            // way — without this their seats sit in pendingTrack forever:
+            // no reconcile, no transit channel, no corrections for anyone
+            // who joined before the heightmap read resolved.
+            if (!room.moveSim.hasField) room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);
+            room.projectiles.attachField(this.field);
           }
         })
         .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));

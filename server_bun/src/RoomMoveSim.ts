@@ -115,6 +115,10 @@ export class RoomMoveSim {
     return this.authoritative ? RoomMoveSim.AUTHORITY_CORRECT_MS : RoomMoveSim.CORRECT_MS;
   }
 
+  /** Late-attach check — rooms built before the shared heightmap resolves
+   *  re-seat via GameServer's post-load pass, same as ballSim.hasField. */
+  get hasField(): boolean { return this.surface !== null; }
+
   /** Map structures layered over the field — solid walls and walkable
    *  tops for every sim already tracking (the surface object is shared). */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
