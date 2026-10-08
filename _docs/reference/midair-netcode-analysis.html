@@ -1,0 +1,2408 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+
+<head>
+
+  <meta charset="utf-8">
+  <meta name="generator" content="quarto-1.9.36">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+  <meta name="dcterms.date" content="2025-11-08">
+
+  <title>Analysing Midairs netcode &amp; lag compensation – karan.codes</title>
+  <style>
+    /* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+    code {
+      white-space: pre-wrap;
+    }
+
+    span.smallcaps {
+      font-variant: small-caps;
+    }
+
+    div.columns {
+      display: flex;
+      gap: min(4vw, 1.5em);
+    }
+
+    div.column {
+      flex: auto;
+      overflow-x: auto;
+    }
+
+    div.hanging-indent {
+      margin-left: 1.5em;
+      text-indent: -1.5em;
+    }
+
+    ul.task-list {
+      list-style: none;
+    }
+
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em;
+      /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */
+      vertical-align: middle;
+    }
+
+    /* CSS for syntax highlighting */
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    pre>code.sourceCode {
+      white-space: pre;
+      position: relative;
+    }
+
+    pre>code.sourceCode>span {
+      display: inline-block;
+      line-height: 1.25;
+    }
+
+    pre>code.sourceCode>span:empty {
+      height: 1.2em;
+    }
+
+    .sourceCode {
+      overflow: visible;
+    }
+
+    code.sourceCode>span {
+      color: inherit;
+      text-decoration: inherit;
+    }
+
+    div.sourceCode {
+      margin: 1em 0;
+    }
+
+    pre.sourceCode {
+      margin: 0;
+    }
+
+    @media screen {
+      div.sourceCode {
+        overflow: auto;
+      }
+    }
+
+    @media print {
+      pre>code.sourceCode {
+        white-space: pre-wrap;
+      }
+
+      pre>code.sourceCode>span {
+        text-indent: -5em;
+        padding-left: 5em;
+      }
+    }
+
+    pre.numberSource code {
+      counter-reset: source-line 0;
+    }
+
+    pre.numberSource code>span {
+      position: relative;
+      left: -4em;
+      counter-increment: source-line;
+    }
+
+    pre.numberSource code>span>a:first-child::before {
+      content: counter(source-line);
+      position: relative;
+      left: -1em;
+      text-align: right;
+      vertical-align: baseline;
+      border: none;
+      display: inline-block;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      padding: 0 4px;
+      width: 4em;
+    }
+
+    pre.numberSource {
+      margin-left: 3em;
+      padding-left: 4px;
+    }
+
+    div.sourceCode {}
+
+    @media screen {
+      pre>code.sourceCode>span>a:first-child::before {
+        text-decoration: underline;
+      }
+    }
+  </style>
+
+
+  <script src="site_libs/quarto-nav/quarto-nav.js"></script>
+  <script src="site_libs/quarto-nav/headroom.min.js"></script>
+  <script src="site_libs/clipboard/clipboard.min.js"></script>
+  <script src="site_libs/quarto-html/quarto.js" type="module"></script>
+  <script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+  <script src="site_libs/quarto-html/popper.min.js"></script>
+  <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
+  <script src="site_libs/quarto-html/anchor.min.js"></script>
+  <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
+  <link href="site_libs/quarto-html/quarto-syntax-highlighting-845c23b38eaddc0f92fda52bfe77a8c8.css" rel="stylesheet"
+    id="quarto-text-highlighting-styles">
+  <script src="site_libs/bootstrap/bootstrap.min.js"></script>
+  <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+  <link href="site_libs/bootstrap/bootstrap-a0f9fd0d421825b736dc1bbcbcba2219.min.css" rel="stylesheet"
+    append-hash="true" id="quarto-bootstrap" data-mode="light">
+  <script id="quarto-search-options" type="application/json">{
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+  <script type="text/javascript">
+    const typesetMath = (el) => {
+      if (window.MathJax) {
+        // MathJax Typeset
+        window.MathJax.typeset([el]);
+      } else if (window.katex) {
+        // KaTeX Render
+        var mathElements = el.getElementsByClassName("math");
+        var macros = [];
+        for (var i = 0; i < mathElements.length; i++) {
+          var texText = mathElements[i].firstChild;
+          if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+            window.katex.render(texText.data, mathElements[i], {
+              displayMode: mathElements[i].classList.contains('display'),
+              throwOnError: false,
+              macros: macros,
+              fleqn: false
+            });
+          }
+        }
+      }
+    }
+    window.Quarto = {
+      typesetMath
+    };
+  </script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+  <div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top quarto-banner">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+        <div class="navbar-brand-container mx-auto">
+          <a class="navbar-brand" href="https://karan.codes">
+            <span class="navbar-title">karan.codes</span>
+          </a>
+        </div>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse"
+          aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation"
+          onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <ul class="navbar-nav navbar-nav-scroll ms-auto">
+            <li class="nav-item compact">
+              <a class="nav-link" href="https://github.com/karan283861/"> <i class="bi bi-github" role="img">
+                </i>
+                <span class="menu-text"></span></a>
+            </li>
+            <li class="nav-item compact">
+              <a class="nav-link" href="https://youtube.com/@karan28386"> <i class="bi bi-youtube" role="img">
+                </i>
+                <span class="menu-text"></span></a>
+            </li>
+          </ul>
+        </div> <!-- /navcollapse -->
+        <div class="quarto-navbar-tools">
+        </div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  </header>
+  <!-- content -->
+  <header id="title-block-header" class="quarto-title-block default page-columns page-full">
+    <div class="quarto-title-banner page-columns page-full">
+      <div class="quarto-title column-body">
+        <h1 class="title">Analysing Midairs netcode &amp; lag compensation</h1>
+        <div class="quarto-categories">
+          <div class="quarto-category">reverse engineering</div>
+          <div class="quarto-category">math</div>
+          <div class="quarto-category">c++</div>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="quarto-title-meta">
+
+
+      <div>
+        <div class="quarto-title-meta-heading">Published</div>
+        <div class="quarto-title-meta-contents">
+          <p class="date">November 8, 2025</p>
+        </div>
+      </div>
+
+
+    </div>
+
+    <div>
+      <div class="abstract">
+        <div class="block-title">Abstract</div>
+        <p>Midair is a defunct video game released in 2018 and developed by an independent team called Archetype
+          Studios. Since its inception, and even today, Midair continues to receive high praise for the teams
+          self-proclaimed custom tailored netcode built from the ground up, and proprietary lag compensation
+          implementation. There are numerous posts by fans and members of development team across various forums
+          regarding the efficacy of the aforementioned features. By reverse engineering the publicly available client I
+          (a) develop a solution for hosting a game server to perform a mathematical analysis of the lag compensation,
+          and (b) perform a code analysis of the netcode and lag compensation. I found that Midairs netcode is almost
+          entirely identical to the original Unreal Engine 4 implementation, with no measurable improvements due to
+          their claimed customisations. The lag compensation implementation is purely client-side and relies on basic
+          kinematics providing both inconsistent and inaccurate results, and is also plagiarised from Epic Games Unreal
+          Tournament 4. Thus the claims made about the efficacy of Midairs netcode and lag compensation are grossly
+          overstated.</p>
+      </div>
+    </div>
+
+  </header>
+  <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+    <!-- sidebar -->
+    <!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+    </div>
+    <!-- main -->
+    <main class="content quarto-banner-title-block" id="quarto-document-content">
+
+      <nav id="TOC" role="doc-toc">
+        <h2 id="toc-title">On this page</h2>
+
+        <ul>
+          <li><a href="#authors-note" id="toc-authors-note"><span class="header-section-number">1</span> Author’s
+              note</a></li>
+          <li><a href="#glossary" id="toc-glossary"><span class="header-section-number">2</span> Glossary</a>
+            <ul>
+              <li><a href="#table-of-variables" id="toc-table-of-variables"><span
+                    class="header-section-number">2.1</span> Table of variables</a></li>
+            </ul>
+          </li>
+          <li><a href="#prerequisite-knowledge" id="toc-prerequisite-knowledge"><span
+                class="header-section-number">3</span> Prerequisite knowledge</a></li>
+          <li><a href="#introduction" id="toc-introduction"><span class="header-section-number">4</span>
+              Introduction</a></li>
+          <li><a href="#sec-background" id="toc-sec-background"><span class="header-section-number">5</span> Background
+              and claims</a>
+            <ul>
+              <li><a href="#midair-today" id="toc-midair-today"><span class="header-section-number">5.1</span> Midair
+                  today</a></li>
+              <li><a href="#claims-quotes" id="toc-claims-quotes"><span class="header-section-number">5.2</span> Claims
+                  (quotes)</a>
+                <ul>
+                  <li><a href="#generic-claims" id="toc-generic-claims"><span class="header-section-number">5.2.1</span>
+                      Generic claims</a></li>
+                  <li><a href="#archetype-studios" id="toc-archetype-studios"><span
+                        class="header-section-number">5.2.2</span> Archetype Studios</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><a href="#research-questions" id="toc-research-questions"><span class="header-section-number">6</span>
+              Research questions</a></li>
+          <li><a href="#tldr" id="toc-tldr"><span class="header-section-number">7</span> TL;DR</a></li>
+          <li><a href="#theory" id="toc-theory"><span class="header-section-number">8</span> Theory</a>
+            <ul>
+              <li><a href="#sec-netcode-lagcomp" id="toc-sec-netcode-lagcomp"><span
+                    class="header-section-number">8.1</span> Defining netcode and lag compensation</a></li>
+              <li><a href="#predicting-the-location-of-moving-objects"
+                  id="toc-predicting-the-location-of-moving-objects"><span class="header-section-number">8.2</span>
+                  Predicting the location of moving objects</a>
+                <ul>
+                  <li><a href="#continuous-time-domain" id="toc-continuous-time-domain"><span
+                        class="header-section-number">8.2.1</span> Continuous time domain</a></li>
+                  <li><a href="#working-in-the-discretised-time-domain"
+                      id="toc-working-in-the-discretised-time-domain"><span class="header-section-number">8.2.2</span>
+                      Working in the discretised time domain</a></li>
+                  <li><a href="#error-between-the-client-and-server" id="toc-error-between-the-client-and-server"><span
+                        class="header-section-number">8.2.3</span> Error between the client and server</a></li>
+                  <li><a href="#sec-min_of_error" id="toc-sec-min_of_error"><span
+                        class="header-section-number">8.2.4</span> Minimisation of error (compensating for lag)</a></li>
+                  <li><a href="#the-effects-of-ping-on-error" id="toc-the-effects-of-ping-on-error"><span
+                        class="header-section-number">8.2.5</span> The effects of ping on error</a></li>
+                  <li><a href="#the-effects-of-server-tick-rate-on-error"
+                      id="toc-the-effects-of-server-tick-rate-on-error"><span class="header-section-number">8.2.6</span>
+                      The effects of server tick rate on error</a></li>
+                  <li><a href="#when-does-error-minimisation-prediction-work"
+                      id="toc-when-does-error-minimisation-prediction-work"><span
+                        class="header-section-number">8.2.7</span> When does error minimisation prediction work</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><a href="#preparations-for-analysing-midairs-lag-compensation"
+              id="toc-preparations-for-analysing-midairs-lag-compensation"><span class="header-section-number">9</span>
+              Preparations for analysing Midairs lag compensation</a>
+            <ul>
+              <li><a href="#server-hosting" id="toc-server-hosting"><span class="header-section-number">9.1</span>
+                  Server hosting</a></li>
+              <li><a href="#server-side-player-position-recording-and-playback"
+                  id="toc-server-side-player-position-recording-and-playback"><span
+                    class="header-section-number">9.2</span> Server side player position recording and playback</a></li>
+              <li><a href="#identifying-the-existing-mechanisms-for-lag-compensation-in-the-midair-client"
+                  id="toc-identifying-the-existing-mechanisms-for-lag-compensation-in-the-midair-client"><span
+                    class="header-section-number">9.3</span> Identifying the existing mechanisms for lag compensation in
+                  the Midair client</a></li>
+            </ul>
+          </li>
+          <li><a href="#mathematical-analysis-of-midairs-lag-compensation"
+              id="toc-mathematical-analysis-of-midairs-lag-compensation"><span class="header-section-number">10</span>
+              Mathematical analysis of Midairs lag compensation</a>
+            <ul>
+              <li><a href="#replaying-a-set-path-with-varying-predict-values"
+                  id="toc-replaying-a-set-path-with-varying-predict-values"><span
+                    class="header-section-number">10.1</span> Replaying a set path with varying Predict values</a></li>
+              <li><a href="#setting-up-for-a-linear-regression" id="toc-setting-up-for-a-linear-regression"><span
+                    class="header-section-number">10.2</span> Setting up for a linear regression</a></li>
+              <li><a href="#performing-a-linear-regression" id="toc-performing-a-linear-regression"><span
+                    class="header-section-number">10.3</span> Performing a linear regression</a></li>
+            </ul>
+          </li>
+          <li><a href="#code-analysis-of-midairs-lag-compensation-and-netcode"
+              id="toc-code-analysis-of-midairs-lag-compensation-and-netcode"><span
+                class="header-section-number">11</span> Code analysis of Midairs lag compensation and netcode</a>
+            <ul>
+              <li><a href="#analysing-lag-compensation" id="toc-analysing-lag-compensation"><span
+                    class="header-section-number">11.1</span> Analysing lag compensation</a>
+                <ul>
+                  <li><a href="#getpredictiontime" id="toc-getpredictiontime"><span
+                        class="header-section-number">11.1.1</span> GetPredictionTime</a></li>
+                  <li><a href="#servernegotiatepredictionping_implementation"
+                      id="toc-servernegotiatepredictionping_implementation"><span
+                        class="header-section-number">11.1.2</span> ServerNegotiatePredictionPing_Implementation</a>
+                  </li>
+                  <li><a href="#maupdatesimulatedposition" id="toc-maupdatesimulatedposition"><span
+                        class="header-section-number">11.1.3</span> MAUpdateSimulatedPosition</a></li>
+                  <li><a href="#other-functions" id="toc-other-functions"><span
+                        class="header-section-number">11.1.4</span> Other functions</a></li>
+                  <li><a href="#findings" id="toc-findings"><span class="header-section-number">11.1.5</span>
+                      Findings</a></li>
+                </ul>
+              </li>
+              <li><a href="#analysing-netcode" id="toc-analysing-netcode"><span
+                    class="header-section-number">11.2</span> Analysing netcode</a></li>
+            </ul>
+          </li>
+          <li><a href="#how-does-midairs-lag-compensation-work" id="toc-how-does-midairs-lag-compensation-work"><span
+                class="header-section-number">12</span> How does Midairs lag compensation work?</a>
+            <ul>
+              <li><a href="#prediction" id="toc-prediction"><span class="header-section-number">12.1</span>
+                  Prediction</a></li>
+              <li><a href="#fake-projectiles" id="toc-fake-projectiles"><span class="header-section-number">12.2</span>
+                  Fake projectiles</a>
+                <ul>
+                  <li><a href="#how-it-works" id="toc-how-it-works"><span class="header-section-number">12.2.1</span>
+                      How it works</a></li>
+                </ul>
+              </li>
+              <li><a href="#how-good-is-midairs-lag-compensation" id="toc-how-good-is-midairs-lag-compensation"><span
+                    class="header-section-number">12.3</span> How good is Midairs lag compensation?</a></li>
+              <li><a href="#how-does-it-compare-to-tribes-titles" id="toc-how-does-it-compare-to-tribes-titles"><span
+                    class="header-section-number">12.4</span> How does it compare to Tribes titles</a></li>
+            </ul>
+          </li>
+          <li><a href="#what-alternatives-are-there" id="toc-what-alternatives-are-there"><span
+                class="header-section-number">13</span> What alternatives are there?</a>
+            <ul>
+              <li><a href="#server-side-rewind" id="toc-server-side-rewind"><span
+                    class="header-section-number">13.1</span> Server-side rewind</a>
+                <ul>
+                  <li><a href="#why-it-is-strictly-better" id="toc-why-it-is-strictly-better"><span
+                        class="header-section-number">13.1.1</span> Why it is strictly better</a></li>
+                  <li><a href="#implementing-server-side-rewind-in-midair"
+                      id="toc-implementing-server-side-rewind-in-midair"><span
+                        class="header-section-number">13.1.2</span> Implementing server-side rewind in Midair</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><a href="#conclusion" id="toc-conclusion"><span class="header-section-number">14</span> Conclusion</a>
+            <ul>
+              <li><a href="#how-did-this-happen" id="toc-how-did-this-happen"><span
+                    class="header-section-number">14.1</span> How did this happen?</a></li>
+            </ul>
+          </li>
+          <li><a href="#response" id="toc-response"><span class="header-section-number">15</span> Response</a>
+            <ul>
+              <li><a href="#midair-community" id="toc-midair-community"><span class="header-section-number">15.1</span>
+                  Midair community</a></li>
+              <li><a href="#vector-z-studios" id="toc-vector-z-studios"><span class="header-section-number">15.2</span>
+                  Vector Z Studios</a></li>
+            </ul>
+          </li>
+          <li><a href="#other-findings" id="toc-other-findings"><span class="header-section-number">16</span> Other
+              findings</a>
+            <ul>
+              <li><a href="#failure-to-deliver-kickstarter-goals" id="toc-failure-to-deliver-kickstarter-goals"><span
+                    class="header-section-number">16.1</span> Failure to deliver Kickstarter goals</a></li>
+              <li><a href="#over-500000-of-combined-sales-and-funding"
+                  id="toc-over-500000-of-combined-sales-and-funding"><span class="header-section-number">16.2</span>
+                  Over $500,000 of combined sales and funding</a></li>
+            </ul>
+          </li>
+        </ul>
+      </nav>
+      <section id="authors-note" class="level1" data-number="1">
+        <h1 data-number="1"><span class="header-section-number">1</span> Author’s note</h1>
+        <p>I have no experience (personal or professional) in game development or with Unreal Engine 4. Therefore, some
+          interpretations presented in this article may not be fully accurate due to the complexity of Unreal Engine.
+          This project was undertaken purely for educational purposes, focusing on reverse engineering, mathematical
+          analysis, and software analysis. All findings are based on independent analysis and publicly available
+          information.</p>
+      </section>
+      <section id="glossary" class="level1" data-number="2">
+        <h1 data-number="2"><span class="header-section-number">2</span> Glossary</h1>
+        <p><strong>DLL</strong> : Dynamic-link library, a file that contains code and data which programs can load and
+          use at runtime</p>
+        <p><strong>Ghidra</strong> : A free, open-source software reverse engineering framework used to analyse and
+          decompile binaries</p>
+        <p><strong>Ping</strong> : The round-trip time (RTT) for data between a client and the server, measured in
+          seconds</p>
+        <p><strong>UE4</strong> : Unreal Engine 4, a game engine developed by Epic Games</p>
+        <p><strong>UT4</strong> : Unreal Tournament 4, a game built on UE4 and developed by Epic Games</p>
+        <section id="table-of-variables" class="level2" data-number="2.1">
+          <h2 data-number="2.1" class="anchored" data-anchor-id="table-of-variables"><span
+              class="header-section-number">2.1</span> Table of variables</h2>
+          <table class="caption-top table">
+            <colgroup>
+              <col style="width: 25%">
+              <col style="width: 25%">
+              <col style="width: 25%">
+              <col style="width: 25%">
+            </colgroup>
+            <thead>
+              <tr class="header">
+                <th>Variable name</th>
+                <th>Description</th>
+                <th>Equivalence</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="odd">
+                <td><span class="math inline">\(\text{TR}\)</span></td>
+                <td>Server tick rate (Hz)</td>
+                <td></td>
+                <td><span class="math inline">\(30\)</span></td>
+              </tr>
+              <tr class="even">
+                <td><span class="math inline">\({\Delta T}_s\)</span></td>
+                <td>Server tick period (s)</td>
+                <td>(<span class="math inline">\(\dfrac{1}{{\text{TR}}}\)</span>)</td>
+                <td><span class="math inline">\(\dfrac{1}{30} \approx 0.033\)</span></td>
+              </tr>
+              <tr class="odd">
+                <td><span class="math inline">\(\text{FPS}\)</span></td>
+                <td>Client tick rate (Hz)</td>
+                <td></td>
+                <td><span class="math inline">\(240\)</span></td>
+              </tr>
+              <tr class="even">
+                <td><span class="math inline">\({\Delta T}_c\)</span></td>
+                <td>Client tick period (s)</td>
+                <td>(<span class="math inline">\(\dfrac{1}{\text{FPS}}\)</span>)</td>
+                <td><span class="math inline">\(\dfrac{1}{240} \approx 0.00417\)</span></td>
+              </tr>
+              <tr class="odd">
+                <td><span class="math inline">\(\text{Ping}\)</span></td>
+                <td>Ping</td>
+                <td>RTT (s)</td>
+                <td></td>
+              </tr>
+              <tr class="even">
+                <td><span class="math inline">\(\text{OWD}\)</span></td>
+                <td>One Way Delay (s)</td>
+                <td>(<span class="math inline">\(\dfrac{\text{Ping}}{2}\)</span>)</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+      <section id="prerequisite-knowledge" class="level1" data-number="3">
+        <h1 data-number="3"><span class="header-section-number">3</span> Prerequisite knowledge</h1>
+        <p>This article assumes the reader</p>
+        <ul>
+          <li>has high school level mathematical proficiency</li>
+          <li>is familiar with basic networking concepts</li>
+        </ul>
+        <p>Derivations have been provided where possible.</p>
+        <p>Readers unfamiliar with the fundamentals of concepts discussed are strongly encouraged to consult additional
+          sources to gain a full understanding.</p>
+      </section>
+      <section id="introduction" class="level1" data-number="4">
+        <h1 data-number="4"><span class="header-section-number">4</span> Introduction</h1>
+        <p>Midair was a community and externally funded multiplayer first-person shooter released on Steam in May 2018,
+          developed by Archetype Studios. It aimed to be a spiritual successor to the Tribes franchise, belonging to a
+          subgenre colloquially referred to as FPS-Z (first-person shooters with a significant vertical axis). The
+          defining mechanic is momentum-based skiing, where players exploit terrain slopes to reach extreme speeds,
+          combined with a jetpack for vertical movement and projectile-based weapons that reward leading fast-moving
+          targets. The project spanned between 2014 and 2019, funded initially via a Kickstarter campaign before
+          ultimately shutting due to being a buggy, incomplete, unbalanced mess that could no longer be maintained due
+          to fledgling resources.</p>
+        <p>Central to Midairs identity, and the subject of this article, were claims made by the development team and
+          the broader community regarding the quality of the game’s netcode and lag compensation. These claims were
+          numerous, persistent, and emphatic - spanning years of forum posts, Discord messages, Reddit comments, and
+          YouTube videos.</p>
+        <p>This article examines those claims through two complementary approaches: a mathematical analysis of the lag
+          compensation mechanism, and a code analysis via reverse engineering of the publicly available Midair client.
+          The findings are unambiguous. Midairs netcode is stock Unreal Engine 4 with no meaningful modifications. The
+          lag compensation is a direct copy of Epic Games’ Unreal Tournament 4, reduces mathematically to a single naive
+          kinematic offset, and is covered under a license that explicitly prohibits its use in other projects. The
+          claims made about these systems are not merely overstated - they are false.</p>
+      </section>
+      <section id="sec-background" class="level1" data-number="5">
+        <h1 data-number="5"><span class="header-section-number">5</span> Background and claims</h1>
+        <p>The implementation of Midairs lag compensation and custom tailored netcode is credited to <a
+            href="https://www.reddit.com/user/Mabeline/">Bazika “Mabel (Mabeline)” Huffman-Kinyalolo</a>.</p>
+        <p>Quoting directly from Midairs <a
+            href="https://www.kickstarter.com/projects/archetypestudios/midair">Kickstarter</a>:</p>
+        <blockquote class="blockquote">
+          <p><strong>Custom Tailored Networking</strong></p>
+          <p>Modern First-Person Shooters require highly customized netcode and lag compensation to ensure that players
+            around the world can enjoy games without worrying about the effects of packet loss, latency, and server
+            location. We have spent and will continue to spend a great amount of effort to specially design our netcode
+            to achieve this end, enabling all players with under 150ms to have the same, high-quality experience. During
+            pre-alpha testing we have brought in players from a variety of FPS-Z titles across both North America and
+            Europe to ensure we provide a seamless cross-continent experience that trumps all others.</p>
+        </blockquote>
+        <p>There are dozens upon dozens (totaling a number probably somewhere in the hundreds) of posts/comments across
+          various forums (e.g.&nbsp;Discord, Legions: Overdrive forums, Reddit, YouTube, etc) since Midairs inception
+          till now which make claim to the superior performance and implementation of Midairs netcode and lag
+          compensation.</p>
+        <p>Unfortunately two of the largest resources, the official Midair forums (playmidair.com), and official Midair
+          discord, have both been essentially “nuked”.</p>
+        <section id="midair-today" class="level2" data-number="5.1">
+          <h2 data-number="5.1" class="anchored" data-anchor-id="midair-today"><span
+              class="header-section-number">5.1</span> Midair today</h2>
+          <p>In early 2020 a new independent studio called Vector Z Studios began development for Midair: Community
+            Edition, which was eventually renamed to Midair 2. As of the writing of this article, Midair 2 remains in
+            development.</p>
+          <p>Also, as of the writing of this article, analysis performed via reverse engineering confirms that Midair 2
+            uses the same netcode and lag compensation as Midair.</p>
+        </section>
+        <section id="claims-quotes" class="level2" data-number="5.2">
+          <h2 data-number="5.2" class="anchored" data-anchor-id="claims-quotes"><span
+              class="header-section-number">5.2</span> Claims (quotes)</h2>
+          <p>The provided quotes do not serve any real purpose other than entertainment (or cringe fuel) due to the fact
+            they are grossly overstated, and raise serious questions about the authors credibility. The remarks suggest
+            either a misunderstanding of the facts or a deliberate distortion (i.e.&nbsp;shilling).</p>
+          <section id="generic-claims" class="level3" data-number="5.2.1">
+            <h3 data-number="5.2.1" class="anchored" data-anchor-id="generic-claims"><span
+                class="header-section-number">5.2.1</span> Generic claims</h3>
+            <p>A <em>very small</em> collection of relevant claims (quotes) I found via googling certain keywords
+              related to Midair are provided below.</p>
+            <div class="callout callout-style-default callout-warning callout-titled">
+              <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse"
+                data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false"
+                aria-label="Toggle callout">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  <span class="screen-reader-only">Warning</span>Read at your own risk - excessive larping ahead
+                </div>
+                <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i
+                    class="callout-toggle"></i></div>
+              </div>
+              <div id="callout-1" class="callout-1-contents callout-collapse collapse">
+                <div class="callout-body-container callout-body">
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Netcode is really, really good and is getting even better as time passes. We have Euros playing
+                        on NY servers and not being disadvantaged.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://forums.legionsoverdrive.com/threads/new-game-midair.5238/post-110159"><strong>Darklord</strong></a>
+                      (Ex-Midair 2 developer) on April 27, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Midair is coming along quite nicely. The testers have regular pickup games and even in its
+                        pre-alpha state it plays very well; things like the netcode have been written from the ground up
+                        already to support advanced lag compensation.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Games/comments/4i1a7h/comment/d2u56ub/"><strong>PROJTHEBENIGNANT</strong></a>
+                      on May 5, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>What you’re getting is essentially an updated t1/t2c but with amazing net code/lag comp,
+                        matchmaking to find balanced, fun games and the possibility of an alive player-base which is
+                        something you won’t be getting with the older tribes games.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Tribes/comments/4i15dq/comment/d2u4l86/"><strong>WorkingAsIntended</strong></a>
+                      on May 5, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>…and we (finally!) have some exciting netcode improvements like lag compensation. All of these
+                        are pretty huge for the game experience. Lag compensation alone opens up a huge amount of
+                        options. Users across the whole of the US can play on the same server with basically no issues
+                      </p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Games/comments/4iecnd/comment/d2xo9rd/"><strong>Mabeline</strong></a>
+                      (Midair developer) on May 8, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>T:A is very ping dependant while Midair will lag compensate everything so pings below 150 will
+                        feel like 0 ping.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Tribes/comments/4l6fj4/comment/d3ln4b5/"><strong>Shreq</strong></a>
+                      (Ex-Midair 2 developer) on May 27, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Yeah big time. The best in the business in fact, you won’t find better lag comp in the market.
+                      </p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://steamcommunity.com/app/439370/discussions/0/1473095331496124404/#c1473095331497561536"><strong>Wildefyr</strong></a>
+                      on August 26, 2017</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>One of the founding members of the original dev team, Mabel, wrote a bunch of netcode. My
+                        understanding is the lag compensation is a lot better than default ue4</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://discord.com/channels/681439528292057097/681439528292057177/740934330796212243"><strong>ehme</strong></a>
+                      (Midair 2 developer) on August 7, 2020</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Midair 2 netcode is really good. Projectiles are the hardest to get right and it nails it on
+                        all fronts. Mabel was originally in charge of it and did an amazing job.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Tribes/comments/18kqkr5/comment/kduli36/"><strong>Cykon</strong></a>
+                      on December 12, 2023</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Nearly perfect netcode has been achieved before in Midair. You can be very generous with it in
+                        Tribes games according to Mabel.</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://discord.com/channels/1169300582222286918/1183811326628339855/1183860419211841587"><strong>afireinasa</strong></a>
+                      on December 18, 2023</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Yeah its bad luck because in previous patches the netcode was top notch even at 150+ ping</p>
+                    </blockquote>
+                    <p>- <a
+                        href="https://www.reddit.com/r/Tribes/comments/1audo0l/comment/kr44tbm/"><strong>Aesdotjs</strong></a>
+                      (Midair 2 developer) on February 19, 2024</p>
+                  </blockquote>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section id="archetype-studios" class="level3" data-number="5.2.2">
+            <h3 data-number="5.2.2" class="anchored" data-anchor-id="archetype-studios"><span
+                class="header-section-number">5.2.2</span> Archetype Studios</h3>
+            <p>A collection of relevant claims (quotes) I found via searching transcripts of YouTube videos related to
+              interviewing Archetype Studios or videos posted by the official Archetype Studios channel itself are
+              provided below.</p>
+            <div class="callout callout-style-default callout-warning callout-titled">
+              <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse"
+                data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false"
+                aria-label="Toggle callout">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  <span class="screen-reader-only">Warning</span>Read at your own risk - excessive larping ahead
+                </div>
+                <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i
+                    class="callout-toggle"></i></div>
+              </div>
+              <div id="callout-2" class="callout-2-contents callout-collapse collapse">
+                <div class="callout-body-container callout-body">
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>So I know the way that the netcode works is has been heavily modified by Mabel in particular.
+                        There’s been a lot of effort spent on getting this right… and some of the benefits we see from
+                        that are some nice smooth gameplay especially with inconsistent ping and latency and that sort
+                        of thing. But yeah, so it was like one of the other benefits is actually cross region play…</p>
+                    </blockquote>
+                    <p>- <a href="https://youtu.be/jR_0L4F94CI?t=4707"><strong>BugsPray</strong></a> (Midair developer,
+                      CEO of Archetype Studios) on March 20, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>As far as consistency goes, the guys going through and making the game right now they put a lot
+                        of work into the netcode… and the netcode in this game is pretty remarkable, especially for an
+                        FPS-Z game.</p>
+                    </blockquote>
+                    <p>- <a href="https://youtu.be/4vvFmfy_fMI?t=163"><strong>GuitarGuy</strong></a> on May 8, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>Yeah the other thing thats contributing to that is Mabel is something of a savant when it comes
+                        to netcode… the netcode we have in Midair is second to none.</p>
+                    </blockquote>
+                    <p>- <a href="https://youtu.be/4vvFmfy_fMI?t=8152">Unknown</a> on May 8, 2016</p>
+                  </blockquote>
+                  <blockquote class="blockquote">
+                    <blockquote class="blockquote">
+                      <p>We’ve actually done something really cool with Midair in particular with match making, so we’ve
+                        taken Unreals netcode and stripped out a bunch and done a bunch of our own work to it and one of
+                        the neat impacts of that is that we are going to have cross region play for matchmaking. Which
+                        is super neat because it means that, and we actually do that now, I in Seattle play all the time
+                        with people in Europe in a server in New York.</p>
+                    </blockquote>
+                    <p>- <a href="https://youtu.be/R6EtcIRfoMQ?t=1340"><strong>BugsPray</strong></a> (Midair developer,
+                      CEO of Archetype Studios) on August 29, 2017</p>
+                  </blockquote>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+      <section id="research-questions" class="level1" data-number="6">
+        <h1 data-number="6"><span class="header-section-number">6</span> Research questions</h1>
+        <p>This article specifically seeks to answer the following questions:</p>
+        <ol type="1">
+          <li><strong>What is Midairs lag compensation doing mathematically?</strong> Is it reducible to a known
+            formula, and if so, how well does it actually perform?</li>
+          <li><strong>Was Midairs netcode custom built?</strong> Or is it stock Unreal Engine 4 with superficial (or no)
+            modifications?</li>
+          <li><strong>Was Midairs lag compensation custom built?</strong> Or was it sourced from an existing codebase?
+          </li>
+          <li><strong>Are the claims made about Midairs netcode and lag compensation accurate?</strong> Or are they
+            overstated, misleading, or outright false?</li>
+        </ol>
+      </section>
+      <section id="tldr" class="level1" data-number="7">
+        <h1 data-number="7"><span class="header-section-number">7</span> TL;DR</h1>
+        <div class="callout callout-style-default callout-warning callout-titled">
+          <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse"
+            data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false"
+            aria-label="Toggle callout">
+            <div class="callout-icon-container">
+              <i class="callout-icon"></i>
+            </div>
+            <div class="callout-title-container flex-fill">
+              <span class="screen-reader-only">Warning</span>Let me spoil it for you
+            </div>
+            <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i
+                class="callout-toggle"></i></div>
+          </div>
+          <div id="callout-3" class="callout-3-contents callout-collapse collapse">
+            <div class="callout-body-container callout-body">
+              <ul>
+                <li>Midair uses <strong>stock standard UE4 netcode</strong> (replication, UNet*)</li>
+                <li>Midairs lag compensation uses <strong>basic kinematics</strong></li>
+                <li>Midairs lag compensation is <strong>copied from Epic Games UT4</strong></li>
+                <li>Epic Games UT4 repository license clearly says it’s code <strong>may not be used in another
+                    project</strong></li>
+                <li>Midair heavily relies on client-side simulation to <strong>fake reduction of latency</strong>
+                  (e.g.&nbsp;fake projectiles)</li>
+                <li>Any perceived benefits of Midairs lag compensation system is <strong>largely placebo</strong></li>
+                <li>Mabel, BugsPray, the Midair development team and notable members of the community made a
+                  <strong>conscious effort to mislead</strong> those who would not investigate any further
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="theory" class="level1" data-number="8">
+        <h1 data-number="8"><span class="header-section-number">8</span> Theory</h1>
+        <section id="sec-netcode-lagcomp" class="level2" data-number="8.1">
+          <h2 data-number="8.1" class="anchored" data-anchor-id="sec-netcode-lagcomp"><span
+              class="header-section-number">8.1</span> Defining netcode and lag compensation</h2>
+          <p>Netcode is defined as the part of a game’s programming that manages communication between the client
+            (player) and the server.</p>
+          <p>Lag compensation is defined as the techniques used to reduce the perceived effect of network latency
+            (i.e.&nbsp;ping).</p>
+          <p>In the gaming community, these terms are often confused, however they represent two very different concepts
+            and should <strong>NOT</strong> be used interchangeably.</p>
+        </section>
+        <section id="predicting-the-location-of-moving-objects" class="level2" data-number="8.2">
+          <h2 data-number="8.2" class="anchored" data-anchor-id="predicting-the-location-of-moving-objects"><span
+              class="header-section-number">8.2</span> Predicting the location of moving objects</h2>
+          <section id="continuous-time-domain" class="level3" data-number="8.2.1">
+            <h3 data-number="8.2.1" class="anchored" data-anchor-id="continuous-time-domain"><span
+                class="header-section-number">8.2.1</span> Continuous time domain</h3>
+            <p>As formulated in the kinematic equations, the position of a moving object under ideal conditions can be
+              expressed as <span class="math display">\[
+                s\left(t\right) = s_{0} + v_{0}t + \dfrac{1}{2}a{t}^2
+                \]</span> where <span class="math display">\[
+                \begin{split}
+                t &amp;: \text{time} \\
+                s_{0} &amp;: \text{initial position} \\
+                v_{0} &amp; : \text{initial velocity} \\
+                a &amp; : \text{acceleration} \\
+                \end{split}
+                \]</span></p>
+            <div class="callout callout-style-default callout-note callout-titled">
+              <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse"
+                data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false"
+                aria-label="Toggle callout">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  <span class="screen-reader-only">Note</span>Derivation of the kinematic equation for position at a
+                  given time
+                </div>
+                <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i
+                    class="callout-toggle"></i></div>
+              </div>
+              <div id="callout-4" class="callout-4-contents callout-collapse collapse">
+                <div class="callout-body-container callout-body">
+                  <p>Define acceleration as a constant.</p>
+                  <p>Let <span class="math inline">\(t &gt; t_0 \geq 0.\)</span></p>
+                  <p><span class="math display">\[
+                      \begin{equation}
+                      a = \dfrac{dv}{dt} = \dfrac{d^2s}{dt^2}
+                      \end{equation}
+                      \]</span></p>
+                  <p><span class="math display">\[
+                      \begin{split}
+                      \dfrac{dv}{dt} &amp;= a \\
+                      \int_{t_0}^{t}{dv} &amp;= \int_{t_0}^{t}{a \cdot dt} \\
+                      \left[v\right]_{t_0}^{t} &amp;= a\left[t\right]_{t_0}^{t} \\
+                      v\left(t\right) - v\left(t_0\right) &amp;= a \cdot \left(t - t_0\right) \\
+                      v\left(t\right) &amp;= v\left(t_0\right) + a \cdot \left(t - t_0\right) \\
+                      &amp;= v\left(t_0\right) + at - at_0
+                      \end{split}
+                      \]</span></p>
+                  <p><span class="math display">\[
+                      \begin{split}
+                      \dfrac{ds}{dt} &amp;= v \\
+                      \int_{t_0}^{t}{ds} &amp;= \int_{t_0}^{t}{\left(v\left(t_0\right) + at - at_0\right) \cdot dt} \\
+                      &amp;= \int_{t_0}^{t}{v\left(t_0\right) \cdot dt + at \cdot dt - at_0 \cdot dt} \\
+                      \left[s\right]_{t_0}^{t} &amp;= \left[v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 - at_0 \cdot
+                      t\right]_{t_0}^{t} \\
+                      s\left(t\right) - s\left(t_0\right) &amp;= \left(v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 -
+                      at_0 \cdot t\right) - \left(v\left(t_0\right) \cdot t_0 + \dfrac{1}{2}a{t_0}^2 - at_0 \cdot
+                      t_0\right)\\
+                      s\left(t\right) &amp;= s\left(t_0\right) + v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 - at_0
+                      \cdot t - v\left(t_0\right) \cdot t_0 - \dfrac{1}{2}a{t_0}^2 + a{t_0}^2 \\
+                      s\left(t\right) &amp;= s\left(t_0\right) + v\left(t_0\right) \cdot t - v\left(t_0\right) \cdot t_0
+                      + \dfrac{1}{2}at^2 - at_0 \cdot t + \dfrac{1}{2}a{t_0}^2 \\
+                      &amp;= s\left(t_0\right) + v\left(t_0\right) \cdot \left( t - t_0 \right) + \dfrac{1}{2}a\left(t^2
+                      - 2 t_0 \cdot t + {t_0}^2\right) \\
+                      &amp;= s\left(t_0\right) + v\left(t_0\right) \cdot \left( t - t_0 \right) + \dfrac{1}{2}a\left(t -
+                      {t_0}\right)^2
+                      \end{split}
+                      \]</span></p>
+                  <p>For convenience, we set <span class="math inline">\(t_0 = 0\)</span>.</p>
+                  <p><span class="math display">\[
+                      \begin{split}
+                      \therefore s\left(t\right) &amp;= s\left(0\right) + v\left(0\right) \cdot \left( t - 0 \right) +
+                      \dfrac{1}{2}a\left(t - 0\right)^2 \\
+                      &amp;= s\left(0\right) + v\left(0\right) \cdot \left(t\right) + \dfrac{1}{2}a\left(t\right)^2 \\
+                      &amp;= s_0 + v_0t + \dfrac{1}{2}at^2
+                      \end{split}
+                      \]</span></p>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section id="working-in-the-discretised-time-domain" class="level3" data-number="8.2.2">
+            <h3 data-number="8.2.2" class="anchored" data-anchor-id="working-in-the-discretised-time-domain"><span
+                class="header-section-number">8.2.2</span> Working in the discretised time domain</h3>
+            <p>Physics calculations in video games are evaluated in discrete time, not continuous time as above.</p>
+            <p>When working with discrete time steps the continuous differential kinematic equation is instead
+              represented by its discrete time analogue - a difference equation, as follows <span
+                class="math display">\[
+                \begin{split}
+                s_{n+1} &amp;= s_{n} + v_{n}\Delta t_n + \dfrac{1}{2}a_{n}\left(\Delta t_n\right)^2
+                \end{split}
+                \]</span></p>
+            <p>where</p>
+            <p><span class="math display">\[
+                \begin{split}
+                \Delta t_n &amp;: \text{time step} \\
+                s_{n+1} &amp;: \text{final position at step n+1} \\
+                s_{n} &amp;: \text{initial position at step n} \\
+                v_{n} &amp; : \text{initial velocity at step n} \\
+                a_{n} &amp; : \text{acceleration at step n} \\
+                \end{split}
+                \]</span></p>
+            <p>Player movement in UE4 is server authoritative which means the server is the one and only source of
+              truth. During each tick the server will factor all input forces to eventually calculate a players final
+              location and final velocity for said tick. This information is then communicated to clients, which then
+              further simulates the remote players movement until a subsequent update is received from the server.
+            </p>
+            <p>Therefore, on the client, the difference kinematic equation is simplified to <span
+                class="math display">\[
+                \begin{split}
+                s_{c_{n+1}} &amp;= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+                \end{split}
+                \]</span></p>
+            <p>where <span class="math display">\[
+                \begin{split}
+                %\Delta t &amp;\approxeq \Delta T_c \gt 0 \\
+                {\epsilon}_n &amp;: \text{error (due to smoothing, corrections, etc)}
+                \end{split}
+                \]</span></p>
+            <p>given</p>
+            <p><span class="math display">\[
+                \begin{split}
+                s_{c_{0}} &amp;: \text{initial position received from server} \\
+                v_{c_{0}} &amp;: \text{initial velocity received from server} \\
+                \end{split}
+                \]</span></p>
+            <p>constrained by <span class="math display">\[
+                \begin{split}
+                n \cdot \Delta T_c &lt; \Delta T_s
+                \end{split}
+                \]</span></p>
+            <div class="callout callout-style-default callout-note callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Note
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>This constraint conveys that the equation is only valid for a specific number of steps - until the
+                  client receives a new update from the server.</p>
+              </div>
+            </div>
+            <div class="callout callout-style-default callout-important callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Important
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>This equation performs simple extrapolation of a players position between receiving updates from the
+                  server. The rate at which these updates occur is simply equal to <span
+                    class="math inline">\(\text{TR}\)</span>. At a given step the position on the client will delayed by
+                  approximately <span class="math inline">\(\text{OWD}\)</span> with respect to the actual position on
+                  the server for the same step.</p>
+                <p>Whatever process the server/client actually uses to calculate/predict a players location in UE4 is
+                  practically irrelevant. The aforementioned equations simply help to provide a simplistic high level
+                  model of what is happening under the hood.</p>
+              </div>
+            </div>
+          </section>
+          <section id="error-between-the-client-and-server" class="level3" data-number="8.2.3">
+            <h3 data-number="8.2.3" class="anchored" data-anchor-id="error-between-the-client-and-server"><span
+                class="header-section-number">8.2.3</span> Error between the client and server</h3>
+            <p>The error between the client predicted location and actual server position is affected by both ping and
+              the server tick rate.</p>
+            <p>This equation can be loosely modelled as</p>
+            <p><span class="math display">\[
+                \begin{split}
+                \Delta \text{Error}_{n} &amp;\approxeq {s}_{{s}_{n}} - {s}_{{c}_{n}} \\
+                &amp;= \underbrace{\left( {s}_{{s}_{0}} + \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s}
+                \rfloor}{\Delta s_{{s_i}}} \right)}_{{s}_{{s}_{n}}} - \underbrace{\left( {s}_{{s}_{0}} +
+                \sum_{i=1}^{n}{\Delta s_{{c_i}}} \right)}_{{s}_{{c}_{n}}} \\
+                &amp;= \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}{\Delta s_{{s_i}}} -
+                \sum_{i=1}^{n}{\Delta s_{{c_i}}} \\
+                &amp;= \underbrace{\sum_{i = 1}^{F}{\Delta s_{{s_i}}}}_{S} - \underbrace{\sum_{i=1}^{n}{\Delta
+                s_{{c_i}}}}_{C_n} \\
+                &amp;= S - C_n
+                \end{split}
+                \]</span></p>
+            <p>where</p>
+            <p><span class="math display">\[
+                \begin{split}
+                %K &amp;: \text{One way RTT} \\
+                F &amp;: \text{number of server ticks elapsed since latest server update received by client} \\
+                n &amp;: \text{index of client tick since latest server update received by client} \\
+                s_{{s}_0} &amp;: \text{initial position received from server by client} \\
+                v_{{c}_0} &amp;: \text{initial velocity received from server by client} \\
+                \Delta s_{{s_i}} &amp; : \text{change in server position during server tick $i$} \\
+                \Delta s_{{c_i}} &amp; : \text{change in client position during client tick $i$} \\
+                \\
+                S &amp;: \text{total change in server position since latest server update received by client} \\
+                C_n &amp;: \text{total change in client position since latest server update received by client} \\
+                \end{split}
+                \]</span></p>
+            <p>constrained by</p>
+            <p><span class="math display">\[
+                \begin{split}
+                N \cdot\Delta T_c &amp; &lt; \Delta T_s
+                \end{split}
+                \]</span></p>
+            <p>Using the client as the frame of reference, at <span class="math inline">\(n = 0\)</span> (the step the
+              client receives an update from the server), the error is reduced to</p>
+            <p><span class="math display">\[
+                \begin{split}
+                \Delta \text{Error}_{0} &amp;\approxeq S - C_0 \\
+                &amp;= S \\
+                &amp;= \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}{\Delta s_{{s_i}}} \\
+                &amp;\approxeq \Delta {{s_1}} + \Delta {{s_2}} + \cdots + \Delta {{s_{{\lfloor \text{OWD} \cdot
+                \dfrac{1}{\Delta T_s} \rfloor}}}} \\
+                &amp;\approxeq v_1\Delta T_s + v_2\Delta T_s + \cdots + v_{{{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta
+                T_s} \rfloor}}}\Delta T_s \\
+                %&amp;\approxeq v_0 \cdot \dfrac{\text{Ping}}{2}
+                \end{split}
+                \]</span></p>
+            <p>For the given step the client only has the information for <span class="math inline">\(v_0\)</span> and
+              <span class="math inline">\(\text{Ping}\)</span>. Thus the only simple and realistic way to approximate
+              this error in terms of what the client knows is
+            </p>
+            <p><span class="math display">\[
+                \begin{split}
+                \Delta \text{Error}_{0} &amp;\approxeq v_1\Delta T_s + v_2\Delta T_s + \cdots + v_{{{\lfloor \text{OWD}
+                \cdot \dfrac{1}{\Delta T_s} \rfloor}}}\Delta T_s \\
+                &amp;\approxeq v_0 \cdot \text{OWD}
+                \end{split}
+                \]</span></p>
+            <div class="callout callout-style-default callout-note callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Note
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>If a client has a RTT ping of <span class="math inline">\(\text{Ping}\)</span> with respect to the
+                  server, then said clients view of the world will be <span
+                    class="math inline">\(\dfrac{\text{Ping}}{2}\)</span> (i.e.&nbsp;<span
+                    class="math inline">\(\text{OWD}\)</span>) seconds in the past.</p>
+              </div>
+            </div>
+          </section>
+          <section id="sec-min_of_error" class="level3" data-number="8.2.4">
+            <h3 data-number="8.2.4" class="anchored" data-anchor-id="sec-min_of_error"><span
+                class="header-section-number">8.2.4</span> Minimisation of error (compensating for lag)</h3>
+            <p>We have formulated an expression for the approximate error using only information accessible to the
+              client at the step at which it receives an update from the server. Now we can attempt to formulate an
+              updated difference equation which minimises said error. </p>
+            <p><span class="math display">\[
+                \begin{split}
+                \Delta \text{Error}_{0} &amp;\approxeq S - C_0 \\
+                &amp;\approxeq v_0 \cdot \text{OWD} \\
+                %&amp;\approxeq v_0 \cdot \dfrac{\text{Ping}}{2}
+                \\
+                \Delta \text{Error}_{0} - v_0 \cdot \text{OWD} &amp;\approx S - C_0 - v_0 \cdot \text{OWD} \\
+                &amp;\approx 0\\
+                \\
+                \therefore S - \left(C_0 + v_0 \cdot \text{OWD} \right) &amp;= S - \hat{C_0} \\
+                &amp;\approx 0\\
+                &amp;= \hat{\Delta \text{Error}_0}
+                \end{split}
+                \]</span></p>
+            <p>Thus to attempt in minimising the error we can shift the players location by <span
+                class="math inline">\(v_0 \cdot \text{OWD}\)</span> at the specified step.</p>
+            <p>The difference equation for the client can now be updated to <span class="math display">\[
+                \begin{split}
+                s_{c_{n+1}} &amp;= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+                \end{split}
+                \]</span></p>
+            <p>where <span class="math display">\[
+                \begin{split}
+                %\Delta t &amp;\approxeq \Delta T_c \gt 0 \\
+                {\epsilon}_n &amp;: \text{error (due to smoothing, corrections, etc)}
+                \end{split}
+                \]</span></p>
+            <p>given</p>
+            <p><span class="math display">\[
+                \begin{split}
+                s_{c_{0}} &amp;: \text{initial position received from server} + v_0 \cdot \text{OWD}\\
+                v_{c_{0}} &amp;: \text{initial velocity received from server} \\
+                \end{split}
+                \]</span></p>
+            <p>constrained by <span class="math display">\[
+                \begin{split}
+                n \cdot \Delta T_c &lt; \Delta T_s
+                \end{split}
+                \]</span></p>
+            <div class="callout callout-style-default callout-note callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Note
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>This is the exact same equation as the original simply with a change in initial value for <span
+                    class="math inline">\(s_{c_{0}}\)</span>.</p>
+              </div>
+            </div>
+            <div class="callout callout-style-default callout-important callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Important
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>The thought process behind this form of lag compensation can be described as: “I know my client is
+                  <span class="math inline">\(\text{OWD}\)</span> seconds in the past compared to server. To combat
+                  this, the client shall simply guess where other players will be <span
+                    class="math inline">\(\text{OWD}\)</span> seconds in the future”.
+                </p>
+                <p>It is extremely simple, naive and generally ineffective (as discussed further below).</p>
+              </div>
+            </div>
+          </section>
+          <section id="the-effects-of-ping-on-error" class="level3" data-number="8.2.5">
+            <h3 data-number="8.2.5" class="anchored" data-anchor-id="the-effects-of-ping-on-error"><span
+                class="header-section-number">8.2.5</span> The effects of ping on error</h3>
+            <p>Clearly as a players ping increases, so does the total error between the client predicted location and
+              the actual server position.</p>
+            <div class="callout callout-style-default callout-important callout-titled">
+              <div class="callout-header d-flex align-content-center">
+                <div class="callout-icon-container">
+                  <i class="callout-icon"></i>
+                </div>
+                <div class="callout-title-container flex-fill">
+                  Important
+                </div>
+              </div>
+              <div class="callout-body-container callout-body">
+                <p>The error is not linearly proportional to the ping.</p>
+                <p>As acceleration may be chaotic the resulting error may also be inherently chaotic. This will result
+                  in the client side error approximation to be inaccurate to an unacceptable degree.</p>
+              </div>
+            </div>
+            <p>This form of prediction is only useful (i.e.&nbsp;accurate to an acceptable degree) within a certain
+              threshold of ping. This threshold is governed mainly by how fast players move and how often they receive
+              changing movement inputs.</p>
+            <p>Therefore, as the pace of a video game increases, the effective threshold decreases.</p>
+          </section>
+          <section id="the-effects-of-server-tick-rate-on-error" class="level3" data-number="8.2.6">
+            <h3 data-number="8.2.6" class="anchored" data-anchor-id="the-effects-of-server-tick-rate-on-error"><span
+                class="header-section-number">8.2.6</span> The effects of server tick rate on error</h3>
+            <p>Generally the effects of server tick rate on the total error are negligible. Increasing the server tick
+              rate does not reduce errors in prediction due to ping, but can reduce error during position simulations on
+              the client.</p>
+          </section>
+          <section id="when-does-error-minimisation-prediction-work" class="level3" data-number="8.2.7">
+            <h3 data-number="8.2.7" class="anchored" data-anchor-id="when-does-error-minimisation-prediction-work"><span
+                class="header-section-number">8.2.7</span> When does error minimisation prediction work</h3>
+            <p>Obviously the error minimisation prediction derived above works to an acceptable degree (in regards to
+              accuracy) if a player maintains constant velocity (i.e.&nbsp;zero acceleration) for <span
+                class="math inline">\({\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}\)</span> server ticks
+              since the last server update on the client.</p>
+            <p>This can be further explained using plots - where the location is mapped to an arbitrary sinusoidal
+              function (which has the properties of having both non-constant velocity and acceleration).</p>
+            <p>The plot below shows a players position both server side and client side (for varying amounts of RTT
+              ping) when no lag compensation is applied.</p>
+            <div id="fig-position-no-lag" class="quarto-float quarto-figure quarto-figure-center anchored" width="100%">
+              <figure class="quarto-float quarto-float-fig figure">
+                <div aria-describedby="fig-position-no-lag-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                  <img src="png/3.png" id="fig-position-no-lag" class="img-fluid figure-img" style="width:100.0%">
+                </div>
+                <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned"
+                  id="fig-position-no-lag-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                  Figure&nbsp;1
+                </figcaption>
+              </figure>
+            </div>
+            <p>As the ping increases, so too does the lag between the server side (real) player position and client side
+              (local) player position.</p>
+            <p>Next, we apply the error minimisation prediction as our form of lag compensation.</p>
+            <div id="fig-position-with-lag" class="quarto-float quarto-figure quarto-figure-center anchored"
+              width="100%">
+              <figure class="quarto-float quarto-float-fig figure">
+                <div aria-describedby="fig-position-with-lag-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                  <img src="png/4.png" id="fig-position-with-lag" class="img-fluid figure-img" style="width:100.0%">
+                </div>
+                <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned"
+                  id="fig-position-with-lag-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                  Figure&nbsp;2
+                </figcaption>
+              </figure>
+            </div>
+            <p>The client side player position (predicted) is nowhere near accurate to the server side (real) player
+              location when the acceleration is non-zero. Conversely, we can clearly see that the client side player
+              position (predicted) is relatively accurate to the server side (real) player location when the
+              acceleration is near zero.</p>
+          </section>
+        </section>
+      </section>
+      <section id="preparations-for-analysing-midairs-lag-compensation" class="level1" data-number="9">
+        <h1 data-number="9"><span class="header-section-number">9</span> Preparations for analysing Midairs lag
+          compensation</h1>
+        <section id="server-hosting" class="level2" data-number="9.1">
+          <h2 data-number="9.1" class="anchored" data-anchor-id="server-hosting"><span
+              class="header-section-number">9.1</span> Server hosting</h2>
+          <p>Any analysis performed must require an isolated Midair server for our client to connect to. As Midair never
+            shipped with any server hosting tools, this functionality must be developed independently through reverse
+            engineering and/or any other techniques.</p>
+          <p>This process is outside the scope of this investigation and will be omitted.</p>
+        </section>
+        <section id="server-side-player-position-recording-and-playback" class="level2" data-number="9.2">
+          <h2 data-number="9.2" class="anchored" data-anchor-id="server-side-player-position-recording-and-playback">
+            <span class="header-section-number">9.2</span> Server side player position recording and playback
+          </h2>
+          <p>To gather consistent and accurate data a server side mod must be developed to simulate player movement.
+            Essentially, the player will move in a preset path so we can conduct our analysis accordingly.</p>
+          <p>This process is outside the scope of this investigation and will be omitted.</p>
+        </section>
+        <section id="identifying-the-existing-mechanisms-for-lag-compensation-in-the-midair-client" class="level2"
+          data-number="9.3">
+          <h2 data-number="9.3" class="anchored"
+            data-anchor-id="identifying-the-existing-mechanisms-for-lag-compensation-in-the-midair-client"><span
+              class="header-section-number">9.3</span> Identifying the existing mechanisms for lag compensation in the
+            Midair client</h2>
+          <p>The Midair client uses a console command to set the degree of lag compensation to perform. This console
+            command is called <code>Predict</code>. It’s usage is documented as follows:
+            <code>Predict &lt;value&gt;</code> (i.e.&nbsp;<code>Predict 160</code>).
+          </p>
+          <p>Once player position playback is running server side, the <code>Predict</code> value can be varied to see
+            the effects of lag compensated player position on the client.</p>
+          <div class="callout callout-style-default callout-important callout-titled">
+            <div class="callout-header d-flex align-content-center">
+              <div class="callout-icon-container">
+                <i class="callout-icon"></i>
+              </div>
+              <div class="callout-title-container flex-fill">
+                Important
+              </div>
+            </div>
+            <div class="callout-body-container callout-body">
+              <p>The <code>Predict</code> console command is <strong>NOT</strong> a part of UE4. This is a custom
+                console command that was introduced by the Midair development team.</p>
+              <p>It’s logic and implementation is actually plagiarised from UT4. More on this will be covered later
+                below.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+      <section id="mathematical-analysis-of-midairs-lag-compensation" class="level1" data-number="10">
+        <h1 data-number="10"><span class="header-section-number">10</span> Mathematical analysis of Midairs lag
+          compensation</h1>
+        <section id="replaying-a-set-path-with-varying-predict-values" class="level2" data-number="10.1">
+          <h2 data-number="10.1" class="anchored" data-anchor-id="replaying-a-set-path-with-varying-predict-values">
+            <span class="header-section-number">10.1</span> Replaying a set path with varying Predict values
+          </h2>
+          <p>Choosing an arbitrary axis (X in this case) and replaying a set path for varying <code>Predict</code>
+            values produces the results as shown below. As the predict value increases we see the error decrease. A key
+            thing to note however is that in this image the position appears to be almost linear, which is why this
+            prediction <em>appears</em> to be working well.</p>
+          <div id="fig-predict-varying" class="quarto-float quarto-figure quarto-figure-center anchored" width="100%">
+            <figure class="quarto-float quarto-float-fig figure">
+              <div aria-describedby="fig-predict-varying-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                <img src="png/0.png" id="fig-predict-varying" class="img-fluid figure-img" style="width:100.0%">
+              </div>
+              <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned"
+                id="fig-predict-varying-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                Figure&nbsp;3
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+        <section id="setting-up-for-a-linear-regression" class="level2" data-number="10.2">
+          <h2 data-number="10.2" class="anchored" data-anchor-id="setting-up-for-a-linear-regression"><span
+              class="header-section-number">10.2</span> Setting up for a linear regression</h2>
+          <p>Assume that the predicted position can be expressed as a linear function of the initial position and
+            initial velocity multiplied by a scalar related to <code>Predict</code> (<span
+              class="math inline">\(K\)</span>).</p>
+          <p><span class="math display">\[
+              \begin{split}
+              L_{x_{t_{p}}} &amp;= L_{x_{t_{c}}} + K \cdot V_{x_{t_{c}}} \cdot \Delta t
+              \end{split}
+              \]</span></p>
+          <p>where</p>
+          <p><span class="math display">\[
+              \begin{split}
+              L_{x_{t_{p}}} &amp;: \text{predicted position at t} \\
+              L_{x_{t_{c}}} &amp;: \text{initial position received from server by client} \\
+              V_{x_{t_{c}}} &amp;: \text{initial velocity received from server by client} \\
+              K &amp;: \text{Predict value multiplied by a scalar}
+              \end{split}
+              \]</span></p>
+          <p>Rearrange the equation as follows</p>
+          <p><span class="math display">\[
+              \begin{split}
+              L_{x_{t_{p}}} &amp;= L_{x_{t_{c}}} + K \cdot V_{x_{t_{c}}} \cdot \Delta t \\
+              \dfrac{\left(L_{x_{t_{p}}} - L_{x_{t_{c}}}\right)}{\Delta t} &amp;= K \cdot V_{x_{t_{c}}}
+              \end{split}
+              \]</span></p>
+          <p>Let <span class="math inline">\(\Delta t = \dfrac{1}{1000} = 0.001\)</span> so our velocity scalar (<span
+              class="math inline">\(K\)</span>) will be computed in milliseconds.</p>
+          <p>A plot of this equation is provided below.</p>
+          <div id="fig-velocity-scalar" class="quarto-float quarto-figure quarto-figure-center anchored" width="100%">
+            <figure class="quarto-float quarto-float-fig figure">
+              <div aria-describedby="fig-velocity-scalar-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                <img src="png/1.png" id="fig-velocity-scalar" class="img-fluid figure-img" style="width:100.0%">
+              </div>
+              <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned"
+                id="fig-velocity-scalar-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                Figure&nbsp;4
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+        <section id="performing-a-linear-regression" class="level2" data-number="10.3">
+          <h2 data-number="10.3" class="anchored" data-anchor-id="performing-a-linear-regression"><span
+              class="header-section-number">10.3</span> Performing a linear regression</h2>
+          <p>Simply apply the OLS (Ordinary Least Squares) method for linear regression.</p>
+          <div id="fig-regression" class="quarto-float quarto-figure quarto-figure-center anchored" width="100%">
+            <figure class="quarto-float quarto-float-fig figure">
+              <div aria-describedby="fig-regression-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                <img src="png/2.png" id="fig-regression" class="img-fluid figure-img" style="width:100.0%">
+              </div>
+              <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned"
+                id="fig-regression-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                Figure&nbsp;5
+              </figcaption>
+            </figure>
+          </div>
+
+          <p>Representing the results above in tabular form we can see that <span class="math inline">\(K \approx
+              \dfrac{\text{Predict}}{2}\)</span>.</p>
+          <div id="tbl-regression-results" class="quarto-float quarto-figure quarto-figure-center anchored">
+            <figure class="quarto-float quarto-float-tbl figure">
+              <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl quarto-uncaptioned"
+                id="tbl-regression-results-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                Table&nbsp;1
+              </figcaption>
+              <div aria-describedby="tbl-regression-results-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+                <table class="caption-top table">
+                  <colgroup>
+                    <col style="width: 33%">
+                    <col style="width: 33%">
+                    <col style="width: 33%">
+                  </colgroup>
+                  <thead>
+                    <tr class="header">
+                      <th>Predict value</th>
+                      <th>Regression slope (<span class="math inline">\(K\)</span>)</th>
+                      <th>Regression slope <span class="math inline">\(\div\)</span> Predict value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="odd">
+                      <td>40</td>
+                      <td>19.95</td>
+                      <td>0.50</td>
+                    </tr>
+                    <tr class="even">
+                      <td>80</td>
+                      <td>40.65</td>
+                      <td>0.51</td>
+                    </tr>
+                    <tr class="odd">
+                      <td>120</td>
+                      <td>64.66</td>
+                      <td>0.54</td>
+                    </tr>
+                    <tr class="even">
+                      <td>160</td>
+                      <td>79.09</td>
+                      <td>0.49</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </figure>
+          </div>
+          <p>The difference equation for the client can now be expressed as <span class="math display">\[
+              \begin{split}
+              s_{c_{n+1}} &amp;= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+              \end{split}
+              \]</span></p>
+          <p>where <span class="math display">\[
+              \begin{split}
+              %\Delta t &amp;\approxeq \Delta T_c \gt 0 \\
+              {\epsilon}_n &amp;: \text{error (due to smoothing, corrections, etc)}
+              \end{split}
+              \]</span></p>
+          <p>given</p>
+          <p><span class="math display">\[
+              \begin{split}
+              s_{c_{0}} &amp;: \text{initial position received from server} +
+              v_0\left(\dfrac{1}{2}\cdot\dfrac{\text{Predict}}{1000}\right)\\
+              v_{c_{0}} &amp;: \text{initial velocity received from server} \\
+              \end{split}
+              \]</span></p>
+          <p>constrained by <span class="math display">\[
+              \begin{split}
+              n \cdot \Delta T_c &lt; \Delta T_s
+              \end{split}
+              \]</span></p>
+          <p>Now, for the case where <span class="math inline">\(\text{Ping} \cdot 1000 \leq \text{Predict}\)</span>,
+          </p>
+          <p><span class="math display">\[
+              \begin{split}
+              s_{c_{0}} &amp;: \text{initial position received from server} + v_0 \cdot \text{OWD}\\
+              \end{split}
+              \]</span></p>
+          <div class="callout callout-style-default callout-important callout-titled">
+            <div class="callout-header d-flex align-content-center">
+              <div class="callout-icon-container">
+                <i class="callout-icon"></i>
+              </div>
+              <div class="callout-title-container flex-fill">
+                Important
+              </div>
+            </div>
+            <div class="callout-body-container callout-body">
+              <p>This is the exact same equation as what was derived in the final part of <a href="#sec-min_of_error"
+                  class="quarto-xref">Section&nbsp;8.2.4</a>!</p>
+              <p>Thus conclusively proving that Midairs lag compensation is simply using the kinematic equations.</p>
+            </div>
+          </div>
+          <div class="callout callout-style-default callout-note callout-titled">
+            <div class="callout-header d-flex align-content-center">
+              <div class="callout-icon-container">
+                <i class="callout-icon"></i>
+              </div>
+              <div class="callout-title-container flex-fill">
+                Note
+              </div>
+            </div>
+            <div class="callout-body-container callout-body">
+              <p>The <code>Predict</code> command sets the prediction limit in milliseconds.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+      <section id="code-analysis-of-midairs-lag-compensation-and-netcode" class="level1" data-number="11">
+        <h1 data-number="11"><span class="header-section-number">11</span> Code analysis of Midairs lag compensation and
+          netcode</h1>
+        <p>I won’t go too much into this because if you don’t understand code then this won’t make much sense to you…
+          and if you do understand code then this is pretty simple and straight forward.</p>
+        <p>The folks at Vector Z Studios were kind enough to ship the earliest release of Midair: Community Edition with
+          a PDB (Program Database) file.</p>
+        <p>I’ll use the PDB in combination with the Midair: Community Edition client in Ghidra to find certain
+          functionality related to lag compensation and netcode. Only functions will be listed, as providing class
+          definitions and their comparisons will be too time consuming.</p>
+        <div class="callout callout-style-default callout-important callout-titled">
+          <div class="callout-header d-flex align-content-center">
+            <div class="callout-icon-container">
+              <i class="callout-icon"></i>
+            </div>
+            <div class="callout-title-container flex-fill">
+              Important
+            </div>
+          </div>
+          <div class="callout-body-container callout-body">
+            <p>I’ve linked relevant sections of code from the official UT4 source code that are associated with the code
+              identified in Midair.</p>
+          </div>
+        </div>
+        <section id="analysing-lag-compensation" class="level2" data-number="11.1">
+          <h2 data-number="11.1" class="anchored" data-anchor-id="analysing-lag-compensation"><span
+              class="header-section-number">11.1</span> Analysing lag compensation</h2>
+          <section id="getpredictiontime" class="level3" data-number="11.1.1">
+            <h3 data-number="11.1.1" class="anchored" data-anchor-id="getpredictiontime"><span
+                class="header-section-number">11.1.1</span> GetPredictionTime</h3>
+            <div class="code-copy-outer-scaffold">
+              <div class="sourceCode" id="cb1">
+                <pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> __thiscall AMAPlayerController<span class="op">::</span>GetPredictionTime<span class="op">(</span>AMAPlayerController <span class="op">*</span><span class="kw">this</span><span class="op">)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">float</span> Ping<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  ENetMode EVar2<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">float</span> PredictionTime<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  EVar2 <span class="op">=</span> AActor<span class="op">::</span>InternalGetNetMode<span class="op">((</span>AActor <span class="op">*)</span><span class="kw">this</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">((</span>EVar2 <span class="op">!=</span> NM_Standalone<span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">(</span><span class="kw">this</span><span class="op">-&gt;</span>_padding_ <span class="op">!=</span> <span class="dv">0</span><span class="op">))</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    Ping <span class="op">=</span> <span class="kw">this</span><span class="op">-&gt;</span>SmoothedRTT<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    PredictionTime <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">((</span><span class="fl">0.0</span> <span class="op">&lt;=</span> Ping<span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">(</span>PredictionTime <span class="op">=</span> <span class="kw">this</span><span class="op">-&gt;</span>MaxPredictionPing <span class="op">*</span> <span class="fl">0.001</span><span class="op">,</span> Ping <span class="op">&lt;=</span> PredictionTime<span class="op">))</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>      PredictionTime <span class="op">=</span> Ping<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> PredictionTime <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre>
+              </div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button>
+            </div>
+            <p>Returns <span class="math inline">\(\dfrac{1}{2}\text{Ping}\)</span> if <span
+                class="math inline">\(\text{Ping} &lt; \dfrac{\text{Predict}}{1000}\)</span> else <span
+                class="math inline">\(\dfrac{1}{2} \dfrac{\text{Predict}}{1000}\)</span>. <span
+                class="math inline">\(\text{Predict}\)</span> in this case refers to the <code>MaxPredictionPing</code>
+              variable inside the <code>AMAPlayerController</code> class.</p>
+            <p>The UT4 equivalent function is <a
+                href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTPlayerController.cpp#L281">float
+                AUTPlayerController::GetPredictionTime</a>.</p>
+            <p>The logic is <em>practically</em> identical.</p>
+            <p><strong>Note that the function and variable names have been kept identical.</strong></p>
+          </section>
+          <section id="servernegotiatepredictionping_implementation" class="level3" data-number="11.1.2">
+            <h3 data-number="11.1.2" class="anchored" data-anchor-id="servernegotiatepredictionping_implementation">
+              <span class="header-section-number">11.1.2</span> ServerNegotiatePredictionPing_Implementation
+            </h3>
+            <div class="code-copy-outer-scaffold">
+              <div class="sourceCode" id="cb2">
+                <pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> __thiscall AMAPlayerController<span class="op">::</span>ServerNegotiatePredictionPing_Implementation <span class="op">(</span>AMAPlayerController <span class="op">*</span><span class="kw">this</span><span class="op">,</span><span class="dt">float</span> NewPredictionPing<span class="op">)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">float</span> MaxPredictionPing<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  pUVar1 <span class="op">=</span> UMAGameEngine<span class="op">::</span>GetPrivateStaticClass<span class="op">();</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  pUVar2 <span class="op">=</span> pUVar1<span class="op">-&gt;</span>ClassDefaultObject<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>pUVar2 <span class="op">==</span> NULL<span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">(**(</span>code <span class="op">**)(</span>pUVar1<span class="op">-&gt;</span>_padding_ <span class="op">+</span> <span class="bn">0x358</span><span class="op">))(</span>pUVar1<span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    pUVar2 <span class="op">=</span> pUVar1<span class="op">-&gt;</span>ClassDefaultObject<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  MaxPredictionPing <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">((</span><span class="fl">0.0</span> <span class="op">&lt;=</span> NewPredictionPing<span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">(</span>MaxPredictionPing <span class="op">=</span> <span class="op">*(</span><span class="dt">float</span> <span class="op">*)(</span>pUVar2 <span class="op">+</span> <span class="bn">0x5b</span><span class="op">),</span> NewPredictionPing <span class="op">&lt;=</span> <span class="op">*(</span><span class="dt">float</span> <span class="op">*)(</span>pUVar2 <span class="op">+</span> <span class="bn">0x5b</span> <span class="op">)))</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    MaxPredictionPing <span class="op">=</span> NewPredictionPing<span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="kw">this</span><span class="op">-&gt;</span>MaxPredictionPing <span class="op">=</span> MaxPredictionPing<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre>
+              </div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button>
+            </div>
+            <p>The implementation of the <code>Predict</code> console command.</p>
+            <p>The UT4 equivalent function is <a
+                href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTPlayerController.cpp#L264">void
+                AUTPlayerController::ServerNegotiatePredictionPing_Implementation</a>.</p>
+            <p>The logic is <em>practically</em> identical.</p>
+            <p><strong>Note that the function and variable names have been kept identical.</strong></p>
+          </section>
+          <section id="maupdatesimulatedposition" class="level3" data-number="11.1.3">
+            <h3 data-number="11.1.3" class="anchored" data-anchor-id="maupdatesimulatedposition"><span
+                class="header-section-number">11.1.3</span> MAUpdateSimulatedPosition</h3>
+            <div class="code-copy-outer-scaffold">
+              <div class="sourceCode" id="cb3">
+                <pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> __thiscall AMACharacter<span class="op">::</span>MAUpdateSimulatedPosition<span class="op">(</span>AMACharacter <span class="op">*</span><span class="kw">this</span><span class="op">,</span>FVector <span class="op">*</span>param_1<span class="op">,</span>FRotator <span class="op">*</span>param_2<span class="op">)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">float</span> PredictionTime<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">...</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span><span class="op">-&gt;</span>MACharacterMovement <span class="op">!=</span> NULL<span class="op">)</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>      pbVar2 <span class="op">=</span> <span class="op">(</span>byte <span class="op">*)((</span>longlong<span class="op">)&amp;</span><span class="kw">this</span><span class="op">-&gt;</span>MACharacterMovement<span class="op">-&gt;</span>_padding_ <span class="op">+</span> <span class="dv">7</span><span class="op">);</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>      <span class="op">*</span>pbVar2 <span class="op">=</span> <span class="op">*</span>pbVar2 <span class="op">|</span> <span class="bn">0x20</span><span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>      PredictionTime <span class="op">=</span> UMAGameplayStatics<span class="op">::</span>GetCatchUpTime<span class="op">((</span>AActor <span class="op">*)</span><span class="kw">this</span><span class="op">);</span> <span class="co">// Same as calling GetPredictionTime</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span><span class="fl">0.0</span> <span class="op">&lt;</span> PredictionTime<span class="op">)</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>      <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">(**(</span>code <span class="op">**)(</span><span class="kw">this</span><span class="op">-&gt;</span>MACharacterMovement<span class="op">-&gt;</span>_padding_ <span class="op">+</span> <span class="bn">0x910</span><span class="op">))</span> <span class="co">// Same as calling UMACharacterMovement::SimulateMovement</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>                  <span class="op">(</span><span class="kw">this</span><span class="op">-&gt;</span>MACharacterMovement<span class="op">,</span>PredictionTime<span class="op">);</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  <span class="op">...</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre>
+              </div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button>
+            </div>
+            <p>Performs the prediction of player position.</p>
+            <p>The UT4 equivalent function is <a
+                href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTCharacter.cpp#L6135">void
+                AUTCharacter::UTUpdateSimulatedPosition</a>.</p>
+            <p>The logic is <em>practically</em> identical.</p>
+            <p><strong>Note that the function and variable names are almost identical. The prefix ‘UT’ has been replaced
+                by ‘MA’.</strong></p>
+          </section>
+          <section id="other-functions" class="level3" data-number="11.1.4">
+            <h3 data-number="11.1.4" class="anchored" data-anchor-id="other-functions"><span
+                class="header-section-number">11.1.4</span> Other functions</h3>
+            <p>Listing all the functions used for lag compensation, their code, what they do, and finding their
+              equivalents from UT4 would be overly exhausting.</p>
+            <p>Instead I’ll provide a table of function names from Midair and their equivalent function from UT4.</p>
+            <table class="caption-top table">
+              <thead>
+                <tr class="header">
+                  <th>Midair function</th>
+                  <th>UT4 function</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="odd">
+                  <td>AMAProjectile::BeginFakeProjectileSync</td>
+                  <td><a
+                      href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTProjectile.cpp#L372">AUTProjectile::BeginFakeProjectileSynch</a>
+                  </td>
+                </tr>
+                <tr class="even">
+                  <td>AMAProjectile::InitFakeProjectile</td>
+                  <td><a
+                      href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTProjectile.cpp#L774">AUTProjectile::InitFakeProjectile</a>
+                  </td>
+                </tr>
+                <tr class="odd">
+                  <td>AMAProjectile::CatchUp</td>
+                  <td><a
+                      href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTProjectile.cpp#L364">AUTProjectile::CatchUpTick</a>
+                  </td>
+                </tr>
+                <tr class="even">
+                  <td>AMAPlayerController::Predict</td>
+                  <td><a
+                      href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTPlayerController.cpp#L274">AUTPlayerController::Predict</a>
+                  </td>
+                </tr>
+                <tr class="odd">
+                  <td>AMAPlayerController::ServerNegotiatePredictionPing_Validate</td>
+                  <td><a
+                      href="https://github.com/karan283861/unrealTournament/blob/cac883d9143e72d21c046bfa4a0915b3ad533dad/UnrealTournament/Source/UnrealTournament/Private/UTPlayerController.cpp#L269">AUTPlayerController::ServerNegotiatePredictionPing_Validate</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p>The list goes on and on. The logic used in the Midair functions and their equivalent UT4 function is
+              <em>practically</em> identical.
+            </p>
+            <p><strong>Note that the function names are almost identical.</strong></p>
+          </section>
+          <section id="findings" class="level3" data-number="11.1.5">
+            <h3 data-number="11.1.5" class="anchored" data-anchor-id="findings"><span
+                class="header-section-number">11.1.5</span> Findings</h3>
+            <p>Midairs lag compensation system is clearly copied from UT4.</p>
+            <p>In fact, Mabel loosely admitted to it in a reddit post as quoted below.</p>
+            <blockquote class="blockquote">
+              <blockquote class="blockquote">
+                <p>For other players, we basically decide to ‘split the difference’ to hide latency. You predict other
+                  players ahead by about 1/2 your RTT, and when the server sees you fire things, it basically ‘fast
+                  forwards’ your projectiles from their predicted point in time (1/2 RTT ago, basically). This is done
+                  to mitigate the effect of player movement misprediction errors, hiding some of the latency on the
+                  receiving end of projectiles.</p>
+              </blockquote>
+            </blockquote>
+            <blockquote class="blockquote">
+              <blockquote class="blockquote">
+                <p>…</p>
+              </blockquote>
+            </blockquote>
+            <blockquote class="blockquote">
+              <blockquote class="blockquote">
+                <p>This is essentially the same model that Reflex and UT4 use. We’re able to use prediction because we
+                  don’t have very precise hitboxes, we basically just have big capsules jumping around and you really
+                  don’t need pixel-perfect accuracy to hit individual hitboxes. If we did, we’d have to use a model more
+                  like Overwatch as we simply couldn’t deal with misprediction errors that bad. If you’ve ever played OW
+                  with &gt;200 ping (which is around where it starts doing prediction) you can see how fast the hitreg
+                  starts failing when the game starts using prediction.</p>
+              </blockquote>
+              <p>- <a
+                  href="https://www.reddit.com/r/Games/comments/4iecnd/comment/d2y7ti6/"><strong>Mabeline</strong></a>
+                (Midair developer) on May 9, 2016</p>
+            </blockquote>
+            <p>The UT4 repository <a
+                href="https://github.com/Rukgul/unrealTournament51/blob/clean-master/LICENSE.pdf">license</a> is quite
+              clear about the usage of its assets from the repository.</p>
+          </section>
+        </section>
+        <section id="analysing-netcode" class="level2" data-number="11.2">
+          <h2 data-number="11.2" class="anchored" data-anchor-id="analysing-netcode"><span
+              class="header-section-number">11.2</span> Analysing netcode</h2>
+          <p>I won’t waste my time going into a deep explanation of my findings regarding Midairs “custom tailored”
+            netcode. Midair uses stock UE4 netcode. If there were any modifications made to the netcode, their impact is
+            practically negligible. In fact, contextually, Midair did not require any modifications to the netcode in
+            the first place to perform at an acceptable benchmark.</p>
+          <p>A quote from an ex-Midair 2 developer confirms this.</p>
+          <blockquote class="blockquote">
+            <blockquote class="blockquote">
+              <p>netcode is mostly just stock ue netcode iirc</p>
+            </blockquote>
+            <p>- <a
+                href="https://discord.com/channels/1118630610961960970/1241076254057304145/1401068949256278077"><strong>Implosions</strong></a>
+              (Ex-Midair 2 developer) on August 2, 2025</p>
+          </blockquote>
+          <p>All videos I could find involving Archetype Studios developers which mentioned the application of their
+            custom netcode actually referred to their lag compensation system. As mentioned in <a
+              href="#sec-netcode-lagcomp" class="quarto-xref">Section&nbsp;8.1</a>, these two terms are
+            <strong>NOT</strong> interchangeable.
+          </p>
+        </section>
+      </section>
+      <section id="how-does-midairs-lag-compensation-work" class="level1" data-number="12">
+        <h1 data-number="12"><span class="header-section-number">12</span> How does Midairs lag compensation work?</h1>
+        <section id="prediction" class="level2" data-number="12.1">
+          <h2 data-number="12.1" class="anchored" data-anchor-id="prediction"><span
+              class="header-section-number">12.1</span> Prediction</h2>
+          <p>Already covered fairly extensively above.</p>
+        </section>
+        <section id="fake-projectiles" class="level2" data-number="12.2">
+          <h2 data-number="12.2" class="anchored" data-anchor-id="fake-projectiles"><span
+              class="header-section-number">12.2</span> Fake projectiles</h2>
+          <p>Fake projectiles (also called client-side predicted projectiles) are visual-only representations of
+            projectiles spawned immediately on the shooter’s client when they fire, before the server confirms the shot.
+          </p>
+          <p>The server runs its own authoritative simulation of the projectile separately. The client’s projectile is
+            “fake” because it doesn’t determine hit results - it just exists to mask latency.</p>
+          <section id="how-it-works" class="level3" data-number="12.2.1">
+            <h3 data-number="12.2.1" class="anchored" data-anchor-id="how-it-works"><span
+                class="header-section-number">12.2.1</span> How it works</h3>
+            <ol type="1">
+              <li>Player fires and the client instantly spawns a fake projectile moving towards the target</li>
+              <li>The input is sent to the server, which spawns the real projectile and simulates it authoritatively
+              </li>
+              <li>When the server result arrives, the fake projectile is either destroyed quietly or reconciled with the
+                real one (the latter in the case of Midair)</li>
+            </ol>
+          </section>
+        </section>
+        <section id="how-good-is-midairs-lag-compensation" class="level2" data-number="12.3">
+          <h2 data-number="12.3" class="anchored" data-anchor-id="how-good-is-midairs-lag-compensation"><span
+              class="header-section-number">12.3</span> How good is Midairs lag compensation?</h2>
+          <p>At low pings (30ms or under), it’s fine. As the ping increases, the game state on the client becomes more
+            and more inaccurate. The use of fake projectiles mask the perceived latency resulting in a placebo effect
+            regarding the efficacy of the lag compensation.</p>
+          <div class="callout callout-style-default callout-important callout-titled">
+            <div class="callout-header d-flex align-content-center">
+              <div class="callout-icon-container">
+                <i class="callout-icon"></i>
+              </div>
+              <div class="callout-title-container flex-fill">
+                Important
+              </div>
+            </div>
+            <div class="callout-body-container callout-body">
+              <p>It’s a simple trade off - a responsive game client side in return for an inaccurate game state.</p>
+              <p><strong>The game lies to you about its real states to hide latency and feel responsive. As ping
+                  increases, the game remains responsive, however, the lie becomes bigger.</strong> Sometimes, the lie
+                just happens to be accurate, and you manage to successfully land shots. However, majority of the time,
+                even if you aim perfectly for your client game state, your shot will not land.</p>
+            </div>
+          </div>
+          <div class="callout callout-style-default callout-important callout-titled">
+            <div class="callout-header d-flex align-content-center">
+              <div class="callout-icon-container">
+                <i class="callout-icon"></i>
+              </div>
+              <div class="callout-title-container flex-fill">
+                <span class="screen-reader-only">Important</span>So, does the lag compensation make 150ms of ping feel
+                like zero? Does it provide a seamless cross-continent experience that trumps all others?
+              </div>
+            </div>
+            <div class="callout-body-container callout-body">
+              <p>No.</p>
+              <p>It would probably pass for UT4, but, Midair isn’t UT4.</p>
+              <p>In fact, there’s a few glaring issues with this lag compensation implementation, essentially leaving it
+                incomplete. One major issue being the amount of leading required remains a function of ping, which
+                defeats the purpose of lag compensation in the first place.</p>
+            </div>
+          </div>
+        </section>
+        <section id="how-does-it-compare-to-tribes-titles" class="level2" data-number="12.4">
+          <h2 data-number="12.4" class="anchored" data-anchor-id="how-does-it-compare-to-tribes-titles"><span
+              class="header-section-number">12.4</span> How does it compare to Tribes titles</h2>
+          <p>It’s basically the same functionality as PFT (Predict Forward Time) from Starsiege: Tribes and Interpolate
+            from Tribes 2, just a smoother implementation (the player models do not teleport/warp as much during
+            prediction thanks to what’s happening under the hood in UE4). This smoother implementation comes at the
+            obvious cost of updating large positional changes slowly, which results in (unnoticeable) desync.</p>
+          <p>Tribes: Ascend has no form of lag compensation.</p>
+          <p>Tribes 3: Rivals uses a similar but more complete implementation that provides better overall results with
+            the occasional non-reg at higher pings (again, due to unnoticeable desync).</p>
+        </section>
+      </section>
+      <section id="what-alternatives-are-there" class="level1" data-number="13">
+        <h1 data-number="13"><span class="header-section-number">13</span> What alternatives are there?</h1>
+        <section id="server-side-rewind" class="level2" data-number="13.1">
+          <h2 data-number="13.1" class="anchored" data-anchor-id="server-side-rewind"><span
+              class="header-section-number">13.1</span> Server-side rewind</h2>
+          <p>Server-side rewind (also called lag compensation via history buffers) is the industry standard approach.
+            Rather than guessing where a player will be in the future on the client, the server maintains a rolling
+            history of every player’s position over recent time. When a client fires a shot and the server receives that
+            input, the server rewinds world state back to the moment the client fired (accounting for ping), evaluates
+            the hit against that historical snapshot, and then restores the present state.</p>
+          <section id="why-it-is-strictly-better" class="level3" data-number="13.1.1">
+            <h3 data-number="13.1.1" class="anchored" data-anchor-id="why-it-is-strictly-better"><span
+                class="header-section-number">13.1.1</span> Why it is strictly better</h3>
+            <ul>
+              <li><strong>Accuracy is not a function of acceleration</strong>: because the server replays recorded
+                positions rather than extrapolating from velocity, the result is accurate regardless of whether the
+                target was accelerating, decelerating, or changing direction at the time of the shot.</li>
+              <li><strong>The shooter hits what they aim at</strong>: from the shooter’s perspective, if they aim
+                correctly at the target visible on their screen at the moment of firing, the shot registers. This is not
+                guaranteed under Midairs model.</li>
+              <li><strong>The trade-off is shifted, not eliminated:</strong> the receiver of a shot may feel they were
+                hit “around a corner” - a well-known side effect. However, this is a far more acceptable and consistent
+                artefact than shots simply failing to register.</li>
+            </ul>
+          </section>
+          <section id="implementing-server-side-rewind-in-midair" class="level3" data-number="13.1.2">
+            <h3 data-number="13.1.2" class="anchored" data-anchor-id="implementing-server-side-rewind-in-midair"><span
+                class="header-section-number">13.1.2</span> Implementing server-side rewind in Midair</h3>
+            <p>An example of a server-side rewind implementation in Midair is provided below.</p>
+            <p>This process is outside the scope of this investigation and will be omitted.</p>
+            <div class="quarto-video ratio ratio-16x9"><iframe data-external="1"
+                src="https://www.youtube.com/embed/KqzfK8Jg51s" title="" frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen=""></iframe></div>
+          </section>
+        </section>
+      </section>
+      <section id="conclusion" class="level1" data-number="14">
+        <h1 data-number="14"><span class="header-section-number">14</span> Conclusion</h1>
+        <p>The findings of this investigation are unambiguous.</p>
+        <p>Mabel, who was directly and publicly credited as the architect of these systems, repeatedly and demonstrably
+          misrepresented the nature of the work. The broader community of developers, ex-developers, and prominent
+          players who amplified these claims - many of whom are quoted in this article - either lacked the technical
+          understanding to scrutinise them or chose not to. Either way, the result was that a paying community was
+          misled for years about the quality of a product they funded.</p>
+        <p>The technical reality is straightforward: Midair shipped a game with stock UE4 netcode and plagiarised,
+          rudimentary lag compensation, wrapped in marketing language designed to sound impressive to an audience
+          unlikely to investigate further. The claims were not just overstated - they were false.</p>
+        <section id="how-did-this-happen" class="level2" data-number="14.1">
+          <h2 data-number="14.1" class="anchored" data-anchor-id="how-did-this-happen"><span
+              class="header-section-number">14.1</span> How did this happen?</h2>
+          <p>The straightforward answer is cronyism - and it is almost inevitable in communities built around dead or
+            dying franchises.</p>
+          <p>In a healthy consumer relationship, there is distance between the developer and the audience. Critics can
+            be critical. Players can be skeptical. A bad product receives honest feedback. In a community-developed
+            successor project, that distance does not exist. Criticising the game means criticising your friends in a
+            community you depend on for social belonging. Skepticism about the netcode means implicitly questioning
+            Mabel, who everyone knows personally and who is generally liked and hailed as a “genius”. The social cost of
+            honest scrutiny is high, and the reward is low - so almost nobody does it.</p>
+          <p>This dynamic allowed a simple pattern to persist for years: one person made a technically
+            impressive-sounding claim, people who trusted that person repeated it, and the repetition created the
+            appearance of consensus.</p>
+          <p>In Midair 2, of which the development includes several people who were part of or adjacent to the original
+            Archetype Studios circle, repeated these same claims years after the original game had shut down . This is
+            not coincidental. The same cronyist dynamic that shielded the original claims from scrutiny carried them
+            forward intact into the successor project, where they continue to circulate today.</p>
+          <p>It is worth being clear: this is not a phenomenon unique to Midair. It is the default mode of operation for
+            community-developed successors to niche dead franchises. The Tribes community is simply a particularly
+            well-documented example of it.</p>
+        </section>
+      </section>
+      <section id="response" class="level1" data-number="15">
+        <h1 data-number="15"><span class="header-section-number">15</span> Response</h1>
+        <section id="midair-community" class="level2" data-number="15.1">
+          <h2 data-number="15.1" class="anchored" data-anchor-id="midair-community"><span
+              class="header-section-number">15.1</span> Midair community</h2>
+          <p>Unsurprisingly, the response from the Midair community has been overwhelmingly negative towards the
+            findings this article. I won’t bother to include quotes of the numerous cringe inducing responses because
+            the authors are clearly deranged.</p>
+          <p>It seems Mabel slander will not be tolerated… despite the fact he deliberately misled a community that
+            trusted him. Or, perhaps they just can’t handle the fact the game they cherish so much is a dead,
+            technically mediocre product built on borrowed code and propped up by years of unchallenged myth.</p>
+        </section>
+        <section id="vector-z-studios" class="level2" data-number="15.2">
+          <h2 data-number="15.2" class="anchored" data-anchor-id="vector-z-studios"><span
+              class="header-section-number">15.2</span> Vector Z Studios</h2>
+          <ol type="1">
+            <li>Midair was <a href="https://store.steampowered.com/news/app/439370/view/628943104979764954">retired</a>
+              from the steam store weeks after the posting of this article</li>
+            <li>The development team has begun <a
+                href="https://discord.com/channels/681439528292057097/681443115756027944/1456936953546276894">implementing
+                their own attempt at server-side rewind solution</a> for Midair 2</li>
+          </ol>
+        </section>
+      </section>
+      <section id="other-findings" class="level1" data-number="16">
+        <h1 data-number="16"><span class="header-section-number">16</span> Other findings</h1>
+        <section id="failure-to-deliver-kickstarter-goals" class="level2" data-number="16.1">
+          <h2 data-number="16.1" class="anchored" data-anchor-id="failure-to-deliver-kickstarter-goals"><span
+              class="header-section-number">16.1</span> Failure to deliver Kickstarter goals</h2>
+          <p>As mentioned in <a href="#sec-background" class="quarto-xref">Section&nbsp;5</a>, Midair was initially
+            funded using Kickstarter, which listed “Custom Tailored Networking” as one it’s features.</p>
+          <p>Now that the game has released and been abandoned, let’s take a look at the list of features the
+            Kickstarter promised, and which (if any) features were delivered.</p>
+          <table class="caption-top table">
+            <thead>
+              <tr class="header">
+                <th>Feature</th>
+                <th>Delivered</th>
+                <th>Information</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="odd">
+                <td>Free to Play</td>
+                <td>⚠️</td>
+                <td><em>Technically</em> it was free to play. However the game required <a
+                    href="https://steamcommunity.com/id/Ryotaiku/recommended/439370/">either paying or excessive
+                    grinding to be playable</a>, resulting in early and almost instantaneous death on public release
+                </td>
+              </tr>
+              <tr class="even">
+                <td>Maps &amp; Map Making</td>
+                <td>❌</td>
+                <td></td>
+              </tr>
+              <tr class="odd">
+                <td>Stats &amp; Rankings</td>
+                <td>❌</td>
+                <td></td>
+              </tr>
+              <tr class="even">
+                <td>Achievements</td>
+                <td>⚠️</td>
+                <td>No idea if this was actually implemented</td>
+              </tr>
+              <tr class="odd">
+                <td>Game Replays</td>
+                <td>❌</td>
+                <td></td>
+              </tr>
+              <tr class="even">
+                <td>Custom Tailored Networking</td>
+                <td>❌</td>
+                <td>As discussed by this article, this is provably false</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>Archetype Studios raised $128,416 via Kickstarter and didn’t really seem to deliver on anything they said
+            they would.</p>
+        </section>
+        <section id="over-500000-of-combined-sales-and-funding" class="level2" data-number="16.2">
+          <h2 data-number="16.2" class="anchored" data-anchor-id="over-500000-of-combined-sales-and-funding"><span
+              class="header-section-number">16.2</span> Over $500,000 of combined sales and funding</h2>
+          <p>A quote from the <a href="https://www.mobygames.com/person/435908/allen-kuceba/">Co-Founder/CFO/COO of
+              Archetype Studios</a> LinkedIn page is presented below.</p>
+          <blockquote class="blockquote">
+            <blockquote class="blockquote">
+              <p>// Co-founded an independent game studio of 23 volunteers/paid employees; primary role in finance and
+                business operations, including Marketing, Legal, and HR. Combined sales and funding over $500,000.</p>
+            </blockquote>
+            <p><a href="https://www.linkedin.com/in/allenkuceba/"><strong>Allen Kuceba</strong></a> (Co-Founder/CFO/COO
+              of Archetype Studios)</p>
+          </blockquote>
+          <p>An internal source to Archetype Studios has alluded to management closing the Kickstarter early once they
+            had raised a large enough sum of funding <strong>and</strong> obtained external funding. This raises serious
+            questions about the integrity of the campaign considering they could barely accomplish a single Kickstarter
+            goal let alone even ship a functional product.</p>
+
+
+        </section>
+      </section>
+
+    </main> <!-- /main -->
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const icon = "";
+        const anchorJS = new window.AnchorJS();
+        anchorJS.options = {
+          placement: 'right',
+          icon: icon
+        };
+        anchorJS.add('.anchored');
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function (e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button,
+              {
+                trigger: "manual",
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]
+              });
+            tooltip.show();
+          }
+          setTimeout(function () {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function (trigger) {
+          const outerScaffold = trigger.parentElement.cloneNode(true);
+          const codeEl = outerScaffold.querySelector('code');
+          for (const childEl of codeEl.children) {
+            if (isCodeAnnotation(childEl)) {
+              childEl.remove();
+            }
+          }
+          return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+        var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+        var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/karan\.codes\/");
+        var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+        }
+        // Inspect non-navigation links and adorn them if external
+        var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+        for (var i = 0; i < links.length; i++) {
+          const link = links[i];
+          if (!isInternal(link.href)) {
+            // undo the damage that might have been done by quarto-nav.js in the case of
+            // links that we want to consider external
+            if (link.dataset.originalHref !== undefined) {
+              link.href = link.dataset.originalHref;
+            }
+          }
+        }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function (el) {
+              return el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'quarto',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+          window.tippy(el, config);
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i = 0; i < noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function () {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch { }
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const xrefs = window.document.querySelectorAll('a.quarto-xref');
+        const processXRef = (id, note) => {
+          // Strip column container classes
+          const stripColumnClz = (el) => {
+            el.classList.remove("page-full", "page-columns");
+            if (el.children) {
+              for (const child of el.children) {
+                stripColumnClz(child);
+              }
+            }
+          }
+          stripColumnClz(note)
+          if (id === null || id.startsWith('sec-')) {
+            // Special case sections, only their first couple elements
+            const container = document.createElement("div");
+            if (note.children && note.children.length > 2) {
+              container.appendChild(note.children[0].cloneNode(true));
+              for (let i = 1; i < note.children.length; i++) {
+                const child = note.children[i];
+                if (child.tagName === "P" && child.innerText === "") {
+                  continue;
+                } else {
+                  container.appendChild(child.cloneNode(true));
+                  break;
+                }
+              }
+              if (window.Quarto?.typesetMath) {
+                window.Quarto.typesetMath(container);
+              }
+              return container.innerHTML
+            } else {
+              if (window.Quarto?.typesetMath) {
+                window.Quarto.typesetMath(note);
+              }
+              return note.innerHTML;
+            }
+          } else {
+            // Remove any anchor links if they are present
+            const anchorLink = note.querySelector('a.anchorjs-link');
+            if (anchorLink) {
+              anchorLink.remove();
+            }
+            if (window.Quarto?.typesetMath) {
+              window.Quarto.typesetMath(note);
+            }
+            if (note.classList.contains("callout")) {
+              return note.outerHTML;
+            } else {
+              return note.innerHTML;
+            }
+          }
+        }
+        for (var i = 0; i < xrefs.length; i++) {
+          const xref = xrefs[i];
+          tippyHover(xref, undefined, function (instance) {
+            instance.disable();
+            let url = xref.getAttribute('href');
+            let hash = undefined;
+            if (url.startsWith('#')) {
+              hash = url;
+            } else {
+              try { hash = new URL(url).hash; } catch { }
+            }
+            if (hash) {
+              const id = hash.replace(/^#\/?/, "");
+              const note = window.document.getElementById(id);
+              if (note !== null) {
+                try {
+                  const html = processXRef(id, note.cloneNode(true));
+                  instance.setContent(html);
+                } finally {
+                  instance.enable();
+                  instance.show();
+                }
+              } else {
+                // See if we can fetch this
+                fetch(url.split('#')[0])
+                  .then(res => res.text())
+                  .then(html => {
+                    const parser = new DOMParser();
+                    const htmlDoc = parser.parseFromString(html, "text/html");
+                    const note = htmlDoc.getElementById(id);
+                    if (note !== null) {
+                      const html = processXRef(id, note);
+                      instance.setContent(html);
+                    }
+                  }).finally(() => {
+                    instance.enable();
+                    instance.show();
+                  });
+              }
+            } else {
+              // See if we can fetch a full url (with no hash to target)
+              // This is a special case and we should probably do some content thinning / targeting
+              fetch(url)
+                .then(res => res.text())
+                .then(html => {
+                  const parser = new DOMParser();
+                  const htmlDoc = parser.parseFromString(html, "text/html");
+                  const note = htmlDoc.querySelector('main.content');
+                  if (note !== null) {
+                    // This should only happen for chapter cross references
+                    // (since there is no id in the URL)
+                    // remove the first header
+                    if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                      note.children[0].remove();
+                    }
+                    const html = processXRef(null, note);
+                    instance.setContent(html);
+                  }
+                }).finally(() => {
+                  instance.enable();
+                  instance.show();
+                });
+            }
+          }, function (instance) {
+          });
+        }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = (cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' + annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+        // Handle positioning of the toggle
+        window.addEventListener(
+          "resize",
+          throttle(() => {
+            elRect = undefined;
+            if (selectedAnnoteEl) {
+              selectCodeLines(selectedAnnoteEl);
+            }
+          }, 10)
+        );
+        function throttle(fn, ms) {
+          let throttle = false;
+          let timer;
+          return (...args) => {
+            if (!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+            } else { // all the others get throttled
+              if (timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+            }
+          };
+        }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i = 0; i < bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function () {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function (cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+    </script>
+  </div> <!-- /content -->
+
+</body>
+
+</html>

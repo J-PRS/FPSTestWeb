@@ -1,0 +1,1674 @@
+
+
+  
+  
+
+  
+
+  
+
+  Analysing Midairs netcode & lag compensation – karan.codes
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  
+  
+
+  
+
+  
+
+  
+  
+    
+      
+        
+          
+            karan.codes
+          
+        
+        
+          
+        
+        
+          
+            
+               
+                
+                
+            
+            
+               
+                
+                
+            
+          
+         
+        
+        
+       
+    
+  
+  
+  
+    
+      
+        Analysing Midairs netcode & lag compensation
+        
+          reverse engineering
+          math
+          c++
+        
+      
+    
+
+    
+
+      
+        Published
+        
+          November 8, 2025
+        
+      
+
+    
+
+    
+      
+        Abstract
+        Midair is a defunct video game released in 2018 and developed by an independent team called Archetype
+          Studios. Since its inception, and even today, Midair continues to receive high praise for the teams
+          self-proclaimed custom tailored netcode built from the ground up, and proprietary lag compensation
+          implementation. There are numerous posts by fans and members of development team across various forums
+          regarding the efficacy of the aforementioned features. By reverse engineering the publicly available client I
+          (a) develop a solution for hosting a game server to perform a mathematical analysis of the lag compensation,
+          and (b) perform a code analysis of the netcode and lag compensation. I found that Midairs netcode is almost
+          entirely identical to the original Unreal Engine 4 implementation, with no measurable improvements due to
+          their claimed customisations. The lag compensation implementation is purely client-side and relies on basic
+          kinematics providing both inconsistent and inaccurate results, and is also plagiarised from Epic Games Unreal
+          Tournament 4. Thus the claims made about the efficacy of Midairs netcode and lag compensation are grossly
+          overstated.
+      
+    
+
+  
+  
+    
+    
+    
+    
+    
+    
+
+      
+        On this page
+
+        
+          1 Author’s
+              note
+          2 Glossary
+            
+              2.1 Table of variables
+            
+          
+          3 Prerequisite knowledge
+          4
+              Introduction
+          5 Background
+              and claims
+            
+              5.1 Midair
+                  today
+              5.2 Claims
+                  (quotes)
+                
+                  5.2.1
+                      Generic claims
+                  5.2.2 Archetype Studios
+                
+              
+            
+          
+          6
+              Research questions
+          7 TL;DR
+          8 Theory
+            
+              8.1 Defining netcode and lag compensation
+              8.2
+                  Predicting the location of moving objects
+                
+                  8.2.1 Continuous time domain
+                  8.2.2
+                      Working in the discretised time domain
+                  8.2.3 Error between the client and server
+                  8.2.4 Minimisation of error (compensating for lag)
+                  8.2.5 The effects of ping on error
+                  8.2.6
+                      The effects of server tick rate on error
+                  8.2.7 When does error minimisation prediction work
+                
+              
+            
+          
+          9
+              Preparations for analysing Midairs lag compensation
+            
+              9.1
+                  Server hosting
+              9.2 Server side player position recording and playback
+              9.3 Identifying the existing mechanisms for lag compensation in
+                  the Midair client
+            
+          
+          10
+              Mathematical analysis of Midairs lag compensation
+            
+              10.1 Replaying a set path with varying Predict values
+              10.2 Setting up for a linear regression
+              10.3 Performing a linear regression
+            
+          
+          11 Code analysis of Midairs lag compensation and netcode
+            
+              11.1 Analysing lag compensation
+                
+                  11.1.1 GetPredictionTime
+                  11.1.2 ServerNegotiatePredictionPing_Implementation
+                  
+                  11.1.3 MAUpdateSimulatedPosition
+                  11.1.4 Other functions
+                  11.1.5
+                      Findings
+                
+              
+              11.2 Analysing netcode
+            
+          
+          12 How does Midairs lag compensation work?
+            
+              12.1
+                  Prediction
+              12.2
+                  Fake projectiles
+                
+                  12.2.1
+                      How it works
+                
+              
+              12.3 How good is Midairs lag compensation?
+              12.4 How does it compare to Tribes titles
+            
+          
+          13 What alternatives are there?
+            
+              13.1 Server-side rewind
+                
+                  13.1.1 Why it is strictly better
+                  13.1.2 Implementing server-side rewind in Midair
+                
+              
+            
+          
+          14 Conclusion
+            
+              14.1 How did this happen?
+            
+          
+          15 Response
+            
+              15.1
+                  Midair community
+              15.2
+                  Vector Z Studios
+            
+          
+          16 Other
+              findings
+            
+              16.1 Failure to deliver Kickstarter goals
+              16.2
+                  Over $500,000 of combined sales and funding
+            
+          
+        
+      
+      
+        1 Author’s note
+        I have no experience (personal or professional) in game development or with Unreal Engine 4. Therefore, some
+          interpretations presented in this article may not be fully accurate due to the complexity of Unreal Engine.
+          This project was undertaken purely for educational purposes, focusing on reverse engineering, mathematical
+          analysis, and software analysis. All findings are based on independent analysis and publicly available
+          information.
+      
+      
+        2 Glossary
+        DLL : Dynamic-link library, a file that contains code and data which programs can load and
+          use at runtime
+        Ghidra : A free, open-source software reverse engineering framework used to analyse and
+          decompile binaries
+        Ping : The round-trip time (RTT) for data between a client and the server, measured in
+          seconds
+        UE4 : Unreal Engine 4, a game engine developed by Epic Games
+        UT4 : Unreal Tournament 4, a game built on UE4 and developed by Epic Games
+        
+          2.1 Table of variables
+          
+            
+              
+              
+              
+              
+            
+            
+              
+                Variable name
+                Description
+                Equivalence
+                Value
+              
+            
+            
+              
+                \(\text{TR}\)
+                Server tick rate (Hz)
+                
+                \(30\)
+              
+              
+                \({\Delta T}_s\)
+                Server tick period (s)
+                (\(\dfrac{1}{{\text{TR}}}\))
+                \(\dfrac{1}{30} \approx 0.033\)
+              
+              
+                \(\text{FPS}\)
+                Client tick rate (Hz)
+                
+                \(240\)
+              
+              
+                \({\Delta T}_c\)
+                Client tick period (s)
+                (\(\dfrac{1}{\text{FPS}}\))
+                \(\dfrac{1}{240} \approx 0.00417\)
+              
+              
+                \(\text{Ping}\)
+                Ping
+                RTT (s)
+                
+              
+              
+                \(\text{OWD}\)
+                One Way Delay (s)
+                (\(\dfrac{\text{Ping}}{2}\))
+                
+              
+            
+          
+        
+      
+      
+        3 Prerequisite knowledge
+        This article assumes the reader
+        
+          has high school level mathematical proficiency
+          is familiar with basic networking concepts
+        
+        Derivations have been provided where possible.
+        Readers unfamiliar with the fundamentals of concepts discussed are strongly encouraged to consult additional
+          sources to gain a full understanding.
+      
+      
+        4 Introduction
+        Midair was a community and externally funded multiplayer first-person shooter released on Steam in May 2018,
+          developed by Archetype Studios. It aimed to be a spiritual successor to the Tribes franchise, belonging to a
+          subgenre colloquially referred to as FPS-Z (first-person shooters with a significant vertical axis). The
+          defining mechanic is momentum-based skiing, where players exploit terrain slopes to reach extreme speeds,
+          combined with a jetpack for vertical movement and projectile-based weapons that reward leading fast-moving
+          targets. The project spanned between 2014 and 2019, funded initially via a Kickstarter campaign before
+          ultimately shutting due to being a buggy, incomplete, unbalanced mess that could no longer be maintained due
+          to fledgling resources.
+        Central to Midairs identity, and the subject of this article, were claims made by the development team and
+          the broader community regarding the quality of the game’s netcode and lag compensation. These claims were
+          numerous, persistent, and emphatic - spanning years of forum posts, Discord messages, Reddit comments, and
+          YouTube videos.
+        This article examines those claims through two complementary approaches: a mathematical analysis of the lag
+          compensation mechanism, and a code analysis via reverse engineering of the publicly available Midair client.
+          The findings are unambiguous. Midairs netcode is stock Unreal Engine 4 with no meaningful modifications. The
+          lag compensation is a direct copy of Epic Games’ Unreal Tournament 4, reduces mathematically to a single naive
+          kinematic offset, and is covered under a license that explicitly prohibits its use in other projects. The
+          claims made about these systems are not merely overstated - they are false.
+      
+      
+        5 Background and claims
+        The implementation of Midairs lag compensation and custom tailored netcode is credited to Bazika “Mabel (Mabeline)” Huffman-Kinyalolo.
+        Quoting directly from Midairs Kickstarter:
+        
+          Custom Tailored Networking
+          Modern First-Person Shooters require highly customized netcode and lag compensation to ensure that players
+            around the world can enjoy games without worrying about the effects of packet loss, latency, and server
+            location. We have spent and will continue to spend a great amount of effort to specially design our netcode
+            to achieve this end, enabling all players with under 150ms to have the same, high-quality experience. During
+            pre-alpha testing we have brought in players from a variety of FPS-Z titles across both North America and
+            Europe to ensure we provide a seamless cross-continent experience that trumps all others.
+        
+        There are dozens upon dozens (totaling a number probably somewhere in the hundreds) of posts/comments across
+          various forums (e.g. Discord, Legions: Overdrive forums, Reddit, YouTube, etc) since Midairs inception
+          till now which make claim to the superior performance and implementation of Midairs netcode and lag
+          compensation.
+        Unfortunately two of the largest resources, the official Midair forums (playmidair.com), and official Midair
+          discord, have both been essentially “nuked”.
+        
+          5.1 Midair today
+          In early 2020 a new independent studio called Vector Z Studios began development for Midair: Community
+            Edition, which was eventually renamed to Midair 2. As of the writing of this article, Midair 2 remains in
+            development.
+          Also, as of the writing of this article, analysis performed via reverse engineering confirms that Midair 2
+            uses the same netcode and lag compensation as Midair.
+        
+        
+          5.2 Claims (quotes)
+          The provided quotes do not serve any real purpose other than entertainment (or cringe fuel) due to the fact
+            they are grossly overstated, and raise serious questions about the authors credibility. The remarks suggest
+            either a misunderstanding of the facts or a deliberate distortion (i.e. shilling).
+          
+            5.2.1 Generic claims
+            A very small collection of relevant claims (quotes) I found via googling certain keywords
+              related to Midair are provided below.
+            
+              
+                
+                  
+                
+                
+                  WarningRead at your own risk - excessive larping ahead
+                
+                
+              
+              
+                
+                  
+                    
+                      Netcode is really, really good and is getting even better as time passes. We have Euros playing
+                        on NY servers and not being disadvantaged.
+                    
+                    - Darklord
+                      (Ex-Midair 2 developer) on April 27, 2016
+                  
+                  
+                    
+                      Midair is coming along quite nicely. The testers have regular pickup games and even in its
+                        pre-alpha state it plays very well; things like the netcode have been written from the ground up
+                        already to support advanced lag compensation.
+                    
+                    - PROJTHEBENIGNANT
+                      on May 5, 2016
+                  
+                  
+                    
+                      What you’re getting is essentially an updated t1/t2c but with amazing net code/lag comp,
+                        matchmaking to find balanced, fun games and the possibility of an alive player-base which is
+                        something you won’t be getting with the older tribes games.
+                    
+                    - WorkingAsIntended
+                      on May 5, 2016
+                  
+                  
+                    
+                      …and we (finally!) have some exciting netcode improvements like lag compensation. All of these
+                        are pretty huge for the game experience. Lag compensation alone opens up a huge amount of
+                        options. Users across the whole of the US can play on the same server with basically no issues
+                      
+                    
+                    - Mabeline
+                      (Midair developer) on May 8, 2016
+                  
+                  
+                    
+                      T:A is very ping dependant while Midair will lag compensate everything so pings below 150 will
+                        feel like 0 ping.
+                    
+                    - Shreq
+                      (Ex-Midair 2 developer) on May 27, 2016
+                  
+                  
+                    
+                      Yeah big time. The best in the business in fact, you won’t find better lag comp in the market.
+                      
+                    
+                    - Wildefyr
+                      on August 26, 2017
+                  
+                  
+                    
+                      One of the founding members of the original dev team, Mabel, wrote a bunch of netcode. My
+                        understanding is the lag compensation is a lot better than default ue4
+                    
+                    - ehme
+                      (Midair 2 developer) on August 7, 2020
+                  
+                  
+                    
+                      Midair 2 netcode is really good. Projectiles are the hardest to get right and it nails it on
+                        all fronts. Mabel was originally in charge of it and did an amazing job.
+                    
+                    - Cykon
+                      on December 12, 2023
+                  
+                  
+                    
+                      Nearly perfect netcode has been achieved before in Midair. You can be very generous with it in
+                        Tribes games according to Mabel.
+                    
+                    - afireinasa
+                      on December 18, 2023
+                  
+                  
+                    
+                      Yeah its bad luck because in previous patches the netcode was top notch even at 150+ ping
+                    
+                    - Aesdotjs
+                      (Midair 2 developer) on February 19, 2024
+                  
+                
+              
+            
+          
+          
+            5.2.2 Archetype Studios
+            A collection of relevant claims (quotes) I found via searching transcripts of YouTube videos related to
+              interviewing Archetype Studios or videos posted by the official Archetype Studios channel itself are
+              provided below.
+            
+              
+                
+                  
+                
+                
+                  WarningRead at your own risk - excessive larping ahead
+                
+                
+              
+              
+                
+                  
+                    
+                      So I know the way that the netcode works is has been heavily modified by Mabel in particular.
+                        There’s been a lot of effort spent on getting this right… and some of the benefits we see from
+                        that are some nice smooth gameplay especially with inconsistent ping and latency and that sort
+                        of thing. But yeah, so it was like one of the other benefits is actually cross region play…
+                    
+                    - BugsPray (Midair developer,
+                      CEO of Archetype Studios) on March 20, 2016
+                  
+                  
+                    
+                      As far as consistency goes, the guys going through and making the game right now they put a lot
+                        of work into the netcode… and the netcode in this game is pretty remarkable, especially for an
+                        FPS-Z game.
+                    
+                    - GuitarGuy on May 8, 2016
+                  
+                  
+                    
+                      Yeah the other thing thats contributing to that is Mabel is something of a savant when it comes
+                        to netcode… the netcode we have in Midair is second to none.
+                    
+                    - Unknown on May 8, 2016
+                  
+                  
+                    
+                      We’ve actually done something really cool with Midair in particular with match making, so we’ve
+                        taken Unreals netcode and stripped out a bunch and done a bunch of our own work to it and one of
+                        the neat impacts of that is that we are going to have cross region play for matchmaking. Which
+                        is super neat because it means that, and we actually do that now, I in Seattle play all the time
+                        with people in Europe in a server in New York.
+                    
+                    - BugsPray (Midair developer,
+                      CEO of Archetype Studios) on August 29, 2017
+                  
+                
+              
+            
+          
+        
+      
+      
+        6 Research questions
+        This article specifically seeks to answer the following questions:
+        
+          What is Midairs lag compensation doing mathematically? Is it reducible to a known
+            formula, and if so, how well does it actually perform?
+          Was Midairs netcode custom built? Or is it stock Unreal Engine 4 with superficial (or no)
+            modifications?
+          Was Midairs lag compensation custom built? Or was it sourced from an existing codebase?
+          
+          Are the claims made about Midairs netcode and lag compensation accurate? Or are they
+            overstated, misleading, or outright false?
+        
+      
+      
+        7 TL;DR
+        
+          
+            
+              
+            
+            
+              WarningLet me spoil it for you
+            
+            
+          
+          
+            
+              
+                Midair uses stock standard UE4 netcode (replication, UNet*)
+                Midairs lag compensation uses basic kinematics
+                Midairs lag compensation is copied from Epic Games UT4
+                Epic Games UT4 repository license clearly says it’s code may not be used in another
+                    project
+                Midair heavily relies on client-side simulation to fake reduction of latency
+                  (e.g. fake projectiles)
+                Any perceived benefits of Midairs lag compensation system is largely placebo
+                Mabel, BugsPray, the Midair development team and notable members of the community made a
+                  conscious effort to mislead those who would not investigate any further
+                
+              
+            
+          
+        
+      
+      
+        8 Theory
+        
+          8.1 Defining netcode and lag compensation
+          Netcode is defined as the part of a game’s programming that manages communication between the client
+            (player) and the server.
+          Lag compensation is defined as the techniques used to reduce the perceived effect of network latency
+            (i.e. ping).
+          In the gaming community, these terms are often confused, however they represent two very different concepts
+            and should NOT be used interchangeably.
+        
+        
+          8.2 Predicting the location of moving objects
+          
+            8.2.1 Continuous time domain
+            As formulated in the kinematic equations, the position of a moving object under ideal conditions can be
+              expressed as \[
+                s\left(t\right) = s_{0} + v_{0}t + \dfrac{1}{2}a{t}^2
+                \] where \[
+                \begin{split}
+                t &: \text{time} \\
+                s_{0} &: \text{initial position} \\
+                v_{0} & : \text{initial velocity} \\
+                a & : \text{acceleration} \\
+                \end{split}
+                \]
+            
+              
+                
+                  
+                
+                
+                  NoteDerivation of the kinematic equation for position at a
+                  given time
+                
+                
+              
+              
+                
+                  Define acceleration as a constant.
+                  Let \(t > t_0 \geq 0.\)
+                  \[
+                      \begin{equation}
+                      a = \dfrac{dv}{dt} = \dfrac{d^2s}{dt^2}
+                      \end{equation}
+                      \]
+                  \[
+                      \begin{split}
+                      \dfrac{dv}{dt} &= a \\
+                      \int_{t_0}^{t}{dv} &= \int_{t_0}^{t}{a \cdot dt} \\
+                      \left[v\right]_{t_0}^{t} &= a\left[t\right]_{t_0}^{t} \\
+                      v\left(t\right) - v\left(t_0\right) &= a \cdot \left(t - t_0\right) \\
+                      v\left(t\right) &= v\left(t_0\right) + a \cdot \left(t - t_0\right) \\
+                      &= v\left(t_0\right) + at - at_0
+                      \end{split}
+                      \]
+                  \[
+                      \begin{split}
+                      \dfrac{ds}{dt} &= v \\
+                      \int_{t_0}^{t}{ds} &= \int_{t_0}^{t}{\left(v\left(t_0\right) + at - at_0\right) \cdot dt} \\
+                      &= \int_{t_0}^{t}{v\left(t_0\right) \cdot dt + at \cdot dt - at_0 \cdot dt} \\
+                      \left[s\right]_{t_0}^{t} &= \left[v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 - at_0 \cdot
+                      t\right]_{t_0}^{t} \\
+                      s\left(t\right) - s\left(t_0\right) &= \left(v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 -
+                      at_0 \cdot t\right) - \left(v\left(t_0\right) \cdot t_0 + \dfrac{1}{2}a{t_0}^2 - at_0 \cdot
+                      t_0\right)\\
+                      s\left(t\right) &= s\left(t_0\right) + v\left(t_0\right) \cdot t + \dfrac{1}{2}at^2 - at_0
+                      \cdot t - v\left(t_0\right) \cdot t_0 - \dfrac{1}{2}a{t_0}^2 + a{t_0}^2 \\
+                      s\left(t\right) &= s\left(t_0\right) + v\left(t_0\right) \cdot t - v\left(t_0\right) \cdot t_0
+                      + \dfrac{1}{2}at^2 - at_0 \cdot t + \dfrac{1}{2}a{t_0}^2 \\
+                      &= s\left(t_0\right) + v\left(t_0\right) \cdot \left( t - t_0 \right) + \dfrac{1}{2}a\left(t^2
+                      - 2 t_0 \cdot t + {t_0}^2\right) \\
+                      &= s\left(t_0\right) + v\left(t_0\right) \cdot \left( t - t_0 \right) + \dfrac{1}{2}a\left(t -
+                      {t_0}\right)^2
+                      \end{split}
+                      \]
+                  For convenience, we set \(t_0 = 0\).
+                  \[
+                      \begin{split}
+                      \therefore s\left(t\right) &= s\left(0\right) + v\left(0\right) \cdot \left( t - 0 \right) +
+                      \dfrac{1}{2}a\left(t - 0\right)^2 \\
+                      &= s\left(0\right) + v\left(0\right) \cdot \left(t\right) + \dfrac{1}{2}a\left(t\right)^2 \\
+                      &= s_0 + v_0t + \dfrac{1}{2}at^2
+                      \end{split}
+                      \]
+                
+              
+            
+          
+          
+            8.2.2 Working in the discretised time domain
+            Physics calculations in video games are evaluated in discrete time, not continuous time as above.
+            When working with discrete time steps the continuous differential kinematic equation is instead
+              represented by its discrete time analogue - a difference equation, as follows \[
+                \begin{split}
+                s_{n+1} &= s_{n} + v_{n}\Delta t_n + \dfrac{1}{2}a_{n}\left(\Delta t_n\right)^2
+                \end{split}
+                \]
+            where
+            \[
+                \begin{split}
+                \Delta t_n &: \text{time step} \\
+                s_{n+1} &: \text{final position at step n+1} \\
+                s_{n} &: \text{initial position at step n} \\
+                v_{n} & : \text{initial velocity at step n} \\
+                a_{n} & : \text{acceleration at step n} \\
+                \end{split}
+                \]
+            Player movement in UE4 is server authoritative which means the server is the one and only source of
+              truth. During each tick the server will factor all input forces to eventually calculate a players final
+              location and final velocity for said tick. This information is then communicated to clients, which then
+              further simulates the remote players movement until a subsequent update is received from the server.
+            
+            Therefore, on the client, the difference kinematic equation is simplified to \[
+                \begin{split}
+                s_{c_{n+1}} &= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+                \end{split}
+                \]
+            where \[
+                \begin{split}
+                %\Delta t &\approxeq \Delta T_c \gt 0 \\
+                {\epsilon}_n &: \text{error (due to smoothing, corrections, etc)}
+                \end{split}
+                \]
+            given
+            \[
+                \begin{split}
+                s_{c_{0}} &: \text{initial position received from server} \\
+                v_{c_{0}} &: \text{initial velocity received from server} \\
+                \end{split}
+                \]
+            constrained by \[
+                \begin{split}
+                n \cdot \Delta T_c < \Delta T_s
+                \end{split}
+                \]
+            
+              
+                
+                  
+                
+                
+                  Note
+                
+              
+              
+                This constraint conveys that the equation is only valid for a specific number of steps - until the
+                  client receives a new update from the server.
+              
+            
+            
+              
+                
+                  
+                
+                
+                  Important
+                
+              
+              
+                This equation performs simple extrapolation of a players position between receiving updates from the
+                  server. The rate at which these updates occur is simply equal to \(\text{TR}\). At a given step the position on the client will delayed by
+                  approximately \(\text{OWD}\) with respect to the actual position on
+                  the server for the same step.
+                Whatever process the server/client actually uses to calculate/predict a players location in UE4 is
+                  practically irrelevant. The aforementioned equations simply help to provide a simplistic high level
+                  model of what is happening under the hood.
+              
+            
+          
+          
+            8.2.3 Error between the client and server
+            The error between the client predicted location and actual server position is affected by both ping and
+              the server tick rate.
+            This equation can be loosely modelled as
+            \[
+                \begin{split}
+                \Delta \text{Error}_{n} &\approxeq {s}_{{s}_{n}} - {s}_{{c}_{n}} \\
+                &= \underbrace{\left( {s}_{{s}_{0}} + \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s}
+                \rfloor}{\Delta s_{{s_i}}} \right)}_{{s}_{{s}_{n}}} - \underbrace{\left( {s}_{{s}_{0}} +
+                \sum_{i=1}^{n}{\Delta s_{{c_i}}} \right)}_{{s}_{{c}_{n}}} \\
+                &= \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}{\Delta s_{{s_i}}} -
+                \sum_{i=1}^{n}{\Delta s_{{c_i}}} \\
+                &= \underbrace{\sum_{i = 1}^{F}{\Delta s_{{s_i}}}}_{S} - \underbrace{\sum_{i=1}^{n}{\Delta
+                s_{{c_i}}}}_{C_n} \\
+                &= S - C_n
+                \end{split}
+                \]
+            where
+            \[
+                \begin{split}
+                %K &: \text{One way RTT} \\
+                F &: \text{number of server ticks elapsed since latest server update received by client} \\
+                n &: \text{index of client tick since latest server update received by client} \\
+                s_{{s}_0} &: \text{initial position received from server by client} \\
+                v_{{c}_0} &: \text{initial velocity received from server by client} \\
+                \Delta s_{{s_i}} & : \text{change in server position during server tick $i$} \\
+                \Delta s_{{c_i}} & : \text{change in client position during client tick $i$} \\
+                \\
+                S &: \text{total change in server position since latest server update received by client} \\
+                C_n &: \text{total change in client position since latest server update received by client} \\
+                \end{split}
+                \]
+            constrained by
+            \[
+                \begin{split}
+                N \cdot\Delta T_c & < \Delta T_s
+                \end{split}
+                \]
+            Using the client as the frame of reference, at \(n = 0\) (the step the
+              client receives an update from the server), the error is reduced to
+            \[
+                \begin{split}
+                \Delta \text{Error}_{0} &\approxeq S - C_0 \\
+                &= S \\
+                &= \sum_{i = 1}^{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}{\Delta s_{{s_i}}} \\
+                &\approxeq \Delta {{s_1}} + \Delta {{s_2}} + \cdots + \Delta {{s_{{\lfloor \text{OWD} \cdot
+                \dfrac{1}{\Delta T_s} \rfloor}}}} \\
+                &\approxeq v_1\Delta T_s + v_2\Delta T_s + \cdots + v_{{{\lfloor \text{OWD} \cdot \dfrac{1}{\Delta
+                T_s} \rfloor}}}\Delta T_s \\
+                %&\approxeq v_0 \cdot \dfrac{\text{Ping}}{2}
+                \end{split}
+                \]
+            For the given step the client only has the information for \(v_0\) and
+              \(\text{Ping}\). Thus the only simple and realistic way to approximate
+              this error in terms of what the client knows is
+            
+            \[
+                \begin{split}
+                \Delta \text{Error}_{0} &\approxeq v_1\Delta T_s + v_2\Delta T_s + \cdots + v_{{{\lfloor \text{OWD}
+                \cdot \dfrac{1}{\Delta T_s} \rfloor}}}\Delta T_s \\
+                &\approxeq v_0 \cdot \text{OWD}
+                \end{split}
+                \]
+            
+              
+                
+                  
+                
+                
+                  Note
+                
+              
+              
+                If a client has a RTT ping of \(\text{Ping}\) with respect to the
+                  server, then said clients view of the world will be \(\dfrac{\text{Ping}}{2}\) (i.e. \(\text{OWD}\)) seconds in the past.
+              
+            
+          
+          
+            8.2.4 Minimisation of error (compensating for lag)
+            We have formulated an expression for the approximate error using only information accessible to the
+              client at the step at which it receives an update from the server. Now we can attempt to formulate an
+              updated difference equation which minimises said error. 
+            \[
+                \begin{split}
+                \Delta \text{Error}_{0} &\approxeq S - C_0 \\
+                &\approxeq v_0 \cdot \text{OWD} \\
+                %&\approxeq v_0 \cdot \dfrac{\text{Ping}}{2}
+                \\
+                \Delta \text{Error}_{0} - v_0 \cdot \text{OWD} &\approx S - C_0 - v_0 \cdot \text{OWD} \\
+                &\approx 0\\
+                \\
+                \therefore S - \left(C_0 + v_0 \cdot \text{OWD} \right) &= S - \hat{C_0} \\
+                &\approx 0\\
+                &= \hat{\Delta \text{Error}_0}
+                \end{split}
+                \]
+            Thus to attempt in minimising the error we can shift the players location by \(v_0 \cdot \text{OWD}\) at the specified step.
+            The difference equation for the client can now be updated to \[
+                \begin{split}
+                s_{c_{n+1}} &= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+                \end{split}
+                \]
+            where \[
+                \begin{split}
+                %\Delta t &\approxeq \Delta T_c \gt 0 \\
+                {\epsilon}_n &: \text{error (due to smoothing, corrections, etc)}
+                \end{split}
+                \]
+            given
+            \[
+                \begin{split}
+                s_{c_{0}} &: \text{initial position received from server} + v_0 \cdot \text{OWD}\\
+                v_{c_{0}} &: \text{initial velocity received from server} \\
+                \end{split}
+                \]
+            constrained by \[
+                \begin{split}
+                n \cdot \Delta T_c < \Delta T_s
+                \end{split}
+                \]
+            
+              
+                
+                  
+                
+                
+                  Note
+                
+              
+              
+                This is the exact same equation as the original simply with a change in initial value for \(s_{c_{0}}\).
+              
+            
+            
+              
+                
+                  
+                
+                
+                  Important
+                
+              
+              
+                The thought process behind this form of lag compensation can be described as: “I know my client is
+                  \(\text{OWD}\) seconds in the past compared to server. To combat
+                  this, the client shall simply guess where other players will be \(\text{OWD}\) seconds in the future”.
+                
+                It is extremely simple, naive and generally ineffective (as discussed further below).
+              
+            
+          
+          
+            8.2.5 The effects of ping on error
+            Clearly as a players ping increases, so does the total error between the client predicted location and
+              the actual server position.
+            
+              
+                
+                  
+                
+                
+                  Important
+                
+              
+              
+                The error is not linearly proportional to the ping.
+                As acceleration may be chaotic the resulting error may also be inherently chaotic. This will result
+                  in the client side error approximation to be inaccurate to an unacceptable degree.
+              
+            
+            This form of prediction is only useful (i.e. accurate to an acceptable degree) within a certain
+              threshold of ping. This threshold is governed mainly by how fast players move and how often they receive
+              changing movement inputs.
+            Therefore, as the pace of a video game increases, the effective threshold decreases.
+          
+          
+            8.2.6 The effects of server tick rate on error
+            Generally the effects of server tick rate on the total error are negligible. Increasing the server tick
+              rate does not reduce errors in prediction due to ping, but can reduce error during position simulations on
+              the client.
+          
+          
+            8.2.7 When does error minimisation prediction work
+            Obviously the error minimisation prediction derived above works to an acceptable degree (in regards to
+              accuracy) if a player maintains constant velocity (i.e. zero acceleration) for \({\lfloor \text{OWD} \cdot \dfrac{1}{\Delta T_s} \rfloor}\) server ticks
+              since the last server update on the client.
+            This can be further explained using plots - where the location is mapped to an arbitrary sinusoidal
+              function (which has the properties of having both non-constant velocity and acceleration).
+            The plot below shows a players position both server side and client side (for varying amounts of RTT
+              ping) when no lag compensation is applied.
+            
+              
+                
+                  
+                
+                
+                  Figure 1
+                
+              
+            
+            As the ping increases, so too does the lag between the server side (real) player position and client side
+              (local) player position.
+            Next, we apply the error minimisation prediction as our form of lag compensation.
+            
+              
+                
+                  
+                
+                
+                  Figure 2
+                
+              
+            
+            The client side player position (predicted) is nowhere near accurate to the server side (real) player
+              location when the acceleration is non-zero. Conversely, we can clearly see that the client side player
+              position (predicted) is relatively accurate to the server side (real) player location when the
+              acceleration is near zero.
+          
+        
+      
+      
+        9 Preparations for analysing Midairs lag
+          compensation
+        
+          9.1 Server hosting
+          Any analysis performed must require an isolated Midair server for our client to connect to. As Midair never
+            shipped with any server hosting tools, this functionality must be developed independently through reverse
+            engineering and/or any other techniques.
+          This process is outside the scope of this investigation and will be omitted.
+        
+        
+          
+            9.2 Server side player position recording and playback
+          
+          To gather consistent and accurate data a server side mod must be developed to simulate player movement.
+            Essentially, the player will move in a preset path so we can conduct our analysis accordingly.
+          This process is outside the scope of this investigation and will be omitted.
+        
+        
+          9.3 Identifying the existing mechanisms for lag compensation in the
+            Midair client
+          The Midair client uses a console command to set the degree of lag compensation to perform. This console
+            command is called Predict. It’s usage is documented as follows:
+            Predict <value> (i.e. Predict 160).
+          
+          Once player position playback is running server side, the Predict value can be varied to see
+            the effects of lag compensated player position on the client.
+          
+            
+              
+                
+              
+              
+                Important
+              
+            
+            
+              The Predict console command is NOT a part of UE4. This is a custom
+                console command that was introduced by the Midair development team.
+              It’s logic and implementation is actually plagiarised from UT4. More on this will be covered later
+                below.
+            
+          
+        
+      
+      
+        10 Mathematical analysis of Midairs lag
+          compensation
+        
+          
+            10.1 Replaying a set path with varying Predict values
+          
+          Choosing an arbitrary axis (X in this case) and replaying a set path for varying Predict
+            values produces the results as shown below. As the predict value increases we see the error decrease. A key
+            thing to note however is that in this image the position appears to be almost linear, which is why this
+            prediction appears to be working well.
+          
+            
+              
+                
+              
+              
+                Figure 3
+              
+            
+          
+        
+        
+          10.2 Setting up for a linear regression
+          Assume that the predicted position can be expressed as a linear function of the initial position and
+            initial velocity multiplied by a scalar related to Predict (\(K\)).
+          \[
+              \begin{split}
+              L_{x_{t_{p}}} &= L_{x_{t_{c}}} + K \cdot V_{x_{t_{c}}} \cdot \Delta t
+              \end{split}
+              \]
+          where
+          \[
+              \begin{split}
+              L_{x_{t_{p}}} &: \text{predicted position at t} \\
+              L_{x_{t_{c}}} &: \text{initial position received from server by client} \\
+              V_{x_{t_{c}}} &: \text{initial velocity received from server by client} \\
+              K &: \text{Predict value multiplied by a scalar}
+              \end{split}
+              \]
+          Rearrange the equation as follows
+          \[
+              \begin{split}
+              L_{x_{t_{p}}} &= L_{x_{t_{c}}} + K \cdot V_{x_{t_{c}}} \cdot \Delta t \\
+              \dfrac{\left(L_{x_{t_{p}}} - L_{x_{t_{c}}}\right)}{\Delta t} &= K \cdot V_{x_{t_{c}}}
+              \end{split}
+              \]
+          Let \(\Delta t = \dfrac{1}{1000} = 0.001\) so our velocity scalar (\(K\)) will be computed in milliseconds.
+          A plot of this equation is provided below.
+          
+            
+              
+                
+              
+              
+                Figure 4
+              
+            
+          
+        
+        
+          10.3 Performing a linear regression
+          Simply apply the OLS (Ordinary Least Squares) method for linear regression.
+          
+            
+              
+                
+              
+              
+                Figure 5
+              
+            
+          
+
+          Representing the results above in tabular form we can see that \(K \approx
+              \dfrac{\text{Predict}}{2}\).
+          
+            
+              
+                Table 1
+              
+              
+                
+                  
+                    
+                    
+                    
+                  
+                  
+                    
+                      Predict value
+                      Regression slope (\(K\))
+                      Regression slope \(\div\) Predict value
+                    
+                  
+                  
+                    
+                      40
+                      19.95
+                      0.50
+                    
+                    
+                      80
+                      40.65
+                      0.51
+                    
+                    
+                      120
+                      64.66
+                      0.54
+                    
+                    
+                      160
+                      79.09
+                      0.49
+                    
+                  
+                
+              
+            
+          
+          The difference equation for the client can now be expressed as \[
+              \begin{split}
+              s_{c_{n+1}} &= s_{c_{n}} + v_{c_{n}} \Delta T_c + {\epsilon}_n
+              \end{split}
+              \]
+          where \[
+              \begin{split}
+              %\Delta t &\approxeq \Delta T_c \gt 0 \\
+              {\epsilon}_n &: \text{error (due to smoothing, corrections, etc)}
+              \end{split}
+              \]
+          given
+          \[
+              \begin{split}
+              s_{c_{0}} &: \text{initial position received from server} +
+              v_0\left(\dfrac{1}{2}\cdot\dfrac{\text{Predict}}{1000}\right)\\
+              v_{c_{0}} &: \text{initial velocity received from server} \\
+              \end{split}
+              \]
+          constrained by \[
+              \begin{split}
+              n \cdot \Delta T_c < \Delta T_s
+              \end{split}
+              \]
+          Now, for the case where \(\text{Ping} \cdot 1000 \leq \text{Predict}\),
+          
+          \[
+              \begin{split}
+              s_{c_{0}} &: \text{initial position received from server} + v_0 \cdot \text{OWD}\\
+              \end{split}
+              \]
+          
+            
+              
+                
+              
+              
+                Important
+              
+            
+            
+              This is the exact same equation as what was derived in the final part of Section 8.2.4!
+              Thus conclusively proving that Midairs lag compensation is simply using the kinematic equations.
+            
+          
+          
+            
+              
+                
+              
+              
+                Note
+              
+            
+            
+              The Predict command sets the prediction limit in milliseconds.
+            
+          
+        
+      
+      
+        11 Code analysis of Midairs lag compensation and
+          netcode
+        I won’t go too much into this because if you don’t understand code then this won’t make much sense to you…
+          and if you do understand code then this is pretty simple and straight forward.
+        The folks at Vector Z Studios were kind enough to ship the earliest release of Midair: Community Edition with
+          a PDB (Program Database) file.
+        I’ll use the PDB in combination with the Midair: Community Edition client in Ghidra to find certain
+          functionality related to lag compensation and netcode. Only functions will be listed, as providing class
+          definitions and their comparisons will be too time consuming.
+        
+          
+            
+              
+            
+            
+              Important
+            
+          
+          
+            I’ve linked relevant sections of code from the official UT4 source code that are associated with the code
+              identified in Midair.
+          
+        
+        
+          11.1 Analysing lag compensation
+          
+            11.1.1 GetPredictionTime
+            
+              
+                float __thiscall AMAPlayerController::GetPredictionTime(AMAPlayerController *this)
+{
+  float Ping;
+  ENetMode EVar2;
+  float PredictionTime;
+  
+  EVar2 = AActor::InternalGetNetMode((AActor *)this);
+  if ((EVar2 != NM_Standalone) && (this->_padding_ != 0))
+  {
+    Ping = this->SmoothedRTT;
+    PredictionTime = 0.0;
+    if ((0.0 <= Ping) && (PredictionTime = this->MaxPredictionPing * 0.001, Ping <= PredictionTime))
+    {
+      PredictionTime = Ping;
+    }
+    return PredictionTime * 0.5;
+  }
+  return 0.0;
+}
+              
+            
+            Returns \(\dfrac{1}{2}\text{Ping}\) if \(\text{Ping} < \dfrac{\text{Predict}}{1000}\) else \(\dfrac{1}{2} \dfrac{\text{Predict}}{1000}\). \(\text{Predict}\) in this case refers to the MaxPredictionPing
+              variable inside the AMAPlayerController class.
+            The UT4 equivalent function is float
+                AUTPlayerController::GetPredictionTime.
+            The logic is practically identical.
+            Note that the function and variable names have been kept identical.
+          
+          
+            
+              11.1.2 ServerNegotiatePredictionPing_Implementation
+            
+            
+              
+                void __thiscall AMAPlayerController::ServerNegotiatePredictionPing_Implementation (AMAPlayerController *this,float NewPredictionPing)
+{
+  float MaxPredictionPing;
+  
+  pUVar1 = UMAGameEngine::GetPrivateStaticClass();
+  pUVar2 = pUVar1->ClassDefaultObject;
+  if (pUVar2 == NULL)
+  {
+    (**(code **)(pUVar1->_padding_ + 0x358))(pUVar1);
+    pUVar2 = pUVar1->ClassDefaultObject;
+  }
+  MaxPredictionPing = 0.0;
+  if ((0.0 <= NewPredictionPing) && (MaxPredictionPing = *(float *)(pUVar2 + 0x5b), NewPredictionPing <= *(float *)(pUVar2 + 0x5b )))
+  {
+    MaxPredictionPing = NewPredictionPing;
+  }
+  this->MaxPredictionPing = MaxPredictionPing;
+  return;
+}
+              
+            
+            The implementation of the Predict console command.
+            The UT4 equivalent function is void
+                AUTPlayerController::ServerNegotiatePredictionPing_Implementation.
+            The logic is practically identical.
+            Note that the function and variable names have been kept identical.
+          
+          
+            11.1.3 MAUpdateSimulatedPosition
+            
+              
+                void __thiscall AMACharacter::MAUpdateSimulatedPosition(AMACharacter *this,FVector *param_1,FRotator *param_2)
+{
+  float PredictionTime;
+  ...
+
+    if (this->MACharacterMovement != NULL)
+    {
+      pbVar2 = (byte *)((longlong)&this->MACharacterMovement->_padding_ + 7);
+      *pbVar2 = *pbVar2 | 0x20;
+      PredictionTime = UMAGameplayStatics::GetCatchUpTime((AActor *)this); // Same as calling GetPredictionTime
+      if (0.0 < PredictionTime)
+      {
+        (**(code **)(this->MACharacterMovement->_padding_ + 0x910)) // Same as calling UMACharacterMovement::SimulateMovement
+                  (this->MACharacterMovement,PredictionTime);
+      }
+    }
+  ...
+}
+              
+            
+            Performs the prediction of player position.
+            The UT4 equivalent function is void
+                AUTCharacter::UTUpdateSimulatedPosition.
+            The logic is practically identical.
+            Note that the function and variable names are almost identical. The prefix ‘UT’ has been replaced
+                by ‘MA’.
+          
+          
+            11.1.4 Other functions
+            Listing all the functions used for lag compensation, their code, what they do, and finding their
+              equivalents from UT4 would be overly exhausting.
+            Instead I’ll provide a table of function names from Midair and their equivalent function from UT4.
+            
+              
+                
+                  Midair function
+                  UT4 function
+                
+              
+              
+                
+                  AMAProjectile::BeginFakeProjectileSync
+                  AUTProjectile::BeginFakeProjectileSynch
+                  
+                
+                
+                  AMAProjectile::InitFakeProjectile
+                  AUTProjectile::InitFakeProjectile
+                  
+                
+                
+                  AMAProjectile::CatchUp
+                  AUTProjectile::CatchUpTick
+                  
+                
+                
+                  AMAPlayerController::Predict
+                  AUTPlayerController::Predict
+                  
+                
+                
+                  AMAPlayerController::ServerNegotiatePredictionPing_Validate
+                  AUTPlayerController::ServerNegotiatePredictionPing_Validate
+                  
+                
+              
+            
+            The list goes on and on. The logic used in the Midair functions and their equivalent UT4 function is
+              practically identical.
+            
+            Note that the function names are almost identical.
+          
+          
+            11.1.5 Findings
+            Midairs lag compensation system is clearly copied from UT4.
+            In fact, Mabel loosely admitted to it in a reddit post as quoted below.
+            
+              
+                For other players, we basically decide to ‘split the difference’ to hide latency. You predict other
+                  players ahead by about 1/2 your RTT, and when the server sees you fire things, it basically ‘fast
+                  forwards’ your projectiles from their predicted point in time (1/2 RTT ago, basically). This is done
+                  to mitigate the effect of player movement misprediction errors, hiding some of the latency on the
+                  receiving end of projectiles.
+              
+            
+            
+              
+                …
+              
+            
+            
+              
+                This is essentially the same model that Reflex and UT4 use. We’re able to use prediction because we
+                  don’t have very precise hitboxes, we basically just have big capsules jumping around and you really
+                  don’t need pixel-perfect accuracy to hit individual hitboxes. If we did, we’d have to use a model more
+                  like Overwatch as we simply couldn’t deal with misprediction errors that bad. If you’ve ever played OW
+                  with >200 ping (which is around where it starts doing prediction) you can see how fast the hitreg
+                  starts failing when the game starts using prediction.
+              
+              - Mabeline
+                (Midair developer) on May 9, 2016
+            
+            The UT4 repository license is quite
+              clear about the usage of its assets from the repository.
+          
+        
+        
+          11.2 Analysing netcode
+          I won’t waste my time going into a deep explanation of my findings regarding Midairs “custom tailored”
+            netcode. Midair uses stock UE4 netcode. If there were any modifications made to the netcode, their impact is
+            practically negligible. In fact, contextually, Midair did not require any modifications to the netcode in
+            the first place to perform at an acceptable benchmark.
+          A quote from an ex-Midair 2 developer confirms this.
+          
+            
+              netcode is mostly just stock ue netcode iirc
+            
+            - Implosions
+              (Ex-Midair 2 developer) on August 2, 2025
+          
+          All videos I could find involving Archetype Studios developers which mentioned the application of their
+            custom netcode actually referred to their lag compensation system. As mentioned in Section 8.1, these two terms are
+            NOT interchangeable.
+          
+        
+      
+      
+        12 How does Midairs lag compensation work?
+        
+          12.1 Prediction
+          Already covered fairly extensively above.
+        
+        
+          12.2 Fake projectiles
+          Fake projectiles (also called client-side predicted projectiles) are visual-only representations of
+            projectiles spawned immediately on the shooter’s client when they fire, before the server confirms the shot.
+          
+          The server runs its own authoritative simulation of the projectile separately. The client’s projectile is
+            “fake” because it doesn’t determine hit results - it just exists to mask latency.
+          
+            12.2.1 How it works
+            
+              Player fires and the client instantly spawns a fake projectile moving towards the target
+              The input is sent to the server, which spawns the real projectile and simulates it authoritatively
+              
+              When the server result arrives, the fake projectile is either destroyed quietly or reconciled with the
+                real one (the latter in the case of Midair)
+            
+          
+        
+        
+          12.3 How good is Midairs lag compensation?
+          At low pings (30ms or under), it’s fine. As the ping increases, the game state on the client becomes more
+            and more inaccurate. The use of fake projectiles mask the perceived latency resulting in a placebo effect
+            regarding the efficacy of the lag compensation.
+          
+            
+              
+                
+              
+              
+                Important
+              
+            
+            
+              It’s a simple trade off - a responsive game client side in return for an inaccurate game state.
+              The game lies to you about its real states to hide latency and feel responsive. As ping
+                  increases, the game remains responsive, however, the lie becomes bigger. Sometimes, the lie
+                just happens to be accurate, and you manage to successfully land shots. However, majority of the time,
+                even if you aim perfectly for your client game state, your shot will not land.
+            
+          
+          
+            
+              
+                
+              
+              
+                ImportantSo, does the lag compensation make 150ms of ping feel
+                like zero? Does it provide a seamless cross-continent experience that trumps all others?
+              
+            
+            
+              No.
+              It would probably pass for UT4, but, Midair isn’t UT4.
+              In fact, there’s a few glaring issues with this lag compensation implementation, essentially leaving it
+                incomplete. One major issue being the amount of leading required remains a function of ping, which
+                defeats the purpose of lag compensation in the first place.
+            
+          
+        
+        
+          12.4 How does it compare to Tribes titles
+          It’s basically the same functionality as PFT (Predict Forward Time) from Starsiege: Tribes and Interpolate
+            from Tribes 2, just a smoother implementation (the player models do not teleport/warp as much during
+            prediction thanks to what’s happening under the hood in UE4). This smoother implementation comes at the
+            obvious cost of updating large positional changes slowly, which results in (unnoticeable) desync.
+          Tribes: Ascend has no form of lag compensation.
+          Tribes 3: Rivals uses a similar but more complete implementation that provides better overall results with
+            the occasional non-reg at higher pings (again, due to unnoticeable desync).
+        
+      
+      
+        13 What alternatives are there?
+        
+          13.1 Server-side rewind
+          Server-side rewind (also called lag compensation via history buffers) is the industry standard approach.
+            Rather than guessing where a player will be in the future on the client, the server maintains a rolling
+            history of every player’s position over recent time. When a client fires a shot and the server receives that
+            input, the server rewinds world state back to the moment the client fired (accounting for ping), evaluates
+            the hit against that historical snapshot, and then restores the present state.
+          
+            13.1.1 Why it is strictly better
+            
+              Accuracy is not a function of acceleration: because the server replays recorded
+                positions rather than extrapolating from velocity, the result is accurate regardless of whether the
+                target was accelerating, decelerating, or changing direction at the time of the shot.
+              The shooter hits what they aim at: from the shooter’s perspective, if they aim
+                correctly at the target visible on their screen at the moment of firing, the shot registers. This is not
+                guaranteed under Midairs model.
+              The trade-off is shifted, not eliminated: the receiver of a shot may feel they were
+                hit “around a corner” - a well-known side effect. However, this is a far more acceptable and consistent
+                artefact than shots simply failing to register.
+            
+          
+          
+            13.1.2 Implementing server-side rewind in Midair
+            An example of a server-side rewind implementation in Midair is provided below.
+            This process is outside the scope of this investigation and will be omitted.
+            
+          
+        
+      
+      
+        14 Conclusion
+        The findings of this investigation are unambiguous.
+        Mabel, who was directly and publicly credited as the architect of these systems, repeatedly and demonstrably
+          misrepresented the nature of the work. The broader community of developers, ex-developers, and prominent
+          players who amplified these claims - many of whom are quoted in this article - either lacked the technical
+          understanding to scrutinise them or chose not to. Either way, the result was that a paying community was
+          misled for years about the quality of a product they funded.
+        The technical reality is straightforward: Midair shipped a game with stock UE4 netcode and plagiarised,
+          rudimentary lag compensation, wrapped in marketing language designed to sound impressive to an audience
+          unlikely to investigate further. The claims were not just overstated - they were false.
+        
+          14.1 How did this happen?
+          The straightforward answer is cronyism - and it is almost inevitable in communities built around dead or
+            dying franchises.
+          In a healthy consumer relationship, there is distance between the developer and the audience. Critics can
+            be critical. Players can be skeptical. A bad product receives honest feedback. In a community-developed
+            successor project, that distance does not exist. Criticising the game means criticising your friends in a
+            community you depend on for social belonging. Skepticism about the netcode means implicitly questioning
+            Mabel, who everyone knows personally and who is generally liked and hailed as a “genius”. The social cost of
+            honest scrutiny is high, and the reward is low - so almost nobody does it.
+          This dynamic allowed a simple pattern to persist for years: one person made a technically
+            impressive-sounding claim, people who trusted that person repeated it, and the repetition created the
+            appearance of consensus.
+          In Midair 2, of which the development includes several people who were part of or adjacent to the original
+            Archetype Studios circle, repeated these same claims years after the original game had shut down . This is
+            not coincidental. The same cronyist dynamic that shielded the original claims from scrutiny carried them
+            forward intact into the successor project, where they continue to circulate today.
+          It is worth being clear: this is not a phenomenon unique to Midair. It is the default mode of operation for
+            community-developed successors to niche dead franchises. The Tribes community is simply a particularly
+            well-documented example of it.
+        
+      
+      
+        15 Response
+        
+          15.1 Midair community
+          Unsurprisingly, the response from the Midair community has been overwhelmingly negative towards the
+            findings this article. I won’t bother to include quotes of the numerous cringe inducing responses because
+            the authors are clearly deranged.
+          It seems Mabel slander will not be tolerated… despite the fact he deliberately misled a community that
+            trusted him. Or, perhaps they just can’t handle the fact the game they cherish so much is a dead,
+            technically mediocre product built on borrowed code and propped up by years of unchallenged myth.
+        
+        
+          15.2 Vector Z Studios
+          
+            Midair was retired
+              from the steam store weeks after the posting of this article
+            The development team has begun implementing
+                their own attempt at server-side rewind solution for Midair 2
+          
+        
+      
+      
+        16 Other findings
+        
+          16.1 Failure to deliver Kickstarter goals
+          As mentioned in Section 5, Midair was initially
+            funded using Kickstarter, which listed “Custom Tailored Networking” as one it’s features.
+          Now that the game has released and been abandoned, let’s take a look at the list of features the
+            Kickstarter promised, and which (if any) features were delivered.
+          
+            
+              
+                Feature
+                Delivered
+                Information
+              
+            
+            
+              
+                Free to Play
+                ⚠️
+                Technically it was free to play. However the game required either paying or excessive
+                    grinding to be playable, resulting in early and almost instantaneous death on public release
+                
+              
+              
+                Maps & Map Making
+                ❌
+                
+              
+              
+                Stats & Rankings
+                ❌
+                
+              
+              
+                Achievements
+                ⚠️
+                No idea if this was actually implemented
+              
+              
+                Game Replays
+                ❌
+                
+              
+              
+                Custom Tailored Networking
+                ❌
+                As discussed by this article, this is provably false
+              
+            
+          
+          Archetype Studios raised $128,416 via Kickstarter and didn’t really seem to deliver on anything they said
+            they would.
+        
+        
+          16.2 Over $500,000 of combined sales and funding
+          A quote from the Co-Founder/CFO/COO of
+              Archetype Studios LinkedIn page is presented below.
+          
+            
+              // Co-founded an independent game studio of 23 volunteers/paid employees; primary role in finance and
+                business operations, including Marketing, Legal, and HR. Combined sales and funding over $500,000.
+            
+            Allen Kuceba (Co-Founder/CFO/COO
+              of Archetype Studios)
+          
+          An internal source to Archetype Studios has alluded to management closing the Kickstarter early once they
+            had raised a large enough sum of funding and obtained external funding. This raises serious
+            questions about the integrity of the campaign considering they could barely accomplish a single Kickstarter
+            goal let alone even ship a functional product.
+
+        
+      
+
+     
+    
+   
+
