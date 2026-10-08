@@ -15,6 +15,9 @@ export interface ConnectCtx {
   /** The map this client built — a p2p host must hand it to guests through
    *  gameState or both ends silently live in different worlds. */
   bootMap?: import('../game/net/mapAssets.js').MapSnapshot | null;
+  /** Fleet only: re-resolve the ws target through the matchmaker before a
+   *  reconnect — the room's worker may have re-homed since the last URL. */
+  resolveUrl?: () => Promise<string | null>;
 }
 
 /** ?p2p=quick — ask the relay for an open lobby and join the oldest. */
@@ -86,7 +89,7 @@ export async function connectServer(ctx: ConnectCtx): Promise<void> {
     await connectP2PMode(ctx, p2p);
   } else if (!classicMode) {
     profiler.markTime('networkConnectStart');
-    networkManager.connect(serverUrl).then(() => {
+    networkManager.connect(serverUrl, undefined, ctx.resolveUrl).then(() => {
       profiler.markTime('networkConnected');
       logger.info(`Connected to server at ${serverUrl}`);
     }).catch((error) => {

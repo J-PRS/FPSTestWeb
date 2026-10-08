@@ -18,6 +18,11 @@ export interface ServerEndpoints {
   fleet?: boolean;
 }
 
+/** Re-resolve a live worker URL — the reconnect path's resolveUrl hook. */
+export async function fleetWorkerUrl(httpUrl: string): Promise<string | null> {
+  return (await resolveFleet(httpUrl))?.wsUrl ?? null;
+}
+
 async function resolveFleet(httpUrl: string): Promise<ServerEndpoints | null> {
   try {
     const room = urlParams.get('room') ?? '';

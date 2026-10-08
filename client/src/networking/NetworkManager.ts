@@ -200,7 +200,7 @@ export class NetworkManager {
   private lastUrl: string | null = null;
   private lastFactory: TransportFactory | undefined;
 
-  connect(url: string, makeTransport?: TransportFactory): Promise<void> {
+  connect(url: string, makeTransport?: TransportFactory, resolveUrl?: () => Promise<string | null>): Promise<void> {
     this.onlineExpected = true;
     this.lastUrl = url;
     this.lastFactory = makeTransport;
@@ -211,6 +211,7 @@ export class NetworkManager {
         const factory = makeTransport ?? ((cfg) => new TieredTransport(cfg));
         this.ws = factory({
           url,
+          resolveUrl,
           onConnect: () => {
             // Join handshake — must precede the queued-message flush,
             // which WebSocketConnection guarantees (onConnect first)

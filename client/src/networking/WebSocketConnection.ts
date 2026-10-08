@@ -12,6 +12,10 @@ const logger = new ChildLogger('WebSocketConnection');
 
 export interface ConnectionConfig {
   url: string;
+  /** Fleet hook: re-resolve the connect target before a retry — a dead
+   *  worker's direct URL would otherwise be retried forever while the
+   *  room already re-homed elsewhere. null → keep config.url. */
+  resolveUrl?: () => Promise<string | null>;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   onConnect?: () => void;
@@ -122,7 +126,18 @@ export class WebSocketConnection {
             logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
           }
           this.reconnectTimer = setTimeout(() => {
-            this.connect();
+            void (async () => {
+              // Fleet: re-resolve through the matchmaker — the room may
+              // have re-homed onto a live worker since this URL died.
+              try {
+                const next = await this.config.resolveUrl?.();
+                if (next && next !== this.config.url) {
+                  logger.info(`reconnect re-resolved ${this.config.url} -> ${next}`);
+                  this.config.url = next;
+                }
+              } catch { /* keep the last URL — matchmaker hiccup isn't fatal */ }
+              this.connect();
+            })();
           }, delay);
         }
       });

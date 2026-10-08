@@ -29,7 +29,7 @@ import { AmbientParticles } from './effects/ambientParticles.js';
 import { GroundMist } from './effects/groundMist.js';
 import { AmbientBirds } from './effects/birds.js';
 
-import { resolveServerEndpoints } from './networking/endpoints.js';
+import { resolveServerEndpoints, fleetWorkerUrl } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
 import { connectServer } from './networking/connectServer.js';
 
@@ -389,7 +389,14 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   if (!classicMode && !soloMode && settings.get('fps-session-token')) {
     if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
   }
-  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler, bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap });
+  const ep = await serverEndpoints;
+  await connectServer({
+    serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler,
+    bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap,
+    // Fleet reconnects re-ask the matchmaker for a live worker — retrying
+    // the dead worker's direct URL forever would never land anywhere.
+    resolveUrl: ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
+  });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
   // Spec maps spawn you at an authored anchor (team spawn > generic

@@ -430,6 +430,21 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       ensure: (r) => { netBallSpawn(r); return netBallById.get(r.id); },
       reap: (b) => b.netKill(),
     });
+    // Membership reconcile alone left existing replicas running on stale
+    // regime fields (enraged/targetId/timers) — a missed retarget edge
+    // then desynced the ball lane permanently. The roster is also the
+    // state heal: soft-apply each row's committed state onto live balls.
+    for (const r of m.balls) {
+      const b = netBallById.get(r.id);
+      if (!b) {continue;} // just spawned — seeded already
+      b.applyNetSegment({
+        px: r.position.x, py: r.position.y, pz: r.position.z,
+        vx: r.velocity.x, vy: r.velocity.y, vz: r.velocity.z,
+        enraged: r.enraged ?? false, targetId: r.targetId ?? null,
+        lead: ballEventAge(r.t), timers: { et: r.et, slowT: r.slowT, damp: r.damp },
+        tp: r.tp, simT: r.t,
+      });
+    }
   }
 
   // A netDriven ball pulls toward ITS committed target — resolve the id to
