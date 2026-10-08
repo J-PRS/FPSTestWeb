@@ -16,8 +16,12 @@ Use when the Windows desktop is locked/unusable or you need scripted gameplay.
 
 - Use `puppeteer-core` (install in a scratch dir, NOT the repo) with the system
   Chrome: `C:\Program Files\Google\Chrome\Application\chrome.exe`.
-- Args: `--headless=new` is default `headless:true`; WebGL needs
-  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --mute-audio --no-sandbox`.
+- Args: `--headless=new` is default `headless:true`; for WebGL prefer the REAL
+  GPU — `--mute-audio --no-sandbox --ignore-gpu-blocklist` gives ANGLE/D3D11 on
+  the host card even while the desktop is locked (verified: RTX 3070 Ti; game
+  time ≈ wall time, ~7× faster than SwiftShader). Fall back to
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` only if
+  the box has no GPU.
 
 ## Pointer lock stub (required)
 
@@ -57,7 +61,9 @@ init (REVERT after testing):
 
 - Game time runs ~7x slower than wall clock under SwiftShader — waits tied to
   in-game seconds (e.g. 5s clip-extraction buffer) need ~35-40s wall; poll
-  `demoManager.recorder.duration` rather than assuming wall time.
+  `demoManager.recorder.duration` rather than assuming wall time. On the real
+  GPU path game time ≈ wall time — but poll `recorder.duration` anyway, it
+  works on both.
 - Landing a real hit: balls spawn 100-200m away moving fast — pin one via
   `setInterval` overriding `ball.pos`/`ball.vel`, aim with
   `player.yaw = atan2(dx,dz)`, `player.pitch = asin(dy/d)` (projectiles spawn at
@@ -71,6 +77,25 @@ init (REVERT after testing):
   are v3 (`DEMO_FORMAT_VERSION` in `client/src/demo/types.ts`).
 - Working example scripts: `C:\TEMP\_WEB\headless-test\demo-e2e.js`,
   `probe2.js`, `legacy-play.js`.
+
+## Demo record→playback E2E (demo-e2e2.js)
+
+`headless-test/demo-e2e2.js` records live bot gameplay, extracts the .demo via
+`recorder.buildDemoFile()` + `serializeDemo`, plays it back through
+`loadDemoFromBuffer` + `togglePlayPause`, then diffs entity positions and
+canvas frames at matched demo-times. Gotchas it encodes:
+
+- `buildDemoFile()` CONSUMES the frame buffer (extractAll clears it) — call once.
+- Playback truth lives in `demoLifecycle.playbackWorld` / `playbackRemotes`
+  (rosterIdx-keyed), NOT `world.remotePlayers` — reading live objects during
+  playback compares different clocks.
+- `seekBy` no-ops while mode is 'idle' — call `togglePlayPause()` first.
+- Recorder duration starts at page init (recording auto-starts), so window
+  captures relative to a baseline, not absolute `duration < N`.
+- `page.screenshot` includes the DOM UI overlay; hide non-canvas elements for
+  canvas-only frames.
+- Expected fidelity: ~all entities within ~6m (replica-interp phase at bot
+  speeds); pixel diff ~3/765 baseline, transient VFX spikes to ~20.
 
 ## Server-side bots (multiplayer testing)
 

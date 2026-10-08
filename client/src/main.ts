@@ -867,7 +867,7 @@ init().then(async () => {
     // this (spawn PlayerModels, read player.pos, aim the camera).
     window.__test = {
       player, scene, entities, world, terrain, viewModel,
-      networkManager, demoManager, rendererSetup,
+      networkManager, demoManager, rendererSetup, demoLifecycle,
       chatSink: (await import('./game/chat.js')).chatSink,
     };
     // .rec captures (gauntlet --record / pvptest record.ts) replay through

@@ -92,7 +92,7 @@ describe('wire lifecycle ordering fuzz', () => {
     for (const { type, m, op } of seen) {
       const meta = TYPE_FAMILY.get(type);
       if (!meta) continue;
-      const f = FAMILIES[meta.fam];
+      const f = FAMILIES[meta.fam]!;
       const id = String(f.idOf(m as never));
       const key = `${meta.fam}:${id}`;
       let st = streams.get(key);
