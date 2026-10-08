@@ -225,11 +225,16 @@ export class CreatureSim {
    *  ballCombat.sweepHit so real shells can whiff/hit the swarm instead
    *  of every shot being an instant claim. Ground walkers use a modest
    *  body radius; totems carry their own scale. */
-  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number; d: number } | null {
+  sweepHit(from: SimVec, to: SimVec, extraReach: number, backMs = 0): { id: number; t: number; d: number } | null {
+    const back = backMs / 1000;
     let best: { id: number; t: number; d: number } | null = null;
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
-      const center = { x: c.x, y: c.y + 1, z: c.z };
+      // backMs rewinds along velocity — shooter rays validate against
+      // the rendered ghost, not sim-now. Linear only: species gravity
+      // isn't uniform and hop arcs barely move in ~200ms.
+      const center = back === 0 ? { x: c.x, y: c.y + 1, z: c.z }
+        : { x: c.x - c.vx * back, y: c.y + 1 - c.vy * back, z: c.z - c.vz * back };
       const rad = 'radius' in c ? (c.radius as number) : 1.4;
       const d = segPointDist(from, to, center);
       if (d > rad + extraReach) continue;

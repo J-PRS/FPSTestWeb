@@ -5,7 +5,7 @@
  * "how the swarm takes damage".
  */
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { type SimBall, type SimVec, type SegmentKind, applySimDamage } from '../../shared/ballSim.ts';
+import { type SimBall, type SimVec, type SegmentKind, applySimDamage, BALL_GRAVITY } from '../../shared/ballSim.ts';
 import { MAX_HIT_CLAIM_DMG, getWeaponStats, WeaponType, MELEE_ARC_DOT, MELEE_CREATURE_DAMAGE } from '../../shared/weapons.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { HitVerdict } from './types.ts';
@@ -59,12 +59,17 @@ export class BallCombat {
   }
 
   /** Earliest live-ball contact along a segment — same order rule the
-   *  player sweep uses (terrain/walls are the caller's to check first). */
-  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number; d: number } | null {
+   *  player sweep uses (terrain/walls are the caller's to check first).
+   *  backMs rewinds each ball along its velocity (gravity-corrected) —
+   *  shooter-aimed rays validate against the rendered ghost, which
+   *  rides ping+renderDelay behind sim-now. */
+  sweepHit(from: SimVec, to: SimVec, extraReach: number, backMs = 0): { id: number; t: number; d: number } | null {
+    const back = backMs / 1000;
     let best: { id: number; t: number; d: number } | null = null;
     for (const b of this.host.balls().values()) {
       if (b.dead) continue;
-      const c = { x: b.x, y: b.y, z: b.z };
+      const c = back === 0 ? { x: b.x, y: b.y, z: b.z }
+        : { x: b.x - b.vx * back, y: b.y - b.vy * back - 0.5 * BALL_GRAVITY * back * back, z: b.z - b.vz * back };
       const d = segPointDist(from, to, c);
       if (d > b.radius + extraReach) continue;
       const t = segPointT(from, to, c);

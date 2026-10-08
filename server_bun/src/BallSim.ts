@@ -206,8 +206,8 @@ export class BallSim {
     this.combat.armorBlast(pos, radius, amount);
   }
 
-  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number; d: number } | null {
-    return this.combat.sweepHit(from, to, extraReach);
+  sweepHit(from: SimVec, to: SimVec, extraReach: number, backMs = 0): { id: number; t: number; d: number } | null {
+    return this.combat.sweepHit(from, to, extraReach, backMs);
   }
 
   splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {

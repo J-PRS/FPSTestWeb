@@ -24,8 +24,8 @@ export interface BeamSweepWorld {
   players: PlayerManager;
   field: Heightfield | null;
   solids: readonly StructureCollider[];
-  ballSim?: { balls: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null };
-  creatureSim?: { crawlers: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number): { id: number; t: number; d: number } | null };
+  ballSim?: { balls: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number, backMs?: number): { id: number; t: number; d: number } | null };
+  creatureSim?: { crawlers: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number, backMs?: number): { id: number; t: number; d: number } | null };
   /** Target uplink-transit estimate (ms) — the same lead the tick
    *  broadcast applies. Absent = no lead knowledge. */
   transitOf?: (playerId: string) => number;
@@ -60,11 +60,14 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }
   }
-  const bc = world.ballSim?.sweepHit(muzzle, end, 0.2);
+  // Creatures broadcast raw positions (no lead), so their ghost is
+  // a flat ping+renderDelay behind — no per-target lead to subtract.
+  const creatureBack = clampPing(shooterPing) + RENDER_LAG_MS;
+  const bc = world.ballSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (bc && bc.t <= bestT) {
     return { ballId: bc.id, contact: at(bc.t), ...beamChain(world, at(bc.t), dir, bc.id, undefined) };
   }
-  const cc = world.creatureSim?.sweepHit(muzzle, end, 0.2);
+  const cc = world.creatureSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (cc && cc.t <= bestT) {
     return { crawlerId: cc.id, contact: at(cc.t), ...beamChain(world, at(cc.t), dir, undefined, cc.id) };
   }
