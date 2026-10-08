@@ -74,7 +74,7 @@ describe('ghost records', () => {
       const m = msg as { type?: string; add?: Record<number, string> };
       if (m.type === 'wireIds' && m.add) for (const [id, pid] of Object.entries(m.add)) roster.set(Number(id), pid);
     };
-    const pool = { slots: [] as never[], resolveId: (id: number) => roster.get(id) };
+    const pool = { slots: [] as never[], byId: new Map(), resolveId: (id: number) => roster.get(id) };
     room.connections.sendBinaryToPlayer = (_id, data) => {
       const tick = decodeTickFrame(data, pool);
       if (tick && tick.updates.some((u, i) => i < tick.count && u.playerId === 'late')) mentions++;

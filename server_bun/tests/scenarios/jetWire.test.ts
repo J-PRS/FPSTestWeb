@@ -18,7 +18,7 @@ describe('scenario: held jet rides the tick frame', () => {
     // Mount the production fanout as a sim and capture the spectator's
     // binary frame (same path replica() uses — wireIds roster + v3 ticks).
     const roster = new Map<number, string>();
-    const pool: TickDecodePool = { slots: [] as WireTickPlayer[], resolveId: (w) => roster.get(w) };
+    const pool: TickDecodePool = { slots: [] as WireTickPlayer[], byId: new Map(), resolveId: (w) => roster.get(w) };
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0,
