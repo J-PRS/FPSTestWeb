@@ -3400,3 +3400,10 @@ mistype silently. player.envelope declares all 17 message-level fields
 absent since they're mode-conditional) and checkPacket verifies them.
 The entire wire surface — verbs, events, rosters, envelopes, intents —
 is now declared + shape-checked from one file.
+
+## 2.193 — tickUpdate envelope declared too
+
+updateEnvelope covers the ack watermarks (ackSeq/inputAck/tickSeq/count)
+wrapping the row list — the last unchecked message-level surface after
+the gameState envelope. Every wire message now verifies both its rows
+and its envelope from one declaration.

@@ -56,6 +56,9 @@ export interface WorldKindDecl {
    *  room/mode/scores/map/... — the roster sweep covers ROWS, this
    *  covers the container's own payload). */
   envelope?: KindFieldDecl[];
+  /** Message-level fields of the UPDATE envelope (tickUpdate's
+   *  ackSeq/inputAck/tickSeq/count wrap the per-player rows). */
+  updateEnvelope?: KindFieldDecl[];
 }
 
 export const WORLD_MODEL: Record<string, WorldKindDecl> = {
@@ -347,6 +350,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'status', wire: 'num', channel: 'edge', absent: null },
       { name: 'sheep', wire: 'num', channel: 'sim', absent: null },
     ],
+    // The tickUpdate envelope — ack/watermark keys wrap the row list.
+    // Only `updates` is unconditional; the ack trio rides optional.
+    updateEnvelope: [
+      { name: 'updates', wire: 'arr', channel: 'edge' },
+      { name: 'ackSeq', wire: 'num', channel: 'edge', absent: null },
+      { name: 'inputAck', wire: 'num', channel: 'edge', absent: null },
+      { name: 'tickSeq', wire: 'num', channel: 'edge', absent: null },
+      { name: 'count', wire: 'num', channel: 'edge', absent: null },
+    ],
     // The gameState envelope's own fields — every key sendWorldState /
     // handleSpectatorHandshake may write. Most are conditional payloads
     // (scores only in team modes, map only when the room carries one),
@@ -570,6 +582,19 @@ export function checkPacket(
       }
     }
     return;
+  }
+  // Update envelopes (tickUpdate's ack/count keys) wrap the row list —
+  // checked before the row branch since updates[] returns early.
+  if (verb === 'update' && kind.updateEnvelope) {
+    for (const f of kind.updateEnvelope) {
+      if (!(f.name in msg)) {
+        if (f.absent === undefined) {
+          warnOnce(`${kind.kind}.${label}:env:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing envelope field '${f.name}'`);
+        }
+      } else if (msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
+        warnOnce(`${kind.kind}.${label}:env:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} envelope field '${f.name}' wrong type (want ${f.wire})`);
+      }
+    }
   }
   const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
   if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
