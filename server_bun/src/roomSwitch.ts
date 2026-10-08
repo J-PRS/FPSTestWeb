@@ -24,6 +24,10 @@ export interface SwitchHost {
   specRooms: Map<string, Room>;
   playerRoom: Map<string, Room>;
   sessions: { tokenFor(playerId: string): string };
+  /** The session record rides the hop — a switch is a seat transfer,
+   *  not a new connection. Without begin+seat the hopped player has no
+   *  session: gen checks fail open and a later close is ignored. */
+  registry: { begin(playerId: string, room: string): void; seat(playerId: string, spectator: boolean, reason: string): number };
 }
 
 export class RoomSwitcher {
@@ -112,6 +116,12 @@ export class RoomSwitcher {
     // plausibility gate + shadow judge for the same drain window a
     // correction gets.
     joined.correctionGraceUntil = wallMs(wallNow() + CONFIG.reportGraceMs);
+    // removePlayerCompletely above reaped the session — the hop must
+    // re-open it in the new room or the seat is session-less (stale gen
+    // on the socket makes its later close a no-op → zombie player that
+    // only idle-reap ever collects).
+    this.host.registry.begin(playerId, room.name);
+    ws.data.gen = this.host.registry.seat(playerId, false, 'roomSwitch');
     this.host.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);

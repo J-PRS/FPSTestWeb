@@ -128,6 +128,7 @@ export class GameServer {
       specRooms: this.specRooms,
       playerRoom: this.playerRoom,
       sessions: this.sessions,
+      registry: this.registry,
     });
   }
 

@@ -241,6 +241,14 @@ export class SessionManager {
       ws.close(1013, 'Server full');
       return;
     }
+    // Re-spectating the same id must retire the old seat first — the
+    // specRooms index repoints while the old room's spectators set would
+    // keep the ghost (two rosters, one id, ticks fanning out to a stale
+    // socket). Runs after the caps so a refused re-join doesn't cost
+    // the id its existing seat.
+    if (this.d.specRooms.has(playerId)) {
+      this.d.departSpectator(playerId, 'spectator re-seated', 1008);
+    }
     ws.data.playerId = playerId;
     this.d.registry.begin(playerId, room.name);
     ws.data.gen = this.d.registry.seat(playerId, true, 'spectate');
