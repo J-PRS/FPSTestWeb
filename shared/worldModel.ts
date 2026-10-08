@@ -586,7 +586,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   shotFired: [{ name: 'weaponType', wire: 'num', absent: null }, { name: 'dir', wire: 'vec3', absent: null }, { name: 'pos', wire: 'vec3', absent: null }, { name: 'shotId', wire: 'str', absent: null }],
   jump: [{ name: 'position', wire: 'vec3' }],
   jetpack: [{ name: 'position', wire: 'vec3' }],
-  inputMove: [{ name: 'input', wire: 'obj' }, { name: 'rotation', wire: 'rot' }, { name: 'seq', wire: 'num', absent: null }],
+  inputMove: [{ name: 'input', wire: 'obj' }, { name: 'rotation', wire: 'rot' }, { name: 'seq', wire: 'num', absent: null }, { name: 'prev', wire: 'obj', absent: null }],
   projectileDestroy: [{ name: 'projectileId', wire: 'str' }, { name: 'shotId', wire: 'str', absent: null }],
   environmentDamage: [{ name: 'amount', wire: 'num' }, { name: 'attacker', wire: 'str', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
   heal: [{ name: 'amount', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],

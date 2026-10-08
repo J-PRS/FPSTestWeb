@@ -18,6 +18,7 @@ export class InputStream {
   // re-emits exactly this (the change-only stream's current edge).
   private lastInputState: MoveInput | null = null;
   private lastInputRotation: MoveRotation = { yaw: 0, pitch: 0 };
+  private lastSentEdge: { seq: number; input: MoveInput; rotation: MoveRotation } | null = null;
   private inputJournal: { seq: number; t: number; input: MoveInput }[] = [];
   private static readonly INPUT_JOURNAL_MAX = 128;
 
@@ -37,10 +38,15 @@ export class InputStream {
     // Change-only stream → unordered transports can deliver stale events
     // after fresh ones; the seq lets the server drop them.
     const seq = ++this.inputSeq;
+    // In-packet redundancy: the previous edge rides along so a single
+    // lost packet heals instantly instead of via the watchdog RTT —
+    // the server's seq gates make the double-apply a no-op when both land.
+    const prev = this.lastSentEdge ? { seq: this.lastSentEdge.seq, input: { ...this.lastSentEdge.input }, rotation: { ...this.lastSentEdge.rotation } } : undefined;
     this.journal(seq, input);
     this.lastInputState = { ...input };
     this.lastInputRotation = { ...rotation };
-    send({ type: 'inputMove', seq, input, rotation });
+    this.lastSentEdge = { seq, input: { ...input }, rotation: { ...rotation } };
+    send({ type: 'inputMove', seq, input, rotation, ...(prev ? { prev } : {}) });
   }
 
   /** Hard-tolerance answer: the server's consumed input watermark fell

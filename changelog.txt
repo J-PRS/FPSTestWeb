@@ -1,3 +1,4 @@
+2026-10-01 - In-packet input redundancy: every inputMove carries the previous edge — a single lost packet heals instantly instead of via the watchdog RTT (GGPO-style "copy of the last packet")
 2026-10-01 - Lag-comp rewinds to the true rendered ghost: shooter one-way transit + render delay - target transit, not full-RTT terms (~150ms tighter at 150ms — hits no longer validate behind the model)
 2026-10-01 - Render-lag reports go stale after ~3 uplink windows; rewind buffer deepened 400->1200ms to reach the ping+lag envelope
 2026-10-01 - Lag-comp rewinds by the shooter's measured render delay (clientStats.renderLagMs), not a fixed 200ms — jittered-link ghosts validated ahead of screen point

@@ -184,36 +184,51 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   inputMove: {
     limit: { maxCount: 120, windowMs: 1000 },
     validate: (obj) => {
-      const input = obj.input;
-      if (typeof input !== 'object' || input === null) {
-        return { success: false, error: 'input must be an object' };
-      }
-      const i = input as Record<string, unknown>;
-      if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
-        return { success: false, error: 'input fields must be finite numbers' };
-      }
-      const rot = validateRotation(obj.rotation);
-      if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
-      return {
-        success: true,
-        data: {
-          type: 'inputMove',
-          seq: isFiniteNumber(obj.seq) ? obj.seq : undefined,
+      const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
+        const input = (raw as Record<string, unknown>)?.input;
+        if (typeof input !== 'object' || input === null) return 'input must be an object';
+        const i = input as Record<string, unknown>;
+        if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
+          return 'input fields must be finite numbers';
+        }
+        const rot = validateRotation((raw as Record<string, unknown>).rotation);
+        if (!rot.success) return `rotation: ${rot.error}`;
+        return {
+          seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
           input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
           rotation: rot.data,
-        },
+        };
       };
+      const edge = parseEdge(obj);
+      if (typeof edge === 'string') return { success: false, error: edge };
+      // prev is optional redundancy: same shape, validated the same —
+      // a malformed copy must not sink the good current edge though, so
+      // it fails soft (dropped, not rejected).
+      let prev: typeof edge | undefined;
+      if (obj.prev != null) {
+        const pe = parseEdge(obj.prev);
+        if (typeof pe !== 'string') prev = pe;
+      }
+      return { success: true, data: { type: 'inputMove', ...edge, prev } };
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
       if (!p || p.isDead) return;
-      const i = m.input;
-      // Stale input events (reordered datagrams) must not touch skiing/
-      // status either — the sim's seq gate decides before we commit.
-      const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
-      if (h.roomInfo.moveInput?.(id, i, newStatus, m.seq) === false) return;
-      p.skiing = i.ski ? 1 : 0;
-      p.status = newStatus;
+      const apply = (e: { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }): boolean => {
+        const i = e.input;
+        const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
+        // Stale edges must not touch skiing/status either — the sim's
+        // seq gate decides before we commit.
+        if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq) === false) return false;
+        p.skiing = i.ski ? 1 : 0;
+        p.status = newStatus;
+        return true;
+      };
+      // Redundant copy first: a lost packet's edge lands here instantly
+      // instead of waiting the watchdog round-trip. seq gates inside
+      // moveInput keep the double-apply a no-op on the happy path.
+      if (m.prev) apply(m.prev);
+      apply(m);
     },
   },
 
