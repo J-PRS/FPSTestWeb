@@ -76,11 +76,11 @@ function laneCheck(lane: ReplicaLane, logger: ChildLogger, a: {
   perKey?: boolean;
   warnWhy: string;
   transientWhy: string;
-}): void {
+}): boolean {
   if (a.localHash === a.serverHash) {
     lane.streak = 0;
     lane.prevKeys.clear();
-    return;
+    return false;
   }
   lane.streak++;
   const detail = `server=${a.serverHash} client=${a.localHash} ${a.detail}`;
@@ -97,6 +97,7 @@ function laneCheck(lane: ReplicaLane, logger: ChildLogger, a: {
   } else {
     logger.debug(`[StateHash] ${a.name} mismatch tick=${a.tick} ${detail} (transient — ${a.transientWhy})`);
   }
+  return persistent;
 }
 
 declare global {
@@ -378,6 +379,10 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     // report phantom desyncs.
     if (ctx.world?.playbackMode) {return;}
     hashCheckCount++;
+    // A persistent lane desync earns a world-state replay, not just a
+    // warn — snapshotRequest now re-streams flag/pickup/deploy/ball/
+    // crawler rosters server-side, so stuck lanes can converge back.
+    let laneNeedsHeal = false;
     // Lane payloads unpack once at the edge — declared field order, so
     // each tuple is cast at the lane it belongs to.
     const serverFlagHash = replica?.flag?.hash;
@@ -394,7 +399,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       for (const [team, state] of Object.entries(ctx.world.flagStates ?? {})) {
         if (state) {local.set(team, { state, carrier: ctx.world.flagMarkers?.get(team)?.carrier ?? null });}
       }
-      laneCheck(flagLane, logger, {
+      laneNeedsHeal ||= laneCheck(flagLane, logger, {
         name: 'FLAG', tick,
         serverHash: serverFlagHash,
         localHash: replicaHash(WORLD_MODEL.flag!, local),
@@ -407,7 +412,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     if (serverPickupHash !== undefined && ctx.world) {
       const local = new Map<number, { kind: string }>();
       for (const [id, p] of ctx.world.netPickups ?? []) {local.set(id, { kind: p.kind });}
-      laneCheck(pickupLane, logger, {
+      laneNeedsHeal ||= laneCheck(pickupLane, logger, {
         name: 'PICKUP', tick,
         serverHash: serverPickupHash,
         localHash: replicaHash(WORLD_MODEL.pickup!, local),
@@ -436,7 +441,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverDeployFields);
         if (d.diffs.length) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
       }
-      laneCheck(deployLane, logger, {
+      laneNeedsHeal ||= laneCheck(deployLane, logger, {
         name: 'DEPLOY', tick,
         serverHash: serverDeployHash,
         localHash: replicaHash(WORLD_MODEL.deploy!, local),
@@ -477,7 +482,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           }
         }
       }
-      laneCheck(creatureLane, logger, {
+      laneNeedsHeal ||= laneCheck(creatureLane, logger, {
         name: 'CREATURE', tick,
         serverHash: serverCreatureHash,
         localHash: localCreatureHash,
@@ -504,7 +509,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         diffKeys = d.keys;
         if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
       }
-      laneCheck(ballLane, logger, {
+      laneNeedsHeal ||= laneCheck(ballLane, logger, {
         name: 'BALL', tick,
         serverHash: serverBallHash,
         localHash: localBallHash,
@@ -514,6 +519,16 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         warnWhy: 'stranded or stale replica',
         transientWhy: 'lifecycle edge or derived-flag boundary in flight',
       });
+    }
+
+    // Object lanes have no other request path: the player-hash branch
+    // below only fires when the PLAYER hash mismatches, so a persistent
+    // flag/pickup/deploy/ball/creature desync could warn forever without
+    // ever pulling the roster replay that heals it. Same cooldown —
+    // one request heals every lane at once.
+    if (laneNeedsHeal && Date.now() - lastSnapshotRequest >= SNAPSHOT_COOLDOWN_MS) {
+      lastSnapshotRequest = Date.now();
+      networkManager.sendSnapshotRequest();
     }
 
     const allPlayers = buildHashablePlayerMap(ctx);
