@@ -20,8 +20,8 @@ export interface KindFieldDecl {
   name: string;
   /** Wire type — lets inbound checks verify SHAPE, not just presence: a
    *  string where a vec3 belongs poisons a replica as silently as a
-   *  missing field. 'vec3' = {x,y,z} finite numbers; 'rot' = {yaw,pitch}; 'arr' = any array. */
-  wire: 'num' | 'str' | 'bool' | 'vec3' | 'rot' | 'arr';
+   *  missing field. 'vec3' = {x,y,z} finite numbers; 'rot' = {yaw,pitch}; 'arr' = any array; 'obj' = any non-null object. */
+  wire: 'num' | 'str' | 'bool' | 'vec3' | 'rot' | 'arr' | 'obj';
   channel: SyncChannel;
   /** Value emitted when the field is absent — the wire's sentinel for
    *  'not set' (deploy teams diff '' server-side, never null). */
@@ -541,35 +541,35 @@ export function checkPacket(
  *  when missing, matching the emit-side contract. A hostile or buggy
  *  client that drops a required field warns once at dispatch instead of
  *  the handler reading `undefined.x` five frames later. */
-export interface IntentFieldDecl { name: string; absent?: unknown }
+export interface IntentFieldDecl { name: string; wire?: KindFieldDecl['wire']; absent?: unknown }
 export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
-  join: [{ name: 'playerId' }, { name: 'token', absent: null }, { name: 'room', absent: null }, { name: 'mode', absent: null }, { name: 'perk', absent: null }, { name: 'armorClass', absent: null }, { name: 'name', absent: null }, { name: 'map', absent: null }, { name: 'bots', absent: null }, { name: 'unlisted', absent: null }, { name: 'transport', absent: null }, { name: 'resumeSeq', absent: null }],
-  position: [{ name: 'position' }, { name: 'rotation' }, { name: 'velocity' }, { name: 'seq', absent: null }, { name: 'inputSeq', absent: null }, { name: 'ping', absent: null }],
-  teleport: [{ name: 'position' }, { name: 'rotation' }, { name: 'velocity' }],
-  ping: [{ name: 'timestamp' }],
-  clientStats: [{ name: 'fps' }, { name: 'jsMs' }, { name: 'ping' }, { name: 'loss' }, { name: 'jitter' }],
-  chat: [{ name: 'text' }, { name: 'team', absent: null }, { name: 'vgs', absent: null }],
-  aoeShot: [{ name: 'position' }, { name: 'weaponType', absent: null }, { name: 'excludeTargetId', absent: null }, { name: 'projectileId', absent: null }, { name: 'airtime', absent: null }, { name: 'power', absent: null }, { name: 'directHit', absent: null }, { name: 'shotId', absent: null }],
-  shotFired: [{ name: 'weaponType', absent: null }, { name: 'dir', absent: null }, { name: 'pos', absent: null }, { name: 'shotId', absent: null }],
-  jump: [{ name: 'position' }],
-  jetpack: [{ name: 'position' }],
-  inputMove: [{ name: 'input' }, { name: 'rotation' }, { name: 'seq', absent: null }],
-  projectileDestroy: [{ name: 'projectileId' }, { name: 'shotId', absent: null }],
-  environmentDamage: [{ name: 'amount' }, { name: 'attacker', absent: null }, { name: 'claimSeq', absent: null }],
-  heal: [{ name: 'amount' }, { name: 'claimSeq', absent: null }],
-  creatureHit: [{ name: 'id' }, { name: 'damage' }, { name: 'kx', absent: null }, { name: 'ky', absent: null }, { name: 'kz', absent: null }, { name: 'claimSeq', absent: null }],
-  crawlerHit: [{ name: 'id' }, { name: 'damage' }, { name: 'kx', absent: null }, { name: 'ky', absent: null }, { name: 'kz', absent: null }, { name: 'claimSeq', absent: null }],
-  deploy: [{ name: 'kind' }, { name: 'position' }, { name: 'claimSeq', absent: null }],
-  repair: [{ name: 'targetId' }, { name: 'claimSeq', absent: null }],
-  skillUse: [{ name: 'claimSeq', absent: null }],
-  slam: [{ name: 'position' }, { name: 'claimSeq', absent: null }],
-  respawn: [{ name: 'hold', absent: null }],
+  join: [{ name: 'playerId', wire: 'str' }, { name: 'token', wire: 'str', absent: null }, { name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'perk', wire: 'str', absent: null }, { name: 'armorClass', wire: 'str', absent: null }, { name: 'name', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }, { name: 'transport', wire: 'str', absent: null }, { name: 'resumeSeq', wire: 'num', absent: null }],
+  position: [{ name: 'position', wire: 'vec3' }, { name: 'rotation', wire: 'rot' }, { name: 'velocity', wire: 'vec3' }, { name: 'seq', wire: 'num', absent: null }, { name: 'inputSeq', wire: 'num', absent: null }, { name: 'ping', wire: 'num', absent: null }],
+  teleport: [{ name: 'position', wire: 'vec3' }, { name: 'rotation', wire: 'rot' }, { name: 'velocity', wire: 'vec3' }],
+  ping: [{ name: 'timestamp', wire: 'num' }],
+  clientStats: [{ name: 'fps', wire: 'num' }, { name: 'jsMs', wire: 'num' }, { name: 'ping', wire: 'num' }, { name: 'loss', wire: 'num' }, { name: 'jitter', wire: 'num' }],
+  chat: [{ name: 'text', wire: 'str' }, { name: 'team', wire: 'str', absent: null }, { name: 'vgs', wire: 'str', absent: null }],
+  aoeShot: [{ name: 'position', wire: 'vec3' }, { name: 'weaponType', wire: 'num', absent: null }, { name: 'excludeTargetId', wire: 'str', absent: null }, { name: 'projectileId', wire: 'str', absent: null }, { name: 'airtime', wire: 'num', absent: null }, { name: 'power', wire: 'num', absent: null }, { name: 'directHit', wire: 'bool', absent: null }, { name: 'shotId', wire: 'str', absent: null }],
+  shotFired: [{ name: 'weaponType', wire: 'num', absent: null }, { name: 'dir', wire: 'vec3', absent: null }, { name: 'pos', wire: 'vec3', absent: null }, { name: 'shotId', wire: 'str', absent: null }],
+  jump: [{ name: 'position', wire: 'vec3' }],
+  jetpack: [{ name: 'position', wire: 'vec3' }],
+  inputMove: [{ name: 'input', wire: 'obj' }, { name: 'rotation', wire: 'rot' }, { name: 'seq', wire: 'num', absent: null }],
+  projectileDestroy: [{ name: 'projectileId', wire: 'str' }, { name: 'shotId', wire: 'str', absent: null }],
+  environmentDamage: [{ name: 'amount', wire: 'num' }, { name: 'attacker', wire: 'str', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
+  heal: [{ name: 'amount', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
+  creatureHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'kx', wire: 'num', absent: null }, { name: 'ky', wire: 'num', absent: null }, { name: 'kz', wire: 'num', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
+  crawlerHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'kx', wire: 'num', absent: null }, { name: 'ky', wire: 'num', absent: null }, { name: 'kz', wire: 'num', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
+  deploy: [{ name: 'kind', wire: 'str' }, { name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
+  repair: [{ name: 'targetId', wire: 'str' }, { name: 'claimSeq', wire: 'num', absent: null }],
+  skillUse: [{ name: 'claimSeq', wire: 'num', absent: null }],
+  slam: [{ name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
+  respawn: [{ name: 'hold', wire: 'bool', absent: null }],
   throwFlag: [],
   snapshotRequest: [],
   resync: [],
-  classUpdate: [{ name: 'armorClass' }],
-  perkUpdate: [{ name: 'perk' }],
-  switchRoom: [{ name: 'room', absent: null }, { name: 'mode', absent: null }, { name: 'map', absent: null }, { name: 'bots', absent: null }, { name: 'unlisted', absent: null }],
+  classUpdate: [{ name: 'armorClass', wire: 'str' }],
+  perkUpdate: [{ name: 'perk', wire: 'str' }],
+  switchRoom: [{ name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }],
 };
 
 // Any warn here repeats per packet/emit — a hostile peer or a broken
@@ -584,6 +584,7 @@ function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
     case 'str': return typeof v === 'string';
     case 'bool': return typeof v === 'boolean';
     case 'arr': return Array.isArray(v);
+    case 'obj': return typeof v === 'object' && v !== null;
     case 'vec3': {
       const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
       return typeof o === 'object' && o !== null &&
@@ -613,6 +614,9 @@ export function checkIntent(type: string, msg: Record<string, unknown>): void {
   const fields = CLIENT_INTENTS[type];
   if (!fields) return;
   for (const f of fields) {
+    if (f.name in msg && f.wire && msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
+      warnOnce(`${type}:${f.name}!t`, `[worldModel] inbound intent ${type} field '${f.name}' wrong type (want ${f.wire})`);
+    }
     if (!(f.name in msg) && f.absent === undefined) {
       warnOnce(`${type}:${f.name}`, `[worldModel] inbound intent '${type}' missing required field '${f.name}'`);
     }

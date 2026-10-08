@@ -3374,3 +3374,11 @@ same way checkPacket checks inbound ones: a mistyped emit warns once
 per field instead of writing a poisoned wire shape. Rotation got its
 own 'rot' tag ({yaw,pitch} isn't vec3) — the check caught it plus a
 false-positive on explicit-undefined emits within minutes.
+
+## 2.190 — client intents declare wire types too
+
+CLIENT_INTENTS fields carry the same wire tag now; checkIntent
+type-checks present fields at dispatch, so a hostile/malformed client
+sending position:"abc" or hold:"yes" warns instead of feeding a
+poisoned shape into the sim. Both wire directions are now
+presence+type checked from one declaration.
