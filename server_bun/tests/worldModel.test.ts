@@ -232,6 +232,19 @@ describe('world model <-> protocol conformance', () => {
     }
   });
 
+  it('SnapshotPlayer keys stay inside the declared roster row', () => {
+    // The debug feed's row is a subset of the roster row plus kill stats —
+    // a key it carries that the model doesn't declare can't come from
+    // live state. Pin the subset relation (kills/deaths are the extras).
+    const body = PROTOCOL.match(/export interface SnapshotPlayer \{([^}]*)\}/)![1]!;
+    const keys = new Set([...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]));
+    const declared = new Set(['id', 'kills', 'deaths',
+      ...declaredFieldNames(WORLD_MODEL.player!, 'rosterFields')]);
+    for (const k of keys) {
+      expect(declared.has(k), `SnapshotPlayer key '${k}' has no declared field source`).toBe(true);
+    }
+  });
+
   it('RemotePlayerState keys stay inside the declared field union', () => {
     // The replica record is the landing zone for roster/update patches —
     // a key there with no declared field can never be written by wire

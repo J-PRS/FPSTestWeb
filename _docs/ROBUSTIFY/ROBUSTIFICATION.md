@@ -3471,3 +3471,10 @@ RemotePlayerState is the wire's landing zone: a key with no declared
 field is a dead slot, a declared field with no key can't land. Its
 keys now pin to the spawn∪update∪roster union (+id). The replica
 record, every roster row, and every interface is declaration-checked.
+
+## 2.202 — SnapshotPlayer pinned too
+
+The debug feed's row parallels the roster row + kill stats — it now
+pins as a subset of the declared row (kills/deaths whitelisted as the
+stats extras). Every hand-written wire row shape is pinned: join
+roster, inline containers, replica record, debug feed.
