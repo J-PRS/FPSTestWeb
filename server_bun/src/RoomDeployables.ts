@@ -19,6 +19,8 @@ export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
 import type { StructureCollider } from '../../shared/ballCollide.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
+import { hmHeight } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import type { TeamId } from '../../shared/teams.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
@@ -28,6 +30,9 @@ const MAX_PER_PLAYER = DEPLOY_MAX;
 const NUGGET_ARM_S = 0.2;
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
+// A claim's y is trusted within this band of the surface beneath it —
+// the pod lands on ground or a structure top, never floating mid-air.
+const PLANT_FLOAT = 3;
 
 export interface Deployed {
   id: number;
@@ -141,6 +146,7 @@ export class RoomDeployables {
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return 'toofar';
+    pos = { ...pos, y: this.groundY(pos) };
     player.beltCharges -= DEPLOY_ITEMS[k].cost;
     // Nugget: no planted item — the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
@@ -166,6 +172,23 @@ export class RoomDeployables {
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: { ...pos }, team: player.team }) as ServerMessage);
     return true;
+  }
+
+  /** The surface a planted item should rest on: highest structure top
+   *  under the claimed point, else terrain. A claim floating more than
+   *  PLANT_FLOAT above it is pulled down — "server decides" applies to
+   *  the landing spot too, and the replica echoes this y verbatim. */
+  private groundY(pos: Vec3): number {
+    let floor = this.room.field ? hmHeight(this.room.field, pos.x, pos.z) : pos.y;
+    const hit = segSolidHit(
+      { x: pos.x, y: pos.y + 0.5, z: pos.z },
+      { x: pos.x, y: floor - 1, z: pos.z },
+      this.room.ballSim.colliders,
+    );
+    const support = hit ? hit.y : floor;
+    if (pos.y > support + PLANT_FLOAT) return support;
+    if (pos.y < support - PLANT_FLOAT) return support; // buried claim — lift to the surface
+    return pos.y;
   }
 
   /** Map-authored base assets — the mission's generator, base turrets,

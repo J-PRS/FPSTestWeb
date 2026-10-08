@@ -3541,3 +3541,7 @@ The squad's persistent movement memory (ring-entry incumbents, failure graveyard
 ## 2.213 — structSinks pin: the three structure sinks can't drift
 
 The roomStructures extraction's whole point — colliders, the mapUpdate diff, and the join-time setMap echo all read the same eff() — is now pinned by a scenario test: kill the generator and the alpha shield pane vanishes from ballSim colliders, exactly one skinny mapUpdate, and the echo in the same call; a gen-less team's pane survives any refresh; a settled refresh emits nothing. (Settling note: the first refresh legitimately diffs once — seatKits grounds authored pos.y on live terrain — so the silence assert runs after that settles.)
+
+## 2.214 — deploy claims ground at the surface server-side
+
+handleDeploy trusted the claim's y verbatim within the 40m plant ring: a forged or buggy pod could plant a turret/mine floating 30m up (or buried under the field) and the replica would echo it everywhere. Claims now snap to the supporting surface — highest structure top under the point via a downward solid cast, else terrain — inside a ±3m trust band so ramps and ledges keep their claimed y. Pinned: an airborne claim grounds at terrain, a band claim keeps its y, a genless shield survives refresh.

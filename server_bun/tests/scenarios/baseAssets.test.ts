@@ -70,6 +70,23 @@ describe('base assets', () => {
     expect(room.deployables.repair('foe', gen.id)).toBe('enemy');
   });
 
+  it('a floating or buried plant claim grounds at the surface — server owns the landing spot', () => {
+    const room = mkRoom({}, 'dm');
+    room.players.addPlayer('p1', 'alpha', 'none', 'medium');
+    const p = firstPlayer(room);
+    pin(room, 'p1', { x: 0, y: 29, z: 0 });
+    p.beltCharges = 10;
+    const TERRAIN_Y = (60 / 255) * 125; // flat harness field
+    // 30m in the air is not a pod landing — the replica grounds it.
+    expect(room.deployables.handleDeploy('p1', 'turret', { x: 1, y: TERRAIN_Y + 30, z: 0 })).toBe(true);
+    const grounded = [...room.deployables.items.values()].find(d => d.kind === 'turret')!;
+    expect(grounded.pos.y).toBeCloseTo(TERRAIN_Y, 1);
+    // Within the trust band the claimed y stands verbatim (ramps, ledges).
+    expect(room.deployables.handleDeploy('p1', 'turret', { x: 1, y: TERRAIN_Y + 1.5, z: 2 })).toBe(true);
+    const trusted = [...room.deployables.items.values()].filter(d => d.kind === 'turret')[1]!;
+    expect(trusted.pos.y).toBeCloseTo(TERRAIN_Y + 1.5, 1);
+  });
+
   it('players cannot plant cap-0 kinds — generators are authored only', () => {
     const room = mkRoom({}, 'dm');
     room.players.addPlayer('p1', 'alpha', 'none', 'medium');
@@ -83,7 +100,7 @@ describe('base assets', () => {
 
   it('base sentry flies a real bolt — blast lands at the lead point, teammates exempt', () => {
     const room = mkRoom({
-      deploys: [{ kind: 'sentry', pos: { x: 0, y: 0, z: 0 }, team: 'alpha' }],
+      deploys: [{ kind: 'baseturret', pos: { x: 0, y: 0, z: 0 }, team: 'alpha' }],
     }, 'ctf');
     const w = watch(room);
     room.players.addPlayer('foe', 'bravo', 'none', 'medium');
