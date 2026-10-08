@@ -80,6 +80,16 @@ try {
   };
   check(await heard('guest', 'hello from host'), `guest receives host chat (log: ${JSON.stringify(await guest.test(`window.__chatLog`))})`);
   check(await heard('host', 'hello from guest'), `host receives guest chat (log: ${JSON.stringify(await host.test(`window.__chatLog`))})`);
+
+  // One-world check: the guest must live in the HOST's map, not its own
+  // saved one — gameState carries the host's terrain, and a mismatch
+  // means two clients simming different ground. Sample a spread of
+  // world points and require identical heights on both ends.
+  const samples = [[0, 0], [500, 500], [-300, 120], [777, -222]];
+  const hostHeights = await host.test<number[]>(`[${samples.map(([x, z]) => `t.terrain.getHeight(${x},${z})`).join(',')}]`);
+  const guestHeights = await guest.test<number[]>(`[${samples.map(([x, z]) => `t.terrain.getHeight(${x},${z})`).join(',')}]`);
+  const drift = Math.max(...hostHeights.map((h, i) => Math.abs(h - (guestHeights[i] ?? NaN))));
+  check(drift < 0.5, `guest terrain matches host map (max drift ${drift.toFixed(3)}m over ${samples.length} samples)`);
 } finally {
   await closeClient(host);
   await closeClient(guest);
