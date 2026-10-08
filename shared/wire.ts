@@ -73,6 +73,10 @@ export interface WireTickPlayer {
   /** Sheep meter 0-100, bots only — how pedestrian the server thinks
    *  this bot is. Trailing byte; absent on older records. */
   sheep?: number;
+  /** Held jet input (0/1) — rides sheep's bit 7 (sheep caps at 100, so
+   *  the high bit was dead space) at zero bytes-per-record cost. Remote
+   *  dead-reckon burns thrust on it; absent on older frames. */
+  jet?: number;
 }
 
 export function isWireFrame(u8: Uint8Array): boolean {
@@ -203,7 +207,7 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
   // Always present — records are concatenated without lengths, so an
   // optional trailing byte would alias as the next record's idLen.
-  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0)));
+  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
   return new Uint8Array(buf, 0, o);
 }
 
@@ -228,7 +232,7 @@ export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer, into?: Tic
   d.setUint16(o, Math.max(0, Math.min(65535, Math.round(p.health))), true); o += 2;
   u8[o++] = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
   u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
-  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0)));
+  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
   return new Uint8Array(buf, 0, o);
 }
 
@@ -327,7 +331,8 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.ping = pingRaw > 0 ? pingRaw : undefined;
     u.ski = (flags & 2) !== 0 ? 1 : 0;
     u.status = flags & STATUS_MASK;
-    u.sheep = sheep > 0 ? sheep : undefined;
+    u.jet = (sheep & 0x80) !== 0 ? 1 : 0;
+    u.sheep = (sheep & 0x7f) > 0 ? sheep & 0x7f : undefined;
   }
   // No slice: the pooled slots array outlives the frame — consumers loop
   // to `count` so a fresh updates[] per 30Hz frame stops being an alloc.

@@ -163,6 +163,8 @@ export interface TickUpdatePlayer {
   isDead: boolean;
   ping?: number;
   ski?: number;
+  /** Held jet input bit — remote dead-reckoning burns thrust on it. */
+  jet?: number;
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
   /** Server-side sheep meter (0-100) — bots report theirs through the

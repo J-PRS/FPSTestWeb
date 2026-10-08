@@ -71,6 +71,7 @@ export class MoveClaims {
         && (msg.inputSeq === undefined || msg.inputSeq >= (this.h.inputSeqOf?.(playerId) ?? -1))) {
       this.h.moveInput?.(playerId, msg.input, player.status & CLIENT_STATUS_MASK);
       player.skiing = msg.input.ski ? 1 : 0;
+      player.jetting = msg.input.jet ? 1 : 0;
     }
 
     // inputSeq (not the frame seq) anchors the probe: it's the count of

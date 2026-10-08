@@ -106,6 +106,7 @@ export class PlayerManager {
       correctionGraceUntil: 0,
       ping: 0,
       skiing: 0,
+      jetting: 0,
       status: 0,
       lastFireSim: -Infinity,
       history: [],

@@ -74,6 +74,9 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
   // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
   p.skiing = out.move?.ski ? 1 : 0;
+  // Jet bit mirrors the held-input the shadow actually burns — the
+  // arsenal's post-throw pin counts as jetting too.
+  p.jetting = (out.move?.jet || h.arsenal.jetPinUntil(id) > now) ? 1 : 0;
 }
 
 /** The bot's intent becomes input keys — only what a player's fingers

@@ -347,6 +347,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // them when unset; `absent` marks omission as legal, not drift.
       { name: 'ping', wire: 'num', channel: 'sim', absent: null },
       { name: 'ski', wire: 'num', channel: 'sim', absent: null },
+      { name: 'jet', wire: 'num', channel: 'sim', absent: null },
       { name: 'status', wire: 'num', channel: 'edge', absent: null },
       { name: 'sheep', wire: 'num', channel: 'sim', absent: null },
     ],

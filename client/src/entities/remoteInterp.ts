@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { MOVEMENT_CONFIG } from '../../../shared/movement.js';
-import { classCapsule } from '../../../shared/botClasses.js';
+import { classCapsule, classMass } from '../../../shared/botClasses.js';
 import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
@@ -29,6 +29,9 @@ export interface InterpHost {
   /** Wire ski flag — a DR'd remote holding ski stays frictionless above
    *  walk speed, same rule the shared sim applies. */
   wireSki?: boolean;
+  /** Wire jet flag — a DR'd remote holding jet climbs instead of
+   *  falling at raw gravity (the "why did he drop mid-air" tell). */
+  wireJet?: boolean;
 }
 
 // Scratch — shared across instances, never retained past the call
@@ -311,6 +314,13 @@ export class RemoteInterp {
   private simStep(dt: number): void {
     const p = this.h.position;
     this.simulatedVelocity.y += GRAVITY * dt;
+
+    // Held jet on the wire burns thrust — the shared sim's
+    // jetForceUp/mass, minus the steering share (no dir bits for remotes).
+    // Without it a jetting remote visibly falls during a packet gap.
+    if (this.h.wireJet === true) {
+      this.simulatedVelocity.y += MOVEMENT_CONFIG.jetForceUp * (dt / classMass(this.h.armorClass));
+    }
 
     p.x += this.simulatedVelocity.x * dt;
     p.y += this.simulatedVelocity.y * dt;

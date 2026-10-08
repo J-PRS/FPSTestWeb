@@ -74,6 +74,7 @@ export interface PlayerState {
   /** Server-driven filler — no socket, no grace period, no idle reap. */
   isBot?: boolean;
   skiing: number; // last reported ski input flag (0/1), from inputMove
+  jetting: number; // last reported jet input flag (0/1) — broadcast so remote DR burns thrust
   // Status bitmask (shared/status.ts bits) from inputMove — the server
   // relays it to remotes and tests bits where mechanics care (shield soaks
   // damage, mend ticks health). Unknown bits pass through untouched, so

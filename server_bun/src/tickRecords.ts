@@ -147,6 +147,7 @@ export class TickFanout {
           // reported (renders them with a bogus "0ms" ping).
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
+          jet: p.jetting,
           status: snap.status,
           sheep,
         }, rec.enc);

@@ -42,6 +42,8 @@ export interface RemotePlayerState {
   health: number;
   ping?: number;
   ski?: number;
+  /** Held jet input from the tick frame — remote DR burns thrust on it. */
+  jet?: number;
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
   team?: TeamId;

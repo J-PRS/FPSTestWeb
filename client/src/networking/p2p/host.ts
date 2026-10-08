@@ -337,6 +337,7 @@ export class P2PHost {
           isDead: p.isDead,
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
+          jet: p.jetting,
         }));
       }
       if (records.length === 0) {continue;}

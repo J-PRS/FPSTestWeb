@@ -202,7 +202,7 @@ describe('world model <-> protocol conformance', () => {
     expect(new Set(declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')))
       .toEqual(new Set([
         'internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
-        'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep',
+        'health', 'ping', 'ski', 'jet', 'status', 'team', 'transport', 'armorClass', 'sheep',
       ]));
   });
 

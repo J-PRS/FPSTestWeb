@@ -112,6 +112,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   // The wire ski bit doubles as the animation claim — tuck when held,
   // run when released, regardless of how much momentum remains.
   remotePlayer.wireSki = !playerState.isDead && Boolean(playerState.ski);
+  remotePlayer.wireJet = !playerState.isDead && Boolean(playerState.jet);
   let skiing = false;
   if (!playerState.isDead && playerState.ski) {
     const v = remotePlayer.vel;
@@ -122,9 +123,9 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
       deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
     }
   }
-  // Jet has no wire bit — a sustained powered climb (vel.y past jump
-  // apex) is the only honest tell, matching the remote animation. Bots
-  // that write wireJet (brain's real jet button) override the guess.
+  // wireJet rides the sheep byte's top bit — set above from the tick
+  // frame. The powered-climb heuristic is only a fallback for senders
+  // that never claimed it.
   const jetting = isJetting(remotePlayer, playerState.isDead);
   if (jetting) {deps.lazyEffects().spawnJetpack(remotePlayer.position);}
   sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel, remotePlayer.armorClass);

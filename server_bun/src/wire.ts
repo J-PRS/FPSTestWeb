@@ -231,6 +231,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         // seq gate decides before we commit.
         if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq) === false) return false;
         p.skiing = i.ski ? 1 : 0;
+        p.jetting = i.jet ? 1 : 0;
         p.status = newStatus;
         return true;
       };
