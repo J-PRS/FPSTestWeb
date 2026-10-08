@@ -87,7 +87,9 @@ export class TickFanout {
     // with simNow — mixing them desyncs the moment simNow ≠ wall.
     const simT = simNow();
     let recN = 0;
-    const roster: Record<number, string> = {};
+    // Lazily minted only when a new wireId binds — a fresh {} per tick
+    // was steady-state garbage for a delta that almost never fires.
+    let roster: Record<number, string> | null = null;
     let rosterDirty = false;
     for (const [playerId, p] of players) {
       if (this.skipRecord(room, playerId, p, now)) continue;
@@ -126,7 +128,7 @@ export class TickFanout {
       if (wireId === undefined) {
         wireId = mintWireId(room);
         room.wireIds.set(playerId, wireId);
-        roster[wireId] = playerId;
+        (roster ??= {})[wireId] = playerId;
         rosterDirty = true;
       }
       let rec = records[recN];
@@ -157,7 +159,7 @@ export class TickFanout {
       this.metrics.recordsBuilt++;
     }
     records.length = recN;
-    if (rosterDirty) room.connections.broadcast({ type: 'wireIds', add: roster });
+    if (rosterDirty) room.connections.broadcast({ type: 'wireIds', add: roster! });
     return records;
   }
 
