@@ -6,6 +6,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ViewModel } from './entities/ViewModel.js';
 import { bakeVertexAO } from './effects/vertexAO.js';
 import { WeaponType } from '../../shared/weapons.js';
+import { isDevHost } from './core/params.js';
+
+if (!isDevHost()) {
+  document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  throw new Error('aodump: dev-only surface');
+}
 
 const q = new URLSearchParams(location.search);
 

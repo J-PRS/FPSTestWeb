@@ -16,6 +16,14 @@
 } }
 </script>
 <script type="module">
+// Dev tool — closed on prod builds (same https-means-prod rule as isDevHost).
+if (location.protocol === 'https:') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  });
+  throw new Error('dev-only surface');
+}
+
 import * as THREE from 'three';
 import { turretterParts } from '/src/entities/Turretter.ts';
 import { bakeVertexAO } from '/src/effects/vertexAO.ts';

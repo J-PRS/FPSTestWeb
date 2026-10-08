@@ -2,6 +2,14 @@
 <html>
 <body style="margin:0;background:#222">
 <script type="module">
+// Dev tool — closed on prod builds (same https-means-prod rule as isDevHost).
+if (location.protocol === 'https:') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  });
+  throw new Error('dev-only surface');
+}
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const q = new URLSearchParams(location.search);

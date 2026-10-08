@@ -4,6 +4,12 @@
 // window.__clips lists clip names once loaded; window.__ready when posed.
 import * as THREE from 'three';
 import { mkGltfLoader } from './gltfLoad';
+import { isDevHost } from './core/params.js';
+
+if (!isDevHost()) {
+  document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  throw new Error('posedump: dev-only surface');
+}
 
 const q = new URLSearchParams(location.search);
 const mann = q.get('model') === 'mannequin';

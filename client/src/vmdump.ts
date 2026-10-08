@@ -2,6 +2,12 @@
 // for the headless iteration pipeline. Never referenced by the game.
 import * as THREE from 'three';
 import { ViewModel } from './entities/ViewModel.js';
+import { isDevHost } from './core/params.js';
+
+if (!isDevHost()) {
+  document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  throw new Error('vmdump: dev-only surface');
+}
 
 const q = new URLSearchParams(location.search);
 const w = Number.parseInt(q.get('w') ?? '0');

@@ -1,6 +1,14 @@
 <!doctype html>
 <html><body style="margin:0">
 <script type="module">
+// Dev tool — closed on prod builds (same https-means-prod rule as isDevHost).
+if (location.protocol === 'https:') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  });
+  throw new Error('dev-only surface');
+}
+
 // Cube-assembly sandbox: renders the t2 sky faces on a cube and lets the
 // URL pick face order/flips, e.g. skytest.html?map=px,nx,ny,py,pz,nz&flip=nx,pz,nz
 import * as THREE from 'three';

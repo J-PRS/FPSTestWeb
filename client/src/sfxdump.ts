@@ -5,6 +5,12 @@ import * as THREE from 'three';
 import { audio } from './core/audio.js';
 import * as sfx from './core/sfx.js';
 import { WeaponType } from '../../shared/weapons.js';
+import { isDevHost } from './core/params.js';
+
+if (!isDevHost()) {
+  document.body.innerHTML = '<div style="color:#cde;font:14px monospace;padding:2em">dev tool — not available on this build.</div>';
+  throw new Error('sfxdump: dev-only surface');
+}
 
 function floatToWav(data: Float32Array, sampleRate: number): ArrayBuffer {
   const buf = new ArrayBuffer(44 + data.length * 2);
