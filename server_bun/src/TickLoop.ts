@@ -374,7 +374,10 @@ export class TickLoop {
         ? { hash: replicaHash(kind, roster.map((e) => [e.id, e] as [number, Record<string, unknown>])),
             fields: kindFields(kind, roster) }
         : undefined;
-    const ballLane = emitLane(WORLD_MODEL.ball!, room.ballSim.roster());
+    // Hash the committed wire regime, not the live sim derivative —
+    // enraged/targetId re-derive inside each integrator and churn on
+    // healthy links; only last-segment state is comparable across ends.
+    const ballLane = emitLane(WORLD_MODEL.ball!, room.ballSim.contractRoster());
     const creatureLane = emitLane(WORLD_MODEL.creature!, room.creatureSim.roster());
     const deployLane = emitLane(WORLD_MODEL.deploy!, room.deployables.snapshot());
     const flagHash = room.flags?.flags.size

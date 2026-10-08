@@ -171,9 +171,27 @@ export class BallSim {
     return targetSnapOf(b);
   }
 
+  /** Regime the last emitted segment committed per ball — what the hash
+   *  lane compares. Hashing LIVE enraged/targetId asks two async
+   *  integrators to derive identically off different target views: churn.
+   *  Committed state only diffs when a real edge is missed or in flight. */
+  private segRegime = new Map<number, { enraged: boolean; targetId: string | null }>();
+
+  /** roster() for the state-hash lane: live membership, committed regime. */
+  contractRoster(): { id: number; variant: number; enraged: boolean; targetId: string | null }[] {
+    const out = [];
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+      const r = this.segRegime.get(b.id) ?? { enraged: b.enraged, targetId: b.targetId };
+      out.push({ id: b.id, variant: b.variant, enraged: r.enraged, targetId: r.targetId });
+    }
+    return out;
+  }
+
   private segment(b: SimBall, kind: SegmentKind): void {
     this.resyncAcc.set(b.id, 0);
     this.snapTarget(b); // segment boundary = aim refresh; clients get the same point
+    this.segRegime.set(b.id, { enraged: b.enraged, targetId: b.targetId });
     // Binary — segments are the highest-rate message (~10/s per ball of
     // bounces + heartbeats); ~50B vs ~160B JSON, and no per-client
     // JSON.stringify. Reliable lane: a dropped stamp costs ~1.2s of blind
@@ -235,6 +253,7 @@ export class BallSim {
     // would otherwise keep one dead entry per killed ball forever.
     this.retargetAcc.delete(b.id);
     this.resyncAcc.delete(b.id);
+    this.segRegime.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
     this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: pos, by }) as ServerMessage);
     if (by) this.onKilled?.(by, pos, b.variant);

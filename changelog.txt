@@ -1,3 +1,4 @@
+2026-10-01 - stateHash ball lane hashes the COMMITTED wire regime: enraged/targetId re-derive inside each integrator and churned on every healthy check; server keeps per-ball last-segment state (contractRoster), client tracks committed netEnraged in the NetBag — only a real missed edge diffs now
 2026-10-01 - cool-shot toggles: settings-page .tog convention — normal button off (hollow state square), accent-filled on; off no longer reads as disabled
 2026-10-01 - cool shots: DEMO/MP4 autorecord toggles atop the sidebar (persisted), per-shot format badges, right-click "Download MP4" for vault-cut clips; mp4 cut is sync so the entry badges on mint
 2026-10-01 - combatBlast: shooter exempt from lag-comp rewind on own blasts — your ghost lands ~lagMs behind a fast ski, outside the envelope, and self-damage silently died; live pos restores the feet-blast tax

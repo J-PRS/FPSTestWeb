@@ -495,7 +495,10 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     if (serverBallHash !== undefined) {
       const localBalls = new Map<number, { variant: number; enraged: boolean; targetId: string | null }>();
       for (const b of Ball.live) {
-        if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.enraged, targetId: b.netS.netTargetId });}
+        // Committed wire regime (last applied segment), NOT live replay
+        // state — b.enraged is re-derived by our own integrator each tick
+        // and can never match the authority's derivation tick-for-tick.
+        if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.netS.netEnraged, targetId: b.netS.netTargetId });}
       }
       const localBallHash = replicaHash(WORLD_MODEL.ball!, localBalls);
       // Membership alone isn't the signal here — enraged/targetId churn

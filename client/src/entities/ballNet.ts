@@ -37,13 +37,17 @@ export interface NetBag {
    *  authority. -1 = unstamped (wall-time fallback). */
   legT0: number;
   netTargetId: string | null;
+  /** Last segment's committed enraged — the wire contract the state-hash
+   *  lane compares. Live s.enraged can't serve: both integrators derive
+   *  it from their own stale target view, so it churns on healthy links. */
+  netEnraged: boolean;
   /** The inert leg walked its arc into terrain and parked — divergence
    *  vs a still-flying authority is the park-vs-bounce guess, not desync. */
   parked: boolean;
 }
 
 export function newNetBag(): NetBag {
-  return { sim: null, simT: 0, netAcc: 0, legT0: -1, netTargetId: null, parked: false };
+  return { sim: null, simT: 0, netAcc: 0, legT0: -1, netTargetId: null, netEnraged: false, parked: false };
 }
 
 /** Live ball state the replay mutates — all shared refs, no copies. */
@@ -156,6 +160,7 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
   else {s.tgtValid = false;}
   bag.netTargetId = seg.targetId;
+  bag.netEnraged = seg.enraged;
   // Do NOT step the lead age here: a partial-width step leaves the sim
   // cursor off the server's 0.05 grid permanently — every subsequent
   // prediction step is phase-shifted, bounce contacts resolve at
