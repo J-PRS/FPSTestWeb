@@ -5,6 +5,9 @@
 // transcoding) and falls back to webm.
 
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('VideoRec');
 
 const MIME_PREFERENCES = [
   'video/mp4;codecs=avc1.42E01E',
@@ -68,6 +71,14 @@ export class VideoRecorder {
   private aCodec: 'aac' | 'opus' | null = null;
   private aPendL: number[] = [];
   private aPendR: number[] = [];
+  // Recorder cost instrumentation — the two numbers that say whether
+  // capture is hurting the main thread. Sampled per second, reported on
+  // stop: queue growth = encoder can't keep up, pump ms = render-loop tax.
+  private statQMax = 0;
+  private statPumpMax = 0;
+  private statPumpSum = 0;
+  private statPumpN = 0;
+  private statLastAt = 0;
 
   setCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -193,6 +204,11 @@ export class VideoRecorder {
       if (audioCfg) {await this.startAudio(audioCfg);}
       this.frameDur = 1e6 / fps;
       this.frames = 0;
+      this.statQMax = 0;
+      this.statPumpMax = 0;
+      this.statPumpSum = 0;
+      this.statPumpN = 0;
+      this.statLastAt = performance.now();
       this.keyEvery = fps * 2; // IDR every 2s — the mp4 trim granularity
       this.encFailed = false;
       this.mime = 'video/mp4';
@@ -311,6 +327,7 @@ export class VideoRecorder {
       this.mux = null;
       this.ring = [];
       this.staged = false;
+      logger.info(`rec done ${this.frames}f qMax=${this.statQMax} pumpMax=${this.statPumpMax.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms codec=${this.vmux}${this.qpMode ? '+qp' : ''}`);
       try {
         if (aenc) {
           // Disconnect the tap first so no more PCM lands on a closing codec.
@@ -375,6 +392,7 @@ export class VideoRecorder {
       if (now - this.lastFrameAt < this.frameDur / 1000 * 0.9) {return;}
       this.lastFrameAt = now;
       const ts = Math.round((now - this.encWall) * 1000); // µs
+      const p0 = performance.now();
       const frame = new VideoFrame(this.staged ? this.stage! : src, { timestamp: ts });
       const opts: VideoEncoderEncodeOptions & Record<string, unknown> = { keyFrame: now - this.lastKeyAt >= 2000 };
       // Fixed-QP ≈ visually lossless: bitrate config is ignored, QP 22 is
@@ -384,6 +402,15 @@ export class VideoRecorder {
       if (now - this.lastKeyAt >= 2000) {this.lastKeyAt = now;}
       frame.close();
       this.frames++;
+      const pumpMs = performance.now() - p0;
+      const q = this.enc.encodeQueueSize;
+      if (q > this.statQMax) {this.statQMax = q;}
+      if (pumpMs > this.statPumpMax) {this.statPumpMax = pumpMs;}
+      this.statPumpSum += pumpMs; this.statPumpN++;
+      if (now - this.statLastAt >= 5000) {
+        this.statLastAt = now;
+        logger.info(`rec stats qMax=${this.statQMax} pump=${pumpMs.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms`);
+      }
     }
   }
 
