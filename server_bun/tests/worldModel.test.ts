@@ -195,6 +195,23 @@ describe('world model <-> protocol conformance', () => {
     }
   });
 
+  it('tick player record survives coordinates past the old i16 bound', () => {
+    // i16×0.04 saturated at ±1310m — a skier past that edge clamped on
+    // the wire and every client read them parked at 1310.7 while the sim
+    // moved on (the dunes z-freeze desync). i32 keeps 4cm precision and
+    // moves the bound out of reach of any real map.
+    const p: WireTickPlayer = {
+      playerId: 'p1', position: { x: 2500.4, y: -1600.2, z: 4095.9 },
+      rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+      health: 100, isDead: false,
+    };
+    const back = decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV3(7, p)], WIRE_TICK_V3));
+    const u = back!.updates[0]!;
+    expect(u.position.x).toBeCloseTo(2500.4, 1);
+    expect(u.position.y).toBeCloseTo(-1600.2, 1);
+    expect(u.position.z).toBeCloseTo(4095.9, 1);
+  });
+
   it('player roster field union covers every RemotePlayerState patch slot', () => {
     // The client derives its roster patch list from this union — a field
     // declared on one verb but missing the union would silently never

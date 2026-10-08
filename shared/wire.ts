@@ -190,22 +190,25 @@ export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePositio
 
 // ---- S→C tickUpdate ----
 
-// Position quantization for tick records: i16 × 0.04m covers ±1310m
-// (2048m fields have headroom) at 4cm steps — sub-pixel on screen and
-// self is never in the record set, so nothing reconciles against it.
-// 12B→6B per record, ~16% of the 38B body.
+// Position quantization for tick records: i32 × 0.04m at 4cm steps —
+// sub-pixel on screen and self is never in the record set, so nothing
+// reconciles against it. i16×0.04 saturated at ±1310m: skiers past that
+// edge CLAMPED on the wire and read as parked at 1310.7 while the sim
+// kept moving (the dunes z-freeze desync). i32 keeps the same precision
+// with ±85Mm of range the world can't outgrow — the clamp below is now
+// dead-capacity safety, not a reachable bound.
 const POS_Q = 0.04;
 const packPos = (d: DataView, o: number, x: number, y: number, z: number): number => {
-  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(x / POS_Q))), true); o += 2;
-  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(y / POS_Q))), true); o += 2;
-  d.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(z / POS_Q))), true); o += 2;
+  d.setInt32(o, Math.max(-2147483648, Math.min(2147483647, Math.round(x / POS_Q))), true); o += 4;
+  d.setInt32(o, Math.max(-2147483648, Math.min(2147483647, Math.round(y / POS_Q))), true); o += 4;
+  d.setInt32(o, Math.max(-2147483648, Math.min(2147483647, Math.round(z / POS_Q))), true); o += 4;
   return o;
 };
 
 /** Pre-encode one player's record — done ONCE per tick, shared across recipients. */
 export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   const id = ENC.encode(p.playerId);
-  const buf = new ArrayBuffer(1 + id.length + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
+  const buf = new ArrayBuffer(1 + id.length + 12 + 6 + 2 + 2 + 2 + 1 + 1 + 1);
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
@@ -226,18 +229,18 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
 }
 
 /** v3 record byte length — u16 wireId replaces the idLen+string prefix. */
-export const TICK_PLAYER_V3_BYTES = 2 + 6 + 6 + 2 + 2 + 2 + 1 + 1 + 1;
+export const TICK_PLAYER_V3_BYTES = 2 + 12 + 6 + 2 + 2 + 2 + 1 + 1 + 1;
 /** Reusable encode target for hot paths (one per pooled record slot):
  *  the returned Uint8Array aliases `into.buf` until the next encode. */
 export interface TickEncodeScratch { buf: ArrayBuffer; u8: Uint8Array; d: DataView }
 export function tickEncodeScratch(): TickEncodeScratch {
   // Sized for the largest record any encoder writes — v4's mask byte
-  // pushes a full record to 24B (one over v3's fixed 23).
+  // pushes a full record to 30B (one over v3's fixed 29).
   const buf = new ArrayBuffer(TICK_PLAYER_V3_BYTES + 1);
   return { buf, u8: new Uint8Array(buf), d: new DataView(buf) };
 }
 
-/** v3 record: u16 wireId replaces the idLen+string prefix (23B total). */
+/** v3 record: u16 wireId replaces the idLen+string prefix (29B total). */
 export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer, into?: TickEncodeScratch): Uint8Array {
   const { buf, u8, d } = into ?? tickEncodeScratch();
   let o = 0;
@@ -331,10 +334,10 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   const v1 = u8[1] === WIRE_TICK_V1;
   const v3 = u8[1] === WIRE_TICK_V3;
   const v4 = u8[1] === WIRE_TICK_V4;
-  // Minimum guaranteed bytes after the id — v1's old check under-counted
-  // sheep, so it stays at its historic 26; v3 has no id string, the whole
-  // record is a fixed 23 bytes.
-  const tail = v1 ? 26 : 20;
+  // Minimum guaranteed bytes after the id — covers the whole record
+  // minus the optional sheep byte (v1 f32 pos: 12+6+4+2+1+1, v2 i32
+  // pos: 12+6+4+2+1+1 — coincidentally both 26).
+  const tail = 26;
   const slots = pool ? pool.slots : [];
   let o = 15;
   for (let i = 0; i < count; i++) {
@@ -342,13 +345,13 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     let playerId: string;
     let wireId = 0;
     if (v3) {
-      if (o + 23 > u8.length) return null;
+      if (o + 29 > u8.length) return null;
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
     } else if (v4) {
       // Variable-length record: bounds-check each present group as it
       // decodes — a truncated frame must die, not read past the buffer.
-      if (o + 9 > u8.length) return null;
+      if (o + 15 > u8.length) return null;
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
     } else {
@@ -376,10 +379,10 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.wireId = wireId;
     if (v4) {
       const mask = u8[o++]!;
-      if (o + 6 > u8.length) return null;
-      u.position.x = d.getInt16(o, true) * POS_Q; o += 2;
-      u.position.y = d.getInt16(o, true) * POS_Q; o += 2;
-      u.position.z = d.getInt16(o, true) * POS_Q; o += 2;
+      if (o + 12 > u8.length) return null;
+      u.position.x = d.getInt32(o, true) * POS_Q; o += 4;
+      u.position.y = d.getInt32(o, true) * POS_Q; o += 4;
+      u.position.z = d.getInt32(o, true) * POS_Q; o += 4;
       if (mask & V4_MASK_VEL) {
         if (o + 6 > u8.length) return null;
         o = unpackVel(d, o, u.velocity);
@@ -421,9 +424,9 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       py = d.getFloat32(o, true); o += 4;
       pz = d.getFloat32(o, true); o += 4;
     } else {
-      px = d.getInt16(o, true) * POS_Q; o += 2;
-      py = d.getInt16(o, true) * POS_Q; o += 2;
-      pz = d.getInt16(o, true) * POS_Q; o += 2;
+      px = d.getInt32(o, true) * POS_Q; o += 4;
+      py = d.getInt32(o, true) * POS_Q; o += 4;
+      pz = d.getInt32(o, true) * POS_Q; o += 4;
     }
     u.position.x = px; u.position.y = py; u.position.z = pz;
     o = unpackVel(d, o, u.velocity);

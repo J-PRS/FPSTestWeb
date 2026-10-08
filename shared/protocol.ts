@@ -15,7 +15,7 @@ import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
 import type { StructureSpec } from './mapSpec.ts';
-export const PROTOCOL_VERSION = 13; // v3 tick frames: u16 wire-ids + wireIds roster events
+export const PROTOCOL_VERSION = 14; // tick positions widened i16→i32 ×0.04 (±1310m saturation desync)
 
 export interface Vec3 {
   x: number;
