@@ -1,3 +1,4 @@
+2026-10-09 - TickLoop: all replica fidelity lanes emit through one emitLane body — hash + per-id diff fields generated from the kind declaration (C4 server half)
 2026-10-09 - stateDebug: all five replica fidelity lanes share one compare/streak/report driver — the last hand-copied lane loops folded (C4 remnant)
 2026-10-08 - dev-watch names the port squatter: two rapid child deaths = bind failure, not a crash — netstat/tasklist identify who's holding :8000 and prompt to kill, instead of an infinite EADDRINUSE respawn loop
 2026-10-08 - p2p host map-swap parity: all three collider sinks re-point on setMap (stale beam sweeps + phantom guest resyncs killed); leaver shells cleared via projectiles.clearOwner on close

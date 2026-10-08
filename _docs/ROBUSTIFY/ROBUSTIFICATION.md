@@ -3595,3 +3595,7 @@ The host's `setMap` re-pointed `roomInfo.bases` and the projectile collider set,
 ## 2.226 — stateDebug lanes unified: one compare/streak/report driver for all five fidelity checks
 
 C4's last live remnant: five hand-copied compare → streak → warn blocks in stateDebug (flag/pickup/deploy/creature/ball, ~170 lines) — the "a fix lands on one lane's copy and re-blooms on the next" drift class. All five now call one `laneCheck` driver owning match-reset / streak / perKey-persistence / warn-vs-debug escalation; per-kind code keeps only roster extraction + detail formatting (the semantic payload). Ball's per-key persistence (derived enraged/targetId churn at integrator boundaries) generalizes into the driver as `perKey`, so a future lane gets the right escalation by declaration. -118/+137 lines, all messages/behavior preserved. tsc + 504 vitest green.
+
+## 2.227 — TickLoop lane emit unified: server side of C4 folded
+
+The server's five replicaHash/kindFields computations (ball/creature/deploy/flag/pickup) were the same loop copied five times — the emit twin of the client lanes folded in 2.226. One `emitLane` body now hashes a roster + ships its per-id fields, both generated from the kind declaration; flag keeps its own line only because its roster is team-keyed rather than id-keyed. Adding a fidelity lane is now roster + one call on each end. -49/+24 lines, replicaParity green, full suite unchanged.
