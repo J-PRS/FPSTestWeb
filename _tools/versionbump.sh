@@ -16,10 +16,10 @@ paths=$(git diff --cached --name-only)
 client=0; server=0
 while IFS= read -r p; do
   case "$p" in
+    client/VERSION|server_bun/VERSION|_tools/versionbump.sh) ;;
     client/*) client=1 ;;
     server_bun/*) server=1 ;;
     shared/*) client=1; server=1 ;;
-    VERSION|client/VERSION|server_bun/VERSION|_tools/versionbump.sh) ;;
     *) client=1; server=1 ;;
   esac
 done <<< "$paths"
