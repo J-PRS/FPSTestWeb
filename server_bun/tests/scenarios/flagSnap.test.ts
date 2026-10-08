@@ -62,14 +62,17 @@ describe('scenario: flag stand snapping', () => {
 });
 
 describe('scenario: auto flag placement (no authored bases)', () => {
-  it('ctf on a spawn-only spec puts both flags on the farthest pair', () => {
+  it('ctf on a spawn-only spec seats both flags at the dominant axis quartiles', () => {
     const room = mkRoom({
       mode: 'ctf',
       spawns: [{ x: -110, y: 0, z: 0 }, { x: 110, y: 0, z: 0 }, { x: 0, y: 0, z: 40 }],
     }, 'ctf');
     const a = room.flags!.flags.get('alpha')!;
     const b = room.flags!.flags.get('bravo')!;
-    expect(new Set([a.home.x, b.home.x])).toEqual(new Set([-110, 110]));
+    // Dominant axis is x (span 220) — stands seat at ±0.25·span = ±55.
+    expect(a.home.x).toBeCloseTo(-55, 0);
+    expect(b.home.x).toBeCloseTo(55, 0);
+    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeCloseTo(110, 0);
   });
 
   it('bare spec still yields two stands (arena/fallback pair)', () => {
