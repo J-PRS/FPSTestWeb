@@ -5,7 +5,7 @@
  * hook. Split out of RoomMoveSim so the shadow bookkeeping (track/energy/
  * input journal) stays separate from the verdict logic.
  */
-import { MoveSim, ENERGY, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
+import { MoveSim, ENERGY, type MoveInput, type MoveState, type SimSnapshot, type Vec3Like } from '../../shared/movement.ts';
 import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
@@ -65,7 +65,7 @@ export interface Shadow {
    *  must compare against the journal entry at N replayed to now — the
    *  live sim applied inputs the report predates (e.g. a jump), which
    *  reads as a divergence otherwise. Insertion-ordered; bounded. */
-  seqStates: Map<number, { st: MoveState; tick: number; inp: MoveInput; e: number }>;
+  seqStates: Map<number, { snap: SimSnapshot; tick: number; inp: MoveInput; e: number }>;
   /** Number of 1/30 sim quanta the shadow has integrated. */
   simTicks: number;
   /** EMA of uplink transit (rttMs/2 from position reports) — how stale
@@ -391,7 +391,7 @@ export class MoveJudge {
     // mid-window then replays correctly instead of being applied to the
     // whole span.
     let anchorSeq: number | undefined;
-    const after: { st: MoveState; tick: number; inp: MoveInput; e: number }[] = [];
+    const after: { snap: SimSnapshot; tick: number; inp: MoveInput; e: number }[] = [];
     for (const [k, e] of sh.seqStates) {
       if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) anchorSeq = k;
       else if (k > reportSeq) after.push(e);
@@ -399,12 +399,12 @@ export class MoveJudge {
     after.sort((x, y) => x.tick - y.tick);
     const anchor = anchorSeq !== undefined ? sh.seqStates.get(anchorSeq) : undefined;
     if (!anchor) return s;
-    const probe = (sh.probe ??= new MoveSim(this.host.surface()!, anchor.st));
+    const probe = (sh.probe ??= new MoveSim(this.host.surface()!, anchor.snap.st));
     // The probe replays the SAME body — a heavy's weaker jets would
     // replay as a phantom climb if mass/eye fell back to defaults.
     probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
-    probe.setState(anchor.st);
-    const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
+    probe.restore(anchor.snap);
+    const segs = [...after, { snap: anchor.snap, tick: sh.simTicks, inp: sh.sim.input }];
     this.replayWindow(sh, probe, anchor, segs);
     return probe.state;
   }
@@ -415,7 +415,7 @@ export class MoveJudge {
    *  truncation as divergence (journal is ≤32 entries, window is small). */
   private replayWindow(
     sh: Shadow, probe: MoveSim,
-    anchor: { st: MoveState; tick: number; inp: MoveInput; e: number },
+    anchor: { snap: SimSnapshot; tick: number; inp: MoveInput; e: number },
     segs: { tick: number; inp: MoveInput }[],
   ): void {
     let tick = anchor.tick;

@@ -243,21 +243,23 @@ export class RoomMoveSim {
     if (seq !== undefined && seq <= sh.lastInputSeq) return false;
     if (seq !== undefined) {
       sh.lastInputSeq = seq;
-      const s = sh.sim.state;
+      if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
+      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
+      // The anchor carries the input that runs FORWARD from this seq —
+      // anchoredCompare replays anchor(k).inp over [k, k+1), so a
+      // pre-apply snapshot would replay the input that just ended and
+      // read every real edge as a phantom divergence.
       sh.seqStates.set(seq, {
-        st: { pos: { ...s.pos }, vel: { ...s.vel }, yaw: s.yaw, pitch: s.pitch, onGround: s.onGround },
+        snap: sh.sim.snapshot(),
         tick: sh.simTicks,
-        // Input + energy snapshot at the moment this seq was consumed —
-        // replaying the window with current input (or without the tank)
-        // reads a mid-window jet toggle or drain-out as a false ~20m
-        // divergence for an honest client.
         inp: { ...sh.sim.input },
         e: sh.energy,
       });
       if (sh.seqStates.size > 32) evictEldest(sh.seqStates);
+    } else {
+      if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
+      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
     }
-    if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
-    sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
 
     // Rising-edge antes — the client pays the activation cost when the
     // bit comes up; the sim must mirror it or cloaked jetters desync.

@@ -106,6 +106,18 @@ export interface MoveInput {
   jetHeld: boolean;
 }
 
+/** Full sim picture for deterministic replay — MoveState plus the
+ *  scratch the step function carries between quanta. */
+export interface SimSnapshot {
+  st: MoveState;
+  input: MoveInput;
+  wishJump: boolean;
+  allowNextJump: boolean;
+  lastJumpableNormal: Vec3Like;
+  groundedBuffered: boolean;
+  acc: number;
+}
+
 /** What the sim needs from the world: terrain height + surface normal.
  *  `maxTop` bounds which raised floors count (a body's reach is its
  *  feet + stepUp — overhead decks are ceilings, not ground). */
@@ -184,6 +196,29 @@ export class MoveSim {
     this.state.pos.x = s.pos.x; this.state.pos.y = s.pos.y; this.state.pos.z = s.pos.z;
     this.state.vel.x = s.vel.x; this.state.vel.y = s.vel.y; this.state.vel.z = s.vel.z;
     this.state.yaw = s.yaw; this.state.pitch = s.pitch; this.state.onGround = s.onGround;
+  }
+
+  /** Everything setState misses: the step residue and the jump/ground
+   *  edge bookkeeping. Replaying a window from a bare MoveState loses
+   *  the in-flight edges (a jump held across the anchor, the carry
+   *  fraction of a step) and the replayed trajectory drifts on the
+   *  first boundary — deterministic replay needs the whole picture. */
+  snapshot(): SimSnapshot {
+    return {
+      st: { pos: { ...this.state.pos }, vel: { ...this.state.vel }, yaw: this.state.yaw, pitch: this.state.pitch, onGround: this.state.onGround },
+      input: { ...this.input },
+      wishJump: this.wishJump, allowNextJump: this.allowNextJump,
+      lastJumpableNormal: { ...this.lastJumpableNormal },
+      groundedBuffered: this.groundedBuffered, acc: this.acc,
+    };
+  }
+
+  restore(snap: SimSnapshot): void {
+    this.setState(snap.st);
+    Object.assign(this.input, snap.input);
+    this.wishJump = snap.wishJump; this.allowNextJump = snap.allowNextJump;
+    Object.assign(this.lastJumpableNormal, snap.lastJumpableNormal);
+    this.groundedBuffered = snap.groundedBuffered; this.acc = snap.acc;
   }
 
   update(dt: number): void {

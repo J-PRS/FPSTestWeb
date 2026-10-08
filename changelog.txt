@@ -1,3 +1,4 @@
+2026-10-01 - MoveSim snapshot/restore + seq-anchor forward-input fix: anchored replay no longer reads input edges as phantom divergence (soakChaos green, corrections quieter)
 2026-10-01 - Broadcast lead: authority positions extrapolate by uplink-transit EMA so observers/rewind aim at client-now (ghost targets, unregistered hits)
 2026-10-09 - P2P host dispatch containment: a throwing handler drops the offending peer's link, not the host's game — ingest containment uniform across dedicated + P2P
 2026-10-09 - binary position lane gets the JSON lane's containment: a throwing handler drops that socket (1011), not the process — ingest edge now uniform across WS/WT/RTC
