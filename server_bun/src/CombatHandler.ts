@@ -8,7 +8,7 @@ import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponS
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { clampPing, rewindPos } from './claimLedger.ts';
+import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
@@ -322,7 +322,7 @@ export class CombatHandler {
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
-      const mpos = rewindPos(player, clampPing(player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
       // needs a creatureHit claim.
@@ -348,7 +348,7 @@ export class CombatHandler {
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
       player.protectedUntil = 0;
-      const mpos = rewindPos(player, clampPing(player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
@@ -362,7 +362,7 @@ export class CombatHandler {
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
-      const mpos = rewindPos(player, clampPing(player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
@@ -383,7 +383,7 @@ export class CombatHandler {
       this.simmedFireTimes.set(playerId, recent);
     }
     this.deps.emit?.({ type: 'fire', playerId });
-    const at = rewindPos(player, clampPing(player.ping));
+    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated

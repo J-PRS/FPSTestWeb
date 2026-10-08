@@ -9,6 +9,16 @@ export function clampPing(ping: number): number {
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
 }
 
+/** The shooter's one-way downlink transit — half its measured RTT EMA
+ *  when the server channel is live, half the clamped self-report while
+ *  the probe is still cold. Rewind math wants the ONE-WAY hop: full-RTT
+ *  terms validate ~RTT/2 behind the rendered ghost (hits landing on
+ *  players the shooter already watched leave the spot). */
+export function shooterTransitMs(transitOf: ((playerId: string) => number) | undefined, shooterId: string, fallbackPingRtt: number): number {
+  const t = transitOf?.(shooterId) ?? 0;
+  return (t > 0 ? t : clampPing(fallbackPingRtt)) / 2;
+}
+
 // Interpolated position at (now - backMs) from the player's rewind buffer.
 export function rewindPos(target: PlayerState, backMs: number): { x: number; y: number; z: number } {
   const h = target.history;

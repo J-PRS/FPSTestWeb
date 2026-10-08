@@ -15,7 +15,7 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { clampPing, rewindPos } from './claimLedger.ts';
+import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 
 /** The sweep only reads positions/ids off the sims — structural slices
@@ -44,28 +44,32 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
   }
   // Ghost-truth lag-comp: the shooter's beam was aimed at the rendered
-  // ghost — sim(t − ping − renderDelay + broadcast lead) — so a ray
-  // tested against live positions reads visible hits as misses at
-  // cruise speed. Rewind each capsule to the shooter's screen point.
+  // ghost — sim(t − shooterTransit − renderDelay + vel·lead) — and the
+  // rewind history itself rides the target's uplink, so the honest back
+  // is shooterTransit + renderDelay − targetTransit. One-way hops only:
+  // a full-RTT term rewinds ~RTT/2 behind the ghost and registers hits
+  // on a model the shooter already watched leave the spot.
   const shooter = world.players.getPlayer(shooterId);
   // Bots see server truth — no render pipeline, no ghost to chase.
   const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
   const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter);
+  const shooterTransit = shooter?.isBot ? 0 : shooterTransitMs(world.transitOf, shooterId, shooterPing);
   let playerId: string | undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) continue;
     const cap = classCapsule(t.armorClass);
-    const lead = (world.transitOf?.(pid) ?? 0) / 2;
-    const back = Math.max(0, clampPing(shooterPing) + shooterLag - lead);
+    const targetTransit = world.transitOf?.(pid) ?? 0;
+    const back = Math.max(0, shooterTransit + shooterLag - targetTransit);
     const tp = rewindPos(t, back);
     const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
     if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }
   }
-  // Creatures broadcast raw positions (no lead), so their ghost is
-  // a flat ping+renderDelay behind — no per-target lead to subtract.
-  const creatureBack = clampPing(shooterPing) + shooterLag;
+  // Creature sims run server-side — no uplink staleness in their
+  // history and no broadcast lead, so the ghost sits exactly
+  // shooterTransit + renderDelay back.
+  const creatureBack = shooterTransit + shooterLag;
   const bc = world.ballSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (bc && bc.t <= bestT) {
     return { ballId: bc.id, contact: at(bc.t), ...beamChain(world, at(bc.t), dir, bc.id, undefined) };

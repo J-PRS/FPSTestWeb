@@ -5,20 +5,22 @@ import { hitRadiusAt } from '../../shared/combat.ts';
 import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
-import { clampPing, rewindPos } from './claimLedger.ts';
+import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 
 type ContactHost = RoomProjectiles;
 
 /** Rewind a body to where it sat on the shell-owner's screen: ghost =
- *  sim(t − ping − renderDelay + broadcast lead). Creature sims keep no
- *  history — their sweeps take the same window as a backMs velocity
- *  extrapolation (no lead: they broadcast raw). */
-function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined, targetId: string): number {
+ *  sim(t − shooterTransit − renderDelay + vel·lead), and rewind history
+ *  rides the target's uplink — so back = shooterTransit + renderDelay
+ *  − targetTransit (one-way hops; a full-RTT term lands ~RTT/2 behind
+ *  the ghost). Creature sims keep no history — their sweeps take the
+ *  shooter-side window as a backMs velocity extrapolation. */
+function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined, ownerId: string, targetId: string): number {
   // Bots read live positions — no render pipeline, no ghost to chase.
   if (owner?.isBot) return 0;
-  const lead = (r.room.moveSim?.transitOf?.(targetId) ?? 0) / 2;
-  return Math.max(0, clampPing(owner?.ping ?? 0) + renderLagOf(owner) - lead);
+  const targetTransit = r.room.moveSim?.transitOf?.(targetId) ?? 0;
+  return Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOf(owner) - targetTransit);
 }
 
 /** The body sweep tests distance to the capsule's axis MIDPOINT, so the
@@ -111,7 +113,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
     const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) continue;
-      const back = ghostBack(r, owner, pid);
+      const back = ghostBack(r, owner, proj.ownerId, pid);
       const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
       const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
       const center = capsuleCenter(target);
@@ -135,7 +137,10 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
  *  client's creatureHit claim does: earliest ball contact along the leg. */
 function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number } } | null | undefined): boolean {
     const p = proj.p;
-    const backMs = owner?.isBot ? 0 : clampPing(owner?.ping ?? 0) + renderLagOf(owner);
+    // Creature sims run server-side — no uplink in their history and
+    // no broadcast lead, so their ghost sits exactly shooterTransit +
+    // renderDelay back.
+    const backMs = owner?.isBot ? 0 : shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), proj.ownerId, owner?.ping ?? 0) + renderLagOf(owner);
     const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
     // Species pops contest the same lane — earliest of ball/crawler
     // contact eats the shell, so a crawler body-blocks a shot meant
@@ -193,7 +198,7 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) continue;
-      const tp = rewindPos(target, ghostBack(r, owner, pid));
+      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid));
       const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) continue;

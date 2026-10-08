@@ -10,7 +10,7 @@ import { aoeDamage, aoeImpulseT1At, t1Minbox, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX
 import { POWERUP } from '../../shared/pickups.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
-import { clampPing, rewindPos } from './claimLedger.ts';
+import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
@@ -166,7 +166,7 @@ export class BlastRunner {
   private plateAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
-      const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot, ctx.lagMs);
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -187,7 +187,7 @@ export class BlastRunner {
   private healAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) continue;
-      const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot, ctx.lagMs);
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs);
       const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) continue;
       if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
@@ -201,17 +201,17 @@ export class BlastRunner {
   }
 
   /** Rewind a victim to where it sat on the SHOOTER's screen. The
-   *  rendered ghost = broadcast(sim(t − ping/2 − interpDelay) +
-   *  vel·lead), so the honest rewind is ping + interpDelay − lead:
-   *  skipping the interp term validates ~200ms·speed past the screen
-   *  point (visible hits reading as clean misses at cruise); the lead
-   *  term credits back the half-transit the broadcast already leads. */
-  private rewindTarget(target: PlayerState, targetId: string, ping: number, bot: boolean, lagMs: number): Vec3 {
+   *  rendered ghost = broadcast(sim(t − shooterTransit − interpDelay)
+   *  + vel·lead) and rewind history rides the target's uplink, so the
+   *  terms cancel to shooterTransit + interpDelay − targetTransit:
+   *  one-way hops only — a full-RTT term validates ~RTT/2 behind the
+   *  ghost (hits landing on a model the shooter already left behind). */
+  private rewindTarget(target: PlayerState, targetId: string, shooterId: string, ping: number, bot: boolean, lagMs: number): Vec3 {
     // Bots read live positions — a bot shooter has no render pipeline,
     // so there is no ghost to rewind toward.
     if (bot) return { x: target.position.x, y: target.position.y, z: target.position.z };
-    const lead = (this.h.deps.transitOf?.(targetId) ?? 0) / 2;
-    const back = clampPing(ping) + lagMs - lead;
+    const targetTransit = this.h.deps.transitOf?.(targetId) ?? 0;
+    const back = shooterTransitMs(this.h.deps.transitOf, shooterId, ping) + lagMs - targetTransit;
     return rewindPos(target, Math.max(0, back));
   }
 
@@ -220,7 +220,7 @@ export class BlastRunner {
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
-    const tpos = this.rewindTarget(target, targetId, ctx.ping, ctx.bot, ctx.lagMs);
+    const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;
