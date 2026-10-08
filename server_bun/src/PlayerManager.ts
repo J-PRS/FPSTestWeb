@@ -277,6 +277,7 @@ export class PlayerManager {
       target.health = 0;
       target.isDead = true;
       target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
+      target.skiing = 0; target.jetting = 0; // held keys die too — the wire bit can't outlive the body
       target.deaths++;
       target.pendingRespawn = true;
       target.armor = 0;
@@ -318,6 +319,7 @@ export class PlayerManager {
     player.health = player.maxHealth;
     player.isDead = false;
     player.status = 0; // a corpse carries no channels — toggles died with them
+    player.skiing = 0; player.jetting = 0; // respawn waits for a fresh inputMove — stale held bits would broadcast a ghost key until then
     player.lastFireSim = -Infinity; // respawn is a fresh cloak, not the old one's reveal
     player.armor = 0;
     player.regenUntil = 0;
