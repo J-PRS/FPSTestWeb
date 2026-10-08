@@ -151,15 +151,26 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));
   }
 
-  function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }[] }): void {
+  function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number }[] }): void {
     reconcileReplicas(netCrawlerById, m.crawlers, {
       rowId: (r) => r.id,
       isDead: (c) => c.dead,
       ensure: (r) => {
         netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
+        // Roster-born replicas inherit the row's absolute skip count —
+        // seeding 0 would replay every past retarget skip again.
+        if (r.sk !== undefined && Number.isFinite(r.sk)) {appliedSkips.set(r.id, r.sk);}
         return netCrawlerById.get(r.id);
       },
       apply: (c, r) => {
+        // sk heals the skip budget edges would have incremented — a
+        // roster row carries the server's absolute count, so missed
+        // retarget edges re-credit the quanta here instead of drifting
+        // the replay clock ahead forever.
+        if (r.sk !== undefined && Number.isFinite(r.sk)) {
+          c.netAcc -= SIM_TICK_DT * (r.sk - (appliedSkips.get(r.id) ?? 0));
+          appliedSkips.set(r.id, r.sk);
+        }
         c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
         deps.lazyDemoManager()?.recordCreatureRoster(r.id, r.species ?? speciesOf(c), r.position, r.velocity);
       },

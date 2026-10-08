@@ -119,7 +119,7 @@ export class CreatureSim {
 
   get hasField(): boolean { return this.field !== null; }
 
-  roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number }[] {
+  roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number; sk?: number }[] {
     const out = [];
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
@@ -128,9 +128,12 @@ export class CreatureSim {
         velocity: { x: c.vx, y: c.vy, z: c.vz },
         uber: c.uber, seed: c.rng, species: c.species, state: c.state,
         targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
+        // sk rides the roster too — a client that missed retarget edges
+        // re-credits the skipped quanta here or its replay clock drifts ahead.
+        sk: this.skipCount.get(c.id) ?? 0,
       }));
     }
-    return out as { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number }[];
+    return out as { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number; sk?: number }[];
   }
 
   private alivePlayers(): { id: string; pos: SimVec }[] {
