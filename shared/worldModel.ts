@@ -52,6 +52,10 @@ export interface WorldKindDecl {
    *  wire type (deployDown, deployUp). Same declared-shape contract:
    *  the emit and the inbound check both read this list. */
   events?: Record<string, KindFieldDecl[]>;
+  /** Message-level fields of the roster envelope itself (gameState's
+   *  room/mode/scores/map/... — the roster sweep covers ROWS, this
+   *  covers the container's own payload). */
+  envelope?: KindFieldDecl[];
 }
 
 export const WORLD_MODEL: Record<string, WorldKindDecl> = {
@@ -343,6 +347,29 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'status', wire: 'num', channel: 'edge', absent: null },
       { name: 'sheep', wire: 'num', channel: 'sim', absent: null },
     ],
+    // The gameState envelope's own fields — every key sendWorldState /
+    // handleSpectatorHandshake may write. Most are conditional payloads
+    // (scores only in team modes, map only when the room carries one),
+    // so all declare `absent` — only the two always-written keys warn.
+    envelope: [
+      { name: 'players', wire: 'arr', channel: 'edge' },
+      { name: 'protocolVersion', wire: 'num', channel: 'edge' },
+      { name: 'sessionToken', wire: 'str', channel: 'edge', absent: null },
+      { name: 'wireIds', wire: 'obj', channel: 'edge', absent: null },
+      { name: 'room', wire: 'str', channel: 'edge', absent: null },
+      { name: 'mode', wire: 'str', channel: 'edge', absent: null },
+      { name: 'mapName', wire: 'str', channel: 'edge', absent: null },
+      { name: 'team', wire: 'str', channel: 'edge', absent: null },
+      { name: 'localPlayerState', wire: 'obj', channel: 'edge', absent: null },
+      { name: 'scores', wire: 'obj', channel: 'edge', absent: null },
+      { name: 'ffaScores', wire: 'obj', channel: 'edge', absent: null },
+      { name: 'pickups', wire: 'arr', channel: 'edge', absent: null },
+      { name: 'flags', wire: 'arr', channel: 'edge', absent: null },
+      { name: 'deployables', wire: 'arr', channel: 'edge', absent: null },
+      { name: 'matchEndsAt', wire: 'num', channel: 'edge', absent: null },
+      { name: 'respawnMs', wire: 'num', channel: 'edge', absent: null },
+      { name: 'map', wire: 'obj', channel: 'edge', absent: null },
+    ],
     // gameState player row — id rides 'id' here (GameStatePlayer.id),
     // unlike the verbs' playerId.
     rosterFields: [
@@ -528,6 +555,20 @@ export function checkPacket(
     }
     const rows = ROSTER_ROWS[kind.kind] ? msg[ROSTER_ROWS[kind.kind]!] : undefined;
     if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); }
+    // The envelope's own fields — the roster containers get row-checked
+    // above; this verifies the message-level payload (players[],
+    // protocolVersion, map, scores, ...) carries its declared shape.
+    if (kind.envelope) {
+      for (const f of kind.envelope) {
+        if (!(f.name in msg)) {
+          if (f.absent === undefined) {
+            warnOnce(`${kind.kind}.${label}:env:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing envelope field '${f.name}'`);
+          }
+        } else if (msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
+          warnOnce(`${kind.kind}.${label}:env:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} envelope field '${f.name}' wrong type (want ${f.wire})`);
+        }
+      }
+    }
     return;
   }
   const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;

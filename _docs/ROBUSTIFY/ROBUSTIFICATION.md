@@ -3390,3 +3390,13 @@ when authoritySims() is true (connected && not p2p/host). The dedicated
 gate already refused every one with 'gone' — sending them was pure
 dead-claim traffic plus a pointless ledger stamp per call. P2P keeps
 the sends: the host still adjudicates claims as its outcome path.
+
+## 2.192 — gameState envelope declares its own fields too
+
+The roster sweep verified ROWS inside gameState but not the envelope's
+own payload — room/mode/scores/map/matchEndsAt/wireIds could drop or
+mistype silently. player.envelope declares all 17 message-level fields
+(only players + protocolVersion are unconditional; the rest declare
+absent since they're mode-conditional) and checkPacket verifies them.
+The entire wire surface — verbs, events, rosters, envelopes, intents —
+is now declared + shape-checked from one file.
