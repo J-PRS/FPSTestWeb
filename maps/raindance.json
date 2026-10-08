@@ -438,7 +438,7 @@
       "team": "alpha"
     },
     {
-      "kind": "sentry",
+      "kind": "baseturret",
       "pos": {
         "x": -90,
         "y": 2.2,
@@ -447,7 +447,7 @@
       "team": "alpha"
     },
     {
-      "kind": "sentry",
+      "kind": "baseturret",
       "pos": {
         "x": -90,
         "y": 2.2,
@@ -492,7 +492,7 @@
       "team": "bravo"
     },
     {
-      "kind": "sentry",
+      "kind": "baseturret",
       "pos": {
         "x": 90,
         "y": 2.2,
@@ -501,7 +501,7 @@
       "team": "bravo"
     },
     {
-      "kind": "sentry",
+      "kind": "baseturret",
       "pos": {
         "x": 90,
         "y": 2.2,

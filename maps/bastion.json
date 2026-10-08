@@ -5,68 +5,223 @@
   "terrain": "slagheap.bin",
   "bases": {
     "alpha": {
-      "x": -450,
+      "x": -500,
       "y": 23.0,
-      "z": 110
+      "z": 60
     },
     "bravo": {
-      "x": -370,
+      "x": -320,
       "y": 23.5,
-      "z": 350
+      "z": 400
     }
   },
   "spawns": [
     {
-      "x": -461.4,
+      "x": -511.4,
       "y": 23.3,
-      "z": 107.5
+      "z": 57.5
     },
     {
-      "x": -441.8,
+      "x": -491.8,
       "y": 25.2,
-      "z": 103.0
+      "z": 53.0
     },
     {
-      "x": -358.6,
+      "x": -308.6,
       "y": 23.3,
-      "z": 352.5
+      "z": 402.5
     },
     {
-      "x": -378.2,
+      "x": -328.2,
       "y": 23.3,
-      "z": 357.0
+      "z": 407.0
     }
   ],
-  "structures": [
+  "teamSpawns": {
+    "alpha": [
+      {
+        "x": -511.4,
+        "y": 23.3,
+        "z": 57.5,
+        "r": 16
+      },
+      {
+        "x": -491.8,
+        "y": 25.2,
+        "z": 53.0,
+        "r": 16
+      }
+    ],
+    "bravo": [
+      {
+        "x": -308.6,
+        "y": 23.3,
+        "z": 402.5,
+        "r": 16
+      },
+      {
+        "x": -328.2,
+        "y": 23.3,
+        "z": 407.0,
+        "r": 16
+      }
+    ]
+  },
+  "deploys": [
     {
-      "kind": "kit",
-      "piece": "bastion",
-      "pos": { "x": -450, "y": 20.4, "z": 110 },
-      "scale": 2,
+      "kind": "generator",
+      "pos": { "x": -500, "y": 24.4, "z": -48 },
       "team": "alpha"
     },
     {
-      "kind": "kit",
-      "piece": "bunker",
-      "pos": { "x": -494, "y": 20.4, "z": 82 },
-      "rotY": 0.35,
-      "scale": 2,
-      "team": "alpha"
-    },
-    {
-      "kind": "kit",
-      "piece": "bastion",
-      "pos": { "x": -370, "y": 20.4, "z": 350 },
-      "rotY": 3.1416,
-      "scale": 2,
+      "kind": "generator",
+      "pos": { "x": -320, "y": 24.4, "z": 508 },
       "team": "bravo"
     },
     {
+      "kind": "baseturret",
+      "pos": { "x": -570, "y": 38, "z": 120 },
+      "team": "alpha"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -430, "y": 22.9, "z": 120 },
+      "team": "alpha"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -570, "y": 23.8, "z": -38 },
+      "team": "alpha"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -430, "y": 20.9, "z": -38 },
+      "team": "alpha"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -250, "y": 28, "z": 340 },
+      "team": "bravo"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -390, "y": 21.5, "z": 340 },
+      "team": "bravo"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -250, "y": 25.5, "z": 498 },
+      "team": "bravo"
+    },
+    {
+      "kind": "baseturret",
+      "pos": { "x": -390, "y": 15.7, "z": 498 },
+      "team": "bravo"
+    }
+  ],
+  "structures": [
+    { "kind": "kit", "piece": "genhouse", "pos": { "x": -500, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "katastand", "pos": { "x": -500, "y": 20.4, "z": 60 }, "scale": 2, "team": "alpha" },
+    { "kind": "kit", "piece": "tower", "pos": { "x": -640, "y": 20.4, "z": 60 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "gendome", "pos": { "x": -400, "y": 20.4, "z": 180 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -380, "y": 20.4, "z": 100 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -500, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -564, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -436, "y": 20.4, "z": 132 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -580, "y": 20.4, "z": 56 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -420, "y": 20.4, "z": 56 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -580, "y": 20.4, "z": -6 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -580, "y": 20.4, "z": 118 }, "rotY": -1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -420, "y": 20.4, "z": -6 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -420, "y": 20.4, "z": 118 }, "rotY": 1.5708, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -558, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -442, "y": 20.4, "z": -48 }, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -608, "y": 20.4, "z": 154 }, "rotY": 0.6, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -412, "y": 20.4, "z": 154 }, "rotY": -0.6, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -608, "y": 20.4, "z": -34 }, "rotY": -0.6, "scale": 4, "team": "alpha" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -412, "y": 20.4, "z": -34 }, "rotY": 0.6, "scale": 4, "team": "alpha" },
+    {
       "kind": "kit",
       "piece": "bunker",
-      "pos": { "x": -326, "y": 20.4, "z": 378 },
-      "rotY": -2.79,
+      "pos": { "x": -638, "y": 20.4, "z": 186 },
+      "rotY": -1.5708,
       "scale": 2,
+      "team": "alpha"
+    },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -570, "y": 20.4, "z": 120 }, "scale": 1, "team": "alpha" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -430, "y": 20.4, "z": 120 }, "scale": 1, "team": "alpha" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -570, "y": 20.4, "z": -38 }, "scale": 1, "team": "alpha" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -430, "y": 20.4, "z": -38 }, "scale": 1, "team": "alpha" },
+    { "kind": "kit", "piece": "genhouse", "pos": { "x": -320, "y": 20.4, "z": 508 }, "rotY": 3.1416, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "katastand", "pos": { "x": -320, "y": 20.4, "z": 400 }, "scale": 2, "team": "bravo" },
+    { "kind": "kit", "piece": "tower", "pos": { "x": -180, "y": 20.4, "z": 400 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "gendome", "pos": { "x": -420, "y": 20.4, "z": 280 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -440, "y": 20.4, "z": 360 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -320, "y": 20.4, "z": 328 }, "rotY": 3.1416, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -256, "y": 20.4, "z": 328 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -384, "y": 20.4, "z": 328 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -240, "y": 20.4, "z": 404 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "gatehouse", "pos": { "x": -400, "y": 20.4, "z": 404 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -240, "y": 20.4, "z": 466 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -240, "y": 20.4, "z": 342 }, "rotY": 1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -400, "y": 20.4, "z": 466 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "curtain", "pos": { "x": -400, "y": 20.4, "z": 342 }, "rotY": -1.5708, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -262, "y": 20.4, "z": 508 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "wallstub", "pos": { "x": -378, "y": 20.4, "z": 508 }, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -212, "y": 20.4, "z": 306 }, "rotY": 3.74, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -408, "y": 20.4, "z": 306 }, "rotY": 2.54, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -212, "y": 20.4, "z": 494 }, "rotY": 2.54, "scale": 4, "team": "bravo" },
+    { "kind": "kit", "piece": "lowwall", "pos": { "x": -408, "y": 20.4, "z": 494 }, "rotY": 3.74, "scale": 4, "team": "bravo" },
+    {
+      "kind": "kit",
+      "piece": "bunker",
+      "pos": { "x": -182, "y": 20.4, "z": 274 },
+      "rotY": 1.5708,
+      "scale": 2,
+      "team": "bravo"
+    },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -250, "y": 20.4, "z": 340 }, "scale": 1, "team": "bravo" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -390, "y": 20.4, "z": 340 }, "scale": 1, "team": "bravo" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -250, "y": 20.4, "z": 498 }, "scale": 1, "team": "bravo" },
+    { "kind": "kit", "piece": "landpad", "pos": { "x": -390, "y": 20.4, "z": 498 }, "scale": 1, "team": "bravo" },
+    {
+      "kind": "shield",
+      "pos": { "x": -500, "y": 20.4, "z": 132 },
+      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": { "x": -580, "y": 20.4, "z": 56 },
+      "rotY": 1.5708,
+      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": { "x": -420, "y": 20.4, "z": 56 },
+      "rotY": 1.5708,
+      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "team": "alpha"
+    },
+    {
+      "kind": "shield",
+      "pos": { "x": -320, "y": 20.4, "z": 328 },
+      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "team": "bravo"
+    },
+    {
+      "kind": "shield",
+      "pos": { "x": -240, "y": 20.4, "z": 404 },
+      "rotY": 1.5708,
+      "size": { "x": 20, "y": 80, "z": 0.8 },
+      "team": "bravo"
+    },
+    {
+      "kind": "shield",
+      "pos": { "x": -400, "y": 20.4, "z": 404 },
+      "rotY": 1.5708,
+      "size": { "x": 20, "y": 80, "z": 0.8 },
       "team": "bravo"
     },
     {
