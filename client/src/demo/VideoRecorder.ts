@@ -52,9 +52,28 @@ export class VideoRecorder {
   private videoH = 0;
   private fpsNow = 60;
   private lastFrameAt = 0;
+  // Game audio lane: the AudioEngine's post-compressor mix feeds an
+  // AudioWorklet that hands PCM to an AudioEncoder (AAC→muxer audio track,
+  // opus fallback, none when unsupported — clips stay video-only then).
+  private audioSrc: (() => { ctx: AudioContext; node: AudioNode } | null) | null = null;
+  private aenc: AudioEncoder | null = null;
+  private aWorklet: AudioWorkletNode | null = null;
+  private aDecConf: EncodedAudioChunkMetadata['decoderConfig'] | null = null;
+  private aring: { ts: number; c: EncodedAudioChunk; m?: EncodedAudioChunkMetadata }[] = [];
+  private aSamples = 0;
+  private aSampleRate = 0;
+  private aCodec: 'aac' | 'opus' | null = null;
+  private aPendL: number[] = [];
+  private aPendR: number[] = [];
 
   setCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
+  }
+
+  /** Audio tap provider — evaluated at start() so recording before the
+   *  AudioContext unlock (first gesture) just records video-only. */
+  setAudioSource(fn: () => { ctx: AudioContext; node: AudioNode } | null): void {
+    this.audioSrc = fn;
   }
 
   get hasCanvas(): boolean { return this.canvas !== null; }
@@ -105,9 +124,13 @@ export class VideoRecorder {
     try {
       const { supported } = await VideoEncoder.isConfigSupported(config);
       if (!supported) {return false;}
+      const audioCfg = await this.probeAudio();
       this.mux = new Muxer({
         target: new ArrayBufferTarget(),
         video: { codec: 'avc', width: src.width, height: src.height, frameRate: fps },
+        audio: audioCfg
+          ? { codec: audioCfg.muxCodec, sampleRate: audioCfg.ctx.sampleRate, numberOfChannels: 2 }
+          : undefined,
         // Wall-clock frame stamps make the first chunk land at wherever
         // the first pumped frame happened — offset rebases it to 0
         // instead of throwing on non-zero DTS.
@@ -133,6 +156,7 @@ export class VideoRecorder {
         error: () => { this.encFailed = true; },
       });
       this.enc.configure(config);
+      if (audioCfg) {await this.startAudio(audioCfg);}
       this.frameDur = 1e6 / fps;
       this.frames = 0;
       this.keyEvery = fps * 2; // IDR every 2s — the mp4 trim granularity
@@ -146,11 +170,92 @@ export class VideoRecorder {
     }
   }
 
+  /** Probe the audio tap + encoder support. AAC first (mp4-native), opus
+   *  fallback — mp4-muxer takes both. Null = record video-only. */
+  private async probeAudio(): Promise<{ ctx: AudioContext; node: AudioNode; codec: string; muxCodec: 'aac' | 'opus' } | null> {
+    const src = this.audioSrc?.();
+    if (!src || typeof AudioEncoder === 'undefined') {return null;}
+    for (const cand of [{ codec: 'mp4a.40.2', muxCodec: 'aac' as const }, { codec: 'opus', muxCodec: 'opus' as const }]) {
+      const cfg: AudioEncoderConfig = {
+        codec: cand.codec, sampleRate: src.ctx.sampleRate, numberOfChannels: 2, bitrate: 128_000,
+      };
+      try {
+        const { supported } = await AudioEncoder.isConfigSupported(cfg);
+        if (supported) {return { ...src, ...cand };}
+      } catch { /* next candidate */ }
+    }
+    return null;
+  }
+
+  /** AudioWorklet → PCM → AudioData → encoder. The worklet posts each
+   *  128-sample render block; we pack them into ~1024-sample frames,
+   *  timestamped by sample count so they stay glued to the wall base. */
+  private async startAudio(a: { ctx: AudioContext; node: AudioNode; codec: string; muxCodec: 'aac' | 'opus' }): Promise<void> {
+    this.aenc = new AudioEncoder({
+      output: (c, meta) => {
+        if (meta?.decoderConfig) {this.aDecConf = meta.decoderConfig;}
+        if (this.mux) {this.mux.addAudioChunk(c, meta);}
+        const ts = this.encWall + c.timestamp / 1000;
+        this.aring.push({ ts, c, m: meta });
+        const cutoff = ts - VideoRecorder.RING_MS;
+        while (this.aring.length > 0 && this.aring[0]!.ts < cutoff) {this.aring.shift();}
+      },
+      error: () => { this.encFailed = true; },
+    });
+    this.aenc.configure({ codec: a.codec, sampleRate: a.ctx.sampleRate, numberOfChannels: 2, bitrate: 128_000 });
+    this.aSampleRate = a.ctx.sampleRate;
+    this.aCodec = a.muxCodec;
+    // Inline worklet — a blob URL keeps it a single-file module.
+    const wsrc = `class Cap extends AudioWorkletProcessor{process(i){const n=i[0];if(n&&n[0]){this.port.postMessage([n[0].slice(0),(n[1]||n[0]).slice(0)])}return true}}registerProcessor('cap',Cap)`;
+    const url = URL.createObjectURL(new Blob([wsrc], { type: 'application/javascript' }));
+    try {
+      await a.ctx.audioWorklet.addModule(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    this.aWorklet = new AudioWorkletNode(a.ctx, 'cap', { numberOfInputs: 1, numberOfOutputs: 0 });
+    this.aWorklet.port.onmessage = (e: MessageEvent<Float32Array[]>) => this.onPcm(e.data[0]!, e.data[1]!);
+    a.node.connect(this.aWorklet);
+    this.aSamples = 0;
+    this.aPendL = [];
+    this.aPendR = [];
+    this.aring = [];
+    this.aDecConf = null;
+  }
+
+  private onPcm(l: Float32Array, r: Float32Array): void {
+    if (!this.aenc || this.aenc.state !== 'configured') {return;}
+    this.aPendL.push(...l); this.aPendR.push(...r);
+    const FRAME = 2048; // ~43ms at 48k — big enough to keep encode cheap
+    while (this.aPendL.length >= FRAME) {
+      const inter = new Float32Array(FRAME * 2);
+      inter.set(this.aPendL.slice(0, FRAME), 0);
+      inter.set(this.aPendR.slice(0, FRAME), FRAME);
+      this.aPendL = this.aPendL.slice(FRAME);
+      this.aPendR = this.aPendR.slice(FRAME);
+      const ts = Math.round(this.aSamples / this.aSampleRate * 1e6);
+      this.aSamples += FRAME;
+      const data = new AudioData({
+        format: 'f32-planar', sampleRate: this.aSampleRate,
+        numberOfFrames: FRAME, numberOfChannels: 2, timestamp: ts, data: inter,
+      });
+      this.aenc.encode(data);
+      data.close();
+    }
+  }
+
   private startMediaRecorder(fps: number): boolean {
     const mime = MIME_PREFERENCES.find(m => MediaRecorder.isTypeSupported(m));
     if (!mime) {return false;}
     try {
       const stream = (this.staged ? this.stage! : this.canvas!).captureStream(fps);
+      // Fallback path gets sound for free — MediaRecorder mixes tracks.
+      const src = this.audioSrc?.();
+      if (src) {
+        const dest = src.ctx.createMediaStreamDestination();
+        src.node.connect(dest);
+        stream.addTrack(dest.stream.getAudioTracks()[0]!);
+      }
       this.recorder = new MediaRecorder(stream, {
         mimeType: mime,
         videoBitsPerSecond: 12_000_000, // ~12 Mbps: crisp motion, sane file size
@@ -167,12 +272,22 @@ export class VideoRecorder {
 
   async stop(): Promise<Blob | null> {
     if (this.enc) {
-      const enc = this.enc, mux = this.mux!;
+      const enc = this.enc, mux = this.mux!, aenc = this.aenc;
       this.enc = null;
       this.mux = null;
       this.ring = [];
       this.staged = false;
       try {
+        if (aenc) {
+          // Disconnect the tap first so no more PCM lands on a closing codec.
+          this.aWorklet?.disconnect();
+          this.aWorklet = null;
+          if (aenc.state === 'configured') {
+            await aenc.flush();
+            aenc.close();
+          }
+        }
+        this.aenc = null;
         await enc.flush();
         enc.close();
         mux.finalize();
@@ -251,6 +366,7 @@ export class VideoRecorder {
     const mux = new Muxer({
       target: new ArrayBufferTarget(),
       video: { codec: 'avc', width: this.videoW, height: this.videoH, frameRate: this.fpsNow },
+      audio: this.aCodec ? { codec: this.aCodec, sampleRate: this.aSampleRate, numberOfChannels: 2 } : undefined,
       fastStart: 'in-memory',
     });
     const base = this.ring[keyIdx]!.ts;
@@ -263,6 +379,17 @@ export class VideoRecorder {
         ? (r.m?.decoderConfig ? r.m : this.decConf ? { decoderConfig: this.decConf } : r.m)
         : undefined;
       mux.addVideoChunk(r.c, meta, Math.round((r.ts - base) * 1000));
+    }
+    if (this.aCodec) {
+      let firstAudio = true;
+      for (const r of this.aring) {
+        if (r.ts < base || r.ts > this.ring[endIdx]!.ts) {continue;}
+        const meta = firstAudio
+          ? (r.m?.decoderConfig ? r.m : this.aDecConf ? { decoderConfig: this.aDecConf } : r.m)
+          : undefined;
+        mux.addAudioChunk(r.c, meta, Math.round((r.ts - base) * 1000));
+        firstAudio = false;
+      }
     }
     mux.finalize();
     return new Blob([mux.target.buffer], { type: 'video/mp4' });

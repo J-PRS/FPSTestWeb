@@ -41,6 +41,7 @@ const noopKill = (): void => undefined;
 export class AudioEngine {
   ctx: BaseAudioContext | null = null;
   private master!: GainNode;
+  private compNode: DynamicsCompressorNode | null = null;
   private sfx!: GainNode;
   world!: GainNode;
   private ui!: GainNode;
@@ -124,6 +125,7 @@ export class AudioEngine {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12; comp.knee.value = 20; comp.ratio.value = 8;
     this.master.connect(comp).connect(ctx.destination);
+    this.compNode = comp;
     this.master.gain.value = settings.get('fps-volume');
     this.duckLp = ctx.createBiquadFilter();
     this.duckLp.type = 'lowpass'; this.duckLp.frequency.value = 20_000;
@@ -143,6 +145,9 @@ export class AudioEngine {
   get context(): BaseAudioContext | null { return this.ctx; }
   get sfxBus(): GainNode | null { return this.ctx ? this.sfx : null; }
   get uiBus(): GainNode | null { return this.ctx ? this.ui : null; }
+  /** Post-compressor mix — everything the listener hears. Recording taps
+   *  here so the clip sounds like the game did. */
+  get mixNode(): AudioNode | null { return this.compNode; }
 
   /** ESC-menu duck: -10dB + a 900Hz blanket on game sounds. Fast attack,
    *  slower release so re-entering the game doesn't pop. */

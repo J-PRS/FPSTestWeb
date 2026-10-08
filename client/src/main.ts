@@ -14,6 +14,7 @@ import { watchDeployVersion } from './core/deployWatch.js';
 import { noteStale, staleCount } from './core/staleFiles.js';
 import { createRenderer, GAME_ASPECT } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
+import { audio } from './core/audio.js';
 
 import { DemoManager } from './demo/index.js';
 import { playerProviders } from './demo/playerProviders.js';
@@ -334,6 +335,12 @@ async function initDemo(): Promise<void> {
   // The recorder needs the REAL render canvas — the DOM carries ~13
   // canvases (atlases, shadow buffers); "largest" picks a black texture.
   demoManager.video.setCanvas(renderer.domElement);
+  // Audio rides the post-compressor mix — null until the first gesture
+  // unlocks the AudioContext, so early clips just stay video-only.
+  demoManager.video.setAudioSource(() =>
+    audio.context instanceof AudioContext && audio.mixNode
+      ? { ctx: audio.context as AudioContext, node: audio.mixNode }
+      : null);
   // Silently re-arm the previously-picked clips folder (no prompt — the
   // handle reuses its stored permission until Chrome asks for a re-grant,
   // which happens inside the next F9 gesture via pickClipsDir).
