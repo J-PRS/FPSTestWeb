@@ -18,10 +18,12 @@ interface BotsPeek {
   healNadeT: Map<string, unknown>;
   sense: {
     notices: { seen: Map<string, unknown> };
-    routeHold: Map<string, unknown>;
-    routeFailed: Map<string, unknown>;
-    routePrefs: Map<string, unknown>;
-    waitSpot: Map<string, unknown>;
+    routing: {
+      routeHold: Map<string, unknown>;
+      routeFailed: Map<string, unknown>;
+      routePrefs: Map<string, unknown>;
+      waitSpot: Map<string, unknown>;
+    };
   };
   arsenal: {
     trigger: Map<string, unknown>;
@@ -61,8 +63,8 @@ describe('scenario: bot untrack purges all per-bot state', () => {
     for (const m of [bots.brains, bots.loadouts, bots.foeNear, bots.lastOut, bots.thinkPhase,
       bots.gearLobT, bots.suppressT, bots.quiet, bots.skillOffAt, bots.supportT,
       bots.healBeamT, bots.healNadeT,
-      bots.sense.notices.seen, bots.sense.routeHold, bots.sense.routeFailed,
-      bots.sense.routePrefs, bots.sense.waitSpot,
+      bots.sense.notices.seen, bots.sense.routing.routeHold, bots.sense.routing.routeFailed,
+      bots.sense.routing.routePrefs, bots.sense.routing.waitSpot,
       bots.arsenal.trigger, bots.arsenal.propelT, bots.arsenal.propelJetUntil,
       bots.arsenal.wasCarrying, bots.arsenal.lastShot, bots.arsenal.lastPropelAt,
       bots.arsenal.propels, bots.roster.roleInfo, bots.roster.classes]) {
