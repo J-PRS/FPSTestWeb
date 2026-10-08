@@ -95,6 +95,15 @@ net suite. 54/55 green; the one fail is the WIP-pinned soak boundary
 - Guest correction parity on hosted rooms confirmed: P2P host reuses
   the real MessageHandler + RoomMoveSim, so reconcile→correction is
   the same code path as dedicated.
+- **Ghost-truth lag-comp landed across every contact validator**
+  (`b94968bb`, `931120b3`, `a355b3bf`): blast sweeps, hitscan beams,
+  and shell body contacts all rewind targets to
+  `clampPing(shooter) + RENDER_LAG_MS(200) − broadcast lead` — the
+  rendered ghost the shooter aimed at. Creature sims rewind by
+  velocity extrapolation (no history buffers). All rewinds gate on
+  `isBot`: bots aim at server truth and must rewind nothing. This
+  closes the "aim at now" tenet for damage; the audit's row "aim at
+  now" was previously held only for position broadcast.
 
 Bottom line: at 150ms the pipeline now matches the manifesto on every
 tenet. TCP head-of-line is the standing risk on genuinely-lossy
