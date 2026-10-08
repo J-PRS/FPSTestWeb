@@ -97,13 +97,27 @@ net suite. 54/55 green; the one fail is the WIP-pinned soak boundary
   the same code path as dedicated.
 - **Ghost-truth lag-comp landed across every contact validator**
   (`b94968bb`, `931120b3`, `a355b3bf`): blast sweeps, hitscan beams,
-  and shell body contacts all rewind targets to
-  `clampPing(shooter) + RENDER_LAG_MS(200) − broadcast lead` — the
-  rendered ghost the shooter aimed at. Creature sims rewind by
-  velocity extrapolation (no history buffers). All rewinds gate on
-  `isBot`: bots aim at server truth and must rewind nothing. This
-  closes the "aim at now" tenet for damage; the audit's row "aim at
-  now" was previously held only for position broadcast.
+  and shell body contacts all rewind targets toward the rendered
+  ghost the shooter aimed at. Creature sims rewind by velocity
+  extrapolation (no history buffers). All rewinds gate on `isBot`:
+  bots aim at server truth and must rewind nothing.
+- **WYSIWYG correction — one-way transits, not full RTT** (`60bfeffa`):
+  the ghost sits at `sim(t − shooterTransit − renderLag + targetUplink)`
+  and the rewind buffer rides the target's uplink, so the terms cancel
+  to `shooterTransit + renderLagOf(shooter) − transitOf(target)`.
+  Every validator (blast/plate/heal sweeps, body & creature sweeps,
+  beam, own-muzzle origins) previously used `clampPing(RTT) − lead`,
+  landing ~RTT/2+lead behind the ghost (~150ms ≈ 7m at 150ms cruise):
+  hits registered on a model the shooter already watched leave — the
+  strict reading of "collider never desyncs from the visual" was
+  violated, generously but wrongly. `shooterTransitMs()` halves the
+  measured RTT EMA (self-report fallback). Client prediction and
+  server authority now aim at the same point by construction.
+- **Adaptive render lag feeds the rewind** (`c5d2bad2`, `4a67bb53`):
+  `renderLagOf()` reads the shooter's reported `renderLagMs`
+  (SnapshotBuffer interp delay, max over remotes), falls back to 200,
+  goes stale after ~3 uplink windows. `REWIND_MS` 400→1200 — the worst
+  envelope (ping 400 + lag 800) no longer clamps to the oldest sample.
 
 Bottom line: at 150ms the pipeline now matches the manifesto on every
 tenet. TCP head-of-line is the standing risk on genuinely-lossy
