@@ -166,7 +166,10 @@ export class TickFanout {
           jet: p.jetting,
           status: snap.status,
           sheep,
-        }, rec.enc, rec.last, room.tickSeq % TickFanout.FULL_RECORD_EVERY === 0);
+          // Stagger fulls by wireId — keying on tickSeq alone synced every
+          // record into one egress spike per window; spreading them keeps
+          // the same 750ms drift bound with a flat send curve.
+        }, rec.enc, rec.last, (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
       recN++;
       this.metrics.recordsBuilt++;
     }
