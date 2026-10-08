@@ -12,7 +12,7 @@ import { urlParams, isDevHost } from './core/params.js';
 import { feedMode } from './feed/feedMode.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { noteStale, staleCount } from './core/staleFiles.js';
-import { createRenderer } from './core/renderer.js';
+import { createRenderer, GAME_ASPECT } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
 
 import { DemoManager } from './demo/index.js';
@@ -84,7 +84,7 @@ const logger = new ChildLogger('Main');
 const profiler = new LoadProfiler();
 
 // ---- Camera ----
-const camera = new THREE.PerspectiveCamera(settings.get('fps-fov') || CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
+const camera = new THREE.PerspectiveCamera(settings.get('fps-fov') || CAMERA_FOV, GAME_ASPECT, CAMERA_NEAR, CAMERA_FAR);
 // Menu FOV field — live via the settings event, no reload needed.
 window.addEventListener('fps:set', (e) => {
   const { key, value } = (e as CustomEvent).detail;

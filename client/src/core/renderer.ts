@@ -194,16 +194,32 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
 // full-res canvas and shrink buffers instead. Returns true when the
 // canvas was shrunk. GL canvas MUST stay visible — pointer lock targets
 // it; fsCanvas is pointer-events:none.
+// The world renders a canonical 16:9 frame at every window shape: the
+// canvas is oversized to cover the window at that aspect and CSS
+// center-crops it, so a non-16:9 window crops (never squashes) the same
+// frame — every player sees identical vertical FOV, and video capture of
+// the canvas is natively 16:9 with no staging pass. body{overflow:hidden}
+// already crops the overscan; the canvas stays centered via transform.
+export const GAME_ASPECT = 16 / 9;
+
+export function overscanSize(): { w: number; h: number } {
+  let w = window.innerWidth;
+  let h = window.innerHeight;
+  if (w / h < GAME_ASPECT) {w = Math.ceil(h * GAME_ASPECT);} else {h = Math.ceil(w / GAME_ASPECT);}
+  return { w, h };
+}
+
 function applyPixelSize(renderer: THREE.WebGLRenderer,
     fsCanvas: HTMLCanvasElement, pscale: number, pmode: number): boolean {
   fsCanvas.style.display = pmode === 3 ? 'block' : 'none';
   if (pscale <= 1 || (pmode !== 0 && pmode !== 3)) return false;
+  const { w, h } = overscanSize();
   renderer.setPixelRatio(1);
-  renderer.setSize(Math.floor(window.innerWidth / pscale),
-    Math.floor(window.innerHeight / pscale), false);
+  renderer.setSize(Math.floor(w / pscale),
+    Math.floor(h / pscale), false);
   renderer.domElement.style.imageRendering = 'pixelated';
-  renderer.domElement.style.width = '100%';
-  renderer.domElement.style.height = '100%';
+  renderer.domElement.style.width = `${w}px`;
+  renderer.domElement.style.height = `${h}px`;
   return true;
 }
 
@@ -416,14 +432,15 @@ function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
     }
     // Canvas stays full-res — in smooth mode only the composer buffers
     // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
+    const { w, h } = overscanSize();
     renderer.setPixelRatio(pixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(w, h);
     // Fractional degrade upscales a sub-res buffer through the same CSS
     // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.
     renderer.domElement.style.imageRendering =
       resScale() < 1 && settings.get('fps-filter') === 0 ? 'pixelated' : 'auto';
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.width = `${w}px`;
+    renderer.domElement.style.height = `${h}px`;
   };
 }
 
@@ -536,6 +553,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
+  // Canonical 16:9 frame at every window shape: canvas oversized to cover
+  // the window at GAME_ASPECT and center-cropped (see overscanSize).
+  renderer.domElement.style.position = 'absolute';
+  renderer.domElement.style.left = '50%';
+  renderer.domElement.style.top = '50%';
+  renderer.domElement.style.transform = 'translate(-50%, -50%)';
   document.body.appendChild(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, modes);
@@ -547,12 +570,13 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // Post buffers track render res: composer pixel modes render at
     // 1/pscale; the plain path uses the fractional resScale.
     const div = pscale > 1 ? pscale : 1 / resScale;
-    const w = Math.floor(window.innerWidth / div), h = Math.floor(window.innerHeight / div);
+    const { w: ow, h: oh } = overscanSize();
+    const w = Math.floor(ow / div), h = Math.floor(oh / div);
     setFxBufferHeight(h); // point-sprite shaders scale on BUFFER height, not CSS
     composer.setSize(w, h);
     upscaleEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
     xbrEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
-    xbrEffect.uniforms.get('xbrScale')!.value = window.innerWidth / w;
+    xbrEffect.uniforms.get('xbrScale')!.value = ow / w;
     // xBR pass handles SMOOTH pixel mode (integer degrade) and the
     // FILTER:XBR fractional tier — either case feeds it a low-res buffer.
     upscalePass.enabled = pscale > 1 && pmodeEff() === 2;
@@ -663,7 +687,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   // Setup window resize handler
-  window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); applyBufferSizes(); });
+  window.addEventListener('resize', () => { camera.aspect = GAME_ASPECT; camera.updateProjectionMatrix(); applyBufferSizes(); });
 
   const { bloomToggleBtn, postproToggleBtn } = wireToggleButtons(modes,
     () => setBloomEnabled(!bloomEnabled),
