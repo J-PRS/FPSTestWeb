@@ -20,8 +20,8 @@ export interface KindFieldDecl {
   name: string;
   /** Wire type — lets inbound checks verify SHAPE, not just presence: a
    *  string where a vec3 belongs poisons a replica as silently as a
-   *  missing field. 'vec3' = {x,y,z} finite numbers; 'arr' = any array. */
-  wire: 'num' | 'str' | 'bool' | 'vec3' | 'arr';
+   *  missing field. 'vec3' = {x,y,z} finite numbers; 'rot' = {yaw,pitch}; 'arr' = any array. */
+  wire: 'num' | 'str' | 'bool' | 'vec3' | 'rot' | 'arr';
   channel: SyncChannel;
   /** Value emitted when the field is absent — the wire's sentinel for
    *  'not set' (deploy teams diff '' server-side, never null). */
@@ -284,7 +284,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'name', wire: 'str', channel: 'edge' },
       { name: 'internalId', wire: 'str', channel: 'edge' },
       { name: 'position', wire: 'vec3', channel: 'sim' },
-      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'rot', channel: 'sim' },
       { name: 'team', wire: 'str', channel: 'edge' },
       { name: 'transport', wire: 'str', channel: 'edge' },
       { name: 'armorClass', wire: 'str', channel: 'edge' },
@@ -320,7 +320,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       playerRespawn: [
         { name: 'internalId', wire: 'str', channel: 'edge' },
         { name: 'position', wire: 'vec3', channel: 'sim' },
-        { name: 'rotation', wire: 'vec3', channel: 'sim' },
+        { name: 'rotation', wire: 'rot', channel: 'sim' },
         { name: 'armorClass', wire: 'str', channel: 'edge', absent: null },
       ],
       teleport: [
@@ -332,7 +332,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // packs the same fields.
     updateFields: [
       { name: 'position', wire: 'vec3', channel: 'sim' },
-      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'rot', channel: 'sim' },
       { name: 'velocity', wire: 'vec3', channel: 'sim' },
       { name: 'health', wire: 'num', channel: 'sim' },
       { name: 'isDead', wire: 'bool', channel: 'edge' },
@@ -349,7 +349,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'name', wire: 'str', channel: 'edge' },
       { name: 'internalId', wire: 'str', channel: 'edge' },
       { name: 'position', wire: 'vec3', channel: 'sim' },
-      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'rot', channel: 'sim' },
       { name: 'velocity', wire: 'vec3', channel: 'sim' },
       { name: 'isDead', wire: 'bool', channel: 'edge' },
       { name: 'health', wire: 'num', channel: 'sim' },
@@ -383,8 +383,12 @@ export function verbPayload(
     // the client then diffs forever. Null IS legit when the declaration
     // names an `absent` sentinel or the field is optional on the wire,
     // so only yell for undeclared-as-absent gaps.
-    if (!(f.name in vals) && f.absent === undefined) {
-      warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit missing declared field '${f.name}'`);
+    if (!(f.name in vals)) {
+      if (f.absent === undefined) {
+        warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit missing declared field '${f.name}'`);
+      }
+    } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
+      warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}!t`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit field '${f.name}' wrong type (want ${f.wire})`);
     }
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -402,8 +406,12 @@ export function rosterRow(
   const row: Record<string, unknown> = { [idField]: id };
   for (const f of kind.rosterFields ?? []) {
     if (f.name === idField) continue;
-    if (!(f.name in vals) && f.absent === undefined) {
-      warnOnce(`${kind.kind}.roster:${f.name}`, `[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
+    if (!(f.name in vals)) {
+      if (f.absent === undefined) {
+        warnOnce(`${kind.kind}.roster:${f.name}`, `[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
+      }
+    } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
+      warnOnce(`${kind.kind}.roster:${f.name}!t`, `[worldModel] ${kind.kind} roster row field '${f.name}' wrong type (want ${f.wire})`);
     }
     row[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -449,8 +457,12 @@ export function eventPayload(
   const msg: Record<string, unknown> = { type, [idField]: id };
   for (const f of fields ?? []) {
     if (f.name === idField) continue;
-    if (!(f.name in vals) && f.absent === undefined) {
-      warnOnce(`${kind.kind}.${type}:${f.name}`, `[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
+    if (!(f.name in vals)) {
+      if (f.absent === undefined) {
+        warnOnce(`${kind.kind}.${type}:${f.name}`, `[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
+      }
+    } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
+      warnOnce(`${kind.kind}.${type}:${f.name}!t`, `[worldModel] ${kind.kind}.${type} emit field '${f.name}' wrong type (want ${f.wire})`);
     }
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
@@ -576,6 +588,11 @@ function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
       const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
       return typeof o === 'object' && o !== null &&
         typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
+    }
+    case 'rot': {
+      const o = v as { yaw?: unknown; pitch?: unknown } | null;
+      return typeof o === 'object' && o !== null &&
+        typeof o.yaw === 'number' && typeof o.pitch === 'number';
     }
   }
 }

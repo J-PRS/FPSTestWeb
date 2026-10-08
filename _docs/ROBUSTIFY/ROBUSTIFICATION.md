@@ -3366,3 +3366,11 @@ presence check and poison the replica just as silently as a missing
 field — now it warns once per field per 5s. Covers verb payloads, roster
 rows (every declared container in a shared feed), and event fields.
 (client tsc + worldModel/fidelityHash 46 checks green)
+
+## 2.189 — wire types on the emit side too
+
+verbPayload/rosterRow/eventPayload now type-check outbound values the
+same way checkPacket checks inbound ones: a mistyped emit warns once
+per field instead of writing a poisoned wire shape. Rotation got its
+own 'rot' tag ({yaw,pitch} isn't vec3) — the check caught it plus a
+false-positive on explicit-undefined emits within minutes.
