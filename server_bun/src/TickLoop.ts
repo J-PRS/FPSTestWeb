@@ -209,7 +209,7 @@ export class TickLoop {
    *  entry so the name can host a live instance again. */
   private drainQuarantined(room: Room): void {
     try {
-      for (const p of [...room.players.getAllPlayers().values()]) {
+      for (const p of room.players.getAllPlayers().values()) {
         try { room.socketOf(p.id)?.close(1011, 'room faulted'); } catch { /* socket already dying */ }
         if (!p.isBot) this.onRemove(room, p.id, 'quarantine');
       }

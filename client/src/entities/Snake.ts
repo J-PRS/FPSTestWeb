@@ -134,8 +134,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    scene;
+  constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.id = nextTargetId();
     this.uber = uber;
     this.health = this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;

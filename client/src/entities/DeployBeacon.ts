@@ -49,10 +49,9 @@ export class DeployBeacon {
   private aimLen = 40;
   private animT = Math.random() * 10;
   unfoldT = 0;
-  private scene: THREE.Scene;
+
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
-    this.scene = scene;
     this.id = nextTargetId();
     this.candId = `dep:${this.id}`;
     this.pos.copy(pos);
@@ -135,6 +134,5 @@ export class DeployBeacon {
     scene.remove(this.group);
     scene.remove(this.pillar);
     this.holoGlow.material.dispose();
-    this.scene;
   }
 }

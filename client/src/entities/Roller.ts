@@ -96,8 +96,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    scene;
+  constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.id = nextTargetId();
     // Uber = "avalanche": double the boulder, triple the tank, and mass
     // enough that blasts cannot stop it — you dodge it or you die.

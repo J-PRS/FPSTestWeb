@@ -122,10 +122,10 @@ export class ServerBots {
    *  checks, stuck probe, rewind push). Always on: a few timer pairs per
    *  think is noise, and the soak + /metrics both read the same
    *  accumulators (stageMs = ms/sec over the last 10s window). */
-  readonly stageProf = new Array<number>(6).fill(0);
-  private stageBase = new Array<number>(6).fill(0);
+  readonly stageProf = Array.from({ length: 6 }, () => 0);
+  private stageBase = Array.from({ length: 6 }, () => 0);
   private stageWinAt = 0;
-  readonly stageMs = new Array<number>(6).fill(0);
+  readonly stageMs = Array.from({ length: 6 }, () => 0);
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {

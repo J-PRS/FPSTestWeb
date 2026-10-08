@@ -87,12 +87,12 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     chat.add(playerId, text, team, vgsChord, muted);
   };
   // V rides the same chat wire — tactical lines team-scoped, emotes global.
-  const vgs = new Vgs({
+  // Self-contained like Chat — its key routing lives on window.
+  new Vgs({
     send: (text, team, chord) => networkManager.sendChat(text, team, chord),
     echo: (text, team, chord) => chat.echoSelf(text, team, chord),
     speak: (text) => speakVgs(text, networkManager.getLocalPlayerId()),
   });
-  vgs; // self-contained like Chat — its key routing lives on window
 
   // Both first-seen-update and respawn-into-missing end up here.
   const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {
