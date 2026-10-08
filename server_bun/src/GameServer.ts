@@ -172,7 +172,14 @@ export class GameServer {
         if (!existingId || !room) return; // binary before join — ignore
         const pos = decodePosition(u8);
         if (pos) {
-          this.handleGameMessage(room, existingId, pos);
+          // Same containment as the JSON lane — a throwing handler drops
+          // this socket, not the process.
+          try {
+            this.handleGameMessage(room, existingId, pos);
+          } catch (e) {
+            logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: e instanceof Error ? e.stack ?? e.message : String(e) });
+            try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+          }
         }
         return;
       }
