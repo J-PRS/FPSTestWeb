@@ -64,7 +64,17 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
       const inputSeq = isFiniteNumber(obj.inputSeq) ? obj.inputSeq : undefined;
       const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
-      return { success: true, data: { type: 'position', ...body.data, seq, inputSeq, ping } };
+      // Held input piggybacks on volatile frames — optional, validated
+      // like inputMove's fields, dropped silently when malformed.
+      let input: { forward: number; right: number; jump: number; ski: number; jet: number } | undefined;
+      const rawInput = obj.input;
+      if (typeof rawInput === 'object' && rawInput !== null) {
+        const i = rawInput as Record<string, unknown>;
+        if (isFiniteNumber(i.forward) && isFiniteNumber(i.right) && isFiniteNumber(i.jump) && isFiniteNumber(i.ski)) {
+          input = { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0 };
+        }
+      }
+      return { success: true, data: { type: 'position', ...body.data, seq, inputSeq, ping, ...(input ? { input } : {}) } };
     },
     handle: (h, id, m) => h.moves.handlePosition(id, m),
   },

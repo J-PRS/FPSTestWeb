@@ -1,3 +1,4 @@
+2026-10-01 - Held input rides every volatile position frame (+3B): a superseding datagram-style input stream on the unordered lane — a dropped packet costs zero, gated by position seq + inputSeq so stale frames can't resurrect released keys
 2026-10-01 - Remote rejoin convergence steers, not slides: when dead-reckoning hands back to the buffered path, a capped-accel controller converges onto it (fake-input correction — an in-world maneuver) instead of the old geometric blend
 2026-10-01 - LANFEEL.md gains a state-of-the-art techniques section: the published netcode playbook (GGPO redundancy, Valve rewind/extrapolation, adaptive interp, teleport thresholds, shooter advantage) mapped to where each lives here
 2026-10-01 - In-packet input redundancy: every inputMove carries the previous edge — a single lost packet heals instantly instead of via the watchdog RTT (GGPO-style "copy of the last packet")

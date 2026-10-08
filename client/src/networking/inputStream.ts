@@ -22,6 +22,11 @@ export class InputStream {
   private inputJournal: { seq: number; t: number; input: MoveInput }[] = [];
   private static readonly INPUT_JOURNAL_MAX = 128;
 
+  /** Held input state for the volatile position frame — the superseding
+   *  datagram input path: every frame carries the current held state, so
+   *  on unordered/lossy lanes a dropped packet costs nothing. */
+  held(): MoveInput | null { return this.lastInputState; }
+
   /** Current input sequence — rides inside the binary position frame so
    *  the server can order input edges against position reports. */
   get seq(): number { return this.inputSeq; }

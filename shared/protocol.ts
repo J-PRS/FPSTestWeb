@@ -53,7 +53,11 @@ export type ClientMessage =
        *  reclaim presents it so the server replays only the missed frames
        *  (Socket.IO connection-state-recovery shape). */
       resumeSeq?: number }
-  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; inputSeq?: number; ping?: number }
+  // input rides every volatile frame as held state — a superseding
+  // stream where loss costs nothing (the next frame carries the same
+  // state). On unordered lanes the position seq gates staleness.
+  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; inputSeq?: number; ping?: number;
+      input?: { forward: number; right: number; jump: number; ski: number; jet?: number } }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
   // its check anchor here instead of rejecting it as a speedhack.

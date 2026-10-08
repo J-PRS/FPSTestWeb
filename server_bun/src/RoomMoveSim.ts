@@ -323,10 +323,14 @@ export class RoomMoveSim {
   }
 
   /** Tick-set confirm for the wire frame — the highest inputMove seq
-   *  this player's shadow consumed. -1 for untracked ids (spectators):
+   *  this player's shadow has accepted. Pending counts too: an undrained
+   *  edge is already claimed — a held-state frame older than it must not
+   *  rewind the input it set. -1 for untracked ids (spectators):
    *  encodes as 0 on the wire. */
   inputSeqOf(playerId: string): number {
-    return this.shadows.get(playerId)?.lastInputSeq ?? -1;
+    const sh = this.shadows.get(playerId);
+    if (!sh) return -1;
+    return Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0);
   }
 
   /** Hard-tolerance trip (Photon Quantum): the position frame carries

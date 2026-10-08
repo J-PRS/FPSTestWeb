@@ -604,6 +604,10 @@ export class MessageHandler {
   moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) {
     return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq, rttMs) ?? null;
   }
+  moveInput(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number): boolean | void {
+    return this.roomInfo.moveInput?.(playerId, input, status, seq);
+  }
+  inputSeqOf(playerId: string): number { return this.roomInfo.inputSeqOf?.(playerId) ?? -1; }
   moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }
   moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }
 

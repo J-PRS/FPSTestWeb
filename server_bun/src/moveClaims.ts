@@ -5,6 +5,7 @@ import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
 import { wallNow } from './wallClock.ts';
+import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 
 // Movement-claim family — position reports, declared teleports, and the
 // plausibility judge that guards them. Split from MessageHandler so the
@@ -20,6 +21,14 @@ export interface MoveHost {
   /** Room-side announce gate — first position report broadcasts join. */
   announceIfInWorld(player: PlayerState): void;
   moveAuthority(): boolean;
+  /** Held input riding the volatile position stream — a superseding
+   *  datagram-style input path next to the change-only inputMove
+   *  edges: seq-ungated (monotonicity is enforced by the position
+   *  seq gate at the call site), so a lost frame costs nothing. */
+  moveInput?(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number): boolean | void;
+  /** Highest inputMove edge seq consumed so far — held-state frames
+   *  older than it must not resurrect a released key. */
+  inputSeqOf?(playerId: string): number;
   moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number):
     { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   moveResync(playerId: string, pos: Vec3, yaw: number): void;
@@ -50,6 +59,19 @@ export class MoveClaims {
 
     const now = wallNow();
     if (!this.plausible(playerId, player, msg, now)) return;
+
+    // Held input rides the volatile frame — the superseding-stream
+    // input path. Two gates: the position seq must be the newest seen
+    // (an unordered older frame must not resurrect a released key),
+    // and the frame's inputSeq must cover the newest edge already
+    // consumed (a frame encoded BEFORE an edge left the client can
+    // otherwise rewind the input that edge just set). Keep the player's
+    // status channel: held frames carry no status bits.
+    if (msg.input !== undefined && msg.seq !== undefined && msg.seq > player.lastSeq
+        && (msg.inputSeq === undefined || msg.inputSeq >= (this.h.inputSeqOf?.(playerId) ?? -1))) {
+      this.h.moveInput?.(playerId, msg.input, player.status & CLIENT_STATUS_MASK);
+      player.skiing = msg.input.ski ? 1 : 0;
+    }
 
     // inputSeq (not the frame seq) anchors the probe: it's the count of
     // inputMove events the client had consumed when it took this snapshot.

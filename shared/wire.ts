@@ -49,6 +49,11 @@ export interface WirePosition {
    *  divergence probe so in-flight inputs don't read as drift. Absent
    *  on old 30-byte frames. */
   inputSeq?: number;
+  /** Held input state riding the volatile frame — the datagram-lane
+   *  answer to inputMove: a superseding stream where a lost packet
+   *  costs nothing because the next frame carries the same state.
+   *  Trailing fields; absent on frames <37 bytes. */
+  input?: { forward: number; right: number; jump: number; ski: number; jet: number };
   ping: number;
 }
 
@@ -102,8 +107,8 @@ function unpackRot(d: DataView, o: number, out: WireRot): number {
 
 // ---- C→S position ----
 
-export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: number, ping: number, inputSeq?: number): Uint8Array {
-  const buf = new ArrayBuffer(34);
+export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: number, ping: number, inputSeq?: number, input?: { forward: number; right: number; jump: number; ski: number; jet: number }): Uint8Array {
+  const buf = new ArrayBuffer(37);
   const d = new DataView(buf);
   let o = 0;
   d.setUint8(o++, MAGIC);
@@ -117,6 +122,13 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
   d.setUint16(o, Math.min(65535, Math.max(0, Math.round(ping))), true); o += 2;
   // Trailing inputSeq is optional — old 30-byte frames still decode.
   if (inputSeq !== undefined) { d.setUint32(o, inputSeq >>> 0, true); o += 4; }
+  // Held input as a superseding stream: +3B, seq'd by inputSeq — the
+  // seq gate drops stale applies, a dropped frame costs nothing.
+  if (input !== undefined) {
+    d.setInt8(o++, Math.round(input.forward));
+    d.setInt8(o++, Math.round(input.right));
+    d.setUint8(o++, (input.jump ? 1 : 0) | (input.ski ? 2 : 0) | (input.jet ? 4 : 0));
+  }
   return new Uint8Array(buf, 0, o);
 }
 
@@ -134,6 +146,11 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
   o = unpackRot(d, o, rotation);
   const ping = d.getUint16(o, true); o += 2;
   const inputSeq = u8.length >= 34 ? d.getUint32(o, true) : undefined;
+  o += u8.length >= 34 ? 4 : 0;
+  const input = u8.length >= 37 ? {
+    forward: d.getInt8(o), right: d.getInt8(o + 1),
+    jump: (d.getUint8(o + 2) & 1) ? 1 : 0, ski: (d.getUint8(o + 2) & 2) ? 1 : 0, jet: (d.getUint8(o + 2) & 4) ? 1 : 0,
+  } : undefined;
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz) ||
       !Number.isFinite(velocity.x) || !Number.isFinite(velocity.y) || !Number.isFinite(velocity.z)) return null;
   // Same bounds as the JSON validator's validateBody — the binary lane
@@ -148,6 +165,7 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
     velocity,
     seq,
     inputSeq,
+    input,
     ping,
   };
 }
