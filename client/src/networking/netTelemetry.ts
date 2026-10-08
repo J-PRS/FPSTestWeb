@@ -10,7 +10,10 @@ const RTT_REJECT_MS = 10_000;
 
 export class NetTelemetry {
   ping = 0;
-  private pingHistory: number[] = [];
+  // Timestamped so a hidden-tab pong can't poison jitter for the next
+  // 10 probes — a 12s-parked pong is one |ΔRTT| of ~12s in a 9-sample
+  // mean (the soak's 2458ms readout), not a real network property.
+  private pingHistory: { t: number; rtt: number }[] = [];
   private lastTickAt = 0;
   private firstTickAt = 0;
   private tickWindow: { t: number; missed: number }[] = [];
@@ -21,8 +24,8 @@ export class NetTelemetry {
     const rtt = now - sentAt;
     if (rtt < 0 || rtt >= RTT_REJECT_MS) {return;}
     this.ping = Math.round(rtt);
-    this.pingHistory.push(rtt);
-    if (this.pingHistory.length > PING_HISTORY_MAX) {this.pingHistory.shift();}
+    this.pingHistory.push({ t: now, rtt });
+    while (this.pingHistory.length > PING_HISTORY_MAX || (this.pingHistory.length > 0 && now - this.pingHistory[0]!.t > TICK_WINDOW_MS)) {this.pingHistory.shift();}
   }
 
   // "Loss" over a reliable WS transport isn't packet loss — what players
@@ -61,11 +64,12 @@ export class NetTelemetry {
   }
 
   jitter(): number {
-    if (this.pingHistory.length < 2) {return 0;}
+    const rtts = this.pingHistory.map((p) => p.rtt);
+    if (rtts.length < 2) {return 0;}
     let sumDiff = 0;
-    for (let i = 1; i < this.pingHistory.length; i++) {
-      sumDiff += Math.abs(this.pingHistory[i] - this.pingHistory[i - 1]);
+    for (let i = 1; i < rtts.length; i++) {
+      sumDiff += Math.abs(rtts[i]! - rtts[i - 1]!);
     }
-    return Math.round(sumDiff / (this.pingHistory.length - 1));
+    return Math.round(sumDiff / (rtts.length - 1));
   }
 }
