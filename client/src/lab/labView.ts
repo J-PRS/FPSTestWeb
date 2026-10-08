@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { SCENARIOS, type LabInstance } from './scenarios.js';
 import { vfxScene, vfxBatcher, setVfxCamOverride } from '../effects/vfxRuntime.js';
 import { setRibbonCamera } from '../effects/RibbonTrail.js';
+import { isDevHost } from '../core/params.js';
 
 const TICK = 1 / 60;
 const DUMP_MS = 200;
@@ -233,8 +234,17 @@ declare global {
  *  asset-iteration tool, not an in-match overlay, so it keeps its own
  *  renderer rather than borrowing the game's. */
 export function wireLabButton(): void {
-  const btn = document.querySelector('#lab-open');
-  document.querySelector('#gunlab-open')?.addEventListener('click', () =>
+  const btn = document.querySelector('#lab-open') as HTMLElement | null;
+  const gunBtn = document.querySelector('#gunlab-open') as HTMLElement | null;
+  // Dev tools: on a prod host the buttons leave the menu entirely —
+  // a visible dead button (gunlab.html is itself gated) is a confused
+  // player's bug report.
+  if (!isDevHost()) {
+    btn?.remove();
+    gunBtn?.remove();
+    return;
+  }
+  gunBtn?.addEventListener('click', () =>
     window.open('gunlab.html', '_blank'));
   if (!btn) {return;}
   window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);

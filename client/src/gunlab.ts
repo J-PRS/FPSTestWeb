@@ -14,9 +14,45 @@ import { ARCHIVE_BUILDERS } from './entities/viewmodel/weaponsGeoArchive.js';
 import { bakeVertexAO, enhanceWeaponMaterial } from './effects/vertexAO.js';
 import { metalMat } from './entities/procMetal.js';
 import { WeaponType } from '../../shared/weaponTable.js';
+import { isDevHost } from './core/params.js';
 import { CREATURES, PICKUPS, ITEMS, CLASSES, STRUCTURES, previewLive, initPreviews } from './gunlab/previews.js';
 import type { AnimationState } from './entities/playerClips.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
+
+// Asset-iteration tool, not a player surface: on a prod host the page
+// renders a closed sign and the whole lab below is skipped. Static hosts
+// still serve the file — this is the same isDevHost gate the ESC-menu
+// button and wireDebugTools use, applied to the entry itself.
+if (!isDevHost()) {
+  document.body.innerHTML =
+    '<div style="color:#cde;font:14px monospace;padding:2em">gunlab is a dev tool — not available on this build.</div>';
+  throw new Error('gunlab: dev-only surface');
+}
+
+// Load profiling: T0 lands after module-eval imports (three, manifold
+// wrapper) finish — that span shows as 'module imports' in the first lap.
+// nav+ is wall time since navigationStart, the number you feel on F5.
+const T0 = performance.now();
+let lapT = T0;
+// Reload-to-reload timing: beforeunload stamps wall-clock so the next
+// boot reports the full F5 round trip (unload → server → module eval).
+addEventListener('beforeunload', () => {
+  try { localStorage.setItem('gunlab.unloadAt', String(Date.now())); } catch { /* private mode */ }
+});
+const reloadGap = ((): number | null => {
+  try {
+    const t = Number(localStorage.getItem('gunlab.unloadAt'));
+    return t > 0 ? Date.now() - t : null;
+  } catch { return null; }
+})();
+if (reloadGap !== null) {console.log(`[gunlab] F5 round trip: ${reloadGap}ms`);}
+
+const lap = (label: string): void => {
+  const now = performance.now();
+  console.log(`[gunlab] ${label} +${(now - lapT).toFixed(0)}ms (nav+${now.toFixed(0)}ms)`);
+  lapT = now;
+};
+lap('module imports');
 
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string }
 // Persisted so noreload-mode F5s come back to the same gun+angle — the
@@ -64,6 +100,7 @@ scene.background = new THREE.Color(0x25282E);
 // FPS view judges the gun wider and warmer-lit than in-game.
 const camera = new THREE.PerspectiveCamera(state.fov ?? 55, innerWidth / innerHeight, 0.01, 100);
 initPreviews(camera); // creature/deployable builders aim at this eye
+lap('renderer+scene');
 scene.add(camera);
 scene.add(new THREE.AmbientLight(0x8899AA, 0.9));
 const sun = new THREE.DirectionalLight(0xff_ff_ff, 1.2);
@@ -146,7 +183,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
 // off the builders. ⓘ info runs the current weapon.
 function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
   root.updateMatrixWorld(true);
-  let meshes = 0, verts = 0, tris = 0;
+  let meshes = 0, verts = 0, tris = 0, bytes = 0;
   const attrs = new Set<string>();
   const wb = new THREE.Box3();
   root.traverse((o) => {
@@ -156,7 +193,14 @@ function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
     const pos = m.geometry.getAttribute('position');
     verts += pos.count;
     tris += m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
-    for (const k of Object.keys(m.geometry.attributes)) {attrs.add(k);}
+    // Buffer footprint: every attribute + index — the on-GPU weight of
+    // the data as-shown (says nothing about the .glb file's compression).
+    for (const k of Object.keys(m.geometry.attributes)) {
+      attrs.add(k);
+      const a = m.geometry.getAttribute(k) as THREE.BufferAttribute;
+      bytes += a.count * a.itemSize * a.array.BYTES_PER_ELEMENT;
+    }
+    if (m.geometry.index) {bytes += m.geometry.index.count * m.geometry.index.array.BYTES_PER_ELEMENT;}
     m.geometry.computeBoundingBox();
     wb.union(m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld));
   });
@@ -165,8 +209,10 @@ function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
   const holes = holeScan(root);
   const gaps = gapScan(root);
   const vol = volScan(root);
+  const kb = bytes / 1024;
   return (
-    `w${wt} ${name}: ${meshes} meshes, ${verts}v/${tris}t, ` +
+    `w${wt} ${name}: ${meshes} meshes, ${verts}v/${tris}t ` +
+    `${kb >= 1024 ? `${(kb / 1024).toFixed(2)}MB` : `${kb.toFixed(1)}KB`}, ` +
     `size ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}, ` +
     `attrs {${[...attrs].join(',')}} — ` +
     `z:${z.pairs} holes:${holes.holes} inverted:${vol.inverted} floaters:${gaps.orphans} clusters:${gaps.clusters}${ 
@@ -190,7 +236,7 @@ function updateStats(): void {
   const root = statRoot();
   if (!root) { statEl.textContent = 'nothing on stage'; return; }
   root.updateMatrixWorld(true);
-  let meshes = 0, insts = 0, verts = 0, tris = 0;
+  let meshes = 0, insts = 0, verts = 0, tris = 0, bytes = 0;
   const mats = new Set<THREE.Material>();
   const wb = new THREE.Box3();
   const _b = new THREE.Box3();
@@ -205,6 +251,11 @@ function updateStats(): void {
     const times = (m as THREE.InstancedMesh).count ?? 1;
     verts += pos.count * times;
     tris += n * times;
+    for (const k of Object.keys(m.geometry.attributes)) {
+      const a = m.geometry.getAttribute(k) as THREE.BufferAttribute;
+      bytes += a.count * a.itemSize * a.array.BYTES_PER_ELEMENT;
+    }
+    if (m.geometry.index) {bytes += m.geometry.index.count * m.geometry.index.array.BYTES_PER_ELEMENT;}
     for (const mm of Array.isArray(m.material) ? m.material : [m.material]) {mats.add(mm);}
     if (m.geometry.boundingBox === null) {m.geometry.computeBoundingBox();}
     if (m.geometry.boundingBox) {wb.union(_b.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));}
@@ -215,7 +266,7 @@ function updateStats(): void {
   statEl.textContent =
     `${label}\n` +
     `${meshes} meshes${insts ? ` + ${insts} inst` : ''} · ${mats.size} mats\n` +
-    `${verts.toLocaleString()} v · ${Math.round(tris).toLocaleString()} t\n` +
+    `${verts.toLocaleString()} v · ${Math.round(tris).toLocaleString()} t · ${(bytes / 1024).toFixed(1)} KB\n` +
     `${s.x.toFixed(2)} × ${s.y.toFixed(2)} × ${s.z.toFixed(2)} m`;
 }
 function toggleStats(): void {
@@ -292,6 +343,7 @@ const statusEl = document.querySelector('#status')!;
 let vm = new ViewModel(camera);
 vm.switchWeapon(state.wt);
 for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // settle past switch dip
+lap('viewmodel init');
 
 // Inspect mode parks the ACTIVE weapon group in the scene on a manual
 // orbit; the rest of the viewmodel (hands/flash) stays offstage. The
@@ -796,19 +848,19 @@ function paintTools(): void {
     tools.append(div);
     return bs;
   };
-  const noBake = new URLSearchParams(location.search).has('nobake');
+  // Procedural is the default — ?bake opts INTO the GLB swap (vmBaked
+  // reads the same flag). View+gun survive the reload via the saved pose.
+  const baked = new URLSearchParams(location.search).has('bake');
   const [, bakeB] = row([
     [state.inspect ? '◈ FPS' : '◉ inspect', () => { setInspect(!state.inspect); paintRail(); }],
     ['▣ baked', () => {
-      // ?nobake forces procedural viewmodels — view+gun survive the
-      // reload via the localStorage pose.
       const u = new URL(location.href);
-      if (noBake) {u.searchParams.delete('nobake');} else {u.searchParams.set('nobake', '1');}
+      if (baked) {u.searchParams.delete('bake');} else {u.searchParams.set('bake', '1');}
       flushSave();
       location.href = u.toString();
     }],
   ]);
-  bakeB!.classList.toggle('active', !noBake);
+  bakeB!.classList.toggle('active', baked);
   const [, zB] = row([
     ['▦ sheet', shotSheet],
     ['⚠ z', () => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); }],
@@ -1059,7 +1111,10 @@ async function pollBakes(): Promise<void> {
     } catch { /* dev-server blip — retry next tick */ }
   }
 }
-const pollTimer = setInterval(pollBakes, 1500);
+// Only armed under ?bake — procedural mode has no bake files to watch.
+const pollTimer = new URLSearchParams(location.search).has('bake')
+  ? setInterval(pollBakes, 1500)
+  : 0;
 
 // --- drag look (FPS pose sway). Inspect-mode dragging is owned by
 // OrbitControls on the canvas — these listeners only feed the sway. ---
@@ -1183,6 +1238,7 @@ addEventListener('resize', () => {
 });
 
 paintRail();
+lap('rail paint');
 // Snapshot the saved pose FIRST — selectArchive/setInspect both end in
 // saveState, which would write the refit camera over state.cam/tgt
 // before the restore below could read them.
@@ -1209,6 +1265,12 @@ if (state.inspect) {
   }
 }
 if (state.z) {zPaint(true);} // remembered ⚠z — after inspect restore (TDZ)
+lap(`restore pick=${state.pick ?? '-'} inspect=${Boolean(state.inspect)} z=${Boolean(state.z)}`);
+// First painted frame ≈ interactive — module eval + init + first render.
+requestAnimationFrame(() => {
+  const tti = performance.now().toFixed(0);
+  console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap !== null ? ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms` : ''}`);
+});
 let last = performance.now();
 renderer.setAnimationLoop(() => {
   const now = performance.now();
