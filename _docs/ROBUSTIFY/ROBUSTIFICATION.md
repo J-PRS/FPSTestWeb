@@ -3599,3 +3599,7 @@ C4's last live remnant: five hand-copied compare → streak → warn blocks in s
 ## 2.227 — TickLoop lane emit unified: server side of C4 folded
 
 The server's five replicaHash/kindFields computations (ball/creature/deploy/flag/pickup) were the same loop copied five times — the emit twin of the client lanes folded in 2.226. One `emitLane` body now hashes a roster + ships its per-id fields, both generated from the kind declaration; flag keeps its own line only because its roster is team-keyed rather than id-keyed. Adding a fidelity lane is now roster + one call on each end. -49/+24 lines, replicaParity green, full suite unchanged.
+
+## 2.228 — stateHash wire shape folded: lanes ride a kind-keyed map
+
+The fidelity lanes rode the stateHash message as eight parallel named slots (five *Hash + three *Fields) — the last place adding a lane meant touching the wire type, the emit, the dispatch, the handler signature, and the consumer. The message now carries `replica: Record<kind, {hash, fields?}>`; emit writes lanes by key, wireIn passes the map through, and stateDebug unpacks it once at the edge with per-lane tuple casts. A new fidelity lane is now declaration + emitLane call + laneCheck call — the wire, dispatch, and handler signatures don't move. Protocol owned end-to-end so no compat story needed; 504 vitest + replicaParity/tickSeqHash green.
