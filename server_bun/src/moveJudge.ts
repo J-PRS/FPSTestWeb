@@ -318,7 +318,10 @@ export class MoveJudge {
     // client to the raw sim pos bounces it back by that whole gap. The
     // same velocity-linear lead as the broadcast puts the correction
     // where the client actually is, so the snap is a nudge not a teleport.
-    const lead = Math.min(Math.max(sh.transitEma, 0), TRANSIT_EMA_CAP_MS) / 1000;
+    // Half the transit: a bad snap resets the client's prediction base,
+    // so corrections take the conservative lead (broadcast keeps the
+    // full one — an observer-side overshoot only looks wrong).
+    const lead = Math.min(Math.max(sh.transitEma, 0), TRANSIT_EMA_CAP_MS) / 2000;
     const truth: MoveState & { inputSeq: number } = {
       pos: { x: s.pos.x + s.vel.x * lead, y: s.pos.y + s.vel.y * lead, z: s.pos.z + s.vel.z * lead },
       vel: { x: s.vel.x, y: s.vel.y, z: s.vel.z },
