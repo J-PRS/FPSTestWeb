@@ -3521,3 +3521,7 @@ The ~450-line clip-drive core (mixer, animations table, fade machinery, playAnim
 ## 2.208 — playerCollider extraction: the debug hitbox leaves PlayerModel
 
 The collider-gizmo block (capsule geometry against the full visual scale, friend-or-foe hex, the debug/force visibility pair, the class-capsule restash, remove/reattach, dispose) moved to `client/src/entities/playerCollider.ts` as `PlayerCollider` — scale and feet offset pass per call since both can change without the gizmo knowing. PlayerModel keeps thin delegates (`setColliderCapsule`/`setColliderColor`/`setColliderVisible`/`removeColliderGizmo`/`addColliderGizmo`) and drops to 692 lines — under half its 1456-line starting size across the split lane.
+
+## 2.209 — playerMats extraction: the material pipeline leaves PlayerModel
+
+The mannequin reskin recipes (mannGunMat/mannJointMat module fns), the per-instance clone cache (ownMaterial/matClones — a shared-GLB material flash would tint the whole fleet), the flashMats emissive capture, and the debug wireframe set moved to `client/src/entities/playerMats.ts` as `PlayerMats`. `prep()` takes (mesh, mann, mannRev) at census time; `flashMats` stays reachable through a getter for ModelFx; `wireframeOn` went public on the controller for the gunCtl.onGeoSwap hook. PlayerModel: 625 lines — 43% of its 1456-line start.

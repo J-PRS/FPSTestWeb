@@ -24,30 +24,11 @@ import { PlayerCollider } from './playerCollider.js';
 import { PlayerGun } from './playerGun.js';
 import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
+import { PlayerMats } from './playerMats.js';
 import { PoseControl } from './playerPose.js';
-import { metalMat } from './procMetal.js';
 import { WeaponType } from '../../../shared/weapons.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
-
-// Mannequin re-skin (cached shared recipes — each PlayerModel still
-// clones via ownMaterial so damage-flash stays per-instance).
-// mannGunMat = the prop-gun recipe (joints), mannJointMat = pickup
-// gunmetal (torso).
-let _mannGun: THREE.MeshStandardMaterial | null = null;
-let _mannMetal: THREE.MeshStandardMaterial | null = null;
-function mannGunMat(): THREE.MeshStandardMaterial {
-  if (!_mannGun) {
-    _mannGun = new THREE.MeshStandardMaterial({ color: 0x2A_2E_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
-  }
-  return _mannGun;
-}
-function mannJointMat(): THREE.MeshStandardMaterial {
-  if (!_mannMetal) {_mannMetal = metalMat();}
-  return _mannMetal;
-}
-
-
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -116,7 +97,9 @@ export class PlayerModel {
   // Damage flash — same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
   // material's emissive toward white and back from a cached baseline.
-  flashMats: { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] = [];
+  /** Emissive materials captured at load for the damage white-pop —
+   *  ModelFx reads this straight through the host. */
+  get flashMats(): { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] { return this.mats.flashMats; }
   private fx = new ModelFx(this);
 
   // ---- Retargeted UAL clips ------------------------------------------
@@ -162,7 +145,7 @@ export class PlayerModel {
     this.pose.wantSpineLock = !shootClip || shootClip.startsWith('UAL_');
     // The gun controller owns the mesh; a baked-geo swap invalidates the
     // wireframe capture, so it reaches back through this hook.
-    this.gunCtl.onGeoSwap = () => { if (this.wireframeOn) {this.captureWireframeMats();} };
+    this.gunCtl.onGeoSwap = () => { if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);} };
   }
 
   async load(): Promise<void> {
@@ -370,35 +353,17 @@ export class PlayerModel {
     this.lodCtl.set(level);
   }
 
-  // Cloned rigs share material refs with every sibling clone — a damage
-  // flash mutating emissive on a shared material would light up the whole
-  // fleet. Clone each material once per model; the map preserves the
-  // GLB's own mesh->mat sharing inside this instance.
-  private matClones = new Map<THREE.Material, THREE.Material>();
-  private ownMaterial(m: THREE.Material): THREE.Material {
-    let c = this.matClones.get(m);
-    if (!c) { c = m.clone(); this.matClones.set(m, c); }
-    return c;
-  }
+  // Mannequin reskin, per-instance material clones (a flash mutating a
+  // shared GLB material would light up the whole fleet), emissive
+  // capture, and the debug wireframe set live in playerMats.ts.
+  private readonly mats = new PlayerMats();
 
   private prepareMesh(child: THREE.Mesh): void {
       child.castShadow = true;
       child.receiveShadow = true;
       child.geometry = smoothShade(child.geometry);
-      if (this.variant === 'mannequin') {
-        // The orange/purple stock figure reads as a debug doll on a
-        // battlefield — re-skin: torso in the gun-prop recipe, joints in
-        // the shared pickup gunmetal.
-        const swap = (m: THREE.Material): THREE.Material => {
-          if (m.name === 'M_Main') {return this.mannRev ? mannGunMat() : mannJointMat();}
-          if (m.name === 'M_Joints') {return this.mannRev ? mannJointMat() : mannGunMat();}
-          return m;
-        };
-        child.material = Array.isArray(child.material) ? child.material.map(swap) : swap(child.material);
-      }
-      child.material = Array.isArray(child.material)
-        ? child.material.map((m) => this.ownMaterial(m))
-        : this.ownMaterial(child.material);
+      // Reskin + per-instance clone + emissive capture — playerMats.ts
+      this.mats.prep(child, this.variant === 'mannequin', this.mannRev);
       // SkinnedMesh bind-pose bounds don't track bone-driven verts —
       // wrong bounds get it frustum-culled when it shouldn't be. Compute
       // the skinned bounds at load (three walks verts through the
@@ -408,16 +373,6 @@ export class PlayerModel {
         this.skinnedMeshes.push(sk);
         sk.computeBoundingSphere();
         if (sk.boundingSphere) {sk.boundingSphere.radius += 0.6;}
-      }
-      // Capture emissive materials for the damage flash — dedupe,
-      // a GLB often shares one material across several meshes.
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      for (const m of mats) {
-        if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial
-          && !this.flashMats.some(f => f.m === m)) {
-          const sm = m as THREE.MeshStandardMaterial;
-          this.flashMats.push({ m: sm, e: sm.emissive.clone(), i: sm.emissiveIntensity });
-        }
       }
     }
 
@@ -619,28 +574,9 @@ export class PlayerModel {
    *  when it's built. */
   setColliderColor(hex: number): void { this.collider.setColor(hex); }
 
-  private wireframeMats: THREE.Material[] | null = null;
-  private wireframeOn = false;
-  /** Debug (?debug / menu DEBUG): render the body as wireframe so it can be
-   *  eyeballed against the collider capsule. */
-  private captureWireframeMats(): void {
-    if (!this.model) {return;}
-    const mats = new Set<THREE.Material>();
-    this.model.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) {return;}
-      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {mats.add(m);}
-    });
-    this.wireframeMats = [...mats];
-  }
-  setWireframe(on: boolean): void {
-    if (!this.model || on === this.wireframeOn) {return;}
-    this.wireframeOn = on;
-    if (on) {
-      this.captureWireframeMats();
-    }
-    for (const m of this.wireframeMats || []) {(m as THREE.MeshBasicMaterial).wireframe = on;}
-  }
+  /** Debug (?debug / menu DEBUG): render the body as wireframe so it can
+   *  be eyeballed against the collider capsule. */
+  setWireframe(on: boolean): void { this.mats.setWireframe(on, this.model); }
 
   setColliderVisible(visible: boolean, force = false): void {
     this.collider.setVisible(visible, force);
@@ -682,10 +618,7 @@ export class PlayerModel {
       this.anim.dispose();
       this.model = null;
       this.gibParts = null; // just (mesh, indices) — nothing GPU-owned here
-      // Per-model material clones — frees their GPU program refs; shared
-      // geometry/textures belong to the cached gltf and stay alive.
-      this.matClones.forEach((m) => m.dispose());
-      this.matClones.clear();
+      this.mats.dispose();
     }
     this.collider.dispose();
   }
