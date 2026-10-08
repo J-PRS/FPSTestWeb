@@ -359,12 +359,11 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     // v4 decodes into the per-wireId slot so masked groups inherit the
     // last-decoded values; flat slots stay for v1/v3 frames.
     let u: WireTickPlayer | undefined;
+    let v4HadBase = false;
     if (v4) {
       u = pool?.byId?.get(wireId);
-      if (!u) {
-        u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
-        if (pool?.byId) pool.byId.set(wireId, u);
-      }
+      v4HadBase = u !== undefined;
+      if (!u) u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;
       slots[i] = u;
     } else {
       u = slots[i] as WireTickPlayer | undefined;
@@ -405,6 +404,15 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
         u.jet = (sheep & 0x80) !== 0 ? 1 : 0;
         u.sheep = (sheep & 0x7f) > 0 ? sheep & 0x7f : undefined;
       }
+      if (!v4HadBase && (mask & V4_MASK_FULL) !== V4_MASK_FULL) {
+        // Mid-join window: a masked delta without a decode baseline is
+        // undecodable — inherited fields would read as zeros until the
+        // next forced-full (~750ms). Drop it like a lost frame via the
+        // empty-id convention; the full record heals it.
+        u.playerId = '';
+        continue;
+      }
+      pool?.byId?.set(wireId, u);
       continue;
     }
     let px: number, py: number, pz: number;
@@ -476,6 +484,9 @@ export const V4_MASK_VEL = 0x02;
 export const V4_MASK_ROT = 0x04;
 export const V4_MASK_HP_PING = 0x08;
 export const V4_MASK_FLAGS_SHEEP = 0x10;
+/** All groups present — the encoder's "fresh" record carries every bit,
+ *  which is also the ONLY record a baseline-less decoder may accept. */
+export const V4_MASK_FULL = V4_MASK_VEL | V4_MASK_ROT | V4_MASK_HP_PING | V4_MASK_FLAGS_SHEEP;
 
 /** Encoder-side retained state per record slot — holds the last
  *  wire-QUANTIZED values so the mask decision matches what the receiver

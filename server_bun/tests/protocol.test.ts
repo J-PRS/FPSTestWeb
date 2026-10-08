@@ -22,15 +22,9 @@ const _exhaustive: Missing extends never ? true : never = true;
 void _exhaustive;
 
 describe('protocol wire contract', () => {
-  it('every ClientMessage type resolves to a WIRE entry — join is the documented exception', () => {
+  it('every ClientMessage type resolves to a WIRE entry', () => {
     for (const t of ALL_CLIENT_TYPES) {
       const entry = WIRE[t];
-      if (t === 'join') {
-        // sessions.handle owns the handshake — the packet never reaches
-        // a room, so a WIRE entry would be dead weight (see wire.ts head).
-        expect(entry).toBeUndefined();
-        continue;
-      }
       expect(entry, `${t} has no WIRE entry`).toBeDefined();
       expect(typeof entry!.validate, `${t} has no validator`).toBe('function');
     }
@@ -38,9 +32,10 @@ describe('protocol wire contract', () => {
 
   it('every WIRE entry carries a room handler — switchRoom is the documented exception', () => {
     // switchRoom validates here but GameServer intercepts before room
-    // dispatch, so it carries no handle (see wire.ts head).
+    // dispatch, so it carries no handle (see wire.ts head). join's
+    // handler only heals the seated-socket retry (resends worldstate).
     for (const t of ALL_CLIENT_TYPES) {
-      if (t === 'join' || t === 'switchRoom') continue;
+      if (t === 'switchRoom') continue;
       expect(typeof WIRE[t]!.handle, `${t} validates but has no room handler`).toBe('function');
     }
     expect(WIRE.switchRoom!.handle).toBeUndefined();

@@ -202,7 +202,9 @@ export function replica(room: Room): Replica {
   const REPLICA_ID = '__replica__';
   const held = new Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>();
   const roster = new Map<number, string>(); // wireId → playerId
-  const pool = { slots: [] as WireTickPlayer[], resolveId: (wid: number) => roster.get(wid) };
+  // byId lets v4 masked records inherit unchanged fields — a pool without
+  // it decodes every masked group as a fresh zero slot (health reads 0).
+  const pool = { slots: [] as WireTickPlayer[], byId: new Map<number, WireTickPlayer>(), resolveId: (wid: number) => roster.get(wid) };
   const prevBroadcast = room.connections.broadcast;
   const prevSendBin = room.connections.sendBinaryToPlayer;
   room.spectators.add(REPLICA_ID);

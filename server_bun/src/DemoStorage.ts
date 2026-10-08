@@ -60,6 +60,10 @@ export class DemoStorage {
           const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
           const header = this.parseDemoHeader(ab);
           if (header.projectileLifetime < CONFIG.minDemoLifetime) continue;
+          // The readFile yield is a race window: a saveDemo landing inside
+          // it already pushed this filename — re-check or the index rows
+          // outnumber the files on disk.
+          if (this.index.some(m => m.filename === filename)) continue;
           this.index.push({
             filename,
             projectileLifetime: header.projectileLifetime,

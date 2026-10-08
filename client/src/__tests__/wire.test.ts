@@ -406,4 +406,30 @@ describe('v4 delta-masked records', () => {
     const healed = decodeTickFrame(encodeTickFrame(0, 5, 0, [encodeTickPlayerV4(7, p, enc, last, true)], WIRE_TICK_V4), r.pool)!;
     expect(healed.updates[0]!.health).toBe(12);
   });
+
+  it('a masked delta with no decode baseline drops, then the full record seats it', () => {
+    // Mid-join window: the roster knows wireId 7 but this receiver never
+    // decoded a full record for it — inheriting masked groups would read
+    // zeros (health=0 ghost) until the next forced-full.
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    const p = base();
+    encodeTickPlayerV4(7, p, enc, last, false); // the join burst this client missed
+    p.position.x = 2;
+    const delta = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(delta.length).toBe(9);
+    const dropped = decodeTickFrame(encodeTickFrame(0, 2, 0, [delta], WIRE_TICK_V4), r.pool)!;
+    expect(dropped.updates[0]!.playerId).toBe(''); // unresolvable → consumer skips
+    const full = encodeTickPlayerV4(7, p, enc, last, true);
+    const seated = decodeTickFrame(encodeTickFrame(0, 3, 0, [full], WIRE_TICK_V4), r.pool)!;
+    expect(seated.updates[0]!.playerId).toBe('player_seven');
+    expect(seated.updates[0]!.health).toBe(100);
+    // Baseline now exists — the next delta inherits it.
+    p.position.x = 4;
+    const after = decodeTickFrame(encodeTickFrame(0, 4, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
+    expect(after.updates[0]!.health).toBe(100);
+    expect(after.updates[0]!.position.x).toBeCloseTo(4);
+  });
 });
