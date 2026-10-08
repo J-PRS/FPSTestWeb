@@ -3356,3 +3356,13 @@ signal and wraps nm.handleCorrection to count corrections — both sat
 undefined, so the whole suite timed out on entry. Restored the two
 accessors: lastTickSeq forwards wireIn.tickSeq, correction dispatches
 through a public nm.handleCorrection seam. (smoke: 10/10 green)
+
+## 2.188 — declared wire types: inbound checks verify shape, not just presence
+
+KindFieldDecl gained a `wire` tag ('num'|'str'|'bool'|'vec3'|'arr') on all
+162 world-model field declarations. checkPacket now type-checks every
+field that arrives: a string where a vec3 belongs used to pass the
+presence check and poison the replica just as silently as a missing
+field — now it warns once per field per 5s. Covers verb payloads, roster
+rows (every declared container in a shared feed), and event fields.
+(client tsc + worldModel/fidelityHash 46 checks green)

@@ -18,6 +18,10 @@ import { sharedNow } from './env.ts';
 export interface KindFieldDecl {
   /** Field name on the sim's entity record (server) and the client replica. */
   name: string;
+  /** Wire type — lets inbound checks verify SHAPE, not just presence: a
+   *  string where a vec3 belongs poisons a replica as silently as a
+   *  missing field. 'vec3' = {x,y,z} finite numbers; 'arr' = any array. */
+  wire: 'num' | 'str' | 'bool' | 'vec3' | 'arr';
   channel: SyncChannel;
   /** Value emitted when the field is absent — the wire's sentinel for
    *  'not set' (deploy teams diff '' server-side, never null). */
@@ -55,150 +59,150 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     kind: 'ball',
     verbs: { spawn: 'ballSpawn', update: 'ballSegment', gone: 'ballDie', roster: 'ballRoster' },
     fields: [
-      { name: 'variant', channel: 'edge' },
-      { name: 'enraged', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
+      { name: 'variant', wire: 'num', channel: 'edge' },
+      { name: 'enraged', wire: 'bool', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
     ],
     spawnFields: [
-      { name: 'variant', channel: 'edge' },
-      { name: 'colorIdx', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'variant', wire: 'num', channel: 'edge' },
+      { name: 'colorIdx', wire: 'num', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
     goneFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'by', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'by', wire: 'str', channel: 'edge' },
     ],
     // ballSegment rides a packed binary frame (wire.ts), not JSON — the
     // list still declares the shape once so the conformance test pins it.
     updateFields: [
-      { name: 'kind', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'enraged', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 'et', channel: 'edge' },
-      { name: 'slowT', channel: 'edge' },
-      { name: 'damp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'enraged', wire: 'bool', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 'et', wire: 'num', channel: 'edge' },
+      { name: 'slowT', wire: 'num', channel: 'edge' },
+      { name: 'damp', wire: 'num', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
     rosterFields: [
-      { name: 'variant', channel: 'edge' },
-      { name: 'colorIdx', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'enraged', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'variant', wire: 'num', channel: 'edge' },
+      { name: 'colorIdx', wire: 'num', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'enraged', wire: 'bool', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
   },
   creature: {
     kind: 'creature',
     verbs: { spawn: 'crawlSpawn', update: 'crawlEvt', gone: 'crawlDie', roster: 'crawlRoster' },
     fields: [
-      { name: 'species', channel: 'edge' },
-      { name: 'state', channel: 'edge' },
-      { name: 'uber', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
+      { name: 'species', wire: 'str', channel: 'edge' },
+      { name: 'state', wire: 'str', channel: 'edge' },
+      { name: 'uber', wire: 'bool', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
     ],
     spawnFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'seed', channel: 'edge' },
-      { name: 'uber', channel: 'edge' },
-      { name: 'species', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'seed', wire: 'num', channel: 'edge' },
+      { name: 'uber', wire: 'bool', channel: 'edge' },
+      { name: 'species', wire: 'str', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
     goneFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'by', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'by', wire: 'str', channel: 'edge' },
     ],
     updateFields: [
-      { name: 'kind', channel: 'edge' },
-      { name: 'sk', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
+      { name: 'sk', wire: 'num', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
     rosterFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'uber', channel: 'edge' },
-      { name: 'seed', channel: 'edge' },
-      { name: 'species', channel: 'edge' },
-      { name: 'state', channel: 'edge' },
-      { name: 'targetId', channel: 'edge' },
-      { name: 'tp', channel: 'edge' },
-      { name: 't', channel: 'sim' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'uber', wire: 'bool', channel: 'edge' },
+      { name: 'seed', wire: 'num', channel: 'edge' },
+      { name: 'species', wire: 'str', channel: 'edge' },
+      { name: 'state', wire: 'str', channel: 'edge' },
+      { name: 'targetId', wire: 'str', channel: 'edge' },
+      { name: 'tp', wire: 'vec3', channel: 'edge' },
+      { name: 't', wire: 'num', channel: 'sim' },
     ],
   },
   deploy: {
     kind: 'deploy',
     verbs: { spawn: 'deploySpawn', update: 'deployHp', gone: 'deployGone' },
     fields: [
-      { name: 'kind', channel: 'edge' },
-      { name: 'owner', channel: 'edge' },
-      { name: 'team', channel: 'edge', absent: '' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
+      { name: 'owner', wire: 'str', channel: 'edge' },
+      { name: 'team', wire: 'str', channel: 'edge', absent: '' },
     ],
     spawnFields: [
-      { name: 'owner', channel: 'edge' },
-      { name: 'kind', channel: 'edge' },
-      { name: 'pos', channel: 'sim' },
-      { name: 'team', channel: 'edge' },
+      { name: 'owner', wire: 'str', channel: 'edge' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
+      { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'team', wire: 'str', channel: 'edge' },
     ],
     updateFields: [
-      { name: 'hp', channel: 'echo' },
-      { name: 'armor', channel: 'echo' },
-      { name: 'src', channel: 'echo' },
+      { name: 'hp', wire: 'num', channel: 'echo' },
+      { name: 'armor', wire: 'num', channel: 'echo' },
+      { name: 'src', wire: 'str', channel: 'echo' },
     ],
     goneFields: [],
     // deployDown/deployUp are lifecycle notifies — a wreck flips DOWN
     // and back UP without leaving the roster.
     events: {
       deployDown: [
-        { name: 'kind', channel: 'edge' },
-        { name: 'team', channel: 'edge', absent: null },
-        { name: 'respawnS', channel: 'edge' },
+        { name: 'kind', wire: 'str', channel: 'edge' },
+        { name: 'team', wire: 'str', channel: 'edge', absent: null },
+        { name: 'respawnS', wire: 'num', channel: 'edge' },
       ],
       deployUp: [],
       // Deployable FX/outcome notifies — visual triggers; damage itself
       // always arrives through the player outcome events.
       turretShot: [
-        { name: 'owner', channel: 'edge' },
-        { name: 'targetId', channel: 'edge' },
+        { name: 'owner', wire: 'str', channel: 'edge' },
+        { name: 'targetId', wire: 'str', channel: 'edge' },
       ],
       sentryShot: [
-        { name: 'owner', channel: 'edge' },
-        { name: 'x', channel: 'sim' },
-        { name: 'y', channel: 'sim' },
-        { name: 'z', channel: 'sim' },
+        { name: 'owner', wire: 'str', channel: 'edge' },
+        { name: 'x', wire: 'num', channel: 'sim' },
+        { name: 'y', wire: 'num', channel: 'sim' },
+        { name: 'z', wire: 'num', channel: 'sim' },
       ],
       mineBoom: [
-        { name: 'owner', channel: 'edge' },
-        { name: 'pos', channel: 'sim' },
+        { name: 'owner', wire: 'str', channel: 'edge' },
+        { name: 'pos', wire: 'vec3', channel: 'sim' },
       ],
       sensorPing: [
-        { name: 'team', channel: 'edge', absent: null },
-        { name: 'targets', channel: 'edge' },
+        { name: 'team', wire: 'str', channel: 'edge', absent: null },
+        { name: 'targets', wire: 'arr', channel: 'edge' },
       ],
     },
     // gameState deployables[] row — hp/armor/team ride optional on the
     // snapshot row; spawn edges always carry the full set.
     rosterFields: [
-      { name: 'owner', channel: 'edge' },
-      { name: 'kind', channel: 'edge' },
-      { name: 'pos', channel: 'sim' },
-      { name: 'hp', channel: 'echo', absent: null },
-      { name: 'armor', channel: 'echo', absent: null },
-      { name: 'team', channel: 'edge', absent: null },
+      { name: 'owner', wire: 'str', channel: 'edge' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
+      { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'hp', wire: 'num', channel: 'echo', absent: null },
+      { name: 'armor', wire: 'num', channel: 'echo', absent: null },
+      { name: 'team', wire: 'str', channel: 'edge', absent: null },
     ],
   },
   flag: {
@@ -207,16 +211,16 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // roster feed, so there are no spawn/gone edge verbs to declare.
     verbs: { update: 'flagUpdate' },
     fields: [
-      { name: 'state', channel: 'edge' },
-      { name: 'carrier', channel: 'edge' },
+      { name: 'state', wire: 'str', channel: 'edge' },
+      { name: 'carrier', wire: 'str', channel: 'edge' },
     ],
     rosterFields: [
       // The flag's row key is its team — rosterRow writes it under the
       // idField ('team'), so it does not repeat here.
-      { name: 'pos', channel: 'sim' },
-      { name: 'home', channel: 'edge' },
-      { name: 'state', channel: 'edge' },
-      { name: 'carrier', channel: 'edge' },
+      { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'home', wire: 'vec3', channel: 'edge' },
+      { name: 'state', wire: 'str', channel: 'edge' },
+      { name: 'carrier', wire: 'str', channel: 'edge' },
     ],
   },
   pickup: {
@@ -225,19 +229,19 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // the new truth spot) — there is no distinct update verb.
     verbs: { spawn: 'pickupSpawn', gone: 'pickupGone' },
     fields: [
-      { name: 'kind', channel: 'edge' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
     ],
     spawnFields: [
-      { name: 'pos', channel: 'sim' },
-      { name: 'kind', channel: 'edge' },
+      { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'kind', wire: 'str', channel: 'edge' },
     ],
     goneFields: [
-      { name: 'by', channel: 'edge' },
+      { name: 'by', wire: 'str', channel: 'edge' },
     ],
     // gameState pickups[] row — `kind` rides optional on the snapshot.
     rosterFields: [
-      { name: 'pos', channel: 'sim' },
-      { name: 'kind', channel: 'edge', absent: null },
+      { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'kind', wire: 'str', channel: 'edge', absent: null },
     ],
   },
   projectile: {
@@ -246,19 +250,19 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // — there is no update verb on the wire.
     verbs: { spawn: 'projectileCreated', gone: 'projectileDestroyed' },
     fields: [
-      { name: 'weaponType', channel: 'edge' },
-      { name: 'ownerId', channel: 'edge' },
+      { name: 'weaponType', wire: 'num', channel: 'edge' },
+      { name: 'ownerId', wire: 'str', channel: 'edge' },
     ],
     spawnFields: [
-      { name: 'projectileId', channel: 'edge' },
-      { name: 'ownerId', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'weaponType', channel: 'edge' },
+      { name: 'projectileId', wire: 'num', channel: 'edge' },
+      { name: 'ownerId', wire: 'str', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'weaponType', wire: 'num', channel: 'edge' },
       // shotId/pellet echo back the client's intent nonce — bot-spawned
       // shells have none, so omission is legal.
-      { name: 'shotId', channel: 'echo', absent: null },
-      { name: 'pellet', channel: 'echo', absent: null },
+      { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
+      { name: 'pellet', wire: 'num', channel: 'echo', absent: null },
     ],
     goneFields: [],
   },
@@ -270,89 +274,89 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     kind: 'player',
     verbs: { spawn: 'playerJoined', update: 'tickUpdate', gone: 'playerLeft', roster: 'gameState' },
     fields: [
-      { name: 'internalId', channel: 'edge' },
-      { name: 'health', channel: 'echo' },
-      { name: 'isDead', channel: 'edge' },
-      { name: 'team', channel: 'edge' },
+      { name: 'internalId', wire: 'str', channel: 'edge' },
+      { name: 'health', wire: 'num', channel: 'echo' },
+      { name: 'isDead', wire: 'bool', channel: 'edge' },
+      { name: 'team', wire: 'str', channel: 'edge' },
     ],
     // playerJoined announce — id rides the 'playerId' key, not 'id'.
     spawnFields: [
-      { name: 'name', channel: 'edge' },
-      { name: 'internalId', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'rotation', channel: 'sim' },
-      { name: 'team', channel: 'edge' },
-      { name: 'transport', channel: 'edge' },
-      { name: 'armorClass', channel: 'edge' },
-      { name: 'health', channel: 'sim' },
-      { name: 'isDead', channel: 'edge' },
+      { name: 'name', wire: 'str', channel: 'edge' },
+      { name: 'internalId', wire: 'str', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'team', wire: 'str', channel: 'edge' },
+      { name: 'transport', wire: 'str', channel: 'edge' },
+      { name: 'armorClass', wire: 'str', channel: 'edge' },
+      { name: 'health', wire: 'num', channel: 'sim' },
+      { name: 'isDead', wire: 'bool', channel: 'edge' },
     ],
     goneFields: [],
     // Player outcome events — server-declared results. Optional wire
     // fields carry `absent` so omission stays legal.
     events: {
       playerHit: [
-        { name: 'shooterId', channel: 'edge' },
-        { name: 'damage', channel: 'sim' },
-        { name: 'health', channel: 'sim' },
-        { name: 'armor', channel: 'sim', absent: null },
-        { name: 'seq', channel: 'echo', absent: null },
-        { name: 'shotId', channel: 'echo', absent: null },
+        { name: 'shooterId', wire: 'str', channel: 'edge' },
+        { name: 'damage', wire: 'num', channel: 'sim' },
+        { name: 'health', wire: 'num', channel: 'sim' },
+        { name: 'armor', wire: 'num', channel: 'sim', absent: null },
+        { name: 'seq', wire: 'num', channel: 'echo', absent: null },
+        { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
       ],
       playerKill: [
-        { name: 'shooterId', channel: 'edge' },
-        { name: 'weapon', channel: 'edge', absent: null },
-        { name: 'streak', channel: 'edge', absent: null },
-        { name: 'air', channel: 'echo', absent: null },
+        { name: 'shooterId', wire: 'str', channel: 'edge' },
+        { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
+        { name: 'streak', wire: 'num', channel: 'edge', absent: null },
+        { name: 'air', wire: 'num', channel: 'echo', absent: null },
       ],
       teamUpdate: [
-        { name: 'team', channel: 'edge' },
+        { name: 'team', wire: 'str', channel: 'edge' },
       ],
       knockback: [
-        { name: 'position', channel: 'sim' },
-        { name: 'force', channel: 'sim' },
-        { name: 'pull', channel: 'edge', absent: null },
+        { name: 'position', wire: 'vec3', channel: 'sim' },
+        { name: 'force', wire: 'vec3', channel: 'sim' },
+        { name: 'pull', wire: 'bool', channel: 'edge', absent: null },
       ],
       playerRespawn: [
-        { name: 'internalId', channel: 'edge' },
-        { name: 'position', channel: 'sim' },
-        { name: 'rotation', channel: 'sim' },
-        { name: 'armorClass', channel: 'edge', absent: null },
+        { name: 'internalId', wire: 'str', channel: 'edge' },
+        { name: 'position', wire: 'vec3', channel: 'sim' },
+        { name: 'rotation', wire: 'vec3', channel: 'sim' },
+        { name: 'armorClass', wire: 'str', channel: 'edge', absent: null },
       ],
       teleport: [
-        { name: 'position', channel: 'sim' },
-        { name: 'velocity', channel: 'sim' },
+        { name: 'position', wire: 'vec3', channel: 'sim' },
+        { name: 'velocity', wire: 'vec3', channel: 'sim' },
       ],
     },
     // tickUpdate record — id rides 'playerId'; the binary tick frame
     // packs the same fields.
     updateFields: [
-      { name: 'position', channel: 'sim' },
-      { name: 'rotation', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'health', channel: 'sim' },
-      { name: 'isDead', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'health', wire: 'num', channel: 'sim' },
+      { name: 'isDead', wire: 'bool', channel: 'edge' },
       // Wire-optional below — the binary frame and old JSON senders omit
       // them when unset; `absent` marks omission as legal, not drift.
-      { name: 'ping', channel: 'sim', absent: null },
-      { name: 'ski', channel: 'sim', absent: null },
-      { name: 'status', channel: 'edge', absent: null },
-      { name: 'sheep', channel: 'sim', absent: null },
+      { name: 'ping', wire: 'num', channel: 'sim', absent: null },
+      { name: 'ski', wire: 'num', channel: 'sim', absent: null },
+      { name: 'status', wire: 'num', channel: 'edge', absent: null },
+      { name: 'sheep', wire: 'num', channel: 'sim', absent: null },
     ],
     // gameState player row — id rides 'id' here (GameStatePlayer.id),
     // unlike the verbs' playerId.
     rosterFields: [
-      { name: 'name', channel: 'edge' },
-      { name: 'internalId', channel: 'edge' },
-      { name: 'position', channel: 'sim' },
-      { name: 'rotation', channel: 'sim' },
-      { name: 'velocity', channel: 'sim' },
-      { name: 'isDead', channel: 'edge' },
-      { name: 'health', channel: 'sim' },
-      { name: 'status', channel: 'edge' },
-      { name: 'team', channel: 'edge' },
-      { name: 'transport', channel: 'edge' },
-      { name: 'armorClass', channel: 'edge' },
+      { name: 'name', wire: 'str', channel: 'edge' },
+      { name: 'internalId', wire: 'str', channel: 'edge' },
+      { name: 'position', wire: 'vec3', channel: 'sim' },
+      { name: 'rotation', wire: 'vec3', channel: 'sim' },
+      { name: 'velocity', wire: 'vec3', channel: 'sim' },
+      { name: 'isDead', wire: 'bool', channel: 'edge' },
+      { name: 'health', wire: 'num', channel: 'sim' },
+      { name: 'status', wire: 'num', channel: 'edge' },
+      { name: 'team', wire: 'str', channel: 'edge' },
+      { name: 'transport', wire: 'str', channel: 'edge' },
+      { name: 'armorClass', wire: 'str', channel: 'edge' },
     ],
   },
 };
@@ -473,8 +477,14 @@ export function checkPacket(
   const label = verb in kind.verbs ? (kind.verbs as Record<string, string>)[verb]! : verb;
   const check = (m: Record<string, unknown>) => {
     for (const f of fields ?? []) {
-      if (!(f.name in m) && f.absent === undefined) {
-        warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
+      if (!(f.name in m)) {
+        if (f.absent === undefined) {
+          warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label} missing declared field '${f.name}'`);
+        }
+        continue;
+      }
+      if (!wireOk(f.wire, m[f.name])) {
+        warnOnce(`${kind.kind}.${label}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} field '${f.name}' wrong type (want ${f.wire})`);
       }
     }
   };
@@ -492,8 +502,13 @@ export function checkPacket(
       if (Array.isArray(extra)) {
         for (const r of extra) {
           for (const f of k.rosterFields) {
-            if (!(f.name in (r as Record<string, unknown>)) && f.absent === undefined) {
-              warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
+            const row = r as Record<string, unknown>;
+            if (!(f.name in row)) {
+              if (f.absent === undefined) {
+                warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
+              }
+            } else if (!wireOk(f.wire, row[f.name])) {
+              warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row field '${f.name}' wrong type (want ${f.wire})`);
             }
           }
         }
@@ -549,6 +564,22 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
 // emit inside a per-entity loop would flood the log. Throttle per key so
 // the signal survives without the flood.
 const WARN_ONCE_MS = 5000;
+/** Shape check for a declared wire type — presence alone can't catch a
+ *  field that arrives as the wrong kind of value. */
+function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
+  switch (wire) {
+    case 'num': return typeof v === 'number' && Number.isFinite(v);
+    case 'str': return typeof v === 'string';
+    case 'bool': return typeof v === 'boolean';
+    case 'arr': return Array.isArray(v);
+    case 'vec3': {
+      const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
+      return typeof o === 'object' && o !== null &&
+        typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
+    }
+  }
+}
+
 const warnOnceSeen = new Map<string, number>();
 function warnOnce(key: string, text: string): void {
   const now = sharedNow();
