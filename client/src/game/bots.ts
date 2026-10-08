@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-import { GameBot, EYE, setBotStructureSpecs } from './botBrain.js';
+import { GameBot, EYE } from './botBrain.js';
+import { applyStructureSpecs } from './structureSpecs.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS, botClassForLoadout } from '../../../shared/botLoadouts.js';
@@ -114,6 +115,10 @@ export class TeamBots {
     private playerTeam: string,
     counts: { alpha: number; bravo: number },
     private mode: ModeId,
+    /** Solo map spec (maps/<X>.json resolved client-side) — feeds flag
+     *  homes and authored spawn anchors; absent = the old around-player
+     *  ±70m default bases. */
+    private mapSpec?: import('../../../shared/mapSpec.js').MapSpec,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
     this.deps.world.mode = mode; // wire rooms set this on gameState; offline must too (scoreboard title)
@@ -147,10 +152,7 @@ export class TeamBots {
     let ni = 0;
     const mk = (team: TeamId, n: number) => {
       for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 20 + Math.random() * 40;
-        const spawn = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
-        spawn.y = terrain.getHeight(spawn.x, spawn.z) + EYE;
+        const spawn = this.spawnSpot(team);
         const name = ffa ? BOT_NAMES[ni++ % BOT_NAMES.length] : `${BOT_NAMES[ni++ % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
         // Same roster the dedicated server fields — loadout picks the
         // weapon by engagement range instead of one generic bolt, and
@@ -193,6 +195,8 @@ export class TeamBots {
         onFeed: (t) => this.hooks.remoteKillFeed(t),
         onPersonalPoints: (id, n) => awardPersonal(this, id, n),
         onFlagNotice: (kind, actorId, actorTeam) => this.notice(kind, actorId, actorTeam),
+        bases: this.mapSpec?.bases,
+        structures: this.mapSpec?.structures,
       });
     }
     if (mode === 'rabbit') {
@@ -206,10 +210,6 @@ export class TeamBots {
         scores: this.scores,
         onFeed: (t) => this.hooks.remoteKillFeed(t),
         onCapture: () => pushScore(this),
-        applyStandSpecs: (specs) => {
-          deps.lazyPlayer().movement?.setStructures(specs);
-          setBotStructureSpecs(specs);
-        },
       }, player.pos);
     }
   }
@@ -491,20 +491,32 @@ export class TeamBots {
   // Coverage window — mirrors BotSheepMeter.coverageDebit on the wire:
   // under ~30m of real displacement per 5s while the brain claims a
   // destination reads as sheeping even when per-tick speed squeaks by.
-  /** Terrain swapped under the roster — re-seat every live bot on the
-   *  spawn ring near the player without touching hp/meters/loadout. */
-  reseatAll(): void {
-    const player = this.deps.lazyPlayer();
+  /** Bot spawn point — spec teamSpawns/spawns when a map authored them
+   *  (with a jitter so a stack doesn't overlap), else the legacy ±50m
+   *  ring around the player. FFA pseudo-teams fall through to 'spawns'. */
+  spawnSpot(team: string): THREE.Vector3 {
     const terrain = this.deps.lazyTerrain();
+    const pool = this.mapSpec?.teamSpawns?.[team as TeamId] ?? this.mapSpec?.spawns;
+    if (pool?.length) {
+      const p = pool[Math.floor(Math.random() * pool.length)]!;
+      const jx = (Math.random() - 0.5) * 8, jz = (Math.random() - 0.5) * 8;
+      return new THREE.Vector3(p.x + jx, terrain.getHeight(p.x + jx, p.z + jz) + EYE, p.z + jz);
+    }
+    const player = this.deps.lazyPlayer();
+    const a = Math.random() * Math.PI * 2;
+    const r = 20 + Math.random() * 40;
+    const sx = player.pos.x + Math.cos(a) * r, sz = player.pos.z + Math.sin(a) * r;
+    return new THREE.Vector3(sx, terrain.getHeight(sx, sz) + EYE, sz);
+  }
+
+  /** Terrain swapped under the roster — re-seat every live bot on its
+   *  team's spawn anchors without touching hp/meters/loadout. */
+  reseatAll(): void {
     for (const bot of this.bots) {
       if (bot.isDead) continue;
-      const a = Math.random() * Math.PI * 2;
-      const r = 20 + Math.random() * 40;
-      const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
-      sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
       // respawn() clears the interp state a teleport needs; it doesn't
       // touch hp or meters so it doubles as a quiet re-seat.
-      bot.respawn(sp);
+      bot.respawn(this.spawnSpot(bot.team));
     }
   }
 

@@ -9,7 +9,7 @@ import { CtfFlags } from './ctfFlags.js';
 import { Explosion } from '../effects/explosion.js';
 import { FLAG_PICKUP_R, TEAM_COLORS, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
-import { setBotStructureSpecs } from './botBrain.js';
+import { applyStructureSpecs } from './structureSpecs.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { flagReturnFx } from './flagFx.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
@@ -45,6 +45,12 @@ export interface CtfBridgeWiring {
   onPersonalPoints?(id: string, pts: number): void;
   /** Flag edge → room chatter sense (the server's bots.notice mirror). */
   onFlagNotice?(kind: 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop', actorId: string, actorTeam?: string): void;
+  /** Authored base positions from a solo map spec — wins over the
+   *  ±70m-around-player default when present. */
+  bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
+  /** The spec's structure list — stand hulls merge OVER it (the solid
+   *  world is replaced wholesale, never appended). */
+  structures?: import('../../../shared/mapSpec.js').StructureSpec[];
 }
 
 export class CtfBridge {
@@ -63,12 +69,6 @@ export class CtfBridge {
       onCapture: (t) => w.onCapture(t),
       onFeed: (t) => w.onFeed(t),
       onPersonalPoints: (id, pts) => w.onPersonalPoints?.(id, pts),
-      // Offline has no wire echo — push the dais hulls into the local
-      // player's and bots' move sims the same way a gameState does.
-      applyStandSpecs: (specs) => {
-        deps.lazyPlayer().movement?.setStructures(specs);
-        setBotStructureSpecs(specs);
-      },
       onFlagEvent: (kind, team, at, actor) => {
         const chatKind = { taken: 'flaggrab', dropped: 'flagdrop', returned: 'flagreturn', captured: 'flagcap' } as const;
         if (actor) w.onFlagNotice?.(chatKind[kind], actor.id, actor.team);
@@ -82,7 +82,7 @@ export class CtfBridge {
           deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1.0 : 1.4,
           TEAM_COLORS[team]));
       },
-    }, deps.lazyPlayer().pos);
+    }, deps.lazyPlayer().pos, w.bases, w.structures);
   }
 
   /** Objective data the per-bot ctx asks for. */

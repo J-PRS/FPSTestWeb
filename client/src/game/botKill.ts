@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 
-import { EYE } from './botBrain.js';
 import { WeaponType, CONC_JET_DRAIN } from '../../../shared/weapons.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import * as sfx from '../core/sfx.js';
@@ -18,11 +17,9 @@ import type { TeamBots } from './bots.js';
 /** Re-seat a dead bot on the spawn ring — shared by the respawn timer
  *  and match reset (same spot-finding, hp, and gizmo re-tint). */
 export function respawnBotF(b: TeamBots, bot: GameBot): void {
-    const player = b.deps.lazyPlayer();
-    const terrain = b.deps.lazyTerrain();
-    const a = Math.random() * Math.PI * 2;
-    const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * 50, 0, player.pos.z + Math.sin(a) * 50);
-    sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
+    // Spawn anchors come from the map spec when authored (teamSpawns >
+    // spawns); spec-less modes fall back to the ring around the player.
+    const sp = b.spawnSpot(bot.team);
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
     // Fresh life is unproven — the meter re-earns it each spawn.

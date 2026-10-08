@@ -134,7 +134,7 @@ export class GameBot extends RemotePlayer {
     // picked inside the RemotePlayer ctor before setBotClass could speak.
     super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain, cls);
     this.team = team;
-    this.moveState = { pos: this.position, vel: this.velocity, yaw: 0, pitch: 0, onGround: true };
+    this.moveState = { pos: this.position, vel: this.velocity, yaw: 0, pitch: 0, onGround: true, team };
     this.movement = new MovementController(terrain, this.moveState);
     this.setBotClass(cls);
     this.brain = new BotBrain({ x: spawn.x, y: spawn.y, z: spawn.z });
@@ -212,6 +212,7 @@ export class GameBot extends RemotePlayer {
     const gyc = sharedGroundYCache;
     const out = this.brain.think(dt, {
       pos,
+      team: this.team === 'ffa' ? undefined : this.team,
       vel: this.velocity,
       enemies: ctx.enemies,
       objective: ctx.objective ?? undefined,

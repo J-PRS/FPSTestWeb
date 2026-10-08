@@ -120,7 +120,7 @@ export function collect(m: MatchHost, collectorId: string): void {
   // touch) — the teamScore echo is the truth; this local board is the
   // offline path's own scoreboard.
   const team = m.teamOf.get(collectorId) as TeamId | undefined;
-  if (!team) return;
+  if (!team || !m.spec.gems) return; // CTF gems heal but don't cap-score
   bank(m.scores, team);
   pushScore(m);
 }

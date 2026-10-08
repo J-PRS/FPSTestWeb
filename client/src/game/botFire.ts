@@ -120,6 +120,7 @@ export class BotFire {
       const p = new Projectile(this.host.scene(), muzzle, d, bot.vel,
         { ...cfg, aoeRadius: radius, aoeDamage: dmg, needsServerTracking: false });
       p.shooterId = bot.playerId;
+      p.shooterTeam = bot.team;
       // 'local' isn't in remotePlayerPositions — this lets a bot shell
       // actually CONNECT with you instead of relying on a trigger-time claim.
       p.sweepLocal = () => {
@@ -234,6 +235,7 @@ export class BotFire {
           _shotMuzzle.set(mx, my, mz), _shotDir.set(hx / len, hy / len, hz / len), bot.vel,
           { ...cfg, needsServerTracking: false });
         p.shooterId = bot.playerId;
+        p.shooterTeam = bot.team;
         this.host.world().projectiles.push(p);
         sfx.shotAt(_shotMuzzle, wt, bot.vel);
       }

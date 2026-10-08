@@ -214,6 +214,7 @@ export class BotSenses {
       if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
       _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
       _losCtx.now = now;
+      _losCtx.team = bot.team === 'ffa' ? undefined : bot.team;
       if (losClear(_losCtx, bot.position, e.pos)) { v = true; break; }
     }
     this.foeSeenCache.set(bot.playerId, { t: now, v });
