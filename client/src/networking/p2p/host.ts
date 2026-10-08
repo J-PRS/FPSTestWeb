@@ -22,6 +22,7 @@ import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
 import { validateMessage } from '../../../../server_bun/src/wire.js';
 import { validatePlayerId } from '../../../../server_bun/src/validation.js';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../../../shared/wire.js';
+import { wallMs } from '../../../../shared/clockBrand.js';
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
 import { RoomProjectiles } from '../../../../server_bun/src/RoomProjectiles.js';
@@ -328,14 +329,14 @@ export class P2PHost {
       if (heal > 0) {
         healPool(p, heal);
         if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {
-          p.healthEchoAt = now;
+          p.healthEchoAt = wallMs(now);
           this.sendJSON(pid, { type: 'yourHealth', health: p.health });
         }
       }
       const acc = lgChargeAt(p.charge, p.chargeT, simT / 1000);
       const live = acc > 0.5;
       if ((live || p.chargeEchoed > 0) && (!live || now - p.chargeEchoAt >= 500)) {
-        p.chargeEchoAt = now;
+        p.chargeEchoAt = wallMs(now);
         p.chargeEchoed = live ? acc : 0;
         this.sendJSON(pid, { type: 'yourCharge', charge: p.chargeEchoed });
       }

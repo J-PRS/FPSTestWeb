@@ -249,6 +249,20 @@ export class RemoteInterp {
     this.sample(sampledPos, sampledRot);
     const p = this.h.position;
 
+    // Extrapolation resample seam: when renderTime outruns the newest
+    // snapshot the sampler coasts on velocity; the late packet then
+    // lands BEHIND the coasted point and a raw copy snaps the render
+    // backward by ~v·ext. Route that discontinuity through the steering
+    // converge instead — same physically-capped rejoin DR exits use —
+    // so a jittered link steers the ghost rather than warping it.
+    const gap = Math.hypot(sampledPos.x - p.x, sampledPos.y - p.y, sampledPos.z - p.z);
+    const stepBudget = Math.max(0.5, this.h.velocity.length() * dt * 3 + 0.25);
+    if (this.lastUpdateTime > 0 && gap > stepBudget && gap < 40) {
+      this.convergeTimer = 0.35;
+      this.convergeStep(dt);
+      return;
+    }
+
     // Directly place on the interpolated path — smooth by construction
     p.copy(sampledPos);
 

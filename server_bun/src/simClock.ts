@@ -16,9 +16,8 @@ let frozenBaseMs: number | null = null;
 /** Branded sim-time ms — a `SimMs` can't pass where a `WallMs` (or plain
  *  wall-epoch number field) is expected without an explicit cast, so a
  *  sim/wall mix fails at tsc instead of desyncing a fast-forwarded soak. */
-declare const simBrand: unique symbol;
-export type SimMs = number & { [simBrand]: 'sim' };
-export const simMs = (n: number): SimMs => n as SimMs;
+export { simMs, type SimMs } from '../../shared/clockBrand.ts';
+import { type SimMs } from '../../shared/clockBrand.ts';
 
 export const simNow = (): SimMs =>
   (frozenBaseMs !== null ? frozenBaseMs + warpOffsetMs : Date.now() + warpOffsetMs) as SimMs;

@@ -10,9 +10,8 @@
  * timers, bot housekeeping) belong to simNow — a fast-forwarded soak
  * must not accelerate real-client windows.
  */
-declare const wallBrand: unique symbol;
-export type WallMs = number & { [wallBrand]: 'wall' };
-export const wallMs = (n: number): WallMs => n as WallMs;
+export { wallMs, type WallMs } from '../../shared/clockBrand.ts';
+import { type WallMs } from '../../shared/clockBrand.ts';
 
 let impl: () => number = Date.now;
 
