@@ -3347,3 +3347,12 @@ peer could silently live in different terrains. setMap() now feeds
 the boot map (soloSpec ?? savedMap) into the host's RoomInfo, which
 moved to a mutable field so the snapshot lands before any handshake.
 (tsc + p2pHost 10/10 green)
+
+## 2.187 — wireIn extraction broke the e2e test surface
+
+The dispatch extraction privatized lastTickSeq and handleCorrection;
+every e2e spec polls t.networkManager.lastTickSeq as the binary-lane
+signal and wraps nm.handleCorrection to count corrections — both sat
+undefined, so the whole suite timed out on entry. Restored the two
+accessors: lastTickSeq forwards wireIn.tickSeq, correction dispatches
+through a public nm.handleCorrection seam. (smoke: 10/10 green)

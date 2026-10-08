@@ -55,6 +55,10 @@ export class WireIn {
   /** Reliable-side watermark for the join handshake's resumeSeq. */
   get evWatermark(): number { return this.lastEv; }
 
+  /** Highest server tickSeq applied — e2e probes poll it as the
+   *  "binary lane alive" signal. */
+  get tickSeq(): number { return this.lastTickSeq; }
+
   recentEvents(): readonly { type: string; t: number; detail: string }[] {
     return this.recentHealthEvents;
   }
@@ -163,7 +167,7 @@ export class WireIn {
     projectileDestroyed: (data) => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId),
     snapshot: (data) => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.ballHash, data.creatureHash, data.deployHash, data.flagHash, data.pickupHash, data.creatureFields, data.deployFields, data.ballFields),
-    correction: (data) => this.handleCorrection(data),
+    correction: (data) => this.h.handleCorrection(data),
     inputSync: (data) => this.h.resendInputs(data.lastSeq),
     claimAck: (data) => this.h.ackClaim(data),
     teleport: (data) => this.h.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
@@ -386,7 +390,8 @@ export class WireIn {
     this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
   }
 
-  private handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {
+  /** Routed through the NetworkManager seam so tests can wrap/count it. */
+  handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {
     // Server rejected our position — snap to last valid state
     logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
     this.h.ackPositionSeq(data.seq);

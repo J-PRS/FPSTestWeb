@@ -147,6 +147,14 @@ export class NetworkManager {
   /** Inbound dispatch — owns the handler table, wire-id roster, tick
    *  decode pool, and per-room seq watermarks (see wireIn.ts). */
   private readonly wireIn = new WireIn(this);
+  /** Highest server tick applied — e2e probes wait on it to prove the
+   *  binary lane flows. Lives in wireIn after the dispatch extraction. */
+  get lastTickSeq(): number { return this.wireIn.tickSeq; }
+  /** Server position correction — the dispatch lives in wireIn but is
+   *  routed through here so tests can wrap/count it. */
+  handleCorrection(data: Parameters<WireIn['handleCorrection']>[0]): void {
+    this.wireIn.handleCorrection(data);
+  }
 
   // --- Ping measurement ---
   private lastPingSendTime: number = 0;
