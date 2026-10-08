@@ -21,7 +21,7 @@ const TIER = (process.argv.find(a => a.startsWith('--tier='))?.slice(7) ?? 'ws')
 // what is ordinary internet weather.
 const DROP_PCT = parseFloat(process.argv.find(a => a.startsWith('--drop='))?.slice(7) ?? '0');
 
-import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK, WIRE_TICK_V3, WireIdRoster } from '../../shared/wire.ts';
+import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK, WIRE_TICK_V3, WIRE_TICK_V4, WireIdRoster } from '../../shared/wire.ts';
 import { openSocket, type BotSocket, type Tier } from './net.ts';
 import { getWeaponStats } from '../../shared/weapons';
 import { MoveSim } from '../../shared/movement.ts';
@@ -246,7 +246,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
         }
       } else {
         const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
-        if (isWireFrame(u8) && (u8[1] === WIRE_TICK || u8[1] === WIRE_TICK_V3)) {
+        if (isWireFrame(u8) && (u8[1] === WIRE_TICK || u8[1] === WIRE_TICK_V3 || u8[1] === WIRE_TICK_V4)) {
           bot.tickFrames++;
           const now = Date.now();
           if (bot.lastTickAt && now - bot.lastTickAt > 150) tickGapEvents++;
@@ -493,10 +493,15 @@ setTimeout(() => {
   // diverged client its authoritative record snaps, and observers see the
   // same pop. A worst pop under 15m = correction-sized, expected. Anything
   // bigger that isn't a respawn is an unexplained jump → fail.
-  verdict(maxRemoteStep < 15, 'remote smoothness', `${chopEvents} 4–15m pops, worst ${maxRemoteStep.toFixed(1)}m (${teleportSteps} respawn teleports, max ${maxTeleport.toFixed(0)}m)`);
-  verdict(tickGapEvents < bots.length, 'tick stream', `${tickGapEvents} >150ms tick gaps, worst ${maxTickGapMs}ms`);
+  // Coverage gate first: a fleet that decoded no frames at all cannot
+  // pass on 0-gap/0-pop numbers — that's a decode drift (e.g. a new
+  // WIRE_TICK version), not a healthy stream.
+  const decoded = totalTickFrames;
+  verdict(decoded > 0, 'tick coverage', `${decoded} frames decoded fleet-wide (${bots.reduce((a, b) => a + b.tickFrames, 0)} raw)`);
+  verdict(maxRemoteStep < 15 && decoded > 0, 'remote smoothness', `${chopEvents} 4–15m pops, worst ${maxRemoteStep.toFixed(1)}m (${teleportSteps} respawn teleports, max ${maxTeleport.toFixed(0)}m)`);
+  verdict(tickGapEvents < bots.length && decoded > 0, 'tick stream', `${tickGapEvents} >150ms tick gaps, worst ${maxTickGapMs}ms`);
   console.log(`SOAK_JSON ${JSON.stringify({ joined, joinFails, kills, hitsLanded, hitsTaken, rejects, corr, worstGap: +worstGap.toFixed(2), corrStreaks, chopEvents, maxRemoteStep: +maxRemoteStep.toFixed(2), hardRejects, tickGapEvents, maxTickGapMs, deploys, deploySpawns, turretShots, mineBooms })}`);
-  const ok = joined === bots.length && hardRejects === 0 && corrStreaks === 0 && maxRemoteStep < 15;
+  const ok = joined === bots.length && hardRejects === 0 && corrStreaks === 0 && maxRemoteStep < 15 && decoded > 0;
   process.exit(ok ? 0 : 1);
 }, SECONDS * 1000 + ROOMS * PER_ROOM * 40 + 2000);
 
