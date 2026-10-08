@@ -11,6 +11,12 @@ const DEMO_ZERO_FRAME = {
 
 export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
   const frames = r.frameBuffer.extractAll();
+  // Same window semantics as extractClip: a target whose Spawned aged
+  // out of the ring still exists in replay, so it gets a synthetic
+  // baseline Spawned at the buffer's leading edge instead of becoming
+  // an orphaned Destroyed.
+  const clipStart = frames.length > 0 ? frames[0]!.timestamp : r.elapsedTime - r.bufferSeconds;
+  const targetEvents = collectTargetEvents(r.targetEvents, clipStart, r.elapsedTime);
 
   return {
     header: {
@@ -21,7 +27,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
       duration: r.elapsedTime,
       totalFrames: frames.length,
       projectileEventCount: r.projectileEvents.length,
-      targetEventCount: r.targetEvents.length,
+      targetEventCount: targetEvents.length,
       checksum: 0,
       description,
       ...startFrame(frames.length > 0 ? frames[0] : null),
@@ -31,7 +37,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     },
     frames,
     projectileEvents: [...r.projectileEvents],
-    targetEvents: [...r.targetEvents],
+    targetEvents,
     roster: r.roster.map(e => ({ ...e })),
     remoteFrames: [...r.remoteFrames],
     ...(r.heightmap ? { heightmap: r.heightmap } : {}),
