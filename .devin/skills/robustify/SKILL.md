@@ -176,7 +176,12 @@ from observed behavior — a round that never looks at evidence hunts blind.
 - Update `_docs/ROBUSTIFY/ROBUSTIFICATION.md` as you go — it's the source
   of truth; §3 and §4 must reflect reality when you finish.
 - Prepend `changelog.txt` (`YYYY-MM-DD - <summary>`, ASCII) when work
-  settles.
+  settles. **Never `git add changelog.txt` while JP's WIP is unstaged**
+  — his entries live in the same head-of-file region and `git add`
+  sweeps them into your commit (happened 3×). Protocol: `cp
+  changelog.txt /tmp/cl.wip`, strip his entries (or checkout HEAD +
+  apply only your line), commit, then `cp` the worktree version back —
+  his lines stay unstaged where they belong.
 - **Never sit down early.** Finishing a milestone, landing a commit, or
   "the surface is now closed" is never a reason to end the session —
   the work continues into the next lane in the SAME turn. Do not stop
