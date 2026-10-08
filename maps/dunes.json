@@ -267,11 +267,6 @@
       "rotY": -1.5708
     }
   ],
-  "balls": {
-    "base": 14,
-    "perPlayer": 5,
-    "max": 60
-  },
   "terrain": "slagheap.bin",
   "heightScale": 1.5,
   "bases": {
