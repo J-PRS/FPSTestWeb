@@ -151,7 +151,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));
   }
 
-  function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number }[] }): void {
+  function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number; ph?: number; od?: number }[] }): void {
     reconcileReplicas(netCrawlerById, m.crawlers, {
       rowId: (r) => r.id,
       isDead: (c) => c.dead,
@@ -184,6 +184,30 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
           appliedSkips.set(r.id, r.sk);
         }
         c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
+        // A retarget edge carries no state label — a replica that missed a
+        // windup/pounce/blink edge replays a different state machine and
+        // strands on it permanently (the soak's persistent state desyncs).
+        // The roster row IS the committed label; seeding it lets the next
+        // tick resume from truth. Transitory timers (windupTimer et al.)
+        // expire quickly either way — a wrong-state tick heals on the next
+        // edge, a wrong label never does.
+        if (r.state && c.sim && c.sim.state !== r.state) {
+          c.sim.state = r.state as typeof c.sim.state;
+        }
+        // The row's `seed` is the server's LIVE LCG state, not the spawn
+        // seed — a missed edge that consumed a crand draw offsets the
+        // replica's whole stream permanently (every later cooldown diverges).
+        if (c.sim && Number.isFinite(r.seed)) {
+          (c.sim as { rng: number }).rng = r.seed;
+        }
+        // Flyer orbit phase/dir steer the anchor every tick yet never ride
+        // an edge — without them a stun pause or missed edge offsets the
+        // replica's orbit by up to 2*ORBIT_R forever.
+        if (c.sim && r.ph !== undefined && Number.isFinite(r.ph)) {
+          const fly = c.sim as { orbitPhase?: number; orbitDir?: number };
+          if (fly.orbitPhase !== undefined) {fly.orbitPhase = r.ph;}
+          if (r.od !== undefined && fly.orbitDir !== undefined) {fly.orbitDir = r.od as 1 | -1;}
+        }
         deps.lazyDemoManager()?.recordCreatureRoster(r.id, r.species ?? speciesOf(c), r.position, r.velocity);
       },
       // Server-truth cull: a crawler we hold that's not on the roster died

@@ -155,6 +155,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'targetId', wire: 'str', channel: 'edge' },
       { name: 'tp', wire: 'vec3', channel: 'edge' },
       { name: 't', wire: 'num', channel: 'sim' },
+      // Flyer orbit steering state — never rides edges, so without the
+      // roster carrying it a stun/missed-edge offsets the replica's orbit
+      // phase forever (up to 2*ORBIT_R standing divergence).
+      { name: 'ph', wire: 'num', channel: 'edge' },
+      { name: 'od', wire: 'num', channel: 'edge' },
     ],
   },
   deploy: {

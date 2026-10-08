@@ -478,9 +478,11 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       // targetId) so the next soak answers instead of asking. Generated
       // from the creature declaration, so emit and diff can't drift apart.
       let detail = `ids=[${[...local.keys()].join(',')}]`;
+      let creatureDiffKeys: Set<string> | null = null;
       if (localCreatureHash !== serverCreatureHash && serverCreatureFields) {
         const d = kindFieldDiffs(WORLD_MODEL.creature!, local, serverCreatureFields);
         if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
+        creatureDiffKeys = new Set(d.diffs);
         // Heal field-level drift the way the snapshot heals player
         // liveness: a lost crawlEvt leaves sim.state/targetId stale
         // forever (the audit just re-warns). Edges stay the primary
@@ -499,6 +501,13 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         serverHash: serverCreatureHash,
         localHash: localCreatureHash,
         detail,
+        // Creature labels cycle every ~1-2s (aim→charge→blink, orbit→dive
+        // →climb), so snapshot checks legitimately catch mid-transition
+        // states — a fleet streak is phase noise, not a strand. perKey
+        // warns only when the same id+field+values repeat (the diff key
+        // includes the value pair, so healthy cycling stays quiet).
+        perKey: true,
+        diffKeys: creatureDiffKeys,
         warnWhy: 'stranded or stale replica',
         transientWhy: 'lifecycle edge in flight',
       });

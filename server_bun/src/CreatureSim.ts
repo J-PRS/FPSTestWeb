@@ -16,7 +16,7 @@ import {
   SPECIES_FAMILY,
   type SimBaneling,
 } from '../../shared/creatureSim.ts';
-import { CreatureBrain, type SimBeing, isTotem, isBaneling } from './creatureBrain.ts';
+import { CreatureBrain, type SimBeing, isTotem, isBaneling, isFlyer } from './creatureBrain.ts';
 import {
   alivePlayers as alivePlayersOf, nearestPlayer,
   spawnCrawler as spawnCrawlerInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
@@ -128,6 +128,11 @@ export class CreatureSim {
         velocity: { x: c.vx, y: c.vy, z: c.vz },
         uber: c.uber, seed: c.rng, species: c.species, state: c.state,
         targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
+        // Flyer-only: orbitPhase/orbitDir steer the orbit anchor every tick
+        // but never ride edges — stun pauses and missed edges offset the
+        // phase permanently (replicas orbit out of sync up to 2*ORBIT_R).
+        ph: isFlyer(c) ? c.orbitPhase : 0,
+        od: isFlyer(c) ? c.orbitDir : 0,
         // sk rides the roster too — a client that missed retarget edges
         // re-credits the skipped quanta here or its replay clock drifts ahead.
         sk: this.skipCount.get(c.id) ?? 0,
