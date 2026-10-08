@@ -18,8 +18,12 @@ import { sharedEnv } from './env.ts';
 // still draws silently.
 const AMBIENT: () => number = () => Math.random();
 let rand: (() => number) | null = null;
-export function botRng(r: () => number): void { rand = r; }
-export function botRngRelease(): void { rand = AMBIENT; }
+// The strictRng gate lives inside the seeded window itself: arming at a
+// test module's import would poison every unrelated file sharing the
+// process (a real-socket suite's ambient draws aren't reproducibility
+// bugs). Inject a stream → gate armed; release → ambient allowed again.
+export function botRng(r: () => number): void { rand = r; sharedEnv.strictRng = true; }
+export function botRngRelease(): void { rand = AMBIENT; sharedEnv.strictRng = false; }
 export function botRand(): number {
   if (sharedEnv.strictRng && (rand === null || rand === Math.random)) {
     throw new Error('botRand drew ambient Math.random under strictRng — inject botRng(lcg) or release with botRngRelease()');

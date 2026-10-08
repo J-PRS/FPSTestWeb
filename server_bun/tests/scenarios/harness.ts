@@ -1,11 +1,10 @@
 import { Room } from '../../src/Room.ts';
 import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
-import { setSharedEnv } from '../../../shared/env.ts';
-
-// Fail loud on ambient dice: any botRand draw outside an injected
-// stream (between step() windows, or a test that forgot to seed) is a
-// trajectory the suite can't reproduce — throw instead of flaking.
-setSharedEnv({ strictRng: true });
+// Fail loud on ambient dice INSIDE seeded windows — botRng() arms the
+// strictRng gate on injection and botRngRelease() disarms it, so ambient
+// draws outside a seeded stream are legal here and in unrelated suites
+// sharing this process (netbot's real-socket bots draw ambient on
+// purpose; an import-time arm would trip them instead).
 import { losMemoReset } from '../../../shared/botLos.ts';
 import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 import { simNowAdvance, simNowReset } from '../../src/simClock.ts';
