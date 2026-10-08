@@ -9,7 +9,7 @@
  */
 import { spawn } from 'node:child_process';
 
-const SPECS = ['smoke.ts', 'duo.ts', 'duo_p2p.ts', 'lobby.ts', 'reconnect.ts', 'vgs.ts', 'overlap.ts', 'perf.ts'];
+const SPECS = ['smoke.ts', 'duo.ts', 'duo_p2p.ts', 'lobby.ts', 'reconnect.ts', 'vgs.ts', 'overlap.ts', 'desyncsoak.ts', 'perf.ts'];
 const skip = new Set(process.argv.slice(2).flatMap((a, i, arr) => a === '--skip' ? [arr[i + 1]] : []));
 const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 
