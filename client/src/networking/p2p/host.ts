@@ -28,6 +28,10 @@ import { RoomProjectiles } from '../../../../server_bun/src/RoomProjectiles.js';
 import { RoomMoveSim } from '../../../../server_bun/src/RoomMoveSim.js';
 import { ENERGY } from '../../../../shared/movement.js';
 import { beamSweepRay } from '../../../../server_bun/src/beamSweep.js';
+import { healPerTick } from '../../../../server_bun/src/tickHelpers.js';
+import { healPool } from '../../../../server_bun/src/healPool.js';
+import { lgChargeAt } from '../../../../shared/combat.js';
+import { simNow } from '../../../../server_bun/src/simClock.js';
 import { getHeightfield } from '../../world/heightmap.js';
 
 const logger = new ChildLogger('P2PHost');
@@ -311,6 +315,30 @@ export class P2PHost {
       const stamp = Date.now();
       this.lastPingStamp.set(pid, stamp);
       this.sendJSON(pid, { type: 'ping', timestamp: stamp });
+    }
+    // Server-owned heal channels + charge bank — the dedicated fanout
+    // ticks these inside buildRecords; the host must too or a guest's
+    // medkit/regen never repairs their authoritative hp (and their
+    // charge bank never crackles). Own player ticks too: the shared
+    // PlayerState is the truth hits resolve against.
+    const simT = simNow();
+    const now = Date.now();
+    for (const [pid, p] of this.playerManager.getAllPlayers()) {
+      const heal = healPerTick(p, simT);
+      if (heal > 0) {
+        healPool(p, heal);
+        if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {
+          p.healthEchoAt = now;
+          this.sendJSON(pid, { type: 'yourHealth', health: p.health });
+        }
+      }
+      const acc = lgChargeAt(p.charge, p.chargeT, simT / 1000);
+      const live = acc > 0.5;
+      if ((live || p.chargeEchoed > 0) && (!live || now - p.chargeEchoAt >= 500)) {
+        p.chargeEchoAt = now;
+        p.chargeEchoed = live ? acc : 0;
+        this.sendJSON(pid, { type: 'yourCharge', charge: p.chargeEchoed });
+      }
     }
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
