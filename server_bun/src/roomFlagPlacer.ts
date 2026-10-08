@@ -4,7 +4,7 @@ import { KIT_HULLS, KIT_STAND_TOP } from '../../shared/structKits.ts';
 import type { MapSpec, Vec3like } from '../../shared/mapSpec.ts';
 import type { Vec3 } from './types.ts';
 import type { RoomFlags } from './RoomFlags.ts';
-import type { BallSim } from './ballSim.ts';
+import type { BallSim } from './BallSim.ts';
 
 /** Where flags and seeded deploys legally stand — the room's placement
  *  domain. Homes snap to walkable surfaces (kit stand decks, structure

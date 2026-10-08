@@ -384,6 +384,9 @@ export class NetClient {
       }
       case 'projectileDestroyed': this.projectiles.delete(m.shotId ?? ''); break;
       case 'pong': this.pingMs = Date.now() - m.timestamp; break;
+      // Server-issued RTT probe — echo verbatim like the browser's
+      // pingReceived; the timestamp is the server's clock, not ours.
+      case 'ping': this.send({ type: 'pong', timestamp: m.timestamp }); break;
     }
     void EVENT_TYPES; // doc anchor for future event taps
   }

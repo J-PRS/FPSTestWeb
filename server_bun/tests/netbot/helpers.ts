@@ -125,5 +125,5 @@ export function mkNetbots() {
   const rejectsOf = () => bots.map((b) => `${b.nc.id}: ${[...b.nc.tel.rejects.entries()].map(([r, n]) => `${r} x${n}`).join(', ') || 'none'}`).join(' | ');
   const totalRejects = () => bots.reduce((a, b) => a + [...b.nc.tel.rejects.values()].reduce((p, q) => p + q, 0), 0);
 
-  return { spawn, bots, rejectsOf, totalRejects, sleep, until, untilProgress };
+  return { spawn, bots, rejectsOf, totalRejects, sleep, until, untilProgress, env: () => env };
 }

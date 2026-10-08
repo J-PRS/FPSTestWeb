@@ -99,6 +99,13 @@ export class RoomMoveSim {
         });
       }
     }
+    // Replay seats taken while the field was still loading — reseated
+    // grace arms them since pre-gameState frames may still be in flight.
+    for (const [pid, t] of this.pendingTrack) {
+      this.track(pid, t.pos, t.yaw, t.perk, t.team);
+      this.markReseated(pid);
+    }
+    this.pendingTrack.clear();
   }
 
   private get divergenceM(): number {
@@ -138,10 +145,18 @@ export class RoomMoveSim {
     return this.solid?.topAt(x, z) ?? -Infinity;
   }
 
+  /** Seats that arrived before the field — attachTerrain resolves async,
+   *  so a join mid-load used to drop here and leave the player shadowless
+   *  for the whole session: no reconcile, no corrections, no transit. */
+  private pendingTrack = new Map<string, { pos: Vec3Like; yaw: number; perk?: string; team?: string }>();
+
   /** Call on join/spawn — seeds the sim at the reported spot. `team`
    *  feeds team-gated colliders (gate shields pass allies). */
   track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string): void {
-    if (!this.surface) return;
+    if (!this.surface) {
+      this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team });
+      return;
+    }
     const state: MoveState = {
       pos: { x: pos.x, y: pos.y, z: pos.z },
       vel: { x: 0, y: 0, z: 0 },
@@ -165,7 +180,7 @@ export class RoomMoveSim {
     });
   }
 
-  untrack(playerId: string): void { this.shadows.delete(playerId); }
+  untrack(playerId: string): void { this.shadows.delete(playerId); this.pendingTrack.delete(playerId); }
 
   /** Mid-match team swap (rebalance) — the shadow's gate-shield access
    *  flips with the jersey, not at the next respawn. */
@@ -500,6 +515,13 @@ export class RoomMoveSim {
    *  trails the client's authored stream by this much. */
   transitOf(playerId: string): number {
     return this.shadows.get(playerId)?.transitEma ?? 0;
+  }
+
+  /** Both raw channels — the effective estimate is min(client, server
+   *  + slack); tests assert the server's own probe actually lands. */
+  transitChannelsOf(playerId: string): { client: number; server: number } {
+    const sh = this.shadows.get(playerId);
+    return { client: sh?.clientTransitEma ?? 0, server: sh?.serverTransitEma ?? 0 };
   }
 
   /** Server-computed position — for future authoritative use. */
