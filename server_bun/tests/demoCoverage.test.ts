@@ -69,6 +69,7 @@ const EXEMPT: Record<string, string> = {
   switchRoom: 'control traffic',
   wireIds: 'control traffic',
   pong: 'liveness',
+  ping: 'liveness',
   resync: 'control traffic',
   stateHash: 'control traffic',
   respawn: 'covered by remote frames (pos resets on spawn)',
