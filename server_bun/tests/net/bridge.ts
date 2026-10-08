@@ -375,7 +375,12 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
       const cs = client.state;
       const ss = server.simState(PID);
       if (ss) {
-        const e = Math.hypot(cs.pos.x - ss.pos.x, cs.pos.y - ss.pos.y, cs.pos.z - ss.pos.z);
+        // The broadcast leads the raw sim by the uplink transit — the
+        // honest comparison is client-vs-led-truth, what an observer
+        // (and the client's own shadow of itself) actually renders.
+        const lead = Math.min(server.transitOf(PID) / 2000, 0.3);
+        const lx = ss.pos.x + ss.vel.x * lead, ly = ss.pos.y + ss.vel.y * lead, lz = ss.pos.z + ss.vel.z * lead;
+        const e = Math.hypot(cs.pos.x - lx, cs.pos.y - ly, cs.pos.z - lz);
         r.errSeries.push(e);
         r.errT.push(tMs);
         if (e > r.maxSteadyErr) r.maxSteadyErr = e;

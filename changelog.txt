@@ -1,3 +1,4 @@
+2026-10-01 - Anchored compare replays to report authored time (transit-corrected) + broadcast lead halved to half-transit; errSeries measures vs led truth
 2026-10-01 - MoveSim snapshot/restore + seq-anchor forward-input fix: anchored replay no longer reads input edges as phantom divergence (soakChaos green, corrections quieter)
 2026-10-01 - Broadcast lead: authority positions extrapolate by uplink-transit EMA so observers/rewind aim at client-now (ghost targets, unregistered hits)
 2026-10-09 - P2P host dispatch containment: a throwing handler drops the offending peer's link, not the host's game — ingest containment uniform across dedicated + P2P

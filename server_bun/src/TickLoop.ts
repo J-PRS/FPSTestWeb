@@ -284,7 +284,10 @@ export class TickLoop {
         if (p.isBot) continue;
         const s = room.moveSim.simState(playerId);
         if (!s) continue;
-        const lead = Math.min(room.moveSim.transitOf(playerId) / 1000, 0.3);
+        // Half transit, not full: a linear lead overshoots on turns by
+        // the same amount it recovers on straights — half centers the
+        // systematic lag without doubling the turn error.
+        const lead = Math.min(room.moveSim.transitOf(playerId) / 2000, 0.3);
         p.position = { x: s.pos.x + s.vel.x * lead, y: s.pos.y + s.vel.y * lead, z: s.pos.z + s.vel.z * lead };
         p.velocity = { x: s.vel.x, y: s.vel.y, z: s.vel.z };
       }

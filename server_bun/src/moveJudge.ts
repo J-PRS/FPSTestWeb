@@ -404,7 +404,11 @@ export class MoveJudge {
     // replay as a phantom climb if mass/eye fell back to defaults.
     probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
     probe.restore(anchor.snap);
-    const segs = [...after, { snap: anchor.snap, tick: sh.simTicks, inp: sh.sim.input }];
+    // The report is a snapshot from one uplink-transit ago — replaying to
+    // simTicks overshoots the probe past the report's true comparison
+    // point and the excess reads as divergence at speed.
+    const targetTick = sh.simTicks - Math.round(sh.transitEma / (MoveSim.STEP * 1000));
+    const segs = [...after, { snap: anchor.snap, tick: Math.max(targetTick, anchor.tick), inp: sh.sim.input }];
     this.replayWindow(sh, probe, anchor, segs);
     return probe.state;
   }
