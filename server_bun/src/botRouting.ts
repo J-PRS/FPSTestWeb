@@ -77,6 +77,15 @@ export class BotRouting {
    *  probe: capper lapped ~150m off the stand for 100s). 8s covers the
    *  ~80m run-in at a walk; expiry falls back to a normal re-pick. */
   static readonly PRESS_MS = 8000;
+  /** A capper's bounce-out excursion after a missed grab runs 15-25s —
+   *  an 8s press memory expires mid-orbit and the ring router re-picks
+   *  a hilltop entry ~100m out, which is the stand/entry yo-yo the
+   *  probes keep catching. Cappers keep their press for the whole
+   *  go-around instead. */
+  static readonly CAP_PRESS_MS = 30_000;
+  /** Outside this stand distance ring entries don't run at all — see
+   *  the gate comment where it's used. */
+  static readonly RING_MAX = 150;
   /** Meters past the flag a capper aims on the committed run — the
    *  pass-through aim that makes the approach wrap to the home-side
    *  exit instead of beeline-and-stop. */
@@ -403,13 +412,21 @@ export class BotRouting {
       // Stay live until the last hop: snapping the goal to the raw
       // stand at 90m beelines the bot into the rim wall it probed its
       // way around — presses end 8m below the flag at the wall's foot.
-      if (dStand > (capper ? 25 : 20) && !laneClear) {
+      // Ring entries are a TERMINAL-sector tool: they exist to breach
+      // the stand's rim wall, which is only a decision worth making
+      // once the press is inside RING_MAX — firing them at 200-300m
+      // keeps re-electing hilltop saddles a full excursion away, and
+      // each chase is a massif-belt yo-yo against the next press
+      // (katabatic 9001: four 30s entry detours, zero net progress).
+      // Far out the flow-field router owns the approach; its whole job
+      // IS terrain-aware routing around exactly these ridges.
+      if (dStand > (capper ? 25 : 20) && !laneClear && dStand < BotRouting.RING_MAX) {
         const inc = this.routeHold.get(p.id);
         const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
         // A pressed-in record (pos≈stand) short-circuits the whole entry
         // probe for its window — see PRESS_MS.
         const pressing = incLive && dist3(incLive.pos, enemyStand) < 1
-          && simNow() - incLive.at < BotRouting.PRESS_MS;
+          && simNow() - incLive.at < (capper ? BotRouting.CAP_PRESS_MS : BotRouting.PRESS_MS);
         if (incLive && dist3(incLive.pos, enemyStand) < 1 && !pressing) {
           this.routeHold.delete(p.id); // stale press — re-probe
         }
@@ -483,6 +500,12 @@ export class BotRouting {
         // lane). Committed pressers still press into the wall — that
         // stall is what feeds the breach machinery.
         if ((wall < 6 && !laneBlocked) || committed || (waveTask && wall < 20) || (capper && dStand < 25)) {
+          // Any straight press is ownership of the stand: stamp the
+          // press record so a bounce back out past the lane window
+          // sees `pressing` instead of re-running the ring probe —
+          // laneClear approaches used to leave no trace, so every
+          // overshoot re-entered routing and picked a hilltop entry.
+          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
           // Two human corrections on the final run:
           // - Altitude pull: a ballistic runner can't dive, so aim the
           //   landing short of the flag and skim through it at grab height.

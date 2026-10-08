@@ -43,12 +43,15 @@ export class BotMoves {
    *  held forward input pushes him down the whole face each cycle and
    *  a ~70m wall reads as an absolute ceiling (katabatic moat). */
   private breath = false;
-  /** Orbit-brake trackers — od sampled at the last window edge and the
-   *  window clock. Progress is closure RATE, not a per-call dip: hints
-   *  runs many times a second so a per-call threshold only sees the
-   *  fastest movers. An orbit closing <3m/s is a lap; an approach
-   *  closing faster is a run. */
-  private odRef = Infinity;
+  /** Orbit-brake trackers — the best (smallest) objective distance
+   *  reached since entering the watch ring, the best at the current
+   *  window's start, and the window clock. Progress is measured against
+   *  the best-yet mark, not the window's instantaneous start: a chaotic
+   *  orbit swinging 5→80m fakes per-window "gain" every pass where a
+   *  monotone progress bar trips the brake (katabatic: 40s of lapping
+   *  the ring before the crawl finally armed). */
+  private odBest = Infinity;
+  private odWindowBest = Infinity;
   private odT = 0;
   /** One-shot brake demand from the closure-rate window; consumed the
    *  moment the bot reaches crawl speed. */
@@ -113,6 +116,7 @@ export class BotMoves {
     // 15-25m out reset odBest on every exit before (katabatic 9002:
     // 110s of 5-25m orbits), so the latch arms inside grabWatchGd.
     if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
+      if (od < this.odBest) this.odBest = od;
       // Each grabOrbitS window must close grabOrbitMinGain toward the
       // pole — an orbit that dips a little nearer each lap keeps making
       // "progress" forever otherwise (katabatic: 110s of improving-miss
@@ -122,8 +126,10 @@ export class BotMoves {
       if (!this.crawl) {
         this.odT += dt;
         if (this.odT >= T.moves.grabOrbitS) {
-          if (this.odRef - od < T.moves.grabOrbitMinGain) this.brakeNow = true;
-          this.odRef = od; this.odT = 0;
+          // A window that didn't set a NEW best by minGain is a lap —
+          // equal-best dips don't count: they re-attest the same line.
+          if (this.odWindowBest - this.odBest < T.moves.grabOrbitMinGain) this.brakeNow = true;
+          this.odWindowBest = this.odBest; this.odT = 0;
         }
       }
       if (this.brakeNow) {
@@ -154,7 +160,12 @@ export class BotMoves {
         }
         return { ski: false, jet: pos.y - (ctx.objective?.y ?? -Infinity) <= 6, jump: od > T.moves.crawlHopGd && (spd0 < 1 || rise > T.moves.stepRise) };
       }
-    } else { this.odRef = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
+    // Hysteresis: the brake/crawl state resets only past the release
+    // radius — an orbit swinging 35-80m out used to wipe the whole
+    // detector every lap (odRef/odT/crawl all reset), so the watch
+    // re-armed fresh on each dip back in and never accumulated the
+    // stall it exists to catch.
+    } else if (od > T.moves.grabWatchGd * 1.5) { this.odBest = Infinity; this.odWindowBest = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
     // fast arrivals brake wide to kill the overshoot-orbit; already
