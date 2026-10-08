@@ -51,6 +51,9 @@ export class VideoRecorder {
   private videoW = 0;
   private videoH = 0;
   private fpsNow = 60;
+  private vmux: 'avc' | 'hevc' = 'avc';
+  private qpMode = false;
+  private qpKey: 'avc' | 'hevc' = 'avc';
   private lastFrameAt = 0;
   // Game audio lane: the AudioEngine's post-compressor mix feeds an
   // AudioWorklet that hands PCM to an AudioEncoder (AAC→muxer audio track,
@@ -112,12 +115,10 @@ export class VideoRecorder {
     // for block artifacts, so the multiplier is generous (~12Mbps at
     // 1080p, capped at 25) — VBR only spends it on hard frames.
     const bitrate = Math.round(src.width * src.height * 6);
-    const config = {
-      codec: 'avc1.640032', // H.264 High@5.0 — covers 1080p60
+    const base = {
       width: src.width,
       height: src.height,
       bitrate: Math.min(Math.max(bitrate, 4_000_000), 25_000_000),
-      bitrateMode: 'variable',
       framerate: fps,
       hardwarePreference: 'prefer-hardware',
       // Quality over realtime: lookahead + B-frames are the difference
@@ -125,20 +126,39 @@ export class VideoRecorder {
       // encode latency doesn't matter for a ring buffer.
       latencyMode: 'quality',
     } as unknown as VideoEncoderConfig;
+    // Codec ladder: HEVC first (NVENC does it — ~25% better quality per
+    // bit), then H.264 High. Quantizer mode (fixed QP ≈ visually
+    // lossless) beats VBR where the encoder supports it.
+    const ladders: { codec: string; muxCodec: 'hevc' | 'avc'; qKey: 'hevc' | 'avc' }[] = [
+      { codec: 'hvc1.1.6.L156.B0', muxCodec: 'hevc', qKey: 'hevc' },
+      { codec: 'hev1.1.6.L156.B0', muxCodec: 'hevc', qKey: 'hevc' },
+      { codec: 'avc1.640032', muxCodec: 'avc', qKey: 'avc' },
+    ];
+    let chosen: (typeof ladders)[number] | null = null;
+    let config: VideoEncoderConfig | null = null;
+    let qpMode = false;
     try {
-      let { supported } = await VideoEncoder.isConfigSupported(config);
-      if (!supported) {
-        // Quality mode + VBR are optional extras — realtime CBR is still
-        // NVENC, far better than dropping to the CPU fallback.
-        config.latencyMode = 'realtime';
-        delete (config as { bitrateMode?: string }).bitrateMode;
-        ({ supported } = await VideoEncoder.isConfigSupported(config));
+      outer:
+      for (const cand of ladders) {
+        for (const variant of [
+          { ...base, codec: cand.codec, bitrateMode: 'quantizer' } as VideoEncoderConfig,
+          { ...base, codec: cand.codec, bitrateMode: 'variable' } as VideoEncoderConfig,
+          { ...base, codec: cand.codec, latencyMode: 'realtime' } as VideoEncoderConfig,
+        ]) {
+          const { supported } = await VideoEncoder.isConfigSupported(variant);
+          if (supported) {
+            chosen = cand;
+            config = variant;
+            qpMode = variant.bitrateMode === 'quantizer';
+            break outer;
+          }
+        }
       }
-      if (!supported) {return false;}
+      if (!config || !chosen) {return false;}
       const audioCfg = await this.probeAudio();
       this.mux = new Muxer({
         target: new ArrayBufferTarget(),
-        video: { codec: 'avc', width: src.width, height: src.height, frameRate: fps },
+        video: { codec: chosen.muxCodec, width: src.width, height: src.height, frameRate: fps },
         audio: audioCfg
           ? { codec: audioCfg.muxCodec, sampleRate: audioCfg.ctx.sampleRate, numberOfChannels: 2 }
           : undefined,
@@ -167,6 +187,9 @@ export class VideoRecorder {
         error: () => { this.encFailed = true; },
       });
       this.enc.configure(config);
+      this.vmux = chosen.muxCodec;
+      this.qpMode = qpMode;
+      this.qpKey = chosen.qKey;
       if (audioCfg) {await this.startAudio(audioCfg);}
       this.frameDur = 1e6 / fps;
       this.frames = 0;
@@ -353,7 +376,11 @@ export class VideoRecorder {
       this.lastFrameAt = now;
       const ts = Math.round((now - this.encWall) * 1000); // µs
       const frame = new VideoFrame(this.staged ? this.stage! : src, { timestamp: ts });
-      this.enc.encode(frame, { keyFrame: now - this.lastKeyAt >= 2000 });
+      const opts: VideoEncoderEncodeOptions & Record<string, unknown> = { keyFrame: now - this.lastKeyAt >= 2000 };
+      // Fixed-QP ≈ visually lossless: bitrate config is ignored, QP 22 is
+      // the game-footage sweet spot (20 for near-transparent).
+      if (this.qpMode) {opts[this.qpKey] = { quantizer: 22 };}
+      this.enc.encode(frame, opts);
       if (now - this.lastKeyAt >= 2000) {this.lastKeyAt = now;}
       frame.close();
       this.frames++;
@@ -376,7 +403,7 @@ export class VideoRecorder {
     if (keyIdx < 0 || endIdx < keyIdx) {return null;}
     const mux = new Muxer({
       target: new ArrayBufferTarget(),
-      video: { codec: 'avc', width: this.videoW, height: this.videoH, frameRate: this.fpsNow },
+      video: { codec: this.vmux, width: this.videoW, height: this.videoH, frameRate: this.fpsNow },
       audio: this.aCodec ? { codec: this.aCodec, sampleRate: this.aSampleRate, numberOfChannels: 2 } : undefined,
       fastStart: 'in-memory',
     });
