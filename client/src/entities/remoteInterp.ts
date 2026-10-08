@@ -79,6 +79,34 @@ export class RemoteInterp {
     }
 
     this.ping = ping;
+
+    // Undeclared teleport: no physically-plausible path reaches this
+    // snapshot from the last one — a respawn, a stale post-reconnect
+    // frame, a lead step. Interpolating across it smears a speed-ghost
+    // across the gap (a 30m slide reads far worse than a clean snap),
+    // and feeding the jump into the DR velocity estimate launches the
+    // next dead-reckon at an impossible speed. Declared teleports reseat
+    // through the wire handler before they ever reach here — this net
+    // catches everything else: wipe the buffer and DR state so the new
+    // truth stands alone, and skip the velocity delta this frame.
+    const jumpSpanSec = (stamp - prevUpdateMs) / 1000;
+    const jumpDist = this.lastServerPosition.lengthSq() > 0 && jumpSpanSec > 0
+      ? Math.hypot(
+          targetPosition.x - this.lastServerPosition.x,
+          targetPosition.y - this.lastServerPosition.y,
+          targetPosition.z - this.lastServerPosition.z)
+      : 0;
+    const teleported = jumpDist > Math.max(8, jumpSpanSec * 90 + 4);
+    if (teleported) {
+      this.net.clear();
+      this._simulating = false;
+      this.reconcileBlend = 0;
+      this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
+      if (serverVelocity) {
+        this.simulatedVelocity.set(serverVelocity.x, serverVelocity.y, serverVelocity.z);
+      }
+    }
+
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     this.targetRotation.yaw = targetRotation.yaw;
     this.targetRotation.pitch = targetRotation.pitch;
@@ -101,7 +129,7 @@ export class RemoteInterp {
     // extrapolated position). serverMs deltas are jitter-free server
     // ticks — dividing by arrival gaps was feeding transport noise
     // into the DR launch vector. Skipped during the prediction window.
-    if (this.predictionTimer <= 0) {
+    if (!teleported && this.predictionTimer <= 0) {
       if (this.lastServerPosition.lengthSq() > 0) {
         const serverDt = (stamp - prevUpdateMs) / 1000;
         if (serverDt > 0) {
