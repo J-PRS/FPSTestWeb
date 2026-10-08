@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, type TickEncodeScratch, type V4Last } from '../../shared/wire.ts';
+import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
@@ -18,7 +18,7 @@ import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
-type PooledRecord = TickRecord & { enc: TickEncodeScratch; last: V4Last };
+type PooledRecord = TickRecord & { enc: TickEncodeScratch };
 
 /** A retired wireId is reissued only after this much dead time — any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
@@ -144,12 +144,20 @@ export class TickFanout {
       }
       let rec = records[recN];
       if (!rec) {
-        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch(), last: v4Last() };
+        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch() };
         records.push(rec);
       }
       rec.playerId = playerId;
       rec.pos = p.position;
       rec.force = forceSend;
+      // Delta basis follows the wireId, never the slot — a slot-carried
+      // `last` encodes this player's mask against whoever held the slot
+      // last tick after every roster shuffle.
+      let last = room.v4Last.get(wireId);
+      if (!last || freshWireId) {
+        last = v4Last();
+        room.v4Last.set(wireId, last);
+      }
       // Delta-masked v4 record: only field groups that changed since this
       // slot's last encode ride the wire; a periodic full record bounds
       // the staleness a lost masked frame can leave behind.
@@ -171,10 +179,10 @@ export class TickFanout {
           // Stagger fulls by wireId — keying on tickSeq alone synced every
           // record into one egress spike per window; spreading them keeps
           // the same 750ms drift bound with a flat send curve. A fresh
-          // mint always fulls: the pooled slot's `last` can still match a
-          // retired wireId, and a masked record would hand receivers the
-          // departed owner's hp/flags.
-        }, rec.enc, rec.last, freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
+          // mint always fulls: a quiet-window-reissued wireId's `last`
+          // could still hold the retired owner's basis, and a masked
+          // record would hand receivers the departed owner's hp/flags.
+        }, rec.enc, last, freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0);
       recN++;
       this.metrics.recordsBuilt++;
     }

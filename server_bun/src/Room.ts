@@ -91,6 +91,11 @@ export class Room {
   readonly wireIds = new Map<string, number>();
   /** wireId → wall-ms it was released at. */
   readonly wireIdRetired = new Map<number, number>();
+  /** wireId → v4 delta-compare basis (last-ENCODED values). Keyed by
+   *  wireId, not by pooled-record slot: slot↔player binding shuffles on
+   *  every join/leave/suppression, and a slot-carried basis would emit a
+   *  mask computed against a different player's values. */
+  readonly v4Last = new Map<number, import('../../shared/wire.ts').V4Last>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
@@ -996,6 +1001,7 @@ export class Room {
     if (wid !== undefined) {
       this.wireIds.delete(playerId);
       this.wireIdRetired.set(wid, wallNow());
+      this.v4Last.delete(wid);
       this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });
     }
     this.lastSentPositions.delete(playerId);
