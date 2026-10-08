@@ -201,7 +201,7 @@ function hashableEntry(
 function diffServerSnapshot(
   serverPlayers: SnapshotPlayer[],
   clientPlayers: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>,
-): { diffs: string[]; healthDriftIds: string[]; deadDriftIds: string[] } {
+): { diffs: string[]; healthDriftIds: string[]; deadDriftIds: string[]; memberDriftIds: string[] } {
   const serverMap = new Map<string, SnapshotPlayer>();
   for (const p of serverPlayers) {
     serverMap.set(p.id, p);
@@ -211,13 +211,17 @@ function diffServerSnapshot(
   const allIds = new Set([...serverMap.keys(), ...clientPlayers.keys()]);
   const healthDriftIds: string[] = [];
   const deadDriftIds: string[] = [];
+  const memberDriftIds: string[] = [];
 
   for (const id of allIds) {
     const cp = clientPlayers.get(id);
     const sp = serverMap.get(id);
 
     if (!cp || !sp) {
-      if (cp !== sp) {diffs.push(`Player ${id} on ${cp ? 'client but not server' : 'server but not client'}`);}
+      if (cp !== sp) {
+        diffs.push(`Player ${id} on ${cp ? 'client but not server' : 'server but not client'}`);
+        memberDriftIds.push(id);
+      }
       continue;
     }
     // A just-joined remote diffs its default record against a mutated
@@ -227,7 +231,7 @@ function diffServerSnapshot(
 
     diffs.push(...diffPlayerFields(id, cp, sp, healthDriftIds, deadDriftIds));
   }
-  return { diffs, healthDriftIds, deadDriftIds };
+  return { diffs, healthDriftIds, deadDriftIds, memberDriftIds };
 }
 
 function diffPlayerFields(
@@ -269,6 +273,7 @@ function diffPlayerFields(
  *  is in-flight traffic, logged at debug. */
 const healthDriftStreak = new Map<string, number>();
 const deadDriftStreak = new Map<string, number>();
+const memberDriftStreak = new Map<string, number>();
 const DRIFT_STREAK_WARN = 2;
 
 // Same streak rule for any echo-flavored field: persistence (same id on
@@ -571,19 +576,24 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     networkManager.sendSnapshotRequest();
 
     pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _ts: number) => {
-      const { diffs, healthDriftIds, deadDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
+      const { diffs, healthDriftIds, deadDriftIds, memberDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
       const { persistentIds, transientCount } = noteDrift(healthDriftStreak, healthDriftIds);
       const { persistentIds: persistentDeadIds, transientCount: transientDeadCount } = noteDrift(deadDriftStreak, deadDriftIds);
+      const { persistentIds: persistentMemberIds } = noteDrift(memberDriftStreak, memberDriftIds);
       // Transient health sightings stay out of the warn — a first-seen
       // [echo] diff is expected while combat is in flight. An [edge]
       // isDead sighting is usually the liveness heal itself firing (the
       // same snapshot that flags it also flips it back) — only a flip
-      // that persists across checks is real desync.
+      // that persists across checks is real desync. Membership gaps are
+      // the same shape: a join/leave edge racing the roster heals via
+      // upsert/remoteDelete in this very pass.
       const significantDiffs = diffs.filter(d => {
         const h = /^\[echo\] Player (\S+) health/.exec(d);
         if (h) {return persistentIds.has(h[1]!);}
         const e = /^\[edge\] Player (\S+) isDead/.exec(d);
         if (e) {return persistentDeadIds.has(e[1]!);}
+        const m = /^Player (\S+) on (?:server but not client|client but not server)/.exec(d);
+        if (m) {return persistentMemberIds.has(m[1]!);}
         return true;
       });
 
