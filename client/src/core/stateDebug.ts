@@ -51,6 +51,54 @@ let pendingServerSnapshot: ((players: SnapshotPlayer[], timestamp: number) => vo
 // here so the kill handlers' import site stays stable.
 export { noteKill } from './diagDump.js';
 
+/** One lane of the §4.7 fidelity check. Roster extraction and detail
+ *  formatting stay per-kind (semantic payload); the compare → streak →
+ *  report loop is shared so a fix lands on every lane at once — the
+ *  five hand-copied loops used to drift a fix into one lane and let it
+ *  re-bloom on the next. */
+interface ReplicaLane {
+  streak: number;
+  /** id+field keys diffed on the previous check — perKey lanes only. */
+  prevKeys: Set<string>;
+}
+
+function laneCheck(lane: ReplicaLane, logger: ChildLogger, a: {
+  name: string;
+  tick: number;
+  serverHash: string;
+  localHash: string;
+  /** Everything past the hashes: roster ids + per-field diffs. */
+  detail: string;
+  /** Diff keys from kindFieldDiffs — perKey lanes escalate on repeats. */
+  diffKeys?: Set<string> | null;
+  /** Same-id+field persistence instead of streak — for lanes whose
+   *  derived fields churn at integrator boundaries (balls). */
+  perKey?: boolean;
+  warnWhy: string;
+  transientWhy: string;
+}): void {
+  if (a.localHash === a.serverHash) {
+    lane.streak = 0;
+    lane.prevKeys.clear();
+    return;
+  }
+  lane.streak++;
+  const detail = `server=${a.serverHash} client=${a.localHash} ${a.detail}`;
+  let persistent = lane.streak >= 2;
+  let persistDesc = `across ${lane.streak} checks`;
+  if (a.perKey) {
+    const stuck = a.diffKeys ? [...a.diffKeys].filter((k) => lane.prevKeys.has(k)) : [];
+    if (a.diffKeys) {lane.prevKeys = a.diffKeys;}
+    persistent = stuck.length > 0 || (!a.diffKeys && lane.streak >= 2);
+    persistDesc = stuck.length ? stuck.slice(0, 6).join(', ') : persistDesc;
+  }
+  if (persistent) {
+    logger.warn(`[StateHash] ${a.name} DESYNC tick=${a.tick} ${detail} (persistent ${persistDesc} — ${a.warnWhy})`);
+  } else {
+    logger.debug(`[StateHash] ${a.name} mismatch tick=${a.tick} ${detail} (transient — ${a.transientWhy})`);
+  }
+}
+
 declare global {
   interface Window {
     takeClientSnapshot?: () => GameStateSnapshot;
@@ -312,22 +360,17 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   let hashCheckCount = 0;
   let hashMismatchCount = 0;
   let lastSnapshotRequest = 0;
-  // Ball replica-fidelity streak — the fleet hash covers identity and
-  // mirrored lifecycle fields (variant/enraged/targetId). A transition
-  // in flight can land across a check boundary, so one sighting is
-  // debug-level; a persistent mismatch means a stranded/lost/stale
-  // replica the ballRoster path never healed (§4.7).
-  // Enraged/targetId are DERIVED inside the replayed integrator, so a
-  // bounce landing one tick either side of the enrage boundary flips the
-  // flag transiently on a different ball each check — a fleet-level
-  // streak of identical-name diffs is churn, not a stranded replica.
+  // §4.7 fidelity lanes — one streak per kind (§ ReplicaLane). The ball
+  // lane is perKey: enraged/targetId are DERIVED inside the replayed
+  // integrator, so a bounce landing one tick either side of the enrage
+  // boundary flips the flag transiently on a different ball each check —
+  // a fleet streak of rotating offenders is churn, not a stranded replica.
   // Only a diff pinned to the same id+field twice running is real.
-  let ballDriftStreak = 0;
-  let prevBallDiffs = new Set<string>();
-  let creatureDriftStreak = 0;
-  let deployDriftStreak = 0;
-  let flagDriftStreak = 0;
-  let pickupDriftStreak = 0;
+  const flagLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
+  const pickupLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
+  const deployLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
+  const creatureLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
+  const ballLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
 
   networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, serverBallHash?: string, serverCreatureHash?: string, serverDeployHash?: string, serverFlagHash?: string, serverPickupHash?: string, serverCreatureFields?: [number, string, string, boolean, string | null][], serverDeployFields?: [number, string, string, string][], serverBallFields?: [number, number, boolean, string | null][]) => {
     hashCheckCount++;
@@ -337,35 +380,27 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       for (const [team, state] of Object.entries(ctx.world.flagStates ?? {})) {
         if (state) {local.set(team, { state, carrier: ctx.world.flagMarkers?.get(team)?.carrier ?? null });}
       }
-      const localFlagHash = replicaHash(WORLD_MODEL.flag!, local);
-      if (localFlagHash === serverFlagHash) {
-        flagDriftStreak = 0;
-      } else {
-        flagDriftStreak++;
-        const detail = `server=${serverFlagHash} client=${localFlagHash} states=${JSON.stringify(Object.fromEntries([...local].map(([t, f]) => [t, `${f.state}:${f.carrier ?? '-'}`])))}`;
-        if (flagDriftStreak >= 2) {
-          logger.warn(`[StateHash] FLAG DESYNC tick=${tick} ${detail} (persistent across ${flagDriftStreak} checks — a flagUpdate edge never landed)`);
-        } else {
-          logger.debug(`[StateHash] flag mismatch tick=${tick} ${detail} (transient — flagUpdate in flight)`);
-        }
-      }
+      laneCheck(flagLane, logger, {
+        name: 'FLAG', tick,
+        serverHash: serverFlagHash,
+        localHash: replicaHash(WORLD_MODEL.flag!, local),
+        detail: `states=${JSON.stringify(Object.fromEntries([...local].map(([t, f]) => [t, `${f.state}:${f.carrier ?? '-'}`])))}`,
+        warnWhy: 'a flagUpdate edge never landed',
+        transientWhy: 'flagUpdate in flight',
+      });
     }
 
     if (serverPickupHash !== undefined && ctx.world) {
       const local = new Map<number, { kind: string }>();
       for (const [id, p] of ctx.world.netPickups ?? []) {local.set(id, { kind: p.kind });}
-      const localPickupHash = replicaHash(WORLD_MODEL.pickup!, local);
-      if (localPickupHash === serverPickupHash) {
-        pickupDriftStreak = 0;
-      } else {
-        pickupDriftStreak++;
-        const detail = `server=${serverPickupHash} client=${localPickupHash} ids=[${[...local.keys()].join(',')}]`;
-        if (pickupDriftStreak >= 2) {
-          logger.warn(`[StateHash] PICKUP DESYNC tick=${tick} ${detail} (persistent across ${pickupDriftStreak} checks — a pickupSpawn/pickupGone edge never landed)`);
-        } else {
-          logger.debug(`[StateHash] pickup mismatch tick=${tick} ${detail} (transient — spawn/collect edge in flight)`);
-        }
-      }
+      laneCheck(pickupLane, logger, {
+        name: 'PICKUP', tick,
+        serverHash: serverPickupHash,
+        localHash: replicaHash(WORLD_MODEL.pickup!, local),
+        detail: `ids=[${[...local.keys()].join(',')}]`,
+        warnWhy: 'a pickupSpawn/pickupGone edge never landed',
+        transientWhy: 'spawn/collect edge in flight',
+      });
     }
 
     if (serverDeployHash !== undefined && ctx.netDeployables) {
@@ -377,28 +412,24 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         // server-side is a permanent false desync (the soak's ids=[2]).
         if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? '', team: d.team ?? '' });}
       }
-      const localDeployHash = replicaHash(WORLD_MODEL.deploy!, local);
-      if (localDeployHash === serverDeployHash) {
-        deployDriftStreak = 0;
-      } else {
-        deployDriftStreak++;
-        // The hash alone can't say WHAT diverged — diff the server's
-        // per-id roster so the warn names the entry: a server-only id is
-        // a missed spawn edge, a client-only id a missed deployGone, and
-        // a field diff is a kind/owner/team asymmetry.
-        let detail = `server=${serverDeployHash} client=${localDeployHash} ids=[${[...local.keys()].join(',')}]`;
-        if (serverDeployFields) {
-          // Generated from the deploy declaration — same field list the
-          // server emitted, so emit and diff can't drift apart.
-          const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverDeployFields);
-          if (d.diffs.length) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
-        }
-        if (deployDriftStreak >= 2) {
-          logger.warn(`[StateHash] DEPLOY DESYNC tick=${tick} ${detail} (persistent across ${deployDriftStreak} checks — a deploySpawn/deployGone edge never landed)`);
-        } else {
-          logger.debug(`[StateHash] deploy mismatch tick=${tick} ${detail} (transient — spawn/gone edge in flight)`);
-        }
+      // The hash alone can't say WHAT diverged — diff the server's
+      // per-id roster so the warn names the entry: a server-only id is
+      // a missed spawn edge, a client-only id a missed deployGone, and
+      // a field diff is a kind/owner/team asymmetry. Generated from the
+      // deploy declaration so emit and diff can't drift apart.
+      let detail = `ids=[${[...local.keys()].join(',')}]`;
+      if (serverDeployFields) {
+        const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverDeployFields);
+        if (d.diffs.length) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
       }
+      laneCheck(deployLane, logger, {
+        name: 'DEPLOY', tick,
+        serverHash: serverDeployHash,
+        localHash: replicaHash(WORLD_MODEL.deploy!, local),
+        detail,
+        warnWhy: 'a deploySpawn/deployGone edge never landed',
+        transientWhy: 'spawn/gone edge in flight',
+      });
     }
 
     if (serverCreatureHash !== undefined && ctx.netCreatures) {
@@ -411,38 +442,35 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         }
       }
       const localCreatureHash = replicaHash(WORLD_MODEL.creature!, local);
-      if (localCreatureHash === serverCreatureHash) {
-        creatureDriftStreak = 0;
-      } else {
-        creatureDriftStreak++;
-        // The hash alone can't say WHAT diverged — with the server's
-        // per-id fields attached, name it (e.g. state drift vs a
-        // stranded targetId) so the next soak answers instead of asking.
-        let detail = `server=${serverCreatureHash} client=${localCreatureHash} ids=[${[...local.keys()].join(',')}]`;
-        if (serverCreatureFields) {
-          // Generated from the creature declaration — same field list
-          // the server emitted, so emit and diff can't drift apart.
-          const d = kindFieldDiffs(WORLD_MODEL.creature!, local, serverCreatureFields);
-          if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
-          // Heal field-level drift the way the snapshot heals player
-          // liveness: a lost crawlEvt leaves sim.state/targetId stale
-          // forever (the audit just re-warns). Edges stay the primary
-          // writer — this only corrects ones that never landed.
-          // Species is constructor-fixed; a mismatch there stays a warn.
-          for (const [id, , state, uber, targetId] of serverCreatureFields) {
-            const c = creatureById.get(id);
-            if (c?.sim && (c.sim.state !== state || (c.sim.targetId ?? null) !== (targetId ?? null))) {
-              c.sim.state = state;
-              c.sim.targetId = targetId ?? null;
-            }
+      // The hash alone can't say WHAT diverged — with the server's
+      // per-id fields attached, name it (e.g. state drift vs a stranded
+      // targetId) so the next soak answers instead of asking. Generated
+      // from the creature declaration, so emit and diff can't drift apart.
+      let detail = `ids=[${[...local.keys()].join(',')}]`;
+      if (localCreatureHash !== serverCreatureHash && serverCreatureFields) {
+        const d = kindFieldDiffs(WORLD_MODEL.creature!, local, serverCreatureFields);
+        if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
+        // Heal field-level drift the way the snapshot heals player
+        // liveness: a lost crawlEvt leaves sim.state/targetId stale
+        // forever (the audit just re-warns). Edges stay the primary
+        // writer — this only corrects ones that never landed.
+        // Species is constructor-fixed; a mismatch there stays a warn.
+        for (const [id, , state, uber, targetId] of serverCreatureFields) {
+          const c = creatureById.get(id);
+          if (c?.sim && (c.sim.state !== state || (c.sim.targetId ?? null) !== (targetId ?? null))) {
+            c.sim.state = state;
+            c.sim.targetId = targetId ?? null;
           }
         }
-        if (creatureDriftStreak >= 2) {
-          logger.warn(`[StateHash] CREATURE DESYNC tick=${tick} ${detail} (persistent across ${creatureDriftStreak} checks — stranded or stale replica)`);
-        } else {
-          logger.debug(`[StateHash] creature mismatch tick=${tick} ${detail} (transient — lifecycle edge in flight)`);
-        }
       }
+      laneCheck(creatureLane, logger, {
+        name: 'CREATURE', tick,
+        serverHash: serverCreatureHash,
+        localHash: localCreatureHash,
+        detail,
+        warnWhy: 'stranded or stale replica',
+        transientWhy: 'lifecycle edge in flight',
+      });
     }
 
     if (serverBallHash !== undefined) {
@@ -451,36 +479,27 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.enraged, targetId: b.netS.netTargetId });}
       }
       const localBallHash = replicaHash(WORLD_MODEL.ball!, localBalls);
-      if (localBallHash === serverBallHash) {
-        ballDriftStreak = 0;
-        prevBallDiffs.clear();
-      } else {
-        ballDriftStreak++;
-        // Membership alone isn't the signal here — enraged/targetId churn
-        // mismatches the hash on identical rosters, so diff the server's
-        // per-id fields like the creature/deploy lanes do.
-        let detail = `server=${serverBallHash} client=${localBallHash} ids=[${[...localBalls.keys()].join(',')}]`;
-        let diffKeys: Set<string> | null = null;
-        if (serverBallFields) {
-          // Generated from the ball declaration — same field list the
-          // server emitted, so emit and diff can't drift apart.
-          const d = kindFieldDiffs(WORLD_MODEL.ball!, localBalls, serverBallFields);
-          diffKeys = d.keys;
-          if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
-        }
-        // Per-key persistence: enraged/targetId flip transiently at bounce
-        // boundaries (same integrator, ±1 tick of contact phase), and a
-        // fleet streak of rotating offenders reads as "persistent" when
-        // nothing is actually stuck. Escalate only diffs the same id+field
-        // repeated, or a fieldless hash drift that won't heal.
-        const persistent = diffKeys ? [...diffKeys].filter((k) => prevBallDiffs.has(k)) : [];
-        if (diffKeys) {prevBallDiffs = diffKeys;}
-        if (persistent.length > 0 || (!diffKeys && ballDriftStreak >= 2)) {
-          logger.warn(`[StateHash] BALL DESYNC tick=${tick} ${detail} (persistent ${persistent.length ? persistent.slice(0, 6).join(', ') : `across ${ballDriftStreak} checks`} — stranded or stale replica)`);
-        } else {
-          logger.debug(`[StateHash] ball mismatch tick=${tick} ${detail} (transient — lifecycle edge or derived-flag boundary in flight)`);
-        }
+      // Membership alone isn't the signal here — enraged/targetId churn
+      // mismatches the hash on identical rosters, so diff the server's
+      // per-id fields like the creature/deploy lanes do. Generated from
+      // the ball declaration, so emit and diff can't drift apart.
+      let detail = `ids=[${[...localBalls.keys()].join(',')}]`;
+      let diffKeys: Set<string> | null = null;
+      if (localBallHash !== serverBallHash && serverBallFields) {
+        const d = kindFieldDiffs(WORLD_MODEL.ball!, localBalls, serverBallFields);
+        diffKeys = d.keys;
+        if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
       }
+      laneCheck(ballLane, logger, {
+        name: 'BALL', tick,
+        serverHash: serverBallHash,
+        localHash: localBallHash,
+        detail,
+        diffKeys,
+        perKey: true,
+        warnWhy: 'stranded or stale replica',
+        transientWhy: 'lifecycle edge or derived-flag boundary in flight',
+      });
     }
 
     const allPlayers = buildHashablePlayerMap(ctx);
