@@ -682,6 +682,7 @@ export class NetworkManager {
     excludeTargetId?: string | null; projectileId?: string | null;
     airtime?: number; power?: number; directHit?: boolean; shotId?: string;
   }): void {
+    if (this.authoritySims()) { return; } // dedicated sims outcomes — the claim would only earn a refused ack
     if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; } // same resync-gap mute as sendShot
     // Victim-named claims (beam tics, direct-hit blasts) ride the same
     // confirm ledger shots use — keyed per victim so a held beam is one
@@ -723,6 +724,7 @@ export class NetworkManager {
   }
 
   sendProjectileDestroy(projectileId: string, shotId?: string): void {
+    if (this.authoritySims()) { return; }
     this.send({ type: 'projectileDestroy', projectileId, shotId });
   }
 
@@ -736,7 +738,7 @@ export class NetworkManager {
   /** Repair claim — only the target id crosses the wire; the server
    *  re-derives range, LOS, team, heal amount, and pacing itself. */
   sendRepair(targetId: number): void {
-    if (!this.connected) return;
+    if (!this.connected || this.authoritySims()) { return; }
     this.send({ type: 'repair', targetId, claimSeq: this.ledger.stamp('repair') });
   }
 
@@ -803,11 +805,13 @@ export class NetworkManager {
    *  impulse the shot imparted — server clamps magnitude and rebroadcasts
    *  the new segment so every client sees the same shove. */
   sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    if (this.authoritySims()) { return; }
     this.send({ type: 'crawlerHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('crawlerHit', true) });
   }
 
   private creatureHitLogN = 0;
   sendCreatureHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    if (this.authoritySims()) { return; }
     // Sampled claim log (1-in-16): chaingun-rate creature fire would flood
     // the buffer; a periodic line still proves claims are flowing and
     // carries the damage values being asserted.

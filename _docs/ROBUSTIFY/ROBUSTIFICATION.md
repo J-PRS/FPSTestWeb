@@ -3382,3 +3382,11 @@ type-checks present fields at dispatch, so a hostile/malformed client
 sending position:"abc" or hold:"yes" warns instead of feeding a
 poisoned shape into the sim. Both wire directions are now
 presence+type checked from one declaration.
+
+## 2.191 — stop sending claims the dedicated path always refuses
+
+aoeShot/projectileDestroy/repair/crawlerHit/creatureHit now early-out
+when authoritySims() is true (connected && not p2p/host). The dedicated
+gate already refused every one with 'gone' — sending them was pure
+dead-claim traffic plus a pointless ledger stamp per call. P2P keeps
+the sends: the host still adjudicates claims as its outcome path.
