@@ -414,24 +414,36 @@ export function verbPayload(
 ): Record<string, unknown> {
   const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
   const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
+  emitFields(kind, kind.verbs[verb]!, fields, idField, vals, msg);
+  return msg;
+}
+
+/** The emit-side field contract — one body for verbs, roster rows, and
+ *  events. An emit that forgets a declared field used to sail out as
+ *  null and the client diffs forever; null IS legit when the
+ *  declaration names an `absent` sentinel, so only yell for
+ *  undeclared-as-absent gaps, and never for explicit-null optionals. */
+function emitFields(
+  kind: WorldKindDecl,
+  label: string,
+  fields: KindFieldDecl[] | undefined,
+  idField: string,
+  vals: Record<string, unknown>,
+  msg: Record<string, unknown>,
+): void {
   for (const f of fields ?? []) {
     // The id field is declared for documentation but already written —
     // skip it or a vals-less emit would overwrite the id with null.
     if (f.name === idField) continue;
-    // An emit that forgets a declared field used to sail out as null —
-    // the client then diffs forever. Null IS legit when the declaration
-    // names an `absent` sentinel or the field is optional on the wire,
-    // so only yell for undeclared-as-absent gaps.
     if (!(f.name in vals)) {
       if (f.absent === undefined) {
-        warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit missing declared field '${f.name}'`);
+        warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] ${kind.kind}.${label} emit missing declared field '${f.name}'`);
       }
     } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
-      warnOnce(`${kind.kind}.${kind.verbs[verb]}:${f.name}!t`, `[worldModel] ${kind.kind}.${kind.verbs[verb]} emit field '${f.name}' wrong type (want ${f.wire})`);
+      warnOnce(`${kind.kind}.${label}:${f.name}!t`, `[worldModel] ${kind.kind}.${label} emit field '${f.name}' wrong type (want ${f.wire})`);
     }
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
-  return msg;
 }
 
 /** One roster row — id plus each declared roster field in order. Same
@@ -443,17 +455,7 @@ export function rosterRow(
   vals: Record<string, unknown>,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = { [idField]: id };
-  for (const f of kind.rosterFields ?? []) {
-    if (f.name === idField) continue;
-    if (!(f.name in vals)) {
-      if (f.absent === undefined) {
-        warnOnce(`${kind.kind}.roster:${f.name}`, `[worldModel] ${kind.kind} roster row missing declared field '${f.name}'`);
-      }
-    } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
-      warnOnce(`${kind.kind}.roster:${f.name}!t`, `[worldModel] ${kind.kind} roster row field '${f.name}' wrong type (want ${f.wire})`);
-    }
-    row[f.name] = vals[f.name] ?? f.absent ?? null;
-  }
+  emitFields(kind, 'roster', kind.rosterFields, idField, vals, row);
   return row;
 }
 
@@ -494,17 +496,7 @@ export function eventPayload(
 ): Record<string, unknown> {
   const fields = kind.events?.[type];
   const msg: Record<string, unknown> = { type, [idField]: id };
-  for (const f of fields ?? []) {
-    if (f.name === idField) continue;
-    if (!(f.name in vals)) {
-      if (f.absent === undefined) {
-        warnOnce(`${kind.kind}.${type}:${f.name}`, `[worldModel] ${kind.kind}.${type} emit missing declared field '${f.name}'`);
-      }
-    } else if (vals[f.name] != null && !wireOk(f.wire, vals[f.name])) {
-      warnOnce(`${kind.kind}.${type}:${f.name}!t`, `[worldModel] ${kind.kind}.${type} emit field '${f.name}' wrong type (want ${f.wire})`);
-    }
-    msg[f.name] = vals[f.name] ?? f.absent ?? null;
-  }
+  emitFields(kind, type, fields, idField, vals, msg);
   return msg;
 }
 

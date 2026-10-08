@@ -3434,3 +3434,11 @@ shape the world model exists to delete. checkFields takes (fields,
 packet, tag); the tag distinguishes rows/env in the warn key. Same
 contract everywhere: absent-declared may omit, null is the sentinel,
 else wireOk.
+
+## 2.197 — one emitFields for every outbound surface too
+
+The emit side mirrored the inbound one: verbPayload, rosterRow, and
+eventPayload each carried the same warn-or-fill loop. emitFields owns
+the contract now (skip idField, warn undeclared-missing, guard null,
+fill sentinel). worldModel.ts is down to two field walkers total — one
+per direction — over the same declarations.
