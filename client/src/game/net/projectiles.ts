@@ -102,6 +102,17 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    // The shooter's rendered remote can sit a leash-width off the server's
+    // spawn point — seed the render offset from the model we see so the
+    // shell leaves that muzzle and blends onto the true trajectory instead
+    // of popping in offset from the model while the flash plays on it.
+    // Beyond ~10m the remote is mid-reseat anyway; a swooping shell reads
+    // worse than the pop there.
+    const rp = deps.world.remotePlayers.get(ownerId);
+    if (rp) {
+      remoteProjectile.renderOffset.copy(rp.position).sub(origin);
+      if (remoteProjectile.renderOffset.lengthSq() > 100) {remoteProjectile.renderOffset.set(0, 0, 0);}
+    }
     // Wire shells are NEVER "mine" — unset shooterId reads as local player
     // authorship in every feedback gate (hitmarker/numbers/self-splash
     // scale) and would even let a remote shell sendShot-claim its hits

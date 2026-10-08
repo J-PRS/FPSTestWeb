@@ -201,6 +201,12 @@ export class Projectile {
   glowMesh: THREE.Mesh | null = null;
   readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
   readonly shotOrigin: THREE.Vector3;
+  /** What the renderer draws: pos + renderOffset. Netcode can seed
+   *  renderOffset so a remote shell visibly leaves the shooter's rendered
+   *  muzzle, then blends onto the true simmed path (~100ms decay) — sim
+   *  truth stays in pos, so trails, sweeps and hit points never lie. */
+  readonly rendered: THREE.Vector3 = new THREE.Vector3();
+  readonly renderOffset: THREE.Vector3 = new THREE.Vector3();
   /** Velocity at spawn — the server's claim validator checks claimed
    *  reach against origin velocity, and gravity/drag mutate `vel`, so
    *  the launch vector lives separately for the client-side re-check. */
@@ -226,6 +232,7 @@ export class Projectile {
     this.pos = origin.clone();
     this.prevPos = origin.clone();
     this.shotOrigin = origin.clone();
+    this.rendered.copy(origin);
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
     this.launchVel = this.vel.clone();
@@ -238,19 +245,19 @@ export class Projectile {
     this.trail = config.wakeVisual
       ? new ProjectileTrail({
           scene, config,
-          pos: this.pos, prevPos: this.prevPos, vel: this.vel,
+          pos: this.rendered, prevPos: this.prevPos, vel: this.vel,
           age: () => this.age,
           hitRadius: () => this.hitRadius,
         })
       : new QuarksTrail({
           config,
-          pos: this.pos, vel: this.vel,
+          pos: this.rendered, vel: this.vel,
           age: () => this.age,
         });
 
     this.ribbons = v.ribbons;
     this.driver = new TrailDriver(
-      { pos: this.pos, vel: this.vel, emitting: () => !this.exploded },
+      { pos: this.rendered, vel: this.vel, emitting: () => !this.exploded },
       [this.trail],
       this.ribbons,
     );
@@ -268,6 +275,9 @@ export class Projectile {
   update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
     if (this.dead) {return;}
 
+    this.renderOffset.multiplyScalar(Math.exp(-dt / 0.05));
+    if (this.renderOffset.lengthSq() < 1e-8) {this.renderOffset.set(0, 0, 0);}
+
     // First frame: just render at spawn position, don't apply physics yet
     if (this.spawnedThisFrame) {
       this.spawnedThisFrame = false;
@@ -276,6 +286,8 @@ export class Projectile {
     }
 
     if (!this.exploded) {this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);}
+
+    this.rendered.copy(this.pos).add(this.renderOffset);
 
     this.tickRayBurst();
 
@@ -300,7 +312,8 @@ export class Projectile {
     this.age += seconds;
     // The jump reads as a discontinuity to the trail driver — it cuts
     // every layer on its next tick, no caller declaration needed.
-    if (this.mesh) { this.mesh.position.copy(this.pos); syncProjectileInstance(this.mesh); }
+    this.rendered.copy(this.pos).add(this.renderOffset);
+    if (this.mesh) { this.mesh.position.copy(this.rendered); syncProjectileInstance(this.mesh); }
   }
 
   /** Ray-burst discharge: the rest of this frame's travel is the beam —
@@ -428,7 +441,7 @@ export class Projectile {
     });
     // Late-join ribbons miss the driver's ctor follow-bind — without this
     // the armed streak's tip trails the shell by a frame of travel.
-    armed.follow = this.pos;
+    armed.follow = this.rendered;
     this.ribbons.push(armed);
   }
 
@@ -459,10 +472,13 @@ export class Projectile {
 
 
   updateMesh(): void {
-    updateProjectileMesh(this.mesh, this.glowMesh, this.pos, this.vel,
+    Projectile._renderPos.copy(this.pos).add(this.renderOffset);
+    updateProjectileMesh(this.mesh, this.glowMesh, Projectile._renderPos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());
   }
+
+  private static readonly _renderPos = new THREE.Vector3();
 
   removeProjectileMesh(): void {
     if (this.projectileRemoved) {return;}
