@@ -298,9 +298,17 @@ export class P2PHost {
       const records: Uint8Array[] = [];
       for (const [pid, p] of players) {
         if (pid === recipientId) {continue;}
+        // Lead the broadcast by the sender's uplink transit, same as
+        // TickLoop — a hosted room otherwise renders everyone ~ping
+        // behind where they actually are (the ghost-aim pattern).
+        const lead = Math.min(this.moveShadows.transitOf(pid) / 2000, 0.3);
         records.push(encodeTickPlayer({
           playerId: pid,
-          position: p.position,
+          position: {
+            x: p.position.x + p.velocity.x * lead,
+            y: p.position.y + p.velocity.y * lead,
+            z: p.position.z + p.velocity.z * lead,
+          },
           rotation: p.rotation,
           velocity: p.velocity,
           health: p.health,
