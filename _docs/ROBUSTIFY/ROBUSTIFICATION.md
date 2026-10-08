@@ -3486,3 +3486,12 @@ bucketed the raw float, so a truth straddling a 4hp bucket edge
 (35.9 room -> 36 wire) desynced forever on live clients. The hash now
 rounds before bucketing — the same transform the wire applies — and
 replicaParity's busy-room spec (a long-standing known-fail) goes green.
+
+## 2.204 — PlayerModel LOD block extracted
+
+The far-LOD swap (lod state, lod1 fetch, baseGeo round-trip, smoothShade
+crease cache) moves to playerModelLod.ts — the only self-contained seam
+in the 1456-line monolith. setLod keeps its mannequin guard and delegates;
+the gun/clip/pose blocks stay because their state is the external API
+(setWeapon/gunMesh ride playerLoadout + modelFx callers). Mechanical
+extraction, zero behavior change — tsc clean.

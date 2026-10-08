@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -11,12 +11,6 @@ import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
 const logger = new ChildLogger('PlayerModel');
 
-// Several body GLBs ship flat normals (per-face corners) — the robot
-// reads faceted because it IS faceted. toCreasedNormals re-averages
-// normals across coplanar verts: curvature goes smooth, edges past the
-// 60° crease stay hard. One pass per geometry — GLBs share geo across
-// meshes, so cache by source.
-const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 const _gunV = new THREE.Vector3();
 const _gunQ = new THREE.Quaternion();
 const _gunMQ = new THREE.Quaternion();
@@ -27,11 +21,6 @@ const _gunLook = new THREE.Matrix4();
 const _gunQ2 = new THREE.Quaternion();
 const _gunQYaw = new THREE.Quaternion();
 
-function smoothShade(geo: THREE.BufferGeometry): THREE.BufferGeometry {
-  let g = _creased.get(geo);
-  if (!g) { g = toCreasedNormals(geo); _creased.set(geo, g); }
-  return g;
-}
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
 // testable without loading the rig.
@@ -43,6 +32,7 @@ import { ONESHOT_CLIPS, clipCandidates,
 import { DIR8, stripHipXZ, dampenSway, computeRootMotionNodes,
   isLayeredClip, AIM_BONE_MASK, AIM_TORSO_BONES, SWAY_BONES, clampHipY, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
+import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PoseControl } from './playerPose.js';
 import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
 import { handWeaponGeo } from './handWeapons.js';
@@ -291,7 +281,7 @@ export class PlayerModel {
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
-    if (this.lod === 1) {this.applyLodGeos();}
+    if (this.lodCtl.lod === 1) {this.lodCtl.apply();}
     logger.debug(`Aim bones: ${this.pose.aimBoneNames()} | hand: ${this.handBone?.name ?? 'NONE'}`);
 
     // Scale and rotate to match our coordinate system
@@ -402,9 +392,14 @@ export class PlayerModel {
   }
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
-  private lodGeos: THREE.BufferGeometry[] | null = null;
-  private lodLoadP: Promise<void> | null = null;
-  private lod = 0;
+  private readonly lodCtl = new PlayerModelLod(this.skinnedMeshes,
+    () => mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
+      const geos: THREE.BufferGeometry[] = [];
+      g.scene.traverse((o) => {
+        if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}
+      });
+      return geos;
+    }));
 
   /** Requested capsule — stashed because the gizmo only exists after the
    *  async load(); applied at creation and on re-request. */
@@ -534,35 +529,7 @@ export class PlayerModel {
     // The decimated rig is mannequin-only — LOD-swapping it onto a class
     // body would graft mannequin geometry onto a foreign skeleton.
     if (this.variant !== 'mannequin') {return;}
-    if (level === this.lod) {return;}
-    this.lod = level;
-    if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
-    if (!this.lodLoadP) {
-      this.lodLoadP = mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
-        const geos: THREE.BufferGeometry[] = [];
-        g.scene.traverse((o) => {
-          if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}
-        });
-        this.lodGeos = geos;
-        if (this.lod === 1) {this.applyLodGeos();}
-      }).catch(() => { this.lodLoadP = null; });
-    }
-  }
-
-  private applyLodGeos(): void {
-    if (this.lod === 1 && !this.lodGeos) {return;}
-    const toLod = this.lod === 1;
-    this.skinnedMeshes.forEach((m, i) => {
-      if (toLod) {
-        if (!m.userData.baseGeo) {m.userData.baseGeo = m.geometry;}
-        const g = this.lodGeos![i];
-        if (g) {m.geometry = g;}
-      } else if (m.userData.baseGeo) {
-        m.geometry = m.userData.baseGeo as THREE.BufferGeometry;
-      }
-      m.computeBoundingSphere();
-      if (m.boundingSphere) {m.boundingSphere.radius += 0.6;}
-    });
+    this.lodCtl.set(level);
   }
 
   // Cloned rigs share material refs with every sibling clone — a damage
@@ -1233,8 +1200,12 @@ export class PlayerModel {
     if (this.gunMesh.geometry !== geo) {
       this.gunMesh.geometry = geo;
       // Baked models carry their own per-part materials; the generic prop
-      // keeps its shared grey.
-      this.gunMesh.material = hit ? hit.mats : PlayerModel._gunMat!;
+      // keeps its shared grey. The cached mats ARE the viewmodel's shared
+      // palette (bodyMat/darkMat) — assigning them raw lets this model's
+      // ghost shimmer (cloak/fire-reveal) fade every first-person gun in
+      // the client, and a despawn-mid-ghost sticks them translucent.
+      // Per-model clones keep setGhost's blast radius to this model only.
+      this.gunMesh.material = hit ? this.handMats(wt, hit.mats) : PlayerModel._gunMat!;
       if (this.wireframeOn) {this.captureWireframeMats();}
       // Flash rides the baked model's real muzzle, not a fixed offset —
       // each baked geo already carries its bounding box from the baker.
@@ -1242,6 +1213,15 @@ export class PlayerModel {
         this.muzzleFlash.position.set(0, 0.05, geo.boundingBox.max.z + 0.08);
       }
     }
+  }
+
+  // Per-weapon hand-prop material clones — see the setWeapon comment on
+  // why the shared palette can't be assigned raw.
+  private handPropMats = new Map<number, THREE.Material[]>();
+  private handMats(wt: number, src: THREE.Material[]): THREE.Material[] {
+    let mats = this.handPropMats.get(wt);
+    if (!mats) { mats = src.map((m) => m.clone()); this.handPropMats.set(wt, mats); }
+    return mats;
   }
 
   /** Damage white-pop — creature-style hit readability on the robot body. */
