@@ -22,6 +22,7 @@ import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playb
 import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';
 import { hmapMatches } from '../demo/demoHmap.js';
 import { feedMode } from '../feed/feedMode.js';
+import { disposeSwings } from '../effects/swingTrails.js';
 import { getHeightfield, injectHeightmapBytes } from '../world/heightmap.js';
 
 const logger = new ChildLogger('DemoPlayback');
@@ -164,6 +165,9 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
     releasePlaybackBeam(d.playbackWorld, b);
   }
   d.playbackWorld.beams.length = 0;
+  // Module-global swipe ribbons — not owned by any entity in `d`, so the
+  // per-entity passes above can't reach them.
+  disposeSwings();
 }
 
 // Snapshot existing alive balls into the demo recording — needed when recording

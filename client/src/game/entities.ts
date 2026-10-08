@@ -34,6 +34,12 @@ export interface EntitiesDeps extends GameContext {
   /** Hostiles of a given team — a bot-owned turret/mine scans these. */
   deployBotFoes?: (team: string) => { playerId?: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
+  /** Offline base-grid edge — a downed generator drops its team's panes. */
+  deployBasePower?: (team: string, on: boolean) => void;
+  /** Deployable-hit damage numbers (solo base raids need the feedback). */
+  deployDamageNumbers?: () => { spawn(pos: THREE.Vector3, amount: number, color: string, cam: THREE.Camera): void };
+  /** Live vitals bar over a damaged deployable/base asset. */
+  deployItemBar?: (item: { pos: THREE.Vector3; dead: boolean; v: { health: number; armor: number; maxHealth: number } }, ally: boolean) => void;
 }
 
 interface BallFieldDeps {
@@ -200,6 +206,9 @@ export function createEntities(deps: EntitiesDeps) {
     enemyBots: deps.deployEnemyBots,
     botFoes: deps.deployBotFoes,
     damageBot: deps.deployDamageBot,
+    basePower: deps.deployBasePower,
+    damageNumbers: deps.deployDamageNumbers?.(),
+    showItemBar: deps.deployItemBar,
     // Nugget pack offline: the pod lands and mints a local gem (connected
     // play uses the server's pickupSpawn edge instead).
     dropNugget: (pos) => spawnNuggetsAt(pos, 1, _noVel),

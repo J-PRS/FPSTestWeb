@@ -334,12 +334,11 @@ async function initDemo(): Promise<void> {
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 
-  const _coolShots = new CoolShotsPanel({
+  new CoolShotsPanel({
     demoManager,
     overlay,
     requestLock,
   });
-  _coolShots;
 
   demoLifecycle = makeDemoLifecycle();
   demoLifecycle.wireDemoHandlers(demoManager, () => {
@@ -586,6 +585,8 @@ function makeEntities(): ReturnType<typeof createEntities> {
     // Offline base grid — a shelled generator drops its team's gate
     // panes (colliders + visuals), revive puts them back.
     deployBasePower: (team, on) => setTeamGridDown(team, !on),
+    deployDamageNumbers: () => damageNumberManager,
+    deployItemBar: (item, ally) => healthBarSystem.showDamage(item, ally),
   });
 }
 
@@ -793,7 +794,11 @@ const { requestLock } = wireOverlayInput({
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads
 // and pushes 'stale:changed' events — we count them so you know how much
 // new code is waiting behind Ctrl+R.
-const {hot} = (import.meta as { hot?: { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } });
+// The literal `import.meta.hot` token is required — vite's HMR inject
+// (createHotContext) only fires when the source spells it out; a
+// destructured `const {hot} = import.meta` leaves it undefined and the
+// listener silently never registers.
+const hot = import.meta.hot as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
 if (hot) {
   let badge: HTMLDivElement | null = null;
   hot.on('stale:changed', (d) => {

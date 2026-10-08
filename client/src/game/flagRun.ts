@@ -114,8 +114,6 @@ export interface FlagRunWiring {
   scores: TeamScores;
   onFeed(t: string): void;
   onCapture(team: TeamId): void;
-  /** Scene-carried flag stand hulls — same bridge CtfBridge uses. */
-  applyStandSpecs(specs: StructureSpec[]): void;
 }
 
 export class FlagRunBridge {

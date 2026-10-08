@@ -17,12 +17,16 @@ const HIDDEN_RESYNC_MS = 3000;
  *  (gameState/rosters/resync reply) re-seeds truth. Local shells stay. */
 export function dropVolatileWorldFx(w: { projectiles: { isRemote: boolean; dispose(): void }[]; explosions: { dispose(): void }[]; implosions: { dead: boolean }[] }): number {
   let dropped = 0;
-  w.projectiles = w.projectiles.filter((p) => {
-    if (!p.isRemote) {return true;}
+  // Splice in place — the dump/debug ctx captured world.projectiles by
+  // reference at wire-up; rebinding the array leaves every such holder
+  // reading a frozen list forever (the "0 live" artifact after resync).
+  for (let i = w.projectiles.length - 1; i >= 0; i--) {
+    const p = w.projectiles[i]!;
+    if (!p.isRemote) {continue;}
     p.dispose();
+    w.projectiles.splice(i, 1);
     dropped++;
-    return false;
-  });
+  }
   for (const e of w.explosions) { e.dispose(); }
   w.explosions.length = 0;
   for (const i of w.implosions) { i.dead = true; }

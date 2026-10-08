@@ -107,7 +107,7 @@ export class WireIn {
       // A malformed-but-parseable message mustn't reach the connection's
       // onError path — one bad packet shouldn't cost a reconnect.
       try { handler(data); }
-      catch (e) { logger.warn(`Handler threw for ${data.type}`, e); }
+      catch (e) { logger.warn(`Handler threw for ${data.type}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
     } else {
       logger.warn(`Unknown message type: ${data.type}`);
     }

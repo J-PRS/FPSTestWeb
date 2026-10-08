@@ -1,19 +1,16 @@
 // World wire handlers — gameState join/restore, admin mapUpdate, and the
 // server-owned creature (ball) event channel.
 
+import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
 import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
-import { structureColliders } from '../../../../shared/ballSim.js';
-import { ColliderIndex } from '../../../../shared/solidWorld.js';
-import { Ball } from '../../entities/balls.js';
-import { Projectile } from '../../projectiles/Projectile.js';
+import { applyStructureSpecs } from '../structureSpecs.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
 import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
-import { setBotStructureSpecs } from '../botBrain.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
@@ -30,6 +27,7 @@ export type { MapSnapshot } from './mapAssets.js';
 // server to either restore the old body (gameState/localPlayerState) or
 // reject the token. Rendering the default spawn in that gap flashes a
 // fake position/health, so we cover it until the first gameState lands.
+const _reseatPos = new THREE.Vector3();
 let sessionVeil: HTMLDivElement | null = null;
 let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
@@ -108,13 +106,8 @@ export function wireWorld(ctx: NetCtx): void {
   // static geometry exactly like the join path does from gameState.
   networkManager.onMapUpdate = (map) => {
     if (map.mapName) {deps.world.mapName = map.mapName;}
-    buildStructures(map.structures ?? [], deps.lazyScene());
-    Ball.colliders = structureColliders(map.structures);
-    Ball.colliderIndex = Ball.colliders.length > 0 ? new ColliderIndex(Ball.colliders) : null;
-    Projectile.solidColliders = Ball.colliders;
-    Projectile.solidIndex = Ball.colliderIndex;
-    deps.lazyPlayer().movement.setStructures(map.structures);
-    setBotStructureSpecs(map.structures);
+    buildStructures(map.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
+    applyStructureSpecs(map.structures, deps.lazyPlayer().movement);
     if (map.arena) {
       buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
     } else {
@@ -140,6 +133,19 @@ export function wireWorld(ctx: NetCtx): void {
     // re-seeding (the hidden-tab regain path can't cover a socket that
     // died and rejoined while we were still looking at the screen).
     dropVolatileWorldFx(deps.world);
+    // A gameState is a full world snapshot — every remote snapshot buffered
+    // before it is stale. Worse, serverMs is per-room (tickSeq×50): a room
+    // hop/restart rewinds it, and pushes stamped behind the buffer's anchor
+    // get pruned as stale — the remote freezes at its old-room coords while
+    // the wire keeps updating (the 500m renderΔ rubber-band). Reseat every
+    // remote: wire pos where the roster has one, own position otherwise —
+    // either way the buffer clears and the next push re-anchors.
+    const wire = new Map(players.map(p => [p.id, p.position]));
+    for (const [id, rp] of deps.world.remotePlayers) {
+      const pos = wire.get(id);
+      _reseatPos.set(pos?.x ?? rp.position.x, pos?.y ?? rp.position.y, pos?.z ?? rp.position.z);
+      rp.teleportTo(_reseatPos);
+    }
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
     dropSessionVeil(); // state is real now — default spawn never painted
@@ -220,17 +226,12 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
  *  re-runs gameState, and the old room's geometry must not survive. */
 function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   const { deps } = ctx;
-  buildStructures(map?.structures ?? [], deps.lazyScene());
+  buildStructures(map?.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
   // Same collider list the server sims against — ball prediction
   // ricochets off structures identically instead of phasing through.
-  Ball.colliders = structureColliders(map?.structures);
-  Ball.colliderIndex = Ball.colliders.length > 0 ? new ColliderIndex(Ball.colliders) : null;
-  Projectile.solidColliders = Ball.colliders;
-  Projectile.solidIndex = Ball.colliderIndex;
-  // Player collision — the move sim's solid layer must hold the same
-  // pieces or every wall contact reads as a divergence.
-  deps.lazyPlayer().movement.setStructures(map?.structures);
-  setBotStructureSpecs(map?.structures);
+  // Player collision comes from the same table — a divergence there
+  // reads as walls that let you through.
+  applyStructureSpecs(map?.structures, deps.lazyPlayer().movement);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
   } else {
@@ -249,7 +250,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
  *  whatever the last packet before disconnect reported, and replaying a
  *  stale knockback vector on reload produced phantom launches. */
 function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): void {
-  const { deps } = ctx;
+  const { deps, nm } = ctx;
   deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
   const player = deps.lazyPlayer();
   // A non-finite stored vector would poison the sim on every reconnect —
@@ -259,18 +260,49 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
     deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
     return;
   }
-  player.pos.set(p.x, p.y, p.z);
-  noteLocalSnap();
-  deps.setLastSentPos({ x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z });
-  player.yaw = localPlayerState.rotation.yaw;
-  player.pitch = localPlayerState.rotation.pitch;
 
   const v = localPlayerState.velocity;
-  if (v && Math.hypot(v.x, v.y, v.z) < 10) {
-    player.vel.set(v.x, v.y, v.z);
+  const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
+
+  // The anchor is the shadow's last-accepted position — on a lossy link
+  // that's seconds stale. Rewind to it and replay the journaled inputs
+  // the server never consumed (same machinery a correction runs), so a
+  // WT flap converges to where you actually are instead of yanking the
+  // body back to where the wire last saw it. A fresh join's journal is
+  // empty — same-input-seq or a dead body restores take the plain snap.
+  const journal = !localPlayerState.isDead && localPlayerState.inputSeq !== undefined
+    ? nm().inputsAfter(localPlayerState.inputSeq, nm().getPing()) : [];
+  if (journal.length) {
+    player.movement.setState({
+      pos: new THREE.Vector3(p.x, p.y, p.z),
+      vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
+      yaw: player.yaw, pitch: player.pitch,
+      onGround: true,
+    });
+    const now = performance.now();
+    for (let i = 0; i < journal.length; i++) {
+      const e = journal[i];
+      const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
+      player.movement.setInput({
+        forward: e.input.forward, right: e.input.right,
+        jumpPressed: !!e.input.jump, jumpHeld: !!e.input.jump,
+        skiHeld: !!e.input.ski, jetHeld: !!e.input.jet,
+      });
+      player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
+    }
+    const st = player.movement.getState();
+    player.pos.set(st.pos.x, st.pos.y, st.pos.z);
+    player.vel.set(st.vel.x, st.vel.y, st.vel.z);
+    player.onGround = st.onGround;
+    deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
   } else {
-    player.vel.set(0, 0, 0);
+    player.pos.set(p.x, p.y, p.z);
+    player.yaw = localPlayerState.rotation.yaw;
+    player.pitch = localPlayerState.rotation.pitch;
+    player.vel.set(anchorVel.x, anchorVel.y, anchorVel.z);
   }
+  noteLocalSnap();
+  deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
 
   player.health = localPlayerState.health;
   player.armor = localPlayerState.armor ?? 0;
