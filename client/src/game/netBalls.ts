@@ -225,7 +225,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
     s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
     s.enraged = m.enraged ?? false;
-    s.enrageTimer = m.et ?? 0; s.slowTimer = m.slowT ?? 0; s.dampNextBounce = m.damp ?? false;
+    s.enrageTimer = m.et ?? 0; s.slowTimer = m.slowT ?? 0; s.dampNextBounce = Boolean(m.damp);
     if (m.tp) { s.tx = m.tp.x; s.ty = m.tp.y; s.tz = m.tp.z; s.tgtValid = true; } else {s.tgtValid = false;}
     s.radius = b.radius; s.gt = 0; s.dead = false;
     _rbTgt.x = s.tx; _rbTgt.y = s.ty; _rbTgt.z = s.tz;
