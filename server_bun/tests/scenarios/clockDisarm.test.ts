@@ -11,7 +11,7 @@ function mkHost(humans: { n: number }) {
   const sent: ServerMessage[] = [];
   const host: MatchHost = {
     room: 't', mode: 'tdm',
-    modeSpec: { label: 'TDM', teams: true, ffa: false, flags: false, winAt: 5, timeLimitS: 600, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+    modeSpec: { label: 'TDM', teams: true, ffa: false, flags: false, gems: false, winAt: 5, timeLimitS: 600, ptsPlayerKill: 1, ptsCreatureKill: 0 },
     scores: { alpha: 0, bravo: 0 },
     ffaScores: new Map(),
     getHumanCount: () => humans.n,

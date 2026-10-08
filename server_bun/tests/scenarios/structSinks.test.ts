@@ -12,7 +12,7 @@ const SPEC: Partial<MapSpec> = {
   deploys: [{ kind: 'generator', pos: { x: -20, y: 0, z: 0 }, team: 'alpha' }],
   structures: [
     { kind: 'shield', pos: { x: 0, y: 0, z: 0 }, size: { x: 20, y: 80, z: 0.8 }, team: 'alpha' },
-    { kind: 'block', pos: { x: 40, y: 0, z: 40 }, size: { x: 4, y: 4, z: 4 } },
+    { kind: 'box', pos: { x: 40, y: 0, z: 40 }, size: { x: 4, y: 4, z: 4 } },
   ],
 };
 

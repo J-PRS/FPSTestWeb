@@ -96,7 +96,14 @@ export class TickFanout {
       const forceSend = simT < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
       const sheep = room.bots.sheepOf(playerId);
-      if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep)) {
+      // Buff bits are server-owned (stripped from client claims at
+      // inputMove) so they must be OR-ed on here, not read off p.status.
+      // Computed before suppression so a transition breaks the window.
+      const wireStatus = p.status
+        | (simT < p.regenUntil ? STATUS.REGEN : 0)
+        | (simT < p.ddUntil ? STATUS.DD : 0)
+        | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
+      if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
         this.metrics.recordsSuppressed++;
         continue; // Skip — within extrapolation tolerance
       }
@@ -111,12 +118,7 @@ export class TickFanout {
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
       snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing; snap.jet = p.jetting;
-      // Buff bits are server-owned (stripped from client claims at
-      // inputMove) so they must be OR-ed on here, not read off p.status.
-      snap.status = p.status
-        | (simT < p.regenUntil ? STATUS.REGEN : 0)
-        | (simT < p.ddUntil ? STATUS.DD : 0)
-        | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
+      snap.status = wireStatus;
       snap.sheep = sheep;
       snap.t = now;
 

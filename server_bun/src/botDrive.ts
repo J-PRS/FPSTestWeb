@@ -36,7 +36,7 @@ export interface DriveHost {
  *  (heading → yaw, walk = forward key) and let the sim integrate.
  *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
  *  after bots.tick, so this reads the fresh post-step state. */
-export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
+export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; jetting: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
   const { out, sh, dt, now } = frame;
   const dx = out.dest.x - p.position.x;
   const dz = out.dest.z - p.position.z;

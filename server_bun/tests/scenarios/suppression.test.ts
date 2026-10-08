@@ -71,12 +71,16 @@ describe('recordSuppressed', () => {
   });
 
   it('suppresses while a server-owned status bit is active', () => {
-    // lastSent.status on the wire carries REGEN/DD bits OR'd in at send
-    // time — comparing it raw against p.status would read a permanent
-    // "change" and defeat suppression for the buff's whole duration.
+    // wireStatus is the record's byte — REGEN/DD OR'd in at emit time —
+    // so an active buff compares equal and doesn't defeat suppression.
     const buffed = { ...sent, status: STATUS.REGEN };
-    expect(recordSuppressed(player, buffed, 1100)).toBe(true);
-    // A real client-side flag change must still break suppression.
+    expect(recordSuppressed(player, buffed, 1100, 0, STATUS.REGEN)).toBe(true);
+    // But each transition is an edge: the buff expiring must force a
+    // record or the stale bit advertises until the player moves.
+    expect(recordSuppressed(player, buffed, 1100, 0, 0)).toBe(false);
+    // And coming up must ship immediately, not after the 250ms window.
+    expect(recordSuppressed(player, sent, 1100, 0, STATUS.REGEN)).toBe(false);
+    // A real client-side flag change still breaks suppression.
     player.status = STATUS.MEND;
     expect(recordSuppressed(player, buffed, 1100)).toBe(false);
     player.status = 0;

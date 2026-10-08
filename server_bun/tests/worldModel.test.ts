@@ -218,7 +218,7 @@ describe('world model <-> protocol conformance', () => {
   it('gameState inline roster rows match each kind\'s declared row', () => {
     // flags/pickups/deployables ride gameState as inline anonymous row
     // types — same drift surface as GameStatePlayer, same pin.
-    const cases: [string, string, string[]][] = [
+    const cases: [string, string, string][] = [
       // [container key, idField, kind]
       ['flags', 'team', 'flag'],
       ['pickups', 'id', 'pickup'],
@@ -237,7 +237,7 @@ describe('world model <-> protocol conformance', () => {
     // a key it carries that the model doesn't declare can't come from
     // live state. Pin the subset relation (kills/deaths are the extras).
     const body = PROTOCOL.match(/export interface SnapshotPlayer \{([^}]*)\}/)![1]!;
-    const keys = new Set([...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]));
+    const keys = new Set([...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]!));
     const declared = new Set(['id', 'kills', 'deaths',
       ...declaredFieldNames(WORLD_MODEL.player!, 'rosterFields')]);
     for (const k of keys) {

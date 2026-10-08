@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, pin, firstPlayer, step } from './harness.ts';
+import { mkRoom, pin, firstPlayer } from './harness.ts';
 import { decodeTickFrame, type WireTickPlayer, type TickDecodePool } from '../../../shared/wire.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
@@ -72,7 +72,7 @@ describe('scenario: held jet rides the tick frame', () => {
     lastJet = undefined;
     room.tickSeq++;
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
-    expect(lastJet).toBe(0);
+    expect<number | undefined>(lastJet).toBe(0);
 
     room.spectators.delete('__probe__');
     room.connections.sendBinaryToPlayer = prevSend;

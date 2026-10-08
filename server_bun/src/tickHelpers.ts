@@ -2,7 +2,7 @@
 // heal math, record suppression, the TickRecord shape. Pulled out so
 // tickRecords doesn't import TickLoop — an arsenal-style runtime cycle.
 import { CONFIG } from './config.ts';
-import { STATUS, CLIENT_STATUS_MASK, MEND_HP_PER_SEC } from '../../shared/status.ts';
+import { STATUS, MEND_HP_PER_SEC } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
@@ -28,7 +28,7 @@ interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: nu
 /** Update suppression: if the player still sits where a dead-reckoning
  *  client would extrapolate them (linear pos+vel from the last sent
  *  record), the update carries no new information — skip it. */
-export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number, sheep = 0): boolean {
+export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number, sheep = 0, wireStatus = p.status): boolean {
   const elapsed = (now - lastSent.t) / 1000;
   const ex = lastSent.x + lastSent.vx * elapsed;
   const ey = lastSent.y + lastSent.vy * elapsed;
@@ -44,10 +44,11 @@ export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSe
   // State fields (health/death/ski/status) must never be eaten by the
   // position check — a flag change forces the record even when the
   // player hasn't moved.
-  // lastSent.status is the wire value — REGEN/DD bits OR'd in at send time —
-  // so mask it back to client bits before comparing or a buff defeats
-  // suppression for its whole duration.
-  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.jetting !== lastSent.jet || p.status !== (lastSent.status & CLIENT_STATUS_MASK)
+  // wireStatus is the record's status byte — client bits with REGEN/DD/
+  // CHARGED OR'd in — so comparing it whole ships each buff transition
+  // as exactly one record (up AND down), instead of either re-defeating
+  // suppression for the buff's life or eating its expiry for good.
+  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.jetting !== lastSent.jet || wireStatus !== lastSent.status
     // Sheep isn't a player field — it lives on the bot driver — so the
     // suppression check reads it off the record args (0 for humans).
     || sheep !== lastSent.sheep;
