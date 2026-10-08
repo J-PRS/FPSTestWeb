@@ -3416,3 +3416,12 @@ sendGameState owns the base payload; the join path layers sessionToken/
 wireIds/team/localPlayerState on top as extras. Two copies of the
 envelope meant two places to drift — now the declaration and the
 builder are each written once.
+
+## 2.195 — null sentinel + projectileId mistype (first live catches)
+
+E2E smoke flushed out the first real findings from the field checks:
+null is the wire's absent sentinel (JSON drops undefined, so optional
+fields ride as explicit null) — every check site now guards `!= null`
+uniformly (packets, roster sweeps, envelopes, intents). And a genuine
+decl bug: projectileId is a STRING id on the wire, declared 'num'.
+The check caught it within one smoke run.

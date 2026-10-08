@@ -261,7 +261,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'ownerId', wire: 'str', channel: 'edge' },
     ],
     spawnFields: [
-      { name: 'projectileId', wire: 'num', channel: 'edge' },
+      { name: 'projectileId', wire: 'str', channel: 'edge' },
       { name: 'ownerId', wire: 'str', channel: 'edge' },
       { name: 'position', wire: 'vec3', channel: 'sim' },
       { name: 'velocity', wire: 'vec3', channel: 'sim' },
@@ -534,7 +534,7 @@ export function checkPacket(
         }
         continue;
       }
-      if (!wireOk(f.wire, m[f.name])) {
+      if (m[f.name] != null && !wireOk(f.wire, m[f.name])) {
         warnOnce(`${kind.kind}.${label}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label} field '${f.name}' wrong type (want ${f.wire})`);
       }
     }
@@ -558,7 +558,7 @@ export function checkPacket(
               if (f.absent === undefined) {
                 warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row missing declared field '${f.name}'`);
               }
-            } else if (!wireOk(f.wire, row[f.name])) {
+            } else if (row[f.name] != null && !wireOk(f.wire, row[f.name])) {
               warnOnce(`${kind.kind}.${label}:${k.kind}:${f.name}!t`, `[worldModel] inbound ${kind.kind}.${label}:${k.kind} row field '${f.name}' wrong type (want ${f.wire})`);
             }
           }
