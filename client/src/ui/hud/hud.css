@@ -253,6 +253,15 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
   pointer-events: none;
 }
+#ground-readout {
+  position: absolute; top: calc(50% + 48px); left: 50%;
+  transform: translateX(-50%);
+  font: 600 12px 'Rajdhani', 'Segoe UI', sans-serif;
+  letter-spacing: 0.5px;
+  color: #a8e6a3;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
+  pointer-events: none;
+}
 #hit-marker {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);

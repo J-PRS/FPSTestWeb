@@ -30,6 +30,9 @@ export const MOVEMENT_CONFIG = {
   // jump takeoff — clears the snap via the vel gate.
   groundSnapDistance: 0.6,
   groundLaunchVel: 3.0,
+  // T1 parity: contact lingers 256ms (MAXJUMPTICKS=8 @ 32ms) after the
+  // surface is lost — gentle crest hops stay grounded, real launches don't.
+  groundGraceT: 0.256,
   // Skiing: friction toggle only — no artificial accel/boost/lift, but a
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
@@ -116,6 +119,7 @@ export interface SimSnapshot {
   lastJumpableNormal: Vec3Like;
   groundedBuffered: boolean;
   acc: number;
+  groundGraceT: number;
 }
 
 /** What the sim needs from the world: terrain height + surface normal.
@@ -150,6 +154,7 @@ export class MoveSim {
   private groundedBuffered = false;
   private wishJump = false;
   private lastJumpableNormal = { x: 0, y: 1, z: 0 };
+  private groundGraceT = 0;
   private allowNextJump = true;
   /** Fixed-step accumulator — the sim integrates at a constant 60Hz on
    *  both ends so a 144Hz client and a 30Hz server tick produce the same
@@ -210,6 +215,7 @@ export class MoveSim {
       wishJump: this.wishJump, allowNextJump: this.allowNextJump,
       lastJumpableNormal: { ...this.lastJumpableNormal },
       groundedBuffered: this.groundedBuffered, acc: this.acc,
+      groundGraceT: this.groundGraceT,
     };
   }
 
@@ -219,6 +225,7 @@ export class MoveSim {
     this.wishJump = snap.wishJump; this.allowNextJump = snap.allowNextJump;
     Object.assign(this.lastJumpableNormal, snap.lastJumpableNormal);
     this.groundedBuffered = snap.groundedBuffered; this.acc = snap.acc;
+    this.groundGraceT = snap.groundGraceT;
   }
 
   update(dt: number): void {
@@ -456,6 +463,9 @@ export class MoveSim {
 
   private collideTerrain(): void {
     const s = this.state;
+    // T1 MAXJUMPTICKS grace: burn the lingering-contact window per step;
+    // contact sites below refill it. Launches zero it explicitly.
+    if (this.groundGraceT > 0) { this.groundGraceT -= MoveSim.STEP; }
     // Solid layers push the capsule out of walls/ceilings first — the
     // floor clamp below only owns top faces.
     this.surface.resolveBody?.(s, this.eyeHeight);
@@ -491,6 +501,7 @@ export class MoveSim {
         || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
       s.onGround = !rising;
       this.allowNextJump = !rising;
+      this.groundGraceT = rising ? 0 : MOVEMENT_CONFIG.groundGraceT;
     } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)) {
       // Stick to the surface: bumps and crest lips inside the snap
       // distance keep ground contact instead of flipping airborne for a
@@ -512,11 +523,19 @@ export class MoveSim {
         s.pos.y = groundY;
         s.onGround = true;
         this.allowNextJump = true;
+        this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
       } else {
+        // Fast/launched inside the snap band — a real launch, not a skim.
         s.onGround = false;
+        this.groundGraceT = 0;
       }
+    } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && this.groundGraceT > 0) {
+      // Outside the snap band without a launch impulse — the crest-lip
+      // case T1 covered with MAXJUMPTICKS: still grounded for the grace.
+      s.onGround = true;
     } else {
       s.onGround = false;
+      this.groundGraceT = 0;
     }
   }
 }

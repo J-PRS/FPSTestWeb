@@ -95,6 +95,7 @@ export class HUD {
     this.connBanner = d.connBanner;
     this.sheepReadout = d.sheepReadout;
     this.energyReadout = d.energyReadout;
+    this.groundReadout = d.groundReadout;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.cmdmap = new CommandMap(this.el);
@@ -105,6 +106,7 @@ export class HUD {
   connBanner: HTMLDivElement;
   sheepReadout: HTMLDivElement;
   energyReadout: HTMLDivElement;
+  groundReadout: HTMLDivElement;
 
   private lastSheepShown = -1;
   private lastEnergyShown = -1;
@@ -130,6 +132,14 @@ export class HUD {
     const k = Math.round(Math.sqrt(2 * parts.ke));
     const p = Math.round(Math.sqrt(2 * parts.pe));
     this.energyReadout.textContent = `E ${shown} (${k}k ${p}p)`;
+  }
+
+  /** Air/ground probe under the energy readout — tag plus height above
+   *  the terrain surface so the grounded flag's actual behavior is visible. */
+  setGround(grounded: boolean, terrainDist: number): void {
+    const text = `[${grounded ? 'G' : 'A'}] ${Math.max(0, terrainDist).toFixed(1)}m`;
+    if (text === this.groundReadout.textContent) {return;}
+    this.groundReadout.textContent = text;
   }
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed

@@ -18,6 +18,7 @@ export interface HudDom {
   crosshair: HTMLDivElement;
   sheepReadout: HTMLDivElement;
   energyReadout: HTMLDivElement;
+  groundReadout: HTMLDivElement;
   hitMarker: HTMLDivElement;
   dmgVignette: HTMLDivElement;
   dmgDir: HTMLDivElement;
@@ -79,6 +80,7 @@ export function createHudDom(): HudDom {
       <div id="crosshair"></div>
       <div id="sheep-readout"></div>
       <div id="energy-readout"></div>
+      <div id="ground-readout"></div>
       <div id="hit-marker"></div>
       <div id="dmg-vignette"></div>
       <div id="dmg-dir"><div class="arc"></div></div>
@@ -111,6 +113,7 @@ export function createHudDom(): HudDom {
     const crosshair = el.querySelector('#crosshair')! as HTMLDivElement;
     const sheepReadout = el.querySelector('#sheep-readout')! as HTMLDivElement;
     const energyReadout = el.querySelector('#energy-readout')! as HTMLDivElement;
+    const groundReadout = el.querySelector('#ground-readout')! as HTMLDivElement;
     const dmgVignette = el.querySelector('#dmg-vignette')! as HTMLDivElement;
     const dmgDir = el.querySelector('#dmg-dir')! as HTMLDivElement;
     const dmgDirArc = dmgDir.querySelector('.arc')! as HTMLDivElement;
@@ -142,7 +145,7 @@ export function createHudDom(): HudDom {
   ammo.style.color = '#ffd54a'; // gold, matching the pickup
 
   return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
-    fps, crosshair, sheepReadout, energyReadout, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
+    fps, crosshair, sheepReadout, energyReadout, groundReadout, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
     armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB,

@@ -433,6 +433,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     hud.setSheep(playerSheep.shown);
     hud.setEnergy(playerSheep.energy);
   }
+  hud.setGround(player.onGround, player.pos.y - terrain.getHeight(player.pos.x, player.pos.z));
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
   budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
   // Belt charges ARE the nugget wallet — spawn stock + pickups, spent by
