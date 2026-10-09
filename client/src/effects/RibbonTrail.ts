@@ -113,7 +113,7 @@ export class RibbonTrail {
   private _ox = 0; private _oy = 0; private _oz = 0; // last lane offset — re-applied on follow re-pin
   // Owning subsystem ('proj:disc', 'ball', 'sentry') — every census/probe
   // row names the owner so a frozen streak is identified, not hunted.
-  private tag!: string;
+  tag = '?';
 
   // Free-list — projectiles churn ribbons constantly; sample buffers are
   // fixed-size so reuse is free.

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { getSwarm, freeSlots } from './swarms.js';
 import { GRAVITY } from '../core/config.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
+import { glitch } from '../core/fxDiag.js';
 // Type-only back-import — Ball calls into these helpers per tick, so a
 // value import would make the pair a runtime cycle. viewPos comes in as
 // a param instead of reaching into Ball's statics.
@@ -81,6 +82,20 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         }],
         b.ribbons,
       );
+    }
+    // A segment correction blends through renderOffset over ~0.5s — the
+    // render pos sweeps tens of meters and every follower (ribbon, dots)
+    // paints the sweep as a chord. Kill the ribbons while a big blend is
+    // in flight; they restart from the corrected arc when it lands.
+    const offSq = b.renderOffset.lengthSq();
+    if (offSq > 400) {
+      if (!b._blendCut) {
+        b._blendCut = true;
+        glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)) });
+      }
+      for (const r of b.ribbons) {r.clear();}
+    } else {
+      b._blendCut = false;
     }
     b.trails.fade(dt);
     for (const r of b.ribbons) {r.update(dt, viewPos);}

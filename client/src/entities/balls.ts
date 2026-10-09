@@ -141,6 +141,7 @@ export class Ball {
   trailDriver?: TrailDriver;
   _trailNear = true;
   _trailDt = 0;
+  _blendCut = false; // true while a large renderOffset blend suppressed ribbons
   flashTimer = 0;
   meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
   _disposed = false;

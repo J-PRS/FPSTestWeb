@@ -51,7 +51,7 @@ export class TrailBatch {
   readonly gen = new Uint32Array(MAX_TRAILS);
   /** slot -> live ribbon handle, so sweeps can kill the ring that
    *  writes a chord, not just black the chord it already wrote. */
-  readonly owners = new Map<number, { clear(): void }>();
+  readonly owners = new Map<number, { clear(): void; tag: string }>();
 
   claim(): number {
     const s = this.free.pop()!;
@@ -267,7 +267,7 @@ export function sweepSmear(): void {
         dirty = true;
       }
       smearCuts++;
-      glitch('trail-smear', { slot: s, gapM: Math.round(Math.sqrt(gapSq)) });
+      glitch('trail-smear', { slot: s, tag: b.owners.get(s)?.tag ?? '?', gapM: Math.round(Math.sqrt(gapSq)) });
     }
     if (dirty) {b.flush();}
   }
