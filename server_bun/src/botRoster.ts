@@ -9,7 +9,7 @@ import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
@@ -36,6 +36,11 @@ const pickOf = <T,>(pool: T[]): T => pool[Math.floor(botRand() * pool.length) % 
 export class BotRoster {
   private roles = new Map<string, BotRole>();
   private classes = new Map<string, ArmorClass>();
+  /** The slot candidates each bot may reroll — authored alternates for
+   *  table kits, the full combat pools for wildcards. Respawn
+   *  adaptation reads this to drift the kit toward what the bot hits
+   *  with; a wildcard keeps every slot live. */
+  private alts = new Map<string, Partial<Record<LoadoutSlot, WeaponType[]>>>();
   private nextIdx = 1;
   private maintainAt = 0;
   private roleT = 0;
@@ -61,9 +66,15 @@ export class BotRoster {
       // the wire.
       const idx = this.nextIdx++;
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
+      const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
+      const wildcard = botRand() < 0.125;
       const loadout = process.env.FPS_SOAK_RANDLO === '1'
         ? { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) }
-        : BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
+        : wildcard
+          ? rollWildcard(botRand)
+          : rollLoadout(BOT_LOADOUTS[kitIdx]!, BOT_ALT_SLOTS[kitIdx], botRand);
+      this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
+      if (wildcard) logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: loadout.near, mid: loadout.mid, far: loadout.far, belt: loadout.belt, side: loadout.side, perk: loadout.perk } });
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.
@@ -327,6 +338,22 @@ export class BotRoster {
     }
   }
 
+  /** Respawn-time kit drift: each rerollable slot keeps whichever
+   *  candidate the skill matrix scores highest — a bot's kit converges
+   *  on what it actually hits with. Class re-derives from the new kit
+   *  so a fresh heavy-only pick swaps the body legally. */
+  adaptOnRespawn(id: string, skill: (w: number) => number): void {
+    const lo = this.loadouts.get(id);
+    const alts = this.alts.get(id);
+    if (!lo || !alts) return;
+    const next = adaptLoadout(lo, alts, skill);
+    const moved = (['near', 'mid', 'far', 'belt', 'side'] as const).filter((s) => next[s] !== lo[s]);
+    if (!moved.length) return;
+    this.loadouts.set(id, next);
+    logger.info('Bot adapted kit', { id, room: this.room.name, swapped: moved.map((s) => `${s}:${lo[s]}->${next[s]}`) });
+    this.refitClass(id);
+  }
+
   private retire(id: string): void {
     this.untrackBot(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
@@ -337,6 +364,7 @@ export class BotRoster {
   forget(id: string): void {
     this.roles.delete(id);
     this.classes.delete(id);
+    this.alts.delete(id);
   }
 
   /** The role map — senses read it for infiltrator raids / carrier

@@ -20,6 +20,9 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
     // Spawn anchors come from the map spec when authored (teamSpawns >
     // spawns); spec-less modes fall back to the ring around the player.
     const sp = b.spawnSpot(bot.team);
+    // Kit drift before the body comes back — the skill matrix rerolls
+    // each open slot toward what this bot actually hits with.
+    bot.adaptLoadout();
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
     // Fresh life is unproven — the meter re-earns it each spawn.

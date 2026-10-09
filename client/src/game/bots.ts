@@ -4,7 +4,8 @@ import { GameBot, EYE } from './botBrain.js';
 import { applyStructureSpecs } from './structureSpecs.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
-import { BOT_LOADOUTS, botClassForLoadout } from '../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollLoadout, rollWildcard } from '../../../shared/botLoadouts.js';
+import { botRand } from '../../../shared/botRand.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
@@ -158,10 +159,15 @@ export class TeamBots {
         // weapon by engagement range instead of one generic bolt, and
         // the kit picks the body (botClassForLoadout) so the class gate
         // never arms an offline bot with contraband guns.
-        const lo = BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length]!;
+        const kitIdx = (ni - 1) % BOT_LOADOUTS.length;
+        const wildcard = botRand() < 0.125;
+        const lo = wildcard
+          ? rollWildcard(botRand)
+          : rollLoadout(BOT_LOADOUTS[kitIdx]!, BOT_ALT_SLOTS[kitIdx], botRand);
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
           botClassForLoadout(lo));
         bot.setLoadout(lo);
+        bot.loadoutAlts = wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx];
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;

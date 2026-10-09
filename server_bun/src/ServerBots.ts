@@ -18,7 +18,7 @@ import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { losClear } from '../../shared/botLos.ts';
-import type { BotSkill } from '../../shared/botSkill.ts';
+import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { endTaunt, startTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
@@ -580,6 +580,9 @@ export class ServerBots {
         this.sheep.clear(id); // respawn is a fresh leash
         this.foeNear.delete(id);
         this.room.moveSim.resync(id, p.position, p.rotation.yaw, true);
+        // Kit drift: the fresh body rerolls each open slot toward the
+        // weapon its skill matrix favors.
+        this.roster.adaptOnRespawn(id, (w) => aimSkillFor(brain.skill, w, 0));
       }
 
       // Test-silenced: heartbeat and shadow upkeep still run — only the

@@ -11,7 +11,7 @@ import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
-import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot } from '../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../shared/botSkill.js';
 import { botWeaponHooks } from '../../../shared/botWeaponHooks.js';
 import { type WeaponType } from '../../../shared/weapons.js';
@@ -107,6 +107,20 @@ export class GameBot extends RemotePlayer {
   /** Kit from the shared roster — TeamBots assigns it so range-band
    *  weapon picks mirror the dedicated server's bots. */
   loadout?: BotLoadout;
+  /** Per-slot reroll candidates this bot spawned with — alternates for
+   *  authored kits, the full pools for wildcards (same rule as
+   *  BotRoster.alts server-side). */
+  loadoutAlts?: Partial<Record<LoadoutSlot, WeaponType[]>>;
+  /** Respawn kit drift: keep whichever candidate the skill matrix
+   *  favors — same adaptation BotRoster.adaptOnRespawn runs online. */
+  adaptLoadout(): void {
+    if (!this.loadout || !this.loadoutAlts) return;
+    const next = adaptLoadout(this.loadout, this.loadoutAlts, (w) => aimSkillFor(this.brain.skill, w, 0));
+    if (next === this.loadout) return;
+    this.setLoadout(next);
+    const cls = botClassForLoadout(next);
+    if (cls !== this.armorClass) this.setBotClass(cls);
+  }
   /** Shared MoveSim — the same physics the server shadow runs, so a bot
    *  skis/jets/lands exactly like a legal player (no invented velocities). */
   readonly movement: MovementController;

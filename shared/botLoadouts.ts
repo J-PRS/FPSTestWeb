@@ -1,7 +1,7 @@
 import { WeaponType, getWeaponStats } from './weapons.ts';
 import { SELF_SPLASH_MAX } from './combat.ts';
 import type { PerkId } from './perks.ts';
-import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, type ArmorClass } from './botClasses.ts';
+import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, classCanFire, type ArmorClass } from './botClasses.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout.
@@ -52,6 +52,115 @@ export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // field medic — fighter first, heals what it walks past
   { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam }, // pocket beam — fighter with a zap for hurt allies
 ];
+
+export type LoadoutSlot = 'near' | 'mid' | 'far' | 'belt' | 'side';
+const SLOTS: readonly LoadoutSlot[] = ['near', 'mid', 'far', 'belt', 'side'];
+
+/** Per-slot alternates per BOT_LOADOUTS row (same order) — a kit keeps
+ *  its identity, but each listed slot may reroll to a sibling at spawn
+ *  and drift toward the bot's best weapon on respawn. The base weapon
+ *  stays in the candidate pool implicitly. */
+export const BOT_ALT_SLOTS: Partial<Record<LoadoutSlot, WeaponType[]>>[] = [
+  { near: [WeaponType.Shotgun], belt: [WeaponType.ImpactGrenade] },                        // chaser
+  { far: [WeaponType.Mortar, WeaponType.RocketLauncher], belt: [WeaponType.ClusterBomb] }, // siege
+  { far: [WeaponType.BoltLauncher], near: [WeaponType.Shotgun] },                          // anchor
+  { belt: [WeaponType.DiscPull, WeaponType.Javelin] },                                     // skirmisher
+  { near: [WeaponType.Flak] },                                                           // hose
+  { belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], mid: [WeaponType.PlasmaCannon] }, // bruiser
+  { near: [WeaponType.Shotgun, WeaponType.Chaingun], belt: [WeaponType.Grenade] },         // flak skirmisher
+  { far: [WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher] }, // artillery
+  { mid: [WeaponType.PlasmaGun], belt: [WeaponType.Javelin] },                             // beam rider
+  { mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], belt: [WeaponType.MRVLauncher] }, // trapper
+  { near: [WeaponType.Chaingun], belt: [WeaponType.Grenade] },                             // support
+  { near: [WeaponType.Chaingun], mid: [WeaponType.Sprinkler] },                            // medic
+  { near: [WeaponType.Shotgun], belt: [WeaponType.ClusterBomb] },                          // field medic
+  { near: [WeaponType.Shotgun], belt: [WeaponType.ArmorGrenade] },                         // pocket beam
+];
+
+/** The wildcard pool — spawns that skip the authored table draw any
+ *  class-legal weapon per slot (MRV only ever fields through this or
+ *  an alternates slot above). Belt stays belt-throwable; HealBeam stays
+ *  out of the combat draw — medics are authored kits, not luck. */
+export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
+  // Heavy ordnance stays in far/belt — the class gate only reads those
+  //  slots for tier-locks, so a mortar in `near` would be invisible to
+  //  derivation (and the authored kits never put it there either).
+  near: [WeaponType.Chaingun, WeaponType.Shotgun, WeaponType.Flak, WeaponType.Lightning],
+  mid: [WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun],
+  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.RocketLauncher, WeaponType.MRVLauncher],
+  belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.DiscPull, WeaponType.MRVLauncher],
+  side: [WeaponType.Pistol, WeaponType.Revolver],
+};
+const WILDCARD_PERKS: PerkId[] = ['vitality', 'overcharge', 'plated', 'bombardier', 'featherjets'];
+
+/** Kit consistency gate: every slot must be fireable under the kit's
+ *  own derived class — an MRV belt can land on a heavy kit, never on a
+ *  beam-rider's light frame, and a reroll that drops the class (Mortar
+ *  far out, ordnance mid still in) must not leave contraband behind. */
+export function kitConsistent(lo: BotLoadout): boolean {
+  const cls = botClassForLoadout(lo);
+  return SLOTS.every((s) => classCanFire(cls, lo[s]));
+}
+
+/** Spawn-time reroll: each slot with candidates draws uniformly from
+ *  the base weapon plus its alternates — kit identity preserved, but
+ *  squads stop being 14 identical silhouettes. A draw that would leave
+ *  the kit inconsistent keeps the base weapon instead. */
+export function rollLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, rng: () => number): BotLoadout {
+  if (!alts) return lo;
+  const out = { ...lo };
+  for (const slot of SLOTS) {
+    const cands = alts[slot];
+    if (!cands?.length) continue;
+    const pool = [lo[slot], ...cands];
+    const w = pool[Math.floor(rng() * pool.length)] ?? lo[slot];
+    if (w === lo[slot]) continue;
+    out[slot] = w;
+    if (!kitConsistent(out)) out[slot] = lo[slot];
+  }
+  return out;
+}
+
+/** A wildcard kit — every slot draws from the full combat pool; the
+ *  class gate still derives the body from whatever it rolled. */
+export function rollWildcard(rng: () => number): BotLoadout {
+  // Class first, then only weapons that body can legally shoulder —
+  // a light wildcard keeps light-locked guns, a heavy may draw MRV, and
+  // no roll can mix tiers (Railgun + Mortar) no class would fire. Perk
+  // is gated last: plated on a light-locked kit would derail the body.
+  const cls: ArmorClass = rng() < 0.25 ? 'light' : rng() < 0.67 ? 'medium' : 'heavy';
+  const pick = (pool: WeaponType[], fb: WeaponType) => {
+    const legal = pool.filter((w) => classCanFire(cls, w));
+    return (legal.length ? legal : [fb])[Math.floor(rng() * (legal.length || 1))] ?? fb;
+  };
+  const kit = {
+    near: pick(WILDCARD_SLOTS.near, WeaponType.Chaingun), mid: pick(WILDCARD_SLOTS.mid, WeaponType.Disc),
+    far: pick(WILDCARD_SLOTS.far, WeaponType.BoltLauncher), belt: pick(WILDCARD_SLOTS.belt, WeaponType.Grenade),
+    side: pick(WILDCARD_SLOTS.side, WeaponType.Pistol),
+  };
+  const perks = WILDCARD_PERKS.filter((p) => kitConsistent({ ...kit, perk: p }));
+  return { ...kit, perk: perks[Math.floor(rng() * perks.length)] ?? 'vitality' };
+}
+
+/** Respawn adaptation: for each slot the bot can reroll, keep whichever
+ *  weapon its skill matrix scores highest — competence drifts the kit
+ *  toward what this bot actually hits with. */
+export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number): BotLoadout {
+  if (!alts) return lo;
+  const out = { ...lo };
+  for (const slot of SLOTS) {
+    const cands = alts[slot];
+    if (!cands?.length) continue;
+    let best = lo[slot];
+    let bs = skill(best);
+    for (const w of cands) {
+      const s = skill(w);
+      if (s > bs && kitConsistent({ ...out, [slot]: w })) { bs = s; best = w; }
+    }
+    out[slot] = best;
+  }
+  return out;
+}
 
 /** Range-band weapon select — shared by player and creature targets so
  *  the visible tracer reads as the kit the bot would really draw.
