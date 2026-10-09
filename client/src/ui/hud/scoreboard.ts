@@ -35,6 +35,8 @@ export type SbRow = {
   cls?: string;
   /** Seconds since last spawn/respawn — null while dead. */
   alive?: number | null;
+  /** "A/S/W" — % of this life spent airborne / skiing / walking. */
+  asw?: string | null;
 };
 
 const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy: 'HVY' };
@@ -44,7 +46,7 @@ const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  const cells = [String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`];
+  const cells = [String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
   const numTd = document.createElement('td');
   numTd.textContent = num;
   tr.appendChild(numTd);

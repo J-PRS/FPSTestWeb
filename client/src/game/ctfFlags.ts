@@ -80,7 +80,7 @@ const FLAG_FINIAL_GEO = new THREE.IcosahedronGeometry(0.14, 0);
 
 /** The movable piece — pole + banner + finial, group origin at the
  *  flag's logical pos (flagRun + ctfFlags share the same look). */
-export function mkFlagMesh(team: TeamId): THREE.Group {
+export function mkFlagMesh(team: TeamId, color = TEAM_COLORS[team]): THREE.Group {
   const g = new THREE.Group();
   const pole = new THREE.Mesh(FLAG_POLE_GEO, FLAG_POLE_MAT);
   pole.position.y = 2;
@@ -88,7 +88,7 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   const bar = new THREE.Mesh(FLAG_BAR_GEO, FLAG_POLE_MAT);
   bar.rotation.z = Math.PI / 2;
   bar.position.y = 3.8;
-  const bannerMat = new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team] });
+  const bannerMat = new THREE.MeshBasicMaterial({ color });
   bannerMat.side = THREE.DoubleSide; // cloth reads from either face
   // The cloth splits into two panels so the pole passes BETWEEN them —
   // one banner read from either side, no clipping through the shaft.
@@ -98,7 +98,7 @@ export function mkFlagMesh(team: TeamId): THREE.Group {
   bannerR.rotation.y = Math.PI; // mirror so its wave also bulges outward
   bannerR.position.set(0, 2.85, -0.11);
   const finial = new THREE.Mesh(FLAG_FINIAL_GEO,
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.4) }));
   finial.position.y = 4.15;
   // Pommel — a tapered butt cap terminates the pole; reads as the
   // spear point the socket swallows when the flag seats.

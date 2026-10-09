@@ -252,6 +252,7 @@ export class TeamBots {
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
     this.rabbit?.update(dt, this.collectors(), (id) => this.posOf(id), (id) => this.holdPoint(id));
+    this.rabbit?.tickIndicator();
     this.flagrun?.update(dt);
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);

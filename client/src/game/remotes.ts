@@ -193,6 +193,9 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // tick() drives interpolation + dead reckoning and internally advances
   // the AnimationMixer — a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
+  // Same grounded heuristic the ski dust uses — wire has no onGround bit.
+  const tY = deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z);
+  aswAccrue(playerId, playerState.isDead, remotePlayer.feetY - tY < 0.8, Boolean(playerState.ski), dt);
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server — the
   // silhouette must follow the sim's body, not the create-time class.
@@ -283,6 +286,31 @@ function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string
 // scoreboard polls it every frame, so dead→alive transitions in ANY
 // source (wire events, tick isDead flips, offline bot respawns) reset it.
 const aliveSince = new Map<string, number>();
+
+/** A/S/W split of the CURRENT life — ms buckets, wiped on death exactly
+ *  like aliveSince. Ski reads as grounded-and-skiing; airborne ski time
+ *  counts as air (you can't ski without a surface). */
+const asw = new Map<string, { a: number; s: number; w: number }>();
+function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean, dt: number): void {
+  if (dead) { asw.delete(id); return; }
+  let e = asw.get(id);
+  if (!e) { e = { a: 0, s: 0, w: 0 }; asw.set(id, e); }
+  if (!grounded) { e.a += dt; } else if (skiing) { e.s += dt; } else { e.w += dt; }
+}
+function aswStr(id: string): string | null {
+  const e = asw.get(id);
+  if (!e) return null;
+  const t = e.a + e.s + e.w;
+  if (t <= 0) return null;
+  const pct = (v: number) => Math.round((v / t) * 100);
+  return `${pct(e.a)}/${pct(e.s)}/${pct(e.w)}`;
+}
+function pruneAsw(live: Set<string>): void {
+  for (const id of asw.keys()) {
+    if (!live.has(id)) {asw.delete(id);}
+  }
+}
+
 /** Seconds alive, or null while dead. A first-seen-alive id stamps now —
  * join-time is the closest observable the client has for pre-existing
  * players. */
@@ -329,15 +357,15 @@ function updateScoreboard(deps: RemotesDeps): void {
   const selfFrags = (deps.world.killCounts.get('local') ?? 0)
     + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
   const now = Date.now();
-  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass }];
+  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
-  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: string | null }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       queriedIds.add(id);
       const ps = nm.getPlayers().get(id);
-      return { name: isBotId(id) ? botRosterName(id) : (ps?.name ?? id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass };
+      return { name: isBotId(id) ? botRosterName(id) : (ps?.name ?? id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass, asw: aswStr(id) };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
@@ -347,10 +375,11 @@ function updateScoreboard(deps: RemotesDeps): void {
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass });
+    remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
   }
   remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   pruneAliveSince(queriedIds);
+  pruneAsw(queriedIds);
   hud.setScoreboardRows([...rows, ...remoteRows]);
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }
@@ -418,6 +447,7 @@ export function createRemotes(deps: RemotesDeps) {
     const previousRemoteCount = deps.world.remotePlayers.size;
 
     const localPlayerId = nm.getLocalPlayerId();
+    aswAccrue(localPlayerId, player.isDead, player.onGround, player.skiing, dt);
 
     // Roster work — player list UI + join/leave log — is polled at 2Hz.
     // Per-position logging at 60Hz was a console flood, and building the
@@ -453,6 +483,8 @@ export function createRemotes(deps: RemotesDeps) {
           && (rp as { team?: string }).team !== undefined;
         hud.updatePlayerIndicator(id, rp.position, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass });
       }
+      const gb = rp as { grounded?: boolean; wireSki?: boolean };
+      aswAccrue(id, rp.isDead, gb.grounded ?? true, gb.wireSki ?? false, dt);
     }
     tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);
     cleanupRemotePlayers(deps, players);

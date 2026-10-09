@@ -2,6 +2,9 @@ import * as THREE from 'three';
 
 import { FLAG_PICKUP_R } from '../../../shared/teams.js';
 import { GRAVITY } from '../core/config.js';
+import { mkFlagMesh } from './ctfFlags.js';
+
+const _indAnchor = new THREE.Vector3();
 
 /**
  * Offline rabbit referee — the no-server mirror of the server's RoomFlags
@@ -26,26 +29,21 @@ export class RabbitBridge {
   private airborneBy: string | null = null;
   private readonly group = new THREE.Group();
 
+  /** world pos while the flag exists — pos is the loose anchor, group
+   *  follows the carrier; the indicator reads whichever is current. */
+  flagPos(): THREE.Vector3 { return this.group.position; }
+
   constructor(
     private d: {
       lazyScene(): THREE.Scene;
       lazyTerrain(): { getHeight(x: number, z: number): number };
+      lazyHud(): { updateFlagIndicator(id: string, p: { x: number; y: number; z: number }, cam: THREE.Camera, team: 'rabbit'): void; removePlayerIndicator(id: string): void };
+      lazyCamera(): THREE.Camera;
     },
     private announce: (text: string) => void,
   ) {
-    // Neutral gold — not either team's color, since the rabbit is FFA.
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6),
-      new THREE.MeshLambertMaterial({ color: 0x88_88_88 }),
-    );
-    pole.position.y = 1.3;
-    const pennant = new THREE.Mesh(
-      new THREE.ConeGeometry(0.7, 1.4, 4),
-      new THREE.MeshLambertMaterial({ color: 0xFFCC44, emissive: 0x66_44_00 }),
-    );
-    pennant.position.y = 2.9;
-    pennant.rotation.x = Math.PI;
-    this.group.add(pole, pennant);
+    // The networked flag's look, no stand — neutral gold since rabbit is FFA.
+    this.group.add(mkFlagMesh('alpha', 0xFFCC44));
     this.group.visible = false;
     this.d.lazyScene().add(this.group);
   }
@@ -156,6 +154,14 @@ export class RabbitBridge {
     }
   }
 
+  /** Per-frame through-terrain marker — same diamond the CTF flags get,
+   *  anchored above the pole finial. Call after update(). */
+  tickIndicator(): void {
+    if (this.state === 'unspawned') {return;}
+    _indAnchor.set(this.group.position.x, this.group.position.y + 3.4, this.group.position.z);
+    this.d.lazyHud().updateFlagIndicator('flag:rabbit', _indAnchor, this.d.lazyCamera(), 'rabbit');
+  }
+
   /** Bot brain objective — hunters run at the loose flag or the rabbit;
    *  the rabbit itself gets none (its combat/kite logic takes over). */
   goalFor(id: string, posOf: (id: string) => THREE.Vector3 | null): THREE.Vector3 | null {
@@ -171,9 +177,11 @@ export class RabbitBridge {
     this.flyVel.set(0, 0, 0);
     this.airborneBy = null;
     this.group.visible = false;
+    this.d.lazyHud().removePlayerIndicator('flag:rabbit');
   }
 
   dispose(): void {
+    this.d.lazyHud().removePlayerIndicator('flag:rabbit');
     this.d.lazyScene().remove(this.group);
   }
 }

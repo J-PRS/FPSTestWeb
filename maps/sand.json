@@ -1,0 +1,12 @@
+{
+  "mode": "dm",
+  "bots": 10,
+  "botFill": 12,
+  "terrain": "heightmap.bin",
+  "arena": {
+    "x": 0,
+    "z": 0,
+    "radius": 200
+  },
+  "_notes": "sand = default boot field (heightmap.bin), all modes"
+}
