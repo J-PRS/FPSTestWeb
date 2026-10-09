@@ -51,7 +51,7 @@ export interface LobbyDeps {
   /** In-place room hop over the live socket — false when there's no
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */
-  switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): boolean;
+  switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): boolean;
   /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
    *  picker preview. Absent → no preview panel. */
   mapThumbUrl?(name: string): string;
@@ -367,7 +367,7 @@ export class Lobby {
     this.rows.append(row);
   }
 
-  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): void {
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void {
     // Already there — a reload would boot us into the same seat anyway.
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
@@ -381,7 +381,7 @@ export class Lobby {
     if (name === 'default') {
       // Live hop cleans the param; the reload path needs ?room=default
       // present or the boot won't connect at all.
-      if (this.deps.switchRoom?.(name, map, bots, mode, unlisted)) {
+      if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
         q.delete('room');
         history.replaceState(null, '', q.toString() ? `${location.pathname}?${q}` : location.pathname);
         return;
@@ -392,9 +392,11 @@ export class Lobby {
       if (v !== undefined && v !== '') {q.set(k, String(v));} else {q.delete(k);}
     }
     if (unlisted) {q.set('unlisted', '1');} else {q.delete('unlisted');}
+    if (noCreatures) {q.set('nocreatures', '1');} else {q.delete('nocreatures');}
+    if (noBalls) {q.set('noballs', '1');} else {q.delete('noballs');}
     const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
     // Live socket: hop in place — the gameState rebuild does the rest.
-    if (this.deps.switchRoom?.(name, map, bots, mode, unlisted)) {
+    if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
       history.replaceState(null, '', href);
       return;
     }

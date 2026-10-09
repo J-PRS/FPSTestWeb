@@ -228,6 +228,8 @@ export class NetworkManager {
               map: urlParams.map ?? undefined,
               bots: urlParams.bots,
               unlisted: urlParams.unlisted || undefined,
+              noCreatures: urlParams.noCreatures || undefined,
+              noBalls: urlParams.noBalls || undefined,
               perk: this.joinPerk?.(),
               armorClass: this.joinClass?.(),
               transport: this.ws?.tier,
@@ -892,9 +894,9 @@ export class NetworkManager {
    *  with a fresh gameState, which the normal (re)connect path rebuilds
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
-  switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): boolean {
+  switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): boolean {
     if (!this.isConnected()) return false;
-    this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined });
+    this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined, noCreatures: noCreatures || undefined, noBalls: noBalls || undefined });
     return true;
   }
 

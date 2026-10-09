@@ -29,6 +29,7 @@ interface RestoreSeat {
 
 interface RestoreRoom {
   name: string; mode?: string; map?: string; bots?: number; unlisted?: boolean;
+  noCreatures?: boolean; noBalls?: boolean;
   players: RestoreSeat[];
 }
 
@@ -104,7 +105,7 @@ export class GameServer {
       rooms: this.rooms,
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
-      roomFor: (n, m, mp, b, u) => this.factory.roomFor(n, m, mp, b, u),
+      roomFor: (n, m, mp, b, u, nc, nb) => this.factory.roomFor(n, m, mp, b, u, nc, nb),
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       totalPlayers: () => opsTotalPlayers(this),
       ops: this.ops,
@@ -122,7 +123,7 @@ export class GameServer {
     });
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id) => this.roomOfPlayer(id),
-      roomFor: (n, m, mp, b, u) => this.factory.roomFor(n, m, mp, b, u),
+      roomFor: (n, m, mp, b, u, nc, nb) => this.factory.roomFor(n, m, mp, b, u, nc, nb),
       removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
       totalPlayers: () => opsTotalPlayers(this),
       specRooms: this.specRooms,
@@ -401,7 +402,7 @@ export class GameServer {
     let seated = 0;
     for (const rs of s.rooms) {
       if (!rs || typeof rs.name !== 'string' || !Array.isArray(rs.players)) continue;
-      const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots, rs.unlisted === true);
+      const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots, rs.unlisted === true, rs.noCreatures === true, rs.noBalls === true);
       if (!room) continue;
       for (const ps of rs.players) {
         if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') continue;

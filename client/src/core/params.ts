@@ -65,6 +65,10 @@ export const urlParams = {
   /** ?unlisted — creation-time flag forwarded on join/switchRoom: the
    *  room stays off /rooms and out of quick-join picks. */
   get unlisted() { return live().has('unlisted'); },
+  /** ?nocreatures=/?noballs= — creation-time sim gates forwarded on
+   *  join/switchRoom: the hosted room skips the species populations. */
+  get noCreatures() { return live().has('nocreatures'); },
+  get noBalls() { return live().has('noballs'); },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */

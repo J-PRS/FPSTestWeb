@@ -30,6 +30,8 @@ type Schema = {
   'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
   'fps-unlisted': number;     // 1 = hosted server rooms stay off /rooms + quick-join
+  'fps-nocreatures': number;  // 1 = hosted rooms mint without melee species
+  'fps-noballs': number;      // 1 = hosted rooms mint without the ball sim
   'fps-fav-rooms': string;    // JSON string[] — server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
   'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
@@ -74,6 +76,8 @@ const DEFAULTS: Schema = {
   'fps-p2p': '',
   'fps-lobby': 0,
   'fps-unlisted': 0,
+  'fps-nocreatures': 0,
+  'fps-noballs': 0,
   'fps-fav-rooms': '[]',
   'fps-shadows': true,
   'fps-tts-chat': false,

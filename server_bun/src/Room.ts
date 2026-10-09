@@ -58,6 +58,10 @@ export class Room {
   /** Unlisted rooms never appear in /rooms or quick-join picks — the
    *  only way in is knowing the name. Set once at creation. */
   unlisted = false;
+  /** Creation-time sim gates (host toggles): strip the melee-species /
+   *  ball populations at mint and on applySpec reloads. */
+  noCreatures = false;
+  noBalls = false;
   // First joiner's mode locks the match — later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;
@@ -328,7 +332,8 @@ export class Room {
       (msg) => this.connections.broadcast(msg),
       (data) => this.connections.broadcastBinaryReliable(data),
     );
-    if (this.spec.balls) this.ballSim.population = this.spec.balls;
+    if (this.noBalls) this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
+    else if (this.spec.balls) this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.structs.eff());
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
@@ -449,7 +454,7 @@ export class Room {
       (msg) => this.connections.broadcast(msg),
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
     );
-    creatureSim.pops = this.spec.creatures ?? {};
+    creatureSim.pops = this.noCreatures ? {} : (this.spec.creatures ?? {});
     creatureSim.colliders = this.ballSim.colliders;
     creatureSim.onBite = (c, targetId) => {
       // dep:N ids are deployables — gnaw their hp, not a player.
@@ -933,9 +938,10 @@ export class Room {
     // mapUpdate below carries the post-snap list). If the terrain is
     // also rotating the attach below corrects them once it lands.
     this.refreshFlagHomes(false);
-    if (spec.balls) this.ballSim.population = spec.balls;
+    if (this.noBalls) this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
+    else if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
-    this.creatureSim.pops = spec.creatures ?? {};
+    this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
     this.creatureSim.colliders = this.ballSim.colliders;
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.

@@ -18,7 +18,7 @@ import { roomWord as word } from './wire.ts';
 
 export interface SwitchHost {
   roomOfPlayer(playerId: string): Room | undefined;
-  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
   totalPlayers(): number;
   specRooms: Map<string, Room>;
@@ -42,7 +42,7 @@ export class RoomSwitcher {
   switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
     if (this.throttled(playerId)) return;
 
-    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean });
+    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean });
     if (!target) return;
     const { from, to, prev } = target;
 
@@ -68,7 +68,7 @@ export class RoomSwitcher {
 
   /** Everything that can deny a hop before teardown — null means the
    *  request dies here (with the client notified when it's worth it). */
-  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
+  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
     const name = word(msg.room) ?? 'default';
     const from = this.host.roomOfPlayer(playerId);
     if (!from) return null;
@@ -87,7 +87,7 @@ export class RoomSwitcher {
 
     const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
       ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
-    const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots, msg.unlisted === true);
+    const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots, msg.unlisted === true, msg.noCreatures === true, msg.noBalls === true);
     if (!to) {
       from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Server full — try again shortly' });
       return null;

@@ -12,7 +12,7 @@ export interface LobbyPanelHost {
   fillMapSelect(): void;
   mapFamOn(kind: 't2' | 'custom'): boolean;
   toggleMapFam(kind: 't2' | 'custom'): void;
-  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean): void;
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void;
   /** SOLO page's pickers — Lobby refills them from the same map list as
    *  HOST's so both tabs agree on what's playable. */
   bindSoloSelects(modeSel: HTMLSelectElement, mapSel: HTMLSelectElement): void;
@@ -373,6 +373,23 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       privBtn.classList.toggle('active', on);
     });
     famRow.appendChild(privBtn);
+    // Sim gates — the host can mint a room without creatures (melee
+    // species) and/or the ball sim. ON is the default; OFF rides the
+    // join as noCreatures/noBalls like `unlisted`.
+    for (const [key, label_, tip] of [
+      ['fps-nocreatures', 'CREATURES', 'spawn melee species (crawlers etc.)'],
+      ['fps-noballs', 'BALLS', 'spawn the ball sim'],
+    ] as const) {
+      const b = btn(label_);
+      b.title = tip;
+      b.classList.toggle('active', settings.get(key) !== 1);
+      b.addEventListener('click', () => {
+        const off = settings.get(key) !== 1;
+        settings.set(key, off ? 1 : 0);
+        b.classList.toggle('active', !off);
+      });
+      famRow.appendChild(b);
+    }
     const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
     // Hidden store — the scrollable list beside the preview is the UI.
     mapSelect.style.display = 'none';
@@ -398,10 +415,12 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         // MODE pick still applies or a named host silently drops it.
         const named = nameInput.value.trim();
         const priv = settings.get('fps-unlisted') === 1;
+        const noCreatures = settings.get('fps-nocreatures') === 1;
+        const noBalls = settings.get('fps-noballs') === 1;
         // A named PRIVATE room is always self-hosted — quickJoin would
         // land in someone's public match instead of creating ours.
         const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots)).room);
-        h.join(room, map || undefined, bots, mode || undefined, priv || undefined);
+        h.join(room, map || undefined, bots, mode || undefined, priv || undefined, noCreatures || undefined, noBalls || undefined);
       } catch { hostBtn.disabled = false; }
     });
 

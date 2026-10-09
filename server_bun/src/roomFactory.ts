@@ -91,7 +91,7 @@ export class RoomFactory {
    *  with no human audience: an empty or bot-only room loses nothing,
    *  its name just remints on the next join. Returns null only when
    *  every live room is occupied — the caller rejects the join. */
-  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false): Room | null {
+  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false, noCreatures = false, noBalls = false): Room | null {
     let room = this.host.rooms.get(name);
     if (!room) {
       if (this.host.rooms.size >= CONFIG.maxRooms) {
@@ -112,6 +112,12 @@ export class RoomFactory {
       this.host.maps.noteSource(name, src);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
       room.unlisted = unlisted;
+      // The ctor already seeded populations (fields default false) — the
+      // gates apply post-ctor and on later applySpec reloads.
+      room.noCreatures = noCreatures;
+      room.noBalls = noBalls;
+      if (noCreatures) room.creatureSim.pops = {};
+      if (noBalls) room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
       room.sessions = this.host.sessions;
       room.mapSrc = src; // spec source filename — scoreboard map title fallback
       // `room` is a mutable let — bind a const for the closures or TS

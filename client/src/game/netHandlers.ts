@@ -150,7 +150,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     // Returning undefined takes the ?room= reload path, which re-resolves
     // through the matchmaker and lands on the owning worker.
     switchRoom: fleet ? undefined
-      : (name, map, bots, mode, unlisted) => networkManager.switchRoom(name, map, bots, mode, unlisted),
+      : (name, map, bots, mode, unlisted, noCreatures, noBalls) => networkManager.switchRoom(name, map, bots, mode, unlisted, noCreatures, noBalls),
     mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
     isConnected: () => networkManager.isConnected(),
     listP2pLobbies: async () => {

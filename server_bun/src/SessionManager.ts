@@ -19,7 +19,7 @@ export interface SessionDeps {
   playerRoom: Map<string, Room>;
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
-  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
@@ -96,7 +96,7 @@ export class SessionManager {
 
     const playerId = playerIdResult.data;
 
-    const { token, roomName, roomMode, joinMap, joinBots, resumeSeq, name, unlisted } = SessionManager.joinSpec(handshake);
+    const { token, roomName, roomMode, joinMap, joinBots, resumeSeq, name, unlisted, noCreatures, noBalls } = SessionManager.joinSpec(handshake);
 
     // A reclaim must land in the room the session was in — find by playerId
     // rather than trusting the claimed room (reconnecting to a different
@@ -119,7 +119,7 @@ export class SessionManager {
       return;
     }
 
-    const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted);
+    const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls);
     if (!room) {
       ws.close(1013, 'Server full');
       return;
@@ -279,6 +279,7 @@ export class SessionManager {
   private static joinSpec(handshake: Record<string, unknown>): {
     token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
     resumeSeq: number | undefined; name: string | undefined; unlisted: boolean;
+    noCreatures: boolean; noBalls: boolean;
   } {
     return {
       name: SessionManager.nameSpec(handshake.name),
@@ -296,6 +297,8 @@ export class SessionManager {
         ? Math.max(0, Math.floor(handshake.resumeSeq))
         : undefined,
       unlisted: handshake.unlisted === true,
+      noCreatures: handshake.noCreatures === true,
+      noBalls: handshake.noBalls === true,
     };
   }
 

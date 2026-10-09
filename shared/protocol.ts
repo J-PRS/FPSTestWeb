@@ -47,6 +47,10 @@ export type ClientMessage =
        *  quick-join picks — in only by knowing the name. Honored only
        *  when this join creates the room (like `mode`). */
       unlisted?: boolean;
+      /** Creation-time sim gates: strip creature (melee species) / ball
+       *  populations from a fresh room — honored like `mode`, only when
+       *  this join creates the room. */
+      noCreatures?: boolean; noBalls?: boolean;
       /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
       transport?: string;
       /** Offset cursor: last reliable `ev` seq the client processed — a
@@ -155,7 +159,7 @@ export type ClientMessage =
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation
   // hints as join; room absent = 'default'.
-  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number; unlisted?: boolean };
+  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean };
 
 export interface TickUpdatePlayer {
   playerId: string;
