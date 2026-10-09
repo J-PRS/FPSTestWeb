@@ -627,7 +627,10 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     return;
   }
   if (++st.warmN <= 60) {return;}
-  if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) {return;}
+  // getObjectByName walks the whole scene — poll every 30 ticks instead of
+  // per frame while interiors land (a live profile caught the scan at ~2%
+  // of a match profile through getObjectByProperty).
+  if (st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
   deps.rendererSetup.warmup();
   // One underground blast fills the burst-spec freelists, so the first

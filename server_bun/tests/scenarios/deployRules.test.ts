@@ -40,4 +40,22 @@ describe('scenario: deploy rules', () => {
     room.deployables.handleDeploy(bot.id, 'turret', { x: 60, y: 31, z: 0 });
     expect(w.count('deploySpawn')).toBe(0);
   });
+
+  it('a plant keeps its planting-team regime after the owner switches sides', () => {
+    // The spawn edge sends the planter's team; snapshot() feeding the
+    // hash lane must emit the SAME committed value — a live owner-team
+    // lookup desynced the lane the moment a planter changed sides
+    // (live soak: DEPLOY DESYNC diffs={id:team alpha/bravo}).
+    const room = mkRoom({ mode: 'tdm', bots: 1 });
+    const bot = firstPlayer(room);
+    bot.team = 'alpha' as never;
+    bot.beltCharges = 99;
+    pin(room, bot.id, { x: 0, y: 31, z: 0 });
+    expect(room.deployables.handleDeploy(bot.id, 'turret', { x: 0, y: 31, z: 2 })).toBe(true);
+    const planted = room.deployables.snapshot().find((d) => d.owner === bot.id)!;
+    expect(planted.team).toBe('alpha');
+    bot.team = 'bravo' as never; // mid-match side switch — regime must hold
+    const snap = room.deployables.snapshot().find((d) => d.id === planted.id)!;
+    expect(snap.team).toBe('alpha');
+  });
 });

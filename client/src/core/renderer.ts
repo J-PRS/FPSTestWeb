@@ -551,6 +551,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // second full-scene pass is the dominant fill cost on weak GPUs.
   renderer.shadowMap.enabled = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Skip the per-link infoLog query — lazy material variants compile
+  // mid-match (new elites, tracers) and a live profile caught the
+  // getProgramInfoLog validation stack at ~1.5% of the frame. Compile
+  // still runs; only the log read is dropped. Dev sessions can flip it
+  // back on with __renderer.debug.checkShaderErrors = true.
+  renderer.debug.checkShaderErrors = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
   // Canonical 16:9 frame at every window shape: canvas oversized to cover

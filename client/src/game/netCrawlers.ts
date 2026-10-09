@@ -10,6 +10,7 @@ import { Baneling } from '../entities/Baneling.js';
 import { Totem } from '../entities/Totem.js';
 import type { Targetable } from '../entities/balls.js';
 import { finiteVec as finite, SIM_TICK_DT } from '../../../shared/wire.js';
+import { seedReplicaState } from './netMelee.js';
 import type { EntitiesDeps } from './entities.js';
 import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
@@ -117,7 +118,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
     if (!finite(m.position) || !finite(m.velocity) || (m.tp && !finite(m.tp))) {deps.logger.warn(`crawl #${m.id} ${m.kind} dropped: non-finite vector`); return;}
-    if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {(c.sim as { state: string }).state = 'windup';}
+    if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {seedReplicaState(c.sim, 'windup');}
     // Server retargetDue() spends the whole tick on the re-aim — the
     // creature takes no step that tick. `sk` is the cumulative count of
     // those skips since spawn, so even a far client that missed edges
@@ -192,7 +193,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
         // expire quickly either way — a wrong-state tick heals on the next
         // edge, a wrong label never does.
         if (r.state && c.sim && c.sim.state !== r.state) {
-          c.sim.state = r.state as typeof c.sim.state;
+          seedReplicaState(c.sim, r.state);
         }
         // The row's `seed` is the server's LIVE LCG state, not the spawn
         // seed — a missed edge that consumed a crand draw offsets the

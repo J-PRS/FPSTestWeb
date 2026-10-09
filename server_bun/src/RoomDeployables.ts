@@ -166,7 +166,10 @@ export class RoomDeployables {
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0 });
+    // Team stamps at plant time — the spawn edge carries this value, so
+    // the hash lane must too (a live owner-team lookup desyncs the moment
+    // the planter switches sides). Gear fights for its planting team.
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
     this.refreshSolids();
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);

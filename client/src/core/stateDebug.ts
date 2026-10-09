@@ -15,6 +15,7 @@ import type { Player } from '../entities/Player.js';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { Projectile } from '../projectiles/Projectile.js';
+import { seedReplicaState } from '../game/netMelee.js';
 
 export interface StateDebugContext {
   networkManager: NetworkManager;
@@ -491,7 +492,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         for (const [id, , state, uber, targetId] of serverCreatureFields) {
           const c = creatureById.get(id);
           if (c?.sim && (c.sim.state !== state || (c.sim.targetId ?? null) !== (targetId ?? null))) {
-            c.sim.state = state;
+            seedReplicaState(c.sim, state);
             c.sim.targetId = targetId ?? null;
           }
         }
