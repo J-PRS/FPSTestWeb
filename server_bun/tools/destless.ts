@@ -36,6 +36,10 @@ const room = mkRoom({
   bases: { alpha: base(mapJson.bases?.alpha) ?? { x: 0, y: hmHeight(field, 0, 0), z: 0 },
            bravo: base(mapJson.bases?.bravo) ?? { x: 80, y: hmHeight(field, 80, 80), z: 80 } },
 }, MODE, SEED, false, field);
+// mkRoom leaves mapSrc '' — attach() then skips the baked interior boxes.
+room.mapSrc = MAP;
+if (mapJson.interiors?.length) room.spec.interiors = mapJson.interiors;
+room.structs.attach();
 
 const ticks = Math.round((HOURS * 3600) / DT);
 const noGoal: Record<string, number> = {};

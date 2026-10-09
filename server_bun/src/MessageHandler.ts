@@ -330,7 +330,8 @@ export class MessageHandler {
   }
 
   /** Rebuild the collider set claim validation occludes against —
-   *  ctor and admin hot-reload both come through here. */
+   *  ctor and admin hot-reload both come through here. Interior hull
+   *  boxes ride the wire list already (eff() merges them). */
   attachStructures(list: RoomInfo['structures']): void {
     this.combat.solids = structureColliders(list);
   }
