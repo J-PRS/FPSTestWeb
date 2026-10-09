@@ -1,6 +1,6 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
-import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId } from '../demo/types.js';
+import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId } from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball } from '../entities/balls.js';
@@ -181,7 +181,7 @@ function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?:
   if (!dm?.isRecording) {return;}
   for (const ball of d.balls) {
     if (ball.dead) {continue;}
-    dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
+    dm.recordTargetSpawned(targetDemoId(ball), { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     onBallRecorded?.(ball);
   }
 }
@@ -387,7 +387,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       // Net balls keep their client id in the 0x40xx namespace while every
       // recorded edge keys on the wire netId — emit the wire id or the
       // baseline pass resurrects a phantom second ball.
-      yield { targetId: b.netDriven ? b.netId : b.id, targetType: b.variant, pos: b.pos, vel: b.vel, health: b.health };
+      yield { targetId: targetDemoId(b), targetType: b.variant, pos: b.pos, vel: b.vel, health: b.health };
     }
     for (const { list, species } of [
       { list: d.crawlers, species: 'crawler' },

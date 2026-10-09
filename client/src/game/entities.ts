@@ -8,6 +8,7 @@ import { createNetCrawlers } from './netCrawlers.js';
 import { createSpeciesKit } from './speciesKit.js';
 import { PROFILES } from './targeting.js';
 import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
+import { targetDemoId } from '../demo/types.js';
 import { Nugget } from '../entities/Nugget.js';
 import type { GameContext } from './context.js';
 import { Deployables } from './deployables.js';
@@ -169,7 +170,7 @@ function recordBallSnapshots(dt: number): void {
   ballSnapshotTimer = 0;
   for (const b of balls) {
     if (!b.dead) {
-      dm.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z }, b.variant);
+      dm.recordTargetPeak(targetDemoId(b), { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z }, b.variant);
     }
   }
 }

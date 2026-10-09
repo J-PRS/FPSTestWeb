@@ -112,6 +112,13 @@ export function isMiscTargetType(targetType: number): boolean {
   return targetType >= TARGETTYPE_KILL;
 }
 
+/** Every target event keys on the wire netId for net-driven targets —
+ *  the client's 0x40xx id namespace creates phantom lanes whose edges
+ *  match nothing else (orphan kills, duplicate baseline spawns). */
+export function targetDemoId(t: { id: number; netDriven?: boolean; netId?: number }): number {
+  return t.netDriven ? (t.netId ?? t.id) : t.id;
+}
+
 // Flat frame structure for efficient recording (~49 bytes)
 export interface DemoFrame {
   frameNumber: number;       // uint16

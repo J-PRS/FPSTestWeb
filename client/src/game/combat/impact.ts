@@ -17,7 +17,7 @@ import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/confi
 import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats, serverSimmed } from '../../../../shared/weapons.js';
 import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 import { isBotId } from '../../../../shared/botNames.js';
-import { HIT_TARGET_NONE } from '../../demo/types.js';
+import { HIT_TARGET_NONE, targetDemoId } from '../../demo/types.js';
 import { lgDischarge } from './lightning.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
 
@@ -384,7 +384,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   if (deps.lazyDemoManager()?.isRecording) {
     // Wire id for net balls — Spawned/Bounce key on it; recording the client
     // namespace id here leaves the kill invisible to replay.
-    deps.lazyDemoManager()!.recordTargetDestroyed(ball.netDriven ? (ball.netId ?? ball.id) : ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
+    deps.lazyDemoManager()!.recordTargetDestroyed(targetDemoId(ball), { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
   }
 }
 
@@ -447,7 +447,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
 
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && !destroyed) {
-    demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
+    demoManager.recordTargetHit(targetDemoId(ball), { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
   }
 }
 
