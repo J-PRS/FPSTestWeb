@@ -297,7 +297,7 @@ function parseModes(raw: unknown): string[] | undefined {
 export function specModes(spec: MapSpec | undefined): string[] {
   if (spec?.modes) return spec.modes;
   if (!spec?.mode) return [];
-  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
+  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun'];
   return [...new Set([spec.mode, ...legal])];
 }
 
