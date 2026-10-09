@@ -524,6 +524,12 @@ export class MoveSim {
         s.onGround = true;
         this.allowNextJump = true;
         this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
+      } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && this.groundGraceT > 0) {
+        // Geometric skim — velDotN reads launched purely because the surface
+        // fell away (crest at speed). World-up velocity separates it from a
+        // real impulse takeoff: skims hold the lingering-contact window,
+        // launches kill it.
+        s.onGround = true;
       } else {
         // Fast/launched inside the snap band — a real launch, not a skim.
         s.onGround = false;
