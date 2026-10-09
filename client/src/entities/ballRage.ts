@@ -14,7 +14,7 @@ import {
   GRAVITY,
   BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST,
   BALL_ENRAGE_TELEGRAPH_H, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_ENABLED,
-  BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
+  BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_MARGIN,
 } from '../core/config.js';
 import { BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME } from '../../../shared/ballSim.js';
 
@@ -238,7 +238,7 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
   b.pos.x = playerPos.x + Math.cos(ang) * dist;
   b.pos.z = playerPos.z + Math.sin(ang) * dist;
-  b.pos.y = terrain.getHeight(b.pos.x, b.pos.z) + BALL_TELE_HEIGHT;
+  b.pos.y = terrain.getHeight(b.pos.x, b.pos.z) + b.radius + BALL_TELE_MARGIN;
 
   // Position jumped — cut the ribbons so they don't streak across the teleport
   for (const r of b.ribbons) {r.clear();}

@@ -96,7 +96,7 @@ export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
 // the server runs the same sim the client's solo/host path runs; derive,
 // never copy. Spawn-policy and VFX knobs stay local.
 export {
-  BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
+  BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_MARGIN,
   BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST,
   BALL_ENRAGE_DASH_SPEED, BALL_BASE_RADIUS,
 } from '../../../shared/ballSim.js';

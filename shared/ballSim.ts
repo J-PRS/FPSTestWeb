@@ -22,10 +22,13 @@ export { structureColliders, BALL_BOUNCE, type StructureCollider } from './ballC
 
 export const BALL_GRAVITY = GRAVITY;
 export const BALL_BASE_RADIUS = 1.2;
-export const BALL_MAX_DIST = 300.0;
-export const BALL_TELE_MIN = 60.0;
-export const BALL_TELE_MAX = 120.0;
-export const BALL_TELE_HEIGHT = 25.0;
+export const BALL_MAX_DIST = 200.0;
+export const BALL_TELE_MIN = 40.0;
+export const BALL_TELE_MAX = 80.0;
+// Surface drop, not airlift: ball radius + margin, so even the big
+// variants land just above contact instead of spawning clipped into
+// the collider (a buried spawn can reflect a garbage velocity).
+export const BALL_TELE_MARGIN = 0.3;
 export const BALL_ENRAGE_FORCE = 12.0;
 export const BALL_ENRAGE_TIMEOUT = 20.0;
 export const BALL_ENRAGE_DASH_DIST = 100.0;
@@ -266,7 +269,7 @@ function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand
   const dist = BALL_TELE_MIN + rand() * (BALL_TELE_MAX - BALL_TELE_MIN);
   b.x = target.x + Math.cos(ang) * dist;
   b.z = target.z + Math.sin(ang) * dist;
-  b.y = hmHeight(field, b.x, b.z) + BALL_TELE_HEIGHT;
+  b.y = hmHeight(field, b.x, b.z) + b.radius + BALL_TELE_MARGIN;
   const speed = Math.hypot(b.vx, b.vy, b.vz) || 1;
   hmNormal(field, b.x, b.z, _n);
   const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;

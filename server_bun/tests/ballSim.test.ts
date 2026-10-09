@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   makeSimBall, stepBall, applySimDamage,
   BALL_BASE_RADIUS, BALL_MAX_DIST, BALL_MIN_SPEED, BALL_STALL_TIME,
-  BALL_ENRAGE_TIMEOUT, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
+  BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_FORCE, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_MARGIN,
   BALL_VARIANT_SCALE, BALL_VARIANT_HEALTH, BALL_BOUNCE, BALL_OVERSPEED,
 } from '../../shared/ballSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
@@ -69,7 +69,8 @@ describe('ballSim state machine', () => {
   });
 
   it('enrage timeout teleports near the target — authority only', () => {
-    const a = mk({ y: 50 });
+    const a = mk({ y: 50 }, { x: 40, y: -10, z: 15 });
+    const speedBefore = Math.hypot(a.vx, a.vy, a.vz);
     a.enraged = true; a.enrageTimer = BALL_ENRAGE_TIMEOUT;
     const target = { x: 100, y: 0, z: 100 };
     const kind = stepBall(a, DT, FLAT, target, true, { rand: () => 0.5 });
@@ -78,7 +79,13 @@ describe('ballSim state machine', () => {
     const d = Math.hypot(a.x - target.x, a.z - target.z);
     expect(d).toBeGreaterThanOrEqual(BALL_TELE_MIN - 0.01);
     expect(d).toBeLessThanOrEqual(BALL_TELE_MAX + 0.01);
-    expect(a.y).toBeGreaterThanOrEqual(BALL_TELE_HEIGHT - 0.01);
+    // Surface drop: radius + margin above ground, never clipped into the collider.
+    const gy = a.y - a.radius;
+    expect(gy).toBeGreaterThanOrEqual(BALL_TELE_MARGIN - 0.01);
+    // The teleport's reflect rewrites direction, not magnitude — the only
+    // drift allowed is the enrage accel + gravity applied this same tick.
+    expect(Math.abs(Math.hypot(a.vx, a.vy, a.vz) - speedBefore))
+      .toBeLessThan((BALL_ENRAGE_FORCE + 10) * DT);
     // Predictor path: no teleport — it lets the ball fly and waits for
     // the authority's segment to snap it.
     const p = mk({ y: 50 });
