@@ -44,6 +44,8 @@ const streak: Record<string, number> = {};
 const maxStreak: Record<string, number> = {};
 const lastPos: Record<string, { x: number; z: number }> = {};
 const travel: Record<string, number> = {};
+// 40m-cell dwell histogram per bot — where grinders actually spend time.
+const dwell: Record<string, Map<string, number>> = {};
 const w0 = Date.now();
 for (let t = 0; t < ticks; t++) {
   step(room, 1, DT);
@@ -54,6 +56,8 @@ for (let t = 0; t < ticks; t++) {
     const lp = lastPos[p.id];
     if (lp) travel[p.id] = (travel[p.id] ?? 0) + Math.hypot(p.position.x - lp.x, p.position.z - lp.z);
     lastPos[p.id] = { x: p.position.x, z: p.position.z };
+    const cell = `${Math.round(p.position.x / 40) * 40},${Math.round(p.position.z / 40) * 40}`;
+    (dwell[p.id] ??= new Map()).set(cell, (dwell[p.id]!.get(cell) ?? 0) + DT);
     if (room.bots.debugDest(p.id) === null) {
       noGoal[p.id] = (noGoal[p.id] ?? 0) + DT;
       streak[p.id] = (streak[p.id] ?? 0) + DT;
@@ -76,3 +80,8 @@ for (const r of rows) {
 }
 const avg = rows.reduce((n, r) => n + r.pct, 0) / (rows.length || 1);
 console.log(`  roster mean ${avg.toFixed(1)}%`);
+for (const r of rows) {
+  const d = dwell[r.id]; if (!d) continue;
+  const top = [...d.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (top && top[1] > r.alive * 0.3) console.log(`  ${r.id} spent ${(top[1] / r.alive * 100).toFixed(0)}% of life in cell ${top[0]}`);
+}
