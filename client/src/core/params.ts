@@ -21,9 +21,19 @@ export const isDevHost = (): boolean =>
 
 // Read live, not a boot snapshot: switchRoom() rewrites ?room/?map/?bots
 // via history.replaceState with no reload — a parse-once snapshot would
-// serve the PREVIOUS room to every later call site. These reads are all
-// boot/join paths (never per-frame), so the reparse cost is nil.
-const live = () => new URLSearchParams(window.location.search);
+// serve the PREVIOUS room to every later call site. Some debug readers
+// DO run per-frame per-remote (collider gizmo tint), so the parse is
+// keyed on the raw string — compare is ~free, reparse only on change.
+let lastSearch = '';
+let liveParams = new URLSearchParams();
+const live = () => {
+  const s = window.location.search;
+  if (s !== lastSearch) {
+    lastSearch = s;
+    liveParams = new URLSearchParams(s);
+  }
+  return liveParams;
+};
 
 export const urlParams = {
   get: (k: string) => live().get(k),

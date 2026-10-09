@@ -282,6 +282,7 @@ export class PlayerModel {
     if ((RIG_MANIFEST[this.variant]?.sources.length ?? 0) > 0) {this.anim.retargetUAL();}
 
     this.scene.add(this.model);
+    if (this._detached) {this.scene.remove(this.model);}
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
 
     // Collider gizmo (wireframe capsule for hitbox visualization) —
@@ -537,6 +538,18 @@ export class PlayerModel {
       this.model.visible = visible;
     }
   }
+
+  /** The ~300-node rig (mostly bones) costs traversal in updateMatrixWorld
+   *  and projectObject even while invisible — detaching is the only prune,
+   *  since matrixAutoUpdate flags don't stop the walk. Offscreen remotes
+   *  detach; stale matrixWorlds correct themselves on re-add. */
+  setSceneDetached(detached: boolean): void {
+    this._detached = detached;
+    if (!this.model) {return;}
+    if (detached) {this.scene.remove(this.model);}
+    else {this.scene.add(this.model);}
+  }
+  private _detached = false;
 
   // Ghost shimmer — translucent material SWAP for the decloak-reveal.
   // The meshes' real materials ride in ghostBaseline while each source

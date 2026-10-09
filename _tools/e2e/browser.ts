@@ -53,10 +53,14 @@ export async function launchClient(clientUrl: string): Promise<Client> {
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
-    args: [
-      '--use-gl=angle', '--use-angle=swiftshader',
-      '--enable-unsafe-swiftshader', '--mute-audio', '--no-sandbox',
-    ],
+    // SwiftShader by default for determinism; E2E_GPU=1 uses real hardware
+    // GL (perf runs — SwiftShader raster costs skew every phase number).
+    args: process.env.E2E_GPU
+      ? ['--mute-audio', '--no-sandbox']
+      : [
+          '--use-gl=angle', '--use-angle=swiftshader',
+          '--enable-unsafe-swiftshader', '--mute-audio', '--no-sandbox',
+        ],
   });
   const page = await browser.newPage();
   await page.evaluateOnNewDocument(POINTER_LOCK_STUB);
