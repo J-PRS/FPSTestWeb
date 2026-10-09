@@ -9,7 +9,8 @@ import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
+import { aimSkillFor } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
@@ -72,9 +73,8 @@ export class BotRoster {
         ? { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) }
         : wildcard
           ? rollWildcard(botRand)
-          : rollLoadout(BOT_LOADOUTS[kitIdx]!, BOT_ALT_SLOTS[kitIdx], botRand);
+          : BOT_LOADOUTS[kitIdx]!;
       this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
-      if (wildcard) logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: loadout.near, mid: loadout.mid, far: loadout.far, belt: loadout.belt, side: loadout.side, perk: loadout.perk } });
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.
@@ -102,6 +102,10 @@ export class BotRoster {
         isDead: p.isDead,
       }) as ServerMessage);
       this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
+      // The spawn pick is thoughtful, not flat: the fresh brain's skill
+      // matrix rerolls every open slot toward what this bot hits with.
+      this.adaptOnRespawn(id, (w) => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
+      if (wildcard) logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
@@ -342,15 +346,15 @@ export class BotRoster {
    *  candidate the skill matrix scores highest — a bot's kit converges
    *  on what it actually hits with. Class re-derives from the new kit
    *  so a fresh heavy-only pick swaps the body legally. */
-  adaptOnRespawn(id: string, skill: (w: number) => number): void {
+  adaptOnRespawn(id: string, skill: (w: number) => number, at: 'spawn' | 'respawn' = 'respawn'): void {
     const lo = this.loadouts.get(id);
     const alts = this.alts.get(id);
     if (!lo || !alts) return;
-    const next = adaptLoadout(lo, alts, skill);
+    const next = adaptLoadout(lo, alts, skill, botRand);
     const moved = (['near', 'mid', 'far', 'belt', 'side'] as const).filter((s) => next[s] !== lo[s]);
     if (!moved.length) return;
     this.loadouts.set(id, next);
-    logger.info('Bot adapted kit', { id, room: this.room.name, swapped: moved.map((s) => `${s}:${lo[s]}->${next[s]}`) });
+    logger.info('Bot adapted kit', { id, room: this.room.name, at, swapped: moved.map((s) => `${s}:${lo[s]}->${next[s]}`) });
     this.refitClass(id);
   }
 

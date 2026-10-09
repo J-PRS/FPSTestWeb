@@ -13,6 +13,7 @@ import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot } from '../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../shared/botSkill.js';
+import { botRand } from '../../../shared/botRand.js';
 import { botWeaponHooks } from '../../../shared/botWeaponHooks.js';
 import { type WeaponType } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
@@ -115,7 +116,7 @@ export class GameBot extends RemotePlayer {
    *  favors — same adaptation BotRoster.adaptOnRespawn runs online. */
   adaptLoadout(): void {
     if (!this.loadout || !this.loadoutAlts) return;
-    const next = adaptLoadout(this.loadout, this.loadoutAlts, (w) => aimSkillFor(this.brain.skill, w, 0));
+    const next = adaptLoadout(this.loadout, this.loadoutAlts, (w) => aimSkillFor(this.brain.skill, w, 0), botRand);
     if (next === this.loadout) return;
     this.setLoadout(next);
     const cls = botClassForLoadout(next);

@@ -56,25 +56,26 @@ export const BOT_LOADOUTS: BotLoadout[] = [
 export type LoadoutSlot = 'near' | 'mid' | 'far' | 'belt' | 'side';
 const SLOTS: readonly LoadoutSlot[] = ['near', 'mid', 'far', 'belt', 'side'];
 
-/** Per-slot alternates per BOT_LOADOUTS row (same order) — a kit keeps
- *  its identity, but each listed slot may reroll to a sibling at spawn
- *  and drift toward the bot's best weapon on respawn. The base weapon
- *  stays in the candidate pool implicitly. */
+/** Per-slot alternates per BOT_LOADOUTS row (same order) — every slot
+ *  carries candidates so the whole kit can drift; the picks run through
+ *  the skill matrix (adaptLoadout), not flat luck. The base weapon
+ *  stays in the candidate pool implicitly, and kitConsistent rejects
+ *  anything the derived class can't shoulder. */
 export const BOT_ALT_SLOTS: Partial<Record<LoadoutSlot, WeaponType[]>>[] = [
-  { near: [WeaponType.Shotgun], belt: [WeaponType.ImpactGrenade] },                        // chaser
-  { far: [WeaponType.Mortar, WeaponType.RocketLauncher], belt: [WeaponType.ClusterBomb] }, // siege
-  { far: [WeaponType.BoltLauncher], near: [WeaponType.Shotgun] },                          // anchor
-  { belt: [WeaponType.DiscPull, WeaponType.Javelin] },                                     // skirmisher
-  { near: [WeaponType.Flak] },                                                           // hose
-  { belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], mid: [WeaponType.PlasmaCannon] }, // bruiser
-  { near: [WeaponType.Shotgun, WeaponType.Chaingun], belt: [WeaponType.Grenade] },         // flak skirmisher
-  { far: [WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher] }, // artillery
-  { mid: [WeaponType.PlasmaGun], belt: [WeaponType.Javelin] },                             // beam rider
-  { mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], belt: [WeaponType.MRVLauncher] }, // trapper
-  { near: [WeaponType.Chaingun], belt: [WeaponType.Grenade] },                             // support
-  { near: [WeaponType.Chaingun], mid: [WeaponType.Sprinkler] },                            // medic
-  { near: [WeaponType.Shotgun], belt: [WeaponType.ClusterBomb] },                          // field medic
-  { near: [WeaponType.Shotgun], belt: [WeaponType.ArmorGrenade] },                         // pocket beam
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] }, // chaser
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // siege
+  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] }, // anchor
+  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon], far: [WeaponType.Disc], belt: [WeaponType.DiscPull, WeaponType.Javelin], side: [WeaponType.Revolver] }, // skirmisher
+  { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // hose
+  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
+  { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // flak skirmisher
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
+  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] }, // beam rider
+  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] }, // trapper
+  { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] }, // support
+  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // medic — near's HealBeam stays: a medic that never zaps still heals
+  { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // field medic
+  { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ClusterBomb, WeaponType.ArmorGrenade], side: [WeaponType.Pistol] }, // pocket beam — side's HealBeam stays
 ];
 
 /** The wildcard pool — spawns that skip the authored table draw any
@@ -145,16 +146,20 @@ export function rollWildcard(rng: () => number): BotLoadout {
 /** Respawn adaptation: for each slot the bot can reroll, keep whichever
  *  weapon its skill matrix scores highest — competence drifts the kit
  *  toward what this bot actually hits with. */
-export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number): BotLoadout {
+export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number, rng?: () => number): BotLoadout {
   if (!alts) return lo;
   const out = { ...lo };
+  const r = rng ?? (() => 0.5);
   for (const slot of SLOTS) {
     const cands = alts[slot];
     if (!cands?.length) continue;
     let best = lo[slot];
     let bs = skill(best);
     for (const w of cands) {
-      const s = skill(w);
+      // Aptitude first, seeded noise second — two bots with the same
+      // matrix don't march in lockstep, but the pick still leans to
+      // what this one actually hits with.
+      const s = skill(w) * (0.7 + 0.6 * r());
       if (s > bs && kitConsistent({ ...out, [slot]: w })) { bs = s; best = w; }
     }
     out[slot] = best;
