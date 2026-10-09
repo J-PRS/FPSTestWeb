@@ -62,6 +62,12 @@ const FLAG_THROW_SPEED = 20;  // deliberate toss along aim — hand-off range, n
 // ski speed can't turn inside 2.2m — the overshoot lap was ~4s of flag-lay
 // per drop (~30% of a match down on a 12-bot raindance soak).
 const RABBIT_PICKUP_R = 4.5;
+// Rabbit loose flag drifts toward the nearest living player — a corpse's
+// fumble should find the next carrier fast; without it a flag that lands
+// 15m off anyone's line eats ~3s of pickup latency per drop (~18% of a
+// match down). Item-magnet, not AI: the flag comes to feet.
+const RABBIT_MAGNET_R = 20;
+const RABBIT_MAGNET_SPEED = 5;
 
 export class RoomFlags {
   readonly flags = new Map<TeamId, RoomFlag>();
@@ -363,6 +369,7 @@ export class RoomFlags {
   /** Dropped flag countdown — time-out sends it home. */
   private tickDropped(f: RoomFlag, dt: number): void {
     this.tickBallistic(f, dt);
+    if (this.rabbit && f.vel.x === 0 && f.vel.y === 0 && f.vel.z === 0) this.magnet(f, dt);
     f.dropT -= dt;
     if (f.dropT > 0) return;
     if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
@@ -370,6 +377,27 @@ export class RoomFlags {
     f.pos = { ...f.home };
     f.vel = { x: 0, y: 0, z: 0 };
     f.droppedAt = 0;
+    this.dirty = true;
+  }
+
+  /** Rabbit-only item magnet: a settled flag slides toward the nearest
+   *  living player inside RABBIT_MAGNET_R at walking speed. */
+  private magnet(f: RoomFlag, dt: number): void {
+    let best: { x: number; y: number; z: number } | null = null;
+    let bestD2 = RABBIT_MAGNET_R * RABBIT_MAGNET_R;
+    for (const p of this.room.players.getAllPlayers().values()) {
+      if (p.isDead) continue;
+      const dx = p.position.x - f.pos.x, dy = p.position.y - f.pos.y, dz = p.position.z - f.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; best = p.position; }
+    }
+    if (!best) return;
+    const d = Math.sqrt(bestD2) || 1;
+    const stepLen = Math.min(RABBIT_MAGNET_SPEED * dt, d);
+    f.pos.x += (best.x - f.pos.x) / d * stepLen;
+    f.pos.z += (best.z - f.pos.z) / d * stepLen;
+    const field = this.room.field;
+    if (field) f.pos.y = hmHeight(field, f.pos.x, f.pos.z) + FLAG_REST_LIFT;
     this.dirty = true;
   }
 
