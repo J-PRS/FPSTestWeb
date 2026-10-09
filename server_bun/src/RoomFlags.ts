@@ -66,8 +66,8 @@ const RABBIT_PICKUP_R = 4.5;
 // fumble should find the next carrier fast; without it a flag that lands
 // 15m off anyone's line eats ~3s of pickup latency per drop (~18% of a
 // match down). Item-magnet, not AI: the flag comes to feet.
-const RABBIT_MAGNET_R = 20;
-const RABBIT_MAGNET_SPEED = 5;
+const RABBIT_MAGNET_R = 40;
+const RABBIT_MAGNET_SPEED = 8;
 
 export class RoomFlags {
   readonly flags = new Map<TeamId, RoomFlag>();

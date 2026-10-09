@@ -42,6 +42,10 @@ const room = mkRoom({
   bases: { alpha: { x: alphaBase.x, y: hmHeight(field, alphaBase.x, alphaBase.z), z: alphaBase.z } },
   balls: { base: 0, perPlayer: 0, max: 0 }, creatures: {},
 }, 'rabbit', SEED, false, field);
+// mkRoom leaves mapSrc '' — attach() then skips the baked interior boxes.
+room.mapSrc = MAP;
+if (mapJson.interiors?.length) room.spec.interiors = mapJson.interiors;
+room.structs.attach();
 
 const bucket = { unspawned: 0, dropped: 0, carried: 0, other: 0 };
 const latencies: number[] = [];
