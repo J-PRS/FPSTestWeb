@@ -500,7 +500,7 @@ body.lobby-open #loadout-bar { display: none; }
   /* Centered hub window — the classic server-browser card floats over
    *  the game view, not docked beside the settings column. */
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  z-index: 60; width: min(760px, 90vw); max-height: 82vh;
+  z-index: 60; width: min(760px, 90vw); height: min(640px, 82vh);
   background: rgba(8,11,16,0.97); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 8px; box-shadow: 0 12px 48px rgba(0,0,0,0.6);
   color: #dde8f2; padding: 18px 20px; font-size: 0.72rem; overflow-y: auto;
@@ -557,6 +557,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .lb-tabs .lb-btn { flex: 1; padding: 5px 0; text-align: center; font-size: 0.62rem; opacity: 0.6; }
 .lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
+.lb-maplist .lb-btn.active { background: rgba(58,167,255,0.18); color: #fff; border-left: 3px solid #3aa7ff; }
 .lb-room { display: flex; align-items: center; gap: 2px; }
 .lb-room .meta { margin-left: auto; float: none; }
 
