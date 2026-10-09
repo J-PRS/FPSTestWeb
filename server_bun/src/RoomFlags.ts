@@ -58,6 +58,10 @@ const FLAG_GRAV = -GRAVITY;   // loose objects fall at world gravity — one con
 const FLAG_KNOCK = 0.55;      // fraction of the player-scale blast impulse
 const FLAG_SETTLE = 0.6;      // |vel| below this on the ground = rest
 const FLAG_THROW_SPEED = 20;  // deliberate toss along aim — hand-off range, not a hail mary
+// Rabbit's ring is wider: carriers die every ~9s and a hunter arriving at
+// ski speed can't turn inside 2.2m — the overshoot lap was ~4s of flag-lay
+// per drop (~30% of a match down on a 12-bot raindance soak).
+const RABBIT_PICKUP_R = 4.5;
 
 export class RoomFlags {
   readonly flags = new Map<TeamId, RoomFlag>();
@@ -211,9 +215,13 @@ export class RoomFlags {
    *  drop reads as a fumble, not a teleport to the dirt. The ballistic
    *  tick owns it from here; the rest spot snaps to walkable ground. */
   private loose(f: RoomFlag, vel?: Vec3): void {
-    f.vel.x = (vel?.x ?? 0) * 0.5;
-    f.vel.y = (vel?.y ?? 0) * 0.5 + 3;
-    f.vel.z = (vel?.z ?? 0) * 0.5;
+    // Rabbit keeps a short pop — a 40m/s corpse skid carried the flag
+    // ~20m past the killer and the re-touch took seconds; the flag
+    // staying near the kill is what keeps rabbit's hot-potato pace.
+    const k = this.rabbit ? 0.15 : 0.5;
+    f.vel.x = (vel?.x ?? 0) * k;
+    f.vel.y = (vel?.y ?? 0) * k + 3;
+    f.vel.z = (vel?.z ?? 0) * k;
   }
 
   /** A blast shoved a dropped flag — puntable objective, same deal as
@@ -472,7 +480,8 @@ export class RoomFlags {
       const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
       if (Math.abs(cy - f.pos.y) > 6) continue;
       const d = Math.hypot(cx - f.pos.x, cz - f.pos.z);
-      if (d <= FLAG_PICKUP_R * perkMods(p.perk).pickupRadius && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
+      const ring = (this.rabbit ? RABBIT_PICKUP_R : FLAG_PICKUP_R) * perkMods(p.perk).pickupRadius;
+      if (d <= ring && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
     }
     return best;
   }
