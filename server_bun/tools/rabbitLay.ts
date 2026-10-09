@@ -91,9 +91,8 @@ for (let t = 0; t < ticks; t++) {
     prevState = st;
   }
 }
-let alive = 0, dead = 0;
-for (const p of room.players.getAllPlayers().values()) { p.isDead ? dead++ : alive++; }
-const frags = [...(room.world?.killCounts?.values?.() ?? [])].reduce((n: number, v) => n + (typeof v === 'number' ? v : 0), 0);
+let alive = 0, dead = 0, frags = 0;
+for (const p of room.players.getAllPlayers().values()) { p.isDead ? dead++ : alive++; frags += p.kills ?? 0; }
 const wallMs = Date.now() - w0;
 
 const spawned = bucket.dropped + bucket.carried;
