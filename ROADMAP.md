@@ -467,6 +467,12 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
   cooldown, hurting builders prefer stations; 'Deploy placed' INFO log
   proves every plant). Live-verified: BOT-* owners planting on crossfire.
 - Voice/avatars/monetization — out of scope until core loops land.
+- URL redesign (JP 2026-10, deferred): `/s/<room>` as the canonical
+  shareable match link (scales to `/s/<server>/<room>` later); query
+  params carry only dev/test knobs (`mode`/`map`/`bots` → lobby/setup
+  picks, `net`/`debug` → config/localStorage defaults, hidden `?`
+  escape hatch OK for soaks). Real gap to fix: URL doesn't update on
+  join/leave — pushState so a live room is copy-pasteable.
 
 ## Non-goals
 - No engine rewrite, no ECS framework, no server authoritative physics yet.
