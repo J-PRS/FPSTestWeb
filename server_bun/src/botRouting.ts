@@ -236,7 +236,10 @@ export class BotRouting {
       }
       const rabbitP = flag.carrier ? this.room.players.getPlayer(flag.carrier) : null;
       const pos = flag.state === 'carried' && rabbitP ? rabbitP.position : flag.pos;
-      return { pos, infiltrating: false, running: true };
+      // Runner commitment: the flag IS rabbit — without it the objective
+      // bids 1.0 against pickups/heard fights and loses, which is why the
+      // flag sat loose untouched for minutes.
+      return { pos, infiltrating: false, running: true, runner: true };
     }
     if (!p.team) return null;
     const me = p.team as TeamId;
