@@ -42,13 +42,18 @@ const noGoal: Record<string, number> = {};
 const aliveT: Record<string, number> = {};
 const streak: Record<string, number> = {};
 const maxStreak: Record<string, number> = {};
+const lastPos: Record<string, { x: number; z: number }> = {};
+const travel: Record<string, number> = {};
 const w0 = Date.now();
 for (let t = 0; t < ticks; t++) {
   step(room, 1, DT);
   room.messages.respawnTick(simNow());
   for (const p of room.players.getAllPlayers().values()) {
-    if (p.isDead) { streak[p.id] = 0; continue; }
+    if (p.isDead) { streak[p.id] = 0; lastPos[p.id] = { x: p.position.x, z: p.position.z }; continue; }
     aliveT[p.id] = (aliveT[p.id] ?? 0) + DT;
+    const lp = lastPos[p.id];
+    if (lp) travel[p.id] = (travel[p.id] ?? 0) + Math.hypot(p.position.x - lp.x, p.position.z - lp.z);
+    lastPos[p.id] = { x: p.position.x, z: p.position.z };
     if (room.bots.debugDest(p.id) === null) {
       noGoal[p.id] = (noGoal[p.id] ?? 0) + DT;
       streak[p.id] = (streak[p.id] ?? 0) + DT;
@@ -63,10 +68,11 @@ const rows = Object.keys(aliveT).map(id => ({
   goalless: noGoal[id] ?? 0,
   pct: (noGoal[id] ?? 0) / aliveT[id] * 100,
   maxStreak: maxStreak[id] ?? 0,
+  mps: (travel[id] ?? 0) / aliveT[id],
 })).sort((a, b) => b.pct - a.pct);
 console.log(`dest-less probe — mode=${MODE} map=${MAP} bots=${BOTS} sim=${HOURS}h wall=${((Date.now() - w0) / 1000).toFixed(0)}s`);
 for (const r of rows) {
-  console.log(`  ${r.id}: ${r.pct.toFixed(1)}% goal-less (${r.goalless.toFixed(0)}s of ${r.alive.toFixed(0)}s alive) worst streak ${r.maxStreak.toFixed(1)}s`);
+  console.log(`  ${r.id}: ${r.pct.toFixed(1)}% goal-less · ${r.mps.toFixed(1)} m/s avg travel · worst streak ${r.maxStreak.toFixed(1)}s`);
 }
 const avg = rows.reduce((n, r) => n + r.pct, 0) / (rows.length || 1);
 console.log(`  roster mean ${avg.toFixed(1)}%`);
