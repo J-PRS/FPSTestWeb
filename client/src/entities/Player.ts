@@ -68,6 +68,8 @@ export class Player {
   // physically lowered, shooting mid-throw would fire through the hip.
   throwLockT = 0;
   health = 100;
+  private _prevHealth = 100;
+  private _regenBaseT = 0;
   /** Server-owned bonus pool (powerup drops) — absorbs most of a hit
    *  before health; mirrored from playerHit/buff messages, never set
    *  locally. */
@@ -112,6 +114,8 @@ export class Player {
     this.applyPendingPerk(); // banked perk lands first — maxHealth reads it
     this.applyPendingClass(); // banked tier swap lands on the new life
     this.health = this.maxHealth;
+    this._prevHealth = this.health;
+    this._regenBaseT = 0;
     this.armor = 0;
     this.energy = this.energyCap;
     this.jetLockT = 0;
@@ -607,10 +611,16 @@ export class Player {
     if (this.energy <= 0) {this.jetLockT = ENERGY.jetLockout;}
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
-    // tick it here so the perk works without a connection.
-    if (this.mods.regen > 0 && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
-      this.health = Math.min(this.maxHealth, this.health + this.mods.regen * dt);
+    // tick it here so the perk works without a connection. Ramp mirrors
+    // the server rule: unhurt seconds Ã— regenRamp, reset by any hp drop.
+    if ((this.mods.regen > 0 || this.mods.regenRamp > 0) && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
+      const now = performance.now();
+      if (this.health < this._prevHealth) this._regenBaseT = now;
+      if (!this._regenBaseT) this._regenBaseT = now;
+      const rate = this.mods.regen + this.mods.regenRamp * (now - this._regenBaseT) / 1000;
+      this.health = Math.min(this.maxHealth, this.health + rate * dt);
     }
+    this._prevHealth = this.health;
     return isJetting;
   }
 

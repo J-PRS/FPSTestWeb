@@ -7,7 +7,7 @@ import { PERKS, PERK_ORDER, perkMods, effectiveResist, isPerkId, type PerkId } f
 // a loadout — pin the contract both ends share.
 
 const MOD_KEYS = [
-  'jetDrain', 'jetRegen', 'damageResist', 'maxHealth', 'regen',
+  'jetDrain', 'jetRegen', 'damageResist', 'maxHealth', 'regen', 'regenRamp',
   'energyRegen', 'directDamage', 'aoeRadius', 'knockbackTaken',
   'healBoost', 'selfDamage', 'energyMax', 'pickupRadius',
 ] as const;
@@ -29,7 +29,7 @@ describe('perks', () => {
         expect(v as number, `${id}.${k}`).toBeGreaterThanOrEqual(0);
         // Multipliers must stay inside a sane band — a 0 or 5x modifier
         // is a balance typo, not a perk.
-        if (k !== 'maxHealth' && k !== 'regen' && k !== 'damageResist') {
+        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist') {
           expect(v as number, `${id}.${k}`).toBeLessThanOrEqual(3);
         }
         if (k === 'damageResist') expect(v as number).toBeLessThan(1);
@@ -40,7 +40,7 @@ describe('perks', () => {
   it('perkMods: unknown/absent ids fall back to the ZERO row, never null', () => {
     const zero = perkMods('none');
     for (const k of MOD_KEYS) {
-      expect(zero[k]).toBe(k === 'maxHealth' || k === 'regen' || k === 'damageResist' ? 0 : 1);
+      expect(zero[k]).toBe(k === 'maxHealth' || k === 'regen' || k === 'regenRamp' || k === 'damageResist' ? 0 : 1);
     }
     expect(perkMods(undefined)).toEqual(zero);
     expect(perkMods(null)).toEqual(zero);
