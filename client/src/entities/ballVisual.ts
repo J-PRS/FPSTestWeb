@@ -66,15 +66,17 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
       b.trailDriver = new TrailDriver(
         {
           pos: b._rpos, vel: b.vel,
-          // Dead balls fade only — updateBallDead emits nothing, so the
-          // driver must not keep sparkling a corpse on the stale near flag.
-          emitting: () => !b.dead && b._trailNear,
+          // Dead balls fade only — updateBallDead emits nothing. The 200m
+          // cull lives on the DOT emitter only: gating the whole emit
+          // here starved ribbons too, so every ball past 200m flew
+          // trail-less ("missing trails").
+          emitting: () => !b.dead,
           ribbonEmitting: () => !b.dead && b.vel.lengthSq() > 0.5,
           emitOnJump: false,
           maxStep: (d) => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
         },
         [{
-          emitSegment: () => b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color),
+          emitSegment: () => { if (b._trailNear) { b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color); } },
           teleport: () => { /* dot deposits die fast — suppression is the cut */ },
         }],
         b.ribbons,
