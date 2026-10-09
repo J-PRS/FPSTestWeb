@@ -16,7 +16,7 @@ describe('flag lane hash covers wire-visible rows only', () => {
     expect(room.flags!.flags.size).toBe(1);
     expect([...room.flags!.flags.values()][0]!.state).toBe('unspawned');
     // The lane input TickLoop hashes — the same set snapshot() emits.
-    const wireVisible = [...room.flags!.flags].filter(([, f]) => f.state !== 'unspawned');
+    const wireVisible = [...room.flags!.flags].filter(([, f]) => f.state !== 'unspawned') as unknown as [string | number, Record<string, unknown>][];
     expect(replicaHash(WORLD_MODEL.flag!, wireVisible))
       .toBe(replicaHash(WORLD_MODEL.flag!, [])); // == client's empty flagStates
     expect(room.flags!.snapshot()).toHaveLength(0);
@@ -29,7 +29,7 @@ describe('flag lane hash covers wire-visible rows only', () => {
     pin(room, a.id, { x: 0, y: 0, z: 0 });
     pin(room, b.id, { x: 5, y: 0, z: 5 });
     room.flags!.spawnAtCorpse(b.id);
-    const wireVisible = [...room.flags!.flags].filter(([, f]) => f.state !== 'unspawned');
+    const wireVisible = [...room.flags!.flags].filter(([, f]) => f.state !== 'unspawned') as unknown as [string | number, Record<string, unknown>][];
     const lane = replicaHash(WORLD_MODEL.flag!, wireVisible);
     // Client view: flagUpdate rows → flagStates { team: {state, carrier} }.
     const clientView = new Map(room.flags!.snapshot().map((f) => [f.team, { state: f.state, carrier: f.carrier }]));

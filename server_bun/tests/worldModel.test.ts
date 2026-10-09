@@ -203,7 +203,7 @@ describe('world model <-> protocol conformance', () => {
     const p: WireTickPlayer = {
       playerId: 'p1', position: { x: 2500.4, y: -1600.2, z: 4095.9 },
       rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
-      health: 100, isDead: false,
+      health: 100, isDead: false, ski: 0,
     };
     const back = decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV3(7, p)], WIRE_TICK_V3));
     const u = back!.updates[0]!;
