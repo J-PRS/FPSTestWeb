@@ -436,9 +436,17 @@ export class TeamBots {
     ctx.terrain = terrain;
     ctx.enemies = enemies;
     ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
-    ctx.objective = info?.pos ?? this.rabbit?.goalFor(bot.playerId, (id) => this.posOf(id)) ?? null;
+    const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id) => this.posOf(id)) ?? null;
+    ctx.objective = info?.pos ?? rabbitGoal;
     ctx.infiltrating = info?.infiltrating ?? false;
-    ctx.running = info?.running ?? false;
+    ctx.running = info?.running ?? rabbitGoal !== null;
+    // Rabbit hunters get the server's runner commitment — the flag
+    // outranks combat/hunt senses. Without this they only crash it
+    // inside 40m, which read as "bots don't care about the flag".
+    ctx.runner = rabbitGoal !== null;
+    ctx.wave = false;
+    ctx.marshal = false;
+    ctx.posted = undefined;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
     this.fillSenses(ctx, bot, others);
     return ctx;

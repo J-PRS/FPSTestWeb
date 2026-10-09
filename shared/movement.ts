@@ -496,12 +496,21 @@ export class MoveSim {
       // A held jet reads as a launch: thrust after this clamp is what
       // generates the climb, but re-grounding here would eat the whole
       // burn until vel crosses the 3 m/s gate (~0.9s of dead jet).
-      const rising = this.input.jetHeld
+      const inputTakeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
+      const rising = inputTakeoff
         || velDotN > MOVEMENT_CONFIG.groundLaunchVel
         || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
-      s.onGround = !rising;
-      this.allowNextJump = !rising;
-      this.groundGraceT = rising ? 0 : MOVEMENT_CONFIG.groundGraceT;
+      if (rising && !inputTakeoff && this.groundGraceT > 0) {
+        // Geometric bounce off the face, not a takeoff — the lingering
+        // contact survives the same as the banded skim below; the grace
+        // keeps burning (decremented at the top of collideTerrain).
+        s.onGround = true;
+        this.allowNextJump = true;
+      } else {
+        s.onGround = !rising;
+        this.allowNextJump = !rising;
+        this.groundGraceT = rising ? 0 : MOVEMENT_CONFIG.groundGraceT;
+      }
     } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)) {
       // Stick to the surface: bumps and crest lips inside the snap
       // distance keep ground contact instead of flipping airborne for a
@@ -515,28 +524,27 @@ export class MoveSim {
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
       const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;
+      // Inside the band the surface is still in contact range — grounded
+      // persists regardless of bounce velocity (T1 contact distance);
+      // the grace window only governs out-of-band lingering.
+      const takeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
+      if (!takeoff) {
+        this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
+        s.onGround = true;
+      } else {
+        s.onGround = false;
+        this.groundGraceT = 0;
+      }
       if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, ty0, tz0) <= stickSpeed && !this.input.jetHeld) {
         this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
         if (velDotN < 0) {
           s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
         }
         s.pos.y = groundY;
-        s.onGround = true;
         this.allowNextJump = true;
-        this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
-      } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && this.groundGraceT > 0) {
-        // Geometric skim — velDotN reads launched purely because the surface
-        // fell away (crest at speed). World-up velocity separates it from a
-        // real impulse takeoff: skims hold the lingering-contact window,
-        // launches kill it.
-        s.onGround = true;
-      } else {
-        // Fast/launched inside the snap band — a real launch, not a skim.
-        s.onGround = false;
-        this.groundGraceT = 0;
       }
-    } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && this.groundGraceT > 0) {
-      // Outside the snap band without a launch impulse — the crest-lip
+    } else if (!this.input.jetHeld && !this.input.jumpHeld && this.groundGraceT > 0) {
+      // Outside the snap band without a takeoff input — the crest-lip
       // case T1 covered with MAXJUMPTICKS: still grounded for the grace.
       s.onGround = true;
     } else {

@@ -5,7 +5,7 @@ import { MAX_DELTA_TIME } from '../core/config.js';
 import { urlParams, isDevHost } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
-import { updateGibs } from '../entities/swarms.js';
+import { updateGibs, getShadows } from '../entities/swarms.js';
 import { updateSwings } from '../effects/swingTrails.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
@@ -76,6 +76,8 @@ const JUMP_FRAME_M = 8;
 // max, the jump itself still counts every time via _posPrev tracking.
 let _posJumpLastAt = 0;
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
+const _selfShadowOwner = { swarmSlot: -1, shadowSlot: -1 }; // self blob — shared instanced pool slot
+const _selfShadowPos = new THREE.Vector3();
 const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
@@ -434,6 +436,17 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     hud.setEnergy(playerSheep.energy);
   }
   hud.setGround(player.onGround, player.pos.y - terrain.getHeight(player.pos.x, player.pos.z));
+  // Self blob — the first-person body never reaches the shadow pass, so
+  // it joins the shared instanced blob pool remotes/creatures ride.
+  const selfShadows = getShadows();
+  if (selfShadows) {
+    if (_selfShadowOwner.shadowSlot < 0) {_selfShadowOwner.shadowSlot = selfShadows.alloc(_selfShadowOwner);}
+    if (_selfShadowOwner.shadowSlot >= 0) {
+      const cap = classCapsule(player.appliedClass);
+      _selfShadowPos.set(player.pos.x, player.pos.y - cap.eye, player.pos.z);
+      selfShadows.set(_selfShadowOwner, _selfShadowPos, cap.radius * 1.9, 0.4);
+    }
+  }
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
   budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
   // Belt charges ARE the nugget wallet — spawn stock + pickups, spent by

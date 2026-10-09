@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { Projectile } from '../../projectiles/Projectile.js';
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { setRibbonCamera, RibbonTrail } from '../../effects/RibbonTrail.js';
+import { sweepSmear } from '../../effects/trailBatch.js';
 import { Explosion } from '../../effects/explosion.js';
 import { AoeGizmo } from '../../effects/aoeGizmo.js';
 import { Implosion } from '../../effects/implosion.js';
@@ -223,6 +224,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   // (a path that skipped releaseSlot) gets blacked out before it can sit
   // as a frozen streak — the count surfaces in the Alt+Q dump.
   RibbonTrail.sweepLit();
+  sweepSmear();
   // Owner-side counterpart of sweepLit: a done ribbon nobody updates any
   // more (orphan path that skipped dispose) still holds its slot + liveSet
   // entry forever — reclaim it so the pool and census reflect reality.

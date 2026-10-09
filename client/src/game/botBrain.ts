@@ -192,6 +192,15 @@ export class GameBot extends RemotePlayer {
     threats?: { x: number; y: number; z: number }[];
     /** Carrying the objective — the route rules the feet. */
     running?: boolean;
+    /** Flag-seeker commitment (rabbit hunters, CTF recoverers) — the
+     *  objective outranks the hunt/dodge senses, same as server-side. */
+    runner?: boolean;
+    /** Named wave member — feet committed to a push/escort flood. */
+    wave?: boolean;
+    /** Escort-officer wave — holds position ahead of a moving carrier. */
+    marshal?: boolean;
+    /** Posted radius around the objective — 0/omitted hunts freely. */
+    posted?: number;
     /** Rushing the enemy stand — cloak candidates cloak up. */
     infiltrating?: boolean;
     /** Enemy carrying OUR flag — beacon-marked, engages without LOS. */
@@ -242,6 +251,10 @@ export class GameBot extends RemotePlayer {
       threats: ctx.threats,
       infiltrating: ctx.infiltrating,
       running: ctx.running,
+      runner: ctx.runner,
+      wave: ctx.wave,
+      marshal: ctx.marshal,
+      posted: ctx.posted,
       thief: ctx.thief ?? null,
       huntCreatures: ctx.huntCreatures,
       repair: ctx.repair ?? null,

@@ -245,8 +245,11 @@ export class InstancedBlobShadows {
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.terrain = terrain;
-    // Unit disc — per-instance matrix carries radius via scale
-    const geo = new THREE.CircleGeometry(1, 24);
+    // Unit(-ish) disc: a low-vert circle under-conforms on slopes — the
+    // heightfield displacement only samples at verts, so rim-to-center
+    // edges slice through dune faces. A subdivided quad samples often
+    // enough to hug the surface; uv stays planar for the radial alpha.
+    const geo = new THREE.PlaneGeometry(2, 2, 12, 12);
     geo.rotateX(-Math.PI / 2);
     this.opacity = new THREE.InstancedBufferAttribute(new Float32Array(SHADOW_CAPACITY), 1);
     this.opacity.setUsage(THREE.DynamicDrawUsage);

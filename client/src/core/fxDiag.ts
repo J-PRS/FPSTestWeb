@@ -46,6 +46,22 @@ export interface DbgTag {
 
 /** Single write site for the probe contract — tag every render object an
  *  on-screen frozen VFX could ever be blamed on. */
+/** Visual-glitch alarm — invariants like "a ribbon's verts lie on one
+ *  trajectory" that, when broken, paint garbage on screen. Each kind is
+ *  counted for the diag dump AND logged loudly (rate-limited so a
+ *  per-frame offender can't flood the shipped log). */
+const glitchCounts: Record<string, number> = {};
+export function glitch(kind: string, detail: Record<string, unknown> = {}): void {
+  const n = (glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1);
+  if (n <= 3 || n % 100 === 0) {
+    // Lazy import would devolve the module graph — Logger is core like us.
+    console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));
+  }
+}
+export function glitchCountsDump(): Record<string, number> { return { ...glitchCounts }; }
+
+registerDiag('glitches', () => glitchCountsDump());
+
 export function markProbe(obj: { userData: Record<string, unknown> }, tag: DbgTag): void {
   obj.userData.dbg = tag;
 }

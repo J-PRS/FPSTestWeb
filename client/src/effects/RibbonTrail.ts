@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 import { EMIT_GAIN } from '../core/config.js';
-import { registerDiag } from '../core/fxDiag.js';
+import { registerDiag, glitch } from '../core/fxDiag.js';
 import type {
   TrailBatch} from './trailBatch.js';
 import { RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
   retireBatchIfOverflow, slotLit, litAudit, sweepLit, reapedLit,
-  batchStats,
+  batchStats, smearCuts,
 } from './trailBatch.js';
 export { TrailBatch, RIBBON_TRIS_PER_SLOT } from './trailBatch.js';
 
@@ -39,6 +39,11 @@ export interface RibbonOpts {
  *  billboard (ball ribbons get theirs via an explicit argument instead). */
 let sharedCamPos: THREE.Vector3 | null = null;
 export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos = pos; }
+
+/** Discontinuity budget for the follow re-pin — a fast shell covers
+ *  ~15m/tick; 60m leaves slack for low-fps catches, cuts map-spanning
+ *  drags. Mirrors push()'s `spd*0.25 + 12` at the top end. */
+const FOLLOW_JUMP_M = 60;
 
 export class RibbonTrail {
   private batch!: TrailBatch;
@@ -134,6 +139,9 @@ export class RibbonTrail {
   /** push() calls that arrived after release — the owner outlived its
    *  ribbon (swept/mass-disposed). Counted, not silent. */
   static zombiePushes = 0;
+  /** follow re-pins refused as discontinuities — orphaned ribbons
+   *  stretching to a recycled host pos. Trends 0; the smear canary. */
+  static followJumps = 0;
   /** Debug dump for __trailDump — one row per live ribbon. */
   static dump(): Record<string, unknown>[] {
     const now = performance.now();
@@ -409,9 +417,18 @@ export class RibbonTrail {
     this.time += dt;
     this.emitScale = this.rampDur > 0 ? Math.min(1, this.rampFrom + (1 - this.rampFrom) * (this.time / this.rampDur)) : 1;
     if (this.follow && this.count > 0) {
-      this.px[this.head] = this.follow.x + this._ox;
-      this.py[this.head] = this.follow.y + this._oy;
-      this.pz[this.head] = this.follow.z + this._oz;
+      // Same discontinuity budget push() uses: a re-pin past it means the
+      // host (or its recycled pos vector) jumped — stretching the head to
+      // it paints a chord across the map, so cut instead.
+      const jx = this.follow.x + this._ox - this.px[this.head];
+      const jy = this.follow.y + this._oy - this.py[this.head];
+      const jz = this.follow.z + this._oz - this.pz[this.head];
+      if (jx * jx + jy * jy + jz * jz > FOLLOW_JUMP_M * FOLLOW_JUMP_M) {
+        this.clear();
+        RibbonTrail.followJumps++;
+        glitch('follow-jump', { tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) });
+        return;
+      }
     }
     if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(camPos);
@@ -561,6 +578,8 @@ registerDiag('ribbons', () => ({
   reapedStale: RibbonTrail.reapedStale,
   nanReject: { pushes: RibbonTrail.nanPushes, sides: RibbonTrail.nanSides },
   zombiePushes: RibbonTrail.zombiePushes,
+  followJumps: RibbonTrail.followJumps,
+  smearCuts,
 }));
 
 /** Shared 'stop → update until done → dispose' drain — detonation paths

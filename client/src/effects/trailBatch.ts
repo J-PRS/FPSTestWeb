@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { BLOOM_LAYER } from '../core/config.js';
 import { urlParams } from '../core/params.js';
-import { markProbe } from '../core/fxDiag.js';
+import { markProbe, glitch } from '../core/fxDiag.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 // Samples per ribbon slot — the batch's index/vertex layout is built
@@ -223,6 +223,44 @@ export function litAudit(): { lit: number; unowned: number[] } {
 }
 
 export let reapedLit = 0;
+
+/** Consecutive lit verts beyond this gap can't lie on one trajectory —
+ *  the chord IS the sky-smear. 60m matches RibbonTrail's cut budget. */
+const SMEAR_GAP_M = 60;
+export let smearCuts = 0;
+
+/** Writer-agnostic smear canary: any lit slot whose consecutive verts
+ *  jump >SMEAR_GAP_M is painting a chord between unrelated points —
+ *  whatever path wrote it, black the slot and count it. Diagnostics
+ *  surface the count; the smear can't outlive a frame. */
+export function sweepSmear(): void {
+  for (const b of allBatches()) {
+    let dirty = false;
+    for (const s of b.used) {
+      const base = s * RIBBON_FLOATS_PER_SLOT;
+      let smeared = false, gapSq = 0;
+      let px = 0, py = 0, pz = 0, hasPrev = false;
+      for (let i = 0; i < VERTS; i += 2) {
+        const c = base + i * 3;
+        if (b.col[c] === 0 && b.col[c + 1] === 0 && b.col[c + 2] === 0) {continue;}
+        const x = b.pos[c], y = b.pos[c + 1], z = b.pos[c + 2];
+        if (hasPrev) {
+          const dx = x - px, dy = y - py, dz = z - pz;
+          if (dx * dx + dy * dy + dz * dz > SMEAR_GAP_M * SMEAR_GAP_M) { smeared = true; gapSq = dx * dx + dy * dy + dz * dz; break; }
+        }
+        px = x; py = y; pz = z; hasPrev = true;
+      }
+      if (!smeared) {continue;}
+      b.col.fill(0, base, base + VERTS * 3);
+      b.mark(base, base + VERTS * 3);
+      dirty = true;
+      smearCuts++;
+      glitch('trail-smear', { slot: s, gapM: Math.round(Math.sqrt(gapSq)) });
+    }
+    if (dirty) {b.flush();}
+  }
+}
+
 /** Sweep unowned lit slots to black — the auto-heal half of litAudit,
  *  so any undiscovered leak path self-cleans instead of freezing a
  *  streak midair. Runs once per frame from updateProjectiles. */
