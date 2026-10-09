@@ -144,7 +144,8 @@ export class SheepCore {
     // refusal to fire. Only counts a PARKED body — a skiing one is
     // playing Tribes even while it holds fire.
     const refusing = s.refusingFire ?? this.notShooting(id);
-    if (!tribesing && s.foe && refusing) {
+    const parked = s.vel.x * s.vel.x + s.vel.y * s.vel.y + s.vel.z * s.vel.z < 4;
+    if (!tribesing && s.foe && refusing && parked) {
       const ig = s.dt * 40;
       why.ignore += ig;
       meter += ig;
