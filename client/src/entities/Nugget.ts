@@ -5,6 +5,7 @@ import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { metalMat } from './procMetal.js';
+import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -26,6 +27,32 @@ const NUGGET_GEO = new THREE.IcosahedronGeometry(NUGGET_RADIUS, 0);
 const _target = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
+// Nugget bodies/accents draw from shared InstancedMeshes per shape — a
+// busy fight drops 15-20 gems and each real Mesh was 2 draws + a sprite.
+// Kind tint rides instanceColor so one pool serves every drop color.
+const POOL_CAP = 256;
+interface NuggetPools { body: PartPool; accent: PartPool | null; }
+const _pools = new Map<THREE.BufferGeometry, NuggetPools>();
+const _m = new THREE.Matrix4();
+const _e = new THREE.Euler();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+
+function poolsFor(scene: THREE.Scene, geo: THREE.BufferGeometry, accentGeo: THREE.BufferGeometry | null, bodyMat: () => THREE.Material): { body: PartPool; accent: PartPool | null } {
+  let p = _pools.get(geo);
+  if (p) return p;
+  p = {
+    body: makePartPool(scene, geo, bodyMat(), POOL_CAP),
+    accent: accentGeo ? makePartPool(scene, accentGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), POOL_CAP) : null,
+  };
+  p.body.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);
+  if (p.accent) p.accent.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);
+  p.body.mesh.layers.enable(BLOOM_LAYER);
+  if (p.accent) p.accent.mesh.layers.enable(BLOOM_LAYER);
+  _pools.set(geo, p);
+  return p;
+}
+
 /**
  * Nugget: Vampire-Survivors-style pickup gem dropped by destroyed targets.
  * Inherits a fraction of the victim's velocity, tumbles under gravity,
@@ -42,9 +69,12 @@ export class Nugget {
   serverOwned = false;
 
   private scene: THREE.Scene;
-  private mesh: THREE.Mesh;
-  private mat: THREE.MeshBasicMaterial | THREE.MeshStandardMaterial;
-  private accentMat: THREE.MeshBasicMaterial | null = null;
+  private pools: NuggetPools;
+  private slot: number;
+  private spinX = 0;
+  private spinY = 0;
+  private visScale = 1;
+  private pulseColor = new THREE.Color();
   private glow: THREE.Sprite;
   private glowMat: THREE.SpriteMaterial;
   private trailFx: BallTrailDots;
@@ -72,19 +102,12 @@ export class Nugget {
     this.vel.z += (Math.random() - 0.5) * 4;
 
     if (parts) {
-      this.mat = metalMat(parts.bodyColor); // procMetal recipe — worn metal via the wear bake
-      this.accentMat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
-      this.mesh = new THREE.Mesh(parts.body, this.mat);
-      const am = new THREE.Mesh(parts.accent, this.accentMat);
-      am.layers.enable(BLOOM_LAYER);
-      this.mesh.add(am);
+      this.pools = poolsFor(scene, parts.body, parts.accent, () => metalMat(parts.bodyColor));
     } else {
-      this.mat = new THREE.MeshBasicMaterial({ color: this.emitColor.clone().multiplyScalar(EMIT_GAIN) });
-      this.mesh = new THREE.Mesh(NUGGET_GEO, this.mat);
+      this.pools = poolsFor(scene, NUGGET_GEO, null, () => new THREE.MeshBasicMaterial({ color: 0xffffff }));
     }
-    this.mesh.position.copy(this.pos);
-    this.mesh.layers.enable(BLOOM_LAYER);
-    scene.add(this.mesh);
+    this.slot = takeSlot(this.pools.body);
+    this.writeInstance();
 
     // Billboarded glow halo — makes the nugget readable at distance
     this.glowMat = new THREE.SpriteMaterial({
@@ -145,10 +168,27 @@ export class Nugget {
 
   private updateCollectFade(dt: number): void {
     this.collectFade += dt * 8;
-    this.mesh.scale.setScalar(Math.max(0, 1 - this.collectFade));
+    this.visScale = Math.max(0, 1 - this.collectFade);
+    this.writeInstance();
     this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
-    this.glow.scale.setScalar(2.2 * Math.max(0, 1 - this.collectFade));
+    this.glow.scale.setScalar(2.2 * this.visScale);
     if (this.collectFade >= 1 && this.trailFx.size === 0) {this.dead = true;}
+  }
+
+  private writeInstance(): void {
+    if (this.slot < 0) return;
+    _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
+    const m = _m.compose(this.pos, _q, _s.setScalar(this.visScale));
+    this.pools.body.mesh.setMatrixAt(this.slot, m);
+    this.pools.body.mesh.instanceMatrix.needsUpdate = true;
+    this.pools.body.mesh.setColorAt(this.slot, this.pulseColor.copy(this.emitColor).multiplyScalar(EMIT_GAIN));
+    this.pools.body.mesh.instanceColor!.needsUpdate = true;
+    if (this.pools.accent) {
+      this.pools.accent.mesh.setMatrixAt(this.slot, m);
+      this.pools.accent.mesh.instanceMatrix.needsUpdate = true;
+      this.pools.accent.mesh.setColorAt(this.slot, this.pulseColor);
+      this.pools.accent.mesh.instanceColor!.needsUpdate = true;
+    }
   }
 
   private magnetStep(dt: number, dist: number, pickupScale = 1): void {
@@ -222,18 +262,34 @@ export class Nugget {
   }
 
   private updateVisuals(dt: number): void {
-    this.mesh.position.copy(this.pos);
-    this.mesh.rotation.y += dt * 3;
-    this.mesh.rotation.x += dt * 1.2;
+    this.spinY += dt * 3;
+    this.spinX += dt * 1.2;
     if (this.settled) {
-      this.mesh.position.y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
       const pulse = 1 + Math.sin(this.age * 5) * 0.12;
-      (this.accentMat ?? this.mat as THREE.MeshBasicMaterial).color.copy(this.emitColor).multiplyScalar(pulse * EMIT_GAIN);
+      this.pulseColor.copy(this.emitColor).multiplyScalar(pulse);
+      const y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
+      _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
+      const m = _m.compose(_target.set(this.pos.x, y, this.pos.z), _q, _s.setScalar(this.visScale));
+      if (this.slot >= 0) {
+        this.pools.body.mesh.setMatrixAt(this.slot, m);
+        this.pools.body.mesh.instanceMatrix.needsUpdate = true;
+        this.pools.body.mesh.setColorAt(this.slot, this.pulseColor.copy(this.emitColor).multiplyScalar(pulse * EMIT_GAIN));
+        this.pools.body.mesh.instanceColor!.needsUpdate = true;
+        if (this.pools.accent) {
+          this.pools.accent.mesh.setMatrixAt(this.slot, m);
+          this.pools.accent.mesh.instanceMatrix.needsUpdate = true;
+          this.pools.accent.mesh.setColorAt(this.slot, this.pulseColor.copy(this.emitColor).multiplyScalar(pulse * EMIT_GAIN));
+          this.pools.accent.mesh.instanceColor!.needsUpdate = true;
+        }
+      }
+      this.glow.position.set(this.pos.x, y, this.pos.z);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
+      return;
     }
+    this.writeInstance();
     // Halo stays welded to the nugget — the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
-    this.glow.position.copy(this.mesh.position);
+    this.glow.position.copy(this.pos);
   }
 
   private emitTrail(dt: number): void {
@@ -250,10 +306,12 @@ export class Nugget {
   }
 
   dispose(): void {
-    this.scene.remove(this.mesh);
     this.scene.remove(this.glow);
-    this.mat.dispose();
-    this.accentMat?.dispose();
+    if (this.slot >= 0) {
+      releaseSlot(this.pools.body, this.slot);
+      if (this.pools.accent) releaseSlot(this.pools.accent, this.slot);
+      this.slot = -1;
+    }
     this.glowMat.dispose();
     this.trailFx.dispose();
   }
