@@ -20,6 +20,7 @@ import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow, type WallMs } from './wallClock.ts';
+import { simNow } from './simClock.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -497,6 +498,9 @@ export class MessageHandler {
         // truth, so the reconnecting client replays its journal over
         // it instead of snapping backward (see restoreLocalPlayer).
         inputSeq: this.roomInfo.inputSeqOf?.(playerId),
+        // Remaining spawn shield — a joiner who lands mid-window has the
+        // client predict blasts the server is still refusing to apply.
+        protectedMs: Math.max(0, player.protectedUntil - simNow()),
       },
     });
 

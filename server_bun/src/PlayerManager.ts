@@ -10,6 +10,7 @@ import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import { SPAWN_PROTECT_MS } from '../../shared/constants.ts';
 import { simNow, simMs } from './simClock.ts';
 import { wallNow, wallMs } from './wallClock.ts';
 
@@ -31,9 +32,6 @@ export class PlayerManager {
   /** Spawn jitter source — Room wires its seeded rng so soaks/tests can
    *  reproduce a spawn layout. */
   spawnRng: () => number = Math.random;
-  /** Spawn protection window — long enough to orient, short enough that
-   *  camping a spawn ring still works. */
-  static readonly SPAWN_PROTECT_MS = 2000;
 
   /** Team home bases — when set, team members spawn near their own flag
    *  instead of the generic farthest-from-everyone ring. */
@@ -111,12 +109,13 @@ export class PlayerManager {
       lastFireSim: simMs(-Infinity),
       history: [],
       forceSendUntil: wallMs(0),
-      protectedUntil: simMs(simNow() + PlayerManager.SPAWN_PROTECT_MS),
+      protectedUntil: simMs(simNow() + SPAWN_PROTECT_MS),
       healCredit: 0,
       beltCharges: BELT_MAX,
       armor: 0,
       regenUntil: simMs(0),
       ddUntil: simMs(0),
+      lastDamageAt: simMs(simNow()), // spawn counts as the ramp's t=0
       charge: 0,
       chargeT: 0,
       chargeEchoed: 0,
@@ -272,6 +271,7 @@ export class PlayerManager {
       target.armor -= soaked;
       incoming -= soaked;
     }
+    target.lastDamageAt = simMs(simNow()); // regenerator ramp resets on any hit that lands
     target.health -= incoming;
     if (target.health <= 0) {
       target.health = 0;
@@ -324,6 +324,7 @@ export class PlayerManager {
     player.armor = 0;
     player.regenUntil = simMs(0);
     player.ddUntil = simMs(0);
+    player.lastDamageAt = simMs(simNow()); // a fresh life is a fresh ramp
     player.charge = 0;
     player.beltCharges = BELT_MAX;
     player.pendingRespawn = false;
@@ -342,7 +343,7 @@ export class PlayerManager {
     // hit validation and muzzle checks would rewind to the death site.
     player.history.length = 0;
     player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z });
-    player.protectedUntil = simMs(simNow() + PlayerManager.SPAWN_PROTECT_MS);
+    player.protectedUntil = simMs(simNow() + SPAWN_PROTECT_MS);
 
     return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };
   }

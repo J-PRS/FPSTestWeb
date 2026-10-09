@@ -14,6 +14,7 @@ import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 import { logger } from './logger.ts';
 import { wallNow , wallMs} from './wallClock.ts';
+import { simNow } from './simClock.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
@@ -240,6 +241,15 @@ export class BlastRunner {
     // at t≈0 is stepped past rather than counted.
     if (this.h.solids.length && this.blastBlocked(ctx.pos, tpos)) return;
 
+    // Spawn-shielded victim: damage already returns early inside
+    // applyDamage, but the shove landed anyway — an "invulnerable" target
+    // that still launches reads as a phantom push with zero feedback.
+    // Self/friendly assists unaffected: the shooter's own shield dies at
+    // trigger-pull, and jump-boosts are beneficial by design. The hit
+    // itself still registers (applyHit runs — shooter sees the contact,
+    // victim just doesn't move).
+    const protectedTarget = targetId !== ctx.shooterId && simNow() < target.protectedUntil && !this.h.friendly(ctx.shooterId, targetId);
+
     const impulseMag = Math.min(
       aoeImpulseT1At(ctx.impulse, ctx.pos, tpos, ctx.radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
       BLAST_IMPULSE_MAX);
@@ -247,7 +257,7 @@ export class BlastRunner {
     // hit claim, but the blast displacement is still owed (wire notify +
     // shadow impulse + forceSend, same as a splash shove).
     if (impulseOnly) {
-      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+      if (!protectedTarget) this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
       return;
     }
 
@@ -258,7 +268,7 @@ export class BlastRunner {
 
     // Humans self-predict their own displacement — server only shoves
     // the self-target when it's a bot (server velocity truth).
-    if (!shoveOnly || target.isBot) {
+    if ((!shoveOnly || target.isBot) && !protectedTarget) {
       this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
     }
     if (shoveOnly && ctx.weapon === WeaponType.Melee) return;
@@ -378,10 +388,14 @@ export class BlastRunner {
       const dz = target.position.z - pos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (dist - t1Minbox(target.armorClass) > radius) continue;
+      // Spawn-shielded targets take the hit but not the shove — same gap
+      // splashOne closes: "invulnerable" targets that still launch read
+      // as phantom wind.
+      const protectedTarget = targetId !== ownerId && simNow() < target.protectedUntil && !this.h.friendly(ownerId, targetId);
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
       const impulseMag = aoeImpulseT1At(knockback, pos, target.position, radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-      this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);
+      if (!protectedTarget) this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);
       // Owner eats the blast too — mines don't pick friends.
       if (!this.h.friendly(ownerId, targetId) && damage > 0) {
         const result = this.h.playerManager.applyDamage(targetId, damage);

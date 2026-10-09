@@ -385,4 +385,7 @@ export interface LocalPlayerState {
    *  replay journaled inputs over the restored anchor instead of
    *  hard-snapping to a seconds-stale position (lossy-link flap). */
   inputSeq?: number;
+  /** Spawn shield remaining — the client suppresses the same predicted
+   *  blast effects the server refuses to apply during the window. */
+  protectedMs?: number;
 }

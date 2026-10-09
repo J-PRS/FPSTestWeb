@@ -7,6 +7,7 @@ import { PlayerSkills } from './player/skills.js'
 import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';;
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
+import { SPAWN_PROTECT_MS } from '../../../shared/constants.js';
 import { PlayerStatus } from './playerStatus.js';
 
 import type { MovementState } from './movement.js';
@@ -74,6 +75,10 @@ export class Player {
   /** Timed powerup expiries (server epoch ms — same clock offset the
    *  buff message `until` arrives on; we just compare against Date.now). */
   buffUntil = { regen: 0, dd: 0 };
+  /** Spawn shield (performance.now deadline) — prediction suppresses the
+   *  enemy-blast shove/damage the server refuses during the window; the
+   *  remaining time rides localPlayerState.protectedMs on join. */
+  protectedUntil = 0;
   /** Passive loadout pick — mods from shared/perks.ts; announced at join.
    *  This is the PICKED intent; `appliedPerk` is what the sim reads. */
   perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
@@ -113,6 +118,7 @@ export class Player {
     this.buffUntil.regen = 0;
     this.buffUntil.dd = 0;
     this.lastDamageSource = '';
+    this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
     this.vel.set(0, 0, 0);
     // Re-arm the viewmodel to the active slot — a banked class swap can
@@ -524,7 +530,7 @@ export class Player {
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.renderPos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.renderPos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight, this.throwLockT);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.renderPos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight, this.throwLockT, this.terrain, CLASS_STATS[this.appliedClass].radius);
   }
 
   private tickTimers(dt: number): void {

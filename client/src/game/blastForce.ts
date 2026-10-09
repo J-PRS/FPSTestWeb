@@ -158,7 +158,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // bound the server applies and the ?debug gizmo draws. The old
     // falloffMultiplier stretched the zero-crossing 2.5-3× — a
     // local-player-only shove nobody else felt.
-    if (dpx - t1Minbox(player.appliedClass) < radius && !occluded(pos, player.pos)) {
+    // Spawn shield: the server refuses enemy-blast shove/damage during
+    // the window — predicting it anyway flies the protected player until
+    // the silent resync snaps them back (the "pushed by wind" report).
+    // Self blasts still predict (the server applies those); a friendly's
+    // blast suppression is harmless — its wire knockback lands anyway.
+    const shielded = a.shooterId !== undefined && a.shooterId !== 'local' && performance.now() < player.protectedUntil;
+    if (!shielded && dpx - t1Minbox(player.appliedClass) < radius && !occluded(pos, player.pos)) {
       applyTo(player, aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken);
       // Stamp the prediction — the server echoes this same shove back as a
       // `knockback` message ~RTT later; net/players.ts consumes the stamp

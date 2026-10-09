@@ -264,6 +264,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
     deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
     return;
   }
+  player.protectedUntil = performance.now() + (localPlayerState.protectedMs ?? 0);
 
   const v = localPlayerState.velocity;
   const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
