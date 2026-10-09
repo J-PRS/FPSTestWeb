@@ -178,7 +178,11 @@ export class PlayerGun {
     // posedump loop, tune via debugSetGunRot.
     if (mount?.euler) {
       this.group.rotation.set(mount.euler[0], mount.euler[1], mount.euler[2]);
-      this.baseX = mount.euler[0];
+      // Same bone-frame trap as the position kick: rotation.x on an euler
+      // mount is arbitrary in bone space, so the fx pitch delta swung the
+      // gun sideways. Stash the rest orientation as a quat — the fx path
+      // then composes deltas in the gun's own frame (muzzle-up pitch).
+      this.baseQuat = this.group.quaternion.clone();
     } else if (mount?.quat) {
       this.baseQuat = new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]);
       this.group.quaternion.copy(this.baseQuat);
