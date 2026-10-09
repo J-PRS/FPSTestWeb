@@ -5,6 +5,7 @@ import { markProbe } from '../core/fxDiag.js';
 import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import type { Terrain, FieldRing } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import { makePartPool, takeSlot, releaseSlot, ZERO_M4, type PartPool } from './deployPool.js';
 
 // Player-deployable recharge pad — the T2 remote-inventory-station role:
 // a field post you stand beside to refill health + energy. Destructible:
@@ -20,6 +21,27 @@ const _geoBase = new THREE.CylinderGeometry(0.7, 0.95, 0.3, 8);
 const _geoMast = new THREE.CylinderGeometry(0.1, 0.16, 1.1, 6);
 const _geoCrystal = new THREE.OctahedronGeometry(0.32, 0);
 const _geoStrut = new THREE.BoxGeometry(0.08, 0.7, 0.08);
+
+const POOL_CAP = 128;
+interface StationPool { base: PartPool; mast: PartPool; strut: PartPool; crystal: PartPool; }
+let _pool: StationPool | null = null;
+function poolFor(scene: THREE.Scene): StationPool {
+  if (!_pool) {
+    _pool = {
+      base: makePartPool(scene, _geoBase, _dark, POOL_CAP),
+      mast: makePartPool(scene, _geoMast, _metal, POOL_CAP),
+      strut: makePartPool(scene, _geoStrut, _metal, POOL_CAP * 3),
+      crystal: makePartPool(scene, _geoCrystal, _crystalMat, POOL_CAP),
+    };
+  }
+  return _pool;
+}
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _up = new THREE.Vector3(0, 1, 0);
 
 // The ground ring is a projected terrain-shader decal (Terrain.addFieldRing)
 // — it conforms to the displaced surface by construction. A draped mesh
@@ -42,6 +64,7 @@ export class DeployStation {
   readonly group = new THREE.Group();
   private crystal = new THREE.Group();
   private glow: THREE.Sprite;
+  private slot = -1;
   // Envelope visuals: the ground ring is a terrain-shader decal slot,
   // dome + motes stay world-space meshes (a tilted parent would shear
   // them, so they never ride the normal-aligned group either).
@@ -62,25 +85,7 @@ export class DeployStation {
     this.pos.copy(pos);
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
-    const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.15;
-    const mast = new THREE.Mesh(_geoMast, _metal);
-    mast.position.y = 0.75;
-    this.group.add(base, mast);
-    // Three foot-struts splay out — a pad that reads planted, not perched
-    for (let i = 0; i < 3; i++) {
-      const s = new THREE.Mesh(_geoStrut, _metal);
-      const a = (i / 3) * Math.PI * 2;
-      s.position.set(Math.cos(a) * 0.55, 0.28, Math.sin(a) * 0.55);
-      s.rotation.z = Math.cos(a) * -0.5;
-      s.rotation.x = Math.sin(a) * 0.5;
-      this.group.add(s);
-    }
-
-    // Hovering crystal — the "power source" read, spins + bobs
-    const c = new THREE.Mesh(_geoCrystal, _crystalMat);
-    c.position.y = 1.55;
-    this.crystal.add(c);
+    this.slot = takeSlot(poolFor(scene).base);
     this.group.add(this.crystal);
 
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -98,6 +103,32 @@ export class DeployStation {
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) return;
+    const pool = _pool;
+    const i = this.slot;
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    pool.base.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.15, 0).premultiply(g));
+    pool.base.mesh.instanceMatrix.needsUpdate = true;
+    pool.mast.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.75, 0).premultiply(g));
+    pool.mast.mesh.instanceMatrix.needsUpdate = true;
+    for (let s = 0; s < 3; s++) {
+      const a = (s / 3) * Math.PI * 2;
+      _q.setFromEuler(new THREE.Euler(Math.sin(a) * 0.5, 0, Math.cos(a) * -0.5));
+      pool.strut.mesh.setMatrixAt(i * 3 + s, _m2.compose(
+        _p.set(Math.cos(a) * 0.55, 0.28, Math.sin(a) * 0.55), _q, _s.set(1, 1, 1),
+      ).premultiply(g));
+    }
+    pool.strut.mesh.instanceMatrix.needsUpdate = true;
+    pool.crystal.mesh.setMatrixAt(i, _m2.compose(
+      _p.set(0, this.crystal.position.y, 0),
+      _q.setFromAxisAngle(_up, this.crystal.rotation.y),
+      _s.set(1, 1, 1),
+    ).premultiply(g));
+    pool.crystal.mesh.instanceMatrix.needsUpdate = true;
   }
 
   /** Recharge envelope — the aura ring is drawn at exactly this radius. */
@@ -124,6 +155,7 @@ export class DeployStation {
     this.glow.scale.setScalar(1.1 + this.charge * 0.7 + Math.sin(this.animT * 3) * 0.08);
     if (!this.ring) this.buildEnvelope();
     this.tickEnvelope(dt);
+    this.syncMatrices();
     return inRange;
   }
 
@@ -192,6 +224,7 @@ export class DeployStation {
    *  DeployTurret so the pod path can treat them identically. */
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);
+    this.syncMatrices();
   }
 
   unfoldDone(): void {
@@ -208,6 +241,17 @@ export class DeployStation {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool) {
+      releaseSlot(_pool.base, this.slot);
+      releaseSlot(_pool.mast, this.slot);
+      releaseSlot(_pool.crystal, this.slot);
+      for (let s = 0; s < 3; s++) {
+        _pool.strut.mesh.setMatrixAt(this.slot * 3 + s, ZERO_M4);
+      }
+      _pool.strut.mesh.instanceMatrix.needsUpdate = true;
+      _pool.strut.free.push(this.slot);
+      this.slot = -1;
+    }
     // Shared materials/geometries intentionally not disposed — module-owned.
     this.glow.material.dispose();
     // The ring slot is a terrain-uniform lease — release it or the decal

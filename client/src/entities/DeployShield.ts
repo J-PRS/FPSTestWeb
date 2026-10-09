@@ -4,6 +4,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import { makeShieldedMesh, type ShieldBubble } from '../effects/shieldBubble.js';
 import type { Terrain, FieldRing } from '../world/terrain.js';
+import { makePartPool, takeSlot, releaseSlot, ZERO_M4, type PartPool } from './deployPool.js';
 
 // Barrier dome pack — plants a field emitter that projects a hex-lattice
 // energy dome. Hostile shells detonate on the face; friendly fire passes
@@ -19,6 +20,26 @@ const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.28, 8);
 const _geoMast = new THREE.CylinderGeometry(0.09, 0.14, 1.3, 6);
 const _geoTip = new THREE.OctahedronGeometry(0.22, 0);
 const _geoStrut = new THREE.BoxGeometry(0.08, 0.6, 0.08);
+
+const POOL_CAP = 128;
+interface ShieldPool { base: PartPool; mast: PartPool; strut: PartPool; tip: PartPool; }
+let _pool: ShieldPool | null = null;
+function poolFor(scene: THREE.Scene): ShieldPool {
+  if (!_pool) {
+    _pool = {
+      base: makePartPool(scene, _geoBase, _dark, POOL_CAP),
+      mast: makePartPool(scene, _geoMast, _metal, POOL_CAP),
+      strut: makePartPool(scene, _geoStrut, _metal, POOL_CAP * 3),
+      tip: makePartPool(scene, _geoTip, _tipMat, POOL_CAP),
+    };
+  }
+  return _pool;
+}
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 
 // Field-edge contact — a shader-projected terrain decal (same slot
 // system the station pad uses). The ring is drawn IN the terrain's own
@@ -39,6 +60,7 @@ export class DeployShield {
   readonly group = new THREE.Group();
   private tipGlow: THREE.Sprite;
   private tip = new THREE.Group();
+  private slot = -1;
   private anchor: THREE.Group | null = null; // world-space dome mount (built post-land)
   private dome: ShieldBubble | null = null;
   private edge: FieldRing | null = null;
@@ -60,22 +82,7 @@ export class DeployShield {
     this.pos.copy(pos);
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
-    const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.14;
-    const mast = new THREE.Mesh(_geoMast, _metal);
-    mast.position.y = 0.8;
-    this.group.add(base, mast);
-    for (let i = 0; i < 3; i++) {
-      const s = new THREE.Mesh(_geoStrut, _metal);
-      const a = (i / 3) * Math.PI * 2;
-      s.position.set(Math.cos(a) * 0.48, 0.24, Math.sin(a) * 0.48);
-      s.rotation.z = Math.cos(a) * -0.5;
-      s.rotation.x = Math.sin(a) * 0.5;
-      this.group.add(s);
-    }
-    // Emitter tip — the node the dome radiates from.
-    const t = new THREE.Mesh(_geoTip, _tipMat);
-    this.tip.add(t);
+    this.slot = takeSlot(poolFor(scene).base);
     this.tip.position.y = 1.55;
     this.group.add(this.tip);
     this.tipGlow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -89,6 +96,29 @@ export class DeployShield {
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) return;
+    const pool = _pool;
+    const i = this.slot;
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    pool.base.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.14, 0).premultiply(g));
+    pool.base.mesh.instanceMatrix.needsUpdate = true;
+    pool.mast.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.8, 0).premultiply(g));
+    pool.mast.mesh.instanceMatrix.needsUpdate = true;
+    for (let s = 0; s < 3; s++) {
+      const a = (s / 3) * Math.PI * 2;
+      _q.setFromEuler(new THREE.Euler(Math.sin(a) * 0.5, 0, Math.cos(a) * -0.5));
+      pool.strut.mesh.setMatrixAt(i * 3 + s, _m2.compose(
+        _p.set(Math.cos(a) * 0.48, 0.24, Math.sin(a) * 0.48), _q, _s.set(1, 1, 1),
+      ).premultiply(g));
+    }
+    pool.strut.mesh.instanceMatrix.needsUpdate = true;
+    const tipM = _m2.compose(this.tip.position, this.tip.quaternion, _s.set(1, 1, 1)).premultiply(g);
+    pool.tip.mesh.setMatrixAt(i, tipM);
+    pool.tip.mesh.instanceMatrix.needsUpdate = true;
   }
 
   /** The dome only exists once the emitter lands — a sphere centered on
@@ -124,10 +154,12 @@ export class DeployShield {
     const pulse = 0.85 + Math.sin(this.animT * 3.2) * 0.15;
     this.tipGlow.material.opacity = 0.5 + pulse * 0.4;
     this.tipGlow.scale.setScalar(0.9 + pulse * 0.35);
+    this.syncMatrices();
   }
 
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);
+    this.syncMatrices();
   }
 
   unfoldDone(): void {
@@ -145,6 +177,17 @@ export class DeployShield {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool) {
+      releaseSlot(_pool.base, this.slot);
+      releaseSlot(_pool.mast, this.slot);
+      releaseSlot(_pool.tip, this.slot);
+      for (let s = 0; s < 3; s++) {
+        _pool.strut.mesh.setMatrixAt(this.slot * 3 + s, ZERO_M4);
+      }
+      _pool.strut.mesh.instanceMatrix.needsUpdate = true;
+      _pool.strut.free.push(this.slot);
+      this.slot = -1;
+    }
     this.tipGlow.material.dispose();
     // Dome + anchor + ring slot are per-instance, baked to THIS landing spot.
     this.dome?.dispose();

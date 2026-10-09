@@ -4,6 +4,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import type { Terrain } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 
 // Player-deployable escort drone — hovers above/behind the owner's head and
 // plinks nearby enemies with the same mini-rocket plumbing the sentry uses.
@@ -27,6 +28,29 @@ const _geoRotor = new THREE.CylinderGeometry(0.34, 0.34, 0.03, 8);
 const _geoPod = new THREE.CylinderGeometry(0.07, 0.09, 0.5, 6);
 const _geoEye = new THREE.SphereGeometry(0.07, 6, 5);
 
+const POOL_CAP = 128;
+interface DronePool { hull: PartPool; rotor: PartPool; pod: PartPool; eye: PartPool; }
+let _pool: DronePool | null = null;
+function poolFor(scene: THREE.Scene): DronePool {
+  if (!_pool) {
+    _pool = {
+      hull: makePartPool(scene, _geoHull, _metal, POOL_CAP),
+      rotor: makePartPool(scene, _geoRotor, _dark, POOL_CAP),
+      pod: makePartPool(scene, _geoPod, _dark, POOL_CAP),
+      eye: makePartPool(scene, _geoEye, _glow, POOL_CAP),
+    };
+  }
+  return _pool;
+}
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _rx90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+const _qI = new THREE.Quaternion();
+const _rq = new THREE.Quaternion();
+const _up = new THREE.Vector3(0, 1, 0);
+
 const _aim = new THREE.Vector3();
 const _acc = new THREE.Vector3();
 const _anchor = new THREE.Vector3();
@@ -44,7 +68,8 @@ export class DeployDrone {
   armor = 0;
 
   readonly group = new THREE.Group();
-  private rotor: THREE.Mesh;
+  private rotorSpin = 0;
+  private slot = -1;
   private flash: THREE.Sprite;
   private flashT = 0;
   private fireCd = 1 + Math.random() * 0.4;
@@ -57,16 +82,7 @@ export class DeployDrone {
     this.terrain = terrain;
     this.pos.copy(pos);
 
-    const hull = new THREE.Mesh(_geoHull, _metal);
-    hull.scale.set(1.25, 0.55, 1.25); // flattened saucer
-    this.rotor = new THREE.Mesh(_geoRotor, _dark);
-    this.rotor.position.y = 0.16;
-    const pod = new THREE.Mesh(_geoPod, _dark);
-    pod.rotation.x = Math.PI / 2;
-    pod.position.set(0, -0.08, 0.2); // underslung launch tube
-    const eye = new THREE.Mesh(_geoEye, _glow);
-    eye.position.set(0, -0.02, 0.3);
-    this.group.add(hull, this.rotor, pod, eye);
+    this.slot = takeSlot(poolFor(scene).hull);
 
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({
       map: getGlowTexture(), color: 0x88DDFF, transparent: true,
@@ -78,6 +94,23 @@ export class DeployDrone {
 
     this.group.position.copy(this.pos);
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) return;
+    const pool = _pool;
+    const i = this.slot;
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    pool.hull.mesh.setMatrixAt(i, _m2.compose(_p.set(0, 0, 0), _qI, _s.set(1.25, 0.55, 1.25)).premultiply(g));
+    pool.hull.mesh.instanceMatrix.needsUpdate = true;
+    _rq.setFromAxisAngle(_up, this.rotorSpin);
+    pool.rotor.mesh.setMatrixAt(i, _m2.compose(_p.set(0, 0.16, 0), _rq, _s.set(1, 1, 1)).premultiply(g));
+    pool.rotor.mesh.instanceMatrix.needsUpdate = true;
+    pool.pod.mesh.setMatrixAt(i, _m2.compose(_p.set(0, -0.08, 0.2), _rx90, _s.set(1, 1, 1)).premultiply(g));
+    pool.pod.mesh.instanceMatrix.needsUpdate = true;
+    pool.eye.mesh.setMatrixAt(i, _m2.makeTranslation(0, -0.02, 0.3).premultiply(g));
+    pool.eye.mesh.instanceMatrix.needsUpdate = true;
   }
 
   /**
@@ -92,7 +125,7 @@ export class DeployDrone {
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; }
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
-    this.rotor.rotation.y += dt * 30;
+    this.rotorSpin += dt * 30;
 
     // Anchor: above the head, biased slightly back — out of view, close
     // enough to read as YOURS. The spring does the "lags behind" part.
@@ -130,6 +163,7 @@ export class DeployDrone {
     }
 
     this.fireCd -= dt;
+    this.syncMatrices();
     if (!best || this.fireCd > 0) {return null;}
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
@@ -140,6 +174,7 @@ export class DeployDrone {
 
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);
+    this.syncMatrices();
   }
 
   unfoldDone(): void {
@@ -156,6 +191,13 @@ export class DeployDrone {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool) {
+      releaseSlot(_pool.hull, this.slot);
+      releaseSlot(_pool.rotor, this.slot);
+      releaseSlot(_pool.pod, this.slot);
+      releaseSlot(_pool.eye, this.slot);
+      this.slot = -1;
+    }
     this.flash.material.dispose(); // per-instance SpriteMaterial
   }
 }
