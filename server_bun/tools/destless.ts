@@ -1,0 +1,72 @@
+// Dest-less bot probe: what share of sim-time does each living bot run
+// with NO routing goal (brain's dest null)? The sheep meter's idle
+// channel charges these ticks hardest — this measures whether that's
+// a rare think-gap or a real no-goal population.
+//
+//   bun tools/destless.ts [--mode ctf] [--map raindance] [--bots 16] [--hours 1] [--seed 4242]
+
+import { readFileSync } from 'node:fs';
+import { mkRoom, step } from '../tests/scenarios/harness.ts';
+import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
+import { simNow } from '../src/simClock.ts';
+
+const arg = (k: string, d: string) => {
+  const i = process.argv.indexOf(`--${k}`);
+  return i >= 0 ? process.argv[i + 1]! : d;
+};
+
+const MODE = arg('mode', 'ctf');
+const MAP = arg('map', 'raindance');
+const BOTS = Number(arg('bots', '16'));
+const HOURS = Number(arg('hours', '1'));
+const SEED = Number(arg('seed', '4242'));
+const DT = 0.05;
+
+const mapJson = JSON.parse(readFileSync(`${import.meta.dir}/../../maps/${MAP}.json`, 'utf8')) as {
+  bases?: { alpha: { x: number; z: number }; bravo?: { x: number; z: number } };
+  terrain?: string;
+};
+const field = hmParseBin(new Uint8Array(readFileSync(
+  `${import.meta.dir}/../../maps/${mapJson.terrain ?? MAP + '.bin'}`)));
+
+const base = (b?: { x: number; z: number }) => b ? { x: b.x, y: hmHeight(field, b.x, b.z), z: b.z } : undefined;
+const room = mkRoom({
+  mode: MODE,
+  bots: BOTS, botFill: BOTS,
+  bases: { alpha: base(mapJson.bases?.alpha) ?? { x: 0, y: hmHeight(field, 0, 0), z: 0 },
+           bravo: base(mapJson.bases?.bravo) ?? { x: 80, y: hmHeight(field, 80, 80), z: 80 } },
+}, MODE, SEED, false, field);
+
+const ticks = Math.round((HOURS * 3600) / DT);
+const noGoal: Record<string, number> = {};
+const aliveT: Record<string, number> = {};
+const streak: Record<string, number> = {};
+const maxStreak: Record<string, number> = {};
+const w0 = Date.now();
+for (let t = 0; t < ticks; t++) {
+  step(room, 1, DT);
+  room.messages.respawnTick(simNow());
+  for (const p of room.players.getAllPlayers().values()) {
+    if (p.isDead) { streak[p.id] = 0; continue; }
+    aliveT[p.id] = (aliveT[p.id] ?? 0) + DT;
+    if (room.bots.debugDest(p.id) === null) {
+      noGoal[p.id] = (noGoal[p.id] ?? 0) + DT;
+      streak[p.id] = (streak[p.id] ?? 0) + DT;
+      if (streak[p.id] > (maxStreak[p.id] ?? 0)) maxStreak[p.id] = streak[p.id];
+    } else streak[p.id] = 0;
+  }
+}
+
+const rows = Object.keys(aliveT).map(id => ({
+  id,
+  alive: aliveT[id],
+  goalless: noGoal[id] ?? 0,
+  pct: (noGoal[id] ?? 0) / aliveT[id] * 100,
+  maxStreak: maxStreak[id] ?? 0,
+})).sort((a, b) => b.pct - a.pct);
+console.log(`dest-less probe — mode=${MODE} map=${MAP} bots=${BOTS} sim=${HOURS}h wall=${((Date.now() - w0) / 1000).toFixed(0)}s`);
+for (const r of rows) {
+  console.log(`  ${r.id}: ${r.pct.toFixed(1)}% goal-less (${r.goalless.toFixed(0)}s of ${r.alive.toFixed(0)}s alive) worst streak ${r.maxStreak.toFixed(1)}s`);
+}
+const avg = rows.reduce((n, r) => n + r.pct, 0) / (rows.length || 1);
+console.log(`  roster mean ${avg.toFixed(1)}%`);
