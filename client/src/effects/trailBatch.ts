@@ -49,6 +49,9 @@ export class TrailBatch {
    *  holding (slot, oldGen) after the slot got re-issued is refused at
    *  owns() — double-ownership dies at the check, not via sweeps. */
   readonly gen = new Uint32Array(MAX_TRAILS);
+  /** slot -> live ribbon handle, so sweeps can kill the ring that
+   *  writes a chord, not just black the chord it already wrote. */
+  readonly owners = new Map<number, { clear(): void }>();
 
   claim(): number {
     const s = this.free.pop()!;
@@ -65,6 +68,7 @@ export class TrailBatch {
 
   release(slot: number): void {
     if (!this.used.delete(slot)) {return;} // stale release can't double-free
+    this.owners.delete(slot);
     const b = slot * RIBBON_FLOATS_PER_SLOT;
     this.pos.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
     this.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
@@ -251,9 +255,17 @@ export function sweepSmear(): void {
         px = x; py = y; pz = z; hasPrev = true;
       }
       if (!smeared) {continue;}
-      b.col.fill(0, base, base + VERTS * 3);
-      b.mark(base, base + VERTS * 3);
-      dirty = true;
+      const owner = b.owners.get(s);
+      if (owner) {
+        // Kill the writer, not just the chord — blacking the buffer left
+        // the stale samples in the owner's ring and it repainted the
+        // same smear every frame (the repeat-glitch spam).
+        owner.clear();
+      } else {
+        b.col.fill(0, base, base + VERTS * 3);
+        b.mark(base, base + VERTS * 3);
+        dirty = true;
+      }
       smearCuts++;
       glitch('trail-smear', { slot: s, gapM: Math.round(Math.sqrt(gapSq)) });
     }

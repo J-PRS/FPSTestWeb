@@ -40,13 +40,12 @@ export interface RibbonOpts {
 let sharedCamPos: THREE.Vector3 | null = null;
 export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos = pos; }
 
-/** Discontinuity budget for the follow re-pin — a fast shell covers
- *  ~15m/tick; 60m leaves slack for low-fps catches, cuts map-spanning
- *  drags. Mirrors push()'s `spd*0.25 + 12` at the top end. */
-const FOLLOW_JUMP_M = 60;
-
+/** Discontinuity budget for the follow re-pin — same per-emitter
+ *  `spd*0.25 + 12` as push(): a flat budget let a slow ball drag a
+ *  50m chord under the 60m sweep floor, invisible to every canary. */
 export class RibbonTrail {
   private batch!: TrailBatch;
+  private lastSpd = 0;
   private slot = -1;
   // Generation word from TrailBatch.claim — a stale instance whose slot
   // got re-issued to a new owner mismatches here and is refused at push
@@ -258,6 +257,7 @@ export class RibbonTrail {
     this.lastUpdateAt = performance.now();
     this.batch = claimableBatch(scene);
     this.slot = this.batch.claim();
+    this.batch.owners.set(this.slot, this);
     this.slotGen = this.batch.gen[this.slot]!;
     RibbonTrail.liveSet.add(this);
     this._lf.fill(-1);
@@ -341,6 +341,7 @@ export class RibbonTrail {
     const spd = _dir.length();
     if (spd * spd < 1e-6) { this.starvedPushes++; return; }
     _dir.normalize();
+    this.lastSpd = spd;
     // Side vector: perpendicular to velocity, biased to the world-horizontal plane
     _side.crossVectors(_dir, Math.abs(_dir.y) < 0.95 ? _up : _fwd).normalize();
 
@@ -423,7 +424,8 @@ export class RibbonTrail {
       const jx = this.follow.x + this._ox - this.px[this.head];
       const jy = this.follow.y + this._oy - this.py[this.head];
       const jz = this.follow.z + this._oz - this.pz[this.head];
-      if (jx * jx + jy * jy + jz * jz > FOLLOW_JUMP_M * FOLLOW_JUMP_M) {
+      const jumpM = this.lastSpd * 0.25 + 12;
+      if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
         RibbonTrail.followJumps++;
         glitch('follow-jump', { tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) });
