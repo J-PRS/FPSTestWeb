@@ -37,6 +37,56 @@ const _geoPod = new THREE.BoxGeometry(0.5, 0.34, 0.72);
 const _geoTube = new THREE.CylinderGeometry(0.15, 0.17, 1.1, 8);
 const _geoEye = new THREE.SphereGeometry(0.09, 6, 5);
 
+// All sentries share instanced part meshes: 8 draws per turret became 6
+// InstancedMesh draws total once 16v16 deploy farms showed ~40 turrets a
+// frame. Instance matrices are composed straight from group/head locals,
+// so slew, recoil, and unfold need no scene-graph walk.
+const POOL_CAP = 192;
+const _rx90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _m3 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3(1, 1, 1);
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+
+interface Pool {
+  base: THREE.InstancedMesh;
+  mast: THREE.InstancedMesh;
+  dome: THREE.InstancedMesh;
+  pod: THREE.InstancedMesh;
+  tube: THREE.InstancedMesh;
+  eye: THREE.InstancedMesh;
+  free: number[];
+}
+let _pool: Pool | null = null;
+
+function makeInstanced(geo: THREE.BufferGeometry, mat: THREE.Material, count: number, scene: THREE.Scene): THREE.InstancedMesh {
+  const m = new THREE.InstancedMesh(geo, mat, count);
+  m.count = count;
+  m.frustumCulled = false; // turrets span the map
+  m.castShadow = false;
+  for (let i = 0; i < count; i++) {m.setMatrixAt(i, _zero);}
+  scene.add(m);
+  return m;
+}
+
+function poolFor(scene: THREE.Scene): Pool {
+  if (!_pool) {
+    _pool = {
+      base: makeInstanced(_geoBase, _dark, POOL_CAP, scene),
+      mast: makeInstanced(_geoMast, _metal, POOL_CAP, scene),
+      dome: makeInstanced(_geoDome, _metal, POOL_CAP, scene),
+      pod: makeInstanced(_geoPod, _metal, POOL_CAP, scene),
+      tube: makeInstanced(_geoTube, _dark, POOL_CAP * 2, scene),
+      eye: makeInstanced(_geoEye, _glow, POOL_CAP, scene),
+      free: [],
+    };
+    for (let i = POOL_CAP - 1; i >= 0; i--) {_pool.free.push(i);}
+  }
+  return _pool;
+}
+
 export class DeployTurret {
   readonly id: number;
   /** Species-candidate id — what a creature's threat table commits to. */
@@ -52,7 +102,7 @@ export class DeployTurret {
 
   readonly group = new THREE.Group();
   private head = new THREE.Group();
-  private tubes: THREE.Mesh[] = [];
+  private slot = -1;         // instanced-pool index; -1 = overflow (invisible)
   private tubeKick = [0, 0];   // per-tube recoil spring — alternate tubes per shot
   private nextTube = 0;
   private flash: THREE.Sprite;
@@ -70,25 +120,7 @@ export class DeployTurret {
     this.pos.copy(pos);
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
-    const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.25;
-    const mast = new THREE.Mesh(_geoMast, _metal);
-    mast.position.y = 0.9;
-    this.group.add(base, mast);
-
-    const dome = new THREE.Mesh(_geoDome, _metal);
-    const pod = new THREE.Mesh(_geoPod, _metal);
-    pod.position.set(0, 0.08, 0.3);
-    const tubeL = new THREE.Mesh(_geoTube, _dark);
-    tubeL.rotation.x = Math.PI / 2;
-    tubeL.position.set(-0.14, 0.08, 0.55);
-    const tubeR = new THREE.Mesh(_geoTube, _dark);
-    tubeR.rotation.x = Math.PI / 2;
-    tubeR.position.set(0.14, 0.08, 0.55);
-    this.tubes = [tubeL, tubeR];
-    const eye = new THREE.Mesh(_geoEye, _glow);
-    eye.position.set(0, 0.3, 0.3);
-    this.head.add(dome, pod, tubeL, tubeR, eye);
+    this.slot = poolFor(scene).free.pop() ?? -1;
     this.head.position.y = 1.4;
     this.group.add(this.head);
 
@@ -103,6 +135,37 @@ export class DeployTurret {
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  /** Write this sentry's 7 instance slots from the group/head transforms
+   *  (the real meshes are pool-owned; `group`/`head` only carry the flash
+   *  sprite and muzzle math now). */
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) return;
+    const pool = _pool;
+    const i = this.slot;
+    // G = terrain-aligned base transform (pos + tilt + unfold scale)
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    const headM = _m2.compose(this.head.position, this.head.quaternion, _s.set(1, 1, 1)).premultiply(g).clone();
+
+    pool.base.setMatrixAt(i, _m3.makeTranslation(0, 0.25, 0).premultiply(g));
+    pool.mast.setMatrixAt(i, _m3.makeTranslation(0, 0.9, 0).premultiply(g));
+    pool.dome.setMatrixAt(i, headM);
+    pool.pod.setMatrixAt(i, _m3.makeTranslation(0, 0.08, 0.3).premultiply(headM));
+    for (let t = 0; t < 2; t++) {
+      const k = this.tubeKick[t]!;
+      pool.tube.setMatrixAt(i * 2 + t, _m3.compose(
+        _p.set(t === 0 ? -0.14 : 0.14, 0.08, 0.55 - k * 0.10),
+        _rx90,
+        _s.set(1, 1 - k * 0.22, 1),
+      ).premultiply(headM));
+    }
+    pool.eye.setMatrixAt(i, _m3.makeTranslation(0, 0.3, 0.3).premultiply(headM));
+
+    for (const mesh of [pool.base, pool.mast, pool.dome, pool.pod, pool.tube, pool.eye]) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /**
@@ -124,10 +187,14 @@ export class DeployTurret {
       const k = this.tubeKick[i]!;
       if (k <= 0.001) continue;
       this.tubeKick[i] = k * Math.exp(-dt * 10);
-      const tube = this.tubes[i]!;
-      tube.position.z = 0.55 - k * 0.10;
-      tube.scale.y = 1 - k * 0.22; // tail = z − 0.55·scaleY ≥ pod rear −0.06
     }
+    const shot = this.stepFire(dt, enemies);
+    this.syncMatrices();
+    return shot;
+  }
+
+  private stepFire(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
+      { muzzle: THREE.Vector3; target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } } | null {
 
     let best: (typeof enemies)[0] | null = null;
     let bestD2 = RANGE * RANGE;
@@ -211,6 +278,7 @@ export class DeployTurret {
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);
     this.head.position.y = 0.6 + this.unfoldT * 0.8; // mast rises out of the base
+    this.syncMatrices();
   }
 
   unfoldDone(): void {
@@ -229,6 +297,17 @@ export class DeployTurret {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool && this.slot >= 0) {
+      for (const mesh of [_pool.base, _pool.mast, _pool.dome, _pool.pod, _pool.eye]) {
+        mesh.setMatrixAt(this.slot, _zero);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      _pool.tube.setMatrixAt(this.slot * 2, _zero);
+      _pool.tube.setMatrixAt(this.slot * 2 + 1, _zero);
+      _pool.tube.instanceMatrix.needsUpdate = true;
+      _pool.free.push(this.slot);
+      this.slot = -1;
+    }
     // Shared materials/geometries intentionally not disposed — module-owned.
     this.flash.material.dispose(); // per-instance SpriteMaterial
   }
