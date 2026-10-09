@@ -60,7 +60,12 @@ export class SpeciesSwarm {
       );
       mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
       if (p.renderOrder !== undefined) {mesh.renderOrder = p.renderOrder;}
-      mesh.castShadow = p.castShadow ?? false;
+      // Instanced castShadow is disabled: the generated depth program for
+      // instanced custom materials mismatches its sampler binding
+      // (GL_INVALID_OPERATION per draw — the driver dropped those shadow
+      // draws anyway, so they never actually cast). Same visuals, and it
+      // kills a per-draw validation error in the console.
+      mesh.castShadow = false;
       scene.add(mesh);
       this.meshes.push(mesh);
       this.pers.push(per);
