@@ -71,8 +71,8 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
           // cull lives on the DOT emitter only: gating the whole emit
           // here starved ribbons too, so every ball past 200m flew
           // trail-less ("missing trails").
-          emitting: () => !b.dead,
-          ribbonEmitting: () => !b.dead && b.vel.lengthSq() > 0.5,
+          emitting: () => !b.dead && b.renderOffset.lengthSq() <= 400,
+          ribbonEmitting: () => !b.dead && b.vel.lengthSq() > 0.5 && b.renderOffset.lengthSq() <= 400,
           emitOnJump: false,
           maxStep: (d) => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
         },
