@@ -35,7 +35,9 @@ def glb_bounds(path):
         return [m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3] for i in range(3)]
 
     I = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-    lo = [math.inf] * 3; hi = [-math.inf] * 3
+    boxes = []  # per-node local AABBs — a building's walls are separate
+    # meshes, so node-level boxes approximate the shell instead of one
+    # solid block filling the whole footprint.
     meshes = g.get('meshes', [])
 
     def walk(idx, parent):
@@ -47,19 +49,21 @@ def glb_bounds(path):
                 if ai is None or 'min' not in accs[ai]:
                     continue
                 mn, mx = accs[ai]['min'], accs[ai]['max']
+                lo = [math.inf] * 3; hi = [-math.inf] * 3
                 for cx in (mn[0], mx[0]):
                     for cy in (mn[1], mx[1]):
                         for cz in (mn[2], mx[2]):
                             p = xform(m, [cx, cy, cz])
                             for i in range(3):
                                 lo[i] = min(lo[i], p[i]); hi[i] = max(hi[i], p[i])
+                boxes.append((lo, hi))
         for c in n.get('children', []):
             walk(c, m)
 
     scene = g.get('scenes', [{}])[g.get('scene', 0)]
     for r in scene.get('nodes', []):
         walk(r, I)
-    return lo, hi
+    return boxes
 
 def aa_rotate(p, axis, deg):
     x, y, z = axis
@@ -78,20 +82,23 @@ def main(spec_path):
         glb = os.path.join(DIF_DIR, it['file'].rsplit('.', 1)[0] + '.glb')
         if not os.path.exists(glb):
             missing.append(it['file']); continue
-        lo, hi = glb_bounds(glb)
         sc = it.get('scale') or {'x': 1, 'y': 1, 'z': 1}
         rot = it.get('rot') or [0, 1, 0, 0]
-        wlo = [math.inf] * 3; whi = [-math.inf] * 3
-        for cx in (lo[0], hi[0]):
-            for cy in (lo[1], hi[1]):
-                for cz in (lo[2], hi[2]):
-                    p = [cx * sc['x'], cy * sc['y'], cz * sc['z']]
-                    if rot[3] % 360:
-                        p = aa_rotate(p, rot[:3], rot[3])
-                    p = [p[0] + it['pos']['x'], p[1] + it['pos']['y'], p[2] + it['pos']['z']]
-                    for i in range(3):
-                        wlo[i] = min(wlo[i], p[i]); whi[i] = max(whi[i], p[i])
-        out.append({'file': it['file'], 'min': [round(v, 2) for v in wlo], 'max': [round(v, 2) for v in whi]})
+        for lo, hi in glb_bounds(glb):
+            wlo = [math.inf] * 3; whi = [-math.inf] * 3
+            for cx in (lo[0], hi[0]):
+                for cy in (lo[1], hi[1]):
+                    for cz in (lo[2], hi[2]):
+                        p = [cx * sc['x'], cy * sc['y'], cz * sc['z']]
+                        if rot[3] % 360:
+                            p = aa_rotate(p, rot[:3], rot[3])
+                        p = [p[0] + it['pos']['x'], p[1] + it['pos']['y'], p[2] + it['pos']['z']]
+                        for i in range(3):
+                            wlo[i] = min(wlo[i], p[i]); whi[i] = max(whi[i], p[i])
+            dx, dy, dz = whi[0] - wlo[0], whi[1] - wlo[1], whi[2] - wlo[2]
+            if dx < 0.5 or dy < 0.5 or dz < 0.5:
+                continue  # degenerate plane slivers — no volume to collide
+            out.append({'file': it['file'], 'min': [round(v, 2) for v in wlo], 'max': [round(v, 2) for v in whi]})
     dst = os.path.join('maps/t2', name, 'hullboxes.json')
     json.dump(out, open(dst, 'w'))
     print(f'{name}: {len(out)} hullboxes -> {dst}', f'MISSING: {missing}' if missing else '')
