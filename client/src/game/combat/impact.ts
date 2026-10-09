@@ -384,7 +384,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   if (deps.lazyDemoManager()?.isRecording) {
     // Wire id for net balls — Spawned/Bounce key on it; recording the client
     // namespace id here leaves the kill invisible to replay.
-    deps.lazyDemoManager()!.recordTargetDestroyed(ball.netDriven ? ball.netId : ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
+    deps.lazyDemoManager()!.recordTargetDestroyed(ball.netDriven ? (ball.netId ?? ball.id) : ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
   }
 }
 

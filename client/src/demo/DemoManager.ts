@@ -212,12 +212,15 @@ export class DemoManager implements demoIO.DemoIOHost {
   /** Cool-shot auto-mp4: the rolling video buffer already holds the clip
    *  window, so the mp4 materializes the moment the demo clip extracts —
    *  no replay pass needed. Clip bounds are demo-recorder seconds, mapped
-   *  to the video's wall clock via the recorder's own duration (±50ms —
-   *  far inside the GOP slop the cut already tolerates). */
+   *  to the video's wall clock through the recorder's wallMarks anchors —
+   *  elapsedTime drifts from real time under throttle, so a plain
+   *  `now - duration` base slides the window forward by the drift. */
   private videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): string | null {
     if (!this.video.isRecording) {return null;}
-    const wallBase = performance.now() - this.recorder.duration * 1000;
-    const blob = this.video.cutWindow(wallBase + clipStart * 1000, wallBase + clipEnd * 1000);
+    const wallStart = this.recorder.wallForElapsed(clipStart);
+    const wallEnd = this.recorder.wallForElapsed(clipEnd);
+    if (wallStart === null || wallEnd === null) {return null;}
+    const blob = this.video.cutWindow(wallStart, wallEnd);
     if (!blob) {return null;}
     const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
     void clipSink.saveClip(name, blob).then(ok => {

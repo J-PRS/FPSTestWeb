@@ -123,6 +123,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   startTime = 0;
   elapsedTime = 0;
   lastTickTime = 0;
+  /** (elapsed sec, wall ms) anchors — elapsedTime drifts from real time
+   *  under throttle, so video-clip windows map through these marks. */
+  wallMarks: { wall: number; t: number }[] = [];
+  private lastWallMarkT = -1;
   tickInterval: number;
   bufferSeconds: number;
   nextProjectileId = 1;
@@ -145,6 +149,23 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   get frameCount(): number { return this.frameBuffer.Count; }
   get duration(): number { return this.elapsedTime; }
 
+  /** Map a recorder-time stamp to wall ms by lerping the anchor marks —
+   *  exact regardless of throttle drift. Extrapolates flatly past the
+   *  mark ends; null only before any mark exists. */
+  wallForElapsed(t: number): number | null {
+    const m = this.wallMarks;
+    if (m.length === 0) {return null;}
+    if (t <= m[0].t) {return m[0].wall - (m[0].t - t) * 1000;}
+    for (let i = 1; i < m.length; i++) {
+      if (t <= m[i].t) {
+        const a = m[i - 1], b = m[i];
+        return a.wall + ((t - a.t) / (b.t - a.t)) * (b.wall - a.wall);
+      }
+    }
+    const last = m[m.length - 1];
+    return last.wall + (t - last.t) * 1000;
+  }
+
   start(playerData: IPlayerDataProvider, inputData: IInputProvider): void {
     if (this.recording) {return;}
     this.recording = true;
@@ -153,6 +174,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.startTime = performance.now() / 1000;
     this.elapsedTime = 0;
     this.lastTickTime = 0;
+    this.wallMarks = [];
+    this.lastWallMarkT = -1;
     this.lastEventResetTime = 0;
     this.eventCountThisSecond = 0;
     this.projectileEvents = [];
@@ -262,6 +285,17 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     this.elapsedTime += dt;
     const now = this.elapsedTime;
+
+    // Wall-clock anchor pair — elapsedTime accumulates CLAMPED dt, so it
+    // drifts from real time under throttling. A raw (wall, elapsed) mark
+    // per tick lets clip windows map to the video ring's wall stamps
+    // exactly instead of guessing from `now - duration`.
+    if (now - this.lastWallMarkT >= 0.2) {
+      this.lastWallMarkT = now;
+      this.wallMarks.push({ wall: performance.now(), t: now });
+      const cutoff = now - this.bufferSeconds;
+      while (this.wallMarks.length > 0 && this.wallMarks[0].t < cutoff) {this.wallMarks.shift();}
+    }
 
     // Only record at tick rate
     if (now - this.lastTickTime < this.tickInterval) {return;}

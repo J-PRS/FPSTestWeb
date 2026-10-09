@@ -170,13 +170,15 @@ export class CoolShotManager {
   }
 
   private extractPendingClip(pending: PendingClip): void {
-    const mp4Name = this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
     if (this.deps.demoEnabled && !this.deps.demoEnabled()) {return;}
     const clipData = this.deps.recorder().extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
     if (!clipData) {
       logger.warn('Auto-clip: not enough buffer for this clip');
       return;
     }
+    // Only after the demo clip exists — an orphan mp4 with no demo entry
+    // is unwatchable vault litter.
+    const mp4Name = this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
 
     const filename = `clip_${this.deps.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
 

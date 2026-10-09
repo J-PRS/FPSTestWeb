@@ -75,6 +75,10 @@ export interface Targetable {
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean;
   applyKnockback(from: THREE.Vector3, force: number): void;
   applyPull(to: THREE.Vector3, force: number): void;
+  /** Wire identity for net-driven targets — kill/damage records must key
+   *  on netId, not the client 0x40xx id, or replay never sees the edge. */
+  netDriven?: boolean;
+  netId?: number;
   /** Props (Tumbleweed) die visually but shouldn't credit frags. */
   scoreless?: boolean;
   /** Suppress nugget drops — wildlife and pure props. */
