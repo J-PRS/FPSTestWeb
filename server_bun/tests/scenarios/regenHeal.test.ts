@@ -35,15 +35,19 @@ describe('scenario: server-owned heal channels', () => {
     p.regenUntil = simMs(now + 30_000);
     expect(healPerTick(p, now)).toBeCloseTo(POWERUP.regenHpPerSec / CONFIG.tickRate, 8);
 
-    // Expired window — nothing.
+    // Expired window — nothing (default perk has no regen either).
     p.regenUntil = simMs(now - 1);
     expect(healPerTick(p, now)).toBeCloseTo(perkMods(p.perk).regen / CONFIG.tickRate, 8);
 
-    // Regenerator perk adds its passive rate on top of the powerup.
+    // Regenerator is a ramp, not a flat rate: 10 unhurt seconds deep it
+    // pays 0.2×10 = 2 hp/s on top of the powerup; a fresh hit zeroes it.
     p.perk = 'regenerator';
+    p.lastDamageAt = simMs(now - 10_000);
     p.regenUntil = simMs(now + 30_000);
     expect(healPerTick(p, now)).toBeCloseTo(
-      (POWERUP.regenHpPerSec + perkMods('regenerator').regen) / CONFIG.tickRate, 8,
+      (POWERUP.regenHpPerSec + perkMods('regenerator').regenRamp * 10) / CONFIG.tickRate, 8,
     );
+    p.lastDamageAt = simMs(now); // the chip-damage case: just hit → ~0
+    expect(healPerTick(p, now)).toBeCloseTo(POWERUP.regenHpPerSec / CONFIG.tickRate, 8);
   });
 });

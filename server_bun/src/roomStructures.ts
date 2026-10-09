@@ -7,6 +7,30 @@ import { seatKits } from '../../shared/structKits.ts';
 import type { FlagPlacer } from './roomFlagPlacer.ts';
 import type { BallSim } from './BallSim.ts';
 import type { ServerMessage } from './types.ts';
+import { existsSync, readFileSync } from 'node:fs';
+
+/** World-space AABBs baked per interior (tools/hullbox) — T2 maps ship
+ *  interiors not structures, so without these the hulls were ghosts:
+ *  bots pathed through them, projectiles flew through, bots bled charge
+ *  grinding a wall they couldn't see (raindance_nef 2731 pts). */
+const HULLBOX_CACHE = new Map<string, StructureSpec[] | null>();
+export function hullBoxes(mapSrc: string): StructureSpec[] {
+  if (!HULLBOX_CACHE.has(mapSrc)) {
+    let boxes: StructureSpec[] | null = null;
+    try {
+      const p = `${import.meta.dir}/../../maps/t2/${mapSrc}/hullboxes.json`;
+      if (existsSync(p)) {
+        boxes = (JSON.parse(readFileSync(p, 'utf8')) as { min: number[]; max: number[] }[]).map((b) => ({
+          kind: 'hull' as const,
+          pos: { x: ((b.min[0] ?? 0) + (b.max[0] ?? 0)) / 2, y: b.min[1] ?? 0, z: ((b.min[2] ?? 0) + (b.max[2] ?? 0)) / 2 },
+          size: { x: (b.max[0] ?? 0) - (b.min[0] ?? 0), y: (b.max[1] ?? 0) - (b.min[1] ?? 0), z: (b.max[2] ?? 0) - (b.min[2] ?? 0) },
+        }));
+      }
+    } catch { boxes = null; }
+    HULLBOX_CACHE.set(mapSrc, boxes);
+  }
+  return HULLBOX_CACHE.get(mapSrc) ?? [];
+}
 
 /** The room-side surface RoomStructures needs — the room satisfies it
  *  structurally; every member reads live so late assigns (terrain,
@@ -23,6 +47,7 @@ export interface RoomStructHost {
   deployables: { teamPowered(team: string): boolean } | null | undefined;
   messages: { setMap(spec: MapSpec): void };
   broadcast(msg: ServerMessage, exclude?: string): void;
+  mapSrc: string;
 }
 
 /** The effective structure set — spec's authored structures plus the
@@ -50,9 +75,13 @@ export class RoomStructures {
     // no render, no blocker on either side.
     // deployables construct after the first moveSim/ballSim attach —
     // pre-seed the grid reads live, so a missing table means powered.
-    return (host.spec.structures ?? []).filter(
+    const authored = (host.spec.structures ?? []).filter(
       (s) => s.kind !== 'shield' || !s.team || (host.deployables?.teamPowered(s.team) ?? true),
     );
+    // 'hull' is the collider-only kind — the client mesh builder skips it
+    // (GLB interiors already render), while every sim AND the wire echo
+    // see the same boxes, so prediction collides identically both sides.
+    return host.spec.interiors?.length ? authored.concat(hullBoxes(host.mapSrc)) : authored;
   }
 
   /** Re-attach the merged structure list everywhere it feeds — called
