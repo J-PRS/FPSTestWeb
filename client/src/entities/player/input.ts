@@ -238,18 +238,34 @@ export class PlayerInput {
       sensInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    // FOV field — degrees, live-applied to the world camera via the
-    // fps:set event (main.ts listens). Viewmodel cam stays fixed at 55.
+    // FOV fields — vertical is the stored/canonical value (camera.fov);
+    // horizontal is derived via aspect and edits back-solve to vertical.
+    // Live-applied via the fps:set event (main.ts listens).
     const fovInput = document.querySelector('#fov-input') as HTMLInputElement | null;
-    if (fovInput) {
+    const fovHInput = document.querySelector('#fov-h-input') as HTMLInputElement | null;
+    if (fovInput && fovHInput) {
+      const aspect = () => window.innerWidth / Math.max(1, window.innerHeight);
+      const vToH = (v: number) => 2 * Math.atan(Math.tan(v * Math.PI / 360) * aspect()) * 180 / Math.PI;
+      const hToV = (h: number) => 2 * Math.atan(Math.tan(h * Math.PI / 360) / aspect()) * 180 / Math.PI;
+      const syncH = () => { fovHInput.value = String(Math.round(vToH(settings.get('fps-fov')))); };
       fovInput.value = String(settings.get('fps-fov'));
-      fovInput.addEventListener('focus', () => fovInput.select());
+      syncH();
+      for (const el of [fovInput, fovHInput]) {
+        el.addEventListener('focus', () => el.select());
+        el.addEventListener('keydown', (e) => e.stopPropagation());
+      }
       fovInput.addEventListener('input', () => {
         const v = Number.parseFloat(fovInput.value);
         if (!isFinite(v)) {return;}
         settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(v))));
+        syncH();
       });
-      fovInput.addEventListener('keydown', (e) => e.stopPropagation());
+      fovHInput.addEventListener('input', () => {
+        const h = Number.parseFloat(fovHInput.value);
+        if (!isFinite(h)) {return;}
+        settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(hToV(h)))));
+        fovInput.value = String(settings.get('fps-fov'));
+      });
     }
 
     const volInput = document.querySelector('#vol-input') as HTMLInputElement | null;
