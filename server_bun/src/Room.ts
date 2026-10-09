@@ -705,6 +705,7 @@ export class Room {
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
+      rabbitFlagLive: this.mode === 'rabbit' ? () => this.flags?.spawned() ?? false : undefined,
       rabbitBottom: this.mode === 'rabbit' ? () => this.scoring.bottomFeeders() : undefined,
       drainEnergy: (pid, n) => this.moveSim.drainEnergy(pid, n),
       // Instant-skill claim: the client already spent the energy locally —

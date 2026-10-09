@@ -59,7 +59,12 @@ export interface CombatDeps {
    *  loose). Presence of the dep IS the mode check — friendly() blocks
    *  damage unless one side of the pair is the rabbit. */
   rabbitCarrier?: () => string | null;
-  /** Rabbit tie-in: ids sitting in last place — the bottom-feeder rule
+  /** Rabbit: true once the flag exists (first corpse spawned it). Before
+   *  that the mode is deliberately open season — hunters can't fight a
+   *  rabbit that doesn't exist yet; after, a loose flag still enforces
+   *  the pairing law. */
+  rabbitFlagLive?: () => boolean;
+  /** Rabbit tie-in: id sitting in last place — the bottom-feeder rule
    *  lets the worst-ranked hunter brawl with anyone. */
   rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — the beam burns movement energy,
@@ -239,15 +244,17 @@ export class CombatHandler {
   }
 
   friendly(shooterId: string, targetId: string): boolean {
-    // Rabbit law: once a rabbit exists, the only legal pairings are ones
-    // that include the rabbit — hunter-vs-hunter is friendly fire. The
-    // bottom-feeder is exempt: last place can hit/be hit by anyone. No
-    // rabbit at all (flag unspawned or loose) = open season. Self-splash
-    // stays legal (rocket jumps).
+    // Rabbit law: pre-flag (first corpse hasn't spawned it) the lobby is
+    // open season — there is no rabbit to hunt yet. Once the flag exists,
+    // the only legal pairings include the carrier — hunter-vs-hunter is
+    // friendly fire, a dropped flag does NOT reopen the season. The
+    // bottom-feeder is exempt: last place can hit/be hit by anyone.
+    // Self-splash stays legal (rocket jumps).
     if (this.deps.rabbitCarrier) {
       if (shooterId === targetId) return false;
       const c = this.deps.rabbitCarrier();
-      if (!c || shooterId === c || targetId === c) return false;
+      if (c && (shooterId === c || targetId === c)) return false;
+      if (!c && !this.deps.rabbitFlagLive?.()) return false;
       const bottom = this.deps.rabbitBottom?.();
       return !(bottom?.has(shooterId) || bottom?.has(targetId));
     }

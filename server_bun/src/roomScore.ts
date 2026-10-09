@@ -177,20 +177,20 @@ export class RoomScore {
     if (w) this.h.endMatch(w);
   }
 
-  /** Rabbit's bottom-feeder rule: everyone tied for the LEAST points is
-   *  last place — those hunters get open season. A full-field tie means
-   *  nobody is uniquely behind, so nobody earns the exemption. */
+  /** Rabbit's bottom-feeder rule: exactly ONE last-place hunter may brawl
+   *  with anyone. Ties break on player id — every-min-tie used to exempt
+   *  the whole field, which left hunter-vs-hunter legal all game. */
   bottomFeeders(): Set<string> {
-    const out = new Set<string>();
-    const ids: string[] = [];
+    let bottom: string | null = null;
     let min = Infinity;
     for (const p of this.h.players.getAllPlayers().values()) {
       const s = this.ffaScores.get(p.id) ?? 0;
-      ids.push(p.id);
-      if (s < min) min = s;
+      if (s < min || (s === min && bottom !== null && p.id < bottom)) {
+        min = s;
+        bottom = p.id;
+      }
     }
-    for (const id of ids) if ((this.ffaScores.get(id) ?? 0) === min) out.add(id);
-    return out.size === ids.length ? new Set() : out;
+    return bottom === null ? new Set() : new Set([bottom]);
   }
 
   /** Objective-time payout (rabbit hold ticks) — same broadcast +

@@ -125,6 +125,8 @@ export interface RoomInfo {
    *  in rabbit rooms — CombatHandler gates all PvP damage on the pair
    *  involving the carrier. */
   rabbitCarrier?: () => string | null;
+  /** Rabbit flag exists (first corpse spawned it) — CombatHandler. */
+  rabbitFlagLive?: () => boolean;
   /** Rabbit bottom-feeder ids — RoomScore.bottomFeeders. */
   rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — energy is server truth. */
@@ -188,6 +190,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     teams: roomInfo?.teams,
     friendlyFire: roomInfo?.friendlyFire,
     rabbitCarrier: roomInfo?.rabbitCarrier,
+    rabbitFlagLive: roomInfo?.rabbitFlagLive,
     rabbitBottom: roomInfo?.rabbitBottom,
     drainEnergy: roomInfo?.drainEnergy,
     energyOf: roomInfo?.energyOf,

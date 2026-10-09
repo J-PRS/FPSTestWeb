@@ -123,7 +123,9 @@ describe('scenario: rabbit mode', () => {
     const flag = room.flags!.flags.get('alpha')!;
     pin(room, rabbit.id, { ...flag.pos });
     room.tickFlags(0.05);
-    // Make `bottom` strictly last: everyone else has points.
+    // Make `bottom` strictly last: everyone else has points — a min-tie
+    // now resolves to ONE feeder (id order), not the whole tied field.
+    room.ffaScores.set(victim.id, 9);
     room.ffaScores.set(rabbit.id, 5);
     room.ffaScores.set(other.id, 3);
     // Same brain-silence as above — a live hunter brain can kill the
@@ -147,6 +149,32 @@ describe('scenario: rabbit mode', () => {
     pin(room, rabbit.id, { x: 100, y: 32, z: 100 });
     for (let i = 0; i < 60; i++) step(room, 1, 0.05); // 3 sim-seconds
     expect(room.ffaScores.get(rabbit.id) ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
+  it('a dropped flag stays locked — only the bottom feeder brawls', () => {
+    const { room, players } = mkRabbit(5);
+    const [victim, rabbit, h1, h2, h3] = players as [PlayerState, PlayerState, PlayerState, PlayerState, PlayerState];
+    scatter(room, players);
+    pin(room, victim.id, { x: 30, y: 32, z: -30 });
+    kill(room, victim);
+    const flag = room.flags!.flags.get('alpha')!;
+    pin(room, rabbit.id, { ...flag.pos });
+    room.tickFlags(0.05);
+    pin(room, rabbit.id, { x: 30, y: 32, z: -30 });
+    kill(room, rabbit); // flag loose again — but it exists, so season is closed
+    expect(flag.state).toBe('dropped');
+
+    room.ffaScores.set(victim.id, 9);
+    room.ffaScores.set(rabbit.id, 9);
+    room.ffaScores.set(h1.id, 9);
+    room.ffaScores.set(h3.id, 9); // h2 strictly last = the bottom feeder
+    room.bots.quiet.add(h1.id);
+    room.bots.quiet.add(h2.id);
+    room.bots.quiet.add(h3.id);
+    room.bots.quiet.add(rabbit.id);
+    expect(shoot(room, h1, h2, { x: 60, y: 32, z: 0 })).toBeGreaterThan(0); // feeder is fair game
+    expect(shoot(room, h2, h3, { x: 60, y: 32, z: 0 })).toBeGreaterThan(0);     // feeder can hit anyone
+    expect(shoot(room, h1, h3, { x: 60, y: 32, z: 0 })).toBe(0);                // hunters stay locked
   });
 
   it('killing the rabbit drops the flag loose', () => {

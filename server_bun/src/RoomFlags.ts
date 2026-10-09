@@ -284,7 +284,16 @@ export class RoomFlags {
    *  own flag home scores. Returns the capturing team, if any. */
   /** Rabbit's only truth: which player currently holds the neutral flag.
    *  The damage gate and scoring both read this — a null return means the
-   *  flag is loose and nobody on the field can hurt anybody. */
+   *  flag is loose (see spawned() for whether that's still open season). */
+  /** Rabbit: the flag exists once first blood drops it — the 'unspawned'
+   *  pre-game is open season, spawned-but-loose still enforces pairings. */
+  spawned(): boolean {
+    for (const f of this.flags.values()) {
+      if (f.state !== 'unspawned') return true;
+    }
+    return false;
+  }
+
   carrierId(): string | null {
     for (const f of this.flags.values()) {
       if (f.state === 'carried') return f.carrier;
