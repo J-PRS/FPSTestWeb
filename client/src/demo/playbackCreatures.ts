@@ -78,6 +78,9 @@ function speciesIdxOf(ev: TargetEvent): number {
   return ev.targetType - TARGETTYPE_CREATURE_BASE;
 }
 
+const PLAYBACK_CREATURE_SNAP_SQ = 2.25; // m² — drift beyond this snaps
+const PLAYBACK_CREATURE_SMOOTH = 0.4; // per-keyframe blend under the snap gate
+
 /** Seek path — same contract as reconstructSeekTarget: spawn + fast-forward. */
 export function reconstructSeekCreature(world: PlaybackWorld, ev: TargetEvent, deadIds: Set<number>, seekTime: number): void {
   const map = world.playbackCreatureById;
@@ -116,9 +119,19 @@ export function applyPlaybackCreatureEvent(world: PlaybackWorld, ev: TargetEvent
     map.delete(ev.targetId);
     return;
   }
-  // Bounce/StateChanged/Hit — recorded keyframe; hard-snap, creature arcs
-  // are short enough that drift correction reads as jitter otherwise.
-  c.pos.set(ev.posX, ev.posY, ev.posZ);
+  // Bounce/StateChanged/Hit — recorded keyframe. The proxy walks the
+  // wire velocity between keyframes; small residual drift blends out
+  // (a hard snap every second reads as a teleport pop), large drift
+  // means the proxy diverged and snaps.
+  const dx = c.pos.x - ev.posX, dy = c.pos.y - ev.posY, dz = c.pos.z - ev.posZ;
+  if (dx * dx + dy * dy + dz * dz < PLAYBACK_CREATURE_SNAP_SQ) {
+    const a = PLAYBACK_CREATURE_SMOOTH;
+    c.pos.x += (ev.posX - c.pos.x) * a;
+    c.pos.y += (ev.posY - c.pos.y) * a;
+    c.pos.z += (ev.posZ - c.pos.z) * a;
+  } else {
+    c.pos.set(ev.posX, ev.posY, ev.posZ);
+  }
   c.vel.set(ev.velX, ev.velY, ev.velZ);
   c.mesh.position.copy(c.pos);
 }
