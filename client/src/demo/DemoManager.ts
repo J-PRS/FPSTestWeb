@@ -1,7 +1,7 @@
 // Demo manager - orchestrates recording, playback, and file I/O.
 // Single entry point for the game to interact with the demo system.
 
-import { DemoRecorder, type DemoContext, type RemoteSample } from './DemoRecorder.js';
+import { DemoRecorder, type DemoContext, type RemoteSample, type TargetSnapshot } from './DemoRecorder.js';
 import { DemoPlayer, type InterpolatedRemote } from './DemoPlayer.js';
 import type { PlaybackState } from './DemoPlayer.js';
 import { DemoUI } from './DemoUI.js';
@@ -139,6 +139,11 @@ export class DemoManager implements demoIO.DemoIOHost {
   // Live remote players for recording (world.remotePlayers etc.)
   setRemoteSource(source: (() => Iterable<RemoteSample>) | null): void {
     this.recorder.setRemoteSource(source);
+  }
+
+  // Live target entities (balls, creatures) for the baseline sweep
+  setTargetSnapshotSource(source: (() => Iterable<TargetSnapshot>) | null): void {
+    this.recorder.setTargetSnapshotSource(source);
   }
 
   // Roster of the loaded demo — replica creation needs the names

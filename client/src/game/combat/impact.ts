@@ -382,7 +382,9 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   ball.onDeath?.(ball); // elite split — entities.ts spawns the children
   // Record here, not in handleBallHit — splash kills need it too
   if (deps.lazyDemoManager()?.isRecording) {
-    deps.lazyDemoManager()!.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
+    // Wire id for net balls — Spawned/Bounce key on it; recording the client
+    // namespace id here leaves the kill invisible to replay.
+    deps.lazyDemoManager()!.recordTargetDestroyed(ball.netDriven ? ball.netId : ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
   }
 }
 

@@ -262,6 +262,26 @@ export function recordPickupGone(b: DemoRecorder, netId: number): void {
     recordTargetDestroyed(b, pickupDemoId(netId), info, info.tt);
   }
 
+  // Periodic world-state sweep — one StateChanged per live entity so a
+  // clip's baseline pass can always rebuild entities whose real lifecycle
+  // edges aged out of the ring (quiet balls/creatures spawn invisibly
+  // otherwise). Bypasses the rate limiter: it's the correctness floor,
+  // and entity count bounds it anyway.
+export function recordTargetSnapshots(b: DemoRecorder, samples: Iterable<{ targetId: number; targetType: number; pos: Vec3; vel: Vec3; health: number }>): void {
+    if (!b.recording) {return;}
+    for (const s of samples) {
+      const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+      e.eventType = TargetEventType.StateChanged;
+      e.timestamp = b.elapsedTime;
+      e.posX = s.pos.x; e.posY = s.pos.y; e.posZ = s.pos.z;
+      e.velX = s.vel.x; e.velY = s.vel.y; e.velZ = s.vel.z;
+      e.targetId = s.targetId; e.targetType = s.targetType; e.health = s.health;
+      e.hasPeakPosition = false;
+      e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
+      b.targetEvents.push(e);
+    }
+  }
+
   // ITargetEventRecorder
 export function recordTargetSpawned(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
     if (!b.recording || !checkEventRate(b)) {return;}

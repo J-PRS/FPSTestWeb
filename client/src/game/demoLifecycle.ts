@@ -1,6 +1,6 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
-import { RemoteFrameFlags } from '../demo/types.js';
+import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId } from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball } from '../entities/balls.js';
@@ -40,6 +40,10 @@ export interface DemoLifecycleDeps {
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls+crawlers live here too — keep in sync on removal
   crawlers: import('../entities/Crawler.js').Crawler[];
+  scarabs: import('../entities/Scarab.js').Scarab[];
+  gnats: import('../entities/Gnat.js').Gnat[];
+  snakes: import('../entities/Snake.js').Snake[];
+  banelings: import('../entities/Baneling.js').Baneling[];
   turrets: import('../entities/Turretter.js').Turretter[];
   rollers: import('../entities/Roller.js').Roller[];
   seekers: import('../entities/Seeker.js').Seeker[];
@@ -368,6 +372,39 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     }
     out.length = i;
     return out;
+  });
+
+  // Live target sweep — every ball + creature the world renders. Clip
+  // extraction rebuilds baseline spawns from the recorder's event ring,
+  // and an entity whose lifecycle edges aged out (spawned >30s ago,
+  // quiet since) is invisible to it: the demo then silently drops it.
+  // A 2s StateChanged sweep keeps a recent truth in the ring so any
+  // window anywhere in the buffer replays the full field.
+  const zeroVel = { x: 0, y: 0, z: 0 };
+  demoManager.setTargetSnapshotSource(function* () {
+    for (const b of d.balls) {
+      if (b.dead) {continue;}
+      // Net balls keep their client id in the 0x40xx namespace while every
+      // recorded edge keys on the wire netId — emit the wire id or the
+      // baseline pass resurrects a phantom second ball.
+      yield { targetId: b.netDriven ? b.netId : b.id, targetType: b.variant, pos: b.pos, vel: b.vel, health: b.health };
+    }
+    for (const { list, species } of [
+      { list: d.crawlers, species: 'crawler' },
+      { list: d.scarabs, species: 'scarab' },
+      { list: d.rakks, species: 'rakk' },
+      { list: d.rollers, species: 'roller' },
+      { list: d.gnats, species: 'gnat' },
+      { list: d.snakes, species: 'snake' },
+      { list: d.banelings, species: 'baneling' },
+      { list: d.totems, species: 'totem' },
+    ]) {
+      const tt = TARGETTYPE_CREATURE_BASE + demoSpeciesIndex(species);
+      for (const c of list) {
+        if (c.netId <= 0) {continue;} // local sims aren't wire entities — the offline lane doesn't record them either
+        yield { targetId: creatureDemoId(c.netId), targetType: tt, pos: c.pos, vel: c.vel ?? zeroVel, health: 0 };
+      }
+    }
   });
 }
 

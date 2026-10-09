@@ -69,7 +69,7 @@ function makePlaybackRig() {
     isPlaying: false, mode: 'playing', currentTime: 0,
     player: { demoData: null },
     ui: { setStatus() {}, setPlaying() {} },
-    fetchCoolShotsFromServer() {}, startRecording() {}, setRemoteSource() {},
+    fetchCoolShotsFromServer() {}, startRecording() {}, setRemoteSource() {}, setTargetSnapshotSource() {},
     seekReconstructing: { on: false },
   } as any;
   const life = createDemoLifecycle({
@@ -84,7 +84,8 @@ function makePlaybackRig() {
     lazyHud: () => ({ showHitMarker() {} } as unknown as HUD),
     balls,
     targets,
-    crawlers: [], turrets: [], rollers: [], seekers: [],
+    crawlers: [], scarabs: [], gnats: [], snakes: [], banelings: [],
+    turrets: [], rollers: [], seekers: [],
     overlords: [], mines: [], totems: [], rakks: [],
     world,
     overlay: null as unknown as HTMLElement,

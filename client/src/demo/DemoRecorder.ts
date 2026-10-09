@@ -19,6 +19,11 @@ const DEFAULT_TICK_RATE = 60; // frames per second
 // Remote players don't need the local tick rate — the wire itself only
 // carries ~20Hz, so sampling faster just stores duplicates.
 const REMOTE_SAMPLE_HZ = 20;
+// World-state sweep cadence — tight enough that a clip's baseline spawn
+// is ≤2s stale, sparse enough to stay noise next to real edge events.
+// Walkers drift several metres between keyframes and the playback lane only
+// knows ballistic drift — 1s keeps parked-proxy error under a body length.
+const TARGET_SNAPSHOT_INTERVAL = 1;
 
 // Splice out all events with timestamp < cutoff in one batch (list is
 // append-ordered, so binary search finds the first keeper index).
@@ -47,6 +52,15 @@ export interface RemoteSample {
 
 export interface DemoContext {
   room: string; mode: string; playerName: string;
+}
+
+// One live entity for the world-state sweep — ids/targetType are already
+// in DEMO space (caller does creatureDemoId/deployDemoId etc).
+export interface TargetSnapshot {
+  targetId: number; targetType: number;
+  pos: { x: number; y: number; z: number };
+  vel: { x: number; y: number; z: number };
+  health: number;
 }
 
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
@@ -82,6 +96,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   flagSeen = new Set<number>();
   remoteSource: (() => Iterable<RemoteSample>) | null = null;
   lastRemoteSampleT = 0;
+  /** Live world-state enumerator — polled every TARGET_SNAPSHOT_INTERVAL
+   *  so clip baselines see entities whose lifecycle edges aged out. */
+  targetSnapshotSource: (() => Iterable<TargetSnapshot>) | null = null;
+  lastTargetSnapT = 0;
   /** Last stored sample per roster idx — the dead-reckon comparator.
    *  Lives outside remoteFrames so pooled/pruned frames don't alias it. */
   private lastRemoteByIdx = new Map<number, { posX: number; posY: number; posZ: number; velX: number; velY: number; velZ: number; yaw: number; pitch: number; flags: number }>();
@@ -148,6 +166,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.pickupInfoByNetId.clear();
     this.flagSeen.clear();
     this.lastRemoteSampleT = 0;
+    this.lastTargetSnapT = 0;
     this.lastRemoteByIdx.clear();
     this.frameBuffer.clear();
     this.playerData = playerData;
@@ -166,6 +185,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // Live remote-player source; polled at REMOTE_SAMPLE_HZ while recording
   setRemoteSource(source: (() => Iterable<RemoteSample>) | null): void {
     this.remoteSource = source;
+  }
+
+  // Live target-entity source; polled every TARGET_SNAPSHOT_INTERVAL
+  setTargetSnapshotSource(source: (() => Iterable<TargetSnapshot>) | null): void {
+    this.targetSnapshotSource = source;
   }
 
   private sampleRemotes(now: number): void {
@@ -192,6 +216,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       f.flags = flags;
       this.remoteFrames.push(f);
     }
+  }
+
+  private sampleTargets(now: number): void {
+    if (!this.targetSnapshotSource) {return;}
+    if (now - this.lastTargetSnapT < TARGET_SNAPSHOT_INTERVAL) {return;}
+    this.lastTargetSnapT = now;
+    ev.recordTargetSnapshots(this, this.targetSnapshotSource());
   }
 
   /** Bit-exact change test for the remote dead-reckon skip; also updates
@@ -274,6 +305,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  the local frame was written or dead-reckon skipped. */
   private housekeep(now: number): void {
     this.sampleRemotes(now);
+    this.sampleTargets(now);
     const cutoff = this.elapsedTime - this.bufferSeconds;
     pruneEventsBefore(this.projectileEvents, cutoff, this.projectileEventPool);
     pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
