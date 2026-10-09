@@ -99,8 +99,15 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
   }
   if (bag.netAcc >= 0.5 && field) {
-    // Clock-estimate stalls must never freeze the sim.
-    while (bag.netAcc >= 0.05) {
+    // Clock-estimate stalls must never freeze the sim — but a stale
+    // estimate must not let prediction sprint ahead of authority
+    // unboundedly either: once simT leads simNow the gate never
+    // re-engages, so each 0.5s of silence banked another 0.5s of
+    // blind flight, and resuming traffic warped enraged balls back
+    // 50-190m. Cap the lead at 1s past the estimate; past that a
+    // parked ball reads better than a guaranteed-wrong one.
+    const leadCap = simNow === Infinity ? Infinity : simNow + 1;
+    while (bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
       bag.netAcc -= 0.05;
       bag.simT += 0.05;
       stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
