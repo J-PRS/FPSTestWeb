@@ -45,6 +45,15 @@ export class SnapshotBuffer {
 
   private snapshots: NetSnapshot[] = [];
   private pool: NetSnapshot[] = [];
+  /** True while the sampler is clamped at the extrapolation cap — the
+   *  remote is freeze-framing on stale truth, so the caller should hand
+   *  motion to dead reckoning rather than wait out the silence timer. */
+  atExtCap = false;
+  /** True between a clear() and the first sample after it: the buffer
+   *  holds only post-teleport truth, so the caller snaps to the sample
+   *  directly — steering the old position across the gap would slide a
+   *  respawn's corpse path into the new seat. */
+  freshSeed = false;
   // Anchor pair for the render clock: newest snapshot's server time and
   // the client wall time it arrived. renderTime = latestT + elapsed.
   // Reordered packets must NOT move the anchor — rewinding latestT snaps
@@ -157,18 +166,24 @@ export class SnapshotBuffer {
     const snaps = this.snapshots;
 
     if (snaps.length === 0) {
+      this.atExtCap = false;
+      // freshSeed survives: an empty buffer means no truth has landed
+      // yet — the FIRST real snapshot still counts as the re-seat.
       outPos.copy(fallbackPos);
       outRot.yaw = fallbackYaw;
       outRot.pitch = fallbackPitch;
       return;
     }
+    this.freshSeed = false;
 
     const newest = snaps[snaps.length - 1]!;
     if (renderTime >= newest.t) {
       // Past the buffer — extrapolate briefly from the newest snapshot.
-      // Extrapolation scales with the observed cadence: a flat 0.25s cap
-      // freezes a 500ms-tier remote for a quarter-second per packet.
-      const cap = Math.min(0.6, Math.max(SnapshotBuffer.MAX_EXTRAPOLATE, (this.arrivalInterval / 1000) * 0.6));
+      // The cap covers ~one full arrival interval: a 400ms-tier remote
+      // freeze-framing 160ms before dead reckoning takes over reads as a
+      // stutter, so the coast hands off to DR at the cap instead.
+      const cap = Math.min(0.9, Math.max(SnapshotBuffer.MAX_EXTRAPOLATE, this.arrivalInterval / 1000));
+      this.atExtCap = (renderTime - newest.t) / 1000 >= cap;
       const ext = Math.min(cap, (renderTime - newest.t) / 1000);
       outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
       // Rotation extrapolates too — a turning remote's head would otherwise
@@ -184,6 +199,7 @@ export class SnapshotBuffer {
       outRot.pitch = newest.pitch + pitchRate * rotExt;
       return;
     }
+    this.atExtCap = false;
 
     // Find the pair straddling renderTime
     let i = snaps.length - 2;
@@ -243,6 +259,8 @@ export class SnapshotBuffer {
     this.lastArrive = 0;
     this.lastRenderTime = -Infinity;
     this.lastSampleWall = 0;
+    this.atExtCap = false;
+    this.freshSeed = true;
   }
 
   get size(): number { return this.snapshots.length; }

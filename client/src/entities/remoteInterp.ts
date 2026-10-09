@@ -168,7 +168,10 @@ export class RemoteInterp {
     // their nominal 250ms interval.
     const drThreshold = Math.min(1500, Math.max(350, this.net.arrivalInterval * 2.5));
     const timeSinceUpdate = Date.now() - this.lastUpdateTime;
-    if (timeSinceUpdate > drThreshold && !this._simulating && !localDriven) {
+    // The sampler clamps past the extrapolation cap — the remote would
+    // freeze-frame on stale truth for the rest of the silence window, so
+    // DR takes over at the cap rather than waiting out the threshold.
+    if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > 200)) && !this._simulating && !localDriven) {
       this._simulating = true;
       logger.debug(`STARTING dead reckoning`, { playerId: this.h.playerId, silentMs: timeSinceUpdate });
     }
@@ -249,6 +252,10 @@ export class RemoteInterp {
   private interp(dt: number): void {
     const sampledPos = _extrapolated;
     const sampledRot = _sampledRot;
+    // A post-clear buffer holds only fresh truth — its first sample is a
+    // re-seat, not a drifted path, so it snaps directly and skips the
+    // steering gate entirely. Read the flag before sample() consumes it.
+    const { freshSeed } = this.net;
     this.sample(sampledPos, sampledRot);
     const p = this.h.position;
 
@@ -260,8 +267,13 @@ export class RemoteInterp {
     // so a jittered link steers the ghost rather than warping it.
     const gap = Math.hypot(sampledPos.x - p.x, sampledPos.y - p.y, sampledPos.z - p.z);
     const stepBudget = Math.max(0.5, this.h.velocity.length() * dt * 3 + 0.25);
-    if (this.lastUpdateTime > 0 && gap > stepBudget && gap < 40) {
-      this.convergeTimer = 0.35;
+    // Every gap steers — no upper bound: a big drift that outlived its
+    // converge window used to fall through to the raw copy and snap by
+    // the whole remainder. Genuine teleports never reach here (onUpdate's
+    // plausibility gate and reseat/reset clear the buffer first), so the
+    // converge is always rejoining a continuous path.
+    if (this.lastUpdateTime > 0 && !freshSeed && gap > stepBudget) {
+      this.convergeTimer = Math.max(this.convergeTimer, 0.35);
       this.convergeStep(dt);
       return;
     }
@@ -294,7 +306,10 @@ export class RemoteInterp {
     const rot = _sampledRot;
     this.sample(target, rot);
 
-    const horizon = 0.18; // s — how hard the convergence is allowed to chase
+    // Horizon scales with the gap: a 12m rejoin gets ~0.5s of steering
+    // (reads as the remote recovering its path), a 1m seam stays snappy.
+    const dist = Math.hypot(target.x - p.x, target.y - p.y, target.z - p.z);
+    const horizon = Math.min(0.6, Math.max(0.18, dist * 0.04));
     // desired velocity that reaches the target within ~horizon
     const dvx = (target.x - p.x) / horizon;
     const dvy = (target.y - p.y) / horizon;
