@@ -527,18 +527,26 @@ export const terrainFrag = /* glsl */`
     if(terrainPreset == 2) {
       // Nested domain warp (IQ's q->r->f idiom): the second warp stage is
       // what turns blobs into organic meadow/scrub regions.
+      // Detail fadeout first: fixed-frequency terms at ~1m wavelength
+      // shimmer into soup past mid distance AND cost real ALU — skip
+      // evaluating them entirely where they can't be seen (Terrain3D's
+      // octave-LOD: noise can't mip, so distance must gate the work).
+      float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
       float region = fbm(uv * 0.42 + 1.1 * r);
       float macro  = fbm(uv + 0.8 * q);
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
-      float micro  = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+      // Sub-2m terms: gated, not faded — a far pixel pays zero for them.
+      float micro = 0.0, blade = 0.0, triDetail = 0.0;
+      if (detFade > 0.0) {
+        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+        blade = noise(uvFin * 4.0 + r * 2.0);
+        triDetail = triplanarNoise(vWorldPos, 0.85);
+      }
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).
       float clumpId = hash(floor(uvMed * 1.4 + r * 0.6));
-      float blade   = noise(uvFin * 4.0 + r * 2.0);
-      float triRock = triplanarNoise(vWorldPos, 0.22);
-      float triDetail = triplanarNoise(vWorldPos, 0.85);
       // Ridged noise for exposed rock — crease lines read as strata/scree.
       float ridged  = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0);
       ridged *= ridged;
@@ -549,9 +557,6 @@ export const terrainFrag = /* glsl */`
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
       float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
                    * (0.45 + 1.1 * patchMask);
-      // Detail fadeout: fixed-frequency terms at ~1m wavelength shimmer
-      // into soup past mid distance; fade them while macro terms persist.
-      float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
 
       // Palette: dark root greens -> bright olive tips, dry straw regions,
       // warm dirt, grey strata rock. Wide value range is what keeps it
