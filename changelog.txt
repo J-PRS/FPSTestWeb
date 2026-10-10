@@ -1,3 +1,4 @@
+2026-10-10 - trail-jumpcut probe: push() already cuts trails on positional jumps and time gaps, so a surviving trail-smear chord would mean partial-rewrite residue in the batch buffer, not a missing owner clear. Writer-side cut now counts via glitch so the next soak separates the two causes
 2026-10-10 - pong removed from ws KEEP_ALWAYS: queued pongs carried stale timestamps — on reconnect they burst-tripped the rate limiter and reported seconds of phantom transit to the server transit EMA. Stale eviction now applies; a skipped RTT sample is free
 2026-10-10 - seg-div span gate: only count segments covering <=4s of stale anchor. Long-span snaps (roster/join heals up to 367m @ 12s) are heals catching up, not predictor drift — drift only ever shows on heartbeat-scale spans
 2026-10-10 - tickNack added to the volatile-pre-join set on both ends (same storm vector as ping — a nack queued during a tier probe could flush before join)

@@ -379,7 +379,13 @@ export class RibbonTrail {
       const jz = pos.z + oz - this.pz[this.head]!;
       const jump = JUMP_BUDGET(spd);
       if (jx * jx + jy * jy + jz * jz > jump * jump
-        || performance.now() - this.lastPushMs > PUSH_GAP_MS) {this.clear();}
+        || performance.now() - this.lastPushMs > PUSH_GAP_MS) {
+        // Writer-side cut — if trail-smear still fires on this tag next
+        // soak, the chord isn't reaching here (partial-rewrite residue),
+        // not a missing owner clear().
+        glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(Math.hypot(jx, jy, jz)) });
+        this.clear();
+      }
     }
     this.lastPushMs = performance.now();
 
