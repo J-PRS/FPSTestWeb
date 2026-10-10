@@ -2,8 +2,11 @@
  * Heightfield — the pure-CPU half of terrain.ts, shared verbatim by client
  * and server so ball flight resolves identical heights on both ends.
  *
- * Data: R channel of the heightmap PNG (u8, square). The client builds one
- * from canvas ImageData; the server loads the pre-dumped heightmap.bin.
+ * Data: R channel of the heightmap, dumped per map as maps/<name>.bin
+ * (u32 size + raw bytes). ONE source of truth — the client fetches the
+ * same .bin the server reads (maps/ mirrored under /assets/heightmaps),
+ * so both ends sample identical bytes. stride=4 tolerates a legacy
+ * RGBA ImageData field; everything live is stride=1.
  * Bilinear sampling matches the GPU texture path exactly (texel-center
  * offset, see terrain.ts for the derivation) — a server ball and a client
  * replay must land on the same vertex or bounces diverge.
