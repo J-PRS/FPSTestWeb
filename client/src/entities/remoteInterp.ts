@@ -301,6 +301,15 @@ export class RemoteInterp {
 
     // Directly place on the interpolated path — smooth by construction
     p.copy(sampledPos);
+    // Rendered-terrain floor: the wire eye clamps to the SMOOTH field
+    // server-side, but the rendered level-0 chord sits above it in
+    // gullies — a grounded remote placed raw sinks under the visible
+    // ground (invisible bots). Same floor simStep applies.
+    if (this.h.terrain) {
+      const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
+      const {eye} = classCapsule(this.h.armorClass);
+      if (p.y < gY + eye) {p.y = gY + eye;}
+    }
 
     // Rotation comes straight from the sampled interpolation (already smoothed)
     this.h.rotation.yaw = sampledRot.yaw;
