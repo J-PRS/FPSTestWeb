@@ -89,7 +89,12 @@ export class BotSteer {
       { x: pos.x, y: pos.y + 1, z: pos.z },
       { x: dest.x, y: pos.y + 1, z: dest.z },
       ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-    if (beelineClear && (objD < (ctx.runner ? 60 : 40) || ctx.posted)) {
+    // The carrier's beeline covers flagGoal's whole direct-home window
+    // (~200m): "route owns the feet" means the stand's slope/memory
+    // repellers can't mask every goalward slot and hold him on an
+    // 80-160m tangent orbit (katabatic capRun: 300s circling, 0 caps).
+    // beelineClear still gates on real structure in the way.
+    if (beelineClear && (objD < (ctx.running ? 160 : ctx.runner ? 60 : 40) || ctx.posted)) {
       // Posted anchors take the beeline at any range: slot scoring can
       // mask every goalward slot (slope probes on a ridgeline stand) and
       // the least-dangerous fallback walks the defender hundreds of
