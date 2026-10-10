@@ -672,6 +672,7 @@ export class Room {
       tileSize: this.spec.tileSize,
       fog: this.spec.fog,
       terrainTex: this.spec.terrainTex,
+      terrainPreset: this.spec.terrainPreset,
       sky: this.spec.sky,
       interiors: this.spec.interiors,
       emit: this.events.emit,
@@ -959,6 +960,7 @@ export class Room {
       tileSize: spec.tileSize,
       fog: spec.fog,
       terrainTex: spec.terrainTex,
+      terrainPreset: spec.terrainPreset,
       sky: spec.sky,
       interiors: spec.interiors,
     });

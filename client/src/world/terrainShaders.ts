@@ -124,7 +124,7 @@ export const terrainFrag = /* glsl */`
   uniform vec3 sunColor;
   uniform vec3 ambientColor;
   uniform float hscale;
-  uniform int terrainPreset; // 0=mixed, 1=desert
+  uniform int terrainPreset; // 0=mixed, 1=desert, 2=grassland
   uniform sampler2D albedoMap;
   uniform bool useAlbedo;
   // T2 material blend layer — real 256px tiles in a 4x2 atlas, blended
@@ -510,6 +510,70 @@ export const terrainFrag = /* glsl */`
       // Fog distance: dampen the DOWNWARD vertical component so terrain
       // below an airborne camera isn't over-fogged (looking down a valley,
       // ground 200m below shouldn't haze like it's 200m across the map).
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
+      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
+      col = mix(col, fogColor, fogFactor);
+      gl_FragColor = vec4(ungradeColor(col), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
+
+    // --- grassland preset: Ascend-bright olive grass over dirt/rock ---
+    if(terrainPreset == 2) {
+      vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      float macro  = fbm(uv + 0.8 * warp);
+      // Two warps at different scales: a region-scale patchiness (what
+      // makes a meadow vs scrub slope) plus the fixed-frequency detail
+      // that would otherwise read as tiling at ground level.
+      vec2 wPatch = vec2(fbm(uv * 0.37 + 4.4), fbm(uv * 0.37 + 9.1));
+      float patch = fbm(uv * 0.31 + 0.55 * wPatch);
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * warp);
+      float micro  = noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5;
+      float cell   = worley(uvMed * 1.4 + warp * 0.6);
+      float triRock = triplanarNoise(vWorldPos, 0.22);
+      float triDetail = triplanarNoise(vWorldPos, 0.85);
+      float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
+      float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
+                   * (0.55 + 0.9 * patchMask);
+
+      // Palette: T:A's sunlit olive — yellowish-green that desaturates to
+      // dry straw on the patch mask, never the dark T2 grass.
+      vec3 cGrass = vec3(0.42, 0.55, 0.16) + medium * vec3(0.10, 0.10, 0.03) + micro * vec3(0.06, 0.07, 0.02);
+      vec3 cMeadow = vec3(0.30, 0.50, 0.10) + medium * vec3(0.06, 0.10, 0.02);
+      vec3 cStraw  = vec3(0.60, 0.52, 0.18) + macro * vec3(0.10, 0.08, 0.02);
+      vec3 cDirtG  = vec3(0.48, 0.32, 0.14) + medium * vec3(0.10, 0.06, 0.02) + cell * vec3(0.06, 0.04, 0.01);
+      vec3 cRockG  = vec3(0.34, 0.30, 0.24) + cell * vec3(0.12, 0.11, 0.09) + triRock * vec3(0.08, 0.07, 0.05);
+      vec3 cCliffG = vec3(0.20, 0.18, 0.14) + cell * vec3(0.10, 0.09, 0.07) + triRock * vec3(0.06, 0.05, 0.04);
+
+      vec3 grassMix = mix(cGrass, cMeadow, smoothstep(0.35, 0.65, patch));
+      grassMix = mix(grassMix, cStraw, smoothstep(0.60, 0.80, patch) * 0.7);
+
+      vec3 col = grassMix;
+      // Low hollows: dirt flats; mid-height patch mask: scrubby dirt
+      // inclusions that break the grass field's uniformity.
+      col = mix(col, cDirtG, smoothstep(0.30, 0.12, height) * 0.6);
+      col = mix(col, cDirtG, smoothstep(0.55, 0.72, patch) * smoothstep(0.15, 0.30, height) * 0.55);
+      // High ground goes rocky before the slope cliff takes over.
+      col = mix(col, cRockG, smoothstep(0.55, 0.80, height));
+
+      float slopeBlend = smoothstep(0.22, 0.50, slope);
+      vec3 slopeCol = mix(cDirtG, cCliffG, smoothstep(0.30, 0.65, slope));
+      col = mix(col, slopeCol, slopeBlend);
+      col *= 0.86 + 0.28 * detail;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+      float diff = max(dot(vNormal, sunDir), 0.0);
+      float shadow = diff * diff;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col *= lit;
+      col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = smoothstep(fogStart, fogEnd, fogDist);

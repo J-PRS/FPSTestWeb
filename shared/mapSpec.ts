@@ -80,6 +80,9 @@ export interface MapSpec {
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
+  /** Procedural palette id for the terrain shader (0=mixed, 1=desert,
+   *  2=grassland). Client-only; absent = the shader's default desert. */
+  terrainPreset?: number;
   /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png — replaces
    *  the procedural sky when set. Client-only. */
   sky?: string;
@@ -233,6 +236,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/, 2, 'terrainTex'),
+    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 2, 0, 'terrainPreset') || undefined,
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/, 2, 'sky'),
     structures: parseStructures((src as { structures?: unknown }).structures),
     deploys: parseDeploys((src as { deploys?: unknown }).deploys),

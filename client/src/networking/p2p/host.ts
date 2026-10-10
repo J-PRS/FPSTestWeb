@@ -129,6 +129,7 @@ export class P2PHost {
     tileSize?: number;
     fog?: { color: [number, number, number]; distance?: number; visible?: number };
     terrainTex?: string;
+    terrainPreset?: number;
     sky?: string;
     interiors?: import('../../../../shared/mapSpec.js').InteriorSpec[];
     spawns?: import('../../../../shared/mapSpec.js').MapSpec['spawns'];
@@ -144,6 +145,7 @@ export class P2PHost {
     this.roomInfo.tileSize = map.tileSize;
     this.roomInfo.fog = map.fog;
     this.roomInfo.terrainTex = map.terrainTex;
+    this.roomInfo.terrainPreset = map.terrainPreset;
     this.roomInfo.sky = map.sky;
     this.roomInfo.interiors = map.interiors;
     // Authored spawn anchors — the host assigns spawn positions, so a

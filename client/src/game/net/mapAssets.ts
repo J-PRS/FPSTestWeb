@@ -16,7 +16,7 @@ import { setFogBase } from '../../world/directionalFog.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number }; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] };
 
 /** Mission haze — spec.fog re-tints the whole atmosphere. distance → fog
  *  near, visible → fog far (T2's authored range for the terrain). Absent
@@ -54,7 +54,7 @@ export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; 
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
-export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number, tileSize?: number): Promise<void> {
+export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number, tileSize?: number, terrainPreset?: number): Promise<void> {
   const mult = heightScale ?? 1;
   const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
   const key = `${file}@${mult}@${wscale}|${texPath}|${skyDir}`;
@@ -70,6 +70,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       setWorldScale(wscale);
       deps.lazyTerrain().setHeightScale(TERRAIN_HEIGHT_SCALE * mult);
       deps.lazyTerrain().setWorldScale(wscale);
+      deps.lazyTerrain().setPreset(terrainPreset ?? 1);
       interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
       const { httpUrl } = await resolveServerEndpoints();
       const fieldKey = `${file}@${mult}`;

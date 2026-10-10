@@ -73,6 +73,7 @@ export interface RoomInfo {
   /** Mission-authored haze — spec.fog, client dressing only. */
   fog?: { color: [number, number, number]; distance?: number; visible?: number };
   /** Baked terrain albedo + skybox dir — client dressing only. */
+  terrainPreset?: number;
   terrainTex?: string;
   sky?: string;
   /** Interior placements (T2 .dif→.glb buildings) — client dressing only. */
@@ -312,7 +313,7 @@ export class MessageHandler {
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */
-  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'terrainTex' | 'sky' | 'interiors'>): void {
+  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'terrainTex' | 'terrainPreset' | 'sky' | 'interiors'>): void {
     // Explicit field writes (not Object.assign): a spec that omits a
     // field must clear it, not leave the previous map's value behind.
     this.roomInfo.bases = m.bases;
@@ -324,6 +325,7 @@ export class MessageHandler {
     this.roomInfo.tileSize = m.tileSize;
     this.roomInfo.fog = m.fog;
     this.roomInfo.terrainTex = m.terrainTex;
+    this.roomInfo.terrainPreset = m.terrainPreset;
     this.roomInfo.sky = m.sky;
     this.roomInfo.interiors = m.interiors;
     this.attachStructures(m.structures);
@@ -411,7 +413,7 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog
-        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
           logger.debug(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),

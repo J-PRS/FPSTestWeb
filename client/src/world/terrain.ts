@@ -235,6 +235,14 @@ export class Terrain {
     }
   }
 
+  /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert,
+   *  2=grassland) — uniform-only, no texture state. */
+  setPreset(p: number): void {
+    for (const level of this.levels) {
+      level.material.uniforms.terrainPreset.value = p;
+    }
+  }
+
   /** Per-map vertical gain (spec.heightScale): uniforms only — the
    *  displacement texture bytes are gain-agnostic, so no re-upload. */
   setHeightScale(worldScale: number): void {
