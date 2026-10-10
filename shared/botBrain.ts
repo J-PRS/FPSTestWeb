@@ -22,6 +22,7 @@ import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
 import {
   newHuntState, pickHunt, pickFire, preyUnreachable,
+  noteFoeHit, noteFoeDeath, dreadOf,
   STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type EscapeState } from './botEscape.ts';
@@ -383,6 +384,7 @@ export class BotBrain {
   markDeath(pos: BotVec, now: number): void {
     this.deaths.push({ x: pos.x, z: pos.z, t: now });
     if (this.deaths.length > 8) {this.deaths.shift();}
+    noteFoeDeath(this.h, now); // the kill goes on whoever hit last
   }
 
   /** Is p within the repel radius of a recent death? */
@@ -497,10 +499,11 @@ export class BotBrain {
   }
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
-  takeHit(from: BotVec): void {
+  takeHit(from: BotVec, attackerId?: string): void {
     this.flinchT = FLINCH_S;
     this.hitSay = true;
     this.flinchFrom = { x: from.x, y: from.y, z: from.z };
+    if (attackerId) noteFoeHit(this.h, attackerId, this.now);
     this.h.lastHitAt = this.now;
     this.h.skill.form = Math.max(0.85, this.h.skill.form - 0.03); // tilt
     this.goalS.revengeT = 2.5;
@@ -581,7 +584,10 @@ export class BotBrain {
   private mood(ctx: BrainCtx, dt: number): { hurtEdge: boolean; hero: boolean; fearing: boolean } {
     const hurt = (ctx.healthFrac ?? 1) < T.brain.fearHp;
     const hurtEdge = hurt && !this.hurtLatch;
-    if (hurtEdge && botRand() < T.brain.heroChance) this.heroT = T.brain.heroS;
+    // A nemesis rattles the hero roll — the man who's already killed
+    // this bot twice doesn't inspire a last stand, he ends it.
+    const shaken = this.h.lastHitBy && dreadOf(this.h, this.h.lastHitBy.id) >= 2;
+    if (hurtEdge && botRand() < T.brain.heroChance * (shaken ? 0.4 : 1)) this.heroT = T.brain.heroS;
     this.hurtLatch = hurt;
     this.heroT = Math.max(0, this.heroT - dt);
     const hero = this.heroT > 0;
