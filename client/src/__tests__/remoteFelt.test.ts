@@ -225,7 +225,17 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // timer expired during the barrage, so the next update must retake it.
     vi.advanceTimersByTime(500);
     interp.onUpdate({ x: 5, y: 20, z: 0 }, { yaw: 0, pitch: 0 }, 40, { x: 0, y: 0, z: 0 }, 50);
-    expect(interp.simulating).toBe(false);
+    // The update arms the converge phase inside the sim (the collapse:
+    // converging IS simulating — the steer shares the sim's velocity).
+    // The ballistic ghost must steer back toward truth: distance shrinks.
+    const driftBefore = h.position.distanceTo(new THREE.Vector3(5, 20, 0));
+    for (let f = 0; f < 15; f++) {
+      vi.advanceTimersByTime(FRAME);
+      h.previousPosition.copy(h.position);
+      interp.step(FRAME / 1000, false);
+    }
+    const driftAfter = h.position.distanceTo(new THREE.Vector3(5, 20, 0));
+    expect(driftAfter).toBeLessThan(driftBefore);
     // And bounded: six stacked launches would have thrown it ~100m+.
     expect(h.position.distanceTo(new THREE.Vector3(5, 20, 0))).toBeLessThan(60);
   });

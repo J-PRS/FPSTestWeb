@@ -83,12 +83,13 @@ export class RemoteInterp {
     const stamp = serverMs ?? this.lastUpdateTime;
     this.lastServerUpdateMs = stamp;
 
-    // Simulating and an update arrived → stop simulating and blend back.
-    // Inside the prediction window the server hasn't reflected the
-    // knockback yet, so the sim keeps running.
-    if (this._simulating && this.predictionTimer <= 0) {
-      this._simulating = false;
-      this.convergeTimer = 0.45; // steer back onto the path, physically
+    // Simulating and an update arrived → arm the converge phase inside
+    // the same sim (steer back onto the path, physically). The sim and
+    // the steer share simulatedVelocity, so staying in one mode removes
+    // the DR→converge→interp hand-off seam. Inside the prediction window
+    // the server hasn't reflected the knockback yet — free-run continues.
+    if (this._simulating && this.convergeTimer <= 0 && this.predictionTimer <= 0) {
+      this.convergeTimer = 0.45;
       logger.debug(`RESUMED updates, converging to server position`, { playerId: this.h.playerId });
     }
 
@@ -186,9 +187,11 @@ export class RemoteInterp {
       if (this.predictionTimer > 0) {
         this.predictionTimer = Math.max(0, this.predictionTimer - dt);
       }
-      this.simStep(dt);
-    } else if (this.convergeTimer > 0) {
-      this.convergeStep(dt);
+      if (this.convergeTimer > 0) {
+        this.convergeStep(dt);
+      } else {
+        this.simStep(dt);
+      }
     } else if (!localDriven) {
       this.interp(dt);
     }
@@ -285,6 +288,7 @@ export class RemoteInterp {
     // plausibility gate and reseat/reset clear the buffer first), so the
     // converge is always rejoining a continuous path.
     if (this.lastUpdateTime > 0 && !freshSeed && gap > stepBudget) {
+      this._simulating = true;
       this.convergeTimer = Math.max(this.convergeTimer, 0.35);
       this.convergeStep(dt);
       return;
@@ -349,6 +353,7 @@ export class RemoteInterp {
     const close = p.distanceToSquared(target) < 0.04; // 0.2m
     if (close || this.convergeTimer <= 0) {
       this.convergeTimer = 0;
+      this._simulating = false;
       this.h.velocity.copy(this.simulatedVelocity);
     }
   }
