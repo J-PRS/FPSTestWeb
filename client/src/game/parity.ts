@@ -22,6 +22,35 @@ export function parityMiss(kind: string, detail: Record<string, unknown>): void 
   glitch(`parity-${kind}`, detail);
 }
 
+// Damage-echo expectations — in authority-sim rooms a predicted hit is
+// feedback-only (numbers, hitmarker, predicted bars) with NO claim behind
+// it: the claim ledger can't see it, so a server-side whiff reads as
+// "my hit landed but did no damage". Stamp each predicted remote hit;
+// a playerHit/kill naming the same victim confirms it, ~RTT of silence
+// counts it as a ghost hit.
+type DmgEcho = { victim: string; dmg: number; wt?: number; t: number };
+const dmgEchoes: DmgEcho[] = [];
+
+export function expectDamageEcho(victim: string, dmg: number, wt?: number): void {
+  dmgEchoes.push({ victim, dmg, wt, t: performance.now() });
+  if (dmgEchoes.length > 32) {dmgEchoes.shift();}
+}
+
+export function confirmDamageEcho(victim: string): void {
+  const i = dmgEchoes.findIndex(e => e.victim === victim);
+  if (i >= 0) {dmgEchoes.splice(i, 1);}
+}
+
+export function sweepDamageEchoes(now: number): void {
+  for (let i = dmgEchoes.length - 1; i >= 0; i--) {
+    const e = dmgEchoes[i]!;
+    if (now - e.t > 900) {
+      parityMiss('dmg-echo', { victim: e.victim, dmg: e.dmg, ...(e.wt !== undefined ? { wt: e.wt } : {}) });
+      dmgEchoes.splice(i, 1);
+    }
+  }
+}
+
 /** Dump section — the census line leads, recent misses follow
  *  newest-first so a paste shows WHICH predictions died. */
 export function parityLines(): string[] {

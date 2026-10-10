@@ -15,10 +15,13 @@ import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
 import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/config.js';
 import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats, serverSimmed } from '../../../../shared/weapons.js';
+import { expectDamageEcho } from '../parity.js';
 import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 import { isBotId } from '../../../../shared/botNames.js';
 import { HIT_TARGET_NONE, targetDemoId } from '../../demo/types.js';
 import { lgDischarge } from './lightning.js';
+import { AoeGizmo } from '../../effects/aoeGizmo.js';
+import { urlParams } from '../../core/params.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
 
 const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
@@ -139,6 +142,15 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
     // Bomblets are visual-only anyway — remote viewers still need the
     // rain, or an airburst reads as a midair pop with no payload.
     if (p.config.cluster) spawnClusterBomblets(c, p);
+    // The replica is visual-only for DAMAGE (server declares it), but the
+    // blast still physically shoves the local player — predict the shove
+    // here so its knockback echo dedupes on the stamp instead of landing
+    // raw and late. Without this every enemy blast felt like a grab.
+    if (!p.config.noExplosion && p.config.aoeRadius > 0) {
+      const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
+      const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
+      c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined);
+    }
     return;
   }
 
@@ -178,6 +190,12 @@ function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
       _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
       { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
     ));
+    // Crumble shells still carry a real server-side shrapnel sweep —
+    // under ?debug show its reach like every blast, else the damage
+    // envelope is invisible (noExplosion skips the normal gizmo path).
+    if (urlParams.debug && p.config.aoeRadius > 0) {
+      deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, p.config.aoeRadius));
+    }
     sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
     return;
   }
@@ -496,6 +514,12 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) return; // bot authority: real damage, no claim
   if (!mine) return;
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
+  // Authority rooms give this hit no claim — stamp it so a server whiff
+  // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
+  // P2P/claim rooms already ledger the outcome through claimSeq instead.
+  if (deps.lazyNetworkManager()?.authoritySims()) {
+    expectDamageEcho(playerId, directDamage, p.config.weaponType);
+  }
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
     : false;

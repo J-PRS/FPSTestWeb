@@ -10,6 +10,7 @@ import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
+import { confirmDamageEcho, sweepDamageEchoes } from '../game/parity.js';
 import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
 import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
@@ -80,6 +81,8 @@ export class NetworkManager {
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }) => void) | null = null;
+  /** Belt-sticky combo — rider server id glued dead-center onto host id. */
+  public onProjRide: ((riderId: string, hostId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
@@ -420,6 +423,7 @@ export class NetworkManager {
   bandwidth(): { up: number; down: number } {
     const now = performance.now();
     this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier });
+    sweepDamageEchoes(now);
     if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
     const dt = (now - this.bwT) / 1000;
     if (dt >= 0.5) {
@@ -499,6 +503,7 @@ export class NetworkManager {
 
   confirmClaimHit(targetId: string, shotId?: string): void {
     this.ledger.confirmHit(targetId, shotId);
+    confirmDamageEcho(targetId);
   }
 
   ackClaim(msg: Parameters<ClaimLedger['ack']>[0]): void {
