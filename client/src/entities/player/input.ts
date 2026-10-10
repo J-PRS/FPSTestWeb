@@ -186,7 +186,13 @@ export class PlayerInput {
     // violent flick is <100px anyway.
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement) {this.lockSettleUntil = performance.now() + 80;}
+      // Lock dropped (ESC menu, alt-tab, OS dialog): any held key/button's
+      // release may never reach the page — a missed mouseup leaves jets
+      // burning till the tank empties, the classic phantom launch.
+      else {this.clearAll();}
     });
+    // Same hazard when the window loses focus mid-hold.
+    window.addEventListener('blur', () => this.clearAll());
     document.addEventListener('mousemove', (e) => {
       if (!document.pointerLockElement || this.frozen) {return;}
       if (performance.now() < this.lockSettleUntil) {return;}

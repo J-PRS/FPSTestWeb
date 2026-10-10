@@ -1,3 +1,4 @@
+2026-10-10 - Phantom yeet: a mouseup lost while pointer lock was dropped left jetPending held (burn whole tank, recharge, relaunch) — input clears helds on lock loss + window blur
 2026-10-10 - Regenerator is a ramp, not a drip: pays regenRamp per unhurt second (0->4hp/s at 10s), any hit zeroes it; completes the lastDamageAt machinery and greens regenHeal
 2026-10-10 - Root cause of 166m remote drift: predicted blasts re-seeded simulatedVelocity additively + refreshed the prediction window, so sustained mortar fire stacked impulses and launched remotes far off-wire — re-predict inside an active window is now a no-op
 2026-10-10 - Dead-reckoning drift capped at 40m horizontal from last wire truth — a silent wire no longer extrapolates remotes hundreds of meters; alt+Q dump now prints rendered pos + DR flag per remote
