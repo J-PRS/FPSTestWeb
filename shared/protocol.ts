@@ -95,6 +95,11 @@ export type ClientMessage =
   // spawns an authoritative shell, echoes shotId on projectileCreated,
   // and declares all outcomes — pos/shotId only help binding, never truth.
   | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; shotId?: string; fireAt?: number }
+  // tickNack: client lost a tick-frame burst — asks the room to run a
+  // full-record window so masked-field baselines reseed in ~1s instead
+  // of waiting out the staggered-full cadence. Payload-free: gap size is
+  // diagnostic only and a forged nack just wastes a full window.
+  | { type: 'tickNack' }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   // inputMove is a change-only stream — on unordered transports (RTC/WT

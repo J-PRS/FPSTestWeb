@@ -148,6 +148,10 @@ export class WireIn {
     if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
     const tick = decodeTickFrame(data, this.tickPool);
     if (!tick) return;
+    // A real loss (the <= drop above already ate reorders): masked fields
+    // in the gap are stale until each wireId's staggered full lands —
+    // ask for a full-record window instead of waiting out the ~750ms.
+    if (tick.tickSeq - this.lastTickSeq > 1) this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);
     this.lastTickSeq = tick.tickSeq;
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.

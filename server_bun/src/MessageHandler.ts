@@ -98,6 +98,10 @@ export interface RoomInfo {
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;
+  /** tickNack sink — a client that lost a tick burst asks for a
+   *  full-record window so its masked-field baselines reseed in ~1s
+   *  instead of waiting out the 750ms stagger. Room-cooldowned. */
+  nackFulls?: () => void;
   /** Deploy claim sink — Room.deployables.handleDeploy. The return is
    *  the claim verdict the claimant sees in its claimAck. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => ClaimVerdict;

@@ -71,6 +71,17 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
   },
 
+  // tickNack: the client detected a tickSeq gap on the lossy lane —
+  // answer with a full-record window (Room.nackFulls, room-cooldowned).
+  // Limit is per-player flood control; the real cap is the room one.
+  tickNack: {
+    limit: { maxCount: 4, windowMs: 1000 },
+    validate: (obj) => obj.type === 'tickNack'
+      ? { success: true, data: { type: 'tickNack' } as Extract<ClientMessage, { type: 'tickNack' }> }
+      : { success: false, error: 'tickNack malformed' },
+    handle: (h) => h.roomInfo.nackFulls?.(),
+  },
+
   position: {
     limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {

@@ -624,6 +624,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   slam: [{ name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
   respawn: [{ name: 'hold', wire: 'bool', absent: null }],
   throwFlag: [],
+  tickNack: [],
   snapshotRequest: [],
   resync: [],
   classUpdate: [{ name: 'armorClass', wire: 'str' }],

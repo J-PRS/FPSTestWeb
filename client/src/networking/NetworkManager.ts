@@ -394,6 +394,17 @@ export class NetworkManager {
     if (this.ws.send(s) === false) this.noteDrop(msg.type);
   }
 
+  /** wireIn hook: a tickSeq gap on the datagram lane — ask the server for
+   *  a full-record window instead of waiting out the ~750ms staggered
+   *  full cadence. Throttled: a torn link nacks every frame otherwise. */
+  private lastNackAt = 0;
+  public onTickGap(_skipped: number): void {
+    const now = Date.now();
+    if (now - this.lastNackAt < 250) return;
+    this.lastNackAt = now;
+    this.send({ type: 'tickNack' });
+  }
+
   private noteDrop(type: string): void {
     // Contract scream: a transport that flips connected()→false without
     // first firing onDisconnect leaves the tier manager blind (the WT

@@ -109,6 +109,8 @@ export class Room {
    *  every wireId's fields at once instead of each player's first
    *  staggered full up to 750ms out (join pop-in). */
   introSeq = -1_000_000;
+  /** Wall-clock of the last accepted tickNack — room-wide cooldown above. */
+  private lastNackAt = 0;
 
   /** Rolling health counters for the room heartbeat — every subsystem
    *  bumps tagged keys (shot claims, rejects, corrections, desyncs,
@@ -700,6 +702,17 @@ export class Room {
       rng: () => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
+      // tickNack: reuse the introSeq full-window — every record goes full
+      // for ~1s, which reseeds every client's baselines whether they
+      // nacked or not (records are shared; scoping per-socket isn't
+      // possible without per-socket encodes). 500ms room cooldown so a
+      // nack-storm can't hold the room on fulls permanently.
+      nackFulls: () => {
+        const now = wallNow();
+        if (now - this.lastNackAt < 500) return;
+        this.lastNackAt = now;
+        this.introSeq = this.tickSeq;
+      },
       fireProjectile: (pid, wt, origin, dir, vel, shotId) => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
       beamSweep: (pid, muzzle, dir, range) => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
