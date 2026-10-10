@@ -43,6 +43,10 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
  *  finish out of order and leave the older field resident. */
 let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
+/** Latest requested spec key — a queued swap that ran late (the boot's
+ *  saved-map prime trailing a reconnect) must not commit after a newer
+ *  gameState already picked the room's real terrain. */
+let terrainWanted: string | null = null;
 /** Heightfield currently resident — null = the boot PNG. Tracked apart
  *  from terrainActive so a boot-primed saved map skips the refetch +
  *  mesh rebuild while still taking the albedo/sky passes. */
@@ -60,10 +64,11 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
   const mult = heightScale ?? 1;
   const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
   const key = `${file}@${mult}@${wscale}|${texPath}|${skyDir}`;
+  terrainWanted = key;
   if (terrainActive === key) {return;}
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
-    if (terrainActive === key) {return;}
+    if (terrainActive === key || terrainWanted !== key) {return;}
     Ball.terrainSwapping = true;
     try {
       // Scale applies to whichever field is resident — a scale-only map
@@ -76,6 +81,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
       const { httpUrl } = await resolveServerEndpoints();
       const fieldKey = `${file}@${mult}`;
+      let swappedBin = false;
       if (fieldKey !== fieldLoaded) {
         if (file) {
           await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
@@ -88,7 +94,15 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
         // the old terrain. Re-read it now that the new field is resident.
         Ball.initNetMode(true);
         fieldLoaded = fieldKey;
+        swappedBin = true;
       }
+      // The bin/tex/sky fetches awaited above gave newer requests time to
+      // supersede this one (reconnect gameState beats a boot-primed saved
+      // map). Commit only if still wanted — otherwise this task's only
+      // footprint is the hmData the newer task's own reload overwrites.
+      // If we did swap the bin, un-mark it so the newer task refetches:
+      // its dedupe check must not skip reloading over our stale data.
+      if (terrainWanted !== key) {if (swappedBin) {fieldLoaded = null;} return;}
 
       // Baked albedo (T2 ports) replaces the procedural palette entirely.
       // Isolated from the terrain swap: a missing texture shouldn't leave
