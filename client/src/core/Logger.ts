@@ -184,15 +184,15 @@ export namespace Logger {
 
   /** Register a diagnostics dump — prepended to Alt+Q/export output so bug
    *  reports carry live game state (isDead, connection, ids) not just logs. */
-  let diagnosticsProvider: (() => string[]) | null = null;
-  export function setDiagnostics(fn: () => string[]): void {
+  let diagnosticsProvider: ((verbose: boolean) => string[]) | null = null;
+  export function setDiagnostics(fn: (verbose: boolean) => string[]): void {
     diagnosticsProvider = fn;
   }
 
-  function buildHeader(): string[] {
+  function buildHeader(verbose = true): string[] {
     const lines = [`=== DIAGNOSTICS @ ${tsLocal()} ===`];
     try {
-      if (diagnosticsProvider) {lines.push(...diagnosticsProvider());}
+      if (diagnosticsProvider) {lines.push(...diagnosticsProvider(verbose));}
     } catch (error) {
       lines.push(`diagnostics threw: ${error}`);
     }
@@ -227,8 +227,8 @@ export namespace Logger {
    * Copy the last `count` buffered lines to the clipboard (Alt+Q).
    * Keydown counts as a user gesture so navigator.clipboard is allowed.
    */
-  export async function copyLogs(count = 300): Promise<number> {
-    const lines = [...buildHeader(), ...logBuffer.slice(-count)].join('\n');
+  export async function copyLogs(count = 300, verbose = false): Promise<number> {
+    const lines = [...buildHeader(verbose), ...logBuffer.slice(-count)].join('\n');
     try {
       await navigator.clipboard.writeText(lines);
       return logBuffer.slice(-count).length;
@@ -439,9 +439,10 @@ if (typeof window !== 'undefined') {
     }
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
-      Logger.copyLogs(300).then(n => {
+      const verbose = e.ctrlKey;
+      Logger.copyLogs(300, verbose).then(n => {
         if (n >= 0) {
-          toast(`Copied ${n} log lines`);
+          toast(`Copied ${n} log lines${verbose ? ' (full census)' : ''}`);
           console.log(`[Logger] Copied ${n} log lines to clipboard`);
         } else {
           toast('Clipboard unavailable — dumped to console', false);

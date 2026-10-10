@@ -677,7 +677,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   // Alt+Q/export header — live game state for bug reports. Keyed toward
   // "why didn't X happen" questions: death/respawn state, connection health,
   // what the server thinks vs what we have.
-  Logger.setDiagnostics(() => diagLines(ctx));
+  Logger.setDiagnostics((verbose: boolean) => diagLines(ctx, verbose));
 
   exposeDebugWindowFunctions(ctx);
 }

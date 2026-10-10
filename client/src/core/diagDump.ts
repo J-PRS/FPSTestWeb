@@ -34,7 +34,7 @@ function heapLine(): string {
   return m ? ` heap ${(m.usedJSHeapSize / 1048576).toFixed(0)}/${(m.jsHeapSizeLimit / 1048576).toFixed(0)}MB` : '';
 }
 
-export function diagLines(ctx: StateDebugContext): string[] {
+export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   const nm = ctx.networkManager;
   const p = ctx.getPlayer();
   const wire = nm.getPlayers();
@@ -46,7 +46,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
   pushWorld(lines, ctx.world);
-  pushRender(lines);
+  if (verbose) pushRender(lines);
   pushPerf(lines);
   pushAimProbe(lines, ctx);
   // Netcode census — corrections/claim verdicts answer "why did it
@@ -68,14 +68,21 @@ export function diagLines(ctx: StateDebugContext): string[] {
     const team = (rp as { team?: string }).team;
     lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
   }
-  pushBots(lines, ctx);
+  if (verbose) pushBots(lines, ctx);
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
     staleLine(),
   );
-  pushTrailCensus(lines, ctx);
-  pushProjectiles(lines, ctx);
+  // Verbose census — trail/ball/proj/shell row dumps, pool inventories,
+  // GPU-slot audits. Actionable when hunting a specific render bug, pure
+  // noise for a netcode paste — Ctrl+Alt+Q brings them back.
+  if (verbose) {
+    pushTrailCensus(lines, ctx);
+    pushProjectiles(lines, ctx);
+  } else {
+    lines.push('verbose: Ctrl+Alt+Q for the full census (trails/pools/projectiles/bots)');
+  }
   if (battleLog.length) {
     lines.push('battleLog:');
     for (const k of battleLog.slice(-15)) lines.push(`  ${k}`);
