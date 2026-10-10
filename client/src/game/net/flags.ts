@@ -142,7 +142,10 @@ export function wireFlags(ctx: NetCtx): void {
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
     const log = (text: string) => deps.lazyHud().logEvent(text, mine ? 'mine' : 'foe');
-    const carrierName = f.carrier?.replace('bot:', '') ?? null;
+    // The 'home' update that scores already cleared its carrier — the
+    // marker still holds the id, so name the actual scorer, not 'Someone'.
+    const carrierName = (f.carrier ?? deps.world.flagMarkers.get(f.team)?.carrier ?? null)
+      ?.replace('bot:', '') ?? null;
     if (rabbit) {
       rabbitCallout(f, iAmCarrier, carrierName, (s) => burst(f, s), frag, log);
       return;
