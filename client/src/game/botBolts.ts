@@ -30,7 +30,7 @@ export function claimShot(b: BoltHost, bot: GameBot, targetId: string, claim: { 
     if (targetId.startsWith('creature:')) { claimCreature(b, bot, targetId, aim, dmg); return; }
     const rp = b.host.world().remotePlayers.get(targetId);
     if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
-      if (rp.takeDamageLocal(dmg, bot.position)) {b.host.botKilled(bot.playerId, rp, weapon);}
+      if (rp.takeDamageLocal(dmg, bot.position, bot.playerId)) {b.host.botKilled(bot.playerId, rp, weapon);}
     }
   }
 

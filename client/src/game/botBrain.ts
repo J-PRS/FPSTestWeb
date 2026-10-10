@@ -162,7 +162,7 @@ export class GameBot extends RemotePlayer {
 
   /** Local-authority damage — the same role the server's hit validation
    *  plays online. Returns true when the hit killed. */
-  takeDamageLocal(dmg: number, fromPos: THREE.Vector3): boolean {
+  takeDamageLocal(dmg: number, fromPos: THREE.Vector3, attackerId?: string): boolean {
     if (this.isDead) {return false;}
     // Plated et al — the server's applyDamage applies the same resist.
     dmg *= 1 - effectiveResist(this.mods, this.botHp, this.botMaxHp);
@@ -175,7 +175,7 @@ export class GameBot extends RemotePlayer {
       if (this.energy <= 0.5) {this.dropSkill(STATUS.SHIELD);}
     }
     this.botHp -= dmg;
-    this.brain.takeHit(fromPos); // recoil decision lives in the shared brain
+    this.brain.takeHit(fromPos, attackerId); // recoil + foe score live in the shared brain
     this.flinch(); // RemotePlayer 'hit' oneshot — the model reacts, not just the brain
     if (this.botHp <= 0) {
       this.playDeath(fromPos, dmg * 0.4);

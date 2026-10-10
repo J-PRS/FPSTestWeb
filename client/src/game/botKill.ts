@@ -97,7 +97,7 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
     const rp = b.deps.world.remotePlayers.get(playerId);
     if (!(rp instanceof GameBot)) return false;
     b.creditDamage(attackerId, playerId, dmg); // bot victim — attacker banks chip
-    const died = rp.takeDamageLocal(dmg, fromPos);
+    const died = rp.takeDamageLocal(dmg, fromPos, attackerId);
     b.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
     if (!died && concStrip(b, playerId, dmg, weapon, rp.position)) {
       rp.energy = Math.max(0, rp.energy - CONC_JET_DRAIN);
