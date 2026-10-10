@@ -207,7 +207,9 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // distance from truth plus the replay span the stamp covers — the
   // delta the wire can't hide.
   const pd = Math.hypot(s.x - seg.px, s.y - seg.py, s.z - seg.pz);
-  if (pd > 20) {
+  // hard segments (teleport/spawn) are deliberate discontinuities — a
+  // 100m+ snap is the feature, not predictor drift.
+  if (pd > 20 && !seg.hard) {
     glitch('seg-div', { m: Math.round(pd), spanMs: simT !== undefined && bag.simT < simT ? Math.round((simT - bag.simT) * 1000) : -1, enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
