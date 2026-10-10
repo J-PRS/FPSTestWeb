@@ -555,18 +555,10 @@ export const terrainFrag = /* glsl */`
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
       // Sub-2m terms: gated, not faded — a far pixel pays zero for them.
       float micro = 0.0, blade = 0.0, triDetail = 0.0;
-      vec3 nUse = vNormal;
       if (detFade > 0.0) {
         micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
         blade = noise(uvFin * 4.0 + r * 2.0);
         triDetail = triplanarNoise(vWorldPos, 0.85);
-        // Canopy bump: perturb the normal by micro-noise derivatives so
-        // light/shadow does the texturing — organic detail no color layer
-        // can fake (Magrathea: "good results just by messing with normals").
-        // Larger wavelength + gentler amplitude than the micro layer:
-        // fine speckle reads as gravel grain, canopy undulation reads smooth.
-        vec3 nd = noised(uvFin * 0.55);
-        nUse = normalize(vNormal + vec3(nd.y, 0.0, nd.z) * 0.7 * detFade);
       }
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).
@@ -599,7 +591,7 @@ export const terrainFrag = /* glsl */`
       // mid-olive. Clump id jitters hue so tufts aren't clones.
       vec3 grass = mix(cGrassDeep, cGrassTip, smoothstep(0.25, 0.75, medium));
       grass = mix(grass, cGrassDry, clumpId * 0.35);
-      grass += blade * vec3(0.05, 0.06, 0.01) * detFade;
+      grass += blade * vec3(0.03, 0.035, 0.008) * detFade;
       grass = mix(grass, cStraw, smoothstep(0.58, 0.78, region) * 0.8);
 
       vec3 col = grass;
@@ -629,19 +621,19 @@ export const terrainFrag = /* glsl */`
       // Continental tint: km-scale hue drift so the whole map isn't one
       // green — reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
-      col *= 0.86 + 0.28 * detail;
-      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.14 * detFade;
+      col *= 0.90 + 0.18 * detail;
+      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.08 * detFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
-      float diff = max(dot(nUse, sunDir), 0.0);
+      float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
-      float rim = pow(1.0 - max(dot(nUse, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
       // Grass sheen: grazing-angle specular lift on open meadow — turf
       // blades glint; masked off dirt, rock, and shaded faces.
       vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
-      float sheen = pow(max(dot(reflect(-sunDir, nUse), viewDir2), 0.0), 14.0);
+      float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDir2), 0.0), 14.0);
       col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);

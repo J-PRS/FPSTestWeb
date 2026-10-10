@@ -19,8 +19,8 @@
   "fog": {
     "color": [0.64, 0.72, 0.80],
     "horizon": [0.55, 0.68, 0.85],
-    "distance": 220.0,
-    "visible": 900.0
+    "distance": 160.0,
+    "visible": 700.0
   },
   "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures"
 }
