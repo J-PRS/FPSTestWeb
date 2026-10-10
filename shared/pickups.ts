@@ -7,6 +7,17 @@
 export type PickupKind = 'gem' | 'tag' | 'heal' | 'armor' | 'regen' | 'dd';
 export type PowerupKind = Exclude<PickupKind, 'gem' | 'tag'>;
 
+/** Blast-tumble physics for knocked pickups — RoomPickups runs this
+ *  integrator and the client replica MUST match: the server publishes the
+ *  rest position when it settles, so any divergence is a guaranteed
+ *  snap-back (the parity 'nugrest' counter). */
+export const NUG_TUMBLE = {
+  friction: 4,      // velocity bleed per second — gems skid, not slide
+  groundLift: 0.5,  // rest height above the heightfield
+  settle: 0.5,      // per-axis speed below which the tumble ends
+  upPop: 0.4,       // up-kick as a fraction of the blast impulse
+} as const;
+
 export const POWERUP = {
   heal: 50,           // flat hp on grab
   armor: 100,         // flat armor on grab (caps at maxArmor)
