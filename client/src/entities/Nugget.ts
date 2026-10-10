@@ -7,6 +7,7 @@ import { BallTrailDots } from '../effects/ballTrails.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 import { parityMiss } from '../game/parity.js';
+import { NUG_TUMBLE } from '../../../shared/pickups.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -158,10 +159,12 @@ export class Nugget {
     if (!this.serverOwned && dist < MAGNET_RADIUS && this.scatterTimer <= 0) {
       this.magnetStep(dt, dist, pickupScale);
     } else if (!this.settled) {
-      this.ballisticStep(dt, terrain);
+      if (this.serverOwned) {this.serverTumble(dt, terrain);} else {this.ballisticStep(dt, terrain);}
     }
 
-    this.pos.addScaledVector(this.vel, dt);
+    // serverTumble integrates internally (server ordering) — the shared
+    // pos+vel*dt line would double-step it.
+    if (!this.serverOwned) {this.pos.addScaledVector(this.vel, dt);}
     this.updateVisuals(dt);
     this.emitTrail(dt);
     this.trailFx.fade(dt);
@@ -228,11 +231,49 @@ export class Nugget {
   // throws them instead of being lerped straight back at the player.
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (this.collected || this.dead) {return;}
+    if (this.serverOwned) {this.serverKnock(from, force, 1); return;}
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force);
     this.vel.y += Math.abs(force) * 0.4; // server-parity pop (RoomPickups.knock)
     this.settled = false;
     this.scatterTimer = 0.4;
+  }
+
+  /** Exact mirror of RoomPickups.knock + tick for wire-owned gems: the
+   *  push is XZ-only (dir scaled by the 3-D distance), the up-pop is a
+   *  fixed fraction, and the tumble bleeds with no bounce. Any drift vs
+   *  this math becomes a nugrest snap when the server publishes its rest. */
+  private serverKnock(from: THREE.Vector3, force: number, sign: 1 | -1): void {
+    const dx = this.pos.x - from.x, dy = this.pos.y - from.y, dz = this.pos.z - from.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    this.vel.x += (dx / d) * force * sign;
+    this.vel.z += (dz / d) * force * sign;
+    this.vel.y += Math.abs(force) * NUG_TUMBLE.upPop;
+    this.settled = false;
+    this.scatterTimer = 0.4;
+  }
+
+  /** RoomPickups.tick order: integrate, gravity, floor, bleed, settle —
+   *  in ONE step per server tick with measured elapsed, not per frame.
+   *  The server runs a single dt≈tick step (TickLoop passes elapsed,
+   *  clamped ≤1s); per-frame stepping multiplies bleed/clamp N× more and
+   *  settles ~0.5-1m off the server's rest (the nugrest spam). */
+  private tumbleAcc = 0;
+  private serverTumble(dt: number, terrain: Terrain): void {
+    this.tumbleAcc += dt;
+    if (this.tumbleAcc < 0.05 || this.settled) {return;}
+    const step = Math.min(this.tumbleAcc, 1); // server's own elapsed cap
+    this.tumbleAcc = 0;
+    const bleed = Math.max(0, 1 - NUG_TUMBLE.friction * step);
+    this.pos.addScaledVector(this.vel, step);
+    this.vel.y += GRAVITY * step;
+    const gy = terrain.getHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
+    if (this.pos.y < gy) {this.pos.y = gy; this.vel.y = 0;}
+    this.vel.x *= bleed; this.vel.y *= bleed; this.vel.z *= bleed;
+    if (Math.abs(this.vel.x) < NUG_TUMBLE.settle && Math.abs(this.vel.y) < NUG_TUMBLE.settle && Math.abs(this.vel.z) < NUG_TUMBLE.settle) {
+      this.vel.set(0, 0, 0);
+      this.settled = true;
+    }
   }
 
   /** Server truth for a knocked-around gem's rest spot — a correction,
@@ -260,6 +301,7 @@ export class Nugget {
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (this.collected || this.dead) {return;}
+    if (this.serverOwned) {this.serverKnock(to, force, -1); return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force);
     this.vel.y += Math.abs(force) * 0.4; // same pop as the server's pull branch
