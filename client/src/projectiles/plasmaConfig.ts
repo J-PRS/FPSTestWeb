@@ -23,6 +23,7 @@ export const PLASMA_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[7].hitMin,
   hitMax: WEAPONS[7].hitMax, // tight proxy — the fat bolt is already generous
   hitGrow: WEAPONS[7].hitGrow,
+  maxLifetime: WEAPONS[7].maxLifetime,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[7].aoeDamage,
   aoeRadius: WEAPONS[7].aoeRadius,

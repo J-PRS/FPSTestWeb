@@ -294,6 +294,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — the fat bolt is already generous
     hitGrow: 2.0,
+    maxLifetime: 5.0, // ~450m flat — same fuse class as Disc; remote replicas otherwise streak forever
   },
   [WeaponType.PlasmaGun]: {
 
