@@ -176,13 +176,29 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string) => {
+  // The gone edge carries the authority's contact point — the replica's
+  // replay drifts past it by ~a transit of flight, so exploding where
+  // the replay stood would center the predicted blast meters off the
+  // real one (every blast stamp then misses its knockback echo and the
+  // shove lands twice). Snap to the wire point before exploding.
+  const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
+    if (!at) {return;}
+    p.pos.set(at.x, at.y, at.z);
+    p.prevPos.copy(p.pos);
+    p.hitPoint.copy(p.pos);
+    p.hitPointValid = true; // the blast renders HERE, not a stale sweep point
+    p.renderOffset.set(0, 0, 0);
+    p.rendered.copy(p.pos);
+  };
+
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }) => {
     if (deps.world.playbackMode) {return;}
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
     // not this map; keeping dead entries leaks one record per shot ever fired.
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
+      snapToContact(remoteProjectile, position);
       remoteProjectile.explode(); // onExploded records + unmaps
     }
     // Kill local projectile if server says it's gone — explode to let
@@ -192,10 +208,22 @@ export function wireProjectiles(ctx: NetCtx): void {
     const localProjectile = registry.byId.get(projectileId)
       ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
+      snapToContact(localProjectile, position);
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
       if (localProjectile.fanSlot) {registry.byFanSlot.delete(localProjectile.fanSlot);}
     }
+  };
+
+  // Belt-sticky combo: the authority swallowed a belt sticky onto a
+  // same-owner shell — parent the replica so it rides dead-center and
+  // pops at the host's contact point (own shots already predicted the
+  // catch; setting .host again is idempotent).
+  networkManager.onProjRide = (riderId, hostId) => {
+    const reg = deps.world.projectileRegistry;
+    const rider = remoteProjectiles.get(riderId) ?? reg.byId.get(riderId);
+    const host = remoteProjectiles.get(hostId) ?? reg.byId.get(hostId);
+    if (rider && host) rider.host = host;
   };
 }

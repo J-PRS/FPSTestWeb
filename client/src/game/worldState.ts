@@ -23,6 +23,7 @@ export interface WorldState {
    *  hooks are wired by createRemotes once the deps exist. */
   remotePlayers: RemoteSet<RemotePlayer, RemotePlayerState>;
   killCounts: Map<string, number>;
+  deathCounts: Map<string, number>;
   /** Kills since last local death — drives the SPREE/RAMPAGE subtitle.
    *  Lives on world (not a handler closure) so match boundaries can zero
    *  it: a new match is a new streak, not a continuation. */
@@ -73,7 +74,11 @@ export interface WorldState {
   /** Fired after a terrain swap completes — local bots re-seat onto the
    *  new heightmap instead of standing at the old field's altitude. */
   onTerrainApplied?: (file: string | null) => void;
-  selfBlastStamps: { x: number; y: number; z: number; t: number }[];
+  selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; f?: number }[];
+  /** The same dedup run backwards: a knockback echo that arrived BEFORE
+   *  its blast's replica exploded applies raw — recorded here so the
+   *  delayed predicted shove at the same center doesn't double it. */
+  recentKb: { x: number; y: number; z: number; t: number }[];
   /** Own banked LG charge, echoed by the server (yourCharge) — the
    *  carrier is excluded from tick fanout so the walking-bomb warning
    *  needs this channel. Decays between echoes; drives the crackle tell. */
@@ -97,6 +102,7 @@ export function createWorldState(): WorldState {
     // world-creation time; createRemotes replaces them before first use.
     remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: () => undefined, isLive: () => true }),
     killCounts: new Map(),
+    deathCounts: new Map(),
     killStreak: 0,
     projectiles: [],
     projectileRegistry: createProjectileRegistry(),
@@ -117,6 +123,7 @@ export function createWorldState(): WorldState {
     netPickups: new Map(),
     playbackMode: false,
     selfBlastStamps: [],
+    recentKb: [],
     selfCharge: 0,
   };
 }

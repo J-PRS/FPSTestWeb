@@ -24,10 +24,23 @@ export function wireMatchEvents(ctx: NetCtx): void {
     deps.lazyHud().setScoreboardVisible(false);
   };
 
+  // Score-spam filter: teamScore broadcasts on EVERY scoring event — in
+  // nuggets that's one line per gem banked, and the feed drowns. Announce
+  // only lead changes, every 10-pt milestone, and the endgame stretch
+  // (within 10 of the cap) where each point actually matters.
+  let lastLead = '';
+  let lastMilestone = -1;
   networkManager.onTeamScore = (scores, winAt) => {
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
-    chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
+    const top = Math.max(scores.alpha, scores.bravo);
+    const lead = scores.alpha === scores.bravo ? 'tie' : scores.alpha > scores.bravo ? 'alpha' : 'bravo';
+    const milestone = Math.floor(top / 10);
+    if (lead !== lastLead || milestone > lastMilestone || top >= winAt - 10) {
+      chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
+      lastLead = lead;
+      lastMilestone = milestone;
+    }
   };
   networkManager.onFfaScore = (scores, winAt) => {
     deps.world.ffaScores = new Map(Object.entries(scores));
@@ -72,6 +85,10 @@ export function wireMatchEvents(ctx: NetCtx): void {
     // New match = new life record — a streak banked last round must not
     // roll over or the first frag of the round reads as a spree.
     deps.world.killStreak = 0;
+    // Fresh score feed too — a carried-over milestone would swallow the
+    // new match's first lead line.
+    lastLead = '';
+    lastMilestone = -1;
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };

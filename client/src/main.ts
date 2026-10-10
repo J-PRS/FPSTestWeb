@@ -459,18 +459,25 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
 
 // Offline death path — the server's kill+respawn round-trip replicated
 // locally. Shared by bot frags and creature/environment damage.
+// True once the 3s respawn deadline has fired — same "pending timer is
+// NOT skippable" gate the server applies in respawnNow.
+let respawnLapsed = false;
+
 function killLocal(source: string): void {
   if (player.isDead) {return;}
   // Any death is a flag event — carried flags drop; in rabbit the
   // first corpse is what spawns the flag at all. Idempotent for the
   // bot-frag path, which already ran localDied() before the banner.
   teamBots?.localDied();
+  world.deathCounts.set('local', (world.deathCounts.get('local') ?? 0) + 1);
   player.isDead = true;
   player.health = 0;
+  respawnLapsed = false;
   hud.hide();
   hud.setDeathOverlay(true);
   fragMessages.show(`YOU DIED\n${source}`);
   setTimeout(() => {
+    respawnLapsed = true;
     // L's die+spectate parks the corpse offline too — the deadline lapses
     // and the player stays dead until a dead-state respawn press revives.
     if (!player.respawnHeld) {reviveLocal();}
@@ -727,9 +734,15 @@ function wireNetworkLocal(): void {
       sfx.playerHurt();
       if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
     },
-    // Dead press = revive now (releases a die+spectate hold); alive press
-    // = suicide — same dual semantics as the server claim.
-    respawn: () => { if (player.isDead) {reviveLocal();} else {killLocal('respawned');} },
+    // Dead press = revive once the deadline lapsed (the only dead state
+    // past 3s is a held corpse); inside the countdown it just releases
+    // a die+spectate hold and the timer revives on schedule — the server
+    // refuses to skip the pending timer, so offline must not either.
+    respawn: () => {
+      if (!player.isDead) {killLocal('respawned'); return;}
+      if (respawnLapsed) {reviveLocal();}
+      else {player.respawnHeld = false;}
+    },
     heal: (amount) => {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },

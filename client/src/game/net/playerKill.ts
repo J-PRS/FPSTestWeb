@@ -28,6 +28,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   if (deps.world.playbackMode) return;
   noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
+  deps.world.deathCounts.set(targetId, (deps.world.deathCounts.get(targetId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
   // Demo kill marker — victim pos from the replica (or local body when
   // the victim is us). Recorded before the early-return branches.

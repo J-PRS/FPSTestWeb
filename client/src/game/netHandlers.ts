@@ -134,10 +134,14 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       if (!res.ok) {throw new Error(`maps ${res.status}`);}
       return res.json() as Promise<import('./lobby.js').MapRow[]>;
     },
-    quickJoin: async (mode, map, bots) => {
+    quickJoin: async (mode, map, bots, noCreatures, noBalls) => {
       const q = new URLSearchParams({ mode });
       if (map) {q.set('map', map);}
       if (bots !== undefined) {q.set('bots', String(bots));}
+      // The join mints the room — gates must ride HERE or the room
+      // exists before the flag can ever reach it.
+      if (noCreatures) {q.set('nocreatures', '1');}
+      if (noBalls) {q.set('noballs', '1');}
       // Fleet: the matchmaker's /join picks the emptiest room FLEET-wide
       // and pins its placement — a worker-local quickJoin would only see
       // that worker's rooms.
