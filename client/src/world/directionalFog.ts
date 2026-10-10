@@ -39,6 +39,16 @@ export function setFogBase(color: THREE.Color): void {
   _base = color.clone();
 }
 
+// Map-spec horizon override: replaces the sky's horizon tint while
+// ground fog keeps its own color (see gameLoop.syncFog).
+let _horizon: THREE.Color | null = null;
+export function setFogHorizon(color: THREE.Color | null): void {
+  _horizon = color;
+}
+export function fogHorizon(): THREE.Color | null {
+  return _horizon;
+}
+
 export function updateDirectionalFog(fog: THREE.Fog, camera: THREE.Camera, sunDir: THREE.Vector3): THREE.Color {
   if (!_base) {_base = fog.color.clone();}
   camera.getWorldDirection(_camDir);

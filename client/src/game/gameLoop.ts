@@ -28,7 +28,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
-import { updateDirectionalFog } from '../world/directionalFog.js';
+import { updateDirectionalFog, fogHorizon } from '../world/directionalFog.js';
 import { updateCubeSky } from './net/mapAssets.js';
 import { isSessionVeiled } from './net/world.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
@@ -233,7 +233,7 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   _sunDir.copy(deps.sceneSetup.sun.position).normalize();
   const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
   fog.color.copy(tinted);
-  deps.sceneSetup.atmosphericSky.setFogColor(tinted);
+  deps.sceneSetup.atmosphericSky.setFogColor(fogHorizon() ?? tinted);
   updateCubeSky(deps.camera, fog.color);
   refreshColliderGizmoVisibility();
   terrain.updateFog(fog.color, fog.near, fog.far);

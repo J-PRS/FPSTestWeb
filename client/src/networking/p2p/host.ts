@@ -127,7 +127,7 @@ export class P2PHost {
     terrain?: string;
     heightScale?: number;
     tileSize?: number;
-    fog?: { color: [number, number, number]; distance?: number; visible?: number };
+    fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
     terrainTex?: string;
     terrainPreset?: number;
     sky?: string;

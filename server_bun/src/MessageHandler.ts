@@ -71,7 +71,7 @@ export interface RoomInfo {
    *  match (spec.tileSize; absent = engine default). */
   tileSize?: number;
   /** Mission-authored haze — spec.fog, client dressing only. */
-  fog?: { color: [number, number, number]; distance?: number; visible?: number };
+  fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
   /** Baked terrain albedo + skybox dir — client dressing only. */
   terrainPreset?: number;
   terrainTex?: string;

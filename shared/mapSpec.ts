@@ -75,8 +75,9 @@ export interface MapSpec {
   tileSize?: number;
   /** Mission-authored haze (T2 Sky block): `color` is the fog tint
    *  [r,g,b], `distance` the fog start, `visible` where full fog
-   *  swallows the world. Absent = engine default haze. Client-only. */
-  fog?: { color: [number, number, number]; distance?: number; visible?: number };
+   *  swallows the world. `horizon` [r,g,b] overrides the sky's
+   *  horizon tint. Absent = engine default haze. Client-only. */
+  fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
@@ -325,17 +326,22 @@ function parseTileSize(raw: unknown): number | undefined {
 
 function parseFog(raw: unknown): MapSpec['fog'] {
   if (!raw || typeof raw !== 'object') return undefined;
-  const f = raw as { color?: unknown; distance?: unknown; visible?: unknown };
+  const f = raw as { color?: unknown; distance?: unknown; visible?: unknown; horizon?: unknown };
   if (!Array.isArray(f.color) || f.color.length < 3 ||
       !f.color.slice(0, 3).every((v) => typeof v === 'number' && Number.isFinite(v)))
     return undefined;
   const num = (v: unknown, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
   const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const vec3 = (v: unknown): [number, number, number] | undefined =>
+    Array.isArray(v) && v.length >= 3 &&
+    v.slice(0, 3).every((c) => typeof c === 'number' && Number.isFinite(c))
+      ? [clamp01(v[0]), clamp01(v[1]), clamp01(v[2])] : undefined;
   return {
     color: [clamp01(f.color[0]), clamp01(f.color[1]), clamp01(f.color[2])],
     distance: num(f.distance, 0, 4000),
     visible: num(f.visible, 0, 8000),
+    horizon: vec3(f.horizon),
   };
 }
 

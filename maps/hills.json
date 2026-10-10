@@ -18,6 +18,7 @@
   "terrainPreset": 2,
   "fog": {
     "color": [0.64, 0.72, 0.80],
+    "horizon": [0.55, 0.68, 0.85],
     "distance": 220.0,
     "visible": 900.0
   },

@@ -12,16 +12,17 @@ import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
 import { loadHeightfieldBin, setHeightScale, setWorldScale } from '../../world/heightmap.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, FOG_COLOR, FOG_START, FOG_END } from '../../core/config.js';
-import { setFogBase } from '../../world/directionalFog.js';
+import { setFogBase, setFogHorizon } from '../../world/directionalFog.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] };
 
 /** Mission haze — spec.fog re-tints the whole atmosphere. distance → fog
  *  near, visible → fog far (T2's authored range for the terrain). Absent
  *  resets to the engine haze, same semantics as the other map fields. */
 const _fogColor = new THREE.Color();
+const _horizonColor = new THREE.Color();
 export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
   const sceneFog = ctx.deps.lazyScene().fog;
   if (!(sceneFog instanceof THREE.Fog)) {return;}
@@ -31,6 +32,7 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
     _fogColor.set(FOG_COLOR);
   }
   setFogBase(_fogColor);
+  setFogHorizon(fog?.horizon ? _horizonColor.setRGB(fog.horizon[0], fog.horizon[1], fog.horizon[2], THREE.SRGBColorSpace) : null);
   sceneFog.color.copy(_fogColor);
   sceneFog.near = fog?.distance ?? FOG_START;
   sceneFog.far = Math.max(fog?.visible ?? FOG_END, sceneFog.near + 1);
