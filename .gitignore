@@ -69,3 +69,6 @@ _reports/*.mp4
 *.blend
 client/assets/LensDirt/originals/
 server_bun/demos/archive/
+.devin-diff/
+.devin-tools/
+_tools/*.b64
