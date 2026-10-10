@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
+const p = await b.newPage();
+p.on('console', m => { const t=m.text(); if(t.match(/NetT|NetW|Disconnect|stall|silent|error|Connected|tier/i)) console.log('[pg]',t.slice(0,200)); });
+p.on('pageerror', e => console.log('[ERR]', e.message.slice(0,400)));
+const url = process.argv[2];
+const secs = parseInt(process.argv[3] ?? '25');
+await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await new Promise(r => setTimeout(r, secs * 1000));
+await b.close();
+console.log('done');

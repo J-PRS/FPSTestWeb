@@ -48,6 +48,10 @@ export class NetBot {
     this.forceCapper = !!opts.capper;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
+    // Blast shoves hit the server shadow via applyImpulse — the local
+    // MoveSim must take the same dv or every blast is a ~60m divergence.
+    // Same math as combatBlast.shove / client playerImpulse.applyKnockback.
+    nc.onKnockback = (pos, force, pull) => this.takeShove(pos, force, pull);
     if (opts.hopEveryMs) {
       this.hopTimer = setInterval(() => {
         // Hold fire for the jitter window first, THEN send the switch —
@@ -398,9 +402,34 @@ export class NetBot {
     return this.sim;
   }
 
+  /** The wire knockback echo → the local sim's velocity. Mirrors
+   *  combatBlast.shove: eff = force/class mass, dir = self − blast,
+   *  push lifts 0.5·eff, pull sucks and lifts 0.3·eff. */
+  private takeShove(from: Vec3, force: number, pull?: boolean): void {
+    const eff = force / CLASS_STATS[this.cls].mass;
+    const ox = this.nc.self.pos.x - from.x;
+    const oy = this.nc.self.pos.y - from.y;
+    const oz = this.nc.self.pos.z - from.z;
+    const d = Math.hypot(ox, oy, oz);
+    if (d <= 0) return;
+    const s = pull ? -1 : 1;
+    const dv = { x: s * (ox / d) * eff, y: (pull ? 0.3 : 0.5) * eff, z: s * (oz / d) * eff };
+    this.nc.self.vel.x += dv.x; this.nc.self.vel.y += dv.y; this.nc.self.vel.z += dv.z;
+    const sim = this.sim;
+    if (sim) {
+      sim.state.vel.x += dv.x; sim.state.vel.y += dv.y; sim.state.vel.z += dv.z;
+      sim.state.onGround = false; // blast ungrounds — friction would eat the shove
+    }
+  }
+
+  /** Set while dead — the first post-respawn sendPos force-reseats the
+   *  local sim (a corpse within 20m of the spawn point would otherwise
+   *  keep its stale position AND stale momentum). */
+  private wasDead = false;
+
   private sendPos(): void {
     const nc = this.nc;
-    if (nc.self.isDead) return;
+    if (nc.self.isDead) { this.wasDead = true; return; }
     const sim = this.ensureSim();
     if (sim) {
       // A server-side snap (respawn, correction, room-hop gameState) is
@@ -408,9 +437,10 @@ export class NetBot {
       const ddx = nc.self.pos.x - sim.state.pos.x;
       const ddy = nc.self.pos.y - sim.state.pos.y;
       const ddz = nc.self.pos.z - sim.state.pos.z;
-      if (ddx * ddx + ddy * ddy + ddz * ddz > 20 * 20) {
+      if (this.wasDead || ddx * ddx + ddy * ddy + ddz * ddz > 20 * 20) {
         sim.setState({ pos: { ...nc.self.pos }, vel: { ...nc.self.vel }, yaw: this.wantMove.yaw, pitch: 0, onGround: true });
       }
+      this.wasDead = false;
       // Mouse-speed turn toward targetYaw — an instant snap per think
       // is the dead giveaway the sheep meter was built to catch.
       const TURN = 6.5 / POS_HZ;

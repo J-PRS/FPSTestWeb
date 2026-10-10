@@ -119,6 +119,11 @@ export class NetClient {
    *  may have moved on without us (grace-gap knockback/kills), so claims
    *  queued before it are stale the same way pre-hop claims are. */
   onGameState?: () => void;
+  /** Server blast shove aimed at us — the impulse the shadow sim already
+   *  received. The bot's local MoveSim must get the same dv or every
+   *  blast reads as a teleport-scale divergence on the judge (the
+   *  'Movement cheat' warns were exactly this gap). */
+  onKnockback?: (pos: Vec3, force: number, pull?: boolean) => void;
   /** Structures from gameState/mapUpdate — stashed until the field
    *  finishes loading so the attach survives a slow .bin fetch. */
   private structures?: readonly StructureSpec[];
@@ -374,12 +379,18 @@ export class NetClient {
           this.self.isDead = false;
           this.self.health = 100;
           this.self.pos = { ...m.position };
+          // Respawn is a full state reset — keeping the pre-death
+          // velocity launches the local sim off the spawn point while
+          // the server shadow starts stationary (~35m/s × seconds of
+          // phantom divergence → judge 'Movement cheat' false trips).
+          this.self.vel = { x: 0, y: 0, z: 0 };
         }
         const e = this.roster.get(m.playerId);
         if (e) { e.isDead = false; e.health = 100; e.pos = { ...m.position }; if (m.armorClass) e.cls = m.armorClass; }
         break;
       }
       case 'yourHealth': this.self.health = m.health; break;
+      case 'knockback': if (m.targetId === this.id) this.onKnockback?.(m.position, m.force, m.pull); break;
       case 'correction': {
         this.tel.corrections++;
         this.self.pos = { ...m.position };
