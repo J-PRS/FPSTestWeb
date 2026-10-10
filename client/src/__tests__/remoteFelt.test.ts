@@ -139,6 +139,16 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(22);
   });
 
+  it('bursty uplink (15% loss at 50ms ticks → clumped arrivals): no steps, stays converged', () => {
+    // Loss turns a dense stream into irregular bursts — ~300-500ms gaps
+    // between clumps, then several packets at once. The same flap as the
+    // suppressed case, arrived at by the wire instead of by tiering.
+    const r = runLink({ transit: 40, jitter: 30, loss: 0.15, secs: 15, tickMs: 50, seed: 314 });
+    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    expect(r.p95).toBeLessThan(12);
+    expect(r.max).toBeLessThan(20);
+  });
+
   it('undeclared big jump snaps in one frame — never a multi-frame slide', () => {
     const h = new Host();
     const interp = new RemoteInterp(h);
