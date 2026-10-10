@@ -165,15 +165,20 @@ export class SessionManager {
     room.sessionTokens.set(playerId, idToken);
     this.d.registry.begin(playerId, room.name);
     this.seat(ws, room, playerId, handshake, idToken, name);
-    // First joiner defined this room's sim gates — if the joiner asked for
-    // different ones, say so out loud instead of silently spawning balls.
+    // First joiner defined this room's sim gates AND its mode/bot roster —
     // (after seat(): the socket needs its connection registration first)
-    if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {
+    // a hosted 'ctf 8 bots' request landing in a pre-existing room would
+    // otherwise silently drop into someone else's match.
+    const modeDiff = roomMode && room.mode !== roomMode ? `mode '${room.mode}'` : '';
+    const botDiff = joinBots !== undefined && room.bots.count !== joinBots ? `${room.bots.count} bots` : '';
+    if (room.noBalls !== noBalls || room.noCreatures !== noCreatures || modeDiff || botDiff) {
       const diffs = [
+        modeDiff,
+        botDiff,
         room.noBalls !== noBalls ? `creatures ${room.noBalls ? 'OFF' : 'ON'}` : '',
         room.noCreatures !== noCreatures ? `critters ${room.noCreatures ? 'OFF' : 'ON'}` : '',
       ].filter(Boolean).join(', ');
-      room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — sim toggles ignored (${diffs})` });
+      room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
     }
   }
 

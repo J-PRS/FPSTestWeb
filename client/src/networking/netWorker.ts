@@ -22,7 +22,7 @@ import type { ServerMessage } from '../../../shared/protocol.js';
 // Worker context — the DOM lib types `self` as Window, so cast to the
 // dedicated-worker scope for the worker global APIs.
 const w = self as unknown as {
-  postMessage(m: unknown): void;
+  postMessage(m: unknown, transfer?: Transferable[]): void;
   onmessage: ((e: MessageEvent) => void) | null;
 };
 
@@ -99,7 +99,15 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
       }
       post({ kind: 'ev', j: m, at: Date.now() });
     },
-    onBinaryMessage: (b) => post({ kind: 'ev', b, at: Date.now() }),
+    onBinaryMessage: (b) => {
+      // Transfer, don't clone — tick frames arrive at 20Hz and run tens
+      // of KB, so a per-frame structured clone was the new dominant copy.
+      // Only transferable when the view owns its whole buffer; a subarray
+      // view falls back to a slice so we don't detach a pooled parent.
+      const buf = b.byteOffset === 0 && b.byteLength === b.buffer.byteLength
+        ? b.buffer : b.slice().buffer;
+      w.postMessage({ kind: 'ev', b: new Uint8Array(buf), at: Date.now() }, [buf]);
+    },
   };
 }
 

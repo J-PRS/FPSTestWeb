@@ -62,7 +62,7 @@ export class RoomSwitcher {
         to.noBalls !== wantNoBalls ? `creatures ${to.noBalls ? 'OFF' : 'ON'}` : '',
         to.noCreatures !== wantNoCreatures ? `critters ${to.noCreatures ? 'OFF' : 'ON'}` : '',
       ].filter(Boolean).join(', ');
-      to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — sim toggles ignored (${diffs})` });
+      to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — your settings overridden (${diffs})` });
     }
     // Banked respawn edits ride the hop too — a hop is a seat transfer,
     // not a respawn, so a queued class/perk swap must survive it or the
