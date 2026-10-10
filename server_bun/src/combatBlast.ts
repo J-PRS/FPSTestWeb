@@ -124,6 +124,7 @@ export class BlastRunner {
     // trusted) can punt it. Lives inside processAOE so claimed shots,
     // server blasts and splashes all knock it through one funnel.
     this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'flag' });
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'pickup' });
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx);
@@ -373,8 +374,7 @@ export class BlastRunner {
     const stats = power !== undefined ? { ...base, aoeDamage: base.aoeDamage * power, aoeRadius: base.aoeRadius * power, knockbackForce: base.knockbackForce * power } : base;
     this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
-    // (flagsKnock is inside processAOE above — every blast reaches it.)
-    this.h.deps.emit?.({ type: 'knock', pos: position, radius: stats.aoeRadius, force: stats.knockbackForce, kind: 'pickup' });
+    // Both loose objects' knocks live inside processAOE above.
   }
 
   /** Server-owned mine blast — owner is the shooter for scoring/friendly
