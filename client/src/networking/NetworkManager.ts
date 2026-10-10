@@ -953,6 +953,11 @@ export class NetworkManager {
     return this.telemetry.ping;
   }
 
+  /** Server-measured RTT echoed back on each pong — the same wire the
+   *  client ping rides, minus our own event-loop stall. null until the
+   *  first echo lands (or on transports without the probe). */
+  serverPingMs: number | null = null;
+
   getPacketLoss(): number {
     return this.telemetry.packetLoss(Date.now());
   }

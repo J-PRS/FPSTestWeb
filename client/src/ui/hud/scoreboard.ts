@@ -28,7 +28,7 @@ function prettifyMapName(file: string): string {
 }
 
 export type SbRow = {
-  name: string; frags: number; score: number | null; ping: number | null;
+  name: string; frags: number; deaths: number; score: number | null; ping: number | string | null;
   net?: string | null; self: boolean; dead: boolean;
   team?: TeamId; sheep?: number | null; bot?: boolean;
   /** Armor class — 'light' | 'medium' | 'heavy', rides the roster. */
@@ -41,12 +41,32 @@ export type SbRow = {
 
 const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy: 'HVY' };
 
+/** Modes where the personal win metric IS frags. dm pays 10pts/kill +
+ *  1pt/creature, so sorting by score lets a creature-farmer outrank a
+ *  frag leader; tdm sends kill pts to the TEAM score, leaving personal
+ *  PTS empty — frags are the only rank either way. */
+const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
+
+/** Row ordering per mode. Objective modes (ctf, flagrun, rabbit) pay
+ *  personal pts for caps/returns/damage/hold-time — pts is the honor
+ *  board there. Kill modes rank by frags. Both end on deaths + name so
+ *  ties render deterministically. */
+export function rankRows(mode: string | undefined, rows: SbRow[]): SbRow[] {
+  const byFrags = FRAG_RANKED.has(mode ?? '');
+  return rows.slice().sort((a, b) =>
+    (byFrags
+      ? b.frags - a.frags || (b.score ?? 0) - (a.score ?? 0)
+      : (b.score ?? b.frags) - (a.score ?? a.frags) || b.frags - a.frags)
+    || a.deaths - b.deaths
+    || a.name.localeCompare(b.name));
+}
+
 // textContent, not innerHTML — display names will be player-chosen
 // strings; interpolating them raw is a stored-XSS hole in waiting.
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  const cells = [String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
+  const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : typeof r.ping === 'string' ? r.ping : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
   const numTd = document.createElement('td');
   numTd.textContent = num;
   tr.appendChild(numTd);

@@ -226,6 +226,7 @@ export type ServerMessage =
   // (rewind to fire time), dir is the shooter's claimed aim — never
   // trusted for damage, only for muzzle audio/visual on observers.
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
+  | { type: 'projRide'; projectileId: string; host: string }
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string;
       /** Server-true contact point — replicas snap here before exploding
        *  so the predicted blast center IS the authority's. */
@@ -280,6 +281,10 @@ export type ServerMessage =
   // Server-issued RTT probe — the client echoes it back as 'pong'.
   | { type: 'ping'; timestamp: number }
   | { type: 'pong'; timestamp: number }
+  // Server-measured RTT echoed to the probed player — the scoreboard's
+  // client/server ping pair; the client number counts its own event-loop
+  // stall, this one doesn't.
+  | { type: 'srvPing'; rtt: number }
   | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string; muted?: boolean }
   // --- Match scoreboard (team-mode rooms) --------------------------------
   | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }

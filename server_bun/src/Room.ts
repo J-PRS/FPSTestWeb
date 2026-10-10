@@ -709,6 +709,10 @@ export class Room {
       transitNote: (pid, rtt, stamp) => {
         if (this.lastPingStamp.get(pid) !== stamp) return;
         this.moveSim.feedTransit(pid, rtt);
+        // Echo the server-measured RTT back — the client's own ping/pong
+        // number includes its event-loop stall, so the pair reads as
+        // "client/server" and splits a busy renderer from a slow wire.
+        this.sendToPlayer(pid, { type: 'srvPing', rtt });
       },
       uplinkNote: (pid, fireAt) => {
         // (arrival − declared instant) is this claim's uplink transit —
