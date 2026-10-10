@@ -1,10 +1,8 @@
 /**
- * First-run surfaces: a hard mobile gate (no keyboard/mouse = the game
- * is unplayable, better to say so than render a broken page) and a
- * one-time controls card for new desktop players. Both are DOM-only;
- * the game keeps booting underneath either way.
+ * Mobile gate: no keyboard/mouse = the game is unplayable, better to
+ * say so than render a broken page. DOM-only; the game keeps booting
+ * underneath.
  */
-import { settings } from '../core/settings.js';
 
 const card = (title: string, body: string, btnText: string | null): HTMLDivElement => {
   const el = document.createElement('div');
@@ -47,16 +45,5 @@ export function wireOnboarding(): void {
       'This game needs a keyboard and mouse.\n\nCome back on a laptop or desktop —\nphone/tablet controls are not supported yet.',
       null,
     ));
-    return;
   }
-
-  if (settings.has('fps-onboarded')) return;
-  settings.set('fps-onboarded', 1);
-  document.body.append(card(
-    'HOW TO PLAY',
-    'WASD     move\nSPACE    hold to ski downhill\nSHIFT    jetpack\n' +
-    'LMB      fire        RMB   throw disc\nT        chat        TAB   scoreboard\n' +
-    'ESC      menu — pick a server under PLAY',
-    'GOT IT',
-  ));
 }

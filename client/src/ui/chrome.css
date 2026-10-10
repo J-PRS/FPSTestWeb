@@ -404,6 +404,9 @@ body.lobby-open #loadout-bar { display: none; }
 }
 #loadout-bar .lo-opt:hover { background: rgba(58,167,255,0.18); color: #fff; }
 #loadout-bar .lo-opt.sel { color: #3aa7ff; }
+/* Equipped in a sibling slot — a whisper of the accent so one open list
+   shows the whole kit; .sel still owns the bright line. */
+#loadout-bar .lo-opt.used { color: rgba(58,167,255,0.45); }
 #loadout-bar .lo-opt.locked { opacity: 0.35; cursor: not-allowed; }
 #loadout-bar .lo-opt.locked:hover { background: none; color: #cdd9e5; }
 #loadout-bar .lo-opt.has-desc { white-space: normal; }
@@ -557,7 +560,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .lb-tabs .lb-btn { flex: 1; padding: 5px 0; text-align: center; font-size: 0.62rem; opacity: 0.6; }
 .lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
-.lb-maplist .lb-btn.active { background: rgba(58,167,255,0.18); color: #fff; border-left: 3px solid #3aa7ff; }
+.lb-maplist .lb-btn.active { background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
 .lb-room { display: flex; align-items: center; gap: 2px; }
 .lb-room .meta { margin-left: auto; float: none; }
 

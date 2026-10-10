@@ -47,7 +47,7 @@ export interface LobbyDeps {
   listMaps(): Promise<MapRow[]>;
   /** GET /join?mode&map&bots — server picks the emptiest live match
    *  fitting the request (or spins a fresh room from the map spec). */
-  quickJoin(mode: string, map?: string, bots?: number): Promise<{ room: string }>;
+  quickJoin(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean): Promise<{ room: string }>;
   /** In-place room hop over the live socket — false when there's no
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */

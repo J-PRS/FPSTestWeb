@@ -19,7 +19,7 @@ export interface LoadoutDeps {
 }
 
 interface DropOpt { v: string; label: string; desc?: string; disabled?: boolean }
-interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: DropOpt[]): void; }
+interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: DropOpt[]): void; markUsed?(used: ReadonlySet<string>): void; }
 
 const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
@@ -132,6 +132,14 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
         // The equipped value may have survived the filter — re-face it.
         this.setValue(currentV);
       },
+      // 'used' = equipped in a sibling slot — a faint tint reads "already
+      // in the kit" without competing with this slot's bright .sel.
+      markUsed(used) {
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) => {
+          const v = o.dataset.v ?? '';
+          o.classList.toggle('used', v !== currentV && used.has(v));
+        });
+      },
     };
   }
 
@@ -151,6 +159,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     // Faces come from menuKit: the pending kit while a swap is banked.
     const opts = weaponOptsFor(player.armorClass);
     ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
+    markSlotUse(player, ui.slotDrops);
     ui.beltDrop?.setValue(player.beltItem);
     ui.skillDrop?.setValue(player.skill);
     ui.perkDrop?.setValue(player.perk);
@@ -171,6 +180,17 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   }
 
   return { refreshLoadout, closeDrops };
+}
+
+/** Faint-mark weapons already sitting in a sibling slot — one open
+ *  list then shows the whole kit at a glance. */
+function markSlotUse(player: Player, slotDrops: Drop[]): void {
+  const kit = player.menuKit.map(String);
+  slotDrops.forEach((d, i) => {
+    const used = new Set(kit);
+    used.delete(kit[i]); // this slot's pick keeps the bright .sel, not 'used'
+    d.markUsed?.(used);
+  });
 }
 
 function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanElement } {
@@ -258,6 +278,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     // respawn), so faces show the recalled kit and gates follow it.
     const opts = weaponOptsFor(player.armorClass);
     ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
+    markSlotUse(player, ui.slotDrops);
     refreshTiles();
   };
   const refreshTiles = () => {
@@ -286,8 +307,6 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- WEAPONS: one numbered cell per slot. No group head — every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
-  // Two chips per row — four wide cells left dead air beside the picks.
-  weaponCells.classList.add('lo-grid2');
   // Filter by armorClass — the tier the menu edits (a banked class swap
   // edits that tier's kit, so its legal picks must show). lazyPlayer can
   // be unborn at wire-up — default the flag pass to medium.

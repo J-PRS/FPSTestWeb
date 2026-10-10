@@ -58,7 +58,7 @@ export class HudStats {
   // sidearms included, since a stale persisted loadout can shoulder one).
   private static readonly WEAPON_SHORT = [
     'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT',
-    'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV',
+    'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV', 'BMB',
   ];
 
   constructor(private h: StatsHost) {}
