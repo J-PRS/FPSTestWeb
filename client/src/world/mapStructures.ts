@@ -57,8 +57,6 @@ let built: THREE.Group | null = null;
 let colliderGizmos: THREE.LineSegments | null = null;
 
 let dome: THREE.Mesh | null = null;
-let domeSpec: { x: number; z: number; radius: number } | null = null;
-let domePulseUntil = 0;
 
 /** Gate shield panes by owning spec — a downed generator switches its
  *  team's fields off (visual half; the collider list is rebuilt by
@@ -75,21 +73,6 @@ export function clearArenaDome(scene: THREE.Scene): void {
   dome.geometry.dispose();
   (dome.material as THREE.Material).dispose();
   dome = null;
-  domeSpec = null;
-  domePulseUntil = 0;
-}
-
-/** Flash the shell — called when the server-side enforcement just
- *  shoved the local player, so the grab has a visible source. */
-export function pulseArenaDome(): void {
-  if (dome) {domePulseUntil = performance.now() + 600;}
-}
-
-/** Does this pull origin sit on the arena center? RoomArena shoves carry
- *  {x:cx, y:playerY, z:cz} — matching (x,z) identifies a barrier pull
- *  vs an implosion blast, which carries the detonation point. */
-export function isArenaPull(pos: { x: number; z: number }): boolean {
-  return !!domeSpec && pos.x === domeSpec.x && pos.z === domeSpec.z;
 }
 
 /** Translucent dome marking the arena boundary (Quicksand-style). Non-
@@ -104,8 +87,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   const mat = new THREE.MeshBasicMaterial({
     color: 0x66CCFF, transparent: true, opacity: 0,
     // DoubleSide: BackSide is invisible from outside — and outside is
-    // exactly where a pushed-back offender stands, so the wall pulling
-    // them in rendered as nothing at all.
+    // exactly where an offender stands when the boundary matters.
     side: THREE.DoubleSide, depthWrite: false,
   });
   dome = new THREE.Mesh(
@@ -121,13 +103,8 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
     const dz = cam.position.z - a.z;
     const distToShell = Math.abs(Math.hypot(dx, dy, dz) - a.radius);
     mat.opacity = Math.max(0, Math.min(0.35, (1 - distToShell / 80) * 0.35));
-    // Barrier-shove pulse — sits on top of the proximity fade so the wall
-    // that just grabbed you is unmistakable even at range.
-    const pulse = Math.max(0, (domePulseUntil - performance.now()) / 600);
-    mat.opacity = Math.max(mat.opacity, pulse * 0.6);
     dome!.visible = mat.opacity > 0.004;
   };
-  domeSpec = a;
   dome.position.set(a.x, groundY, a.z);
   dome.matrixAutoUpdate = false;
   dome.matrixWorldAutoUpdate = false;

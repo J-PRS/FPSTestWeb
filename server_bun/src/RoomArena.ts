@@ -1,23 +1,17 @@
 /**
- * RoomArena — the dome barrier enforcement layer. The client renders the
- * shell itself; this sim watches positions and pushes violators back
- * inside. Contact is a shove, not a wall: the player keeps momentum and
- * can skate the rim, which feels like sliding on the barrier rather than
- * teleporting. Bots respect it implicitly (their roam targets come from
- * inside the arena).
+ * RoomArena — the dome boundary layer. The client renders the shell
+ * itself; this sim watches positions and warns violators. There is no
+ * physical enforcement: an earlier pull-back shove was removed (it read
+ * as getting grabbed by nothing). Bots respect it implicitly (their roam
+ * targets come from inside the arena).
  */
-import type { Vec3 } from './types.ts';
-import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 
-const PUSH_INTERVAL_S = 0.5;   // how often an offender gets re-shoved
-const PUSH_FORCE = 40;         // inward impulse strength
-const GRACE_OUTSIDE_S = 1.5;   // brief spillover (knockback through it) before pushback
+const GRACE_OUTSIDE_S = 1.5;   // brief spillover (knockback through it) before the warning
 
 export class RoomArena {
   private outsideSince = new Map<string, number>();
-  // Ids already banner-warned on this excursion — the shove re-fires
-  // every ~2s but the warning should land once per trip outside.
+  // Ids already banner-warned on this excursion — re-arms on return.
   private warned = new Set<string>();
   // Sim-time, not wall time: deterministic under test stepping AND a
   // frozen/paused sim can't silently drain the grace window.
@@ -39,22 +33,9 @@ export class RoomArena {
       if (d <= r) { this.outsideSince.delete(p.id); this.warned.delete(p.id); continue; }
       const since = this.outsideSince.get(p.id);
       if (since === undefined) { this.outsideSince.set(p.id, now); continue; }
-      if (now - since < GRACE_OUTSIDE_S) continue;
-      // Pull toward the dome center — knockback semantics push AWAY from
-      // `position`, so a rim-anchored shove would launch offenders further
-      // out. pull:true draws them inward instead. The shadow must eat the
-      // same impulse or its trajectory diverges from the client's real one.
-      const inv = 1 / (d || 1);
-      const center: Vec3 = { x: cx, y: p.position.y, z: cz };
-      this.room.connections.sendToPlayer(p.id, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', p.id, {
-        position: center, force: PUSH_FORCE, pull: true,
-      }) as Parameters<Room['broadcast']>[0]);
-      if (!this.warned.has(p.id)) {
-        this.warned.add(p.id);
-        this.room.connections.sendToPlayer(p.id, { type: 'serverWarn', text: 'RETURN TO THE ARENA — outside the dome' });
-      }
-      this.room.moveSim.applyImpulse(p.id, { x: -dx * inv * PUSH_FORCE, y: PUSH_FORCE * 0.3, z: -dz * inv * PUSH_FORCE });
-      this.outsideSince.set(p.id, now + PUSH_INTERVAL_S);
+      if (now - since < GRACE_OUTSIDE_S || this.warned.has(p.id)) { continue; }
+      this.warned.add(p.id);
+      this.room.connections.sendToPlayer(p.id, { type: 'serverWarn', text: 'RETURN TO THE ARENA — outside the dome' });
     }
     // Gone players can't self-clean — they never appear in the iteration
     // above, so a leaver's entry would sit in the map for the room's life.

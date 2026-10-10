@@ -10,7 +10,6 @@ import { finiteVec } from '../../../../shared/wire.js';
 import { weaponDef } from '../../weapons.js';
 import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
-import { isArenaPull, pulseArenaDome } from '../../world/mapStructures.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
 import type { NetCtx } from './ctx.js';
@@ -128,14 +127,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // predicted, or a predicted blast whose stamp aged out (400ms). The
     // shove is real; logging it lets an alt+Q dump separate 'the blast
     // never touched me' from 'a shove arrived from nowhere'.
-    const arenaPull = Boolean(pull) && isArenaPull(position);
-    logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull, arena: arenaPull || undefined });
+    logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
     const from = new THREE.Vector3(position.x, position.y, position.z);
     const player = deps.lazyPlayer();
     if (pull) {
-      // The dome's grab used to land silently — flash the shell so the
-      // thing yanking you is visible, not a ghost.
-      if (arenaPull) {pulseArenaDome();}
       player.applyPull(from, force);
     } else {
       player.applyKnockback(from, force);
