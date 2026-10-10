@@ -43,7 +43,10 @@ const VOLATILE_TYPES = new Set([
 // every 2s — nothing a reclaim needs journaled. ping/pong too: each
 // replayed ping earns a client pong (a reclaim burst tripped the
 // rate limiter) and a stale echo would poison the transit EMA.
-const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong']);
+// gameState too: it's the largest frame type and a reclaimer's stale
+// copy is always superseded by the fresh one sent right after replay —
+// journaling it spends roster-sized replay bytes for nothing.
+const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
 const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {
