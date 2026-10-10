@@ -208,8 +208,12 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // delta the wire can't hide.
   const pd = Math.hypot(s.x - seg.px, s.y - seg.py, s.z - seg.pz);
   // hard segments (teleport/spawn) are deliberate discontinuities — a
-  // 100m+ snap is the feature, not predictor drift.
-  if (pd > 20 && !seg.hard) {
+  // 100m+ snap is the feature, not predictor drift. Span gate: a stamp
+  // covering seconds of stale anchor is a roster/join heal catching up
+  // (367m @ 12s reads identically to drift but means nothing about the
+  // predictor); real divergence shows on heartbeat-scale spans.
+  const spanMs = simT !== undefined && bag.simT < simT ? (simT - bag.simT) * 1000 : -1;
+  if (pd > 20 && !seg.hard && spanMs <= 4000) {
     glitch('seg-div', { m: Math.round(pd), spanMs: simT !== undefined && bag.simT < simT ? Math.round((simT - bag.simT) * 1000) : -1, enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
