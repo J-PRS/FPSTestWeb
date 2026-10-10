@@ -160,12 +160,27 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   }
 }
 
+const _crumbCol = new THREE.Color();
+
 /** Kinetic-hit feedback for noExplosion shells — the bullet puff is the
  *  floor; an embedding spear (javelin) earns a compact kinetic burst and
  *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
 function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
   const deps = c.deps;
   deps.lazyEffects().spawnImpact(pos, p.vel);
+  if (p.config.crumbles) {
+    // The ball IS the ordnance: it bursts into rock shards at the contact
+    // point, riding the same pooled debris a creature death would — no
+    // explosion, no dome, just the mass coming apart.
+    _debrisDir.copy(p.vel).normalize();
+    deps.world.debrisList.push(new BallDebris(
+      deps.lazyScene(), deps.lazyTerrain(), pos,
+      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
+      { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
+    ));
+    sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
+    return;
+  }
   if (p.config.embeds === undefined) return;
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
@@ -182,7 +197,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   const pos = p.hitPointValid ? p.hitPoint : p.pos;
   if (p.config.noExplosion) {
     kineticHitFx(c, p, pos);
-    if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(pos);
+    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) deps.lazyEffects().spawnBulletMark(pos);
     return;
   }
   deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
@@ -197,8 +212,9 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     const hitPos = p.hitPointValid ? p.hitPoint : p.pos;
     kineticHitFx(c, p, hitPos);
     // Bullet hole on terrain hits only — enemy/player hits already get
-    // damage numbers, bars, and spark feedback
-    if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(hitPos);
+    // damage numbers, bars, and spark feedback; a crumbled shell leaves
+    // shards, not a decal.
+    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) deps.lazyEffects().spawnBulletMark(hitPos);
     return;
   }
   // One AOE message for all weapons — the shared weapon table carries
@@ -325,7 +341,8 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
   // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
   if ((p.hitBall || p.hitPlayerId) && !p.shooterId) {
-    deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${p.hitBall ? 'ball' : 'player'} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
+    const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
+    deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${hitWho} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
     if (demoManager?.isRecording && p.hitAge > 0.2) {
       demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, { weapon: p.config.displayName, distance: p.hitDistance });
     }
@@ -335,13 +352,13 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 // Score breakdown is an AIRSHOT reward — grounded hits get the plain
 // hit marker, not a stat sheet. `airborne` = target's feet >0.6m over
 // terrain at the moment of the hit (same threshold the anim code uses).
-export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'player', airborne: boolean): void {
+export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'player', airborne: boolean, targetId?: string): void {
   const deps = c.deps;
   const acc = computeAccuracy(p.hitAccuracy, p.directHit);
   const dist = p.hitDistance;
   const air = p.hitAge;
   const score = Math.round(acc * dist * air);
-  deps.logger.info(`[Hit] ${target} direct=${p.directHit} air=${airborne} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+  deps.logger.info(`[Hit] ${target}${targetId ? ` ${targetId}` : ''} direct=${p.directHit} air=${airborne} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
   if (airborne) deps.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
   deps.lazyHud().showHitMarker();
   sfx.hitMarker(p.directHit);
@@ -436,7 +453,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
     deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
   }
   const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
-  if (mine) logHitScore(c, p, 'ball', airborne);
+  if (mine) logHitScore(c, p, 'ball', airborne, `ball#${ball.id}`);
   if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);
   else if (ball.ichor !== undefined) {
     // Non-lethal hit: a thin spray along the shot direction — the stains
@@ -482,9 +499,16 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
     : false;
-  logHitScore(c, p, 'player', airborne);
+  logHitScore(c, p, 'player', airborne, playerId);
 
   if (playerId === 'local') return;
+  // A predicted server-simmed shell whose projectileCreated echo never
+  // arrived is a ghost — it can register hits, but the authority knows
+  // nothing about it and will never pay the damage. Lost shotFired
+  // intent or a resync that wiped server projectiles both land here.
+  if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId) {
+    deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}) — hit is prediction-only, no damage`);
+  }
   // Server-simmed shells never claim their hit — predicted feedback
   // (damage numbers, bars, hitmarker) already ran above; the authority
   // declares the outcome via playerHit/projectileDestroyed.
