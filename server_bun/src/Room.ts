@@ -104,6 +104,11 @@ export class Room {
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
+  /** Last tickSeq a client seated/reclaimed — tickRecords forces full
+   *  v4 records for a window after it so the new decode baseline lands
+   *  every wireId's fields at once instead of each player's first
+   *  staggered full up to 750ms out (join pop-in). */
+  introSeq = -1_000_000;
 
   /** Rolling health counters for the room heartbeat — every subsystem
    *  bumps tagged keys (shot claims, rejects, corrections, desyncs,

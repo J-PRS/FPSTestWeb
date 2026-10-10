@@ -155,7 +155,11 @@ export class TickFanout {
       // (masked-out groups emit the retained slot value). A skipped full
       // would leave that drift unbounded, so forced fulls must bypass
       // tier skipping like hit-window forced sends.
-      const fullRecord = freshWireId || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
+      // introSeq window: a client just seated/reclaimed — masked deltas
+      // are undecodable until each wireId's first full lands, so every
+      // record goes full for ~1s instead of pop-in over 750ms staggered.
+      const fullRecord = freshWireId || room.tickSeq - room.introSeq < 20
+        || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
       rec.force = forceSend || fullRecord;
       // Delta basis follows the wireId, never the slot — a slot-carried
       // `last` encodes this player's mask against whoever held the slot

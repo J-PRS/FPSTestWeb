@@ -236,6 +236,7 @@ export class SessionManager {
     if (oldSock && oldSock !== ws) {
       try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
     }
+    room.introSeq = room.tickSeq; // reclaimer's decode baseline reset too
     room.messages.handleHandshake(playerId, undefined, true);
     // Disconnect cancelled any pending respawn — if they come back dead,
     // re-arm it or the restored corpse stays dead forever
@@ -284,6 +285,7 @@ export class SessionManager {
     room.spectators.add(playerId);
     this.d.specRooms.set(playerId, room);
     room.connections.register(playerId, ws);
+    room.introSeq = room.tickSeq; // spectators decode from zero too
     room.messages.handleSpectatorHandshake(playerId);
     this.d.ops.joins++;
     logger.info('Spectator joined', { playerId, room: room.name });
@@ -365,6 +367,7 @@ export class SessionManager {
     ws.data.gen = this.d.registry.seat(playerId, false, 'join');
     this.d.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
+    room.introSeq = room.tickSeq; // see Room.introSeq — fulls for ~1s
     room.messages.handleHandshake(playerId, sessionToken);
     this.d.ops.joins++;
     switch (handshake.transport) {
