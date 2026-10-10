@@ -114,7 +114,13 @@ export class WorkerTransport implements GameTransport {
         .then((url) => this.worker.postMessage({ kind: 'resolved', seq: ev.seq, url }));
       return;
     }
-    if (ev.kind === 'rtt') { this.netProbe.rttMs = ev.rtt; this.config.onRtt?.(ev.rtt); }
+    if (ev.kind === 'rtt') {
+      // Probe event — apply at the edge; queueing it to drain would just
+      // churn the batch as a no-op case every ping cycle.
+      this.netProbe.rttMs = ev.rtt;
+      this.config.onRtt?.(ev.rtt);
+      return;
+    }
     if (ev.kind === 'ev') {
       this.netProbe.lagMs = Date.now() - ev.at;
       // Liveness is a RECEIVE property — stamp it at the edge, not at

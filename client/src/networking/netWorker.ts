@@ -80,6 +80,11 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
           const seq = ++resolveSeq;
           resolveWaiters.set(seq, res);
           post({ kind: 'resolve', seq });
+          // A reply that never comes (disconnect mid-flight, a stalled
+          // matchmaker) must not park the reconnect promise forever.
+          setTimeout(() => {
+            if (resolveWaiters.delete(seq)) {res(null);}
+          }, 10_000);
         })
       : undefined,
     onConnect: () => { connected = true; post({ kind: 'up', tier: inner?.tier }); },
@@ -138,6 +143,10 @@ w.onmessage = (e: MessageEvent<Down>) => {
       connected = false;
       inner?.disconnect();
       inner = null;
+      // In-flight resolves can never be answered now — fail them fast
+      // instead of parking the next transport's reconnect on the timeout.
+      for (const res of resolveWaiters.values()) {res(null);}
+      resolveWaiters.clear();
       break;
     case 'resolved':
       resolveWaiters.get(m.seq)?.(m.url);
