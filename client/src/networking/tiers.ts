@@ -387,7 +387,7 @@ export class TieredTransport implements GameTransport {
     // probe flushes BEFORE the join the server demands first (the rejected-
     // handshake flap storm — every retry died on 'pre-join ping').
     if (typeof data === 'string' &&
-        (data.startsWith('{"type":"ping"') || data.startsWith('{"type":"pong"') || data.startsWith('{"type":"clientStats"'))) {
+        (data.startsWith('{"type":"ping"') || data.startsWith('{"type":"pong"') || data.startsWith('{"type":"clientStats"') || data.startsWith('{"type":"tickNack"'))) {
       return true;
     }
     if (data instanceof Uint8Array) {
