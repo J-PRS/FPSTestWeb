@@ -192,10 +192,18 @@ export class WtSocketAdapter {
       void this.session.sendDatagram(msg).catch(() => {});
       return msg.byteLength;
     }
-    // Stream-2 (caps.binLane opt-in): raw u16-framed binary — drops the
-    // ~33% base64 tax and isolates oversized tick frames from the JSON
-    // lane, so a 1300B tick can't HoL-block an event behind it.
-    if (typeof msg !== 'string' && this.binWriter && msg.byteLength <= 0xffff) {
+    // Stream-2 (caps.binLane opt-in): oversized TICK frames only — raw
+    // u16-framed, no base64 tax, and HoL-isolated so a 1300B tick can't
+    // stall an event behind it. Tick frames were already unordered vs
+    // events on the datagram lane, so the second stream changes nothing
+    // about ordering. Other binary (ballSeg etc.) must STAY on stream 1:
+    // its relative order against JSON spawn/roster events is load-bearing
+    // (a segment beating its ballSpawn left stale regimes — the BALL
+    // DESYNC churn on enraged/targetId).
+    if (typeof msg !== 'string' && this.binWriter &&
+        msg.length >= 2 && msg[0] === 0x54 &&
+        (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
+        msg.byteLength <= 0xffff) {
       const v = new DataView(this.binScratch);
       v.setUint16(0, msg.byteLength);
       void this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => {});
