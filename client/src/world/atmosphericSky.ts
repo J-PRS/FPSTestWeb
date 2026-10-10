@@ -131,9 +131,9 @@ const atmosphereFragmentShader = /* glsl */`
     color.b *= 1.18;
     color = clamp(color, 0.0, 1.0);
 
-    // Blend to exact fogColor just above the horizon so fully-fogged terrain
-    // is invisible against the sky.
-    color = mix(fogColor, color, smoothstep(0.0, 0.06, h));
+    // Blend to exact fogColor across a wide low band so fully-fogged
+    // terrain dissolves upward into the sky instead of cutting a line.
+    color = mix(fogColor, color, smoothstep(0.0, 0.12, h));
 
     // No sun disc — Tribes-style tracking needs uniform sky brightness.
     // sunPosition only suppresses stars near the sun direction below.

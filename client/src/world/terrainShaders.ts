@@ -470,7 +470,7 @@ export const terrainFrag = /* glsl */`
       // World-edge dissolve: outermost level fades to transparent over its
       // last ~300m — geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
-      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
@@ -528,7 +528,7 @@ export const terrainFrag = /* glsl */`
       // World-edge dissolve: outermost level fades to transparent over its
       // last ~300m — geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
-      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
@@ -642,7 +642,7 @@ export const terrainFrag = /* glsl */`
       // World-edge dissolve: outermost level fades to transparent over its
       // last ~300m — geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
-      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
@@ -726,7 +726,7 @@ export const terrainFrag = /* glsl */`
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
     float fogFactor = terrainFogFactor(dist);
-    float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, dist) * step(0.5, edgeHalf);
+    float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, dist) * step(0.5, edgeHalf);
     // Height-augmented fog: tall terrain at distance gets extra fog
     float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
                      * smoothstep(0.3, 0.8, height);
