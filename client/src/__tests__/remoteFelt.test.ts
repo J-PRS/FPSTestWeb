@@ -203,4 +203,30 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.snaps, JSON.stringify(r)).toBe(0);
     expect(r.max).toBeLessThan(60); // a 1.2s dead-reckon may stray ~v·gap, but never warps
   });
+
+  it('mortar spam: re-predicts inside the window cannot keep the ghost ballistic forever', () => {
+    const h = new Host();
+    const interp = new RemoteInterp(h);
+    const FRAME = 1000 / 60;
+    vi.setSystemTime(0);
+    interp.onUpdate({ x: 0, y: 20, z: 0 }, { yaw: 0, pitch: 0 }, 40, { x: 0, y: 0, z: 0 }, 0);
+    h.position.set(0, 20, 0);
+    // Repeated predicted blasts ~150ms apart — each used to re-arm the
+    // window, so wire truth arriving mid-spam could never exit the sim.
+    for (let b = 0; b < 6; b++) {
+      vi.setSystemTime(b * 150);
+      interp.predict(new THREE.Vector3(h.position.x + 1, h.position.y, h.position.z), 20);
+      for (let f = 0; f < 9; f++) {
+        vi.advanceTimersByTime(FRAME);
+        interp.step(FRAME / 1000, false);
+      }
+    }
+    // Window is short (~0.2s at ping 0): with spam ignored in-window the
+    // timer expired during the barrage, so the next update must retake it.
+    vi.advanceTimersByTime(500);
+    interp.onUpdate({ x: 5, y: 20, z: 0 }, { yaw: 0, pitch: 0 }, 40, { x: 0, y: 0, z: 0 }, 50);
+    expect(interp.simulating).toBe(false);
+    // And bounded: six stacked launches would have thrown it ~100m+.
+    expect(h.position.distanceTo(new THREE.Vector3(5, 20, 0))).toBeLessThan(60);
+  });
 });
