@@ -383,6 +383,13 @@ export class TieredTransport implements GameTransport {
     if (this.inner) {return this.inner.send(data);}
     // Binary frames are volatile state — keep only the freshest while the
     // probe resolves, same rule WebSocketConnection applies during downtime.
+    // Keepalives are volatile too: a ping queued during a multi-second wt
+    // probe flushes BEFORE the join the server demands first (the rejected-
+    // handshake flap storm — every retry died on 'pre-join ping').
+    if (typeof data === 'string' &&
+        (data.startsWith('{"type":"ping"') || data.startsWith('{"type":"pong"') || data.startsWith('{"type":"clientStats"'))) {
+      return true;
+    }
     if (data instanceof Uint8Array) {
       this.pending = this.pending.filter(m => !(m instanceof Uint8Array));
     }

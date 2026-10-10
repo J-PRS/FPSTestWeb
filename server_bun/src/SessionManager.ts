@@ -83,6 +83,11 @@ export class SessionManager {
     }
 
     const handshake = raw as Record<string, unknown>;
+    // Volatile keepalives may precede join: a tier probe holds sends in a
+    // pending queue that flushes on session open — pings enqueued during
+    // the probe land before join. Killing the session re-arms the
+    // reconnect loop (the ~1s flap storm); swallowing them costs nothing.
+    if (handshake.type === 'ping' || handshake.type === 'pong' || handshake.type === 'clientStats') return;
     if (handshake.type !== 'join') {
       logger.warn('pre-join frame rejected', { got: handshake.type });
       ws.close(1008, 'Expected join handshake');
