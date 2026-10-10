@@ -32,6 +32,9 @@ export interface NetBag {
   simT: number;
   /** Fixed-dt accumulator — prediction steps at server rate. */
   netAcc: number;
+  /** Last simNow estimate tickNet stepped against — the replay-vs-clock
+   *  skew the render-blend counter needs to name its cause. -1 = unset. */
+  lastSimNow: number;
   /** Sim-time stamp the current leg started at; inert flight measures T
    *  off the server clock so tick drift can't push prediction ahead of
    *  authority. -1 = unstamped (wall-time fallback). */
@@ -47,7 +50,7 @@ export interface NetBag {
 }
 
 export function newNetBag(): NetBag {
-  return { sim: null, simT: 0, netAcc: 0, legT0: -1, netTargetId: null, netEnraged: false, parked: false };
+  return { sim: null, simT: 0, netAcc: 0, lastSimNow: -1, legT0: -1, netTargetId: null, netEnraged: false, parked: false };
 }
 
 /** Live ball state the replay mutates — all shared refs, no copies. */
@@ -88,6 +91,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // Locked to the server's 50ms grid and gated on the stamped sim clock
   // so the replay neither phase-shifts nor free-runs ahead of authority.
   const simNow = st.simNow() ?? Infinity;
+  bag.lastSimNow = simNow;
   // The committed target rides tp snapshots: enrage pull needs it, and an
   // inert ball's stall-breaker launches at it — predicting it client-side
   // mirrors the authority instead of waiting two seconds for the event.
