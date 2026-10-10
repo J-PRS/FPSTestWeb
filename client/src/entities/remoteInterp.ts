@@ -172,7 +172,12 @@ export class RemoteInterp {
     // The sampler clamps past the extrapolation cap — the remote would
     // freeze-frame on stale truth for the rest of the silence window, so
     // DR takes over at the cap rather than waiting out the threshold.
-    if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > 200)) && !this._simulating && !localDriven) {
+    // But on a suppressed stream (250ms+ arrivals) the cap + a fixed
+    // silence flap DR on/off every packet — DR free-runs, converge
+    // steers back, repeat. Only a stream starving well past its own
+    // cadence earns the takeover.
+    const starveMs = Math.max(200, this.net.arrivalInterval * 1.5);
+    if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > starveMs)) && !this._simulating && !localDriven) {
       // Seed from the wire velocity — differentiating snapshot positions
       // folds arrival noise into the launch vector (a jittered pair
       // reports phantom speed the real sim never had).
@@ -326,10 +331,12 @@ export class RemoteInterp {
     // (reads as the remote recovering its path), a 1m seam stays snappy.
     const dist = Math.hypot(target.x - p.x, target.y - p.y, target.z - p.z);
     const horizon = Math.min(0.6, Math.max(0.18, dist * 0.04));
-    // desired velocity that reaches the target within ~horizon
-    const dvx = (target.x - p.x) / horizon;
-    const dvy = (target.y - p.y) / horizon;
-    const dvz = (target.z - p.z) / horizon;
+    // desired velocity = target's own velocity + closing term — chasing
+    // only the static gap gives dv = dist/horizon, which stalls at
+    // ~27m on a 44m/s remote (the steer literally cannot catch it).
+    const dvx = (target.x - p.x) / horizon + this.h.serverVelocity.x;
+    const dvy = (target.y - p.y) / horizon + this.h.serverVelocity.y;
+    const dvz = (target.z - p.z) / horizon + this.h.serverVelocity.z;
     // accel = (desiredVel - vel)/dt, critically damped, capped to what a
     // jet-burning player could produce (~jetForceDir + gravity-class)
     const ACCEL_CAP = 80;

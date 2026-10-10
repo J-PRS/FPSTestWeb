@@ -43,7 +43,7 @@ const CRUISE = R * W; // ~44 m/s
 interface Packet { emitT: number; arriveT: number; s: ReturnType<typeof truth>; }
 const q0 = (errs: number[], p: number) => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!.toFixed(2);
 
-function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number }) {
+function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }) {
   let rng = opts.seed ?? 12345;
   const rand = () => (rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
@@ -69,7 +69,7 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
 
     // Server emits on its own 50ms cadence; transport delivers late/jittered.
     // (frame-index gated — float `now % 50` almost never lands exactly)
-    if (f % Math.round(TICK_MS / FRAME_MS) === 0) {
+    if (f % Math.round((opts.tickMs ?? TICK_MS) / FRAME_MS) === 0) {
       const silent = opts.silentFrom !== undefined && now >= opts.silentFrom && now < (opts.silentTo ?? 0);
       if (!silent && rand() > opts.loss) {
         const s = truth(now);
@@ -123,6 +123,20 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // budget the correction path uses, plus the true interp delay.
     expect(r.p95).toBeLessThan(18);
     expect(r.max).toBeLessThan(25);
+  });
+
+  it('tier-suppressed stream (250ms arrivals) on a fast mover: no steps, bounded lag', () => {
+    // Interest-tier suppression is the production shape the canary was
+    // missing: snapshots arrive 5x slower than the server emits them.
+    // The speed-scaled delay cap (~90ms at 44m/s) trades cushion for
+    // freshness — the ghost rides ~250ms-old truth between arrivals and
+    // must not step at the send rate.
+    const r = runLink({ transit: 40, jitter: 25, loss: 0, secs: 15, tickMs: 250, seed: 99 });
+    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    // ~44 m/s × ~300ms effective lag ≈ 13m — the delay cap bounds it,
+    // the alternation between buffer and DR must not double it.
+    expect(r.p95).toBeLessThan(16);
+    expect(r.max).toBeLessThan(22);
   });
 
   it('undeclared big jump snaps in one frame — never a multi-frame slide', () => {
