@@ -131,7 +131,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // it just isn't an anomaly, and the explosion already painted.
     // Only a shove with no blast anywhere near earns the log + phantom FX.
     const seen = deps.explosionTracker.getRecentExplosions()
-      .some(e => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12);
+      .some(e => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12)
+      // A triggered mine's blast has no projectile replica and its
+      // deployDown races the echo — a live mine nearby IS the blast.
+      || deps.entities().deployables.mineNear(from, 12);
     if (!seen) {
       // Server shoved us from a blast we never rendered — envelope/occlusion
       // or rewind disagreed with the server. Loud parity counter — except

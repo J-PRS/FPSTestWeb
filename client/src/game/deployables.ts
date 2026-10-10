@@ -138,7 +138,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 export interface DeployDeps extends GameContext {
   scene: THREE.Scene;    // scene exists before deployables is constructed
   targets: Targetable[]; // shared creature surface
-  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean } | undefined;
+  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string): boolean } | undefined;
   /** Enemy bots the turret may legally shoot (deployer's team excluded). */
   enemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   /** Damage funnel for bot hits — same authority as a player's bolts. */
@@ -466,6 +466,18 @@ export class Deployables {
 
   remoteDown(id: number): void { this.remotes.down(id); }
   remoteUp(id: number): void { this.remotes.up(id); }
+
+  /** Blast-echo attribution: a triggered mine explodes server-side with
+   *  no projectile replica, and its deployDown races the knockback echo —
+   *  a live mine within the radius means the blast was expected, not a
+   *  prediction miss. */
+  mineNear(pos: THREE.Vector3, radius: number): boolean {
+    for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
+      if (i.dead || i.kind !== 'mine') {continue;}
+      if (i.pos.distanceToSquared(pos) < radius * radius) {return true;}
+    }}
+    return false;
+  }
 
   /** Repair-beam pick: nearest deployed item along the ray, padded —
    *  beam thin but not needle-thin, aim at the body not the feet.
