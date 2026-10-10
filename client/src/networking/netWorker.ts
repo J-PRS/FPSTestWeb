@@ -142,9 +142,12 @@ w.onmessage = (e: MessageEvent<Down>) => {
       break;
     case 'connect': {
       // A lingering lane from a previous connect gets torn down here —
-      // orphan sockets are the parallel-join flood source.
+      // orphan sockets are the parallel-join flood source. Queued sends
+      // die with it too: they belong to the dead session, and flushing
+      // them into the fresh lane lands stale frames ahead of 'join'.
       seated = false;
       connected = false;
+      sendQueue.length = 0;
       if (inner) { const old = inner; inner = null; old.disconnect(); }
       inner = new TieredTransport(makeConfig(m.url, m.resolve), opts);
       inner.connect(m.url);
