@@ -36,7 +36,7 @@
     { "kind": "ramp", "pos": { "x": 70, "y": 0, "z": 0 }, "size": { "x": 10, "y": 8, "z": 10 }, "rotY": -1.5708 }
   ],
   "terrain": "hills.bin",
-  "heightScale": 1.0,
+  "heightScale": 1.5,
   "terrainPreset": 2,
   "fog": {
     "color": [0.78, 0.66, 0.45],
