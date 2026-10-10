@@ -117,10 +117,15 @@ w.onmessage = (e: MessageEvent<Down>) => {
       inner.connect(m.url);
       break;
     }
-    case 'send':
-      if ('s' in m) {inner?.send(m.s);}
-      else {inner?.send(m.b);}
+    case 'send': {
+      const ok = 's' in m ? inner?.send(m.s) : inner?.send(m.b);
+      // A lane that reports dead without a disconnect event was the
+      // contract-violation scream on main — keep it visible here.
+      if (ok === false && connected) {
+        post({ kind: 'nlog', level: 'warn', name: 'NetW', msg: 'inner lane dropped a send while reporting connected' });
+      }
       break;
+    }
     case 'disconnect':
       connected = false;
       inner?.disconnect();

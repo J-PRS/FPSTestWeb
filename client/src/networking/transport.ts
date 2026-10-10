@@ -18,8 +18,9 @@ export interface GameTransport {
   /** Worker transports run their own ping cadence — NetworkManager must
    *  not double-send app-level 'ping' probes. */
   readonly ownsPing?: boolean;
-  /** Worker-side probes (clean wire RTT, postMessage delivery lag). */
-  readonly probe?: { rttMs: number; lagMs: number; coalesced: number };
+  /** Worker-side probes (clean wire RTT, postMessage delivery lag,
+   *  receive-edge liveness stamp, coalesced tick count). */
+  readonly probe?: { rttMs: number; lagMs: number; coalesced: number; lastRxAt: number };
 }
 
 export type TransportFactory = (config: ConnectionConfig) => GameTransport;

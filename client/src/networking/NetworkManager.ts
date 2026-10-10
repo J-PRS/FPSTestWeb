@@ -329,8 +329,11 @@ export class NetworkManager {
     // still trips wt.closed/the pumps, and the visibility resync covers
     // whatever's left on regain.
     if (document.hidden) return;
-    const silent = Date.now() - this.lastRxAt;
-    if (this.lastRxAt === 0 || silent < NetworkManager.STALL_MS) return;
+    // Worker transports stamp liveness at the receive edge — a main-loop
+    // stall delays DRAIN, not arrival, and must not read as socket silence.
+    const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
+    const silent = Date.now() - lastRx;
+    if (lastRx === 0 || silent < NetworkManager.STALL_MS) return;
     logger.warn(`no server traffic in ${Math.round(silent)}ms — socket silent, reprobing`, { tier: this.ws?.tier });
     const url = this.lastUrl;
     // TieredTransport is one-shot after disconnect() (closed flag), so

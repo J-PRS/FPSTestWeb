@@ -56,7 +56,7 @@ export class WorkerTransport implements GameTransport {
   /** Worker owns the ping cadence — NetworkManager must not double-send. */
   readonly ownsPing = true;
   /** Clean wire RTT (worker's clock) + worker→main delivery lag. */
-  readonly netProbe = { rttMs: 0, lagMs: 0 };
+  readonly netProbe = { rttMs: 0, lagMs: 0, lastRxAt: 0 };
 
   private worker: Worker;
   private open = false;
@@ -115,7 +115,13 @@ export class WorkerTransport implements GameTransport {
       return;
     }
     if (ev.kind === 'rtt') { this.netProbe.rttMs = ev.rtt; this.config.onRtt?.(ev.rtt); }
-    if (ev.kind === 'ev') { this.netProbe.lagMs = Date.now() - ev.at; }
+    if (ev.kind === 'ev') {
+      this.netProbe.lagMs = Date.now() - ev.at;
+      // Liveness is a RECEIVE property — stamp it at the edge, not at
+      // drain time, or a render stall reads as a dead socket to the
+      // silence watchdog and tears down a healthy session.
+      this.netProbe.lastRxAt = Date.now();
+    }
     this.pending.push(ev);
     // Draining on the NEXT macrotask lets every already-queued message
     // land in the same batch — free stall coalescing, ~0 added latency
@@ -143,7 +149,7 @@ export class WorkerTransport implements GameTransport {
   get coalescedTicks(): number { return this.coalesced; }
 
   /** rtt/lag read for the dump — null on non-worker transports. */
-  get probe(): { rttMs: number; lagMs: number; coalesced: number } {
-    return { rttMs: this.netProbe.rttMs, lagMs: this.netProbe.lagMs, coalesced: this.coalesced };
+  get probe(): { rttMs: number; lagMs: number; coalesced: number; lastRxAt: number } {
+    return { rttMs: this.netProbe.rttMs, lagMs: this.netProbe.lagMs, coalesced: this.coalesced, lastRxAt: this.netProbe.lastRxAt };
   }
 }
