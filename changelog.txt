@@ -1,3 +1,4 @@
+2026-10-10 - player identity (playerId + sessionToken) moved to sessionStorage: two tabs sharing one localStorage identity reclaim-evicted each other forever (~13s ping-pong observed in headed soak); per-tab identity keeps in-tab F5/reconnect reclaim intact and a second tab mints its own seat
 2026-10-10 - tickNack window no longer extends while active: re-stamping introSeq during a paying window let a nack every 500ms hold the room on fulls forever; a live window already covers every client
 2026-10-10 - srvPing + gameState excluded from the reclaim journal: srvPing is a 2Hz single-recipient echo churning the replay window; gameState is the largest frame type and its stale copy is always superseded by the fresh post-replay send
 2026-10-10 - ping/pong excluded from the reclaim journal (NO_JOURNAL): each replayed ping earned a client pong, and a post-flap replay burst tripped the rate limiter on a legit client; stale echoes would also poison the transit EMA

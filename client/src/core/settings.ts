@@ -113,20 +113,28 @@ const LEGACY_TRUE_AS_ONE = new Set<keyof Schema>(['fps-pixelated']);
 // at boot) would kill the app on a device that can still play fine, so
 // failures fall back to a session-only shadow.
 const memFallback = new Map<string, string>();
+// Identity keys live in sessionStorage (per-tab), not localStorage: two
+// tabs sharing one playerId+token reclaim-evict each other forever (~13s
+// ping-pong, observed in soaks). sessionStorage survives F5 inside a tab,
+// so reconnect/reclaim still works; a second tab mints its own identity.
+const SESSION_KEYS = new Set(['fps-player-id', 'fps-session-token']);
 const store = {
+  backing(k: string): Storage {
+    return SESSION_KEYS.has(k) ? sessionStorage : localStorage;
+  },
   get(k: string): string | null {
-    try { return localStorage.getItem(k); } catch { return memFallback.get(k) ?? null; }
+    try { return this.backing(k).getItem(k); } catch { return memFallback.get(k) ?? null; }
   },
   set(k: string, v: string): void {
     memFallback.set(k, v);
-    try { localStorage.setItem(k, v); } catch { /* shadow keeps it session-local */ }
+    try { this.backing(k).setItem(k, v); } catch { /* shadow keeps it session-local */ }
   },
   has(k: string): boolean {
-    try { return localStorage.getItem(k) !== null; } catch { return memFallback.has(k); }
+    try { return this.backing(k).getItem(k) !== null; } catch { return memFallback.has(k); }
   },
   remove(k: string): void {
     memFallback.delete(k);
-    try { localStorage.removeItem(k); } catch { /* nothing persisted anyway */ }
+    try { this.backing(k).removeItem(k); } catch { /* nothing persisted anyway */ }
   },
 };
 
