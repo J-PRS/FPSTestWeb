@@ -1,3 +1,4 @@
+2026-10-10 - Unstamped knockbacks now paint a blast visual at the wire position (no more invisible shoves); hp=NaN fixed: regenRamp was read off PerkMods but never declared (undefined*dt=NaN under Regenerator)
 2026-10-10 - WT datagram lane death degrades to reliable-only instead of killing the session — fixes 2.3s reconnect flap that desynced remotes 50-160m and orphaned server-simmed shells (ghost hits)
 2026-10-10 - Hit logs name the target ([Hit]/[CoolShot] carry targetId); ghost-shell warn when an unbound server-simmed shell registers a hit (lost shotFired intent / resync wipe → prediction-only hit, no server damage)
 2026-10-10 - Log every local-player impulse (impulse: knockback/pull with force, origin, velY) so airborne-launch reports can be attributed from dumps

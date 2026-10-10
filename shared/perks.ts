@@ -23,6 +23,8 @@ export interface PerkMods {
   maxHealth: number;
   /** Passive health regen, hp per second. */
   regen: number;
+  /** Extra regen accrued per unhurt second (ramps up the longer you go untouched). */
+  regenRamp: number;
   /** Energy pool recharge multiplier (cloak/shield/mend all share it). */
   energyRegen: number;
   /** Direct-hit damage multiplier (1.2 = +20% on hits that land dead-on). */
@@ -41,7 +43,7 @@ export interface PerkMods {
   pickupRadius: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, regen: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1 };
 
 export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<PerkMods> }> = {
   none:        { name: 'No Perk',     blurb: '', mods: {} },

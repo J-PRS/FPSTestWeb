@@ -133,6 +133,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (pull) {
       player.applyPull(from, force);
     } else {
+      // No stamp means no predicted blast rendered either — paint the
+      // explosion the wire never showed so the shove isn't invisible.
+      // Radius isn't on the wire; force is the only size signal we get.
+      deps.lazyEffects().spawnExplosion(from, Math.max(1.5, Math.min(5, force / 8)), 12);
       player.applyKnockback(from, force);
     }
   };
