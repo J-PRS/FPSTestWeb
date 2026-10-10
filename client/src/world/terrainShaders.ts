@@ -542,9 +542,16 @@ export const terrainFrag = /* glsl */`
       // Ridged noise for exposed rock — crease lines read as strata/scree.
       float ridged  = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0);
       ridged *= ridged;
+      // Drainage: anisotropic erosion streaks following the real normal
+      // — gully lines carved down slopes, not random dark blotches.
+      vec2 slopeDir = normalize(vec2(vNormal.x, vNormal.z) + vec2(0.001));
+      float drainage = terrainErosion(uvMed, slopeDir);
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
       float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
                    * (0.45 + 1.1 * patchMask);
+      // Detail fadeout: fixed-frequency terms at ~1m wavelength shimmer
+      // into soup past mid distance; fade them while macro terms persist.
+      float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
 
       // Palette: dark root greens -> bright olive tips, dry straw regions,
       // warm dirt, grey strata rock. Wide value range is what keeps it
@@ -563,7 +570,7 @@ export const terrainFrag = /* glsl */`
       // mid-olive. Clump id jitters hue so tufts aren't clones.
       vec3 grass = mix(cGrassDeep, cGrassTip, smoothstep(0.25, 0.75, medium));
       grass = mix(grass, cGrassDry, clumpId * 0.35);
-      grass += blade * vec3(0.05, 0.06, 0.01);
+      grass += blade * vec3(0.05, 0.06, 0.01) * detFade;
       grass = mix(grass, cStraw, smoothstep(0.58, 0.78, region) * 0.8);
 
       vec3 col = grass;
@@ -583,8 +590,14 @@ export const terrainFrag = /* glsl */`
       col = mix(col, slopeCol, slopeBlend);
       // Trough AO: fake canopy self-shadowing in micro lows — the single
       // biggest fix for "flat" procedural ground.
+      // Drainage darkening: gully streaks on sloped ground only — flat
+      // meadow stays clean, hillsides get carved.
+      col *= 1.0 - smoothstep(0.10, 0.45, slope) * (1.0 - smoothstep(0.25, 0.75, drainage)) * 0.28;
+      // Continental tint: km-scale hue drift so the whole map isn't one
+      // green — reads as wetter/drier sub-regions at horizon distance.
+      col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
       col *= 0.78 + 0.44 * detail;
-      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.22;
+      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.22 * detFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
@@ -592,6 +605,11 @@ export const terrainFrag = /* glsl */`
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
+      // Grass sheen: grazing-angle specular lift on open meadow — turf
+      // blades glint; masked off dirt, rock, and shaded faces.
+      vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
+      float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDir2), 0.0), 14.0);
+      col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
