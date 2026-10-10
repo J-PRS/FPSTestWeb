@@ -12,6 +12,7 @@ import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
+import { parityMiss } from './parity.js';
 import { targetDemoId } from '../demo/types.js';
 
 export interface BlastForceHooks {
@@ -189,6 +190,15 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // so the blast can't land twice.
     const stamps = deps.world.selfBlastStamps;
     stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now });
+    // Settle older stamps: a predicted self-shove the server never echoed
+    // back (~700ms past the 400ms consume window) was rejected server-side —
+    // loud parity miss, not a silent expiry.
+    for (let i = stamps.length - 1; i >= 0; i--) {
+      if (now - stamps[i]!.t > 700) {
+        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), ageMs: Math.round(now - stamps[i]!.t) });
+        stamps.splice(i, 1);
+      }
+    }
     if (stamps.length > 8) {stamps.shift();}
     return true;
   }

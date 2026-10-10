@@ -6,6 +6,7 @@
 import { aimProbe } from './aimProbe.js';
 import { staleLine } from './staleFiles.js';
 import { diagLines as netProbeLines } from '../debug/netProbe.js';
+import { parityLines } from '../game/parity.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { StateDebugContext } from './stateDebug.js';
 
@@ -51,6 +52,9 @@ export function diagLines(ctx: StateDebugContext): string[] {
   // Netcode census — corrections/claim verdicts answer "why did it
   // rubberband / why didn't that hit land" before the row dumps.
   lines.push(...netProbeLines());
+  // Prediction-parity ledger — misses where wire truth disagreed with a
+  // local prediction (blast echoes, pickup rests, unprompted shoves).
+  lines.push(...parityLines());
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
   for (const [id, ps] of wire) {
     const rp = ctx.remotePlayers.get(id);
@@ -252,6 +256,24 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   if (td.geoNaN?.length) lines.push(`geoNaN: ${td.geoNaN.map(h => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);
   pushBallCensus(lines, td);
   pushShellAudit(lines, ctx);
+  pushUnclaimed(lines, td);
+}
+
+// Generic pass-through — collectDiag merges EVERY registerDiag section,
+// so keys this census has no bespoke format for must still reach the
+// paste; before this sweep, glitches/visAudit/the net reject censuses
+// and vfx.drivers were collected and silently dropped.
+const TRAIL_CLAIMED = new Set([
+  'stats', 'pools', 'trails', 'ribbons', 'ribbonBatch', 'ribbonOrphans',
+  'litAudit', 'reapedLit', 'inst', 'swarm', 'fx', 'geoNaN', 'ballDots', 'balls',
+]);
+function pushUnclaimed(lines: string[], td: TrailDump): void {
+  for (const [k, v] of Object.entries(td)) {
+    if (TRAIL_CLAIMED.has(k) || v == null) continue;
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (!s || s === '{}' || s === '[]') continue;
+    lines.push(`${k}: ${s.length > 600 ? s.slice(0, 600) + '…' : s}`);
+  }
 }
 
 // Projectile audit — the oldest-shell line surfaces the next immortal

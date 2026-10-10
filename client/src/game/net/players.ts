@@ -12,6 +12,7 @@ import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
+import { parityMiss } from '../parity.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
@@ -123,17 +124,30 @@ function wirePlayerCombat(ctx: NetCtx): void {
     const i = stamps.findIndex(s => now - s.t < 400 &&
       Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 3);
     if (i >= 0) { stamps.splice(i, 1); return; }
-    // No matching self-blast stamp — either an enemy blast we never
-    // predicted, or a predicted blast whose stamp aged out (400ms). The
-    // shove is real; logging it lets an alt+Q dump separate 'the blast
-    // never touched me' from 'a shove arrived from nowhere'.
-    logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
     const from = new THREE.Vector3(position.x, position.y, position.z);
+    // A blast we RENDERED but never predicted a shove from — client-side
+    // envelope/occlusion disagreed with the server's rewind, or the boom
+    // had no replica at all (tripped mine). The impulse is still law;
+    // it just isn't an anomaly, and the explosion already painted.
+    // Only a shove with no blast anywhere near earns the log + phantom FX.
+    const seen = deps.explosionTracker.getRecentExplosions()
+      .some(e => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12);
+    if (!seen) {
+      // Server shoved us from a blast we never rendered — envelope/occlusion
+      // or rewind disagreed with the server. Loud parity counter.
+      parityMiss('kb-unpredicted', { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z), force: Math.round(force * 10) / 10, pull: !!pull });
+      logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
+      // Radius isn't on the wire; force is the only size signal we get.
+      deps.lazyEffects().spawnExplosion(from, Math.max(1.5, Math.min(5, force / 8)), 12);
+    }
+    // Record the raw application: the echo can beat its blast's replica
+    // explode (handlers run on arrival, the predicted blast waits for
+    // the next projectile tick) — a delayed predicted shove at this
+    // same center must then skip, or the blast lands twice.
+    const rkb = deps.world.recentKb;
+    rkb.push({ x: position.x, y: position.y, z: position.z, t: now });
+    if (rkb.length > 8) {rkb.shift();}
     const player = deps.lazyPlayer();
-    // No stamp means no predicted blast rendered either — paint the
-    // explosion the wire never showed so the shove isn't invisible.
-    // Radius isn't on the wire; force is the only size signal we get.
-    deps.lazyEffects().spawnExplosion(from, Math.max(1.5, Math.min(5, force / 8)), 12);
     if (pull) {
       player.applyPull(from, force);
     } else {

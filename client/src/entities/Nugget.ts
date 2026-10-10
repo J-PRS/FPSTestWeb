@@ -6,6 +6,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
+import { parityMiss } from '../game/parity.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -239,7 +240,11 @@ export class Nugget {
   serverRest(p: { x: number; y: number; z: number }): void {
     if (this.collected || this.dead) {return;}
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
-    if (dx * dx + dy * dy + dz * dz < 0.5 * 0.5) {return;}
+    const dSq = dx * dx + dy * dy + dz * dz;
+    if (dSq < 0.5 * 0.5) {return;}
+    // The predicted tumble overshot the server's rest — the "knocked it
+    // and it snapped back" report. Loud counter, not a silent snap.
+    parityMiss('nugrest', { dM: Math.round(Math.sqrt(dSq) * 10) / 10 });
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);
     this.settled = true;
