@@ -47,8 +47,17 @@ type Down =
 const post = (m: Up) => w.postMessage(m);
 
 // Transport logs surface in the page's Alt+Q buffer, not just the
-// worker's devtools console — relay them as protocol messages.
-setNetLogSink((level, name, msg, ctx) => post({ kind: 'nlog', level, name, msg, ctx }));
+// worker's devtools console — relay them as protocol messages. The ctx
+// rides structured clone: DOM Events (WebTransportError et al.) can't
+// clone and would throw INSIDE the worker — a lane death then reports
+// as a crashed worker instead of a clean disconnect.
+setNetLogSink((level, name, msg, ctx) => {
+  try {
+    post({ kind: 'nlog', level, name, msg, ctx });
+  } catch {
+    post({ kind: 'nlog', level, name, msg, ctx: ctx instanceof Error ? ctx.message : String(ctx) });
+  }
+});
 
 let inner: GameTransport | null = null;
 let opts: { net?: string } = {};
