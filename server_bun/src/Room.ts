@@ -44,7 +44,7 @@ import { EventBus } from './roomEvents.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
-import { chatKindFor, vgsCommandFor } from '../../shared/botTaunts.ts';
+import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
@@ -372,12 +372,20 @@ export class Room {
           if (shooter) shooter.lastFireSim = simNow(); // decloak-on-fire: senses unmask CLOAK for the reveal window
           break;
         }
-        case 'botSpoke': this.bots.notice('reply', e.id, this.players.getPlayer(e.id)?.team); break;
+        case 'botSpoke': {
+          const team = this.players.getPlayer(e.id)?.team;
+          // A bot who spoke a command chord issued a real call — teammates
+          // get the pin just like a human's VGS. Everything else is a bark.
+          const goal = e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined;
+          this.bots.notice(goal ? 'ack' : 'reply', e.id, team, goal);
+          break;
+        }
         case 'chat': {
           const kind = chatKindFor(e.text)
             ?? (e.vgs ? vgsCommandFor(e.vgs) : null)
             ?? (this.bots.nameIn(e.text) ? 'mention' : null);
-          if (kind) this.bots.notice(kind, e.id, this.players.getPlayer(e.id)?.team);
+          const team = this.players.getPlayer(e.id)?.team;
+          if (kind) this.bots.notice(kind, e.id, team, e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined);
           this.noteChatPace(e.id);
           break;
         }
@@ -460,6 +468,24 @@ export class Room {
     if (tauntRand() >= 0.12) return;
     const bots = [...this.players.getAllPlayers().values()].filter((p) => p.id.startsWith('BOT-') && !p.isDead);
     if (bots.length) this.messages.killFeed.say(bots[(tauntRand() * bots.length) | 0]!.id, 'quiet', id);
+  }
+
+  /** A team VGS chord → the spot it orders bots toward. 'own'/'enemy'
+   *  resolve through the flag table; 'carrier' is OUR flag's runner
+   *  ("Chase the enemy flag carrier!" means the thief holding ours);
+   *  'actor' is the caller's position. No stand/no flag → no pin. */
+  private radioGoal(chord: string, actorId: string, actorTeam?: string): { x: number; y: number; z: number } | undefined {
+    const aim = radioAimFor(chord);
+    if (!aim) return undefined;
+    if (aim === 'actor') return this.players.getPlayer(actorId)?.position;
+    if (!this.flags || !actorTeam) return undefined;
+    const ours = this.flags.flags.get(actorTeam as TeamId);
+    const enemyTeam = actorTeam === 'alpha' ? 'bravo' : 'alpha';
+    const theirs = this.flags.flags.get(enemyTeam);
+    if (aim === 'own') return ours?.home;
+    if (aim === 'enemy') return theirs?.home;
+    // 'carrier' — the thief holding OUR flag; beacon info, pos is public
+    return ours && ours.state === 'carried' ? ours.pos : undefined;
   }
 
   /** Server-authoritative melee species — the crawl* wire events are the
@@ -710,6 +736,9 @@ export class Room {
       nackFulls: () => {
         const now = wallNow();
         if (now - this.lastNackAt < 500) return;
+        // A window still paying out covers every client — re-stamping
+        // would let a nack every 500ms hold the room on fulls forever.
+        if (this.tickSeq - this.introSeq < 20) return;
         this.lastNackAt = now;
         this.introSeq = this.tickSeq;
       },
