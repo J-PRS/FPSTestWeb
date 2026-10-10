@@ -127,6 +127,25 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(10);
   });
 
+  it('speed-scales the interp delay — fast movers never ride a 500ms cushion', () => {
+    const fast = new SnapshotBuffer();
+    const walk = new SnapshotBuffer();
+    const now = Date.now();
+    // Same 250ms arrival stream for both: only the wire velocity differs.
+    // delay×speed is rendered error — an 80m/s remote at ~350ms sits ~28m
+    // behind truth; the cap must trade cushion for freshness (≤50ms here).
+    // interpDelay slews down 10ms/push — the stream needs enough pushes
+    // for the cap to converge, same as real play.
+    for (let i = 9; i >= 0; i--) {
+      const t = now - i * 250;
+      fast.push(t, {x:(9-i)*20,y:0,z:0}, {yaw:0,pitch:0}, {x:80,y:0,z:0}, t);
+      walk.push(t, {x:(9-i)*1,y:0,z:0}, {yaw:0,pitch:0}, {x:3,y:0,z:0}, t);
+    }
+    expect(fast.interpDelay).toBeLessThanOrEqual(4000 / 80 + 1);
+    // Walkers keep the jitter cushion — delay still covers the interval.
+    expect(walk.interpDelay).toBeGreaterThan(250);
+  });
+
   it('keeps the yaw lerp on the shortest arc across ±PI', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
