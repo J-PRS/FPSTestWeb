@@ -192,6 +192,10 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
   const endAt = seconds * 1000;
   let lastClient = simNow, lastServer = simNow, lastReport = simNow, lastEventAt = 0;
   let posSeq = 0;
+  // Mirrors InputStream.lastSentEdge: production rides the previous edge
+  // inside every packet so a single loss heals instantly instead of
+  // waiting the inputSync watchdog round-trip.
+  let lastSentEdge: { seq: number; input: WireInput } | null = null;
 
   try {
   while (simNow < endAt) {
@@ -218,7 +222,9 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
     const iseq = journal.push(input, now);
     if (iseq !== null && !dead) {
       r.inputsSent++;
-      up.send(JSON.stringify({ type: 'inputMove', seq: iseq, input }), now);
+      const prev = lastSentEdge ? { seq: lastSentEdge.seq, input: { ...lastSentEdge.input } } : undefined;
+      lastSentEdge = { seq: iseq, input: { ...input } };
+      up.send(JSON.stringify({ type: 'inputMove', seq: iseq, input, ...(prev ? { prev } : {}) }), now);
     }
 
     // 20Hz position reports — the correction trigger, with our input watermark
@@ -243,6 +249,10 @@ export function runBridge(field: Heightfield, profile: BridgeProfile, script: Br
         ping?: number;
       };
       if (m.type === 'inputMove') {
+        // Production applies the redundant prev edge first (wire.ts) —
+        // the seq gate makes the double-apply a no-op when both land.
+        const pe = (m as { prev?: { seq?: number; input?: WireInput } }).prev;
+        if (pe?.input) server.queueInput(PID, pe.input, 0, pe.seq);
         server.queueInput(PID, m.input!, 0, m.seq);
       } else if (m.type === 'position') {
         const truth = server.reconcile(PID, m.position!, m.rotation!.yaw, m.velocity, m.inputSeq, m.ping);

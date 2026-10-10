@@ -97,6 +97,7 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
     lastReport: number;
     posSeq: number;
     lastClient: number;
+    lastSentEdge: { seq: number; input: WireInput } | null;
   };
 
   const clients: Client[] = specs.map((spec, i) => {
@@ -124,7 +125,7 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
       jetLock: 0,
       r: { preErr: [], postErr: [], corrections: 0, snaps: 0, reportsSent: 0, inputsSent: 0, inputsResent: 0, maxSteadyErr: 0, errSeries: [], durableEvs: [] },
       lastEv: 0, dead: false, dropped: false, reconnected: false,
-      lastReport: 0, posSeq: 0, lastClient: 0,
+      lastReport: 0, posSeq: 0, lastClient: 0, lastSentEdge: null,
     };
   });
 
@@ -170,7 +171,11 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
       const iseq = c.journal.push(input, now);
       if (iseq !== null && !c.dead) {
         c.r.inputsSent++;
-        c.up.send(JSON.stringify({ type: 'inputMove', seq: iseq, input }), now);
+        // Production rides the previous edge inside every packet
+        // (InputStream.prev) — a single loss heals instantly.
+        const prev = c.lastSentEdge ? { seq: c.lastSentEdge.seq, input: { ...c.lastSentEdge.input } } : undefined;
+        c.lastSentEdge = { seq: iseq, input: { ...input } };
+        c.up.send(JSON.stringify({ type: 'inputMove', seq: iseq, input, ...(prev ? { prev } : {}) }), now);
       }
 
       if (!c.dead && now - c.lastReport >= 50) {
@@ -189,6 +194,8 @@ export function runBridgeN(field: Heightfield, specs: ClientSpec[], seconds: num
           position?: Vec3Like; velocity?: Vec3Like; rotation?: { yaw: number };
         };
         if (m.type === 'inputMove') {
+          const pe = (m as { prev?: { seq?: number; input?: WireInput } }).prev;
+          if (pe?.input) server.queueInput(c.spec.id, pe.input, 0, pe.seq);
           server.queueInput(c.spec.id, m.input!, 0, m.seq);
         } else if (m.type === 'position') {
           const truth = server.reconcile(c.spec.id, m.position!, m.rotation!.yaw, m.velocity, m.inputSeq);
