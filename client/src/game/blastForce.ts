@@ -177,7 +177,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // for the next projectile tick). A recorded raw echo at this center
     // means the shove already landed — consume it, don't re-apply.
     const rkb = deps.world.recentKb;
-    const dup = rkb.findIndex(s => now - s.t < 400 &&
+    // Same 700ms horizon as the stamp lifecycle — under drain-burst lag
+    // the replica's explode can trail the echo's wire arrival past 400ms,
+    // and a stale window double-shoves + strands a false kb-echo stamp.
+    const dup = rkb.findIndex(s => now - s.t < 700 &&
       Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 3);
     if (dup >= 0) {rkb.splice(dup, 1); return true;}
     const impulse = Math.min(
@@ -189,13 +192,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // `knockback` message ~RTT later; net/players.ts consumes the stamp
     // so the blast can't land twice.
     const stamps = deps.world.selfBlastStamps;
-    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now });
+    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, f: Math.round(force * 10) / 10 });
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the 400ms consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.
     for (let i = stamps.length - 1; i >= 0; i--) {
       if (now - stamps[i]!.t > 700) {
-        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), ageMs: Math.round(now - stamps[i]!.t) });
+        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
         stamps.splice(i, 1);
       }
     }
