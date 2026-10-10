@@ -59,7 +59,7 @@ export class RoomSwitcher {
     const wantNoBalls = req.noBalls === true, wantNoCreatures = req.noCreatures === true;
     if (to.noBalls !== wantNoBalls || to.noCreatures !== wantNoCreatures) {
       const diffs = [
-        to.noBalls !== wantNoBalls ? `creatures ${to.noBalls ? 'OFF' : 'ON'}` : '',
+        to.noBalls !== wantNoBalls ? `balls ${to.noBalls ? 'OFF' : 'ON'}` : '',
         to.noCreatures !== wantNoCreatures ? `critters ${to.noCreatures ? 'OFF' : 'ON'}` : '',
       ].filter(Boolean).join(', ');
       to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — your settings overridden (${diffs})` });

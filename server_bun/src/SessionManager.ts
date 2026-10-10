@@ -107,7 +107,19 @@ export class SessionManager {
     // seat — reclaim is already authenticated by the session token.
     const reclaimRoom = this.d.roomOfPlayer(playerId);
     if (reclaimRoom) {
-      this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq);
+      const ok = this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq);
+      // Reclaim skips roomFor, so the joiner's sim gates would never be
+      // consulted — a re-host with noBalls inside the grace window lands
+      // in the stale spec anyway. When the room is otherwise bot-only
+      // it's still theirs: adopt the flags like an empty-room join does.
+      if (ok && reclaimRoom.players.getHumanCount() <= 1 &&
+          (reclaimRoom.noBalls !== noBalls || reclaimRoom.noCreatures !== noCreatures)) {
+        reclaimRoom.noBalls = noBalls;
+        reclaimRoom.noCreatures = noCreatures;
+        if (noCreatures) {reclaimRoom.creatureSim.pops = {}; reclaimRoom.creatureSim.cullAll();}
+        if (noBalls) {reclaimRoom.ballSim.population = { base: 0, perPlayer: 0, max: 0 }; reclaimRoom.ballSim.cullAll();}
+        logger.info('Reclaim adopted joiner sim gates', { room: reclaimRoom.name, noBalls, noCreatures });
+      }
       return;
     }
 
@@ -176,7 +188,7 @@ export class SessionManager {
       const diffs = [
         modeDiff,
         botDiff,
-        room.noBalls !== noBalls ? `creatures ${room.noBalls ? 'OFF' : 'ON'}` : '',
+        room.noBalls !== noBalls ? `balls ${room.noBalls ? 'OFF' : 'ON'}` : '',
         room.noCreatures !== noCreatures ? `critters ${room.noCreatures ? 'OFF' : 'ON'}` : '',
       ].filter(Boolean).join(', ');
       room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
@@ -185,12 +197,12 @@ export class SessionManager {
 
   /** Grace-period reclaim: the seat is still reserved — cancel the removal
    *  timer and re-seat the socket, or reject on a bad token / live playerId. */
-  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined, resumeSeq: number | undefined): void {
+  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined, resumeSeq: number | undefined): boolean {
     const existingPlayer = room.players.getPlayer(playerId);
     if (!existingPlayer) {
       logger.warn('Reclaim rejected: no player state', { playerId });
       SessionManager.rejectIdentity(ws, 'Invalid session token');
-      return;
+      return false;
     }
     // Session reclaim requires the server-issued token — bare playerId
     // knowledge must not be enough to steal a slot. Check it BEFORE the
@@ -202,7 +214,7 @@ export class SessionManager {
     if (token !== room.sessionTokens.get(playerId)) {
       logger.warn('Reconnect rejected: bad session token', { playerId });
       SessionManager.rejectIdentity(ws, 'Invalid session token');
-      return;
+      return false;
     }
     // The armed grace timer clears inside registry.reclaim's transition —
     // no parallel bookkeeping survives from the old room map.
@@ -230,6 +242,7 @@ export class SessionManager {
     room.messages.onPlayerReconnected(playerId);
 
     logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
+    return true;
   }
 
   /** Identity rejections (bad token, claimed id, malformed id): tell the
