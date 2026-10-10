@@ -367,6 +367,16 @@ export class RemoteInterp {
     p.y += this.simulatedVelocity.y * dt;
     p.z += this.simulatedVelocity.z * dt;
 
+    // Drift cap: past ~40m of horizontal extrapolation the sim is a ghost,
+    // not a guess — freeze the XZ runaway (gravity still grounds them) or
+    // a silent wire renders bots hundreds of meters from any real record.
+    const driftX = p.x - this.lastServerPosition.x;
+    const driftZ = p.z - this.lastServerPosition.z;
+    if (this.lastServerPosition.lengthSq() > 0 && Math.hypot(driftX, driftZ) > 40) {
+      this.simulatedVelocity.x = 0;
+      this.simulatedVelocity.z = 0;
+    }
+
     if (this.h.terrain) {
       const groundY = this.h.terrain.getHeight(p.x, p.z);
       const {eye} = classCapsule(this.h.armorClass);
