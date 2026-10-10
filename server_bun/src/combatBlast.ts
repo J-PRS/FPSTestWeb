@@ -387,6 +387,7 @@ export class BlastRunner {
     const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
     this.h.deps.emit?.({ type: 'knock', pos, radius, force: knockback, kind: 'pickup' });
     this.h.deps.emit?.({ type: 'knock', pos, radius, force: knockback, kind: 'flag' });
+    this.h.deps.emit?.({ type: 'knock', pos, radius, force: knockback, kind: 'prey' });
     // Wildlife isn't mine-savvy — a popping trap catches the swarm too.
     this.h.deps.emit?.({ type: 'preySplash', ownerId, pos, radius, maxDamage: baseDamage });
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
