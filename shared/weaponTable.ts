@@ -151,6 +151,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 8.0,
     hitGrow: 2.0,
+    maxLifetime: 4.0, // ~480m of reach — a lobbed bolt missing every contact streaked forever on remote replicas
   },
   [WeaponType.Disc]: {
     directDamage: 50,
@@ -164,6 +165,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.3,
     hitMax: 8.0,
     hitGrow: 2.0,
+    maxLifetime: 5.0, // ~400m flat — flat-flying shells have no gravity to end them on open ground
   },
   [WeaponType.DiscPull]: {
     // Belt disc (C): the implosion — pulls targets toward the blast.

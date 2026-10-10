@@ -20,6 +20,7 @@ export const BOLT_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[0].hitMin,
   hitMax: WEAPONS[0].hitMax,
   hitGrow: WEAPONS[0].hitGrow,
+  maxLifetime: WEAPONS[0].maxLifetime,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[0].aoeDamage,
   aoeRadius: WEAPONS[0].aoeRadius,
@@ -53,7 +54,7 @@ export const BOLT_CONFIG: ProjectileConfig = {
   // the filament map eats most of the additive fill.
   glowOpacity: 0.6,
   glowScale: 0.8,
-  glowShape: 'cone',
+  glowShape: 'wakeCone',
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.2,

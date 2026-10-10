@@ -17,6 +17,7 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[3].hitMin,
   hitMax: WEAPONS[3].hitMax, // tight proxy cap — slugs get a small wake, not the 8m shell drag
   hitGrow: WEAPONS[3].hitGrow,
+  maxLifetime: WEAPONS[3].maxLifetime,
   forceMultiplier: 0,
   aoeDamage: 1.5, // unused (aoeRadius 0, noExplosion) — kept at 1/10 of rocket AOE for consistency
   aoeRadius: 0,
@@ -43,9 +44,13 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   trailRampIn: 0,
   meshColor: 0xffee88,
   meshType: 'rocket',
+  // Wake cone available but off for now — flip glowShell to render the
+  // same hitbox-coupled collar disc/bolt wear.
   glowShell: false,
+  glowShape: 'wakeCone',
   glowColor: 0xffee88,
-  glowOpacity: 0,
+  glowOpacity: 0.6,
+  glowScale: 0.8,
   meshRampIn: true,
   // Same spawn trick as plasma — at 250 m/s a full-size bolt at the
   // muzzle covers the crosshair on frame one; grow 10% → full over 0.1s.

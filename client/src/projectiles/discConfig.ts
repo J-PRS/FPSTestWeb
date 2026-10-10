@@ -22,6 +22,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[1].hitMin,
   hitMax: WEAPONS[1].hitMax,
   hitGrow: WEAPONS[1].hitGrow,
+  maxLifetime: WEAPONS[1].maxLifetime,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[1].aoeDamage,
   aoeRadius: WEAPONS[1].aoeRadius,
@@ -58,7 +59,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   // IS the live wake hitbox (projectileVisuals couples them); this only
   // sizes the skirt's trailing length, never the reach.
   glowScale: 1.0,
-  glowShape: 'cone',
+  glowShape: 'wakeCone',
   meshRampIn: true,
   meshRampInDuration: 0.15,
   meshStartScale: 0.25,

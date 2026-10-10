@@ -19,6 +19,7 @@ export const REVOLVER_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[17].hitMin,
   hitMax: WEAPONS[17].hitMax,
   hitGrow: WEAPONS[17].hitGrow,
+  maxLifetime: WEAPONS[17].maxLifetime,
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,
