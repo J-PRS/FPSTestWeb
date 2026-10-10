@@ -144,14 +144,21 @@ export class RoomFactory {
 
   /** Quick-join: pick the emptiest open room already running `mode`
    *  (and `map` when given), else spin up `<map|mode>-N`. `bots`
-   *  overrides the spec's bot count/botFill on creation only. */
-  quickRoom(mode: string, map = '', bots?: number): Room | null {
+   *  overrides the spec's bot count/botFill on creation only. The sim
+   *  gates must ride the mint too — joining the freshly picked name
+   *  with noBalls afterwards is a no-op (first joiner defines), so a
+   *  bare quickRoom would silently ignore the host's toggles. */
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false): Room | null {
     let best: Room | undefined;
     for (const room of this.host.rooms.values()) {
       // Map and mode are independent filters — a peaks-ctf room must not
       // absorb a peaks-dm quick-join just because the map matches.
       if (map && this.host.maps.mapNameOf(room.name) !== map) continue;
       if (mode && room.mode !== mode) continue;
+      // The sim gates are part of the match a joiner asked for — picking a
+      // balled room for a no-balls joiner silently ignores the toggle
+      // (first joiner defines, so a wrong-gated room can never be fixed).
+      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) continue;
       if (room.playerCount() >= CONFIG.maxPlayers) continue;
       if (room.unlisted) continue;
       if (!best || room.playerCount() < best.playerCount()) best = room;
@@ -160,6 +167,6 @@ export class RoomFactory {
     const base = map || mode || 'arena';
     let n = 1;
     while (this.host.rooms.has(`${base}-${n}`)) n++;
-    return this.roomFor(`${base}-${n}`, mode, map, bots);
+    return this.roomFor(`${base}-${n}`, mode, map, bots, false, noCreatures, noBalls);
   }
 }
