@@ -38,6 +38,8 @@ export enum WeaponType {
   ProxyGrenade = 32,  // belt throw: 1s fuse, proxy bubble inflating to 4m — toss-and-zone pop
   SatchelCharge = 33,    // belt throw: infiltrator satchel — glues to surface/player, 4s fuse, objective-killer blast
   Concussion = 34,       // belt throw: T2 conc — fuse bomb, tiny sting, huge shove, strips the flag and drains jets
+  Bombard = 35,          // heavy siege slug: the cannon's bigger brother — biggest direct hit in the game, NEVER explodes, crumbles on any contact
+  BeltSticky = 36,       // belt throw: hand-lobbed glue bomb — same payload as the launcher, but slow enough to be CAUGHT: a same-owner shell picks it up mid-flight and it rides dead-center to the target (Painkiller combo)
 }
 
 export interface WeaponStats {
@@ -122,7 +124,17 @@ export interface WeaponStats {
    *  weapon. Both ends read this so a stuck bomb looks and kills
    *  identically. */
   stick?: boolean;
+  /** Rideable payload (belt sticky): while airborne, a same-owner
+   *  projectile passing inside RIDE_CATCH_R swallows it — it stops
+   *  simming, centers on the host, and detonates where the host dies.
+   *  Both ends run the same catch or replicas unride. */
+  rides?: boolean;
 }
+
+/** Catch radius for the belt-sticky combo — shared so the server and
+ *  the client replica attach on the same tick. Tight on purpose: this
+ *  is an aimed skill shot, not a vacuum. */
+export const RIDE_CATCH_R = 1.0;
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
  *  the visual edge (covers the shock ring), and the two can never drift. */
@@ -199,8 +211,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: false,
     bodyRadius: 0.15,
     hitMin: 0.0,
-    hitMax: 0.5, // tight proxy cap — slugs get a small wake, not the 8m shell drag
-    hitGrow: 2.0,
+    hitMax: 2.0, // forgiving wake — the dps is honest, so let the spray land like it feels
+    hitGrow: 0.25, // full 1m proxy by ~125m — mid-range is where the spray lives
+    maxLifetime: 1.5, // ~375m of reach — every other fast slug carries a fuse; without one remote replicas streak to the 10s backstop
   },
   [WeaponType.Mortar]: {
     directDamage: 120,
@@ -376,7 +389,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 10.0,
     knockbackForce: 40.0,
     forceMode: 'push',
-    speed: 72.0,    // faster than GL's 55 — it skips far between bounces
+    speed: 80.0,    // faster than GL's 55 — it skips far between bounces
     gravity: true,
     bodyRadius: 0.8, // HUGE — the comedy is the ball, not the damage
     hitMin: 0.0,
@@ -456,6 +469,27 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0.5,
     maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
     stick: true,
+  },
+  [WeaponType.BeltSticky]: {
+    // Belt twin of the glue bomb — same payload, hand-thrown lob. The
+    // slow arc is the COMBO enabler: it hangs long enough for your own
+    // shell to catch up and swallow it (stats.rides). Own weaponType so
+    // the wire tells toss from launcher — the shared type used to make
+    // belt throws free (server couldn't charge the nugget).
+    directDamage: 45,
+    aoeDamage: 35,
+    aoeRadius: 11.0,
+    knockbackForce: 40.0,
+    forceMode: 'push',
+    speed: 26.0,      // half the launcher's muzzle — hangs catchable
+    gravity: true,
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 0.25,
+    hitGrow: 0.5,
+    maxLifetime: 3.5, // a beat longer than the launcher — the lob needs hang time to BE caught
+    stick: true,
+    rides: true,
   },
   [WeaponType.ClusterBomb]: {
     // Belt cluster: a fuse bomb whose pop is only the carrier — the real
@@ -744,6 +778,34 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5,          // bomblets must LAND — a big proxy would pop them mid-air on anything nearby
     hitGrow: 1.0,
     maxLifetime: 10.0,    // safety TTL only — contact pops them; an air fuse wastes the rain
+  },
+  [WeaponType.Bombard]: {
+    // The cannon's bigger, meaner brother: an even fatter iron ball that
+    // NEVER detonates — it shatters into shards on ANY contact (terrain,
+    // walls, shields, bodies; no terrainBounce, no arm window). The
+    // crumble's shards are real now: a tight radial shrapnel sweep pays
+    // near-misses. The player envelope rides directDamage (splash is a
+    // fraction of the direct line by convention) — so eating EVERY shard
+    // tops out at exactly ball-meets-body, never above.
+    directDamage: 140,   // tops every primary — and the only headline
+                         // number actually landable on a body: Mortar's
+                         // 120 is fuse-gated (armTime 1.5s ≈ 82m), its
+                         // real ceiling is the 100 inner splash ring.
+                         // The planted satchel (150) still owns the
+                         // overall record; also the shrapnel ceiling.
+    aoeDamage: 140,      // wildlife splash mirrors the player envelope —
+                         // a shard is a shard regardless of what it hits
+    aoeRadius: 9,        // tight shard cone read — a few meters of menace,
+                         // not an artillery dome
+    knockbackForce: 12,  // shard thump — staggers, doesn't launch
+    forceMode: 'push',
+    speed: 100.0,        // faster than the cannon's 80 — a flat siege slug, not a lob
+    gravity: true,
+    bodyRadius: 1.05,    // HUGE — visibly wider than the 0.8 cannonball
+    hitMin: 0.0,
+    hitMax: 1.5,         // modest proxy — a siege slug earns contact, not a 2m wake
+    hitGrow: 0.5,
+    maxLifetime: 6.0,    // ~570m of carry before the fuse crumbles it mid-air
   },
 };
 
