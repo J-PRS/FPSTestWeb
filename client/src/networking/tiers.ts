@@ -319,6 +319,10 @@ export class TieredTransport implements GameTransport {
   connect(url?: string): void {
     this.url = url;
     const gen = ++this.gen;
+    this.closed = false;
+    // Sends queued during a superseded attempt belong to that generation —
+    // flushing them into the new probe could replay a stale join.
+    this.pending.length = 0;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     // A previous inner can still be alive here (its teardown raced the
     // new attempt) — orphaning its socket is exactly the session leak

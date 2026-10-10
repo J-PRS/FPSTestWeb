@@ -144,6 +144,7 @@ w.onmessage = (e: MessageEvent<Down>) => {
       // A lingering lane from a previous connect gets torn down here —
       // orphan sockets are the parallel-join flood source.
       seated = false;
+      connected = false;
       if (inner) { const old = inner; inner = null; old.disconnect(); }
       inner = new TieredTransport(makeConfig(m.url, m.resolve), opts);
       inner.connect(m.url);
@@ -153,7 +154,10 @@ w.onmessage = (e: MessageEvent<Down>) => {
       seated = true;
       const payload = 's' in m ? m.s : m.b;
       const ok = inner?.send(payload);
-      if (!ok) { sendQueue.push(payload); }
+      // Only queue when NO transport exists — a TieredTransport that
+      // returns false already parked the send in its own pending list,
+      // and queueing here too would double-deliver on connect.
+      if (ok === undefined) { sendQueue.push(payload); }
       while (sendQueue.length > SEND_QUEUE_MAX) sendQueue.shift();
       // A lane that reports dead without a disconnect event was the
       // contract-violation scream on main — keep it visible here.
