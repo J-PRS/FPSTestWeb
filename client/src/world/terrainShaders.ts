@@ -467,13 +467,14 @@ export const terrainFrag = /* glsl */`
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
-      // World-edge dissolve: outermost level's far band melts into fog so
-      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
-      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
+      // World-edge dissolve: outermost level fades to transparent over its
+      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // (edgeHalf=0 on inner levels => edgeA stays 1).
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      gl_FragColor = vec4(ungradeColor(mix(col, fogColor, fogFactor)), 1.0);
+      gl_FragColor = vec4(ungradeColor(mix(col, fogColor, fogFactor)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -524,14 +525,15 @@ export const terrainFrag = /* glsl */`
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
-      // World-edge dissolve: outermost level's far band melts into fog so
-      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
-      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
+      // World-edge dissolve: outermost level fades to transparent over its
+      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // (edgeHalf=0 on inner levels => edgeA stays 1).
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), 1.0);
+      gl_FragColor = vec4(ungradeColor(col), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -637,14 +639,15 @@ export const terrainFrag = /* glsl */`
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
-      // World-edge dissolve: outermost level's far band melts into fog so
-      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
-      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
+      // World-edge dissolve: outermost level fades to transparent over its
+      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // (edgeHalf=0 on inner levels => edgeA stays 1).
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), 1.0);
+      gl_FragColor = vec4(ungradeColor(col), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -722,14 +725,15 @@ export const terrainFrag = /* glsl */`
     // Same dampened-downward-distance fog as the desert branch — see above
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
-    float fogFactor = smoothstep(fogStart, fogEnd, dist);
+    float fogFactor = terrainFogFactor(dist);
+    float edgeA = 1.0 - smoothstep(edgeHalf * 0.80, edgeHalf * 0.97, dist) * step(0.5, edgeHalf);
     // Height-augmented fog: tall terrain at distance gets extra fog
     float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
                      * smoothstep(0.3, 0.8, height);
     float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
     fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
     col = mix(col, fogColor, fogFactor);
-    gl_FragColor = vec4(ungradeColor(col), 1.0);
+    gl_FragColor = vec4(ungradeColor(col), edgeA);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }

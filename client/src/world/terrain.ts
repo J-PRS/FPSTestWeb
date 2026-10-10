@@ -150,6 +150,9 @@ export class Terrain {
         vertexShader: terrainVert,
         fragmentShader: terrainFrag,
         lights: true, // binds sun shadow map/matrices — enables USE_SHADOWMAP
+        // Outermost ring alpha-dissolves into the sky past ~80% of its
+        // extent (edgeHalf) — transparent so the world edge has no seam.
+        transparent: i === CLIPMAP_LEVELS.length - 1,
         polygonOffset: i > 0,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
