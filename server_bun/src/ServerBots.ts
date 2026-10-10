@@ -187,7 +187,7 @@ export class ServerBots {
   flinch(targetId: string, shooterId: string): void {
     const brain = this.brains.get(targetId);
     const shooter = this.room.players.getPlayer(shooterId);
-    if (brain && shooter) brain.takeHit(shooter.position);
+    if (brain && shooter) brain.takeHit(shooter.position, shooterId);
   }
 
   /** A room event the squad may react to — enters the senses as a notice
