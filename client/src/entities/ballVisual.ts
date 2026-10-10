@@ -94,8 +94,12 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         // offM alone can't tell a sim-clock lag (correction ≈ speed×skew,
         // periodic at segment cadence) from an integrator mismatch
         // (bounce/field resolving differently — irregular). skew names it.
-        const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
-        glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
+        // First-seg fold is the join/roster heal — a fresh replica
+        // converging onto mid-flight truth, not a correction.
+        if ((b.netS.segsSeen ?? 0) > 1) {
+          const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
+          glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
+        }
       }
       for (const r of b.ribbons) {r.clear();}
     } else {

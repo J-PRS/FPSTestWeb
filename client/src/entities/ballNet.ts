@@ -51,10 +51,14 @@ export interface NetBag {
   /** The inert leg walked its arc into terrain and parked — divergence
    *  vs a still-flying authority is the park-vs-bounce guess, not desync. */
   parked: boolean;
+  /** Segments applied since the bag minted — 0/1 is the join/roster
+   *  heal, so counters that measure predictor correctness only run on
+   *  later corrections. */
+  segsSeen?: number;
 }
 
 export function newNetBag(): NetBag {
-  return { sim: null, simT: 0, netAcc: 0, lastSimNow: -1, legT0: -1, netTargetId: null, netEnraged: false, parked: false };
+  return { sim: null, simT: 0, netAcc: 0, lastSimNow: -1, legT0: -1, netTargetId: null, netEnraged: false, parked: false, segsSeen: 0 };
 }
 
 /** Live ball state the replay mutates — all shared refs, no copies. */
@@ -222,7 +226,10 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // (367m @ 12s reads identically to drift but means nothing about the
   // predictor); real divergence shows on heartbeat-scale spans.
   const spanMs = simT !== undefined && bag.simT < simT ? (simT - bag.simT) * 1000 : -1;
-  if (pd > 20 && !seg.hard && spanMs <= 4000) {
+  bag.segsSeen = (bag.segsSeen ?? 0) + 1;
+  // legT0 === -1 = never seeded: a first-segment snap is the roster heal,
+  // not predictor drift — there is no prediction to diverge from yet.
+  if (pd > 20 && !seg.hard && spanMs <= 4000 && bag.legT0 !== -1) {
     glitch('seg-div', { m: Math.round(pd), spanMs: simT !== undefined && bag.simT < simT ? Math.round((simT - bag.simT) * 1000) : -1, enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
