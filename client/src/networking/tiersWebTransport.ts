@@ -21,6 +21,13 @@ export class WebTransportGameTransport implements GameTransport {
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  // Retained for the session's life: a GC'd stream/reader wrapper can be
+  // finalized into a stream close server-side (worker GC timing made this
+  // sporadic — the reliable pump then reads a reset that looks like a
+  // peer kill). Only reader/writer halves being referenced is NOT enough.
+  private stream: WebTransportBidirectionalStream | null = null;
+  private rr: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  private dr: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private preOpen: string[] = [];
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
@@ -33,16 +40,20 @@ export class WebTransportGameTransport implements GameTransport {
       this.open = true;
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
       const stream = await wt.createBidirectionalStream();
+      this.stream = stream;
       this.writer = stream.writable.getWriter();
       // Datagram uplink is an optimization — a session whose writable is
       // unavailable still works fully reliable.
       try { this.dgWriter = wt.datagrams.writable?.getWriter() ?? null; } catch { this.dgWriter = null; }
-      void this.pumpReliable(stream.readable.getReader());
-      void this.pumpDatagrams(wt.datagrams.readable.getReader());
+      this.rr = stream.readable.getReader();
+      this.dr = wt.datagrams.readable.getReader();
+      void this.pumpReliable(this.rr);
+      void this.pumpDatagrams(this.dr);
       for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n')).catch(() => {});
       this.preOpen.length = 0;
       this.config.onConnect?.();
     }).catch((e) => {
+      logger.warn(`wt connect failed mid-setup: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`);
       this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
       this.config.onDisconnect?.(1006, 'webtransport failed');
     });
@@ -50,7 +61,7 @@ export class WebTransportGameTransport implements GameTransport {
     // every failed probe (the log-spam bug). Rejection = closed.
     wt.closed.then(
       () => this.declareDead('webtransport closed'),
-      () => this.declareDead('webtransport closed'),
+      (e) => this.declareDead(`webtransport closed: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`),
     );
   }
 
@@ -89,7 +100,7 @@ export class WebTransportGameTransport implements GameTransport {
         if (line) this.dispatchLine(line);
       }
       }
-    } catch { this.declareDead('wt reliable stream reset'); }
+    } catch (e) { this.declareDead(`wt reliable stream reset: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`); }
   }
 
   // One complete JSON frame from the reliable stream. The server wraps
@@ -144,7 +155,9 @@ export class WebTransportGameTransport implements GameTransport {
     if (!this.writer) { this.preOpen.push(payload); return true; }
     // A write can outlive the session — teardown rejects it; that's a
     // normal close, not an error.
-    void this.writer.write(this.encoder.encode(payload + '\n')).catch(() => {});
+    void this.writer.write(this.encoder.encode(payload + '\n')).catch((e) => {
+      logger.warn(`wt reliable write failed: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`);
+    });
     return true;
   }
 
@@ -152,7 +165,11 @@ export class WebTransportGameTransport implements GameTransport {
   /** Deliberate teardown ONLY — losing probe / NetworkManager shutdown.
    *  Internal failures must use declareDead() so the tier manager learns
    *  the lane died and reprobes. */
-  disconnect(): void { this.open = false; void this.wt?.close(); }
+  disconnect(): void {
+    this.open = false;
+    this.stream = null; this.rr = null; this.dr = null;
+    void this.wt?.close();
+  }
 }
 
 export async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport | null> {

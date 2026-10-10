@@ -80,7 +80,7 @@ describe('WebTransport lane-death contract', () => {
     const { config, stream } = await connectWt();
     stream.ctrl.error(new Error('boom'));
     await flush();
-    expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt reliable stream reset');
+    expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt reliable stream reset: Error boom');
   });
 
   it('wt.closed resolving declares dead', async () => {
@@ -94,7 +94,7 @@ describe('WebTransport lane-death contract', () => {
     const { config, closeReject } = await connectWt();
     closeReject(new Error('quic reset'));
     await flush();
-    expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'webtransport closed');
+    expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'webtransport closed: Error quic reset');
   });
 
   it('datagram lane ending degrades to reliable-only — the session lives', async () => {

@@ -53,14 +53,25 @@ setNetLogSink((level, name, msg, ctx) => post({ kind: 'nlog', level, name, msg, 
 let inner: GameTransport | null = null;
 let opts: { net?: string } = {};
 let connected = false;
-
+// True once main has forwarded its first send (always 'join') — the
+// worker's own ping must never race it: QUIC lanes are unordered across
+// streams, so a ping landing before join gets the session closed as
+// 'Expected join handshake' (the wt flap loop this gate ended).
+let seated = false;
+// Sends that arrive while the lane is mid-probe used to be dropped —
+// the join included, which left fresh sessions with no handshake until
+// the server's join-timeout killed them (the silent half of the flap).
+// Bounded FIFO flushed on connect keeps the ordering guarantee
+// WebSocketConnection::KEEP_ALWAYS gave the main-thread path.
+const sendQueue: (string | Uint8Array)[] = [];
+const SEND_QUEUE_MAX = 64;
 // --- Ping: owned here so the RTT is measured on an unstarved clock. ----
 // The client's pong reply to a SERVER ping still originates on main —
 // so the server's own srvPing keeps capturing main-thread stall while
 // this probe reads the clean wire number. Both samples stay meaningful.
 const PING_INTERVAL = 2500;
 setInterval(() => {
-  if (!connected || !inner?.connected()) {return;}
+  if (!connected || !seated || !inner?.connected()) {return;}
   inner.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
 }, PING_INTERVAL);
 
@@ -84,7 +95,11 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
           }, 10_000);
         })
       : undefined,
-    onConnect: () => { connected = true; post({ kind: 'up', tier: inner?.tier }); },
+    onConnect: () => {
+      connected = true;
+      for (const q of sendQueue.splice(0)) inner?.send(q);
+      post({ kind: 'up', tier: inner?.tier });
+    },
     onDisconnect: (code, reason) => { connected = false; post({ kind: 'down', code, reason }); },
     onError: (e) => post({ kind: 'err', msg: e.message }),
     onMessage: (m) => {
@@ -128,13 +143,18 @@ w.onmessage = (e: MessageEvent<Down>) => {
     case 'connect': {
       // A lingering lane from a previous connect gets torn down here —
       // orphan sockets are the parallel-join flood source.
+      seated = false;
       if (inner) { const old = inner; inner = null; old.disconnect(); }
       inner = new TieredTransport(makeConfig(m.url, m.resolve), opts);
       inner.connect(m.url);
       break;
     }
     case 'send': {
-      const ok = 's' in m ? inner?.send(m.s) : inner?.send(m.b);
+      seated = true;
+      const payload = 's' in m ? m.s : m.b;
+      const ok = inner?.send(payload);
+      if (!ok) { sendQueue.push(payload); }
+      while (sendQueue.length > SEND_QUEUE_MAX) sendQueue.shift();
       // A lane that reports dead without a disconnect event was the
       // contract-violation scream on main — keep it visible here.
       if (ok === false && connected) {

@@ -64,21 +64,22 @@ export class WtSocketAdapter {
     this.remoteAddress = session.peer?.ip ?? 'webtransport';
     // The client's first action after connect is creating THE reliable
     // bidi stream — grab it and start pumping both lanes.
-    void this.acceptReliable().catch(() => this.die());
-    void this.pumpDatagrams().catch(() => {}); // session death ends the iterator
+    void this.acceptReliable().catch((e) => this.die(`reliable pump: ${e instanceof Error ? e.message : e}`));
+    void this.pumpDatagrams().catch((e) => { logger.warn('wt dg lane ended', { e: String(e) }); }); // session death ends the iterator
     // Every lane here rejects with E_SESSION_CLOSED when the peer drops —
     // an unhandled rejection in the native addon's stream callbacks kills
     // the whole bun process, so each one is caught at its boundary.
-    session.closed.then(() => this.die()).catch(() => this.die());
+    session.closed.then(() => this.die('session.closed')).catch((e) => this.die(`session.closed err: ${e instanceof Error ? e.message : e}`));
   }
 
   private asSocket(): ServerWebSocket<WebSocketData> {
     return this as unknown as ServerWebSocket<WebSocketData>;
   }
 
-  private die(): void {
+  private die(reason = 'unspecified'): void {
     if (!this.open) return;
     this.open = false;
+    logger.warn('wt session died', { reason });
     this.game.onClose(this.asSocket());
   }
 
@@ -106,7 +107,7 @@ export class WtSocketAdapter {
     }
     // Reliable stream ended while the session lives — the lane is dead,
     // treat the socket as closed rather than leaving a zombie.
-    this.die();
+    this.die('reliable stream ended');
   }
 
   /** One newline-delimited frame. Binary frames arrive base64-wrapped
@@ -165,6 +166,7 @@ export class WtSocketAdapter {
   }
 
   close(_code = 1000, reason = ''): void {
+    logger.warn('wt close() called', { code: _code, reason, by: new Error().stack?.split('\n').slice(1, 4).join(' | ') });
     try { this.session.close({ closeCode: 0, reason }); } catch { /* gone */ }
     // A locally-initiated close can't be assumed to re-enter through
     // session.closed — without die() here, kicks/idle reaps never reach

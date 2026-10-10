@@ -84,6 +84,7 @@ export class SessionManager {
 
     const handshake = raw as Record<string, unknown>;
     if (handshake.type !== 'join') {
+      logger.warn('pre-join frame rejected', { got: handshake.type });
       ws.close(1008, 'Expected join handshake');
       return;
     }
