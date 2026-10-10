@@ -598,6 +598,9 @@ export const terrainFrag = /* glsl */`
       // Drainage darkening: gully streaks on sloped ground only — flat
       // meadow stays clean, hillsides get carved.
       col *= 1.0 - smoothstep(0.10, 0.45, slope) * (1.0 - smoothstep(0.25, 0.75, drainage)) * 0.28;
+      // Slope shading: flats lift, hillsides drop — reads as grazing light
+      // on the relief itself, not just sun-on-normal.
+      col *= mix(1.08, 0.78, smoothstep(0.0, 0.45, slope));
       // Continental tint: km-scale hue drift so the whole map isn't one
       // green — reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
