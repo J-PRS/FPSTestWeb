@@ -555,10 +555,16 @@ export const terrainFrag = /* glsl */`
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
       // Sub-2m terms: gated, not faded — a far pixel pays zero for them.
       float micro = 0.0, blade = 0.0, triDetail = 0.0;
+      vec3 nUse = vNormal;
       if (detFade > 0.0) {
         micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
         blade = noise(uvFin * 4.0 + r * 2.0);
         triDetail = triplanarNoise(vWorldPos, 0.85);
+        // Canopy bump: perturb the normal by micro-noise derivatives so
+        // light/shadow does the texturing — organic detail no color layer
+        // can fake (Magrathea: "good results just by messing with normals").
+        vec3 nd = noised(uvFin * 1.3);
+        nUse = normalize(vNormal + vec3(nd.y, 0.0, nd.z) * 1.4 * detFade);
       }
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).
@@ -581,8 +587,8 @@ export const terrainFrag = /* glsl */`
       vec3 cGrassTip  = vec3(0.52, 0.62, 0.20);
       vec3 cGrassDry  = vec3(0.45, 0.50, 0.12);
       vec3 cStraw     = vec3(0.62, 0.52, 0.18);
-      vec3 cDirtG     = vec3(0.46, 0.30, 0.13);
-      vec3 cDirtDark  = vec3(0.30, 0.19, 0.09);
+      vec3 cDirtG     = vec3(0.44, 0.36, 0.22);
+      vec3 cDirtDark  = vec3(0.32, 0.26, 0.17);
       vec3 cRockG     = vec3(0.38, 0.34, 0.27);
       vec3 cCliffG    = vec3(0.20, 0.18, 0.14);
 
@@ -595,10 +601,11 @@ export const terrainFrag = /* glsl */`
       grass = mix(grass, cStraw, smoothstep(0.58, 0.78, region) * 0.8);
 
       vec3 col = grass;
-      // Dirt: hollows + ragged mid-field patches, darker rim where grass
-      // wears to soil (edge band of the mask = the transition line).
-      float dirtMask = smoothstep(0.52, 0.66, region) * smoothstep(0.14, 0.28, height);
-      float hollow = (1.0 - smoothstep(0.12, 0.28, height)) * 0.7;
+      // Dirt: only the driest cells, broken by medium noise so patches
+      // stay small and ragged — big smooth blobs read as mud smears.
+      float dirtMask = smoothstep(0.62, 0.74, region) * smoothstep(0.14, 0.28, height)
+                     * smoothstep(0.35, 0.65, medium);
+      float hollow = (1.0 - smoothstep(0.12, 0.28, height)) * 0.35;
       col = mix(col, mix(cDirtDark, cDirtG, micro), clamp(dirtMask + hollow, 0.0, 1.0));
       float wornEdge = dirtMask * (1.0 - dirtMask) * 4.0;
       col *= 1.0 - wornEdge * 0.25;
@@ -624,15 +631,15 @@ export const terrainFrag = /* glsl */`
       col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.22 * detFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
-      float diff = max(dot(vNormal, sunDir), 0.0);
+      float diff = max(dot(nUse, sunDir), 0.0);
       float shadow = diff * diff;
-      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      float rim = pow(1.0 - max(dot(nUse, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
       // Grass sheen: grazing-angle specular lift on open meadow — turf
       // blades glint; masked off dirt, rock, and shaded faces.
       vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
-      float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDir2), 0.0), 14.0);
+      float sheen = pow(max(dot(reflect(-sunDir, nUse), viewDir2), 0.0), 14.0);
       col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
