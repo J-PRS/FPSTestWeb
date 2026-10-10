@@ -563,8 +563,10 @@ export const terrainFrag = /* glsl */`
         // Canopy bump: perturb the normal by micro-noise derivatives so
         // light/shadow does the texturing — organic detail no color layer
         // can fake (Magrathea: "good results just by messing with normals").
-        vec3 nd = noised(uvFin * 1.3);
-        nUse = normalize(vNormal + vec3(nd.y, 0.0, nd.z) * 1.4 * detFade);
+        // Larger wavelength + gentler amplitude than the micro layer:
+        // fine speckle reads as gravel grain, canopy undulation reads smooth.
+        vec3 nd = noised(uvFin * 0.55);
+        nUse = normalize(vNormal + vec3(nd.y, 0.0, nd.z) * 0.7 * detFade);
       }
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).
@@ -627,8 +629,8 @@ export const terrainFrag = /* glsl */`
       // Continental tint: km-scale hue drift so the whole map isn't one
       // green — reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
-      col *= 0.78 + 0.44 * detail;
-      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.22 * detFade;
+      col *= 0.86 + 0.28 * detail;
+      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.14 * detFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(nUse, sunDir), 0.0);
