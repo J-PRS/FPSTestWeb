@@ -390,6 +390,25 @@ describe('v4 delta-masked records', () => {
     expect(rec.length).toBe(30);
   });
 
+  it('a single lost frame self-heals — the K-deep basis resends the field', () => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const last = v4Last();
+    const p = base();
+    decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
+    // Health changes on a frame the link "loses" (never decoded) — but
+    // the K-basis keeps carrying it for the next V4_BASIS_DEPTH-1 ticks.
+    p.health = 12;
+    const lost = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(lost.length).toBe(15 + 3); // hp group present
+    p.position.x = 5;
+    const resent = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(resent.length).toBe(15 + 3); // still carrying hp (basis predates the change)
+    const healed = decodeTickFrame(encodeTickFrame(0, 3, 0, [resent], WIRE_TICK_V4), r.pool)!;
+    expect(healed.updates[0]!.health).toBe(12);
+  });
+
   it('a torn-then-healed link resyncs on the forced full record', () => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
@@ -397,15 +416,15 @@ describe('v4 delta-masked records', () => {
     const last = v4Last();
     const p = base();
     decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
-    // Health changes on a frame the link "loses" (never decoded).
+    // A burst loss longer than the basis window eats the field: health
+    // changes at t2 and frames t2..t4 all die (each carried hp), so the
+    // decode pool stays stale until the forced full lands.
     p.health = 12;
-    encodeTickPlayerV4(7, p, enc, last, false);
-    // Subsequent deltas keep the stale 100 until the full record lands.
+    for (let t = 2; t <= 4; t++) { p.position.x = t; encodeTickPlayerV4(7, p, enc, last, false); }
     p.position.x = 5;
-    decodeTickFrame(encodeTickFrame(0, 3, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
-    const stale = decodeTickFrame(encodeTickFrame(0, 4, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
+    const stale = decodeTickFrame(encodeTickFrame(0, 5, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
     expect(stale.updates[0]!.health).toBe(100);
-    const healed = decodeTickFrame(encodeTickFrame(0, 5, 0, [encodeTickPlayerV4(7, p, enc, last, true)], WIRE_TICK_V4), r.pool)!;
+    const healed = decodeTickFrame(encodeTickFrame(0, 6, 0, [encodeTickPlayerV4(7, p, enc, last, true)], WIRE_TICK_V4), r.pool)!;
     expect(healed.updates[0]!.health).toBe(12);
   });
 

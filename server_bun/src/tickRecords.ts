@@ -165,9 +165,10 @@ export class TickFanout {
         last = v4Last();
         room.v4Last.set(wireId, last);
       }
-      // Delta-masked v4 record: only field groups that changed since this
-      // slot's last encode ride the wire; a periodic full record bounds
-      // the staleness a lost masked frame can leave behind.
+      // Delta-masked v4 record: field groups that changed since the
+      // K-deep basis ride the wire — a field changed once is resent
+      // V4_BASIS_DEPTH times, healing short datagram bursts; a periodic
+      // full record bounds whatever longer loss leaves behind.
       rec.data = encodeTickPlayerV4(wireId, {
           playerId,
           position: p.position,

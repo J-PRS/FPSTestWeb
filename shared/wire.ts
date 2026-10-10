@@ -494,18 +494,33 @@ export const V4_MASK_FLAGS_SHEEP = 0x10;
  *  which is also the ONLY record a baseline-less decoder may accept. */
 export const V4_MASK_FULL = V4_MASK_VEL | V4_MASK_ROT | V4_MASK_HP_PING | V4_MASK_FLAGS_SHEEP;
 
-/** Encoder-side retained state per record slot — holds the last
- *  wire-QUANTIZED values so the mask decision matches what the receiver
- *  will have, not the pre-quantization floats. `wireId` detects slot
- *  reuse: a reassigned wireId forces a full record. */
-export interface V4Last {
+/** Basis depth: each encode masks against the state from this many
+ *  encodes ago, so a field that changed once rides the wire K times —
+ *  a dropped datagram (or short burst) self-heals on the next frame
+ *  instead of waiting on the forced full. Per-client acked baselines
+ *  would be tighter still, but cost an encode per recipient; this
+ *  shared K-basis buys most of the same loss resilience for free. */
+export const V4_BASIS_DEPTH = 3;
+
+interface V4Snap {
   wireId: number;
   velX: number; velY: number; velZ: number;
   yaw: number; pitch: number;
   hp: number; flags: number; sheepJet: number;
 }
+
+/** Encoder-side retained state per record slot — a ring of the last
+ *  V4_BASIS_DEPTH wire-QUANTIZED states, so the mask decision matches
+ *  what the receiver will have, not the pre-quantization floats.
+ *  `wireId` detects slot reuse: a reassigned wireId forces a full
+ *  record. ringPos always points at the oldest slot (next to retire). */
+export interface V4Last {
+  ringPos: number;
+  slots: V4Snap[];
+}
 export function v4Last(): V4Last {
-  return { wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, hp: -1, flags: -1, sheepJet: -1 };
+  const snap = (): V4Snap => ({ wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, hp: -1, flags: -1, sheepJet: -1 });
+  return { ringPos: 0, slots: Array.from({ length: V4_BASIS_DEPTH }, snap) };
 }
 
 /** v4 record: wireId(2) + mask(1) + pos(6) + present groups.
@@ -521,14 +536,15 @@ export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: Tick
   const pingB = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
   const flags = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
   const sheepJet = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
-  const fresh = forceFull || last.wireId !== wireId || last.hp < 0;
+  const basis = last.slots[last.ringPos]!;
+  const fresh = forceFull || basis.wireId !== wireId || basis.hp < 0;
   let mask = 0;
-  if (fresh || last.velX !== velX || last.velY !== velY || last.velZ !== velZ) mask |= V4_MASK_VEL;
-  if (fresh || last.yaw !== yaw || last.pitch !== pitch) mask |= V4_MASK_ROT;
-  if (fresh || last.hp !== hp) mask |= V4_MASK_HP_PING;
+  if (fresh || basis.velX !== velX || basis.velY !== velY || basis.velZ !== velZ) mask |= V4_MASK_VEL;
+  if (fresh || basis.yaw !== yaw || basis.pitch !== pitch) mask |= V4_MASK_ROT;
+  if (fresh || basis.hp !== hp) mask |= V4_MASK_HP_PING;
   // flags and sheepJet share the group: one byte each, splitting buys 1B
   // at the cost of another mask bit.
-  if (fresh || last.flags !== flags || last.sheepJet !== sheepJet) mask |= V4_MASK_FLAGS_SHEEP;
+  if (fresh || basis.flags !== flags || basis.sheepJet !== sheepJet) mask |= V4_MASK_FLAGS_SHEEP;
   let o = 0;
   d.setUint16(o, wireId, true); o += 2;
   u8[o++] = mask;
@@ -537,8 +553,19 @@ export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: Tick
   if (mask & V4_MASK_ROT) { d.setUint16(o, yaw, true); o += 2; d.setInt16(o, pitch, true); o += 2; }
   if (mask & V4_MASK_HP_PING) { d.setUint16(o, hp, true); o += 2; u8[o++] = pingB; }
   if (mask & V4_MASK_FLAGS_SHEEP) { u8[o++] = flags; u8[o++] = sheepJet; }
-  last.wireId = wireId; last.velX = velX; last.velY = velY; last.velZ = velZ;
-  last.yaw = yaw; last.pitch = pitch; last.hp = hp; last.flags = flags; last.sheepJet = sheepJet;
+  // A fresh basis reseeds every slot so subsequent deltas mask against
+  // THIS state — the K-send redundancy window starts clean, not against
+  // whatever the retired owner's history still held.
+  if (fresh) {
+    for (const s of last.slots) {
+      s.wireId = wireId; s.velX = velX; s.velY = velY; s.velZ = velZ;
+      s.yaw = yaw; s.pitch = pitch; s.hp = hp; s.flags = flags; s.sheepJet = sheepJet;
+    }
+  } else {
+    basis.wireId = wireId; basis.velX = velX; basis.velY = velY; basis.velZ = velZ;
+    basis.yaw = yaw; basis.pitch = pitch; basis.hp = hp; basis.flags = flags; basis.sheepJet = sheepJet;
+  }
+  last.ringPos = (last.ringPos + 1) % last.slots.length;
   return new Uint8Array(buf, 0, o);
 }
 
