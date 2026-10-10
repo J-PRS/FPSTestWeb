@@ -525,46 +525,66 @@ export const terrainFrag = /* glsl */`
 
     // --- grassland preset: Ascend-bright olive grass over dirt/rock ---
     if(terrainPreset == 2) {
-      vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
-      float macro  = fbm(uv + 0.8 * warp);
-      // Two warps at different scales: a region-scale patchiness (what
-      // makes a meadow vs scrub slope) plus the fixed-frequency detail
-      // that would otherwise read as tiling at ground level.
-      vec2 wPatch = vec2(fbm(uv * 0.37 + 4.4), fbm(uv * 0.37 + 9.1));
-      float patch = fbm(uv * 0.31 + 0.55 * wPatch);
-      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * warp);
-      float micro  = noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5;
-      float cell   = worley(uvMed * 1.4 + warp * 0.6);
+      // Nested domain warp (IQ's q->r->f idiom): the second warp stage is
+      // what turns blobs into organic meadow/scrub regions.
+      vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
+      float region = fbm(uv * 0.42 + 1.1 * r);
+      float macro  = fbm(uv + 0.8 * q);
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
+      float micro  = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+      // Per-clump id hash: stable hue jitter across grass tufts (same
+      // domain as a worley grid, but without the 9-tap distance loop).
+      float clumpId = hash(floor(uvMed * 1.4 + r * 0.6));
+      float blade   = noise(uvFin * 4.0 + r * 2.0);
       float triRock = triplanarNoise(vWorldPos, 0.22);
       float triDetail = triplanarNoise(vWorldPos, 0.85);
+      // Ridged noise for exposed rock — crease lines read as strata/scree.
+      float ridged  = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0);
+      ridged *= ridged;
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
       float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
-                   * (0.55 + 0.9 * patchMask);
+                   * (0.45 + 1.1 * patchMask);
 
-      // Palette: T:A's sunlit olive — yellowish-green that desaturates to
-      // dry straw on the patch mask, never the dark T2 grass.
-      vec3 cGrass = vec3(0.42, 0.55, 0.16) + medium * vec3(0.10, 0.10, 0.03) + micro * vec3(0.06, 0.07, 0.02);
-      vec3 cMeadow = vec3(0.30, 0.50, 0.10) + medium * vec3(0.06, 0.10, 0.02);
-      vec3 cStraw  = vec3(0.60, 0.52, 0.18) + macro * vec3(0.10, 0.08, 0.02);
-      vec3 cDirtG  = vec3(0.48, 0.32, 0.14) + medium * vec3(0.10, 0.06, 0.02) + cell * vec3(0.06, 0.04, 0.01);
-      vec3 cRockG  = vec3(0.34, 0.30, 0.24) + cell * vec3(0.12, 0.11, 0.09) + triRock * vec3(0.08, 0.07, 0.05);
-      vec3 cCliffG = vec3(0.20, 0.18, 0.14) + cell * vec3(0.10, 0.09, 0.07) + triRock * vec3(0.06, 0.05, 0.04);
+      // Palette: dark root greens -> bright olive tips, dry straw regions,
+      // warm dirt, grey strata rock. Wide value range is what keeps it
+      // from reading as flat soup at distance.
+      vec3 cGrassDeep = vec3(0.22, 0.40, 0.08);
+      vec3 cGrassTip  = vec3(0.52, 0.62, 0.20);
+      vec3 cGrassDry  = vec3(0.45, 0.50, 0.12);
+      vec3 cStraw     = vec3(0.62, 0.52, 0.18);
+      vec3 cDirtG     = vec3(0.46, 0.30, 0.13);
+      vec3 cDirtDark  = vec3(0.30, 0.19, 0.09);
+      vec3 cRockG     = vec3(0.38, 0.34, 0.27);
+      vec3 cCliffG    = vec3(0.20, 0.18, 0.14);
 
-      vec3 grassMix = mix(cGrass, cMeadow, smoothstep(0.35, 0.65, patch));
-      grassMix = mix(grassMix, cStraw, smoothstep(0.60, 0.80, patch) * 0.7);
+      // Canopy value gradient: medium noise lifts tip color over deep roots
+      // — the grass field gets real dark/light structure instead of one
+      // mid-olive. Clump id jitters hue so tufts aren't clones.
+      vec3 grass = mix(cGrassDeep, cGrassTip, smoothstep(0.25, 0.75, medium));
+      grass = mix(grass, cGrassDry, clumpId * 0.35);
+      grass += blade * vec3(0.05, 0.06, 0.01);
+      grass = mix(grass, cStraw, smoothstep(0.58, 0.78, region) * 0.8);
 
-      vec3 col = grassMix;
-      // Low hollows: dirt flats; mid-height patch mask: scrubby dirt
-      // inclusions that break the grass field's uniformity.
-      col = mix(col, cDirtG, smoothstep(0.30, 0.12, height) * 0.6);
-      col = mix(col, cDirtG, smoothstep(0.55, 0.72, patch) * smoothstep(0.15, 0.30, height) * 0.55);
-      // High ground goes rocky before the slope cliff takes over.
-      col = mix(col, cRockG, smoothstep(0.55, 0.80, height));
+      vec3 col = grass;
+      // Dirt: hollows + ragged mid-field patches, darker rim where grass
+      // wears to soil (edge band of the mask = the transition line).
+      float dirtMask = smoothstep(0.52, 0.66, region) * smoothstep(0.14, 0.28, height);
+      float hollow = (1.0 - smoothstep(0.12, 0.28, height)) * 0.7;
+      col = mix(col, mix(cDirtDark, cDirtG, micro), clamp(dirtMask + hollow, 0.0, 1.0));
+      float wornEdge = dirtMask * (1.0 - dirtMask) * 4.0;
+      col *= 1.0 - wornEdge * 0.25;
+      // Ridges/high ground: ridged strata bleed in before cliff slope.
+      col = mix(col, cRockG, smoothstep(0.55, 0.75, height) * (0.4 + 0.6 * ridged));
+      col = mix(col, cCliffG * (0.8 + 0.4 * ridged), smoothstep(0.72, 0.92, height));
 
-      float slopeBlend = smoothstep(0.22, 0.50, slope);
-      vec3 slopeCol = mix(cDirtG, cCliffG, smoothstep(0.30, 0.65, slope));
+      float slopeBlend = smoothstep(0.20, 0.48, slope);
+      vec3 slopeCol = mix(mix(cDirtG, cRockG, ridged), cCliffG, smoothstep(0.30, 0.65, slope));
       col = mix(col, slopeCol, slopeBlend);
-      col *= 0.86 + 0.28 * detail;
+      // Trough AO: fake canopy self-shadowing in micro lows — the single
+      // biggest fix for "flat" procedural ground.
+      col *= 0.78 + 0.44 * detail;
+      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.22;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
