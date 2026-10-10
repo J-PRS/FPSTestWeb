@@ -21,7 +21,7 @@ import { registerDiag } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import {
   vfxPressure, vfxReady, vfxBatcher,
-  live, pools, takeSystem, activateSystem, returnSystem, resyncEmission,
+  live, pools, takeSystem, activateSystem, attachSystem, returnSystem, resyncEmission,
   queueIfCold, buildQueue, activeTrailPs, trailStats,
   poolDump, trailDriverCount,
 } from './vfxRuntime.js';
@@ -158,8 +158,7 @@ function trailKey(config: ProjectileConfig): string {
  *  stops moving — explode() simply stops calling emitSegment.
  *
  *  Trade vs the hand-rolled version: ring/disc mesh types collapse to
- *  billboards (only 'billboard' was ever configured anyway) and wakeVisual
- *  keeps the old path — no config enables it. */
+ *  billboards (only 'billboard' was ever configured anyway). */
 // Debug surface — a live-trail registry + lifecycle counters so a silent
 // trail can be told apart from (a) never built, (b) reaped while a
 // projectile still owns it, (c) parked paused, (d) zombie from the pool.
@@ -302,16 +301,27 @@ export class QuarksTrail {
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
   emitSegment(): void {
     if (!this.ps) return;
+    // Starve-reaped while parked (owner stalled >4s without disposing):
+    // re-attach so this emit actually lands — an orphan's detach is
+    // self-healing here, not a permanent "no trail" state.
+    if (!vfxBatcher()!.systemToBatchIndex.has(this.ps)) {
+      this.ps.paused = false;
+      attachSystem(this.ps);
+      resyncEmission(this.ps, this.ps.emitter);
+      activeTrailPs.add(this.ps);
+    }
     this.segCount++;
     const { pos, vel, config } = this.host;
     // Emit-time jump cut — the deposit is the segment the emitter
     // traveled, so ANY discontinuity (teleport, resync sweep, correction
     // glide) has to be refused HERE, inside emit, not left to every
-    // caller remembering teleport(). Same shape as RibbonTrail.push's
-    // guard: ~0.25s of travel + slack reads as a jump, not motion.
+    // caller remembering teleport(). Same budget RibbonTrail.push uses:
+    // ~80ms of travel + slack — deposits span ≤2 render frames between
+    // sim ticks, so legit motion never reaches it; the old quarter-second
+    // budget let 30-80m jumps cash as one sky-crossing dotted line.
     const em = this.ps.emitter;
     const spd = vel.length();
-    const jump = spd * 0.25 + 12;
+    const jump = spd * 0.08 + 3;
     // Measure against what emit() actually deposits from —
     // previousWorldPos, not the emitter's last position write.
     const pwp = (this.ps.emissionState as { previousWorldPos?: THREE.Vector3 }).previousWorldPos;
@@ -319,6 +329,10 @@ export class QuarksTrail {
     const jx = pos.x - ax, jy = pos.y - ay, jz = pos.z - az;
     const jumped = jx * jx + jy * jy + jz * jz > jump * jump;
     em.position.copy(pos);
+    // emit() deposits previousWorldPos→matrixWorld — matrixWorld only
+    // refreshes at render, so without this the segment always ends at
+    // LAST frame's rendered pos: a full frame of head gap on fast shells.
+    em.updateMatrixWorld(true);
     if (jumped) { trailStats.emitCuts++; resyncEmission(this.ps, em); }
     if (vel.lengthSq() > 1e-4) {
       this.ps.emitter.quaternion.setFromUnitVectors(

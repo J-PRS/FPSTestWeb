@@ -69,13 +69,24 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['punch', 0.5, 0.8, undefined, 0.08],
     ['hg_tick', 0.4, 0.5, 2000, 0.3, 0.06], // motor hiss, slightly delayed
   ],
-  // Cannon: naval-gun boom — big chest cavity + crack + the iron ring
-  // tail of a ball leaving the bore. The THUMP is the whole identity.
+  // Cannon: naval-gun boom — the powder body sits a half-octave under
+  // the disc launch (0.32/~300Hz vs disc's 0.5/600Hz) so the two can't
+  // be confused blind, and a delayed low explosion_small rolls behind
+  // it as the echo off the hills. Bore ring tail stays — the identity.
   [WeaponType.Cannon]: [
-    ['shot_cannon', 1.0, 0.55, 500, 0.5],
-    ['thud_big', 0.85, 0.7],
-    ['punch', 0.45, 0.9, 1500, 0.15],
-    ['hg_clang', 0.3, 0.8, undefined, 0.25],
+    ['shot_cannon', 1.0, 0.32, 300, 0.5],
+    ['thud_big', 0.9, 0.45, 320, 0.4],
+    ['explosion_small', 0.35, 0.55, 1400, 0.3, 0.1], // rolling far echo
+    ['punch', 0.4, 0.8, 1200, 0.12],
+    ['hg_clang', 0.3, 0.7, undefined, 0.25],
+  ],
+  // Bombard: the same naval gun a full octave down — a slower, deeper
+  // chest hit with a long clang tail. Slower cadence lets the ring ride.
+  [WeaponType.Bombard]: [
+    ['shot_cannon', 1.0, 0.26, 280, 0.6],
+    ['thud_big', 0.95, 0.55, 350, 0.4],
+    ['punch', 0.5, 0.7, 1200, 0.2],
+    ['hg_clang', 0.4, 0.6, undefined, 0.4, 0.08],
   ],
   // Sidearms: pistol = short snappy crack + hammer tick; revolver = deeper
   // bark with a metallic ring — the two need to be distinguishable blind.
@@ -162,11 +173,12 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
 
 function shootInto(g: GainNode, weaponType: number): void {
   // Disc launcher + belt disc share the voice: lowpassed cannon body +
-  // short metallic twang + punch transient, all cut before their ring
-  // tails — verified punchy in the spectrogram (sharp attack, decayed by
-  // ~0.4s, no sustained band). A thrown disc IS a disc launch.
+  // a double low-end stack (thud_big + slam_thud — the launcher's chest
+  // thump) + short metallic twang + punch transient, all cut before their
+  // ring tails — verified punchy in the spectrogram (sharp attack, decayed
+  // by ~0.4s, no sustained band). A thrown disc IS a disc launch.
   if ((weaponType === WeaponType.Disc || weaponType === WeaponType.DiscPull) &&
-      layer(g, [['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.8], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) return;
+      layer(g, [['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) return;
   // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
   // The connect 'impact' plays separately in combat on an actual hit.
   if (weaponType === WeaponType.Melee &&
@@ -229,6 +241,7 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   [WeaponType.Flak]:      (g) => { noise(0.2, 0.4, g, 'lowpass', 2500, 300); osc('square', 220, 80, 0.15, 0.3, g); },
   [WeaponType.Shotgun]:   (g) => { noise(0.18, 0.6, g, 'lowpass', 1800, 250); osc('sine', 160, 55, 0.18, 0.5, g); noise(0.05, 0.3, g, 'highpass', 3500, 5000); },
   [WeaponType.Cannon]:    (g) => { osc('sine', 130, 45, 0.3, 0.7, g); noise(0.25, 0.35, g, 'lowpass', 800, 150); osc('square', 700, 200, 0.06, 0.15, g); },
+  [WeaponType.Bombard]:   (g) => { osc('sine', 95, 32, 0.4, 0.85, g); noise(0.35, 0.4, g, 'lowpass', 600, 120); osc('square', 500, 140, 0.08, 0.18, g); },
   // thump + whoosh
   [WeaponType.RocketLauncher]: (g) => { osc('sine', 150, 60, 0.2, 0.5, g); noise(0.3, 0.3, g, 'bandpass', 800, 500, 1.5); },
   [WeaponType.PlasmaCannon]:   (g) => { osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); },

@@ -90,6 +90,12 @@ export class LightningBeam {
     this.from.copy(from);
     this.to.copy(to);
     this.camPos.copy(camPos);
+    // Revive from hidden: update() early-returns while faded, so jagT
+    // froze mid-clock and the skeleton still holds the PREVIOUS shot's
+    // curve — endpoints weld to the new shot but the interior arcs
+    // through the old contact. Force a re-roll on THIS revive only;
+    // continuous fire keeps the 30ms throttle.
+    if (this.fade <= 0) { this.jagT = 0; }
     this.fade = 1;
     this.group.visible = true;
     this.hitGlow.position.copy(to);
@@ -195,7 +201,11 @@ export class LightningBeam {
     // Spark fountain: integrate + respawn dead sparks at the contact
     for (let i = 0; i < SPARKS; i++) {
       this.sparkAge[i]! -= dt;
-      if (this.sparkAge[i]! <= 0) {
+      // Respawn only while the trigger is held (fade===1 means a fire()
+      // landed this frame; <1 is the post-release decay) — otherwise the
+      // fountain keeps feeding itself at the STALE point through the fade,
+      // visible as sparks still spawning at the old hit spot.
+      if (this.sparkAge[i]! <= 0 && this.fade >= 1 && this.sparkPoints.visible) {
         // Respawn: burst outward from the hit point + slight gravity bounce;
         // charged victims boil faster and fling harder.
         this.sparkAge[i] = SPARK_LIFE * (0.5 + Math.random() * 0.5) * (1 + c * 0.6);

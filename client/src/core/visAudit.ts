@@ -77,6 +77,28 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
         const base = s * SLOT_VERTS;
         for (let i = 0; i < SLOT_VERTS / 2 - 1; i++) {check(base + i * 2, base + i * 2 + 2);}
       }
+    } else if ((anyO as { isSkinnedMesh?: boolean }).isSkinnedMesh) {
+      // Geometry is authored at bind pose — a stretched rig hides in the
+      // BONES' world positions, so measure skeleton spread, not verts.
+      // The 60m edge limit that catches trail teleports catches an
+      // exploded skeleton identically.
+      const skel = (o as unknown as { skeleton?: { bones: { updateWorldMatrix(a: boolean, b: boolean): void; matrixWorld: { elements: ArrayLike<number> } }[] } }).skeleton;
+      if (!skel || skel.bones.length < 2) return;
+      out.scanned++;
+      // matrixWorld.elements[12..14] — no Vector3 needed (THREE is a
+      // type-only import in this file).
+      const step = Math.max(1, Math.floor(skel.bones.length / 64));
+      const px = (i: number) => { skel.bones[i].updateWorldMatrix(true, false); return skel.bones[i].matrixWorld.elements; };
+      for (let i = 0; i < skel.bones.length; i += step) {
+        const ea = px(i);
+        for (let j = i + step; j < skel.bones.length; j += step) {
+          const eb = px(j);
+          const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
+          const e = dx * dx + dy * dy + dz * dz;
+          if (!isFinite(e)) { nan++; continue; }
+          if (e > maxEdge) { maxEdge = e; at = [ea[12] | 0, ea[13] | 0, ea[14] | 0]; }
+        }
+      }
     } else if (anyO.isInstancedMesh && anyO.instanceMatrix && anyO.count != null) {
       // Giant or off-field instances — matrix rows give scale+position.
       out.scanned++;

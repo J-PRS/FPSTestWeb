@@ -108,7 +108,7 @@ describe('TrailDriver', () => {
     host.pos.x += 1; d.tick(0.016);          // ~legit frame of travel
     expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1);
     host.pos.x += 200; d.tick(0.016);        // discontinuity — no caller help
-    expect(layer.teleports).toBe(1); expect(rib.clears).toBe(1);
+    expect(layer.teleports).toBe(2); expect(rib.clears).toBe(1); // +1 = startup resync on the first tick
     host.pos.x += 1; d.tick(0.016);          // motion resumes cleanly
     expect(layer.emits).toBe(3);
     d.release();
@@ -139,7 +139,7 @@ describe('TrailDriver', () => {
     host.pos.x += 1; d.tick(0.016);
     expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1);
     host.pos.x += 50; d.tick(0.016); // correction sweep — layers still cut…
-    expect(rib.clears).toBe(1); expect(layer.teleports).toBe(1);
+    expect(rib.clears).toBe(1); expect(layer.teleports).toBe(2); // +1 = startup resync on the first tick
     expect(layer.emits).toBe(1); expect(rib.pushes).toBe(1); // …but nothing deposits
     moving = false; host.pos.x += 1; d.tick(0.016);
     expect(layer.emits).toBe(2); expect(rib.pushes).toBe(1); // dots sparkle, ribbon starves

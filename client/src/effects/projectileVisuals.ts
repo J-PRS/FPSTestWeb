@@ -268,13 +268,13 @@ export function buildProjectileMeshes(
   let glowMesh: THREE.Mesh | null = null;
   if (config.glowShell) {
     const flash = !!config.glowPulse;
-    const cone = config.glowShape === 'cone';
+    const cone = config.glowShape === 'wakeCone';
     const glowMat = getGlowMat(config.glowColor, config.glowOpacity, flash, cone); // shared
     const glowGeo = cone ? CONE_GEO : GLOW_GEO;
     glowMesh = new THREE.Mesh(glowGeo, glowMat);
     glowMesh.position.copy(pos);
     glowMesh.layers.enable(BLOOM_LAYER);
-    const gpool = instPoolFor(scene, `glow|${cone ? 'cone' : 'sphere'}|${config.glowColor}|${config.glowOpacity}|${flash ? 'f' : ''}`, glowGeo, glowMat, flash);
+    const gpool = instPoolFor(scene, `glow|${cone ? 'wakeCone' : 'sphere'}|${config.glowColor}|${config.glowOpacity}|${flash ? 'f' : ''}`, glowGeo, glowMat, flash);
     (glowMesh as SlotTag).__inst = { pool: gpool, slot: instAlloc(gpool) };
     if (flash) {
       // Resting tint = base color ÷ crest color, so tint×material lands
@@ -363,7 +363,7 @@ export function updateProjectileMesh(
     // two instanced spheres coincide. The floor ramps too — an unscaled
     // floor at spawn pins a body-sized glow right at the muzzle.
     gs = Math.max(gs, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
-    if (config.glowShape === 'cone') {
+    if (config.glowShape === 'wakeCone') {
       // Shock collar: apex rides the shell, skirt trails -velocity.
       // Stationary frames keep the last orientation — a parked cone
       // still reads as the wake envelope.

@@ -219,7 +219,19 @@ function reapStarved(ps: IParticleSystem): void {
   // that dispose() pools — every later reuse renders nothing.
   if (activeTrailPs.has(ps as ParticleSystem)) {
     const s = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
-    if (s === STARVE_LIMIT) {trailStats.reapedActive++;}
+    if (s === STARVE_LIMIT) {
+      trailStats.reapedActive++;
+      // Reap for real — a looping trail system whose owner left the
+      // world without dispose() stays attached FOREVER otherwise: a
+      // parked emitter holding a stale matrixWorld is exactly the
+      // object that cashes a later teleport as one giant deposit.
+      // emitSegment() re-attaches on the next emit if the owner was
+      // merely stalled (rested bomblet), so this is self-healing.
+      activeTrailPs.delete(ps as ParticleSystem);
+      detachSystem(ps as ParticleSystem);
+      starveFrames.delete(ps);
+      return;
+    }
     if (s) {starveFrames.set(ps, s);} else {starveFrames.delete(ps);}
     return;
   }
@@ -406,6 +418,14 @@ export class TrailDriver {
   tick(dt: number): void {
     if (dt <= 0) {return;} // paused fx clock — pos is frozen, don't misread a seek as travel
     const { pos, vel } = this.host;
+    // First tick: the host may already have been advanced since the
+    // emitters' previousWorldPos was synced (remote spawn's latency
+    // lead). NaN reads as "no jump" and emits anyway — depositing a
+    // spawn→advanced chord. Resync before the first emit instead.
+    if (!Number.isFinite(this.last.x)) {
+      for (const e of this.emitters) {e.teleport();}
+      this.last.copy(pos);
+    }
     // Same budget the old host-side backstop used: ~3 frames of legit
     // travel + slack — beyond that it's a discontinuity every layer cuts.
     const maxStep = this.host.maxStep?.(dt) ?? vel.length() * dt * 3 + 4;

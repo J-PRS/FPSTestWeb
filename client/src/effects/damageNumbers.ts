@@ -21,7 +21,7 @@ const MAX_GLYPHS = 5;               // '-9999!' worst case
 const MAX_QUADS = MAX_NUMBERS * MAX_GLYPHS;
 const DURATION = 1;
 const POP_SCALE = 0.1;
-const BASE_SCALE = 4;
+const BASE_SCALE = 2;
 
 interface LiveNumber {
   pos: THREE.Vector3;             // drifting world position
