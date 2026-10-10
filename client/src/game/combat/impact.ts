@@ -502,12 +502,13 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   logHitScore(c, p, 'player', airborne, playerId);
 
   if (playerId === 'local') return;
-  // A predicted server-simmed shell whose projectileCreated echo never
-  // arrived is a ghost — it can register hits, but the authority knows
-  // nothing about it and will never pay the damage. Lost shotFired
-  // intent or a resync that wiped server projectiles both land here.
-  if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId) {
-    deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}) — hit is prediction-only, no damage`);
+  // A predicted server-simmed shell still unbound past the bind grace is
+  // a ghost — the authority knows nothing about it and will never pay the
+  // damage. Under the grace it's a benign race: close-range hits land
+  // before the projectileCreated echo round-trips, while the server-side
+  // shell exists and adjudicates its own contact regardless.
+  if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId && p.age > 0.6) {
+    deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}, age=${p.age.toFixed(2)}s) — hit is prediction-only, no damage`);
   }
   // Server-simmed shells never claim their hit — predicted feedback
   // (damage numbers, bars, hitmarker) already ran above; the authority
