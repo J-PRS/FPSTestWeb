@@ -730,6 +730,16 @@ export class BotBrain {
     // if a structure wall sits on the straight path and its top is
     // inside the full-tank climb envelope (curtains ~17m, not 85m gate
     // towers), spend the tank scaling it before giving up the waypoint.
+    // While a breach owns the feet, the stall counters must not grow —
+    // the bot is deliberately walking a waypoint that ISN'T the goal,
+    // so "not closing on goal" measures the escape itself, not a new
+    // pin. Left counted, each breach re-arms the next: armed bg drives
+    // feet off-goal, orbitStreak hits 4, wallResponse rolls another
+    // 25s breach — the flag-carrier midfield orbit (capRun autopsy).
+    if (this.breachUntil > now) {
+      this.escapeS.stuckStreak = 0;
+      this.escapeS.orbitStreak = 0;
+    }
     const streak = Math.max(this.escapeS.stuckStreak, this.escapeS.orbitStreak);
     // Committed tasks outrank the hunt exemption: a besieger/runner
     // stalled on a vault wall with a live foe in sight still needs the
