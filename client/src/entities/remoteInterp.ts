@@ -172,6 +172,12 @@ export class RemoteInterp {
     // freeze-frame on stale truth for the rest of the silence window, so
     // DR takes over at the cap rather than waiting out the threshold.
     if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > 200)) && !this._simulating && !localDriven) {
+      // Seed from the wire velocity — differentiating snapshot positions
+      // folds arrival noise into the launch vector (a jittered pair
+      // reports phantom speed the real sim never had).
+      if (this.h.serverVelocity.lengthSq() > 0) {
+        this.simulatedVelocity.copy(this.h.serverVelocity);
+      }
       this._simulating = true;
       logger.debug(`STARTING dead reckoning`, { playerId: this.h.playerId, silentMs: timeSinceUpdate });
     }

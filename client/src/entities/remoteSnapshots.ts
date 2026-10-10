@@ -113,8 +113,15 @@ export class SnapshotBuffer {
       // cap leaves renderTime permanently past the newest snapshot —
       // far remotes then freeze on the extrapolation clamp and step at
       // the send rate instead of interpolating.
+      // Speed-scaled cap: delay × speed is rendered position error —
+      // a 40m/s remote at 600ms sits 24m behind truth. Faster remotes
+      // get less delay (more extrapolation), walkers keep the cushion.
+      const spd = Math.hypot(vel.x, vel.y, vel.z);
+      const delayCap = spd > 5
+        ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, 4000 / spd)
+        : SnapshotBuffer.MAX_INTERP_DELAY;
       const target = Math.min(
-        SnapshotBuffer.MAX_INTERP_DELAY,
+        delayCap,
         SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalInterval + this.arrivalJitter * 2,
       );
       // ~200ms/s deflate at push cadence — see the slew comment above.
