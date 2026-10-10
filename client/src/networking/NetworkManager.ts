@@ -4,6 +4,7 @@ import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, S
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
 import { TieredTransport } from './tiers.js';
+import { WorkerTransport } from './WorkerTransport.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { urlParams } from '../core/params.js';
@@ -216,7 +217,10 @@ export class NetworkManager {
     this.stallTimer ??= setInterval(() => this.checkStall(), 1000);
     return new Promise((resolve, reject) => {
       try {
-        const factory = makeTransport ?? ((cfg) => new TieredTransport(cfg));
+        // Default: the whole transport stack runs on the net worker —
+        // Blink starves ws dispatch under input/render load, so the wire
+        // lives on its own event loop. Tests/node have no Worker.
+        const factory = makeTransport ?? ((cfg) => typeof Worker === 'undefined' ? new TieredTransport(cfg) : new WorkerTransport(cfg));
         this.ws = factory({
           url,
           resolveUrl,
@@ -285,6 +289,8 @@ export class NetworkManager {
           },
           onMessage: (data) => this.wireIn.message(data),
           onBinaryMessage: (data) => this.wireIn.binary(data),
+          // Worker-measured RTT — wire-honest (no main-loop queue delay).
+          onRtt: (rtt) => this.telemetry.onPong(Date.now() - rtt, Date.now()),
         });
         this.ws.connect(url);
       } catch (error) {
@@ -640,8 +646,9 @@ export class NetworkManager {
     this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputs.seq,
       held ? { forward: held.forward, right: held.right, jump: held.jump, ski: held.ski, jet: held.jet ?? 0 } : undefined));
 
-    // Send ping if interval elapsed
-    if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
+    // Send ping if interval elapsed — worker transports own their own
+    // probe (measured off the main thread, so stall can't inflate it).
+    if (!this.ws?.ownsPing && now - this.lastPingSendTime >= this.PING_INTERVAL) {
       this.lastPingSendTime = now;
       this.send({ type: 'ping', timestamp: now });
     }
@@ -957,6 +964,12 @@ export class NetworkManager {
    *  client ping rides, minus our own event-loop stall. null until the
    *  first echo lands (or on transports without the probe). */
   serverPingMs: number | null = null;
+
+  /** Worker-transport probes (clean wire RTT, postMessage delivery lag,
+   *  coalesced tick count) — null on non-worker transports. */
+  get netProbe(): { rttMs: number; lagMs: number; coalesced: number } | null {
+    return this.ws?.probe ?? null;
+  }
 
   getPacketLoss(): number {
     return this.telemetry.packetLoss(Date.now());

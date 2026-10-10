@@ -151,11 +151,14 @@ export default defineConfig(({ mode }) => ({
       output: {
         codeSplitting: false,
         entryFileNames: 'game.js',
-        chunkFileNames: 'game.js',
+        // The net worker is the only secondary chunk (codeSplitting off) —
+        // a fixed 'game.js' here would collide with the entry bundle.
+        chunkFileNames: 'net-worker-[hash].js',
         assetFileNames: 'game.[ext]',
       },
     },
   },
+  worker: { format: 'es' },
   server: {
     port: 5400,
     host: '0.0.0.0',

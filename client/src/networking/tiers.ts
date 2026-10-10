@@ -12,11 +12,14 @@
 import type { ConnectionConfig } from './WebSocketConnection.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import type { GameTransport } from './transport.js';
-import { ChildLogger } from '../core/Logger.js';
+import { netLogger } from './netLog.js';
 import { tryWebTransport } from './tiersWebTransport.js';
-import { urlParams } from '../core/params.js';
 
-const logger = new ChildLogger('NetTiers');
+const logger = netLogger('NetTiers');
+
+/** Tier pin — the net worker can't read ?net off window.location, so the
+ *  caller (WorkerTransport init / page code) passes it down. */
+export interface TierOpts { net?: string }
 
 /** Best-tier selection: ?net=wt|rtc|ws pins a single tier; otherwise WT and
  *  RTC probe in parallel and the better of whatever succeeded wins. WS is
@@ -39,8 +42,8 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
   };
 }
 
-export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
-  const want = urlParams.net ?? 'auto';
+export async function connectGameTransport(config: ConnectionConfig, opts?: TierOpts): Promise<GameTransport> {
+  const want = opts?.net ?? 'auto';
   if (want !== 'auto') {return pinnedTier(want, config);}
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
@@ -309,7 +312,7 @@ export class TieredTransport implements GameTransport {
   private gen = 0;
   private static readonly BACKOFF_MS = 1000;
 
-  constructor(private readonly config: ConnectionConfig) {}
+  constructor(private readonly config: ConnectionConfig, private readonly opts?: TierOpts) {}
 
   get tier() { return this.inner?.tier; }
 
@@ -359,7 +362,7 @@ export class TieredTransport implements GameTransport {
       onMessage: (data) => { if (gen === this.gen) {this.config.onMessage?.(data);} },
       onBinaryMessage: (data) => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} },
     };
-    connectGameTransport(innerConfig).then((t) => {
+    connectGameTransport(innerConfig, this.opts).then((t) => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);

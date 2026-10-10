@@ -1,9 +1,9 @@
 import type { ConnectionConfig } from './WebSocketConnection.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 import type { GameTransport } from './transport.js';
-import { ChildLogger } from '../core/Logger.js';
+import { netLogger } from './netLog.js';
 
-const logger = new ChildLogger('NetWt');
+const logger = netLogger('NetWt');
 
 // QUIC datagrams don't fragment — anything past the path MTU (~1200B) is
 // dropped ENTIRELY, so "unreliable" there means "never arrives". Small

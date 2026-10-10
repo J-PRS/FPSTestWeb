@@ -15,6 +15,11 @@ export interface GameTransport {
   /** Which netcode-v2 tier this transport is — reported in the join so
    *  /metrics shows the real deployment's transport mix. */
   readonly tier?: TransportKind | 'p2p' | 'host';
+  /** Worker transports run their own ping cadence — NetworkManager must
+   *  not double-send app-level 'ping' probes. */
+  readonly ownsPing?: boolean;
+  /** Worker-side probes (clean wire RTT, postMessage delivery lag). */
+  readonly probe?: { rttMs: number; lagMs: number; coalesced: number };
 }
 
 export type TransportFactory = (config: ConnectionConfig) => GameTransport;

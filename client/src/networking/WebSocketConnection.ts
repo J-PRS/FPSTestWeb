@@ -4,11 +4,13 @@
  * shared/protocol.ts; the binary codec in shared/wire.ts.
  */
 
-import { ChildLogger } from '../core/Logger.js';
+import { netLogger } from './netLog.js';
 import { WS_RECONNECT_INTERVAL } from '../core/config.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 
-const logger = new ChildLogger('WebSocketConnection');
+// netLogger, not ChildLogger — this file also runs inside the net worker,
+// where Logger's settings/urlParams imports would crash on load.
+const logger = netLogger('WebSocketConnection');
 
 export interface ConnectionConfig {
   url: string;
@@ -23,6 +25,9 @@ export interface ConnectionConfig {
   onError?: (error: Error) => void;
   onMessage?: (data: ServerMessage) => void;
   onBinaryMessage?: (data: Uint8Array) => void;
+  /** Worker transports report their own ping RTT (measured off the main
+   *  thread — the honest wire number). */
+  onRtt?: (rttMs: number) => void;
 }
 
 export class WebSocketConnection {
