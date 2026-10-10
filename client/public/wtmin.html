@@ -1,0 +1,13 @@
+<!doctype html>
+<html><body>
+<script src="/wtmin.js"></script>
+<script>
+// ?mt=1 runs the same code on the main thread (control); default = worker.
+if (new URLSearchParams(location.search).get('mt') === '1') {
+  self.runWtMin((m) => console.log('[wtmin-mt]', 'net wtmin ' + m));
+} else {
+  const w = new Worker('/wtmin-worker.js' + location.search, { type: 'classic' });
+  w.onmessage = (e) => console.log('[wtmin]', e.data);
+  w.onerror = (e) => console.log('[wtmin] worker error', e.message);
+}
+</script></body></html>
