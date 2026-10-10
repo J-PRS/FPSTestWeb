@@ -54,6 +54,12 @@ export class WtSocketAdapter {
   readonly remoteAddress: string;
   private open = true;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  /** Stream-2 reliable-binary lane: length-prefixed u16 frames, no
+   *  base64/newline tax, and HoL-isolated from the JSON stream — a big
+   *  oversized tick frame can't stall an event behind it. Set when the
+   *  client's second bidi stream arrives (caps.binLane handshake). */
+  private binWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  private binScratch = new ArrayBuffer(2);
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
 
@@ -85,8 +91,41 @@ export class WtSocketAdapter {
 
   private async acceptReliable(): Promise<void> {
     const reader = this.session.incomingBidirectionalStreams.getReader();
-    const { value: stream, done: streamDone } = await reader.read();
-    if (streamDone || !stream) return;
+    // Stream index 0 is the JSON text lane (existing contract). Any later
+    // stream is the caps.binLane client opting into the raw-binary lane.
+    let idx = 0;
+    for (;;) {
+      const { value: stream, done: streamDone } = await reader.read();
+      if (streamDone || !stream) return;
+      if (idx++ === 0) void this.pumpText(stream).catch((e) => this.die(`reliable pump: ${e instanceof Error ? e.message : e}`));
+      else void this.pumpBin(stream).catch(() => {});
+    }
+  }
+
+  /** Stream-2+: u16-length-prefixed binary both ways. Uplink feeds the
+   *  same binary path as datagrams; downlink is this.binWriter. */
+  private async pumpBin(stream: WtDuplex): Promise<void> {
+    this.binWriter = stream.writable.getWriter();
+    const rr = stream.readable.getReader();
+    let carry = new Uint8Array(0);
+    for (;;) {
+      const { done, value } = await rr.read();
+      if (done) break;
+      const merged = new Uint8Array(carry.length + value.length);
+      merged.set(carry); merged.set(value);
+      carry = merged;
+      while (carry.length >= 2) {
+        const n = carry[0]! | (carry[1]! << 8);
+        if (carry.length < 2 + n) break;
+        this.game.onMessage(this.asSocket(), carry.subarray(2, 2 + n));
+        carry = carry.subarray(2 + n);
+      }
+    }
+    // Bin lane ending while JSON lives degrades to base64 — don't die.
+    this.binWriter = null;
+  }
+
+  private async pumpText(stream: WtDuplex): Promise<void> {
     this.writer = stream.writable.getWriter();
     // Reliable lane is newline-delimited JSON (same framing as the
     // client's WebTransportGameTransport produces).
@@ -151,6 +190,16 @@ export class WtSocketAdapter {
         (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
         msg.byteLength <= WT_MAX_DATAGRAM) {
       void this.session.sendDatagram(msg).catch(() => {});
+      return msg.byteLength;
+    }
+    // Stream-2 (caps.binLane opt-in): raw u16-framed binary — drops the
+    // ~33% base64 tax and isolates oversized tick frames from the JSON
+    // lane, so a 1300B tick can't HoL-block an event behind it.
+    if (typeof msg !== 'string' && this.binWriter && msg.byteLength <= 0xffff) {
+      const v = new DataView(this.binScratch);
+      v.setUint16(0, msg.byteLength);
+      void this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => {});
+      void this.binWriter.write(msg).catch(() => {});
       return msg.byteLength;
     }
     if (!this.writer) return 0;

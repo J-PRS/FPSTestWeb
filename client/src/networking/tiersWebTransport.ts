@@ -26,6 +26,9 @@ export class WebTransportGameTransport implements GameTransport {
   // sporadic — the reliable pump then reads a reset that looks like a
   // peer kill). Only reader/writer halves being referenced is NOT enough.
   private stream: WebTransportBidirectionalStream | null = null;
+  // Stream-2 (caps.binLane): u16-framed raw binary, HoL-isolated from the
+  // JSON lane — opened only when the server advertises it on gameState.
+  private binStream: WebTransportBidirectionalStream | null = null;
   private rr: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private dr: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private preOpen: string[] = [];
@@ -109,11 +112,42 @@ export class WebTransportGameTransport implements GameTransport {
   private dispatchLine(line: string): void {
     let m: ServerMessage | { type: 'bin'; d: string };
     try { m = JSON.parse(line); } catch { return; /* malformed */ }
+    if (m.type === 'gameState' && (m as { caps?: { binLane?: number } }).caps?.binLane && !this.binStream) {
+      void this.openBinLane();
+    }
     if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
       this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c) => c.charCodeAt(0)));
     } else {
       this.config.onMessage?.(m as ServerMessage);
     }
+  }
+
+  private async openBinLane(): Promise<void> {
+    try {
+      const stream = await this.wt.createBidirectionalStream();
+      // A second stream could have been opened by a later gameState
+      // (resync replays the caps) — keep the first, drop the extra.
+      if (this.binStream) { stream.readable.cancel().catch(() => {}); stream.writable.close().catch(() => {}); return; }
+      this.binStream = stream;
+      const rr = stream.readable.getReader();
+      let carry = new Uint8Array(0);
+      for (;;) {
+        const { done, value } = await rr.read();
+        if (done) break;
+        const merged = new Uint8Array(carry.length + value.length);
+        merged.set(carry); merged.set(value);
+        carry = merged;
+        while (carry.length >= 2) {
+          const n = carry[0]! | (carry[1]! << 8);
+          if (carry.length < 2 + n) break;
+          this.config.onBinaryMessage?.(carry.subarray(2, 2 + n));
+          carry = carry.subarray(2 + n);
+        }
+      }
+    } catch { /* lane reset */ }
+    // Bin lane dying degrades to base64 on stream 1 — never kills the
+    // session (same rule as the datagram lane).
+    this.binStream = null;
   }
 
   private async pumpDatagrams(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
@@ -167,7 +201,7 @@ export class WebTransportGameTransport implements GameTransport {
    *  the lane died and reprobes. */
   disconnect(): void {
     this.open = false;
-    this.stream = null; this.rr = null; this.dr = null;
+    this.stream = null; this.rr = null; this.dr = null; this.binStream = null;
     void this.wt?.close();
   }
 }

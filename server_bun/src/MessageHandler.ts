@@ -489,6 +489,9 @@ export class MessageHandler {
 
     this.sendGameState(playerId, playersData, {
       sessionToken,
+      // wt clients only: advertise the reliable-binary lane (stream 2).
+      // Absent on ws/old builds so clients stay on the base64 envelope.
+      caps: player.transport === 'wt' ? { binLane: 1 } : undefined,
       // v3 record-id roster — everyone minted before this joiner needs
       // their mapping shipped inline (deltas only reach live sockets).
       wireIds: this.roomInfo.wireIds?.() ?? {},
