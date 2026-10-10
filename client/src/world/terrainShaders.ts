@@ -185,10 +185,13 @@ export const terrainFrag = /* glsl */`
   }
 
   // Exp² distance fog on the spec's linear start/end: near field stays
-  // clean, haze rolls in on the natural 1-e^-(t²) curve, ~98% at fogEnd.
+  // clean, haze rolls in on the natural 1-e^-(t²) curve. The raw curve
+  // tops at ~98% — the *1.05 saturates the last ~13% of range to a true
+  // 1.0 so the clipmap's far edge dissolves fully into the sky haze
+  // instead of leaving a faint terrain-colored rim against it (T2 look).
   float terrainFogFactor(float dist) {
     float t = clamp((dist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0);
-    return 1.0 - exp(-t * t * 4.0);
+    return min((1.0 - exp(-t * t * 4.0)) * 1.05, 1.0);
   }
 
   // --- Derivative erosion FBM (suppresses detail on steep slopes) ---

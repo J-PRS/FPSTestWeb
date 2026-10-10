@@ -18,7 +18,8 @@ const atmosphereVertexShader = /* glsl */`
 // sun — without hand-tuned color bands.
 const atmosphereFragmentShader = /* glsl */`
   varying vec3 vDir;
-  uniform vec3 fogColor;      // horizon haze color (matches terrain fog exactly)
+  uniform vec3 fogColor;      // ground fog — the h=0 seam must equal saturated terrain exactly
+  uniform vec3 horizonColor;  // map-painted horizon tint, drifts in just above the seam
   uniform vec3 sunPosition;   // world-space sun position (used for direction only)
   uniform float sunIntensity;
   uniform float rayleigh;
@@ -131,9 +132,13 @@ const atmosphereFragmentShader = /* glsl */`
     color.b *= 1.18;
     color = clamp(color, 0.0, 1.0);
 
-    // Blend to exact fogColor across a wide low band so fully-fogged
-    // terrain dissolves upward into the sky instead of cutting a line.
-    color = mix(fogColor, color, smoothstep(0.0, 0.2, h));
+    // Two-stop haze: h=0 is exactly the ground fog color so saturated
+    // terrain meets the sky color-for-color; the map's painted horizon
+    // tint owns the band just above it, then the real atmosphere takes
+    // over. One-stop blends fed the horizon tint AT the seam — a bluer
+    // spec horizon re-cut the line the fog saturation fixed.
+    vec3 haze = mix(fogColor, horizonColor, smoothstep(0.0, 0.05, h));
+    color = mix(haze, color, smoothstep(0.0, 0.2, h));
 
     // No sun disc — Tribes-style tracking needs uniform sky brightness.
     // sunPosition only suppresses stars near the sun direction below.
@@ -188,6 +193,7 @@ export class AtmosphericSky {
         mieDirectionalG: { value: params.mieDirectionalG ?? 0.758 },
         turbidity: { value: params.turbidity ?? 10 },
         fogColor: { value: params.fogColor ?? new THREE.Color(0xBBD0E8) },
+        horizonColor: { value: params.fogColor?.clone() ?? new THREE.Color(0xBBD0E8) },
         starIntensity: { value: params.starIntensity ?? 0.9 },
       },
       side: THREE.BackSide,
@@ -237,6 +243,12 @@ export class AtmosphericSky {
 
   setFogColor(color: THREE.Color): void {
     this.material.uniforms.fogColor.value.copy(color);
+  }
+
+  /** Painted horizon band — distinct from the seam color so a spec can
+   *  glow the low sky without breaking the fog/terrain melt. */
+  setHorizonColor(color: THREE.Color): void {
+    this.material.uniforms.horizonColor.value.copy(color);
   }
 
   isDay(): boolean {

@@ -5,6 +5,7 @@ build/
 *.log
 
 *.png
+*.mp4
 
 # Rust
 target/
