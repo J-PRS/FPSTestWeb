@@ -102,7 +102,14 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // backlog down over a few frames instead; steady-state arrivals are
   // ~1 cell/frame so the backlog never grows, but bursts smooth out
   // below the ribbon's discontinuity budget.
-  let cellsLeft = 2;
+  // Fixed 2 while the bank isn't full — but a fixed cap under sustained
+  // low fps drains slower than real time, starving simT behind the
+  // stamped clock so every segment lands as a 20-30m correction
+  // (render-blend, chronic negative skew, seen live in headless <10fps).
+  // Only a FULL bank earns the dt-scaled drain: burst pacing intact,
+  // starvation impossible, and a 250ms stall frame still pays down over
+  // the next frames instead of leaping.
+  let cellsLeft = bag.netAcc >= 0.5 ? Math.max(2, Math.ceil(dt / 0.05)) : 2;
   // The committed target rides tp snapshots: enrage pull needs it, and an
   // inert ball's stall-breaker launches at it — predicting it client-side
   // mirrors the authority instead of waiting two seconds for the event.
