@@ -537,13 +537,20 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         fields[k] = obj[k];
       }
       const renderLagMs = isFiniteNumber(obj.renderLagMs) ? (obj.renderLagMs as number) : undefined;
-      return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs } };
+      let renderLag: Record<string, number> | undefined;
+      if (obj.renderLag !== null && typeof obj.renderLag === 'object' && !Array.isArray(obj.renderLag)) {
+        renderLag = {};
+        for (const [k, v] of Object.entries(obj.renderLag as Record<string, unknown>)) {
+          if (isFiniteNumber(v)) renderLag[k] = v;
+        }
+      }
+      return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs, renderLag } };
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
       if (!p) return;
       p.lastSeen = wallNow();
-      p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, renderLagMs: m.renderLagMs, at: wallNow() };
+      p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, renderLagMs: m.renderLagMs, renderLag: m.renderLag, at: wallNow() };
     },
   },
 

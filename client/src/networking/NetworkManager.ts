@@ -79,7 +79,7 @@ export class NetworkManager {
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
-  public onProjectileDestroyed: ((projectileId: string, shotId?: string) => void) | null = null;
+  public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
@@ -647,13 +647,14 @@ export class NetworkManager {
         loss: this.telemetry.packetLoss(now),
         jitter: this.telemetry.jitter(),
         renderLagMs: s.renderLagMs,
+        renderLag: s.renderLag,
       });
     }
   }
 
   /** GameLoop feeds live perf numbers — the uplink above can't read
    *  the perf HUD itself without an import cycle the other direction. */
-  statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number }) | null = null;
+  statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number; renderLag?: Record<string, number> }) | null = null;
   private lastStatsSendTime = 0;
   private static readonly STATS_INTERVAL = 10_000;
 

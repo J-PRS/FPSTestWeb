@@ -740,13 +740,17 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!networkManager.statsSource) {
       networkManager.statsSource = () => {
         const s = perf.snapshot();
-        // Worst-case remote render delay — lag-comp needs the ghost lag
-        // the shooter actually rides, which stretches under bad links.
+        // Per-victim render delay map — rewinding every victim by the
+        // MAX delay validates ~500ms behind a fast ghost the shooter is
+        // actually tracking at ~100ms: the classic "numbers, no damage".
+        // renderLagMs stays as the fallback for old wires/creatures.
         let renderLagMs = 0;
-        deps.world.remotePlayers.forEach((rp) => {
+        const renderLag: Record<string, number> = {};
+        deps.world.remotePlayers.forEach((rp, id) => {
+          renderLag[id] = rp.renderDelayMs;
           if (rp.renderDelayMs > renderLagMs) renderLagMs = rp.renderDelayMs;
         });
-        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs };
+        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs, renderLag };
       };
     }
     const demoPaused = simTick(deps, perf, frame, terrain);

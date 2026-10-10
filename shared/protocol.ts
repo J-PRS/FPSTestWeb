@@ -74,7 +74,7 @@ export type ClientMessage =
   // Client-side ops telemetry the server can't see itself — self-reported
   // fps/frame cost and link quality, ~10s cadence, rolled into /metrics so
   // a client's bad connection or melting renderer surfaces server-side.
-  | { type: 'clientStats'; fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number }
+  | { type: 'clientStats'; fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; renderLag?: Record<string, number> }
   | { type: 'chat'; text: string; team?: boolean; vgs?: string }
   // shotId is a client-generated nonce stamped at spawn and echoed on
   // every claim naming this shell — binding is explicit identity, not
@@ -226,7 +226,10 @@ export type ServerMessage =
   // (rewind to fire time), dir is the shooter's claimed aim — never
   // trusted for damage, only for muzzle audio/visual on observers.
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
-  | { type: 'projectileDestroyed'; projectileId: string; shotId?: string }
+  | { type: 'projectileDestroyed'; projectileId: string; shotId?: string;
+      /** Server-true contact point — replicas snap here before exploding
+       *  so the predicted blast center IS the authority's. */
+      position?: Vec3 }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
       /** §4.7 replica lanes keyed by kind name — `hash` the client

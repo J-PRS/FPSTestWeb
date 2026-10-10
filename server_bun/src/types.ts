@@ -70,7 +70,7 @@ export interface PlayerState {
   ping: number; // self-reported client RTT in ms
   /** Latest clientStats uplink — self-reported fps/jsMs + link quality.
    *  Stamped at receive so /metrics can drop stale reporters. */
-  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; at: WallMs };
+  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; renderLag?: Record<string, number>; at: WallMs };
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: TransportKind;
   // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
@@ -124,6 +124,9 @@ export interface PlayerState {
   armor: number;
   regenUntil: SimMs;
   ddUntil: SimMs;
+  /** Last time this player took a hit (sim clock) — the regenerator
+   *  perk's ramp counts unhurt seconds from here and resets on damage. */
+  lastDamageAt: SimMs;
   // LG pop-charge banked ON this victim by enemy beams — the walking bomb.
   // `charge` is the bank at `chargeT` (epoch s); reads decay lazily via
   // lgChargeAt (5× drain), so no ticking needed. Any non-LG hit detonates

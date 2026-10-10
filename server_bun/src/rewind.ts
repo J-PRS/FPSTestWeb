@@ -34,6 +34,23 @@ export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: numb
   return Math.min(Math.max(st.renderLagMs, 0), 800);
 }
 
+/** Per-victim render delay: the shooter's ghost lag for THIS target.
+ *  A single max-across-remotes rewinds a fast victim ~500ms behind the
+ *  ghost the shooter actually saw — the "damage numbers, no damage"
+ *  class of miss. Falls back to the max when the map's absent (old
+ *  client) or lacks the id (bot/creature/streamed late). */
+export function renderLagOfTarget(
+  p: { clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined,
+  targetId: string,
+): number {
+  const st = p?.clientStats;
+  if (st?.renderLag && !(st.at !== undefined && wallNow() - st.at > 30_000)) {
+    const v = st.renderLag[targetId];
+    if (v !== undefined) return Math.min(Math.max(v, 0), 800);
+  }
+  return renderLagOf(p);
+}
+
 export function pushRewindSample(
   p: { history: { t: WallMs; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
   now: WallMs,
