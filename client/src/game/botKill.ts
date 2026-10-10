@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { WeaponType, CONC_JET_DRAIN } from '../../../shared/weapons.js';
+import { WeaponType, CONC_JET_DRAIN, getWeaponStats } from '../../../shared/weapons.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import * as sfx from '../core/sfx.js';
 import { PlayerDebris } from '../effects/debris.js';
@@ -39,12 +39,19 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     const p = b.deps.lazyPlayer();
     if (p.isDead) return;
     p.lastDamageSource = opts.src;
+    // An explosive hit detonates this same frame — the blast pays the
+    // T1 shove, which is the ONLY displacement the server grants a
+    // direct-hit victim (impulseOnly). A flat knock on top double-shoves
+    // offline AND online (predicted blast + this knock + the deduped
+    // wire echo read as a blink). Blastless hits (bolts, melee) keep it.
+    const blastPays = opts.weapon !== undefined && getWeaponStats(opts.weapon).aoeRadius > 0;
+    const knock = () => { if (!blastPays) p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken); };
     // Connected room: health is server truth. A local write gets stomped
     // by the next yourHealth echo — report through the self-damage channel
     // (same as creature melee) and let the wire echo apply it. Feedback
     // stays local so the hit still reads instantly.
     if (b.deps.lazyNetworkManager?.()?.isConnected()) {
-      p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken);
+      knock();
       b.deps.lazyHud().showDamage(fromPos, dmg);
       sfx.playerHurt();
       b.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, attackerId);
@@ -52,7 +59,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     }
     p.health = Math.max(0, p.health - dmg);
     b.creditDamage(attackerId, 'local', dmg); // offline CTF dmg economy
-    p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken);
+    knock();
     b.deps.lazyHud().showDamage(fromPos, dmg);
     sfx.playerHurt();
     if (p.health > 0) return;
@@ -166,6 +173,7 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     // Kills drop nuggets — bots feed the economy like everything else.
     if (!b.spec.ffa) b.hooks.dropNuggets(bot.position, 3, bot.vel);
     b.deps.world.killCounts.set(killerId, (b.deps.world.killCounts.get(killerId) ?? 0) + 1);
+    b.deps.world.deathCounts.set(bot.playerId, (b.deps.world.deathCounts.get(bot.playerId) ?? 0) + 1);
     b.creditKill(killerId, false, bot.position);
     b.ctf?.dropCarried(bot.playerId, bot.position);
     // Rabbit: every corpse is a flag event — first kill spawns it, a
