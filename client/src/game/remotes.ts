@@ -118,7 +118,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   if (!playerState.isDead && playerState.ski) {
     const v = remotePlayer.vel;
     const terrain = deps.lazyTerrain();
-    const groundY = terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z);
+    const groundY = Math.max(terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z), terrain.getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
     if (v.x * v.x + v.z * v.z > 10 && remotePlayer.feetY - groundY < 0.8) {
       skiing = true;
       deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
@@ -195,7 +195,7 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // the AnimationMixer — a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
   // Same grounded heuristic the ski dust uses — wire has no onGround bit.
-  const tY = deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z);
+  const tY = Math.max(deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z), deps.lazyTerrain().getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
   aswAccrue(playerId, playerState.isDead, remotePlayer.feetY - tY < 0.8, Boolean(playerState.ski), dt);
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server — the

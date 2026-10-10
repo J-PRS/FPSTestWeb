@@ -402,7 +402,10 @@ export class RemoteInterp {
     }
 
     if (this.h.terrain) {
-      const groundY = this.h.terrain.getHeight(p.x, p.z);
+      // Feet clamp to the VISIBLE surface — the smooth heightfield can
+      // dip below the rendered level-0 chord in gullies, sinking bodies
+      // meters under what the player sees as ground.
+      const groundY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
       const {eye} = classCapsule(this.h.armorClass);
       if (p.y < groundY + eye) { // keep EYE at eye height above feet
         p.y = groundY + eye;
