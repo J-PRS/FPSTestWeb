@@ -147,6 +147,8 @@ export class NetworkManager {
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
+  private readonly STILL_SEND_INTERVAL = 250; // 4Hz parked heartbeat — server sees identical truth
+  private lastSentState?: { px: number; py: number; pz: number; yaw: number; pitch: number };
   // Tick ARRIVAL cadence is the server loop's 50ms interval (20Hz).
   private readonly telemetry = new NetTelemetry(50);
   private hasLoggedConnectionError: boolean = false;
@@ -628,12 +630,23 @@ export class NetworkManager {
 
     const now = Date.now();
 
-    // Rate limiting
-    if (now - this.lastPositionSendTime < this.POSITION_SEND_INTERVAL) {
+    // Still-throttle: a truly parked player (no pos/vel/aim change) earns
+    // a 4Hz heartbeat instead of 20Hz — identical truth, ~5x less server
+    // reconcile/rewind work per idle player. Any wiggle (incl. aim —
+    // standing snipers still aim) returns to full rate instantly.
+    const still = this.lastSentState !== undefined
+      && Math.hypot(position.x - this.lastSentState.px, position.y - this.lastSentState.py, position.z - this.lastSentState.pz) < 0.05
+      && Math.hypot(velocity.x, velocity.y, velocity.z) < 0.5
+      && Math.abs(rotation.yaw - this.lastSentState.yaw) < 0.01
+      && Math.abs(rotation.pitch - this.lastSentState.pitch) < 0.01;
+    if (now - this.lastPositionSendTime < (still ? this.STILL_SEND_INTERVAL : this.POSITION_SEND_INTERVAL)) {
       return;
     }
 
     this.lastPositionSendTime = now;
+    this.lastSentState ??= { px: 0, py: 0, pz: 0, yaw: 0, pitch: 0 };
+    this.lastSentState.px = position.x; this.lastSentState.py = position.y; this.lastSentState.pz = position.z;
+    this.lastSentState.yaw = rotation.yaw; this.lastSentState.pitch = rotation.pitch;
 
     // Assign sequence number and store in state history for reconciliation
     const seq = ++this.sequenceCounter;
