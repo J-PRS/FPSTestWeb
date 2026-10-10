@@ -66,6 +66,25 @@ describe('RibbonTrail pooling + slots', () => {
   // ---- lifecycle invariants pinned before the P1/P2 restructure ----
   // These describe the contract the overhaul keeps, not the bugs it kills.
 
+  it('a full ring rewrite keeps vert 0 at the CURRENT oldest sample', () => {
+    // Push past MAX_SAMPLES so every push evicts — each vert's sample
+    // assignment shifts. Buffer vert 0 must track the live oldest, not
+    // the position it was first written with (the stale-vert streak).
+    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, life: 10 });
+    // Per-frame cadence like production: one push, one update — pushed=1
+    // at rewrite time, so vert 0 only stays fresh if eviction forces a
+    // full rewrite (the stale-vert bug hid behind freshFrom=count-1).
+    for (let i = 0; i < 60; i++) {r.push(pos(i), vel()); r.update(0.016);}
+    const b = (r as unknown as { batch: { pos: Float32Array } }).batch;
+    const s = slot(r);
+    const o = s * 48 * 2 * 3; // slot * VERTS * 3
+    // Current oldest = sample x=12 (60 pushes, ring holds last 48).
+    // Vert 0's x sits at oldest ± half-width; a stale vert reads ~x=0.
+    expect(b.pos[o]!).toBeGreaterThan(10);
+    expect(b.pos[o]!).toBeLessThan(14);
+    r.dispose();
+  });
+
   it('a position discontinuity cuts the strip instead of drawing a chord', () => {
     const r = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
     r.push(pos(0), vel());
