@@ -233,13 +233,14 @@ export class RoomFlags {
   /** A blast shoved a dropped flag — puntable objective, same deal as
    *  nuggets: server moves truth, flagUpdate streams the flight, the rest
    *  spot is what a touch resolves against. */
-  knock(at: Vec3, radius: number, force: number): void {
+  knock(at: Vec3, radius: number, force: number, pull = false): void {
+    const s = pull ? -1 : 1;
     for (const f of this.flags.values()) {
       if (f.state !== 'dropped') continue;
       const dx = f.pos.x - at.x, dy = f.pos.y - at.y, dz = f.pos.z - at.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d >= radius) continue;
-      const mag = aoeImpulse(force, d, radius) * FLAG_KNOCK;
+      const mag = aoeImpulse(force, d, radius) * FLAG_KNOCK * s;
       f.vel.x += (dx / (d || 1)) * mag;
       f.vel.z += (dz / (d || 1)) * mag;
       f.vel.y += Math.abs(mag) * 0.4; // pop off the dirt — tumble, not skid

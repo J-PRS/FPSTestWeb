@@ -105,6 +105,23 @@ export class BallCombat {
     }
   }
 
+  /** Blast shove on the swarm — mirrors the client's predicted
+   *  Ball.applyKnockback (flat dir*force inside radius+body, pull flips
+   *  it). Without it the client throws the ball and the next segment
+   *  yanks it back. */
+  knock(pos: SimVec, radius: number, force: number, pull = false): void {
+    const s = pull ? -1 : 1;
+    for (const b of this.host.balls().values()) {
+      if (b.dead) continue;
+      const dx = b.x - pos.x, dy = b.y - pos.y, dz = b.z - pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > radius + b.radius || d < 1e-6) continue;
+      b.vx += (dx / d) * force * s;
+      b.vy += (dy / d) * force * s;
+      b.vz += (dz / d) * force * s;
+    }
+  }
+
   /** creatureHit claim. Lenient sanity clamps only — real validation is an
    *  anticheat-phase concern; a bogus claim costs a shoved ball, not state.
    *  `killed` feeds kill-edge telemetry; `reason` names a claim the sim

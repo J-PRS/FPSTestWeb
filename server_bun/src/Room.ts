@@ -373,7 +373,10 @@ export class Room {
         // must not punt loose pickups — 'pickup' emits only come from
         // server-owned blast paths (shells, mines).
         case 'blast': this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
-        case 'knock': (e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force); break;
+        case 'knock':
+          if (e.kind === 'prey') { this.ballSim.knock(e.pos, e.radius, e.force, e.pull); this.creatureSim.knock(e.pos, e.radius, e.force, e.pull); }
+          else (e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force, e.pull);
+          break;
         case 'preySplash':
           this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
           this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);

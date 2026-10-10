@@ -120,11 +120,13 @@ export class BlastRunner {
       splash: stats.aoeDamage * this.h.ddMult(player),
     });
 
-    // A dropped flag is a loose physical object — every blast (claimed or
-    // trusted) can punt it. Lives inside processAOE so claimed shots,
-    // server blasts and splashes all knock it through one funnel.
-    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'flag' });
-    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'pickup' });
+    // Loose physical objects — flags, pickups, wildlife — get punted by
+    // every blast (claimed or trusted) through this one funnel. The client
+    // predicts each shove; the server-side impulse is what makes it stick
+    // instead of snapping back on the next truth update.
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'flag', pull });
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'pickup', pull });
+    this.h.deps.emit?.({ type: 'knock', pos: position, radius, force: stats.knockbackForce, kind: 'prey', pull });
 
     // Armor grenade: the blast's payload is plating, not just damage.
     if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx);

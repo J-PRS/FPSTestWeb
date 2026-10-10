@@ -229,6 +229,11 @@ export class BallSim {
     this.combat.armorBlast(pos, radius, amount);
   }
 
+  /** Blast knockback on the swarm — BallCombat owns the force surface. */
+  knock(pos: SimVec, radius: number, force: number, pull = false): void {
+    this.combat.knock(pos, radius, force, pull);
+  }
+
   sweepHit(from: SimVec, to: SimVec, extraReach: number, backMs = 0): { id: number; t: number; d: number } | null {
     return this.combat.sweepHit(from, to, extraReach, backMs);
   }

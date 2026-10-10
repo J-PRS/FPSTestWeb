@@ -23,7 +23,7 @@ export type RoomEvent =
   // whichever subsystems care (deployables eat splash, dropped flags punt,
   // loose pickups punt, wildlife takes splash, armor-nades plate sims).
   | { type: 'blast'; pos: Vec3; damage: number; radius: number; shooterId: string; scales?: readonly number[]; weapon?: number; splash?: number }
-  | { type: 'knock'; pos: Vec3; radius: number; force: number; kind: 'flag' | 'pickup' }
+  | { type: 'knock'; pos: Vec3; radius: number; force: number; kind: 'flag' | 'pickup' | 'prey'; pull?: boolean }
   | { type: 'preySplash'; ownerId: string; pos: Vec3; radius: number; maxDamage: number }
   // Melee intent aftermath: the swing is server-derived (rewound pos +
   // aim dir), so the creature cone pays here — the client predicts the

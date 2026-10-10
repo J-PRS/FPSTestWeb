@@ -269,6 +269,23 @@ export class CreatureSim {
     }
   }
 
+  /** Blast knockback on the pack — same flat dir*force the client predicts
+   *  on net-driven creatures, pull flips it. Without it a blast visibly
+   *  throws them and the next segment yanks them back. */
+  knock(pos: SimVec, radius: number, force: number, pull = false): void {
+    const s = pull ? -1 : 1;
+    for (const c of this.crawlers.values()) {
+      if (c.dead) continue;
+      const rad = 'radius' in c ? (c.radius as number) : 1.4;
+      const dx = c.x - pos.x, dy = c.y - pos.y, dz = c.z - pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > radius + rad || d < 1e-6) continue;
+      c.vx += (dx / d) * force * s;
+      c.vy += (dy / d) * force * s;
+      c.vz += (dz / d) * force * s;
+    }
+  }
+
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the
    *  real validation is anticheat-phase). Returns whether it killed. */
   handleHit(playerId: string, id: number, damage: number): HitVerdict {
