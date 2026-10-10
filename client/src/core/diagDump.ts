@@ -55,7 +55,7 @@ export function diagLines(ctx: StateDebugContext): string[] {
   for (const [id, ps] of wire) {
     const rp = ctx.remotePlayers.get(id);
     const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
-    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m` : ' NOT-RENDERED'}`);
+    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} sim=${rp.isSimulating}` : ' NOT-RENDERED'}`);
   }
   // Rendered but absent from the wire roster — local bots, dummies,
   // stale ghosts the roster never told us about.
