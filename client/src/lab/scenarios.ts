@@ -8,17 +8,22 @@
 import * as THREE from 'three';
 import { segPointDist, projStep, segFieldHit, type SimProjectile } from '../../../shared/projSim.js';
 import { hmHeight, hmNormal, type Heightfield } from '../../../shared/heightfield.js';
-import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
+import { GRAVITY, type MoveSurface } from '../../../shared/movement.js';
 import type { BallVariant } from '../../../shared/ballSim.js';
-import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
+import type { BotVec } from '../../../shared/botBrain.js';
 import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
-import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, type BotLoadout } from '../../../shared/botLoadouts.js';
 import {
   spawnBall, spawnCrawler, spawnFlyer, spawnRoller, spawnSlither,
   spawnBaneling, spawnTotem,
   spawnBolt, spawnMover, spawnShell,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
 } from './simKit.js';
+import {
+  BOT_ENERGY_MAX, BOT_HP, botSpeed, locomoteAgent, pickAtRange,
+  respawnAgent, spawnAgent, type BotAgent,
+} from './botAgents.js';
+import { flagScrim } from './flagScrim.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 
 export interface LabInstance {
@@ -656,93 +661,8 @@ function skiRun(scene: THREE.Scene): LabInstance {
 /* Bot duel — REAL BotBrain minds on real MoveSim bodies. Each agent   */
 /* thinks with the full sense stack (hunt/steer/escape/dodge/fire) and */
 /* locomotes through the same physics a player does — nothing staged.  */
+/* The shared mind-body rig lives in botAgents.ts.                     */
 /* ------------------------------------------------------------------ */
-
-const BOT_SURFACE: MoveSurface = {
-  getHeight: (x, z) => hmHeight(FLAT, x, z),
-  getNormal: (_x, _z, out) => { out.x = 0; out.y = 1; out.z = 0; return out; },
-};
-const BOT_HP = 100;
-const BOT_ENERGY_MAX = 100;
-
-/** Client's locomote() slew — turn toward dest at a wrist-speed rate. */
-function slewYaw(cur: number, want: number, k: number): number {
-  let d = want - cur;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  const m = Math.abs(d);
-  return cur + (m < k ? d : Math.sign(d) * k);
-}
-
-interface BotAgent {
-  brain: BotBrain;
-  sim: MoveSim;
-  mesh: THREE.Mesh;
-  hp: number;
-  energy: number;
-  yaw: number;
-  lastDest: BotVec | null;
-  lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
-  name: string;
-  dead: number; // respawn countdown
-  lo: BotLoadout;
-}
-
-function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number, lo: BotLoadout): BotAgent {
-  const pos = { x, y: 2, z: 0 };
-  const mesh = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.9, 1.4, 4, 12),
-    new THREE.MeshBasicMaterial({ color }),
-  );
-  scene.add(mesh);
-  return {
-    brain: new BotBrain({ ...pos }),
-    sim: new MoveSim(BOT_SURFACE, {
-      pos: { ...pos }, vel: { x: 0, y: 0, z: 0 },
-      yaw: 0, pitch: 0, onGround: false,
-    }),
-    mesh, hp: BOT_HP, energy: BOT_ENERGY_MAX, yaw: 0,
-    lastDest: null, lastMove: undefined, name, dead: 0, lo,
-  };
-}
-
-function respawnAgent(a: BotAgent, x: number): void {
-  a.sim.setState({
-    pos: { x, y: 2, z: 0 }, vel: { x: 0, y: 0, z: 0 },
-    yaw: a.yaw, pitch: 0, onGround: false,
-  });
-  a.mesh.visible = true;
-}
-
-function locomoteAgent(a: BotAgent, dt: number): void {
-  if (!a.lastDest) return;
-  const s = a.sim.state;
-  const md = Math.hypot(a.lastDest.x - s.pos.x, a.lastDest.z - s.pos.z);
-  if (md > 0.01) {
-    a.yaw = slewYaw(a.yaw, Math.atan2(a.lastDest.x - s.pos.x, a.lastDest.z - s.pos.z), 5 * dt);
-    s.yaw = a.yaw;
-  }
-  const jet = !!a.lastMove?.jet && a.energy > 0.5;
-  a.sim.setInput({
-    forward: md > 0.5 ? 1 : 0,
-    right: 0,
-    jumpHeld: !!a.lastMove?.jump,
-    skiHeld: !!a.lastMove?.ski,
-    jetHeld: jet,
-  });
-  a.sim.update(dt);
-  // Honest tank: jets burn, regen fills — the brain's skills read this.
-  a.energy = Math.min(BOT_ENERGY_MAX, Math.max(0, a.energy + (jet ? -30 : 20) * dt));
-}
-
-const botSpeed = (a: BotAgent) => Math.hypot(a.sim.state.vel.x, a.sim.state.vel.y, a.sim.state.vel.z).toFixed(1);
-
-/** Weapon the brain would bring to this range — same pick the game host
- *  runs at botBrain.ts think(). Speed 0 (hitscan) means no shell. */
-function pickAtRange(a: BotAgent, d: number) {
-  const wt = pickBotWeapon(a.lo, d, d);
-  return { wt, st: getWeaponStats(wt) };
-}
 
 function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
@@ -981,6 +901,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   };
 }
 
+
 /* ------------------------------------------------------------------ */
 
 export const SCENARIOS: LabScenario[] = [
@@ -997,4 +918,5 @@ export const SCENARIOS: LabScenario[] = [
   { id: 'totem-field', name: 'TOTEM FIELD', blurb: 'real totemSim: charge telegraph → locked beam fire → blink relocate', create: totemField },
   { id: 'baneling-rush', name: 'BANELING RUSH', blurb: 'real banelingSim: fuse-lit rush + pop on the prey point', create: banelingRush },
   { id: 'ski-run', name: 'SKI RUN', blurb: 'real MoveSim skiing a heightfield hill', create: skiRun },
+  { id: 'flag-scrim', name: 'FLAG SCRIM', blurb: '4v4 CTF: BotBrain minds on the real role table', create: flagScrim },
 ];
