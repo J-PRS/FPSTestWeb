@@ -71,6 +71,14 @@ export class WorkerTransport implements GameTransport {
     this.worker.onerror = (e) => {
       logger.error('net worker error', e.message);
       config.onError?.(new Error(e.message || 'net worker crashed'));
+      // A crashed worker is a dead lane — fire 'down' so the session
+      // reprobes now instead of waiting the 4s silence watchdog. Queued
+      // inbound events drain first or they'd replay into the post-down
+      // roster/seq reset out of wire order.
+      if (this.drainTimer) { clearTimeout(this.drainTimer); this.drainTimer = null; }
+      this.drain();
+      this.open = false;
+      config.onDisconnect?.(1006, 'net worker crashed');
     };
     this.worker.postMessage({ kind: 'init', net: urlParams.net ?? undefined });
   }
