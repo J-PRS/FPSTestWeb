@@ -127,7 +127,11 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
       if (map && !ctx.gameServer.hasMap(map)) {
         return corsResponse('Unknown map', { status: 400 });
       }
-      const room = ctx.gameServer.quickRoom(mode, map, bots);
+      // Sim gates ride the mint — a bare roomFor'd room ignores the
+      // flags the follow-up join carries (creation-time only).
+      const noCreatures = url.searchParams.get('nocreatures') === '1';
+      const noBalls = url.searchParams.get('noballs') === '1';
+      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls);
       if (!room) return corsResponse('Server full', { status: 503 });
       return json({ room: room.name, mode: room.mode });
     },

@@ -14,13 +14,13 @@ import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
-import type { PickupKind } from '../../shared/pickups.ts';
+import { NUG_TUMBLE, type PickupKind } from '../../shared/pickups.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
 const PICKUP_TTL_S = 60; // dropped loot decays — no infinite accumulation
 const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
-const NUG_FRICTION = 4;  // tumble bleed per second — gems skid, not slide
+const NUG_FRICTION = NUG_TUMBLE.friction;
 
 export class RoomPickups {
   private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; vel: Vec3; armT: number }>();
@@ -102,7 +102,7 @@ export class RoomPickups {
       const mag = aoeImpulse(force, d, radius) * 0.4 * s; // nugs are light but grounded — fraction of player shove
       p.vel.x += (dx / (d || 1)) * mag;
       p.vel.z += (dz / (d || 1)) * mag;
-      p.vel.y += Math.abs(mag) * 0.4; // slight pop — tumble reads as a bounce, not a slide
+      p.vel.y += Math.abs(mag) * NUG_TUMBLE.upPop; // slight pop — tumble reads as a bounce, not a slide
     }
   }
 
@@ -130,10 +130,10 @@ export class RoomPickups {
         const bleed = Math.max(0, 1 - NUG_FRICTION * dt);
         p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
         p.pos.y += p.vel.y * dt; p.vel.y += GRAVITY * dt; // world gravity — no soft loose-object fork
-        const gy = this.room.field ? hmHeight(this.room.field, p.pos.x, p.pos.z) + 0.5 : p.pos.y;
+        const gy = this.room.field ? hmHeight(this.room.field, p.pos.x, p.pos.z) + NUG_TUMBLE.groundLift : p.pos.y;
         if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
         p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
-        if (Math.abs(p.vel.x) < 0.5 && Math.abs(p.vel.z) < 0.5 && Math.abs(p.vel.y) < 0.5) {
+        if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
           p.vel.x = p.vel.y = p.vel.z = 0;
           this.settleReachable(p);
           // Resting spot is the new truth — one edge resyncs every client.

@@ -24,10 +24,10 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, RIDE_CATCH_R, canHostRide } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
-import { WORLD_MODEL, spawnPayload, verbPayload } from '../../shared/worldModel.ts';
+import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
@@ -58,6 +58,11 @@ export interface LiveProj {
   /** Owner's team at spawn — team-filtered solids (shield gates) let the
    *  shell through when it matches. undefined = teamless/owner gone. */
   ownerTeam?: string;
+  /** Belt-sticky combo: this shell caught a ridable bomb — no wait,
+   *  the other direction: set ON THE RIDER, value = the host shell's id.
+   *  A riding projectile stops integrating, centers on the host, and
+   *  detonates where the host dies. */
+  rides?: string;
 }
 
 // Player aim height — matches where the client sweeps the capsule center.
@@ -233,6 +238,16 @@ export class RoomProjectiles {
       const stats = proj.stats;
       const p = proj.p;
       const prevAge = p.age;
+      // Combo rider: centered on the host shell — no integration, no
+      // contact; the host's detonation cascades into this pop. A missing
+      // host (cleared without detonate) just drops the ride.
+      if (proj.rides) {
+        const h = this.projs.get(proj.rides);
+        if (h) { p.pos.x = h.p.pos.x; p.pos.y = h.p.pos.y; p.pos.z = h.p.pos.z; }
+        else proj.rides = undefined;
+        p.age += dt;
+        continue;
+      }
       // A glued bomb rides its victim — position follows the player it
       // stuck to (feet + the contact offset), so the fuse pops wherever
       // they carried it. Dead victim keeps the last riding point.
@@ -257,6 +272,10 @@ export class RoomProjectiles {
         continue;
       }
 
+      // Combo catch: a same-owner ridable bomb inside this shell's swept
+      // step glues on dead-center. Runs BEFORE contact so a shell that
+      // dies inside the catch still carries its riders into the blast.
+      if (!stats.rides && canHostRide(proj.weaponType, stats)) this.catchRiders(proj, from);
       if (this.stepContact(proj, stats, from, dt)) continue;
       // No contact — still flying; survives to the next tick.
     }
@@ -286,9 +305,39 @@ export class RoomProjectiles {
     proj.p.vel.x = 0; proj.p.vel.y = 0; proj.p.vel.z = 0;
   }
 
+  /** Combo catch — a same-owner airborne belt sticky inside the swept
+   *  segment glues dead-center onto this shell (Painkiller stake+nade).
+   *  The edge tells replicas to parent the same pair, so every client
+   *  rides the same combined trail. */
+  private catchRiders(host: LiveProj, from: Vec3): void {
+    const hx = host.p.pos.x - from.x, hy = host.p.pos.y - from.y, hz = host.p.pos.z - from.z;
+    const len2 = hx * hx + hy * hy + hz * hz;
+    const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
+    for (const r of this.projs.values()) {
+      if (r === host || !r.stats.rides || r.stuck || r.rides || r.ownerId !== host.ownerId) continue;
+      const ax = r.p.pos.x - from.x, ay = r.p.pos.y - from.y, az = r.p.pos.z - from.z;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, (ax * hx + ay * hy + az * hz) / len2)) : 0;
+      const dx = ax - hx * t, dy = ay - hy * t, dz = az - hz * t;
+      if (dx * dx + dy * dy + dz * dz <= r2) {
+        r.rides = host.id;
+        r.p.pos.x = host.p.pos.x; r.p.pos.y = host.p.pos.y; r.p.pos.z = host.p.pos.z;
+        r.p.vel.x = 0; r.p.vel.y = 0; r.p.vel.z = 0;
+        this.room.broadcast(eventPayload(WORLD_MODEL.projectile!, 'projRide', 'projectileId', r.id, { host: host.id }) as ServerMessage);
+      }
+    }
+  }
+
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
+    // Riders pop where the host died — collect before deleting, their
+    // own detonate() mutates the same map.
+    for (const r of [...this.projs.values()].filter(s => s.rides === proj.id)) {
+      this.detonate(r, at);
+    }
     this.projs.delete(proj.id);
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, {}) as ServerMessage);
+    // `at` rides the edge: a replica's replay drifts past the real
+    // contact by ~a transit of flight; exploding AT the wire point keeps
+    // every predicted blast centered where the authority put it.
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at }) as ServerMessage);
     // Skillshot ramp: sim shells carry their real flight age — a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
@@ -426,7 +475,7 @@ export class RoomProjectiles {
     for (const [id, proj] of this.projs) {
       if (proj.ownerId === ownerId) {
         this.projs.delete(id);
-        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, {}) as ServerMessage);
+        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, { position: proj.p.pos }) as ServerMessage);
       }
     }
   }

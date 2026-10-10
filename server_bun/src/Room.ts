@@ -180,6 +180,13 @@ export class Room {
       if (this.modeSpec?.teams) {
         this.players.teamBases = { alpha: { ...snapped.alpha }, bravo: { ...snapped.bravo } };
       }
+    },
+    (rings) => {
+      // Auto-derived stands mint their own spawn rings — but authored
+      // teamSpawns still win when a base-less spec bothered to ship them.
+      if (this.modeSpec?.teams && !this.spec.teamSpawns) {
+        this.players.teamSpawns = rings;
+      }
     });
   /** Effective structure set (authored + dais hulls) and everywhere it
    *  feeds — colliders, join echo, skinny mapUpdate diff — lives in

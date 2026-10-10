@@ -52,7 +52,7 @@ export class RoomMoveSim {
   /** Fires when a shadow accumulates SEVERE_N teleport-scale divergences
    *  inside SEVERE_MS — the kick wiring lives at the Room level (this
    *  sim only knows movement truth). */
-  onCheat?: (playerId: string, dist: number) => void;
+  onCheat?: (playerId: string, dist: number, detail?: Record<string, unknown>) => void;
   /** Live player capsules for body-vs-body contact — the Room supplies
    *  records each tick (corpses excluded upstream); each shadow gets a
    *  self-less view so its own sim does the pushing. */
@@ -67,7 +67,7 @@ export class RoomMoveSim {
       divergenceM: () => this.divergenceM,
       correctMs: () => this.correctMs,
       health: () => this.health,
-      onCheat: (id, d) => this.onCheat?.(id, d),
+      onCheat: (id, d, detail) => this.onCheat?.(id, d, detail),
       surface: () => this.surface,
     });
   }
@@ -178,7 +178,8 @@ export class RoomMoveSim {
       energy: ENERGY.max * mods.energyMax, energyMax: mods.energyMax,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
-      lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
+      lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0, pending: [],
+      lastRepPos: null,
       gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
@@ -226,31 +227,27 @@ export class RoomMoveSim {
     if (sh) { sh.sim.mass = mass; sh.sim.eyeHeight = eyeHeight; sh.sim.bodyRadius = bodyRadius; }
   }
 
-  /** Command-queue ingress — inputMove does NOT apply on arrival. The
-   *  newest event parks in the shadow's pending slot and the next tick's
-   *  phase-0 drain applies it, so a tick's outcome can't depend on where
-   *  inside the tick window a packet landed. Seq gate mirrors setInput's
-   *  so the caller's stale-check answer is unchanged. */
+  /** Command-queue ingress — inputMove does NOT apply on arrival. Edges
+   *  queue in seq order and the next tick's phase-0 drain replays them
+   *  across the window, so a tick's outcome can't depend on where inside
+   *  the window a packet landed. Seq gate mirrors setInput's so the
+   *  caller's stale-check answer is unchanged. FIFO not slot: newest-
+   *  wins dropped every co-tick edge (tap-jumps, double-edges inside
+   *  50ms, the prev-redundancy copy) — a systematic divergence vs the
+   *  client's per-edge replay. */
   queueInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
     const sh = this.shadows.get(playerId);
     if (!sh) return true;
-    // Gate against the pending slot too — lastInputSeq only moves at
-    // drain, so without it a reordered old packet could overwrite a
-    // fresher parked command before the next tick runs.
-    if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) return false;
-    sh.pending = { input, status, seq };
+    // Gate against the queued tail too — lastInputSeq only moves at
+    // drain, so without it a reordered old packet could append a stale
+    // edge behind fresher queued ones.
+    const tail = sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq : undefined;
+    if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, tail ?? 0)) return false;
+    sh.pending.push({ input, status, seq });
+    // Bounded — a flood can't queue unbounded replay work; the oldest
+    // edge drops (its seq anchor with it) so the newest intent survives.
+    if (sh.pending.length > 8) sh.pending.shift();
     return true;
-  }
-
-  /** Phase 0 of every tick: drain pending commands through the normal
-   *  setInput path (seq journal, jet gating, rising-edge antes). */
-  private drainInputs(): void {
-    for (const [pid, sh] of this.shadows) {
-      if (!sh.pending) continue;
-      const p = sh.pending;
-      sh.pending = undefined;
-      this.setInput(pid, p.input, p.status, p.seq);
-    }
   }
 
   /** inputMove → sim input. Rotation/yaw comes from position reports.
@@ -334,7 +331,8 @@ export class RoomMoveSim {
   inputSeqOf(playerId: string): number {
     const sh = this.shadows.get(playerId);
     if (!sh) return -1;
-    return Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0);
+    const tail = sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0;
+    return Math.max(sh.lastInputSeq, tail);
   }
 
   /** Hard-tolerance trip (Photon Quantum): the position frame carries
@@ -366,7 +364,7 @@ export class RoomMoveSim {
     // consecutive uncovered reports means events were lost, not queued
     // (≥2 measured worse: the early hint's resend re-anchored the client
     // mid-flight and corrections tripled on the adverse soak).
-    if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending?.seq ?? 0)) {
+    if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0)) {
       if (sh.gapStreak === 0) sh.gapAt = wallNow(); // streak start — the judge's in-flight grace window
       sh.gapStreak++;
       const now = wallNow();
@@ -403,6 +401,9 @@ export class RoomMoveSim {
     // Journal anchors pre-teleport positions — the discarded trajectory
     // would swallow fresh reports' divergence checks.
     sh.seqStates.clear();
+    // Queued edges pre-date the discontinuity — replaying them would
+    // coast a respawned body on corpse intent for a full tick.
+    sh.pending.length = 0;
     // Input dies with the discontinuity: the client re-declares intent on
     // its next inputMove, but a retained pre-respawn stick/ski/jet would
     // coast the shadow away from the anchor until kick-scale divergence.
@@ -410,11 +411,13 @@ export class RoomMoveSim {
     sh.jetWanted = false;
     sh.resyncSeq = sh.lastInputSeq;
     sh.resyncAt = wallNow();
+    // The declared discontinuity is a legal step — anchor the report
+    // tracker here or the first post-respawn report reads as a forge.
+    sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
     sh.divergences = 0; // new trajectory — don't carry old accumulation
   }
 
   tick(dt: number): void {
-    this.drainInputs(); // phase 0 — all queued commands land at the boundary
     const bodies = this.bodySource ? [...this.bodySource()] : null;
     // One shared broad-phase per tick: without it every shadow scans the
     // whole roster in collideBodies — O(shadows × bodies) at scale. 4m
@@ -448,6 +451,11 @@ export class RoomMoveSim {
       };
     }
     for (const [pid, sh] of this.shadows) {
+      // Phase 0 (per shadow): drain the queued edges through setInput in
+      // seq order — seq-journal anchors, jet gating, and rising-edge
+      // antes all land before the econ pass reads the final jetWanted.
+      const edges = sh.pending.length ? sh.pending.splice(0, sh.pending.length) : null;
+      if (edges) for (const e of edges) this.setInput(pid, e.input, e.status, e.seq);
       if (bodies) {
         // Shared list for every shadow — collideBodies skips selfId, so
         // rebuilding N-1 copies per tick was pure churn.
@@ -485,12 +493,25 @@ export class RoomMoveSim {
       const resting = s.onGround && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
         && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
         && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
+        && (!edges || edges.every(e => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
         && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some(b => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
       if (!resting) {
         // MoveSim.update() sub-steps internally at its own 1/60 quantum —
         // feed it the raw tick delta. Count consumed steps ourselves for
         // the seq-anchored journal (simTicks is in STEP quanta).
-        sh.sim.update(dt);
+        if (edges) {
+          // Interleave: each edge governs an equal slice of the window
+          // (uniform intra-tick timing — edges carry seq, not stamps), so
+          // a press+release pair holds the key for ~half the tick and the
+          // hop/jet fires instead of collapsing into the final state.
+          const slice = dt / edges.length;
+          for (const e of edges) {
+            sh.sim.setInput({ ...e.input, jetHeld: jetting });
+            sh.sim.update(slice);
+          }
+        } else {
+          sh.sim.update(dt);
+        }
       }
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);

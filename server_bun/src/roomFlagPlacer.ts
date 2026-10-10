@@ -1,7 +1,7 @@
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
 import { KIT_HULLS, KIT_STAND_TOP } from '../../shared/structKits.ts';
-import type { MapSpec, Vec3like } from '../../shared/mapSpec.ts';
+import type { MapSpec, SpawnPoint, Vec3like } from '../../shared/mapSpec.ts';
 import type { Vec3 } from './types.ts';
 import type { RoomFlags } from './RoomFlags.ts';
 import type { BallSim } from './BallSim.ts';
@@ -26,6 +26,10 @@ export class FlagPlacer {
     /** Spawn anchors track corrected stands — a mid-match terrain attach
      *  can move them tens of meters. */
     private syncTeamBases: (snapped: { alpha: Vec3; bravo: Vec3 }) => void,
+    /** Fires only on the no-authored-bases path — the Room turns the
+     *  minted rings into teamSpawns so a spawnless spec doesn't drop
+     *  players on the global ring mid-map. */
+    private syncAutoSpawns?: (rings: { alpha: SpawnPoint[]; bravo: SpawnPoint[] }) => void,
   ) {}
 
   /** Rabbit's one stand: the midpoint of a two-base map (a team's own
@@ -132,13 +136,86 @@ export class FlagPlacer {
     return floor === Infinity ? authoredY : floor;
   }
 
-  /** CTF on a map with no authored bases: derive the map's dominant axis
-   *  from the anchor cloud (spawns + structures) and seat the stands at
-   *  its 25%/75% marks — symmetric layouts (equal eigenvalues, square
-   *  arenas) fall back to the 45° diagonal so a square map gets a
-   *  corner-to-corner flag run instead of an arbitrary side-to-side one.
-   *  Arena split / ±50m remain the bare-spec fallbacks. */
+  /** Local-peak finder for the no-bases path: from a seed, step to the
+   *  highest walkable top within 100m until it stops rising. Hilltops
+   *  are the classic readable stand — visible and defensible — and
+   *  deShelf still rescues the rare pure-cliff summit it lands on. */
+  private hilltop(x0: number, z0: number): { x: number; z: number } {
+    let x = x0, z = z0, top = this.standTop(x, z);
+    for (let i = 0; i < 8; i++) {
+      let bt = top, bx = x, bz = z;
+      for (let r = 25; r <= 100; r += 25) {
+        for (let a = 0; a < 8; a++) {
+          const px = x + Math.cos((a / 8) * Math.PI * 2) * r;
+          const pz = z + Math.sin((a / 8) * Math.PI * 2) * r;
+          const t = this.standTop(px, pz);
+          if (t > bt + 0.5) { bt = t; bx = px; bz = pz; }
+        }
+      }
+      if (bx === x && bz === z) break;
+      x = bx; z = bz; top = bt;
+    }
+    return { x, z };
+  }
+
+  /** Spawn rings minted around auto-derived stands — a spawnless spec
+   *  otherwise drops bravo players next to alpha's flag on the global
+   *  config ring. Three anchors 35m out, snapped to standTop. */
+  private autoSpawnRings(bases: { alpha: Vec3; bravo: Vec3 }): { alpha: SpawnPoint[]; bravo: SpawnPoint[] } {
+    const ring = (b: Vec3): SpawnPoint[] => [0, 1, 2].map(i => {
+      const a = (i / 3) * Math.PI * 2;
+      const x = b.x + Math.cos(a) * 35, z = b.z + Math.sin(a) * 35;
+      return { x, y: this.standTop(x, z), z, r: 10 };
+    });
+    return { alpha: ring(bases.alpha), bravo: ring(bases.bravo) };
+  }
+
+  /** CTF on a map with no authored bases: seed a symmetric pair 300m
+   *  apart on the map diagonal (through the arena center / anchor
+   *  centroid), hill-climb each seed onto its local peak, and keep the
+   *  pair when the climbed distance stays a sane flag run. The PCA
+   *  anchor-cloud axis, arena split, and ±50m remain the fallbacks when
+   *  the peaks collide or flee. */
   autoFlagBases(): { alpha: Vec3; bravo: Vec3 } {
+    const pair = this.diagonalHilltops();
+    if (pair) return this.seatAuto(pair);
+    return this.seatAuto(this.pcaAxisSeats());
+  }
+
+  private seatAuto(raw: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
+    const snapped = this.snapFlagBases(raw);
+    this.syncAutoSpawns?.(this.autoSpawnRings(snapped));
+    return snapped;
+  }
+
+  /** Seeds 150m either side of the map center on each diagonal; a pair
+   *  counts when the peaks end 150–500m apart — closer is one hill
+   *  claiming both seeds, farther means the climbs ran off the map. */
+  private diagonalHilltops(): { alpha: Vec3like; bravo: Vec3like } | null {
+    const spec = this.host.spec;
+    const pts: Vec3like[] = [
+      ...(spec.spawns ?? []),
+      ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
+    ];
+    let cx = spec.arena?.x ?? 0, cz = spec.arena?.z ?? 0;
+    if (!spec.arena && pts.length) {
+      for (const p of pts) { cx += p.x; cz += p.z; }
+      cx /= pts.length; cz /= pts.length;
+    }
+    for (const [ux, uz] of [[Math.SQRT1_2, Math.SQRT1_2], [Math.SQRT1_2, -Math.SQRT1_2]] as const) {
+      const a = this.hilltop(cx - ux * 150, cz - uz * 150);
+      const b = this.hilltop(cx + ux * 150, cz + uz * 150);
+      const d = Math.hypot(b.x - a.x, b.z - a.z);
+      if (d >= 150 && d <= 500) return { alpha: { x: a.x, y: 0, z: a.z }, bravo: { x: b.x, y: 0, z: b.z } };
+    }
+    return null;
+  }
+
+  /** The old auto path, kept as the fallback: dominant axis of the
+   *  anchor cloud (spawns + structures), stands at its 25%/75% marks;
+   *  symmetric clouds take the 45° diagonal, bare specs the arena split
+   *  or ±50m. */
+  private pcaAxisSeats(): { alpha: Vec3like; bravo: Vec3like } {
     const spec = this.host.spec;
     const pts: Vec3like[] = [
       ...(spec.spawns ?? []),
@@ -186,7 +263,7 @@ export class FlagPlacer {
     } else {
       a = { x: -50, y: 0, z: 0 }; b = { x: 50, y: 0, z: 0 };
     }
-    return this.snapFlagBases({ alpha: a, bravo: b });
+    return { alpha: a, bravo: b };
   }
 
   snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {

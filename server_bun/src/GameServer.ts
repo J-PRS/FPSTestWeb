@@ -158,8 +158,8 @@ export class GameServer {
     return this.journal.stats();
   }
 
-  quickRoom(mode: string, map = '', bots?: number): Room | null {
-    return this.factory.quickRoom(mode, map, bots);
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false): Room | null {
+    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls);
   }
 
   /** Route guard: does maps/<name>.json resolve? The catalog negative-

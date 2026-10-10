@@ -35,6 +35,11 @@ export interface Shadow {
    *  apply the shove at different sim phases, so mid-arc reads diverge
    *  ~40m for ~2s without anyone cheating. */
   lastImpulseAt: number;
+  /** Last judged report position — the report-to-report step is the
+   *  teleport signal: a forge shows the REPORT jumping (production's
+   *  plausible() gate already rejects these upstream), while an honest
+   *  drift shows a normal step beside a stuck shadow. */
+  lastRepPos: Vec3Like | null;
   // ---- Energy model ---------------------------------------------------
   // The wire `jet` bit is a claim the tank has fuel; the sim must model
   // the same economy or infinite-jet claims read as valid trajectories.
@@ -100,10 +105,13 @@ export interface Shadow {
   /** Step-count residue — simTicks counts MoveSim.STEP quanta; the
    *  fraction of a step dt didn't complete carries into the next tick. */
   acc: number;
-  /** Command-queue slot: the newest inputMove waiting for the next tick's
-   *  phase-0 drain. Latest wins — movement input is superseding state,
-   *  not a command list, so an older packet's loss is a no-op. */
-  pending?: { input: Partial<MoveInput>; status: number; seq?: number };
+  /** Command queue: inputMove edges waiting for the next tick's phase-0
+   *  drain, applied in seq order across the tick window. A FIFO, not a
+   *  slot — the client replays EVERY journaled edge on correction, so a
+   *  co-tick edge the server drops is a guaranteed divergence (tap-jump
+   *  under autoHop's hold-to-jump can never exist in a one-slot world).
+   *  Bounded: a spam burst drops the oldest edge, not the newest. */
+  pending: { input: Partial<MoveInput>; status: number; seq?: number }[];
   /** Consecutive reports whose inputSeq outran our consumed watermark —
    *  a transient gap is just queue latency; a sustained one is a lost
    *  input edge (hard-tolerance trip). */
@@ -151,7 +159,7 @@ export interface JudgeHost {
   /** Fires when a shadow accumulates SEVERE_N teleport-scale divergences
    *  inside SEVERE_MS — the kick wiring lives at the Room level (this
    *  sim only knows movement truth). */
-  onCheat(playerId: string, dist: number): void;
+  onCheat(playerId: string, dist: number, detail?: Record<string, unknown>): void;
   surface(): FieldSurface | null;
 }
 
@@ -212,7 +220,7 @@ export class MoveJudge {
     // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
     if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return 'stale-epoch';
     if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
-      const parked = reportInputSeq <= (sh.pending?.seq ?? 0);
+      const parked = reportInputSeq <= (sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0);
       // Journal coverage gate: a report stamped seq N was produced by the
       // input whose seq is N. When that inputMove has arrived but is still
       // parked in the pending slot (drains at the next tick's phase 0), the
@@ -273,10 +281,17 @@ export class MoveJudge {
       if (vel) s.vel = { x: vel.x, y: vel.y, z: vel.z };
       s.onGround = true;
       sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
+      sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
       return null;
     }
     if (phase === 'stale-epoch') return null;
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
+    // Report-to-report step — tracked on every judged report so a
+    // step-function teleport reads as teleport even while the shadow
+    // sits elsewhere (drift and forge look identical as report-vs-
+    // shadow distance; only the report stream itself separates them).
+    const repJump = sh.lastRepPos ? Math.hypot(pos.x - sh.lastRepPos.x, pos.y - sh.lastRepPos.y, pos.z - sh.lastRepPos.z) : 0;
+    sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
     if (phase === 'parked-defer') { ++sh.deferStreak; return null; }
     if (reportInputSeq === undefined || reportInputSeq <= sh.lastInputSeq) {
       sh.deferStreak = 0;
@@ -325,7 +340,30 @@ export class MoveJudge {
     const gapCredit = sh.gapStreak > 0
       ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
       : 0;
-    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, SEVERE_M + gapCredit);
+    const severeM = SEVERE_M + gapCredit;
+    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM);
+    // Judge mode: the client report is truth (no corrections flow), so a
+    // shadow left standing on a stale position measures the SAME offset
+    // on every report — one systematic blip (crest timing, transit skew,
+    // a knockback event the link dropped) snowballs into teleport-scale
+    // strikes on honest play; the soak's 'Movement cheat' warns were
+    // exactly this. Reseat when the report's own step is sub-severe —
+    // the client's motion stayed continuous and only the shadow is lost.
+    // A step-function report (>severeM between reports) never reseats:
+    // that split is the teleport evidence itself and the shadow must
+    // keep measuring it (documented intent: "over that we resync the
+    // sim to the report"). A divergence past the severe bar only reseats
+    // inside the impulse window — a shove the wire event never carried
+    // is server-caused split, not client evidence. Authority mode keeps
+    // sim truth — the correction below is what reconverges that side.
+    const postImpulse = sh.lastImpulseAt > 0 && wallNow() - sh.lastImpulseAt < 2000;
+    if (!this.host.authoritative() && repJump <= severeM && (dist <= severeM || postImpulse)) {
+      s.pos = { x: pos.x, y: pos.y, z: pos.z };
+      s.onGround = true;
+      // Anchors captured pre-reseat replay over the discarded trajectory
+      // and read every next report as phantom divergence.
+      sh.seqStates.clear();
+    }
     // Snap budget scales with speed: at cruise (~50m/s) a 5m offset is
     // 0.1s of travel — invisible; at standstill even 1.5m reads. The
     // snap ships only past the floor (feel over accuracy); divergences
@@ -373,9 +411,27 @@ export class MoveJudge {
   private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number): void {
     sh.divergences++;
     this.noteHealth(dist);
-    this.noteSevere(sh, playerId, dist, severeM);
+    // The severe counter gets the same grace the log line does: inside
+    // the impulse window the journal can't reproduce the shove (see
+    // anchoredCompare's own comment), so a >severeM gap is unverifiable
+    // knockback skew, not teleport evidence. Without this, three blasts
+    // a minute on one honest player banks a guaranteed cheat trip — the
+    // nb_57/nb_63 warns the 64-client soak produced on the 5%-loss
+    // quartile. Strikes already banked keep decaying on SEVERE_MS; the
+    // window just can't add new ones.
+    if (wallNow() - sh.lastImpulseAt >= 2000) {
+      const s = sh.sim.state;
+      this.noteSevere(sh, playerId, dist, severeM, {
+        simPos: `${s.pos.x.toFixed(1)},${s.pos.y.toFixed(1)},${s.pos.z.toFixed(1)}`,
+        repPos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
+        simVel: `${s.vel.x.toFixed(1)},${s.vel.y.toFixed(1)},${s.vel.z.toFixed(1)}`,
+        inp: `${sh.sim.input.forward},${sh.sim.input.right},${sh.sim.input.skiHeld ? 1 : 0},${sh.sim.input.jetHeld ? 1 : 0}`,
+        simTicks: sh.simTicks, inSeq: sh.lastInputSeq, repSeq: reportInputSeq,
+        gapStreak: sh.gapStreak, impAgo: sh.lastImpulseAt > 0 ? Math.round(wallNow() - sh.lastImpulseAt) : -1,
+      });
+    }
     // Mid-arc knockback skew is transient by construction — the severe
-    // counter still eats it (3 hits in 60s = real teleport), but the
+    // counter no longer banks inside the impulse window (above), but the
     // log line stays informational. Same for permissive mode: without
     // sim authority nothing ever corrects the shadow, so two honest
     // sims drifting on cresty terrain is the expected steady state,
@@ -401,14 +457,14 @@ export class MoveJudge {
 
   /** Rolling severe-blow counter — N overshoots inside the window flags
    *  the shadow as a teleporter, not a drifter. */
-  private noteSevere(sh: Shadow, playerId: string, dist: number, severeM: number): void {
+  private noteSevere(sh: Shadow, playerId: string, dist: number, severeM: number, detail?: Record<string, unknown>): void {
     if (dist <= severeM || sh.cheated) return;
     const now = wallNow();
     sh.severeT = sh.severeT.filter((t) => now - t < SEVERE_MS);
     sh.severeT.push(now);
     if (sh.severeT.length >= SEVERE_N) {
       sh.cheated = true;
-      this.host.onCheat(playerId, dist);
+      this.host.onCheat(playerId, dist, detail);
     }
   }
 

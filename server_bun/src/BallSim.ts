@@ -277,6 +277,20 @@ export class BallSim {
     }
   }
 
+  /** Gate-adoption cull: every ball leaves with a 'gone' edge — a bare
+   *  balls.clear() deletes server truth silently and every replica would
+   *  keep rendering its last segment forever (no TTL on wire balls). */
+  cullAll(): void {
+    for (const b of [...this.balls.values()]) {
+      b.dead = true;
+      this.balls.delete(b.id);
+      this.retargetAcc.delete(b.id);
+      this.resyncAcc.delete(b.id);
+      this.segRegime.delete(b.id);
+      this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z } }) as ServerMessage);
+    }
+  }
+
   /** Step by real elapsed dt — the room tick calls this once per fire;
    *  scenario tests and warp soaks drive it directly (sim-time ≠ wall). */
   step(dt: number): void {

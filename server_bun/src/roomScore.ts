@@ -122,6 +122,29 @@ export class RoomScore {
     const corpse = this.h.players.getPlayer(targetId);
     if (corpse) this.h.pushNoise(corpse.position);
     const spec = this.h.modeSpec;
+    // Corpse loot — offline drops 3 nuggets on every team-mode death
+    // ("kills feed the economy"); the wire must match or hosted rooms
+    // starve on maps without creature pops. Runs before the shooter
+    // checks: environment/self kills leave loot too, same as offline.
+    // tdm keeps its single kill-confirm tag; other team modes scatter
+    // gems (belt income + heal — they only bank points where
+    // modeSpec.gems says so).
+    if (spec?.teams && corpse) {
+      if (this.h.mode === 'tdm') {
+        // Kill-confirmed: ANY team grabs the tag for the point —
+        // deny by touching it first.
+        this.h.pickups?.spawn(corpse.position, 'tag');
+        this.h.influence.splat(corpse.position, 'opportunity', 0.5);
+      } else {
+        for (let i = 0; i < 3; i++) {
+          this.h.pickups?.spawn({
+            x: corpse.position.x + (this.h.rng() - 0.5) * 3,
+            y: corpse.position.y,
+            z: corpse.position.z + (this.h.rng() - 0.5) * 3,
+          });
+        }
+      }
+    }
     const shooter = this.h.players.getPlayer(shooterId);
     if (!spec || !shooter) return;
     // Self-splash is a death, not a frag — kills/deaths still record,
@@ -138,16 +161,7 @@ export class RoomScore {
     }
     if (spec.ptsPlayerKill <= 0) return;
     if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
-    else if (shooter.team) {
-      this.score(shooter.team, spec.ptsPlayerKill);
-      // Kill-confirmed mode (tdm): the corpse drops a tag that ANY team
-      // can pick up for another point — deny by grabbing it first.
-      const t = this.h.players.getPlayer(targetId);
-      if (this.h.mode === 'tdm' && t) {
-        this.h.pickups?.spawn(t.position, 'tag');
-        this.h.influence.splat(t.position, 'opportunity', 0.5);
-      }
-    }
+    else if (shooter.team) this.score(shooter.team, spec.ptsPlayerKill);
   }
 
   /** CTF damage economy — every 100 post-mitigation enemy damage pays 1

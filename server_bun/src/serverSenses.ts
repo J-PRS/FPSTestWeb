@@ -209,7 +209,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -293,6 +293,7 @@ export class ServerBotSenses {
       // mends (moveSkill times botMoves' hop-descent tap; undefined = skilled).
       energy: this.room.moveSim.energyOf(id) ?? undefined, moveSkill: skill?.movement,
       healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
+      confidence: this.confidenceOf(p),
       // Inbound shells feed the dodge sense — bots sidestep rockets
       // like a human reading the arc instead of eating every volley.
       threats: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),
@@ -319,6 +320,19 @@ export class ServerBotSenses {
    *  the scanVisible passers, not a second LOS sweep of its own. */
   reportSpots(p: { team?: string }, seen: BotEnemy[], now: number): void {
     this.spotBoard.update(p, seen, now);
+  }
+
+  /** The bot's nerve input, 0..1: how the match is going FOR it — team
+   *  score margin normalized to the win target plus its own K/D trend.
+   *  Team modes only; FFA has no allies to seek anyway so the goal
+   *  picker's drift candidate can't fire there regardless. */
+  private confidenceOf(p: { team?: string; kills?: number; deaths?: number }): number | undefined {
+    const spec = this.room.modeSpec;
+    if (!spec?.teams || (p.team !== 'alpha' && p.team !== 'bravo')) return undefined;
+    const other = p.team === 'alpha' ? 'bravo' : 'alpha';
+    const margin = (this.room.scores[p.team] - this.room.scores[other]) / Math.max(1, spec.winAt);
+    const kd = Math.tanh(((p.kills ?? 0) - (p.deaths ?? 0)) / 4);
+    return Math.min(1, Math.max(0, 0.5 + margin * 0.35 + kd * 0.25));
   }
 
   /** Which gem to chase: nearest within real reach, unless the bot is so

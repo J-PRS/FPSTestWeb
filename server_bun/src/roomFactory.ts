@@ -93,6 +93,18 @@ export class RoomFactory {
    *  every live room is occupied — the caller rejects the join. */
   roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false, noCreatures = false, noBalls = false): Room | null {
     let room = this.host.rooms.get(name);
+    // A bot-only room's mode is first-joiner residue, not someone's
+    // match — a hosted 'ctf' landing in a stale 'nuggets' room would
+    // otherwise be absorbed with only a warn toast. No humans and no
+    // spectators means nothing is lost: remint under the asked mode.
+    if (room && mode && room.mode !== mode &&
+        room.players.getHumanCount() === 0 && room.spectators.size === 0) {
+      room.dispose();
+      this.host.rooms.delete(name);
+      this.host.forgetRoom(name);
+      logger.info('Bot-only room reminted for hosted mode', { room: name, was: room.mode, mode });
+      room = undefined;
+    }
     if (!room) {
       if (this.host.rooms.size >= CONFIG.maxRooms) {
         for (const [n, r] of this.host.rooms) {
@@ -127,8 +139,8 @@ export class RoomFactory {
       // Judge mode counts divergences instead of correcting — the kick
       // only fires on repeated teleport-scale gaps honest drift can't
       // reach (see RoomMoveSim.SEVERE_*).
-      room.moveSim.onCheat = (pid, dist) => {
-        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1) });
+      room.moveSim.onCheat = (pid, dist, detail) => {
+        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1), ...detail });
         // Warn instead of kick — flap/reconnect catch-up reports read as
         // teleport-scale divergence, and a kick loop punishes honest lag.
         r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
@@ -147,11 +159,11 @@ export class RoomFactory {
         room.noCreatures = noCreatures;
         if (noCreatures) {
           room.creatureSim.pops = {};
-          room.creatureSim.crawlers.clear();
+          room.creatureSim.cullAll();
         }
         if (noBalls) {
           room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
-          room.ballSim.balls.clear();
+          room.ballSim.cullAll();
         }
         logger.info('Bot-only room adopted joiner sim gates', {
           room: name, noBalls, noCreatures,

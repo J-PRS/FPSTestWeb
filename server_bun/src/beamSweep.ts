@@ -24,6 +24,9 @@ export interface BeamSweepWorld {
   players: PlayerManager;
   field: Heightfield | null;
   solids: readonly StructureCollider[];
+  /** Deployable hulls — same dynCols the projectile contact sweep uses;
+   *  a turret body-blocks the beam like a wall. */
+  dynSolids?: readonly StructureCollider[];
   ballSim?: { balls: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number, backMs?: number): { id: number; t: number; d: number } | null };
   creatureSim?: { crawlers: Map<number, { id: number; x: number; y: number; z: number; dead: boolean }>; sweepHit(a: Vec3, b: Vec3, pad: number, backMs?: number): { id: number; t: number; d: number } | null };
   /** Target uplink-transit estimate (ms) — the same lead the tick
@@ -42,6 +45,10 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   if (world.solids.length) {
     const sh = segSolidHit(muzzle, end, world.solids, undefined, world.players.getPlayer(shooterId)?.team);
     if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+  }
+  if (world.dynSolids?.length) {
+    const dh = segSolidHit(muzzle, end, world.dynSolids, undefined, world.players.getPlayer(shooterId)?.team);
+    if (dh) bestT = Math.min(bestT, segPointT(muzzle, end, dh));
   }
   // Ghost-truth lag-comp: the shooter's beam was aimed at the rendered
   // ghost — sim(t − shooterTransit − renderDelay + vel·lead) — and the

@@ -325,6 +325,20 @@ export class CreatureSim {
     if (by) this.onKilled?.(by, pos);
   }
 
+  /** Gate-adoption cull: every crawler leaves with a 'gone' edge — a bare
+   *  crawlers.clear() orphans every replica (wire creatures have no TTL).
+   *  Banelings do NOT detonate: a cull is a removal, not a kill. */
+  cullAll(): void {
+    for (const c of [...this.crawlers.values()]) {
+      c.dead = true;
+      this.crawlers.delete(c.id);
+      this.edgeSeq.delete(c.id);
+      this.skipCount.delete(c.id);
+      this.brain.forget(c.id);
+      this.broadcast(verbPayload(WORLD_MODEL.creature!, 'gone', 'id', c.id, { position: { x: c.x, y: c.y, z: c.z } }) as ServerMessage);
+    }
+  }
+
   /** Step by real elapsed dt — the room tick calls this once per fire;
    *  tests and embedded hosts drive it directly (sim-time ≠ wall). */
   step(dt: number): void {
