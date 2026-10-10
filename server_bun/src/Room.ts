@@ -62,9 +62,6 @@ export class Room {
    *  ball populations at mint and on applySpec reloads. */
   noCreatures = false;
   noBalls = false;
-  /** One-shot: a joiner asked for gates this pre-existing room doesn't
-   *  have — the seat path warns them instead of ignoring silently. */
-  gateMismatchNotice?: { noBalls: boolean; noCreatures: boolean };
   // First joiner's mode locks the match — later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;

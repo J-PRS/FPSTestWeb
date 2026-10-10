@@ -53,6 +53,17 @@ export class RoomSwitcher {
     this.host.removePlayerCompletely(from, playerId, 'roomSwitch');
 
     this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name);
+    // Same gate check the join path sends — a host hopping into a
+    // pre-existing room with different sim toggles must hear it.
+    const req = raw as { noBalls?: boolean; noCreatures?: boolean };
+    const wantNoBalls = req.noBalls === true, wantNoCreatures = req.noCreatures === true;
+    if (to.noBalls !== wantNoBalls || to.noCreatures !== wantNoCreatures) {
+      const diffs = [
+        to.noBalls !== wantNoBalls ? `creatures ${to.noBalls ? 'OFF' : 'ON'}` : '',
+        to.noCreatures !== wantNoCreatures ? `critters ${to.noCreatures ? 'OFF' : 'ON'}` : '',
+      ].filter(Boolean).join(', ');
+      to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — sim toggles ignored (${diffs})` });
+    }
     // Banked respawn edits ride the hop too — a hop is a seat transfer,
     // not a respawn, so a queued class/perk swap must survive it or the
     // client's declared next-life loadout silently vanishes.
