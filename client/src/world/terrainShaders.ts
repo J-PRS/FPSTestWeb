@@ -50,8 +50,8 @@ export const terrainVert = /* glsl */`
   float getMorphHeight(vec2 worldXZ) {
     float outerH = sampleHeightGPU(worldXZ);
     if (innerHalfSize <= 0.0) return outerH;
-    vec2 d = worldXZ - innerGridOrigin;
-    float dist = length(d);
+    vec2 d = abs(worldXZ - innerGridOrigin);
+    float dist = max(d.x, d.y);
     // 100% inner-height region extends BEYOND the discard boundary by 3 inner spacings.
     // This ensures all vertices of triangles spanning the discard boundary are at full inner
     // height, so the per-fragment interpolated height at the boundary exactly matches the
@@ -72,8 +72,8 @@ export const terrainVert = /* glsl */`
     float h = getMorphHeight(worldXZ);
 
     // For normals, use raw GPU height if far from morph boundary (saves 4× sampleInnerHeight)
-    vec2 d = worldXZ - innerGridOrigin;
-    float dist = length(d);
+    vec2 d = abs(worldXZ - innerGridOrigin);
+    float dist = max(d.x, d.y);
     float morphStart = innerHalfSize + innerSpacing * 3.0;
     float morphEnd = innerHalfSize + innerSpacing * 9.0;
     bool nearBoundary = innerHalfSize > 0.0 && dist > morphStart - eps && dist < morphEnd + eps;
@@ -407,8 +407,8 @@ export const terrainFrag = /* glsl */`
 
   void main() {
     if (innerHalfSize > 0.0) {
-      vec2 _d = vWorldPos.xz - innerGridOrigin;
-      if (length(_d) < innerHalfSize) discard;
+      vec2 _d = abs(vWorldPos.xz - innerGridOrigin);
+      if (max(_d.x, _d.y) < innerHalfSize) discard;
     }
     float slope  = 1.0 - clamp(vNormal.y, 0.0, 1.0);
     float height = clamp(vWorldPos.y / hscale, 0.0, 1.0);
