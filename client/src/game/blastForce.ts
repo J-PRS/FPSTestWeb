@@ -63,17 +63,17 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     pos: THREE.Vector3,
     radius: number,
     force: number,
-    forceMode: 'push' | 'pull',
-    forceMultiplier: number
+    forceMode: 'push' | 'pull'
   ): void {
     // Predict what the server applies (RoomPickups.knock): the shared
-    // aoeImpulse falloff × 0.4 — the old raw force×1.3 overshot ~3x and
-    // serverRest snapped the gem back every blast.
+    // aoeImpulse falloff × 0.4 — NOT a.forceMultiplier: the server's
+    // pickup knock ignores it, so a 0.4 push multiplier under-threw
+    // every gem 2.5x and serverRest snapped it forward (nugrest spam).
     for (const n of deps.nuggets) {
       if (n.dead || n.collected) {continue;}
       const d = n.pos.distanceTo(pos);
       if (d >= radius) {continue;}
-      const f = aoeImpulse(force, d, radius) * 0.4 * forceMultiplier;
+      const f = aoeImpulse(force, d, radius) * 0.4;
       if (forceMode === 'push') {n.applyKnockback(pos, f);}
       else {n.applyPull(pos, f);}
     }
@@ -262,7 +262,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     }
     const kbForce = force * KNOCKBACK_SCALE;
     applyForceToBalls({ ...a, force: kbForce }, applyTo);
-    applyForceToNuggets(pos, radius, kbForce, forceMode, forceMultiplier);
+    applyForceToNuggets(pos, radius, kbForce, forceMode);
     applyForceToRemotes(a);
     // Deployables in the envelope — the offline mirror of the server's
     // applyBlast sweep (connected, remote hurt is a no-op so the call is
