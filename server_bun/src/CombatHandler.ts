@@ -296,6 +296,9 @@ export class CombatHandler {
       if (key.startsWith(`${playerId}:`)) this.fireWindows.delete(key);
     }
     this.lastHeal.delete(playerId);
+    for (const key of this.lastEnvCredit.keys()) {
+      if (key.endsWith(`>${playerId}`) || key.startsWith(`${playerId}>`)) this.lastEnvCredit.delete(key);
+    }
     this.chargeBank.delete(playerId);
     for (const key of this.healTicks.keys()) {
       if (key.startsWith(`${playerId}|`) || key.endsWith(`|${playerId}`)) this.healTicks.delete(key);
@@ -467,6 +470,8 @@ export class CombatHandler {
 
   /** Heal claim cadence gate — see envClaims.handleHeal. */
   lastHeal = new Map<string, number>();
+  /** Per-attacker env-splash credit clock — see envClaims EnvHost. */
+  lastEnvCredit = new Map<string, number>();
 
   // Client-claimed heal — self-only; team-mode needs a server-granted
   // credit, elsewhere the claim stays free-form.

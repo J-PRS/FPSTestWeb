@@ -18,6 +18,12 @@ export interface EnvHost {
     result: { killed: boolean; newHealth: number; newArmor: number },
     opts: { label: string }): void;
   lastHeal: Map<string, number>;
+  /** Per-attacker splash cadence: victim-reported blast credit rides
+   *  free otherwise — a cheat could claim 80dmg attributed to a nearby
+   *  player at wire-limit rate, feeding their kill/assist score. Blasts
+   *  from one source can't legally land on the same victim faster than
+   *  ~250ms apart (separate attackers keep separate clocks). */
+  lastEnvCredit: Map<string, number>;
 }
 
 // First env claim per player lands on disk (warn → server.log) — the
@@ -75,10 +81,26 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
         logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
       }
     }
+    // Splash cadence: a cheat claiming rapid 80dmg blasts under one
+    // name feeds that player kill/assist credit — strip the tag past
+    // ~250ms per source, keep the self-damage honest at the tagged cap.
+    // Cluster/burst volleys that legitimately land inside the window
+    // lose nothing but the scoreboard line.
+    let creditAttacker = attacker;
+    if (attacker) {
+      const creditKey = `${attacker}>${playerId}`;
+      const lastCredit = h.lastEnvCredit.get(creditKey) ?? 0;
+      if (lastCredit > wallNow()) {
+        h.hb('envdmg.creditSpam');
+        creditAttacker = undefined;
+      } else {
+        h.lastEnvCredit.set(creditKey, wallNow() + 250);
+      }
+    }
     const damage = Math.min(attacker ? 80 : 40, Math.max(1, Math.round(msg.amount)));
     const result = h.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
-    h.applyHit(attacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
+    h.applyHit(creditAttacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
     return true;
   }
 
