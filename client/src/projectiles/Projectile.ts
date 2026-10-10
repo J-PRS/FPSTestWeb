@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY } from '../core/config.js';
+import { glitch } from '../core/fxDiag.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
 import { idSeed, jitteredTtl } from '../../../shared/weapons.js';
 
@@ -10,7 +11,7 @@ import type { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
 
 import { RibbonTrail } from '../effects/RibbonTrail.js';
-import { ProjectileTrail } from '../effects/trailParticles.js';
+
 import { QuarksTrail } from '../effects/vfx.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
@@ -59,7 +60,7 @@ const ABSOLUTE_TTL_S = 10;
  * On impact, the projectile records `hitBall`, `directHit`, `hitAccuracy`, etc.,
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
- * Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
+ * Trail visuals live in vfx.ts (QuarksTrail) — the batched particle path.
  * (Not a bug: `hitRadius` starts at `hitMin`=0 by design — it's the expanding
  *  WAKE threshold, not the direct-hit radius, and a fresh projectile must not
  *  whack its own shooter. Core hits use the constant `bodyRadius`.)
@@ -128,6 +129,12 @@ export class Projectile {
   // Sticky: froze to a surface — physics off, fuse still burning. The
   // blast is what hurts people, not the glue point.
   stuck = false;
+  /** Belt-sticky combo: this bomb was caught mid-flight by a same-owner
+   *  shell and rides it dead-center (Painkiller: grenade on the stake).
+   *  Physics + collision off; pos/vel shadow the host; when the host
+   *  dies this pops at its contact point. Trails keep emitting from the
+   *  same point — the "combined trail" is the two ribbons overlapping. */
+  host: Projectile | null = null;
   // Embed (javelin) + sticky glue — the planted-shell family lives in
   // projStuck.ts behind the StuckHost surface.
   glue = new ProjStuck(this); // public-ish: projCollide calls stickAt
@@ -215,9 +222,8 @@ export class Projectile {
    *  shared claim legality check's age-vs-airtime gate. */
   readonly spawnedAtMs: number;
 
-  // Particle trail — quarks-batched by default; the pooled-mesh path
-  // survives only for wakeVisual hosts (no config enables it today).
-  private trail: ProjectileTrail | QuarksTrail;
+  // Particle trail — quarks-batched.
+  private trail: QuarksTrail;
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: RibbonTrail[] = [];
@@ -242,18 +248,11 @@ export class Projectile {
     this.mesh = v.mesh;
     this.glowMesh = v.glowMesh;
 
-    this.trail = config.wakeVisual
-      ? new ProjectileTrail({
-          scene, config,
-          pos: this.rendered, prevPos: this.prevPos, vel: this.vel,
-          age: () => this.age,
-          hitRadius: () => this.hitRadius,
-        })
-      : new QuarksTrail({
-          config,
-          pos: this.rendered, vel: this.vel,
-          age: () => this.age,
-        });
+    this.trail = new QuarksTrail({
+      config,
+      pos: this.rendered, vel: this.vel,
+      age: () => this.age,
+    });
 
     this.ribbons = v.ribbons;
     this.driver = new TrailDriver(
@@ -333,6 +332,26 @@ export class Projectile {
 
   // Physics + collision + visuals for a live (non-exploded) projectile
   private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
+    // Riding a host shell: dead-center on its path, no own physics or
+    // collision. Host death pops us at ITS contact point — the rider is
+    // the payload the shell was carrying.
+    if (this.host) {
+      const h = this.host;
+      if (h.dead || h.exploded) {
+        this.host = null;
+        this.pos.copy(h.hitPointValid ? h.hitPoint : h.pos);
+        this.prevPos.copy(this.pos);
+        this.explode();
+        return;
+      }
+      this.prevPos.copy(h.prevPos);
+      this.pos.copy(h.pos);
+      this.vel.copy(h.vel);
+      this.lastDt = dt;
+      this.age += dt;
+      this.updateMesh();
+      return;
+    }
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
@@ -365,6 +384,19 @@ export class Projectile {
     if (ttl && ((fa >= 0 && fa >= ttl) || (fa < 0 && this.age >= ttl * 3))) {
       this.explode();
       return;
+    }
+    // A live shell this far past its fuse means the pop path itself failed
+    // (stale ttl, armed gate, stuck early-return) — name it in the dump.
+    if (ttl && !this.overdueFlagged && this.age > ttl * 2) {
+      this.overdueFlagged = true;
+      glitch('proj-overdue', { cfg: this.config.name, age: +this.age.toFixed(2), ttl, fa, remote: this.isRemote, stuck: this.stuck, wt: this.config.weaponType });
+    }
+    // Fuseless shells (missing maxLifetime — the BOLT_CONFIG fallback on an
+    // unknown weaponType is exactly this) fly to the 10s backstop; flag
+    // them early so an immortal replica names itself instead of streaking.
+    if (!ttl && !this.overdueFlagged && this.age > 4) {
+      this.overdueFlagged = true;
+      glitch('proj-fuseless', { cfg: this.config.name, age: +this.age.toFixed(2), remote: this.isRemote, wt: this.config.weaponType });
     }
 
     this.tickRayDischarge();
@@ -433,6 +465,7 @@ export class Projectile {
   // requiring fuse math. Lives in `ribbons` so trail push/stop/pooling
   // treat it exactly like a launcher-attached ribbon.
   private armedFxDone = false;
+  private overdueFlagged = false;
   private tickArmedFx(): void {
     if (this.armedFxDone || !this.armed || this.config.armTime === undefined) {return;}
     this.armedFxDone = true;
