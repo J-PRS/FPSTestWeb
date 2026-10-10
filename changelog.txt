@@ -1,3 +1,4 @@
+2026-10-10 - Root cause of 166m remote drift: predicted blasts re-seeded simulatedVelocity additively + refreshed the prediction window, so sustained mortar fire stacked impulses and launched remotes far off-wire — re-predict inside an active window is now a no-op
 2026-10-10 - Dead-reckoning drift capped at 40m horizontal from last wire truth — a silent wire no longer extrapolates remotes hundreds of meters; alt+Q dump now prints rendered pos + DR flag per remote
 2026-10-10 - Ghost-shell warn now only fires past a 0.6s bind grace — sub-RTT hits on unbound predicted shells are a benign race (server shell adjudicates its own contact), not orphans
 2026-10-10 - Unstamped knockbacks now paint a blast visual at the wire position (no more invisible shoves); hp=NaN fixed: regenRamp was read off PerkMods but never declared (undefined*dt=NaN under Regenerator)

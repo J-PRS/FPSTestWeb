@@ -222,6 +222,12 @@ export class RemoteInterp {
    *  the pre-hit path after the window — that stale-buffer resample was
    *  the old snap-back bug. */
   predict(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
+    // Inside an active window the seed already owns the flight — a second
+    // predicted blast re-seeding would STACK impulses (serverVelocity +
+    // impulse, again) and refresh the timer, so sustained mortar spam
+    // launched remotes tens of meters past any real record. The arriving
+    // wire truth carries the extra blasts; this prediction is cosmetic.
+    if (this.predictionTimer > 0) return;
     const p = this.h.position;
     const dx = p.x - fromPos.x;
     const dy = p.y - fromPos.y;
