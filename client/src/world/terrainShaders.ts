@@ -142,6 +142,7 @@ export const terrainFrag = /* glsl */`
   uniform float fogEnd;
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
+  uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
 
   // --- hash + value noise with analytic derivatives ---
   float hash(vec2 p) {
@@ -181,6 +182,13 @@ export const terrainFrag = /* glsl */`
       ? a * dist
       : a * (1.0 - exp(-HF_K * rdy * dist)) / (HF_K * rdy);
     return min(1.0 - exp(-max(od, 0.0)), HF_CAP);
+  }
+
+  // Exp² distance fog on the spec's linear start/end: near field stays
+  // clean, haze rolls in on the natural 1-e^-(t²) curve, ~98% at fogEnd.
+  float terrainFogFactor(float dist) {
+    float t = clamp((dist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0);
+    return 1.0 - exp(-t * t * 4.0);
   }
 
   // --- Derivative erosion FBM (suppresses detail on steep slopes) ---
@@ -458,7 +466,10 @@ export const terrainFrag = /* glsl */`
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
-      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
+      float fogFactor = terrainFogFactor(fogDist);
+      // World-edge dissolve: outermost level's far band melts into fog so
+      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
+      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
@@ -512,7 +523,10 @@ export const terrainFrag = /* glsl */`
       // ground 200m below shouldn't haze like it's 200m across the map).
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
-      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
+      float fogFactor = terrainFogFactor(fogDist);
+      // World-edge dissolve: outermost level's far band melts into fog so
+      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
+      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
@@ -622,7 +636,10 @@ export const terrainFrag = /* glsl */`
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
-      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
+      float fogFactor = terrainFogFactor(fogDist);
+      // World-edge dissolve: outermost level's far band melts into fog so
+      // slivers sliding in as the grid snaps can't pop (edgeHalf=0 elsewhere).
+      fogFactor = max(fogFactor, smoothstep(edgeHalf * 0.82, edgeHalf * 0.97, fogDist) * step(0.5, edgeHalf));
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);

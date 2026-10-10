@@ -174,6 +174,9 @@ export class Terrain {
           innerHalfSize:   { value: cfg.innerHalfSize },
           innerSpacing:    { value: i > 0 ? CLIPMAP_LEVELS[i - 1].spacing : 0.0 },
           innerGridOrigin: { value: new THREE.Vector2(0, 0) },
+          // Outermost level dissolves into fog near its world edge — every
+          // inner level's outer edge is covered by the next ring.
+          edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0.0 },
           sunDir:          { value: sunDir.clone().normalize() },
           sunColor:        { value: new THREE.Color(1.0, 0.94, 0.8) },
           ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },
