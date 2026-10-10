@@ -18,6 +18,7 @@ import { GRAVITY } from '../core/config.js';
 import { stepBall, type SimBall, type SimVec, type StructureCollider } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { Heightfield } from '../../../shared/heightfield.js';
+import { glitch } from '../core/fxDiag.js';
 
 const BALL_GRAVITY = GRAVITY;
 const _tgt = { x: 0, y: 0, z: 0 };
@@ -40,6 +41,9 @@ export interface NetBag {
    *  authority. -1 = unstamped (wall-time fallback). */
   legT0: number;
   netTargetId: string | null;
+  /** Last rendered pos — frame-to-frame step telemetry names whether a
+   *  ribbon jump came from sim-catch-up (netAcc sprint) or a seg snap. */
+  px?: number; py?: number; pz?: number;
   /** Last segment's committed enraged — the wire contract the state-hash
    *  lane compares. Live s.enraged can't serve: both integrators derive
    *  it from their own stale target view, so it churns on healthy links. */
@@ -92,12 +96,20 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // so the replay neither phase-shifts nor free-runs ahead of authority.
   const simNow = st.simNow() ?? Infinity;
   bag.lastSimNow = simNow;
+  // Stamps arrive batched once per drain: simNow jumps forward in bursts,
+  // and consuming the whole backlog in one frame leaps pos 6-20m — the
+  // exact per-frame step the ribbon cut counts as follow-jump. Pay the
+  // backlog down over a few frames instead; steady-state arrivals are
+  // ~1 cell/frame so the backlog never grows, but bursts smooth out
+  // below the ribbon's discontinuity budget.
+  let cellsLeft = 2;
   // The committed target rides tp snapshots: enrage pull needs it, and an
   // inert ball's stall-breaker launches at it — predicting it client-side
   // mirrors the authority instead of waiting two seconds for the event.
   const tgt = s.tgtValid ? (_tgt.x = s.tx, _tgt.y = s.ty, _tgt.z = s.tz, _tgt) : null;
   const field = st.field();
-  while (field && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
+  while (field && cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
+    cellsLeft--;
     bag.netAcc -= 0.05;
     bag.simT += 0.05;
     stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
@@ -111,6 +123,9 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     // 50-190m. Cap the lead at 1s past the estimate; past that a
     // parked ball reads better than a guaranteed-wrong one.
     const leadCap = simNow === Infinity ? Infinity : simNow + 1;
+    // Uncapped on purpose: with the clock frozen only this path can drain
+    // the bank — pacing it would strand the sim mid-flight indefinitely,
+    // and post-silence continuity is lost regardless.
     while (bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
       bag.netAcc -= 0.05;
       bag.simT += 0.05;
@@ -119,8 +134,15 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   }
   // Sub-cell render: the sim rests on grid points; host.pos carries the
   // unconsumed fraction ballistically so motion doesn't quantize at 20Hz.
-  const rem = bag.netAcc;
+  const rem = Math.min(bag.netAcc, 0.05); // sub-cell fraction only — a banked backlog must not extrapolate pos ahead of the cells still paying it down
   host.pos.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);
+  if (bag.px !== undefined && bag.py !== undefined && bag.pz !== undefined) {
+    const dx = host.pos.x - bag.px, dy = host.pos.y - bag.py, dz = host.pos.z - bag.pz;
+    if (dx * dx + dy * dy + dz * dz > 25) {
+      glitch('ball-step', { gapM: Math.round(Math.hypot(dx, dy, dz)), acc: Math.round(bag.netAcc * 1000) });
+    }
+  }
+  bag.px = host.pos.x; bag.py = host.pos.y; bag.pz = host.pos.z;
   host.vel.set(s.vx, s.vy + BALL_GRAVITY * rem, s.vz);
   // Resting is a sim state now, not a prediction guess — parked marks a
   // settled ball whose authority-side wake event may still be in flight.

@@ -65,6 +65,15 @@ describe('tickNet — grid discipline', () => {
     expect(bag.netAcc).toBeCloseTo(0, 9);
   });
 
+  it('cell consumption is paced: a burst backlog pays down over frames instead of one leap', () => {
+    const { st, bag, host } = rig(() => 10); // simNow wide open
+    tickNet(st, bag, host, 0.25); // 5 cells available
+    expect(bag.simT).toBeCloseTo(0.10, 9); // only 2 cells this call
+    expect(bag.netAcc).toBeCloseTo(0.15, 9); // backlog stays banked
+    tickNet(st, bag, host, 0); // next frame pays down 2 more
+    expect(bag.simT).toBeCloseTo(0.20, 9);
+  });
+
   it('banks at most 0.5s of lead — long hitches cannot fast-forward', () => {
     const { st, bag, host } = rig();
     tickNet(st, bag, host, 2.0);
