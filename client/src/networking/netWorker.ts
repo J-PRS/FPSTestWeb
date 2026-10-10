@@ -59,12 +59,9 @@ let connected = false;
 // so the server's own srvPing keeps capturing main-thread stall while
 // this probe reads the clean wire number. Both samples stay meaningful.
 const PING_INTERVAL = 2500;
-let lastPingAt = 0;
 setInterval(() => {
   if (!connected || !inner?.connected()) {return;}
-  const now = Date.now();
-  lastPingAt = now;
-  inner.send(JSON.stringify({ type: 'ping', timestamp: now }));
+  inner.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
 }, PING_INTERVAL);
 
 /** resolveUrl is a main-thread callback (matchmaker). Bridge it as a
@@ -97,7 +94,13 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
       // main-thread queue delay back into the number).
       if ((m as { type?: string }).type === 'pong') {
         const stamp = (m as { timestamp?: number }).timestamp;
-        if (typeof stamp === 'number' && stamp >= lastPingAt) {
+        // Consume EVERY pong — they only exist as replies to our pings.
+        // A stale one (arrived after the next ping went out) used to fall
+        // through to main's pongReceived, which feeds the same telemetry
+        // with stamp→receipt — re-polluting the clean worker RTT with
+        // main-loop queue delay. now−stamp on the worker clock is the
+        // honest number either way.
+        if (typeof stamp === 'number') {
           post({ kind: 'rtt', rtt: Date.now() - stamp });
           return;
         }
