@@ -65,6 +65,11 @@ export class NetworkManager {
   private localPlayerId: string;
   private sessionToken: string | null;
   private connected: boolean = false;
+  /** performance.now() at the live-join ack — parity counters need it to
+   *  skip join-race echoes (events that happened before prediction
+   *  existed can't be "unpredicted"). */
+  private connectedAtMs = 0;
+  msSinceConnect(): number { return performance.now() - this.connectedAtMs; }
   /** Loadout perk, announced at join so the server can enforce resist/heal. */
   joinPerk: (() => string) | null = null;
   joinClass: (() => string) | null = null;
@@ -238,6 +243,7 @@ export class NetworkManager {
               transport: this.ws?.tier,
             });
             this.connected = true;
+            this.connectedAtMs = performance.now();
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
             this.lastDownReason = null;

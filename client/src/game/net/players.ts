@@ -134,8 +134,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
       .some(e => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12);
     if (!seen) {
       // Server shoved us from a blast we never rendered — envelope/occlusion
-      // or rewind disagreed with the server. Loud parity counter.
-      parityMiss('kb-unpredicted', { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z), force: Math.round(force * 10) / 10, pull: !!pull });
+      // or rewind disagreed with the server. Loud parity counter — except
+      // in the join window: echoes landing before our prediction window
+      // existed can't be "unpredicted", they're join-race leftovers.
+      if (networkManager.msSinceConnect() > 2000) {
+        parityMiss('kb-unpredicted', { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z), force: Math.round(force * 10) / 10, pull: !!pull });
+      }
       logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
       // Radius isn't on the wire; force is the only size signal we get.
       deps.lazyEffects().spawnExplosion(from, Math.max(1.5, Math.min(5, force / 8)), 12);
