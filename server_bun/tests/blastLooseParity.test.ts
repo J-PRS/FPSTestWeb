@@ -2,6 +2,7 @@ import { simMs } from '../src/simClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
+import { WeaponType } from '../../shared/weapons.ts';
 import { makeSimCrawler } from '../../shared/creatureCore.ts';
 import type { SimBall } from '../../shared/ballSim.ts';
 
@@ -66,6 +67,16 @@ describe('blast → loose-object parity', () => {
     blast(room);
     const c = room.creatureSim.crawlers.get(7)!;
     expect(Math.hypot(c.vx, c.vy, c.vz)).toBeGreaterThan(0.1);
+  });
+
+  it('a pull blast sucks a server-side ball toward center, not away', () => {
+    const { room } = roomWithShooter();
+    room.ballSim.balls.set(43, fakeBall(43, 5, 10, 0));
+    room.messages.serverBlast('p1', { ...blastAt }, WeaponType.DiscPull, null);
+    const b = room.ballSim.balls.get(43)!;
+    // Ball sits +x from center — a pull must drive it BACK toward 0, never
+    // fling it further out (the old sign-less knock pushed instead).
+    expect(b.vx).toBeLessThan(-0.1);
   });
 
   it('the same blast leaves a far gem untouched (radius, not blanket)', () => {
