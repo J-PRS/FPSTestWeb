@@ -113,7 +113,11 @@ export class PlayerVisuals {
     const attr = this.shadowPosAttr
       ?? (this.shadowPosAttr = this.shadowBlob.geometry.getAttribute('position') as THREE.BufferAttribute);
     for (let i = 0; i < attr.count; i++) {
-      attr.setZ(i, terrain.getHeight(pos.x + attr.getX(i), pos.z - attr.getY(i)) + 0.05);
+      const wx = pos.x + attr.getX(i), wz = pos.z - attr.getY(i);
+      // Clear the rendered chord too, not just the heightfield: the 5m
+      // mesh bridges mid-cell gullies, and depthTest clips a blob that
+      // dips under the chord even though it hugs the true heightmap.
+      attr.setZ(i, Math.max(terrain.getHeight(wx, wz), terrain.getRenderedHeight(wx, wz)) + 0.12);
     }
     attr.needsUpdate = true;
     this.shadowBlob.position.set(pos.x, 0, pos.z);

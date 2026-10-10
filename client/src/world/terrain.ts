@@ -447,4 +447,19 @@ export class Terrain {
   getNormal(wx: number, wz: number): THREE.Vector3 {
     return sampleNormal(wx, wz);
   }
+
+  /** Height of the RENDERED level-0 surface chord at (wx,wz) — the
+   *  clipmap's flat triangles, not the smooth heightfield. A decal that
+   *  conforms to getHeight still gets occluded where the heightfield
+   *  dips mid-cell (a gully the 5m mesh bridges over), so conforming
+   *  decals must also clear this chord. Only valid near the player —
+   *  level 0 always surrounds the camera. */
+  getRenderedHeight(wx: number, wz: number): number {
+    const s = CLIPMAP_LEVELS[0].spacing;
+    const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
+    const h00 = this.getHeight(x0, z0), h10 = this.getHeight(x0 + s, z0);
+    const h01 = this.getHeight(x0, z0 + s), h11 = this.getHeight(x0 + s, z0 + s);
+    const tx = (wx - x0) / s, tz = (wz - z0) / s;
+    return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
+  }
 }
