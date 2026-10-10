@@ -62,6 +62,7 @@ export class WebTransportGameTransport implements GameTransport {
    *  the session just black-holed sends forever. */
   private declareDead(reason: string): void {
     if (!this.open) return; // first detector wins; deliberate disconnect() leaves open=false
+    logger.warn(`wt declareDead: ${reason}`);
     this.open = false;
     this.config.onDisconnect?.(1006, reason);
   }

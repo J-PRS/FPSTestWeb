@@ -339,9 +339,10 @@ export class TieredTransport implements GameTransport {
         // Flap breaker: a tier that dies seconds after connecting is worse
         // than not having it — mark the miss so the re-probe skips it and
         // the session lands on WS instead of connect/disconnect looping.
-        if (this.inner?.tier === 'rtc' && Date.now() - this.connectedAt < 10_000) {
-          missUntil.rtc = Date.now() + MISS_CACHE_MS;
-          logger.warn('rtc session flapped — tier benched for 30s', { code, reason });
+        const flapTier = this.inner?.tier;
+        if ((flapTier === 'rtc' || flapTier === 'wt') && Date.now() - this.connectedAt < 10_000) {
+          missUntil[flapTier] = Date.now() + MISS_CACHE_MS;
+          logger.warn(`${flapTier} session flapped — tier benched for 30s`, { code, reason });
         }
         // WebSocketConnection runs its own reconnect loop — reprobing here
         // would double-schedule connections.
