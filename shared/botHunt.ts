@@ -96,6 +96,14 @@ export interface HuntState {
    *  and the pin is permanent. Cleared entries are a filter, not a
    *  wallhack change: the enemy is still shootable, just not chased. */
   unreachUntil: Map<string, number>;
+  /** Per-foe scorecard — who keeps landing hits on / killing this bot.
+   *  takeHit tallies hits by attacker id; markDeath attributes the death
+   *  to whoever hit it last inside the window. Feeds the dread filter:
+   *  a nemesis stops being someone this bot volunteers to duel. */
+  foeScore: Map<string, { hits: number; deaths: number }>;
+  /** Who landed the most recent hit + when — the death-attribution
+   *  channel (markDeath runs at corpse sighting, after the last hit). */
+  lastHitBy: { id: string; at: number } | null;
   huntTick: number;
   lastHitAt: number;
   readonly reactTicks: number; // acquisition → first shot, per-bot nerves
@@ -129,6 +137,8 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
     fightHold: 0,
     acquiredAt: new Map(),
     unreachUntil: new Map(),
+    foeScore: new Map(),
+    lastHitBy: null,
     huntTick: 0,
     lastHitAt: -1e9,
     // Personality rolls ride the skill's spawn-seeded private stream, not
@@ -167,6 +177,31 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
 /** Target acquisition + fight-position replan, on the slow think
  *  cadence — the ring eval is the expensive part (LOS per candidate
  *  per enemy) and 3Hz is plenty for position keeping. */
+/** Dread: how much this foe owns the bot — deaths dominate, repeated
+ *  hits count before a death lands. The score is a filter threshold,
+ *  not a continuum: past ~2 the bot stops volunteering for the duel. */
+export function dreadOf(st: HuntState, id: string): number {
+  const f = st.foeScore.get(id);
+  return f ? f.deaths * 1.5 + f.hits * 0.25 : 0;
+}
+
+/** A hit or a death attribution — foes get remembered, not forgotten.
+ *  Cap at 8 entries: the lobby's repeat offenders, not a census. */
+export function noteFoeHit(st: HuntState, id: string, now: number): void {
+  const f = st.foeScore.get(id) ?? { hits: 0, deaths: 0 };
+  f.hits++;
+  st.foeScore.set(id, f);
+  st.lastHitBy = { id, at: now };
+  if (st.foeScore.size > 8) st.foeScore.delete(st.foeScore.keys().next().value!);
+}
+
+/** markDeath side: who gets the kill on this bot's scorecard. */
+export function noteFoeDeath(st: HuntState, now: number): void {
+  if (!st.lastHitBy || now - st.lastHitBy.at > 4000) return;
+  const f = st.foeScore.get(st.lastHitBy.id);
+  if (f) f.deaths++;
+}
+
 export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   const { hero, fearing } = mood;
   // Armament reach widens acquisition for siege weapons — a mortar heavy
@@ -180,10 +215,15 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
   // Blacklist filter: prey that defeated the escape kit is invisible to
   // acquisition for its window — chasing it again is the wall-grind
-  // loop this map exists to break.
+  // loop this map exists to break. Dread sits next to it: a nemesis is
+  // equally invisible to *acquisition* — not to defense. Two exemptions
+  // keep it honest: brawl range (nobody ignores the man in their face)
+  // and hero (the desperate last stand doesn't pick its opponent).
+  const BRAWL_M = 25;
   let ectx = ctx;
-  if (st.unreachUntil.size) {
-    const enemies = ctx.enemies.filter((e) => (st.unreachUntil.get(e.id) ?? 0) <= now);
+  if (st.unreachUntil.size || st.foeScore.size) {
+    const enemies = ctx.enemies.filter((e) => (st.unreachUntil.get(e.id) ?? 0) <= now
+      && (hero || dreadOf(st, e.id) < 2 || dist3(pos, e.pos) < BRAWL_M));
     if (st.unreachUntil.size > 6) {
       for (const [id, until] of st.unreachUntil) if (until <= now) st.unreachUntil.delete(id);
     }
