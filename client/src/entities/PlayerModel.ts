@@ -6,6 +6,7 @@ import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../cor
 import { urlParams } from '../core/params.js';
 
 import { ChildLogger } from '../core/Logger.js';
+import { glitch } from '../core/fxDiag.js';
 import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
 const logger = new ChildLogger('PlayerModel');
@@ -457,6 +458,46 @@ export class PlayerModel {
     this.anim.tick(dt);
     this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL);
     this.fx.tick(dt);
+    this.auditStretch(dt);
+  }
+
+  // Stretch canary — the exploded-rig bug smears verts between bones that
+  // should sit ~2m apart; visAudit only samples at dump time, so a
+  // transient mid-clip stretch never lands in the paste. Every 0.5s
+  // (staggered per model) measure the skeleton's max world-space spread —
+  // >8m on a ≤2.8m body is impossible geometry. glitch() records the
+  // variant + clip + state so the Alt+Q glitch census names the
+  // animation that did it.
+  private stretchAt = Math.random() * 0.5;
+  private auditStretch(dt: number): void {
+    this.stretchAt -= dt;
+    if (this.stretchAt > 0) return;
+    this.stretchAt = 0.5;
+    if (!this.model || !this.model.visible || this.skinnedMeshes.length === 0) return;
+    this.model.updateMatrixWorld(true);
+    let maxSq = 0, bi = -1, bj = -1, mesh0 = this.skinnedMeshes[0];
+    for (const sm of this.skinnedMeshes) {
+      const bones = sm.skeleton.bones;
+      for (let i = 0; i < bones.length; i++) {
+        const a = bones[i].matrixWorld.elements;
+        for (let j = i + 1; j < bones.length; j++) {
+          const b = bones[j].matrixWorld.elements;
+          const dx = a[12] - b[12], dy = a[13] - b[13], dz = a[14] - b[14];
+          const d = dx * dx + dy * dy + dz * dz;
+          if (d > maxSq) { maxSq = d; bi = i; bj = j; }
+        }
+      }
+    }
+    if (maxSq > 64) {
+      const bn = mesh0 && bi >= 0 ? `${mesh0.skeleton.bones[bi]?.name}↔${mesh0.skeleton.bones[bj]?.name}` : '?';
+      glitch('model-stretch', {
+        variant: this.variant,
+        clip: this.anim.currentClipName ?? '?',
+        state: this.anim.currentState,
+        spread: Math.round(Math.sqrt(maxSq)),
+        bones: bn,
+      });
+    }
   }
 
   /** Barrel-tip world point — third-person beam/tracer anchor. */

@@ -26,6 +26,11 @@ export class WarpBeacon {
 
   throwBeacon(): void {
     if (this.beacon || this.cooldown > 0) {return;}
+    // The ante is on the throw like every other skill — a beacon you
+    // can't afford to warp to shouldn't exist. Spend it here and the
+    // release's teleport is free (already paid for).
+    if (!this.ctx.spendEnergy(ENERGY.skillCost)) {return;}
+    this.ctx.skillUsed();
     if (!this.mesh) {
       // Glowing beacon: white-hot octa core + additive halo — it must read
       // as a warp anchor, not a pebble, at 60m against the sand
@@ -62,9 +67,7 @@ export class WarpBeacon {
     this.beacon = null;
     if (!b) {return;}
     if (this.mesh) {this.mesh.visible = false;}
-    // The throw is free — the WARP is what costs: no energy, no teleport.
-    if (!this.ctx.spendEnergy(ENERGY.skillCost)) {return;}
-    this.ctx.skillUsed();
+    // Energy already paid at throw — release just commits the teleport.
     // Land the player just over the beacon — never inside terrain
     const gy = this.ctx.terrain.getHeight(b.pos.x, b.pos.z);
     const from = this.ctx.pos.clone();

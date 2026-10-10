@@ -26,6 +26,7 @@ import { RAILGUN_CONFIG } from './projectiles/railgunConfig.js';
 import { LIGHTNING_CONFIG } from './projectiles/lightningConfig.js';
 import { SHOTGUN_CONFIG } from './projectiles/shotgunConfig.js';
 import { CANNON_CONFIG } from './projectiles/cannonConfig.js';
+import { BOMBARD_CONFIG } from './projectiles/bombardConfig.js';
 import { RKT_CONFIG } from './projectiles/rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './projectiles/pistolConfig.js';
 import { REVOLVER_CONFIG } from './projectiles/revolverConfig.js';
@@ -35,7 +36,7 @@ import { REPAIR_CONFIG } from './projectiles/repairConfig.js';
 import {
   BOLT_FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
-  PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE,
+  PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE, BOMBARD_RATE,
   SPRINKLER_RATE, SPRINKLER_SPREAD, REPAIR_RATE, MRV_RATE,
   FLAK_SHARDS, FLAK_SPREAD, SG_PELLETS, SG_SPREAD,
 } from './core/config.js';
@@ -102,6 +103,7 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Sprinkler, SPRINKLER_RATE, SPRINKLER_CONFIG, 0.5, { auto: true, spread: SPRINKLER_SPREAD }),
   def(WeaponType.Repair, REPAIR_RATE, REPAIR_CONFIG, 0, { auto: true, sidearm: true }),
   def(WeaponType.MRVLauncher, MRV_RATE, MRV_CONFIG, 2.2),
+  def(WeaponType.Bombard, BOMBARD_RATE, BOMBARD_CONFIG, 2.4),
 ];
 
 export const SLOT_COUNT = SLOT_DEFS.length;

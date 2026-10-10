@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import type { Terrain } from '../world/terrain.js';
 
+const _obTarget = new THREE.Vector3(); // observer drift target — scratch
+
 // Camera paths: first/third-person boom, frozen (demo playback), and the
 // T1/T2 observer free-fly rig — plus the feet gizmo that shares their
 // terrain reads.
@@ -86,17 +88,27 @@ export function updateFrozenCamera(v: PlayerVisuals, camera: THREE.PerspectiveCa
   // risk; the player drives the view like T1's observer/Tab mode.
 export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, ...rest: [vel: THREE.Vector3, yaw: number, pitch: number, input: { forward: number; right: number; jumpHeld: boolean; shiftDown: boolean }]): void {
     const [vel, yaw, pitch, input] = rest;
-    const OBSERVER_SPEED = 20; // m/s ghost-flight — half player strafe speed, it should lag a chase not race it
+    // Ghost drift, not sprint: 12 m/s ceiling reached through an
+    // exponential ramp (~0.25s to bite) and released the same way — a
+    // dead cam that snaps to full speed reads as alive-and-moving.
+    // `vel` doubles as the drift accumulator (the dead body's sim
+    // velocity is dead weight anyway); it enters holding whatever the
+    // corpse had, so a kill shove carries over and bleeds off.
+    const OBSERVER_SPEED = 12;
     const fwd = new THREE.Vector3(
       Math.cos(pitch) * Math.sin(yaw),
       Math.sin(pitch),
       Math.cos(pitch) * Math.cos(yaw)
     );
     const right = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
-    pos.addScaledVector(fwd, input.forward * OBSERVER_SPEED * dt);
-    pos.addScaledVector(right, input.right * OBSERVER_SPEED * dt);
-    if (input.jumpHeld) {pos.y += OBSERVER_SPEED * dt;}
-    if (input.shiftDown) {pos.y -= OBSERVER_SPEED * dt;}
+    _obTarget.set(0, 0, 0)
+      .addScaledVector(fwd, input.forward)
+      .addScaledVector(right, input.right);
+    _obTarget.y += (input.jumpHeld ? 1 : 0) - (input.shiftDown ? 1 : 0);
+    if (_obTarget.lengthSq() > 1) { _obTarget.normalize(); }
+    _obTarget.multiplyScalar(OBSERVER_SPEED);
+    vel.lerp(_obTarget, 1 - Math.exp(-dt / 0.25));
+    pos.addScaledVector(vel, dt);
     // Terrain collider, spectator-flavored: the floor under the EYE always
     // holds, and when the view pitches down the terrain ahead of the eye
     // matters too — the near plane is what dirt clips. Blend the look-dir
@@ -117,8 +129,7 @@ export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.Pe
       if (aheadY > groundY) {groundY += (aheadY - groundY) * down;}
     }
     const floorY = groundY + 0.6; // eye clearance — not a buried-body fight
-    if (pos.y < floorY) {pos.y = floorY;}
-    vel.set(0, 0, 0); // observer drift isn't body momentum
+    if (pos.y < floorY) {pos.y = floorY; vel.y = Math.max(0, vel.y);} // floor holds the drift too
     updateCamera(v, camera, terrain, { pos, yaw, pitch, thirdPerson: false }); // keeps the camera above the terrain surface
   }
 

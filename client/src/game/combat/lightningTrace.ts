@@ -81,6 +81,14 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
     if (sh) {hitT *= sh.t;} // entry as a fraction of the current reach
   }
 
+  // Deployable hulls contest the same lane — a turret body-blocks the
+  // beam (projectiles already detonate on these via the contact sweep).
+  if (Projectile.dynColliders.length > 0) {
+    _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
+    const dh = segSolidHit(_lgO, _lgP, Projectile.dynColliders, undefined, deps.world.localTeam);
+    if (dh) {hitT *= dh.t;}
+  }
+
   // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
   // point (exact aim), never magnetized to the center
   const hitTarget = traceTargetHit(deps, hitT, traceT);

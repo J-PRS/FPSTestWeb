@@ -42,9 +42,9 @@ export interface LoadoutHost {
 export class PlayerLoadout {
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
    *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
-  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher
+  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18, 19]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher, Bombard
   /** Medium-only guns — lights trade them for speed, heavies for ordnance. */
-  static readonly MEDIUM_ONLY: readonly number[] = [5, 15]; // Flak, PlasmaGun
+  static readonly MEDIUM_ONLY: readonly number[] = [5, 10, 15]; // Flak, Cannon, PlasmaGun
   /** Light-frame precision gear — heavier chassis can't shoulder them. */
   static readonly LIGHT_ONLY: readonly number[] = [7, 8]; // Railgun, Lightning
   static readonly LOADOUT_SLOTS = 4;

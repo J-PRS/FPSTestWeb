@@ -10,6 +10,7 @@ import { PROFILES } from './targeting.js';
 import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
 import { targetDemoId } from '../demo/types.js';
 import { Nugget } from '../entities/Nugget.js';
+import { BELT_MAX } from '../../../shared/weapons.js';
 import type { GameContext } from './context.js';
 import { Deployables } from './deployables.js';
 import { createMeleeSpecies } from './species/melee.js';
@@ -29,7 +30,7 @@ export interface EntitiesDeps extends GameContext {
   nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean; pickupScale?: number }[];
   onNuggetCollect?: (collectorId: string) => void;
   /** Deployables: combat resolves after entities is built — lazy getter. */
-  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean } | undefined;
+  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string): boolean } | undefined;
   /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
   deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   /** Hostiles of a given team — a bot-owned turret/mine scans these. */
@@ -85,6 +86,7 @@ function spawnBall(): void {
   const dm = deps.lazyDemoManager();
   if (dm?.isPlaying) return; // skip normal spawning during demo playback
   if (f.serverBalls()) return; // connected: the server owns ball spawning
+  if (urlParams.noBalls) return; // lobby sim-gate, applied to the local field too
   if (f.atCap(balls, BALL_MAX)) return;
   // Classic mode is plain bouncy balls — no elites, no variants
   spawnBallOfVariant(f.classicMode ? 0 : f.pickVariant());
@@ -109,6 +111,7 @@ function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 function spawnEliteBall(): void {
   if (deps.lazyDemoManager()?.isPlaying) return;
   if (f.serverBalls()) return;
+  if (urlParams.noBalls) return;
   spawnBallOfVariant(3);
 }
 
@@ -118,6 +121,7 @@ function spawnEliteBall(): void {
 function spawnSplitChildren(t: Targetable): void {
   if (deps.lazyDemoManager()?.isPlaying) return;
   if (f.serverBalls()) return;
+  if (urlParams.noBalls) return;
   const dm = deps.lazyDemoManager();
   for (let k = 0; k < 2; k++) {
     const child = new Ball(scene, deps.lazyTerrain(), 0);
@@ -243,6 +247,16 @@ export function createEntities(deps: EntitiesDeps) {
   });
   const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes } = ballField;
 
+  // ?nocreatures/?noballs — the lobby sim-gates mint server rooms bare via
+  // the join handshake; offline there is no mint, so the local population
+  // honors the same params at the spawn boundary instead. Ambient species
+  // timers are gated in speciesKit.updateSpecies; these cover everything
+  // else that calls the spawn API (director picks/beats, boot seeds).
+  // Wire-owned spawns (netBalls/netCrawlers) never route through here.
+  const noSpawn = <A extends unknown[]>(off: boolean, fn: (...a: A) => void): ((...a: A) => void) =>
+    off ? () => {} : fn;
+  const gateC = <A extends unknown[]>(fn: (...a: A) => void) => noSpawn(urlParams.noCreatures, fn);
+
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----
   function updateNuggets(dt: number): void {
     const terrain = deps.lazyTerrain();
@@ -270,6 +284,10 @@ export function createEntities(deps: EntitiesDeps) {
           nuggetsCollected++;
           player.grantJetBoost();
           player.heal(0.2); // 20% max hp per nugget
+          // Belt income — the wired collect (net/pickups.ts) pays a charge
+          // per gem; offline nuggets must or the pack economy only exists
+          // online.
+          player.beltCharges = Math.min(BELT_MAX, player.beltCharges + 1);
           deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth — clamped 25/call
           sfx.powerup('gem'); // same crystal chime server-owned gems play on collect
           logger.info(`Nugget collected (${nuggetsCollected} total)`);
@@ -294,13 +312,13 @@ export function createEntities(deps: EntitiesDeps) {
     balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets, banelings,
     spawnNuggetsAt,
     getNuggetsCollected: () => nuggetsCollected,
-    spawnBall,
-    spawnCrawler: melee.spawnCrawler, spawnScarab: melee.spawnScarab, spawnGrub: melee.spawnGrub, spawnSnake: melee.spawnSnake,
-    spawnGnatCloud: flyers.spawnGnatCloud, spawnSeeker: flyers.spawnSeeker, spawnRakk: flyers.spawnRakk,
-    spawnRoller: melee.spawnRoller,
-    spawnTurretter: siege.spawnTurretter, spawnOverlord: siege.spawnOverlord,
-    spawnTotem: siege.spawnTotem, spawnUberTotem: siege.spawnUberTotem,
-    spawnEliteBall, plantMine: siege.plantMine,
+    spawnBall: noSpawn(urlParams.noBalls, spawnBall),
+    spawnCrawler: gateC(melee.spawnCrawler), spawnScarab: gateC(melee.spawnScarab), spawnGrub: gateC(melee.spawnGrub), spawnSnake: gateC(melee.spawnSnake),
+    spawnGnatCloud: gateC(flyers.spawnGnatCloud), spawnSeeker: gateC(flyers.spawnSeeker), spawnRakk: gateC(flyers.spawnRakk),
+    spawnRoller: gateC(melee.spawnRoller),
+    spawnTurretter: gateC(siege.spawnTurretter), spawnOverlord: gateC(siege.spawnOverlord),
+    spawnTotem: gateC(siege.spawnTotem), spawnUberTotem: gateC(siege.spawnUberTotem),
+    spawnEliteBall: noSpawn(urlParams.noBalls, spawnEliteBall), plantMine: gateC(siege.plantMine),
     turretBolts: siege.turretBolts, consumeBolt: siege.consumeBolt, cookBoltsNear: siege.cookBoltsNear,
     shieldObstacles: () => deployables.shieldObstacles(),
     reportTargetDamage,

@@ -5,7 +5,7 @@ import { Explosion } from '../../effects/explosion.js';
 import { screenShake } from '../../effects/screenShake.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import {
-  GRENADE_CONFIG, BELT_DISC_CONFIG, STICKY_CONFIG,
+  GRENADE_CONFIG, BELT_DISC_CONFIG, BELT_STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
   CONC_CONFIG,
@@ -160,7 +160,7 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   grenade: GRENADE_CONFIG,
   cluster: CLUSTER_CONFIG,
   javelin: JAVELIN_CONFIG,
-  sticky: STICKY_CONFIG,
+  sticky: BELT_STICKY_CONFIG,
   impact: IMPACT_CONFIG,
   conc: CONC_CONFIG,
   remoterailgun: REMOTE_RAILGUN_CONFIG,

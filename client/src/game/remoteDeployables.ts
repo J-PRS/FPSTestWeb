@@ -494,7 +494,13 @@ export class RemoteDeployables {
    *  remoteRemove also arrives (deployGone); either order resolves since
    *  the item may already be gone locally. */
   mineBoom(_id: number, pos: { x: number; y: number; z: number }): void {
-    sfx.explosionAt(new THREE.Vector3(pos.x, pos.y, pos.z), true);
+    const v = new THREE.Vector3(pos.x, pos.y, pos.z);
+    sfx.explosionAt(v, true);
+    // Server-owned blast: its victim knockback arrives on the wire —
+    // predict through the stamped path like a projectile so the echo
+    // dedupes instead of landing raw. DEPLOY_ITEMS.mine is the envelope.
+    const d = DEPLOY_ITEMS.mine;
+    this.deps.lazyCombat?.()?.predictLocalShove?.(v, d.blastRadius ?? 6, d.knockback ?? 12, 'push');
   }
 
   update(dt: number): void {

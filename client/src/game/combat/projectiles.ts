@@ -17,7 +17,7 @@ import * as sfx from '../../core/sfx.js';
 import { screenShake } from '../../effects/screenShake.js';
 import { EXPLOSION_VFX_RADIUS, SCORCH_MAX } from '../../core/config.js';
 import { urlParams } from '../../core/params.js';
-import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR, RIDE_CATCH_R, canHostRide } from '../../../../shared/weapons.js';
 import { POWERUP } from '../../../../shared/pickups.js';
 import { handleProjectileImpact } from './impact.js';
 import type { CombatCtx, ExplosionArgs } from '../combat.js';
@@ -242,6 +242,34 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
     }
 
     if (p.dead) retireProjectile(deps, p, i);
+  }
+  catchRiders(deps.world.projectiles);
+}
+
+// Belt-sticky combo: an airborne belt sticky inside a same-owner shell's
+// swept segment is swallowed dead-center and rides it (the Painkiller
+// stake+grenade trick — lob the bomb, shoot THROUGH it). Same-owner only:
+// stealing an enemy's bomb mid-air would be chaos, catching your own is
+// the skill shot. Server runs the identical pass — replicas unride on the
+// projRide edge, so prediction and authority attach on the same tick.
+const _segAB = new THREE.Vector3();
+const _segAP = new THREE.Vector3();
+function distSqToSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number {
+  _segAB.subVectors(b, a);
+  _segAP.subVectors(p, a);
+  const d = _segAB.lengthSq();
+  const t = d > 0 ? Math.max(0, Math.min(1, _segAP.dot(_segAB) / d)) : 0;
+  return _segAP.addScaledVector(_segAB, -t).lengthSq();
+}
+function catchRiders(list: Projectile[]): void {
+  const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
+  for (const q of list) {
+    if (!q.config.rides || q.host || q.exploded || q.stuck || q.dead) continue;
+    for (const h of list) {
+      if (h === q || h.exploded || h.dead || h.stuck || h.config.rides || h.shooterId !== q.shooterId
+        || !canHostRide(h.config.weaponType, getWeaponStats(h.config.weaponType)!)) continue;
+      if (distSqToSegment(q.pos, h.prevPos, h.pos) <= r2) { q.host = h; break; }
+    }
   }
 }
 

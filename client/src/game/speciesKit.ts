@@ -19,6 +19,9 @@ export interface Species<T extends Targetable & { dispose(): void }> {
   t: number;
   spawn: () => void;
   tick: (e: T, dt: number) => void;
+  /** Ambient dressing, not creature population — ?nocreatures leaves it
+   *  alone (the server gate only empties the combat-species pops too). */
+  decor?: boolean;
 }
 
 // Shared machinery every species block in entities.ts drives: the
@@ -263,7 +266,9 @@ class SpeciesKitImpl {
       // anyway are harmless defense — director events call them directly.)
       // ?spawns=random: ambient timers stay off — the random director
       // owns population so the total budget isn't double-spent.
-      if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying) {s.spawn();}
+      // ?nocreatures — the lobby sim-gate, applied to the local ambient
+      // population (offline rooms have no server mint to carry it).
+      if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying && !(urlParams.noCreatures && !s.decor)) {s.spawn();}
     }
     const playerPos = this.deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i--) {

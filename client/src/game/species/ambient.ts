@@ -39,6 +39,7 @@ export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   const weedSpecies: Species<Tumbleweed> = {
     list: weeds, interval: WEED_SPAWN_INTERVAL, t: 0,
+    decor: true, // ambience — ?nocreatures gates combat species, not set dressing
     spawn: spawnWeed,
     tick: (w, dt) => { w.update(dt, deps.lazyTerrain(), deps.lazyPlayer().pos); kickDust(w, dt); },
   };

@@ -233,7 +233,8 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   _sunDir.copy(deps.sceneSetup.sun.position).normalize();
   const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
   fog.color.copy(tinted);
-  deps.sceneSetup.atmosphericSky.setFogColor(fogHorizon() ?? tinted);
+  deps.sceneSetup.atmosphericSky.setFogColor(tinted);
+  deps.sceneSetup.atmosphericSky.setHorizonColor(fogHorizon() ?? tinted);
   updateCubeSky(deps.camera, fog.color);
   refreshColliderGizmoVisibility();
   terrain.updateFog(fog.color, fog.near, fog.far);
