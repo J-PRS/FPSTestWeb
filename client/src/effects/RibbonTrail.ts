@@ -535,6 +535,10 @@ export class RibbonTrail {
   private freshFromIndex(camMoved: boolean): number {
     if (this.billboard && camMoved) {return 0;}
     if (this.stopped) {return this.count;}
+    // A full ring evicts the oldest sample on every push — every vert's
+    // position assignment shifts, so all verts must rewrite; keeping the
+    // old positions leaves lit stale verts that streak (v0 gap in dumps).
+    if (this.count === MAX_SAMPLES && this.pushed > 0) {return 0;}
     return this.count - Math.min(this.pushed, this.count);
   }
 
