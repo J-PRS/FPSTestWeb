@@ -39,7 +39,7 @@
   "heightScale": 1.5,
   "terrainPreset": 2,
   "fog": {
-    "color": [0.78, 0.66, 0.45],
+    "color": [0.66, 0.72, 0.60],
     "distance": 220.0,
     "visible": 900.0
   },
