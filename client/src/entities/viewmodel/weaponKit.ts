@@ -14,16 +14,40 @@ export const brassMat = new THREE.MeshLambertMaterial({ color: 0xB08A3A, emissiv
 // hseg: vertex AO bakes per-vertex — a 1-segment cylinder only has two
 // vert rings, so one occluded rim shades the WHOLE length black. Long
 // tubes need a few height segments for the bake to resolve locally.
-export const mkTube = (r1: number, r2: number, len: number, z: number, mat: THREE.Material, hseg = 1) => {
+export const mkTube = (r1: number, r2: number, len: number, z: number, mat: THREE.Material, hseg = 1): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8, hseg), mat);
   m.rotation.x = Math.PI / 2;
   m.position.z = z;
   return m;
 };
-export const mkBore = (r: number, z: number) => {
+export const mkBore = (r: number, z: number): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.CircleGeometry(r, 8), boreMat);
   m.position.z = z;
   return m;
+};
+
+// Thin rod along Z with caller-chosen radial segments — hex pipes, struts,
+// rail pins. mkTube's hardcoded 8 segs is for bore walls; detail rods want
+// fewer. Caller owns the x/y seat (radial repeats, under-slung runs).
+export const mkRod = (r: number, len: number, mat: THREE.Material, seg = 6): THREE.Mesh => {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+  m.rotation.x = Math.PI / 2;
+  return m;
+};
+
+/** Ring of N copies around the Z axis — ribs, pipes, vents. `mk` gets the
+ *  angle so callers can build per-index parts; the returned mesh is
+ *  pre-seated at (cos a × r, sin a × r, z). Angle offset defaults to
+ *  facet centers on the 8-seg tube walls. */
+export const radialRepeat = <T extends THREE.Mesh>(n: number, r: number, z: number, mk: (a: number) => T, a0 = Math.PI / 8): T[] => {
+  const out: T[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const a = a0 + (i / n) * Math.PI * 2;
+    const m = mk(a);
+    m.position.set(Math.cos(a) * r, Math.sin(a) * r, z);
+    out.push(m);
+  }
+  return out;
 };
 
 // --- Loft kit -------------------------------------------------------------
@@ -112,7 +136,7 @@ const validateLoft = (sections: LoftSection[]): void => {
 /** Skin ring sections into a solid along Z, ngon-cap both ends. Non-indexed
  *  so faces are flat-shaded (hard-surface read + vertex-AO friendly).
  *  UVs are surface-relative: u wraps the ring, v runs the length. */
-export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true): THREE.Mesh => {
+export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true, smooth = false): THREE.Mesh => {
   validateLoft(sections);
   const seg = (sections.find(s => s.ring)?.ring ?? []).length;
   const pos: number[] = [], uv: number[] = [];
@@ -121,27 +145,30 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true)
     const p = s.ring![j % seg]!;
     return [p[0] + (s.dx ?? 0), p[1] + (s.dy ?? 0), s.z];
   };
-  const quad = (a: number[], b: number[], c: number[], d: number[], u0: number, u1: number, v0: number, v1: number) => {
+  // uv quad params ride in one tuple — lint caps params at 6.
+  const quad = (a: number[], b: number[], c: number[], d: number[], uvr: [number, number, number, number]): void => {
+    const [u0, u1, v0, v1] = uvr;
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);
     uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
   };
-  const tri = (a: number[], b: number[], c: number[], u0: number, u1: number, v0: number, v1: number) => {
+  const tri = (a: number[], b: number[], c: number[], uvr: [number, number, number, number]): void => {
+    const [u0, u1, v0, v1] = uvr;
     pos.push(...a, ...b, ...c);
     uv.push((u0 + u1) / 2, v0, u1, v1, u0, v1);
   };
   for (let i = 0; i < sections.length - 1; i++) {
     const s0 = sections[i]!, s1 = sections[i + 1]!;
     for (let j = 0; j < seg; j++) {
-      if (s0.point && s1.ring) {tri(pt(s0), ring(s1, j), ring(s1, j + 1), j / seg, (j + 1) / seg, s0.z, s1.z);}
-      else if (s0.ring && s1.point) {tri(pt(s1), ring(s0, j + 1), ring(s0, j), j / seg, (j + 1) / seg, s0.z, s1.z);}
+      if (s0.point && s1.ring) {tri(pt(s0), ring(s1, j), ring(s1, j + 1), [j / seg, (j + 1) / seg, s0.z, s1.z]);}
+      else if (s0.ring && s1.point) {tri(pt(s1), ring(s0, j + 1), ring(s0, j), [j / seg, (j + 1) / seg, s0.z, s1.z]);}
       else if (s0.ring && s1.ring) {
         const a = ring(s0, j), b = ring(s1, j), c = ring(s1, j + 1), d = ring(s0, j + 1);
-        quad(a, b, c, d, j / seg, (j + 1) / seg, s0.z, s1.z);
+        quad(a, b, c, d, [j / seg, (j + 1) / seg, s0.z, s1.z]);
       }
     }
   }
   if (cap) {
-    const capEnd = (s: LoftSection, flip: boolean) => {
+    const capEnd = (s: LoftSection, flip: boolean): void => {
       if (!s.ring) {return;} // point ends are already closed by the fan
       let cx = 0, cy = 0;
       for (const p of s.ring) { cx += p[0]; cy += p[1]; }
@@ -155,9 +182,13 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true)
     capEnd(sections[0]!, true);        // +Z end faces forward
     capEnd(sections[sections.length - 1]!, false); // −Z end faces back
   }
-  const geo = new THREE.BufferGeometry();
+  let geo: THREE.BufferGeometry = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  // smooth welds coincident verts before normal pass — turned parts
+  // (tubes, sleeves, bells) want averaged normals, not per-face facets.
+  // AO bakes per-vertex either way; welding just fixes shading.
+  if (smooth) {geo = mergeVertices(geo);}
   geo.computeVertexNormals();
   return new THREE.Mesh(geo, mat);
 };
@@ -313,18 +344,19 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   if (inner.length === seg) {validateRing(inner, 'annulus inner');}
   else {inner = resampleRing(inner, seg);}
   const pos: number[] = [], uv: number[] = [];
-  const quad = (a: number[], b: number[], c: number[], d: number[], u0: number, u1: number, v0: number, v1: number) => {
+  const quadW = (a: number[], b: number[], c: number[], d: number[], uvr: [number, number, number, number]): void => {
+    const [u0, u1, v0, v1] = uvr;
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);
     uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
   };
-  const O = (j: number, z: number) => [...outer[j % seg]!, z] as number[];
-  const I = (j: number, z: number) => [...inner[j % seg]!, z] as number[];
+  const O = (j: number, z: number): number[] => [...outer[j % seg]!, z];
+  const I = (j: number, z: number): number[] => [...inner[j % seg]!, z];
   for (let j = 0; j < seg; j++) {
     const u0 = j / seg, u1 = (j + 1) / seg;
-    quad(O(j, zBack), O(j, zFront), O(j + 1, zFront), O(j + 1, zBack), u0, u1, zBack, zFront); // outer wall (outward)
-    quad(I(j, zBack), I(j + 1, zBack), I(j + 1, zFront), I(j, zFront), u0, u1, zBack, zFront); // inner wall (faces the hole)
-    quad(O(j, zBack), O(j + 1, zBack), I(j + 1, zBack), I(j, zBack), u0, u1, 0, 1);           // back face (+Z)
-    quad(O(j, zFront), I(j, zFront), I(j + 1, zFront), O(j + 1, zFront), u0, u1, 0, 1);        // front face (−Z)
+    quadW(O(j, zBack), O(j, zFront), O(j + 1, zFront), O(j + 1, zBack), [u0, u1, zBack, zFront]); // outer wall (outward)
+    quadW(I(j, zBack), I(j + 1, zBack), I(j + 1, zFront), I(j, zFront), [u0, u1, zBack, zFront]); // inner wall (faces the hole)
+    quadW(O(j, zBack), O(j + 1, zBack), I(j + 1, zBack), I(j, zBack), [u0, u1, 0, 1]);           // back face (+Z)
+    quadW(O(j, zFront), I(j, zFront), I(j + 1, zFront), O(j + 1, zFront), [u0, u1, 0, 1]);        // front face (−Z)
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -337,10 +369,11 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
  *  rails: everything we've been faking with rotated boxes. Uses parallel-
  *  transport frames so the profile doesn't twist along the run. Radii may
  *  vary per point ([x,y,z,r] — r optional, defaults to `radius`). */
-export const tubePath = (pts: [number, number, number, number?][], radius: number, mat: THREE.Material, seg = 8, cap = true): THREE.Mesh => {
+/** Parallel-transport frames along a polyline — tangent (central
+ *  differences) plus a swept normal/binormal per point, so a swept
+ *  profile doesn't twist along the run. */
+const sweepFrames = (pts: [number, number, number, number?][]): { N: THREE.Vector3[]; B: THREE.Vector3[] } => {
   const n = pts.length;
-  // Tangent per point (central differences), then parallel-transport a
-  // normal down the chain: project out the tangent component each step.
   const T: THREE.Vector3[] = [], N: THREE.Vector3[] = [], B: THREE.Vector3[] = [];
   for (let i = 0; i < n; i++) {
     const a = pts[Math.max(0, i - 1)]!, b = pts[Math.min(n - 1, i + 1)]!;
@@ -353,6 +386,12 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
     B.push(new THREE.Vector3().crossVectors(T[i]!, nv));
     nv = B[i]!.clone().cross(T[i]!).normalize(); // carry forward
   }
+  return { N, B };
+};
+
+export const tubePath = (pts: [number, number, number, number?][], radius: number, mat: THREE.Material, seg = 8, cap = true): THREE.Mesh => {
+  const n = pts.length;
+  const { N, B } = sweepFrames(pts);
   const pos: number[] = [], uv: number[] = [];
   const ring = (i: number, j: number): number[] => {
     const a = (j / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
@@ -373,7 +412,8 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
       const p = pts[i]!;
       for (let j = 0; j < seg; j++) {
         const a = ring(i, j), b = ring(i, j + 1);
-        if (flip) {pos.push(p[0], p[1], p[2], ...b, ...a);} else {pos.push(p[0], p[1], p[2], ...a, ...b);}
+        const [x, y] = flip ? [b, a] : [a, b];
+        pos.push(p[0], p[1], p[2], ...x, ...y);
         uv.push(0.5, i, 1, i, 0, i);
       }
     }
@@ -389,7 +429,7 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
 // flat bevel on the caps. All 12 edges get a planar 45° face and the
 // corners close as clean triangles — no pinched corner vertex like
 // RoundedBoxGeometry's seg-1 hack.
-export const mkSoftBox = (w: number, h: number, d: number, mat: THREE.Material, r = 0.004) => {
+export const mkSoftBox = (w: number, h: number, d: number, mat: THREE.Material, r = 0.004): THREE.Mesh => {
   const hw = w / 2, hh = h / 2;
   const s = new THREE.Shape();
   s.moveTo(-hw + r, -hh);

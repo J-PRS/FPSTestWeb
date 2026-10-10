@@ -218,6 +218,54 @@ rocket.add(channelFloor);
 return rocket;
 }
 
+// mkMortar v1 (2026-11): fat tube + flared muzzle, base plate and bipod
+// under the breech, shell hopper on the left flank. Archived verbatim —
+// every identity part sat below/beside the tube, so in first person it
+// read as a stubby pipe. Replaced by the bell-mouth + top pan-drum build.
+export function mkMortar_v1(): THREE.Group {
+const mortar = new THREE.Group();
+mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat)); // main bore tube
+mortar.add(mkTube(0.22, 0.2, 0.1, -0.22, bodyMat)); // flared muzzle
+mortar.add(mkBore(0.17, -0.271));
+// Breech block + base plate — the mortar's tell: a flat plate the tube
+// seats on, like it's meant to be slammed down
+mortar.add(mkTube(0.1, 0.14, 0.14, 0.2, darkMat));
+const mBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.24), bodyMat);
+mBase.position.set(0, -0.17, 0.2);
+mortar.add(mBase);
+// Bipod struts — angled legs off the mid-tube, the "crew-served" read
+for (const side of [-1, 1]) {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.05), darkMat);
+  leg.position.set(side * 0.14, -0.14, -0.1);
+  leg.rotation.z = -side * 0.5;
+  mortar.add(leg);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.08), darkMat);
+  foot.position.set(side * 0.2, -0.24, -0.1);
+  mortar.add(foot);
+}
+// Shell hopper on the left flank — a rack of finned bombs, tips
+// visible above the tube. Live ordnance = the mortar read.
+const finMat = new THREE.MeshLambertMaterial({ color: 0x5a_4a_28, emissive: 0x18_12_05 });
+for (let i = 0; i < 3; i++) {
+  const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
+  shell.position.set(-0.15, -0.02, shell.position.z);
+  mortar.add(shell);
+  // Fin cross at the shell's tail
+  const finV = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.07, 0.06), finMat);
+  finV.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
+  mortar.add(finV);
+  const finH = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.01, 0.06), finMat);
+  finH.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
+  mortar.add(finH);
+}
+// Front sight post on the muzzle ring
+const mSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat);
+mSight.position.set(0, 0.22, -0.22);
+mortar.add(mSight);
+mortar.visible = false;
+return mortar;
+}
+
 // Registry for the Gun Lab — key is a display label.
 export const ARCHIVE_BUILDERS: [string, () => THREE.Group][] = [
   ['cannon_v1', mkCannon_v1],
@@ -225,4 +273,5 @@ export const ARCHIVE_BUILDERS: [string, () => THREE.Group][] = [
   ['chaingun_v1', mkChaingun_v1],
   ['rakk_v1', mkRakk_v1],
   ['bolt_v1', mkBolt_v1],
+  ['mortar_v1', mkMortar_v1],
 ];

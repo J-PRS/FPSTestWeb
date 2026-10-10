@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, mkRevolve, mkRod, radialRepeat, profCircle, profOct, rotRing, tubePath } from './weaponKit.js';
 
 // Ballistic weapon geometry — the launchers and throwers built from
 // primitives (rocket, disc, chaingun, mortar, GL, sticky, flak, shotgun,
@@ -404,49 +404,22 @@ chain.visible = false;
 return { g: chain, barrels: chainBarrels };
 }
 
-// Weapon 3 — mortar: an artillery piece, not a pipe. The reads: FAT
-// bore tube, base plate under the breech, bipod struts on the fore-end,
-// a shell hopper on the flank with finned bomb tips peeking out.
+// Weapon 3 — mortar: mkMortar_v1 restored verbatim (see
+// weaponsGeoArchive.ts) — every redesign iteration baked worse than it.
 export function mkMortar(): THREE.Group {
 const mortar = new THREE.Group();
 mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat)); // main bore tube
 mortar.add(mkTube(0.22, 0.2, 0.1, -0.22, bodyMat)); // flared muzzle
+// Step ring behind the flare — eases the muzzle-to-body transition.
+mortar.add(mkTube(0.2, 0.2, 0.04, -0.16, bodyMat));
 mortar.add(mkBore(0.17, -0.271));
-// Breech block + base plate — the mortar's tell: a flat plate the tube
-// seats on, like it's meant to be slammed down
-mortar.add(mkTube(0.1, 0.14, 0.14, 0.2, darkMat));
-const mBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.24), bodyMat);
-mBase.position.set(0, -0.17, 0.2);
-mortar.add(mBase);
-// Bipod struts — angled legs off the mid-tube, the "crew-served" read
-for (const side of [-1, 1]) {
-  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.05), darkMat);
-  leg.position.set(side * 0.14, -0.14, -0.1);
-  leg.rotation.z = -side * 0.5;
-  mortar.add(leg);
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.08), darkMat);
-  foot.position.set(side * 0.2, -0.24, -0.1);
-  mortar.add(foot);
-}
-// Shell hopper on the left flank — a rack of finned bombs, tips
-// visible above the tube. Live ordnance = the mortar read.
-const finMat = new THREE.MeshLambertMaterial({ color: 0x5a_4a_28, emissive: 0x18_12_05 });
-for (let i = 0; i < 3; i++) {
-  const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
-  shell.position.set(-0.15, -0.02, shell.position.z);
-  mortar.add(shell);
-  // Fin cross at the shell's tail
-  const finV = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.07, 0.06), finMat);
-  finV.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
-  mortar.add(finV);
-  const finH = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.01, 0.06), finMat);
-  finH.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
-  mortar.add(finH);
-}
-// Front sight post on the muzzle ring
-const mSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat);
-mSight.position.set(0, 0.22, -0.22);
-mortar.add(mSight);
+// Cooling pipes — a thin hex rod at each facet's middle, running the
+// tube's length and butting into the muzzle ring. Sinks into the fat
+// rear taper, stands proud at the thin front — reads welded.
+for (const pipe of radialRepeat(8, 0.163, 0, () => mkRod(0.014, 0.36, darkMat))) {mortar.add(pipe);}
+
+
+
 mortar.visible = false;
 return mortar;
 }
@@ -718,6 +691,41 @@ cn.scale.setScalar(1.2);
 cn.position.z += 0.08;
 cn.visible = false;
 return cn;
+}
+
+// Weapon 35 — Bombard: the cannon's siege brother. The SILHOUETTE is the
+// whole read — a mortar-wide bore on a shortened barrel: fat at the
+// breech, fat at the lip, no long slim chase. Reads "ship's gun dragged
+// ashore", not "big rifle".
+export function mkBombard(): THREE.Group {
+const bb = new THREE.Group();
+let bz = 0;
+const bbSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
+  bb.add(mkTube(r1, r2, len, bz - len / 2, mat));
+  bz -= len;
+};
+const bbHoop = (r: number) => {
+  bbSeg(r, r + 0.008, 0.016, darkMat);
+  bbSeg(r + 0.008, r, 0.016, darkMat);
+};
+bbSeg(0.19, 0.2, 0.04, bodyMat);   // breech cap — already wider than the whole cannon
+bbSeg(0.2, 0.175, 0.14, bodyMat);  // chamber taper — the powder room
+bbHoop(0.183);                     // hoop 1
+bbSeg(0.175, 0.16, 0.12, bodyMat); // tube taper
+bbHoop(0.168);                     // hoop 2
+bbSeg(0.16, 0.21, 0.05, bodyMat);  // muzzle bell — a flared lip wider than the breech
+bbHoop(0.215);                     // muzzle ring — the widest point on the gun
+// Cascabel — same knob trick as the cannon but scaled to the mass: a
+// ball nearly the barrel's own width reads as counterweight, not finial.
+const bbNeck = mkTube(0.07, 0.05, 0.04, 0.02, bodyMat);
+bb.add(bbNeck);
+const bbBall = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), bodyMat);
+bbBall.position.set(0, 0, 0.06);
+bb.add(bbBall);
+bb.scale.setScalar(1.15);
+bb.position.z += 0.08;
+bb.visible = false;
+return bb;
 }
 
 // Weapon 11 — rocket launcher: classic RPG profile. Long launch tube,

@@ -68,6 +68,7 @@ export class ViewModel {
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
     [WeaponType.Repair]: -0.2,   // emitter stud on the reflector dish
     [WeaponType.MRVLauncher]: -0.56, // group-space: scaled bore face (-0.445 model) ×1.25
+    [WeaponType.Bombard]: -0.42, // short barrel — the bell ends ~-0.37 model-space ×1.15
   };
   chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
   // Bore axis in the SPIN NODE's local space — procedural barrels run

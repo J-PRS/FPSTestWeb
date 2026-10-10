@@ -38,6 +38,7 @@ const RECOIL: Record<number, { recover: number; jitter: number; amp: number; bac
     [WeaponType.Sticky]:          { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1.0 },  // thoomp — tube launch
     [WeaponType.Repair]:          { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1.0 },  // per-tick hum
     [WeaponType.MRVLauncher]:     { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, // drum-fed cannon — pull-back
+    [WeaponType.Bombard]:         { recover: 0.9,  jitter: 0.02,  amp: 1.35, back: 1.2 },  // siege gun — biggest muzzle rise in the roster
 };
 // FLASH: color of quad+light, scale of the starburst sprite, life of
 // the pop (×70ms), light scale for intensity/range of the lamp pop.
@@ -65,6 +66,7 @@ const FLASH: Record<number, { color: number; scale: number; life: number; light:
     [WeaponType.Sticky]:          { color: 0xff66dd, scale: 0.8,  life: 0.7, light: 1.0 },  // magenta spit
     [WeaponType.Repair]:          { color: 0x7dffb8, scale: 0.4,  life: 0.4, light: 1.0 },  // green weld spark
     [WeaponType.MRVLauncher]:     { color: 0xff7744, scale: 1.4,  life: 1.4, light: 1.0 },
+    [WeaponType.Bombard]:         { color: 0xff8833, scale: 2.4,  life: 1.9, light: 2.0 }, // a powder fireball that fills the bell
 };
 const RECOIL_FALLBACK = RECOIL[WeaponType.BoltLauncher];
 const FLASH_FALLBACK = FLASH[WeaponType.BoltLauncher];
