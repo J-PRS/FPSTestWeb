@@ -47,7 +47,10 @@ export class WebSocketConnection {
   // worth sending inside STALE_MS; older than that it references a sim
   // moment that no longer exists and the server would reject it anyway.
   private static readonly KEEP_NEWEST = new Set(['inputMove', 'position', 'teleport', 'jump', 'jetpack', 'shotFired']);
-  private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'switchRoom', 'respawn', 'snapshotRequest', 'resync', 'pong']);
+  // No 'pong': a queued pong's timestamp goes stale in the queue — the
+  // echo arrives with seconds of phantom transit and poisons the server's
+  // transit EMA; a missing RTT sample costs nothing by comparison.
+  private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'switchRoom', 'respawn', 'snapshotRequest', 'resync']);
   private static readonly STALE_MS = 3000;
   private hasLoggedConnectionError: boolean = false;
   // 'close' fires asynchronously — a deliberate disconnect() would
