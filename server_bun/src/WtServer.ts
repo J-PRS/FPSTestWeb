@@ -176,7 +176,11 @@ export class WtSocketAdapter {
 
   // desiredSize goes negative once the writable's internal queue is
   // backlogged — report the negative magnitude as buffered bytes.
-  getBufferedAmount(): number { return Math.max(0, -(this.writer?.desiredSize ?? 0)); }
+  getBufferedAmount(): number {
+    // Both lanes' queues count toward the drown check — a client
+    // backlogging on the bin lane alone would otherwise escape it.
+    return Math.max(0, -(this.writer?.desiredSize ?? 0)) + Math.max(0, -(this.binWriter?.desiredSize ?? 0));
+  }
 
   send(msg: string | Uint8Array): number {
     if (!this.open) return 0;
