@@ -5,9 +5,11 @@ import { THROW_TOTAL } from './ViewModel.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { BELT_THROW_TIME, type Player } from './Player.js';
 import { PlayerLoadout } from './playerLoadout.js';
+import { ChildLogger } from '../core/Logger.js';
 
 // Trigger + impulse family: weapon/belt fire intent and every
 // pos/vel writer that must sync back into the movement controller.
+const logger = new ChildLogger('Impulse');
 
   /** Primary-fire intent: weapon lowered during a belt-throw, a held
    *  secondary auto-fires at its own cadence, and class-locked ordnance
@@ -70,6 +72,7 @@ export function applyKnockback(p: Player, from: THREE.Vector3, force: number): v
     // scales its own dv by class mass) — divide here so the predicted and
     // wire echoes land the same delta.
     const f = force / CLASS_STATS[p.appliedClass].mass;
+    logger.info('impulse: knockback', { force: Number(f.toFixed(1)), from: { x: Number(from.x.toFixed(1)), y: Number(from.y.toFixed(1)), z: Number(from.z.toFixed(1)) }, velY: Number(p.vel.y.toFixed(1)) });
     const dir = p.pos.clone().sub(from).normalize();
     p.vel.addScaledVector(dir, f);
     p.vel.y += f * 0.5;
@@ -81,6 +84,7 @@ export function applyKnockback(p: Player, from: THREE.Vector3, force: number): v
 
 export function applyPull(p: Player, to: THREE.Vector3, force: number): void {
     const f = force / CLASS_STATS[p.appliedClass].mass;
+    logger.info('impulse: pull', { force: Number(f.toFixed(1)), to: { x: Number(to.x.toFixed(1)), y: Number(to.y.toFixed(1)), z: Number(to.z.toFixed(1)) }, velY: Number(p.vel.y.toFixed(1)) });
     const dir = to.clone().sub(p.pos).normalize();
     p.vel.addScaledVector(dir, f);
     p.vel.y += f * 0.3;
