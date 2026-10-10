@@ -16,6 +16,9 @@ const GRACE_OUTSIDE_S = 1.5;   // brief spillover (knockback through it) before 
 
 export class RoomArena {
   private outsideSince = new Map<string, number>();
+  // Ids already banner-warned on this excursion — the shove re-fires
+  // every ~2s but the warning should land once per trip outside.
+  private warned = new Set<string>();
   // Sim-time, not wall time: deterministic under test stepping AND a
   // frozen/paused sim can't silently drain the grace window.
   private t = 0;
@@ -30,10 +33,10 @@ export class RoomArena {
     const { x: cx, z: cz, radius: r } = this.arena;
     const now = this.t;
     for (const p of this.room.players.getAllPlayers().values()) {
-      if (p.isDead) { this.outsideSince.delete(p.id); continue; }
+      if (p.isDead) { this.outsideSince.delete(p.id); this.warned.delete(p.id); continue; }
       const dx = p.position.x - cx, dz = p.position.z - cz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d <= r) { this.outsideSince.delete(p.id); continue; }
+      if (d <= r) { this.outsideSince.delete(p.id); this.warned.delete(p.id); continue; }
       const since = this.outsideSince.get(p.id);
       if (since === undefined) { this.outsideSince.set(p.id, now); continue; }
       if (now - since < GRACE_OUTSIDE_S) continue;
@@ -46,13 +49,17 @@ export class RoomArena {
       this.room.connections.sendToPlayer(p.id, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', p.id, {
         position: center, force: PUSH_FORCE, pull: true,
       }) as Parameters<Room['broadcast']>[0]);
+      if (!this.warned.has(p.id)) {
+        this.warned.add(p.id);
+        this.room.connections.sendToPlayer(p.id, { type: 'serverWarn', text: 'RETURN TO THE ARENA — outside the dome' });
+      }
       this.room.moveSim.applyImpulse(p.id, { x: -dx * inv * PUSH_FORCE, y: PUSH_FORCE * 0.3, z: -dz * inv * PUSH_FORCE });
       this.outsideSince.set(p.id, now + PUSH_INTERVAL_S);
     }
     // Gone players can't self-clean — they never appear in the iteration
     // above, so a leaver's entry would sit in the map for the room's life.
     for (const id of this.outsideSince.keys()) {
-      if (!this.room.players.getPlayer(id)) this.outsideSince.delete(id);
+      if (!this.room.players.getPlayer(id)) { this.outsideSince.delete(id); this.warned.delete(id); }
     }
   }
 }

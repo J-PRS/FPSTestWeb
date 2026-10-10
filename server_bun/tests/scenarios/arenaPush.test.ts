@@ -21,6 +21,10 @@ describe('scenario: arena dome pushes violators back', () => {
     step(room, 40);
     const kb = sent.find((m) => m.type === 'knockback')!;
     expect(kb).toBeTruthy();
+    // The barrier shove repeats every ~2s but the banner lands once per
+    // excursion — a second warn would spam the offender's HUD.
+    step(room, 80);
+    expect(sent.filter((m) => m.type === 'serverWarn').length).toBe(1);
     // Let the impulse carry them — no more pinning. In shadow mode the
     // client keeps position truth (the knockback msg does the real pull
     // there); the honest server-side evidence is the shadow's simPos
