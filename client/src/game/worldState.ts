@@ -78,7 +78,7 @@ export interface WorldState {
   /** The same dedup run backwards: a knockback echo that arrived BEFORE
    *  its blast's replica exploded applies raw — recorded here so the
    *  delayed predicted shove at the same center doesn't double it. */
-  recentKb: { x: number; y: number; z: number; t: number }[];
+  recentKb: { x: number; y: number; z: number; t: number; f?: number }[];
   /** Own banked LG charge, echoed by the server (yourCharge) — the
    *  carrier is excluded from tick fanout so the walking-bomb warning
    *  needs this channel. Decays between echoes; drives the crackle tell. */

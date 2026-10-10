@@ -124,8 +124,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Consume window = the stamp's own settle horizon (700ms in
     // blastForce) — a 400ms+ echo is still THIS blast, and a stale
     // window double-shoves then reports a false kb-echo on expiry.
+    // 8m center window + force match: the replica's explode position
+    // diverges from the server's blast center under drain lag (a 3m
+    // match missed real echoes → double-shove + false kb-echo miss);
+    // force disambiguates two blasts inside the same 700ms window.
     const i = stamps.findIndex(s => now - s.t < 700 &&
-      Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 3);
+      Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 8 &&
+      (s.f === undefined || Math.abs(s.f - force) < 0.5));
     if (i >= 0) { stamps.splice(i, 1); return; }
     const from = new THREE.Vector3(position.x, position.y, position.z);
     // A blast we RENDERED but never predicted a shove from — client-side
@@ -155,7 +160,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // the next projectile tick) — a delayed predicted shove at this
     // same center must then skip, or the blast lands twice.
     const rkb = deps.world.recentKb;
-    rkb.push({ x: position.x, y: position.y, z: position.z, t: now });
+    rkb.push({ x: position.x, y: position.y, z: position.z, t: now, f: force });
     if (rkb.length > 8) {rkb.shift();}
     const player = deps.lazyPlayer();
     if (pull) {

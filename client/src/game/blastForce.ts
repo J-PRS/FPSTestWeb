@@ -180,8 +180,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Same 700ms horizon as the stamp lifecycle — under drain-burst lag
     // the replica's explode can trail the echo's wire arrival past 400ms,
     // and a stale window double-shoves + strands a false kb-echo stamp.
+    // Same 8m + force match as the stamp consume in players.ts — replica
+    // explode positions diverge from the server's blast center past 3m.
     const dup = rkb.findIndex(s => now - s.t < 700 &&
-      Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 3);
+      Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8 &&
+      (s.f === undefined || Math.abs(s.f - force) < 0.5));
     if (dup >= 0) {rkb.splice(dup, 1); return true;}
     const impulse = Math.min(
       aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
