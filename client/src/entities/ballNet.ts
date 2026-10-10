@@ -135,11 +135,19 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // Sub-cell render: the sim rests on grid points; host.pos carries the
   // unconsumed fraction ballistically so motion doesn't quantize at 20Hz.
   const rem = Math.min(bag.netAcc, 0.05); // sub-cell fraction only — a banked backlog must not extrapolate pos ahead of the cells still paying it down
+  _rpos.copy(host.pos).add(host.renderOffset); // rendered point before this rebuild
   host.pos.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);
   if (bag.px !== undefined && bag.py !== undefined && bag.pz !== undefined) {
     const dx = host.pos.x - bag.px, dy = host.pos.y - bag.py, dz = host.pos.z - bag.pz;
-    if (dx * dx + dy * dy + dz * dz > 25) {
-      glitch('ball-step', { gapM: Math.round(Math.hypot(dx, dy, dz)), acc: Math.round(bag.netAcc * 1000) });
+    const gap2 = dx * dx + dy * dy + dz * dz;
+    if (gap2 > 25) {
+      glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
+      // The step is honest truth — but it leaps the rendered ball past
+      // every follower budget. Fold it into renderOffset so the catch-up
+      // reads as a fast slide (offset decays ~0.2s) instead of a cut;
+      // normal per-frame motion stays under the 5m floor untouched.
+      _rpos.sub(host.pos);
+      host.renderOffset.add(_rpos);
     }
   }
   bag.px = host.pos.x; bag.py = host.pos.y; bag.pz = host.pos.z;
