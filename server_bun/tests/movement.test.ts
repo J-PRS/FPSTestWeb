@@ -134,12 +134,15 @@ describe('movement', () => {
   it('autoHop: holding jump keeps hopping on every landing', () => {
     const s = mk();
     s.setInput({ jumpHeld: true });
+    // Held jump keeps state.onGround false by design (takeoff branch —
+    // ground friction mustn't eat the hop), so count the impulses
+    // themselves: vel.y kicking up past 2 m/s is a hop.
     let apexes = 0;
-    let airborne = false;
+    let prevVy = 0;
     for (let i = 0; i < 240; i++) { // 4s
       s.update(1 / 60);
-      if (!s.state.onGround) airborne = true;
-      if (airborne && s.state.onGround) { apexes++; airborne = false; }
+      if (prevVy <= 2 && s.state.vel.y > 2) apexes++;
+      prevVy = s.state.vel.y;
     }
     expect(apexes).toBeGreaterThanOrEqual(2); // hopped repeatedly, not once
   });

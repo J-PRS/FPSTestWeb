@@ -500,10 +500,13 @@ export class MoveSim {
       const rising = inputTakeoff
         || velDotN > MOVEMENT_CONFIG.groundLaunchVel
         || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
-      if (rising && !inputTakeoff && this.groundGraceT > 0) {
+      if (rising && !inputTakeoff && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && this.groundGraceT > 0) {
         // Geometric bounce off the face, not a takeoff — the lingering
         // contact survives the same as the banded skim below; the grace
         // keeps burning (decremented at the top of collideTerrain).
+        // vel.y gate again: a real impulse launch (vel.y past the gate)
+        // inside the grace window is a takeoff, not a face skim — hold
+        // it down and the shove lands flat on every predicting client.
         s.onGround = true;
         this.allowNextJump = true;
       } else {
@@ -525,10 +528,15 @@ export class MoveSim {
       const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
       const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;
       // Inside the band the surface is still in contact range — grounded
-      // persists regardless of bounce velocity (T1 contact distance);
-      // the grace window only governs out-of-band lingering.
+      // persists (T1 contact distance) UNLESS the body is really taking
+      // off: a world-up velocity past the launch gate is an impulse
+      // launch (blast, bounce), and re-grounding it eats the knock flat
+      // — the server sim then diverges from every predicting client
+      // (latency soak: corrections 52 -> 72 after the gate was dropped).
+      // Skims are safe: crest lip reads velDotN launched while vel.y
+      // stays small, so the world-up gate keeps them grounded.
       const takeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
-      if (!takeoff) {
+      if (!takeoff && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel) {
         this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
         s.onGround = true;
       } else {
@@ -543,9 +551,12 @@ export class MoveSim {
         s.pos.y = groundY;
         this.allowNextJump = true;
       }
-    } else if (!this.input.jetHeld && !this.input.jumpHeld && this.groundGraceT > 0) {
+    } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && !this.input.jumpHeld && this.groundGraceT > 0) {
       // Outside the snap band without a takeoff input — the crest-lip
       // case T1 covered with MAXJUMPTICKS: still grounded for the grace.
+      // The world-up gate applies here too: a real impulse launch out
+      // of the band keeps flying instead of riding the linger window
+      // (dropping it blurred prediction after a stale reseed ~1m).
       s.onGround = true;
     } else {
       s.onGround = false;
