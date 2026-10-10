@@ -93,8 +93,12 @@ export class BotSteer {
     // (~200m): "route owns the feet" means the stand's slope/memory
     // repellers can't mask every goalward slot and hold him on an
     // 80-160m tangent orbit (katabatic capRun: 300s circling, 0 caps).
+    // The outbound runner's approach has the same hole: flagGoal hands
+    // quiet-approach ring waypoints ~140m out, and at 60-160m the slot
+    // scorer could orbit him around the stand for minutes (katabatic
+    // grab@218s — the return-leg fix has to be symmetric).
     // beelineClear still gates on real structure in the way.
-    if (beelineClear && (objD < (ctx.running ? 160 : ctx.runner ? 60 : 40) || ctx.posted)) {
+    if (beelineClear && (objD < (ctx.running || ctx.runner ? 160 : 40) || ctx.posted)) {
       // Posted anchors take the beeline at any range: slot scoring can
       // mask every goalward slot (slope probes on a ridgeline stand) and
       // the least-dangerous fallback walks the defender hundreds of

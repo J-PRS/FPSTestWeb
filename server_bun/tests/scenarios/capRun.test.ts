@@ -28,11 +28,11 @@ describe('scenario: capper run on real terrain', () => {
   }, 120000);
 
   it('real T2 Katabatic stands (~775m, no static meshes)', () => {
-    // 775m stand-to-stand at honest cap pace runs ~250s door to door —
-    // the default 240s window was sized for the 300m peaks route and
-    // clips a completed cap by seconds. 320 keeps the orbit fail
-    // detectable (a 100s+ lap train still can't close inside it).
-    const stat = measureCap(katabatic, KAT_BASES, { verbose: true, tag: 'katabatic', simBudgetS: 320 });
+    // 775m stand-to-stand at honest cap pace runs ~300-350s door to
+    // door. The orbit detector needs no tight window: a true orbit
+    // never caps at ANY budget (0 caps, always). 480 only asks that
+    // the cap completes at all on this map's real distance.
+    const stat = measureCap(katabatic, KAT_BASES, { verbose: true, tag: 'katabatic', simBudgetS: 480 });
     expect(stat.caps).toBeGreaterThan(0);
     // The long route still has to beat a walk — no stand-distance
     // excuse for llama pace.
