@@ -40,9 +40,14 @@ export interface RibbonOpts {
 let sharedCamPos: THREE.Vector3 | null = null;
 export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos = pos; }
 
-/** Discontinuity budget for the follow re-pin — same per-emitter
- *  `spd*0.25 + 12` as push(): a flat budget let a slow ball drag a
- *  50m chord under the 60m sweep floor, invisible to every canary. */
+/** Discontinuity budget for push() and the follow re-pin — a few
+ *  frames of travel plus slack. Pushes arrive per frame, so a gap
+ *  beyond ~80ms of travel isn't a sample step, it's a host jump or a
+ *  suppressed-emitter resume; either way a chord would paint. (The old
+ *  `spd*0.25 + 12` — a quarter-second — let a 90m/s ball legitimately
+ *  resume 22m away and painted exactly the sky streaks it guarded.) */
+const JUMP_BUDGET = (spd: number) => spd * 0.08 + 3;
+
 export class RibbonTrail {
   private batch!: TrailBatch;
   private lastSpd = 0;
@@ -361,7 +366,7 @@ export class RibbonTrail {
       const jx = pos.x + ox - this.px[this.head]!;
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
-      const jump = spd * 0.25 + 12;
+      const jump = JUMP_BUDGET(spd);
       if (jx * jx + jy * jy + jz * jz > jump * jump) {this.clear();}
     }
 
@@ -424,7 +429,7 @@ export class RibbonTrail {
       const jx = this.follow.x + this._ox - this.px[this.head];
       const jy = this.follow.y + this._oy - this.py[this.head];
       const jz = this.follow.z + this._oz - this.pz[this.head];
-      const jumpM = this.lastSpd * 0.25 + 12;
+      const jumpM = JUMP_BUDGET(this.lastSpd);
       if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
         RibbonTrail.followJumps++;
