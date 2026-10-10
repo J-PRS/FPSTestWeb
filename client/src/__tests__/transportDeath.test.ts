@@ -97,11 +97,13 @@ describe('WebTransport lane-death contract', () => {
     expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'webtransport closed');
   });
 
-  it('datagram lane ending declares dead', async () => {
-    const { config, dgrams } = await connectWt();
+  it('datagram lane ending degrades to reliable-only — the session lives', async () => {
+    const { config, t, dgrams } = await connectWt();
     dgrams.ctrl.close();
     await flush();
-    expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt datagrams ended');
+    expect(config.onDisconnect).not.toHaveBeenCalled();
+    // Sends still succeed: binary now rides the enveloped reliable stream.
+    expect(t.send(new Uint8Array([1, 2, 3]))).toBe(true);
   });
 
   it('multiple detectors firing still yields ONE onDisconnect', async () => {

@@ -1,6 +1,9 @@
 import type { ConnectionConfig } from './WebSocketConnection.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 import type { GameTransport } from './transport.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('NetWt');
 
 // QUIC datagrams don't fragment — anything past the path MTU (~1200B) is
 // dropped ENTIRELY, so "unreliable" there means "never arrives". Small
@@ -105,10 +108,17 @@ export class WebTransportGameTransport implements GameTransport {
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) { this.declareDead('wt datagrams ended'); return; }
+        if (done) { break; }
         this.config.onBinaryMessage?.(value);
       }
-    } catch { this.declareDead('wt datagrams reset'); }
+    } catch { /* lane reset */ }
+    // The datagram lane is an optimization — its death degrades the
+    // session to reliable-only, it must not kill the connection (a
+    // dead lane declared the whole session dead, flapping reconnects
+    // every few seconds and desyncing remotes by hundreds of meters).
+    // Real session death is owned by wt.closed and the reliable pump.
+    this.dgWriter = null;
+    logger.warn('wt datagram lane ended — degrading to reliable-only');
   }
 
   send(data: string | Uint8Array): boolean {
