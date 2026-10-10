@@ -78,6 +78,30 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(positions).toHaveLength(1);      // only the freshest position kept
   });
 
+  it('a handshake stuck in CONNECTING is closed at 10s so the retry loop keeps cycling', () => {
+    // The zombie: a black-holed host fires no events for the OS TCP
+    // timeout (~2min); each retry starves that whole window. The connect
+    // timer closes the socket instead, its 'close' re-arms the loop.
+    const c = conn(1000);
+    c.connect();
+    const ws = FakeWS.instances[0]!;
+    vi.advanceTimersByTime(10_000);
+    expect(ws.readyState).toBe(FakeWS.CLOSED);           // force-closed
+    // Never opened → uptime 0 < MIN_UPTIME_MS → flap damper backs off 4x.
+    vi.advanceTimersByTime(4000);
+    expect(FakeWS.instances).toHaveLength(2);            // re-dialed, not starved
+  });
+
+  it('an opened socket is left alone by the handshake watchdog', () => {
+    const c = conn(1000);
+    c.connect();
+    const ws = FakeWS.instances[0]!;
+    ws.fire('open');
+    vi.advanceTimersByTime(30_000);
+    expect(ws.readyState).toBe(FakeWS.OPEN);
+    expect(FakeWS.instances).toHaveLength(1);
+  });
+
   it('binary frames dedupe to the newest while queued', () => {
     const c = conn();
     c.connect();

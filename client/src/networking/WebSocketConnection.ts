@@ -54,6 +54,12 @@ export class WebSocketConnection {
   // die → connect. Uptime <5s gets a 4x backoff instead of the base tick.
   private openedAt = 0;
   private static readonly MIN_UPTIME_MS = 5000;
+  /** A black-holed connect (host up, port filtered, server dead) sits in
+   *  CONNECTING for the OS TCP timeout (~2min) firing NO events — the
+   *  reconnect loop starves that whole window. Bound the handshake; the
+   *  close it triggers feeds the normal retry path. */
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly CONNECT_MS = 10_000;
 
   constructor(config: ConnectionConfig) {
     this.config = {
@@ -77,6 +83,15 @@ export class WebSocketConnection {
       this.ws = new WebSocket(url || this.config.url);
       // Explicitly set binaryType to handle binary frames correctly
       this.ws.binaryType = 'arraybuffer';
+
+      const sock = this.ws;
+      if (this.connectTimer) {clearTimeout(this.connectTimer);}
+      this.connectTimer = setTimeout(() => {
+        if (this.ws === sock && sock.readyState === WebSocket.CONNECTING) {
+          logger.warn(`connect handshake stuck ${WebSocketConnection.CONNECT_MS}ms — closing to retry`);
+          sock.close();
+        }
+      }, WebSocketConnection.CONNECT_MS);
 
       this.ws.addEventListener('open', () => {
         logger.info('WebSocket connected');
