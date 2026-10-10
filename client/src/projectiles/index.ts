@@ -18,7 +18,7 @@ export { CANNON_CONFIG } from './cannonConfig.js';
 export { RKT_CONFIG } from './rocketLauncherConfig.js';
 export { PISTOL_CONFIG } from './pistolConfig.js';
 export { REVOLVER_CONFIG } from './revolverConfig.js';
-export { STICKY_CONFIG } from './stickyConfig.js';
+export { STICKY_CONFIG, BELT_STICKY_CONFIG } from './stickyConfig.js';
 export { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 export { ARMORNADE_CONFIG } from './armornadeConfig.js';
 export { MRV_CONFIG, MRV_BOMBLET_CONFIG } from './mrvConfig.js';
@@ -26,6 +26,7 @@ export { PROXY_CONFIG } from './proxyConfig.js';
 export { SATCHEL_CONFIG } from './satchelConfig.js';
 export { HEALNADE_CONFIG } from './healnadeConfig.js';
 export { CONC_CONFIG } from './concConfig.js';
+export { BOMBARD_CONFIG } from './bombardConfig.js';
 
 import { BOLT_CONFIG } from './boltConfig.js';
 import { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
@@ -45,7 +46,7 @@ import { CANNON_CONFIG } from './cannonConfig.js';
 import { RKT_CONFIG } from './rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './pistolConfig.js';
 import { REVOLVER_CONFIG } from './revolverConfig.js';
-import { STICKY_CONFIG } from './stickyConfig.js';
+import { STICKY_CONFIG, BELT_STICKY_CONFIG } from './stickyConfig.js';
 import { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 import { ARMORNADE_CONFIG } from './armornadeConfig.js';
 import { MRV_CONFIG, MRV_BOMBLET_CONFIG } from './mrvConfig.js';
@@ -53,12 +54,13 @@ import { PROXY_CONFIG } from './proxyConfig.js';
 import { SATCHEL_CONFIG } from './satchelConfig.js';
 import { HEALNADE_CONFIG } from './healnadeConfig.js';
 import { CONC_CONFIG } from './concConfig.js';
+import { BOMBARD_CONFIG } from './bombardConfig.js';
 
 import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG, MRV_CONFIG, MRV_BOMBLET_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG, CONC_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG, MRV_CONFIG, MRV_BOMBLET_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG, CONC_CONFIG, BOMBARD_CONFIG, BELT_STICKY_CONFIG];
 
 // Slot order lives in ../weapons.ts (SLOT_DEFS) — index IS the wid there.
 // WEAPON_CONFIGS stays weaponType-keyed (find-by-id) and includes belt items.

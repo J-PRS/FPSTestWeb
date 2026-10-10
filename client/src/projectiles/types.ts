@@ -36,10 +36,10 @@ export interface ProjectileConfig {
   glowColor: number;
   glowOpacity: number;
   glowScale?: number; // override glow mesh size; defaults to hitRadius if not set
-  /** Glow shell silhouette: 'sphere' = the classic proxy bubble; 'cone' =
-   *  a vapor-cone (shock collar) — apex at the shell, flaring backward
-   *  along -velocity, base radius still tracking hitRadius. */
-  glowShape?: 'sphere' | 'cone';
+  /** Glow shell silhouette: 'sphere' = the classic proxy bubble;
+   *  'wakeCone' = a vapor-cone (shock collar) — apex at the shell, flaring
+   *  backward along -velocity, base radius still tracking hitRadius. */
+  glowShape?: 'sphere' | 'wakeCone';
   /** Armed-light pulse — the glow shell breathes in scale (per-instance
    *  matrix, so it survives material sharing). `fuseRamp` quickens the
    *  blink as maxLifetime runs out — the classic "beeping faster" tell. */
@@ -53,6 +53,10 @@ export interface ProjectileConfig {
   ttlJitter?: number; // per-shot fuse spread ±fraction, seeded from serverProjectileId so replicas agree
   trailMeshType?: 'sphere' | 'ring' | 'disc' | 'billboard'; // trail particle geometry; defaults to sphere
   noExplosion?: boolean; // true = hit produces no explosion/knockback (hitscan-style bullets)
+  /** The shell's body IS the ammunition: on contact it bursts into rock
+   *  shards (BallDebris) instead of leaving a bullet mark — the bombard's
+   *  crumble. Only read on the noExplosion path. */
+  crumbles?: boolean;
   ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles — ON by default; set false to opt out
   ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)
   ribbonWidth?: number;
@@ -67,6 +71,7 @@ export interface ProjectileConfig {
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
   bodyArmTime?: number; // bodies pop on contact at/after this age (defaults to armTime); 0 = GL: pops bodies at any age while still bouncing off dirt
   sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius
+  rides?: boolean;  // belt sticky: while airborne a same-owner shell inside catch range swallows it dead-center; it rides to the host's contact point
   /** Cluster carrier — detonation spawns `count` VISUAL bomblets
    *  (BOMBLET_CONFIG) in a cone of half-angle `spread` (rad) around the
    *  carrier's heading. `fuse` caps bomblet lifetime — omit for
@@ -84,7 +89,7 @@ export interface ProjectileConfig {
    *  the fuse airburst IS the attack). Terrain bounce + interception
    *  by bolts/fields still apply. */
   passThroughTargets?: boolean;
-  wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
+
   /** Mid-flight hitscan discharge (remote railgun): at `delay` seconds the
    *  slug fires a beam along its velocity — implemented as one giant swept
    *  step so terrain/target/obstacle hits apply to the beam — then dies at

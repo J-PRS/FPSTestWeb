@@ -52,7 +52,7 @@ export function scaledDirectDamage(weaponType: number, airtime?: number): number
 }
 
 import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
-export { WeaponType, WEAPONS, idSeed, jitteredTtl } from './weaponTable.js';
+export { WeaponType, WEAPONS, idSeed, jitteredTtl, RIDE_CATCH_R } from './weaponTable.js';
 export type { WeaponStats } from './weaponTable.js';
 
 /** Claimless-combat rollout: intents (shotFired) for these weaponTypes
@@ -73,7 +73,8 @@ export const SERVER_SIMMED_WEAPONS = new Set<number>([
   WeaponType.ArmorGrenade, WeaponType.HealGrenade, WeaponType.Flak, WeaponType.Shotgun,
   WeaponType.Chaingun, WeaponType.Railgun, WeaponType.Cannon, WeaponType.RocketLauncher,
   WeaponType.Pistol, WeaponType.Revolver, WeaponType.Sprinkler,
-  WeaponType.ProxyGrenade, WeaponType.SatchelCharge,
+  WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Bombard,
+  WeaponType.BeltSticky,
 ]);
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
@@ -106,9 +107,10 @@ export const BELT_MAX = 5;        // spawn stock AND the pickup cap
 export const BELT_THROW_COST = 1; // per belt toss
 export const DEPLOY_COST = 2;     // per pack item (turret/mine/station/drone/shield)
 // WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
-// one pays BELT_THROW_COST. Sticky is deliberately absent: the launcher
-// fires the same weaponType, so the wire can't tell toss from launcher.
+// one pays BELT_THROW_COST. BeltSticky is its own type so a toss CAN be
+// told from a launcher shot — the old shared type made throws unchargeable.
 export const BELT_THROW_WEAPONS = new Set<number>([
+  WeaponType.BeltSticky,
   WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
@@ -161,4 +163,20 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate
   [WeaponType.Melee]: 0.5,
   [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
+  [WeaponType.Bombard]: 1.6, // slower than the cannon — 160dmg can't ride a 0.55s cadence
 };
+
+/** Belt-sticky ride: which shells may HOST a caught bomb. Only deliberate
+ *  heavy shots qualify — a chaingun tick or shotgun pellet vacuuming the
+ *  sticky reads as a bug, not a skill shot. Gate = slow cadence AND a
+ *  real direct-hit payload; belt throws (no cadence entry) can't host. */
+export const RIDE_HOST_MIN_INTERVAL_S = 0.7;
+export const RIDE_HOST_MIN_DIRECT = 45;
+export function canHostRide(weaponType: number, stats: { directDamage: number }): boolean {
+  // MRV exemption: the carrier's small pop is delivery, not the payload —
+  // it airbursts mid-flight anyway, so a hitchhiker adds spectacle, not
+  // a damage exploit the gate exists to prevent.
+  if (weaponType === WeaponType.MRVLauncher) return true;
+  return (WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0) >= RIDE_HOST_MIN_INTERVAL_S
+    && stats.directDamage >= RIDE_HOST_MIN_DIRECT;
+}

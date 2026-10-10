@@ -288,6 +288,13 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     goneFields: [
       { name: 'position', wire: 'vec3', channel: 'edge', absent: null },
     ],
+    // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
+    // onto `host` — replicas parent to the host's path the same tick.
+    events: {
+      projRide: [
+        { name: 'host', wire: 'str', channel: 'edge' },
+      ],
+    },
   },
   // The player lane: join announce / leave / gameState roster rows / the
   // per-tick record. Players are the only client-owned kind — the server

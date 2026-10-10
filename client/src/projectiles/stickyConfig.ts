@@ -81,3 +81,28 @@ export const STICKY_CONFIG: ProjectileConfig = {
   trailMeshType: 'sphere',
   sticks: true,
 };
+
+// Belt twin — same glue-bomb payload, hand-thrown at half muzzle so it
+// HANGS: the Painkiller combo needs a slow lob your own shell can catch
+// up to and swallow (rides flag). weaponType is its own wire id — the
+// old shared-Sticky type made belt throws indistinguishable from
+// launcher shots server-side.
+export const BELT_STICKY_CONFIG: ProjectileConfig = {
+  ...STICKY_CONFIG,
+  name: 'beltSticky',
+  displayName: 'Sticky Bomb',
+  weaponType: 36,
+  speed: WEAPONS[36].speed,
+  gravity: WEAPONS[36].gravity,
+  explosionRadius: WEAPONS[36].aoeRadius * AOE_VFX_SCALE,
+  force: WEAPONS[36].knockbackForce,
+  aoeDamage: WEAPONS[36].aoeDamage,
+  aoeRadius: WEAPONS[36].aoeRadius,
+  bodyRadius: WEAPONS[36].bodyRadius,
+  hitMin: WEAPONS[36].hitMin,
+  hitMax: WEAPONS[36].hitMax,
+  hitGrow: WEAPONS[36].hitGrow,
+  maxLifetime: WEAPONS[36].maxLifetime,
+  terrainOffset: WEAPONS[36].hitMin,
+  rides: true,
+};
