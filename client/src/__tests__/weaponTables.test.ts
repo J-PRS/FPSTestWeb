@@ -3,7 +3,10 @@ import * as THREE from 'three';
 
 import { SLOT_DEFS, SLOT_COUNT, weaponDef } from '../weapons';
 import { WEAPON_CONFIGS } from '../projectiles/index';
-import { WEAPONS, getWeaponStats, WeaponType } from '../../../shared/weapons';
+import { WEAPONS, getWeaponStats, WeaponType, serverSimmed } from '../../../shared/weapons';
+import { HEAVY_ONLY_WEAPONS } from '../../../shared/botClasses';
+import { BOMBARD_CONFIG } from '../projectiles/bombardConfig';
+import { PlayerLoadout } from '../entities/playerLoadout';
 import { Projectile } from '../projectiles/Projectile';
 import { REMOTE_RAILGUN_CONFIG } from '../projectiles/remotergunConfig';
 import type { Terrain } from '../world/terrain';
@@ -57,6 +60,37 @@ describe('weapon registry', () => {
       expect(seen.has(c.weaponType), `dup weaponType ${c.weaponType} (${c.name})`).toBe(false);
       seen.add(c.weaponType);
     }
+  });
+
+  it('bombard is heavy-only, server-simmed, and tops the direct-damage table', () => {
+    const w = WEAPONS[WeaponType.Bombard];
+    expect(w).toBeDefined();
+    // Highest flat direct hit among PRIMARIES — the planted satchel
+    // (belt item) is allowed to keep the overall record.
+    const PRIMARIES = new Set(SLOT_DEFS.map((d) => d.weaponType));
+    for (const [wt, s] of Object.entries(WEAPONS)) {
+      if (!PRIMARIES.has(Number(wt))) continue;
+      expect(s.directDamage, `w${wt} out-damages the bombard`).toBeLessThanOrEqual(w.directDamage);
+    }
+    // Crumble shrapnel: the radial sweep's per-victim payout is a
+    // fraction of directDamage, so the direct line stays the ceiling.
+    expect(w.aoeDamage).toBe(w.directDamage);
+    expect(w.aoeRadius).toBeGreaterThan(0);
+    expect(w.aoeRadius).toBeLessThan(w.directDamage / 4); // shrapnel, not a mortar shell
+    expect(w.terrainBounce).toBeUndefined(); // crumbles on ANY contact — no skips
+    expect(serverSimmed(WeaponType.Bombard)).toBe(true);
+    expect(HEAVY_ONLY_WEAPONS.has(WeaponType.Bombard)).toBe(true);
+    // The slot-space gate must agree with the wire-space gate — the bombard
+    // slot def is the last SLOT_DEFS entry and both lists must carry it.
+    const wid = SLOT_DEFS.findIndex((d) => d.weaponType === WeaponType.Bombard);
+    expect(wid).toBeGreaterThanOrEqual(0);
+    expect(PlayerLoadout.HEAVY_ONLY).toContain(wid);
+    // Client contract: never explodes, always crumbles, no bounce flags.
+    expect(BOMBARD_CONFIG.noExplosion).toBe(true);
+    expect(BOMBARD_CONFIG.crumbles).toBe(true);
+    expect(BOMBARD_CONFIG.explosionRadius).toBe(0);
+    expect(BOMBARD_CONFIG.bounces).toBeUndefined();
+    expect(BOMBARD_CONFIG.bodyRadius).toBe(w.bodyRadius);
   });
 
   it('every ray-burst weapon declares delay+range in shared stats', () => {

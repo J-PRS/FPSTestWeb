@@ -142,6 +142,40 @@ describe('switchRoom', () => {
     expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(false);
   });
 
+  it('a bot-only room remints under a hosted mode mismatch', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', mode: 'nuggets', bots: 2 }));
+    const rooms = (gs as unknown as { rooms: Map<string, {
+      mode: string;
+      players: { getHumanCount(): number };
+    }> }).rooms;
+    const stale = rooms.get('r')!;
+    expect(stale.mode).toBe('nuggets');
+
+    // p1 hops away — 'r' is bot-only residue, nothing's being played.
+    gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'other' }));
+    expect(stale.players.getHumanCount()).toBe(0);
+
+    const ws2 = fakeWs();
+    gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', mode: 'ctf' }));
+    expect(rooms.get('r')).not.toBe(stale); // reminted, not absorbed
+    expect(rooms.get('r')!.mode).toBe('ctf');
+    expect(ws2.sent.some((s: string) => s.includes('settings overridden'))).toBe(false);
+  });
+
+  it('a human-occupied room keeps its mode and warns the mismatched joiner', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', mode: 'nuggets' }));
+    const rooms = (gs as unknown as { rooms: Map<string, { mode: string }> }).rooms;
+
+    const ws2 = fakeWs();
+    gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', mode: 'ctf' }));
+    expect(rooms.get('r')!.mode).toBe('nuggets');
+    expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(true);
+  });
+
   it('a human-occupied room keeps its gates and warns the mismatched joiner', () => {
     gs = new GameServer();
     const ws = fakeWs();

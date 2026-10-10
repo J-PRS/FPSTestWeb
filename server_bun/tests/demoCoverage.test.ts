@@ -57,6 +57,8 @@ const EXEMPT: Record<string, string> = {
   jump: 'remote anim relay — remote frames already carry pos/flags',
   jetpack: 'remote anim relay',
   knockback: 'impulse echo — remote frames carry the result',
+  projRide: 'cosmetic pairing relay — destroy events carry the contact pos',
+  srvPing: 'liveness',
   aoeShot: 'cosmetic beam relay',
   sensorPing: 'intel relay — no actor state',
   correction: 'self-sync control traffic',

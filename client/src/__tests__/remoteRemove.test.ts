@@ -11,6 +11,7 @@ const mkDeps = () => {
   const world = {
     remotePlayers: { hooks: {} as Record<string, unknown> },
     killCounts: new Map<string, number>(),
+    deathCounts: new Map<string, number>(),
   };
   const hud = { removePlayerIndicator: vi.fn() };
   const healthbars = { forgetPlayer: vi.fn() };
@@ -36,10 +37,12 @@ describe('remote onRemove purges per-player receipts', () => {
     const onRemove = world.remotePlayers.hooks.onRemove as (id: string) => void;
 
     world.killCounts.set('leaver', 3);
+    world.deathCounts.set('leaver', 2);
     lastWeaponByPlayer.set('leaver', { wt: 1, n: 2 });
     onRemove('leaver');
 
     expect(world.killCounts.has('leaver')).toBe(false);
+    expect(world.deathCounts.has('leaver')).toBe(false);
     expect(lastWeaponByPlayer.has('leaver')).toBe(false);
     expect(hud.removePlayerIndicator).toHaveBeenCalledWith('leaver');
     expect(healthbars.forgetPlayer).toHaveBeenCalledWith('leaver');

@@ -62,17 +62,29 @@ describe('scenario: flag stand snapping', () => {
 });
 
 describe('scenario: auto flag placement (no authored bases)', () => {
-  it('ctf on a spawn-only spec seats both flags at the dominant axis quartiles', () => {
+  it('ctf on a spawn-only spec seats flags on the diagonal pair, 300m apart', () => {
     const room = mkRoom({
       mode: 'ctf',
       spawns: [{ x: -110, y: 0, z: 0 }, { x: 110, y: 0, z: 0 }, { x: 0, y: 0, z: 40 }],
     }, 'ctf');
     const a = room.flags!.flags.get('alpha')!;
     const b = room.flags!.flags.get('bravo')!;
-    // Dominant axis is x (span 220) — stands seat at ±0.25·span = ±55.
-    expect(a.home.x).toBeCloseTo(-55, 0);
-    expect(b.home.x).toBeCloseTo(55, 0);
-    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeCloseTo(110, 0);
+    // Flat terrain: hilltops can't rise, so the diagonal seeds stand —
+    // anchor centroid (0, 13.3) ±150·(√.5,√.5) → (-106,-92.7)+(106,119.4).
+    expect(a.home.x).toBeCloseTo(-106.07, 0);
+    expect(b.home.x).toBeCloseTo(106.07, 0);
+    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeCloseTo(300, 0);
+  });
+
+  it('auto-derived stands mint team spawn rings when the spec ships none', () => {
+    const room = mkRoom({ mode: 'ctf' }, 'ctf');
+    const a = room.flags!.flags.get('alpha')!;
+    const ring = room.players.teamSpawns?.alpha;
+    expect(ring?.length).toBe(3);
+    for (const s of ring!) {
+      expect(Math.hypot(s.x - a.home.x, s.z - a.home.z)).toBeCloseTo(35, 0);
+    }
+    expect(room.players.teamSpawns?.bravo?.length).toBe(3);
   });
 
   it('bare spec still yields two stands (arena/fallback pair)', () => {

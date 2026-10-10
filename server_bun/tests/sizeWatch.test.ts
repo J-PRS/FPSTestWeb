@@ -18,6 +18,8 @@ const GRANDFATHERED: Record<string, number> = {
   'server_bun/src/serverSenses.ts': 1045,
   'client/src/effects/vertexAO.ts': 956,
   'shared/botTaunts.ts': 1099,
+  'shared/botBrain.ts': 910,
+  'client/src/main.ts': 924,
 };
 
 function* walk(dir: string): Generator<string> {

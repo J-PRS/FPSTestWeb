@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { createBlastForce, type BlastArgs } from '../game/blastForce.js';
+import { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { CombatDeps } from '../game/combat.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -45,7 +46,8 @@ const mkRig = (): Rig => {
   const deps = {
     targets: balls,
     nuggets,
-    world: { remotePlayers: remotes, selfBlastStamps: stamps },
+    world: { remotePlayers: remotes, selfBlastStamps: stamps, recentKb: [] },
+    explosionTracker: new ExplosionTracker(),
     lazyPlayer: () => player,
     lazyHud: () => hud,
     lazyHealthBarSystem: () => hbs,
@@ -230,5 +232,41 @@ describe('applyExplosionForce — balls and nuggets', () => {
     expect(live.applyKnockback).toHaveBeenCalled();
     expect(dead.applyKnockback).not.toHaveBeenCalled();
     expect(taken.applyKnockback).not.toHaveBeenCalled();
+  });
+});
+
+// Remote-blast prediction: the replica is visual-only for damage, but the
+// shove must be predicted so its wire knockback dedupes — and the echo
+// that raced in BEFORE the replica exploded must consume, not double.
+describe('predictLocalShove — remote-blast knockback dedup', () => {
+  it('shoves + stamps so the server echo is eaten', () => {
+    const r = mkRig();
+    const applied = r.blast.predictLocalShove(new THREE.Vector3(5, 0, 0), 10, 30, 'push', 'bot:ENEMY-1');
+    expect(applied).toBe(true);
+    expect(r.player.knock).toHaveBeenCalledOnce();
+    expect(r.stamps).toHaveLength(1);
+    expect(r.stamps[0].x).toBe(5);
+  });
+
+  it('a raced raw echo at the same center consumes — no second shove', () => {
+    const r = mkRig();
+    (r.deps.world as { recentKb: { x: number; y: number; z: number; t: number }[] }).recentKb
+      .push({ x: 5, y: 0, z: 0, t: performance.now() });
+    const applied = r.blast.predictLocalShove(new THREE.Vector3(5, 0, 0), 10, 30, 'push', 'bot:ENEMY-1');
+    expect(applied).toBe(true);
+    expect(r.player.knock).not.toHaveBeenCalled();
+    expect(r.stamps).toHaveLength(0);
+    expect((r.deps.world as { recentKb: unknown[] }).recentKb).toHaveLength(0);
+  });
+
+  it('outside the envelope: no shove, no stamp, untouched echo survives', () => {
+    const r = mkRig();
+    const w = r.deps.world as { recentKb: { x: number; y: number; z: number; t: number }[] };
+    w.recentKb.push({ x: 60, y: 0, z: 0, t: performance.now() });
+    const applied = r.blast.predictLocalShove(new THREE.Vector3(60, 0, 0), 10, 30, 'push', 'bot:ENEMY-1');
+    expect(applied).toBe(false);
+    expect(r.player.knock).not.toHaveBeenCalled();
+    expect(r.stamps).toHaveLength(0);
+    expect(w.recentKb).toHaveLength(1); // a different blast's echo — keep it
   });
 });
