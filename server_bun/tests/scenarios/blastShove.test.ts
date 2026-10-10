@@ -8,7 +8,10 @@ describe('scenario: blast knockback', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [shooter, p] = twoPlayers(room);
     freeze(room, shooter.id, { x: -40, y: 31, z: 0 });
-    freeze(room, p.id, { x: 5, y: 31, z: 0 });
+    // y=32: stand height on this terrain is ~31.9 (terrain 29.4 + eye
+    // ~2.5) — pinning at 31 leaves the body marginally buried, and
+    // unburyTick re-seats the shadow every 0.5s, erasing the shove.
+    freeze(room, p.id, { x: 5, y: 32, z: 0 });
     const before = { ...room.moveSim.simPos(p.id)! }; // live ref — copy it
 
     // Knockback is private feedback to the victim — tap their channel.
@@ -33,7 +36,7 @@ describe('scenario: blast knockback', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [shooter, p] = twoPlayers(room);
     freeze(room, shooter.id, { x: -40, y: 31, z: 0 });
-    freeze(room, p.id, { x: 0.5, y: 31, z: 0 }); // shell pops on their chest
+    freeze(room, p.id, { x: 0.5, y: 32, z: 0 }); // shell pops on their chest
     const hp0 = room.players.getPlayer(p.id)!.health;
     const before = { ...room.moveSim.simPos(p.id)! };
 
@@ -45,8 +48,10 @@ describe('scenario: blast knockback', () => {
     expect(toVictim.filter((m) => m.type === 'knockback').length).toBe(1);
     // Splash damage must not double-pay on top of the direct hit.
     expect(room.players.getPlayer(p.id)!.health).toBe(hp0);
-    step(room, 20);
-    const after = room.moveSim.simPos(p.id)!;
-    expect(after.x - before.x).toBeGreaterThan(0.5);
+    // A chest-pop shoves mostly UP — measure the arc mid-flight, not the
+    // landing spot (by 20 ticks they settle back near the pin).
+    step(room, 6);
+    const mid = room.moveSim.simPos(p.id)!;
+    expect(Math.hypot(mid.x - before.x, mid.y - before.y, mid.z - before.z)).toBeGreaterThan(0.5);
   });
 });
