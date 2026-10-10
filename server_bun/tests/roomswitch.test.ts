@@ -117,4 +117,40 @@ describe('switchRoom', () => {
     expect(ws2.data.playerId).toBe('p1');
     expect(gameStates(ws2).length).toBeGreaterThan(0);
   });
+
+  it('a bot-only room adopts a new joiner\'s sim gates instead of warning', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', bots: 2 }));
+    const rooms = (gs as unknown as { rooms: Map<string, {
+      noBalls: boolean;
+      ballSim: { population: { base: number }; balls: Map<number, unknown> };
+      players: { getHumanCount(): number };
+    }> }).rooms;
+    const room = rooms.get('r')!;
+    expect(room.noBalls).toBe(false);
+
+    // p1 hops away — 'r' keeps its bots but has no humans left.
+    gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'other' }));
+    expect(room.players.getHumanCount()).toBe(0);
+
+    const ws2 = fakeWs();
+    gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', noBalls: true }));
+    expect(room.noBalls).toBe(true);
+    expect(room.ballSim.population.base).toBe(0);
+    expect(room.ballSim.balls.size).toBe(0);
+    expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(false);
+  });
+
+  it('a human-occupied room keeps its gates and warns the mismatched joiner', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r' }));
+    const rooms = (gs as unknown as { rooms: Map<string, { noBalls: boolean }> }).rooms;
+
+    const ws2 = fakeWs();
+    gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', noBalls: true }));
+    expect(rooms.get('r')!.noBalls).toBe(false);
+    expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(true);
+  });
 });

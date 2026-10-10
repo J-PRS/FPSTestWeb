@@ -139,11 +139,30 @@ export class RoomFactory {
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     } else if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {
-      // First joiner defines the sim gates — callers warn their joiner.
-      logger.warn('Join sim gates differ from room', {
-        room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
-        roomNoBalls: room.noBalls, roomNoCreatures: room.noCreatures,
-      });
+      if (room.players.getHumanCount() === 0) {
+        // No human contradicts the joiner's gates — a bot-only room just
+        // adopts them instead of warning. Same post-ctor gate writes the
+        // mint path runs, plus culling the populations already alive.
+        room.noBalls = noBalls;
+        room.noCreatures = noCreatures;
+        if (noCreatures) {
+          room.creatureSim.pops = {};
+          room.creatureSim.crawlers.clear();
+        }
+        if (noBalls) {
+          room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
+          room.ballSim.balls.clear();
+        }
+        logger.info('Bot-only room adopted joiner sim gates', {
+          room: name, noBalls, noCreatures,
+        });
+      } else {
+        // First joiner defines the sim gates — callers warn their joiner.
+        logger.warn('Join sim gates differ from room', {
+          room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
+          roomNoBalls: room.noBalls, roomNoCreatures: room.noCreatures,
+        });
+      }
     }
     return room;
   }
