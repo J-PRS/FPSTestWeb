@@ -138,6 +138,14 @@ export class RoomFactory {
       if (spec?.terrain || spec?.heightScale || spec?.tileSize) this.attachTerrain(room, spec);
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
+    } else if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {
+      // First joiner defines the sim gates — a host toggling balls off who
+      // lands in a pre-existing balled room otherwise gets them silently.
+      logger.warn('Join sim gates differ from room', {
+        room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
+        roomNoBalls: room.noBalls, roomNoCreatures: room.noCreatures,
+      });
+      room.gateMismatchNotice = { noBalls, noCreatures };
     }
     return room;
   }

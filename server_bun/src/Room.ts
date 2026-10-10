@@ -62,6 +62,9 @@ export class Room {
    *  ball populations at mint and on applySpec reloads. */
   noCreatures = false;
   noBalls = false;
+  /** One-shot: a joiner asked for gates this pre-existing room doesn't
+   *  have — the seat path warns them instead of ignoring silently. */
+  gateMismatchNotice?: { noBalls: boolean; noCreatures: boolean };
   // First joiner's mode locks the match — later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;
@@ -512,7 +515,12 @@ export class Room {
         // kill-confirmation point; they only ever spawn there.
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
         const team = p.team;
-        if ((kind === 'tag' || this.modeSpec?.gems) && (team === 'alpha' || team === 'bravo')) this.score(team);
+        if ((kind === 'tag' || this.modeSpec?.gems) && (team === 'alpha' || team === 'bravo')) {
+          this.score(team);
+          // Banker credit — without it nuggets/tdm leave the personal
+          // PTS column blank and hauling objective pays zero honor.
+          this.scoring.awardPersonal(pid, 1);
+        }
         return;
       }
       this.scoring.applyPowerup(p, kind);
@@ -618,6 +626,7 @@ export class Room {
     return beamSweepRay({
       players: this.players, field: this.field,
       solids: this.projectiles.solidColliders,
+      dynSolids: this.deployables.solidCols,
       ballSim: this.ballSim, creatureSim: this.creatureSim,
       transitOf: (pid) => this.moveSim.transitOf(pid),
     }, shooterId, muzzle, dir, range);

@@ -164,6 +164,17 @@ export class SessionManager {
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
     this.d.registry.begin(playerId, room.name);
+    // First joiner defined this room's sim gates — if the joiner asked for
+    // different ones, say so out loud instead of silently spawning balls.
+    if (room.gateMismatchNotice) {
+      const g = room.gateMismatchNotice;
+      room.gateMismatchNotice = undefined;
+      const diffs = [
+        room.noBalls !== g.noBalls ? `creatures ${room.noBalls ? 'OFF' : 'ON'}` : '',
+        room.noCreatures !== g.noCreatures ? `critters ${room.noCreatures ? 'OFF' : 'ON'}` : '',
+      ].filter(Boolean).join(', ');
+      room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — sim toggles ignored (${diffs})` });
+    }
     this.seat(ws, room, playerId, handshake, idToken, name);
   }
 
