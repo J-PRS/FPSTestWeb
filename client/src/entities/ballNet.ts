@@ -159,7 +159,9 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
       // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
       // between 20Hz rebuilds — counting that as a step was ~90% noise.
       // Only fire when the leap outruns what the tick budget explains.
-      if (gap2 > spdBudget * spdBudget) {
+      // segsSeen<=1 folds are the join/roster heal — a 400m first snap is
+      // the seed converging, not a step the predictor took.
+      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 1) {
         glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
       }
       // The step is honest truth — but it leaps the rendered ball past
