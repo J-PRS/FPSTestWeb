@@ -40,8 +40,10 @@ const VOLATILE_TYPES = new Set([
 // stateHash joins the periodic-echo ban for a second reason: replaying
 // a seconds-old hash against a replica that kept moving reads as a
 // phantom desync + a spurious heal request, and the probe self-repeats
-// every 2s — nothing a reclaim needs journaled.
-const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash']);
+// every 2s — nothing a reclaim needs journaled. ping/pong too: each
+// replayed ping earns a client pong (a reclaim burst tripped the
+// rate limiter) and a stale echo would poison the transit EMA.
+const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong']);
 const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {
