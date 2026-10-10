@@ -48,9 +48,16 @@ export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos 
  *  resume 22m away and painted exactly the sky streaks it guarded.) */
 const JUMP_BUDGET = (spd: number) => spd * 0.08 + 3;
 
+/* Wall-clock gap between pushes that severs the trail. Live emitters push
+ * every frame, so >120ms of silence is never contiguous motion — the host
+ * kept moving while emission was off, and joining across it paints a
+ * chord. Generous for frame hitches, tighter than any deliberate pause. */
+const PUSH_GAP_MS = 120;
+
 export class RibbonTrail {
   private batch!: TrailBatch;
   private lastSpd = 0;
+  private lastPushMs = 0;
   private slot = -1;
   // Generation word from TrailBatch.claim — a stale instance whose slot
   // got re-issued to a new owner mismatches here and is refused at push
@@ -361,14 +368,20 @@ export class RibbonTrail {
     // Teleport guard — owners are supposed to clear() on a jump, but one
     // missed caller draws a chord from the last sample to wherever the
     // new owner/pos landed (the streak between two different projectiles).
-    // Beyond ~0.5s of travel + slack this "sample" is a jump: cut the strip.
+    // Beyond ~80ms of travel + slack this "sample" is a jump: cut the strip.
+    // Time cut too: the distance budget trusts the caller's vel, which can
+    // be stale or glitched — a stalled emitter (suppressed gates, starved
+    // pushes, blend pauses) leaves a real spatial gap no vel can explain,
+    // so any push after a gap is a fresh trail, not a chord.
     if (this.count > 0) {
       const jx = pos.x + ox - this.px[this.head]!;
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
       const jump = JUMP_BUDGET(spd);
-      if (jx * jx + jy * jy + jz * jz > jump * jump) {this.clear();}
+      if (jx * jx + jy * jy + jz * jz > jump * jump
+        || performance.now() - this.lastPushMs > PUSH_GAP_MS) {this.clear();}
     }
+    this.lastPushMs = performance.now();
 
     this._ox = ox; this._oy = oy; this._oz = oz;
     this.head = (this.head + 1) % MAX_SAMPLES;
