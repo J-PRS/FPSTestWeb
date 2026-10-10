@@ -121,7 +121,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // double the shove. Consume the stamp and drop the message.
     const stamps = deps.world.selfBlastStamps;
     const now = performance.now();
-    const i = stamps.findIndex(s => now - s.t < 400 &&
+    // Consume window = the stamp's own settle horizon (700ms in
+    // blastForce) — a 400ms+ echo is still THIS blast, and a stale
+    // window double-shoves then reports a false kb-echo on expiry.
+    const i = stamps.findIndex(s => now - s.t < 700 &&
       Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 3);
     if (i >= 0) { stamps.splice(i, 1); return; }
     const from = new THREE.Vector3(position.x, position.y, position.z);
