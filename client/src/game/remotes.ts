@@ -377,10 +377,13 @@ function updateScoreboard(deps: RemotesDeps): void {
     const t = (rp as { team?: string }).team;
     remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
   }
-  remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
+  // Self sorts into the ranking like everyone else — pinning the local
+  // row to the top read as "unordered" whenever the leader wasn't you.
+  const allRows = [...rows, ...remoteRows];
+  allRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   pruneAliveSince(queriedIds);
   pruneAsw(queriedIds);
-  hud.setScoreboardRows([...rows, ...remoteRows]);
+  hud.setScoreboardRows(allRows);
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }
 
