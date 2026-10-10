@@ -22,6 +22,7 @@ import type { RemotePlayerState } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 import type { NetworkManager } from './NetworkManager.js';
+import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('Wire');
 
@@ -34,6 +35,9 @@ export class WireIn {
   private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id) => this.wireIds.get(id) };
 
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
+  /** ?dropticks=N test hook — see the tick-path comment below. */
+  private static dropEvery = Number(urlParams.get('dropticks') ?? 0) || 0;
+  private static dropCounter = 0;
   /** Last processed reliable `ev` seq — the host presents it as
    *  resumeSeq on a token-carrying join so the server replays only the
    *  missed frames. */
@@ -146,6 +150,9 @@ export class WireIn {
     // out-of-order datagram frame would smuggle its stale fields into the
     // retained slots even when dropped here. tickSeq sits at bytes 6-9.
     if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
+    // ?dropticks=N — drop every Nth tick frame before decode to exercise
+    // the tickNack recovery loop (localhost can't produce real loss).
+    if (WireIn.dropEvery > 0 && ++WireIn.dropCounter >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
     const tick = decodeTickFrame(data, this.tickPool);
     if (!tick) return;
     // A real loss (the <= drop above already ate reorders): masked fields
