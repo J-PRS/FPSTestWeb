@@ -16,7 +16,7 @@ import { sharedEnv } from './env.ts';
 import type { ChatterKind } from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotLines } from './botLines.ts';
-import { BotGoals } from './botGoals.ts';
+import { BotGoals, type GoalState } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
 import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
@@ -25,15 +25,15 @@ import {
   STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type EscapeState } from './botEscape.ts';
-import { driftForm, type BotSkill } from './botSkill.ts';
+import { driftForm, type BotSkill, type BotSkillSpec } from './botSkill.ts';
+import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
+import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
+import { BOT_TUNING as T } from './botTuning.ts';
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
 export { losClear, losMemoReset, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
-import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
-
 export type { BotVec } from './botVec.ts';
-import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
 
 /** Brawl range — the "a live enemy is right here" evidence the sheep
  *  meter's ignore debit and every foeNear check measure by. One radius
@@ -131,6 +131,11 @@ export interface BrainCtx {
    *  ammo. Hosts compute it from the loadout's long-range weapon; absent
    *  → the default duel range. */
   engageRange?: number;
+  /** How this bot's match is going, 0..1 — the host folds team score
+   *  margin and personal K/D into one "nerve" the goal picker reads:
+   *  rattled bots seek company, confident ones spread out and hunt.
+   *  Omit where there's no scoreboard; 0.5 (neutral) is assumed. */
+  confidence?: number;
   /** Wall/sim time in ms — brain cooldowns key off this, not frames. */
   now: number;
   /** Modeled energy tank (server shadow truth) — skills/jet gate on it.
@@ -241,8 +246,6 @@ export interface BrainOut {
   say?: { kind: ChatterKind; target?: string };
 }
 
-import { BOT_TUNING as T } from './botTuning.ts';
-
 const FLINCH_S = 0.4;
 
 // Fear / hero — both are sense tuning, never new moves or info. Below
@@ -255,7 +258,7 @@ const FLINCH_S = 0.4;
  // per hurt episode, rolled on the rising edge
         // seconds of hero before it cools off
 
-const DEATH_MS = 15000;  // a death spot stays scary this long
+const DEATH_MS = 15_000;  // a death spot stays scary this long
 const DEATH_RANGE = 10;  // m — repel radius around each remembered death
 
 
@@ -263,22 +266,24 @@ export class BotBrain {
   /** Set the spawn point as the initial goal. `spec` picks the
    *  difficulty band (or per-axis mix) the skill matrix and hunt
    *  draws are rolled from. */
-  constructor(spawn: BotVec, spec: import('./botSkill.ts').BotSkillSpec = 'medium') {
-    this.goalS.goal = { ...spawn };
+  constructor(spawn: BotVec, spec: BotSkillSpec = 'medium') {
+    this.goalS.goal = { x: spawn.x, y: spawn.y, z: spawn.z };
     this.h = newHuntState(spawn, spec);
     // Phase-stagger + personality by spawn hash, not RNG: constructor-time
     // draws run before a harness can install a seeded stream, so botRand
     // here made same-seed rooms diverge on which tick each brain first
     // thought. Three independent hashes so the traits don't correlate.
-    const h01 = ((Math.sin(spawn.x * 12.9898 + spawn.z * 78.233 + spawn.y * 37.719) * 43758.5453) % 1 + 1) % 1;
-    const h02 = ((Math.sin(spawn.x * 39.3468 + spawn.z * 11.1357 + spawn.y * 83.1554) * 24634.6345) % 1 + 1) % 1;
-    const h03 = ((Math.sin(spawn.x * 73.1562 + spawn.z * 52.2354 + spawn.y * 9.1512) * 58342.2154) % 1 + 1) % 1;
+    const h01 = ((Math.sin(spawn.x * 12.9898 + spawn.z * 78.233 + spawn.y * 37.719) * 43_758.5453) % 1 + 1) % 1;
+    const h02 = ((Math.sin(spawn.x * 39.3468 + spawn.z * 11.1357 + spawn.y * 83.1554) * 24_634.6345) % 1 + 1) % 1;
+    const h03 = ((Math.sin(spawn.x * 73.1562 + spawn.z * 52.2354 + spawn.y * 9.1512) * 58_342.2154) % 1 + 1) % 1;
+    const h04 = ((Math.sin(spawn.x * 27.6197 + spawn.z * 57.5831 + spawn.y * 19.9176) * 31_415.9265) % 1 + 1) % 1;
     this.thinkT = h01 * T.brain.thinkS;
     this.beltT = 4 + h02 * 4;
     this.deployT = 8 + h02 * 25;
     this.builder = h03 < 0.45;
     this.wanderlust = T.brain.wanderBase + h01 * T.brain.wanderRand;
     this.duty = T.brain.dutyBase + h03 * T.brain.dutyRand;
+    this.social = h04;
     this.orbitA = h02 * Math.PI * 2;
     this.orbitDir = h01 < 0.5 ? 1 : -1;
     this.orbitFlipT = 1 + h03 * 1.5;
@@ -322,7 +327,7 @@ export class BotBrain {
   private readonly lines = new BotLines();
   // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
   // reads/writes so the brain's goal/wander/revenge fields stay private.
-  readonly goalS: import('./botGoals.ts').GoalState = {
+  readonly goalS: GoalState = {
     goal: { x: 0, y: 0, z: 0 },
     revengeT: 0,
     revengeFrom: { x: 0, y: 0, z: 0 },
@@ -335,12 +340,13 @@ export class BotBrain {
     () => this.steerer.headingVec(),
     (p) => this.nearDeath(p),
     () => this.duty,
+    () => this.social,
   );
   // Ski/jet/jump hint intents live in botMoves.ts — host closures read
   // the escape burst latch and the live hunt target.
   private readonly moves = new BotMoves({
-    escapeJetT: () => this.escapeS.escapeJetT,
-    huntPos: () => this.h.hunt?.pos ?? null,
+    escapeJetT: (): number => this.escapeS.escapeJetT,
+    huntPos: (): BotVec | null => this.h.hunt?.pos ?? null,
   });
   // Death memory — where the host reported this body dying. Souring
   // goals near a death spot is how map denial emerges: nobody scripts
@@ -376,16 +382,16 @@ export class BotBrain {
   private now = 0;
   markDeath(pos: BotVec, now: number): void {
     this.deaths.push({ x: pos.x, z: pos.z, t: now });
-    if (this.deaths.length > 8) this.deaths.shift();
+    if (this.deaths.length > 8) {this.deaths.shift();}
   }
 
   /** Is p within the repel radius of a recent death? */
   private nearDeath(p: { x: number; z: number }): boolean {
-    const now = this.now;
+    const { now } = this;
     for (const d of this.deaths) {
-      if (now - d.t > DEATH_MS) continue;
+      if (now - d.t > DEATH_MS) {continue;}
       const dx = p.x - d.x, dz = p.z - d.z;
-      if (dx * dx + dz * dz < DEATH_RANGE * DEATH_RANGE) return true;
+      if (dx * dx + dz * dz < DEATH_RANGE * DEATH_RANGE) {return true;}
     }
     return false;
   }
@@ -399,6 +405,12 @@ export class BotBrain {
    *  Independent of wanderlust: a hyper tourist and a lazy pro both
    *  exist in a real lobby. */
   private readonly duty = T.brain.dutyBase;
+  /** Gregariousness 0..1 — how much company this bot seeks when the
+   *  match isn't going its way. A 0-social bot is a career lone wolf:
+   *  it rallies at the same near-death HP a human soloer would, while
+   *  a 1-social bot rattled by a losing match drifts toward teammates
+   *  long before it's cornered. */
+  private readonly social: number = 0.5;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
@@ -435,7 +447,7 @@ export class BotBrain {
    *  for a lobbed throw (live position would be a wallhack on a
    *  cloaked or occluded target). */
   get currentHuntSeen(): BotVec | null {
-    return this.h.hunt ? { ...this.h.lastSeen } : null;
+    return this.h.hunt ? { x: this.h.lastSeen.x, y: this.h.lastSeen.y, z: this.h.lastSeen.z } : null;
   }
 
   /** Jet-gate telemetry for the cap-run harness — which gate armed the
@@ -461,8 +473,8 @@ export class BotBrain {
       ss: this.escapeS.stuckStreak,
       os: this.escapeS.orbitStreak,
       ps: this.escapeS.pinStreak,
-      det: +this.escapeS.detourT.toFixed(2),
-      ej: +this.escapeS.escapeJetT.toFixed(2),
+      det: Number(this.escapeS.detourT.toFixed(2)),
+      ej: Number(this.escapeS.escapeJetT.toFixed(2)),
       park: this.lastPark,
       posted: this.lastPosted,
     };
@@ -488,11 +500,11 @@ export class BotBrain {
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
     this.hitSay = true;
-    this.flinchFrom = { ...from };
+    this.flinchFrom = { x: from.x, y: from.y, z: from.z };
     this.h.lastHitAt = this.now;
     this.h.skill.form = Math.max(0.85, this.h.skill.form - 0.03); // tilt
     this.goalS.revengeT = 2.5;
-    this.goalS.revengeFrom = { ...from };
+    this.goalS.revengeFrom = { x: from.x, y: from.y, z: from.z };
   }
 
   /** Situation chatter — rising edges only; the host resolves kind→line
@@ -795,7 +807,7 @@ export class BotBrain {
             // let the next window route again.
             const g = dirXZ(this.goalS.goal.x - pos.x, this.goalS.goal.z - pos.z);
             this.breachGoal = { x: pos.x - g.x * 14, y: pos.y, z: pos.z - g.z * 14 };
-            this.breachUntil = now + 4_000;
+            this.breachUntil = now + 4000;
             this.goalClimbs = 0;
           } else {
             this.wallResponse(ctx, pos, now);

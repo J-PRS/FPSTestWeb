@@ -12,7 +12,7 @@ const flat = (over: Partial<BrainCtx> = {}): BrainCtx => ({
   ...over,
 });
 
-const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; nearDeath?: (p: { x: number; z: number }) => boolean } = {}) => {
+const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; nearDeath?: (p: { x: number; z: number }) => boolean; social?: number } = {}) => {
   const s: GoalState = {
     goal: { x: 0, y: 0, z: 0 },
     revengeT: 0, revengeFrom: { x: 0, y: 0, z: 0 },
@@ -23,6 +23,8 @@ const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; ne
     () => over.wanderlust ?? 1,
     () => over.heading ?? { x: 1, z: 0 },
     over.nearDeath ?? (() => false),
+    () => 1,
+    () => over.social ?? 0.5,
   );
   return { s, g };
 };
@@ -65,6 +67,31 @@ describe('BotGoals.pick — priority ladder', () => {
     expect(s.goal).toEqual({ x: 3, y: 0, z: 0 });
   });
 
+  it('a rattled social bot folds well before critical HP', () => {
+    const { s, g } = kit({ social: 1 });
+    // confidence 0 → nerve 1.1 → rallyAt ≈ 0.32: 28% HP is inside it.
+    g.pick(flat({
+      objective: { x: 40, y: 0, z: 40 },
+      healthFrac: 0.28,
+      confidence: 0,
+      allies: [{ x: 3, y: 0, z: 0 }],
+    }), pos);
+    expect(s.goal).toEqual({ x: 3, y: 0, z: 0 });
+  });
+
+  it('a 0-social loner holds the near-death rally threshold', () => {
+    const { s, g } = kit({ social: 0 });
+    s.wanderT = 50; s.wanderWp = { x: 60, y: 0, z: 60 };
+    // Same 28% HP — loner's rallyAt is ~0.09, so no fold: objective wins.
+    g.pick(flat({
+      objective: { x: 40, y: 0, z: 40 },
+      healthFrac: 0.28,
+      confidence: 0,
+      allies: [{ x: 3, y: 0, z: 0 }],
+    }), pos);
+    expect(s.goal).toEqual({ x: 40, y: 0, z: 40 });
+  });
+
   it('heard fight pulls only on a curiosity roll', () => {
     const { s, g } = kit({ wanderlust: 1 });
     // Pre-commit the wander slot so no rolls precede the curiosity one:
@@ -77,6 +104,47 @@ describe('BotGoals.pick — priority ladder', () => {
     botRng(() => 0.1); // curious → the heard fight outscores the wander
     g.pick(c, pos);
     expect(s.goal).toEqual({ x: 8, y: 0, z: 8 });
+  });
+});
+
+describe('BotGoals.pick — ally drift', () => {
+  const pos = { x: 0, y: 0, z: 0 };
+  const farAlly = { x: 120, y: 0, z: 0 };
+
+  it('a rattled social bot drifts toward a reachable ally', () => {
+    const { s, g } = kit({ social: 1 });
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ allies: [farAlly], confidence: 0, healthFrac: 1 }), pos);
+    expect(s.goal).toEqual(farAlly);
+  });
+
+  it('a confident bot ignores the same ally — solo roam wins', () => {
+    const { s, g } = kit({ social: 1 });
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    // confidence 1 → drift weight ~0.05 vs wander's 0.35.
+    g.pick(flat({ allies: [farAlly], confidence: 1, healthFrac: 1 }), pos);
+    expect(s.goal).toEqual({ x: -60, y: 0, z: -60 });
+  });
+
+  it('a loner trait never drifts regardless of nerve', () => {
+    const { s, g } = kit({ social: 0 });
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ allies: [farAlly], confidence: 0, healthFrac: 1 }), pos);
+    expect(s.goal).toEqual({ x: -60, y: 0, z: -60 });
+  });
+
+  it('no pull while company is already close — no herding into a blob', () => {
+    const { s, g } = kit({ social: 1 });
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ allies: [{ x: 30, y: 0, z: 0 }, farAlly], confidence: 0, healthFrac: 1 }), pos);
+    expect(s.goal).toEqual({ x: -60, y: 0, z: -60 });
+  });
+
+  it('no pull in objective modes — flag machinery owns cohesion there', () => {
+    const { s, g } = kit({ social: 1 });
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ objective: { x: 40, y: 0, z: 40 }, allies: [farAlly], confidence: 0, healthFrac: 1 }), pos);
+    expect(s.goal).toEqual({ x: 40, y: 0, z: 40 });
   });
 });
 

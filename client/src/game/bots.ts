@@ -475,6 +475,9 @@ export class TeamBots {
     ctx.sounds = this.senses.recentNoises(bot.position);
     ctx.threats = this.senses.incomingNear(bot.position);
     ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
+    // Same nerve the server senses feeds: team margin + own K/D. FFA
+    // leaves it undefined — no allies to drift toward anyway.
+    ctx.confidence = this.confidenceOf(bot);
     // Room-event ping — the server senses feeds the same notice ctx so
     // offline bots groan a cap and alert a grab like online ones.
     ctx.notice = this.notices.for(bot.playerId, bot.team, performance.now());
@@ -484,6 +487,18 @@ export class TeamBots {
    *  pushes these; the actor never hears their own ping. */
   notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
     this.notices.notice(kind, actorId, actorTeam, performance.now());
+  }
+
+  /** Mirrors ServerBotSenses.confidenceOf — the goal picker's nerve
+   *  input must read the same scoreboard offline that it reads on the
+   *  wire, or solo bots herd differently than hosted ones. */
+  private confidenceOf(bot: GameBot): number | undefined {
+    if (!this.spec.teams || (bot.team !== 'alpha' && bot.team !== 'bravo')) return undefined;
+    const other = bot.team === 'alpha' ? 'bravo' : 'alpha';
+    const margin = (this.scores[bot.team] - this.scores[other]) / Math.max(1, this.spec.winAt);
+    const kd = Math.tanh(((this.deps.world.killCounts.get(bot.playerId) ?? 0)
+      - (this.deps.world.deathCounts.get(bot.playerId) ?? 0)) / 4);
+    return Math.min(1, Math.max(0, 0.5 + margin * 0.35 + kd * 0.25));
   }
 
   /** Rally channel = live teammates (incl. the local player). Team
@@ -625,6 +640,10 @@ export class TeamBots {
    *  rabbit every corpse is a flag event (first one spawns it). */
   localDied(): void {
     const pos = this.deps.lazyPlayer().pos;
+    const p = this.deps.lazyPlayer();
+    // Same corpse-loot rule bot deaths and the server both run: team
+    // modes drop 3 nuggets so a death feeds the economy, not just pain.
+    if (!this.spec.ffa) this.hooks.dropNuggets(pos, 3, p.vel);
     this.ctf?.dropCarried('local', pos);
     this.rabbit?.onDeath('local', pos);
     this.flagrun?.dropCarried('local', pos);

@@ -19,14 +19,15 @@ export interface ClassStats {
 }
 
 /** Tier-locked ordnance — WeaponType ids only heavies may fire (Mortar,
- *  PlasmaCannon, RocketLauncher, MRVLauncher). Enforced server-side in
- *  CombatHandler; the loadout menu filter is a convenience, not a
- *  boundary. */
-export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28]);
+ *  PlasmaCannon, RocketLauncher, MRVLauncher, Bombard). Enforced
+ *  server-side in CombatHandler; the loadout menu filter is a
+ *  convenience, not a boundary. */
+export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28, 35]);
 
-/** Medium-only guns (Flak, PlasmaGun) — the mid-tier punch. An EXACT-class
- *  lock like the light tier: heavies trade it away for ordnance access. */
-export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = new Set([6, 23]);
+/** Medium-only guns (Flak, Cannon, PlasmaGun) — the mid-tier punch. An
+ *  EXACT-class lock like the light tier: heavies trade it away for
+ *  ordnance access. */
+export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = new Set([6, 14, 23]);
 
 /** Light-only finesse weapons (Railgun, Lightning) — precision gear for
  *  the frame that paid HP for twitch; heavies get ordnance instead.

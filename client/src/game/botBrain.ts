@@ -227,6 +227,9 @@ export class GameBot extends RemotePlayer {
     repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
     /** Room event this bot noticed — the server senses' notice ping. */
     notice?: { kind: ChatterKind; actor?: string } | null;
+    /** The bot's nerve input (score margin + K/D) — mirrors
+     *  ServerBotSenses.confidenceOf. Team modes only. */
+    confidence?: number;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
     // Heights are static for a match's lifetime — every bot probes the
@@ -274,6 +277,7 @@ export class GameBot extends RemotePlayer {
       huntCreatures: ctx.huntCreatures,
       repair: ctx.repair ?? null,
       notice: ctx.notice ?? null,
+      confidence: ctx.confidence,
       now: performance.now(),
       // The real tank + hp — fear, mend, shield, and retreat gates all
       // read these; without them every status decision saw a full sheet.

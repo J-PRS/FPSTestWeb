@@ -122,6 +122,9 @@ export function collect(m: MatchHost, collectorId: string): void {
   const team = m.teamOf.get(collectorId) as TeamId | undefined;
   if (!team || !m.spec.gems) return; // CTF gems heal but don't cap-score
   bank(m.scores, team);
+  // Banker credit — mirrors Room.onCollect's awardPersonal so the
+  // offline board's PTS column carries nuggets hauled, same as wire.
+  awardPersonal(m, collectorId, 1);
   pushScore(m);
 }
 

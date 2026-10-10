@@ -25,7 +25,10 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
   // Light-frame guns (Railgun/Lightning) pick the body outright — a kit
   // built around them can't ride a heavier chassis.
   if (kit.some((w) => LIGHT_ONLY_WEAPONS.has(w))) return 'light';
-  if (HEAVY_ONLY_WEAPONS.has(lo.far) || HEAVY_ONLY_WEAPONS.has(lo.belt)) return 'heavy';
+  // Any ordnance slot can carry the tier-lock — authored kits keep it in
+  // far/belt, but the bombard lives in mid and a hidden heavy pick would
+  // shoulder it on a medium body that can't legally fire it.
+  if (kit.some((w) => HEAVY_ONLY_WEAPONS.has(w))) return 'heavy';
   if (lo.perk === 'plated') return 'heavy';
   // featherjets wants light, but a kit carrying medium-locked ordnance
   // (Flak/PlasmaGun) can't shoulder it on a light frame — the class gate
@@ -39,10 +42,10 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
 export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser — light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
-  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.Cannon,    far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only PlasmaGun
+  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
   { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
-  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Cannon,    far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear now)
+  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
   { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
   { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.DiscPull,      side: WeaponType.Pistol   }, // beam rider
@@ -67,9 +70,9 @@ export const BOT_ALT_SLOTS: Partial<Record<LoadoutSlot, WeaponType[]>>[] = [
   { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] }, // anchor
   { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon], far: [WeaponType.Disc], belt: [WeaponType.DiscPull, WeaponType.Javelin], side: [WeaponType.Revolver] }, // skirmisher
   { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // hose
-  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
+  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
   { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // flak skirmisher
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
   { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] }, // beam rider
   { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] }, // trapper
   { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] }, // support
@@ -87,7 +90,9 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   //  slots for tier-locks, so a mortar in `near` would be invisible to
   //  derivation (and the authored kits never put it there either).
   near: [WeaponType.Chaingun, WeaponType.Shotgun, WeaponType.Flak, WeaponType.Lightning],
-  mid: [WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun],
+  // Bombard lives in mid — a 160dmg... a direct-hit slug has no business
+  // in the far band where only splash reach matters.
+  mid: [WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard],
   far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.RocketLauncher, WeaponType.MRVLauncher],
   belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.DiscPull, WeaponType.MRVLauncher],
   side: [WeaponType.Pistol, WeaponType.Revolver],

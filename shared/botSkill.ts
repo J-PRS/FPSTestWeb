@@ -146,6 +146,7 @@ export function weaponAxis(w: number): AimAxis | null {
     case WeaponType.RocketLauncher:
     case WeaponType.Flak:
     case WeaponType.Cannon:
+    case WeaponType.Bombard:
     case WeaponType.GrenadeLauncher:
     case WeaponType.ImpactGrenade:
     case WeaponType.MRVLauncher:

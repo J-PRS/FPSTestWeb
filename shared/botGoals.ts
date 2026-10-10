@@ -35,7 +35,15 @@ export class BotGoals {
     private headingVec: () => { x: number; z: number },
     private nearDeath: (p: { x: number; z: number }) => boolean,
     private duty: () => number = () => 1,
+    private social: () => number = () => 0.5,
   ) {}
+
+  /** The bot's nerve — where on the solo↔social dial it sits right now.
+   *  High social + low confidence (losing, dying) pushes toward company;
+   *  a confident loner barely registers allies exist. */
+  private nerve(ctx: BrainCtx): number {
+    return this.social() * (1.1 - (ctx.confidence ?? 0.5));
+  }
 
   /** Idle-goal selection, in priority order: revenge > rally > objective >
    *  pickup > heard fight > wander. */
@@ -51,8 +59,12 @@ export class BotGoals {
         return;
       }
     }
-    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
-      const rally = this.rallyGoal(ctx, pos);
+    // Rally threshold breathes with nerve: a rattled gregarious bot folds
+    // at ~30% HP, a confident loner only at the brink (a 0-social nerve
+    // barely moves the base 15%).
+    const rallyAt = 0.15 * (0.4 + this.nerve(ctx) * 1.6);
+    if ((ctx.healthFrac ?? 1) < rallyAt && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
+      const rally = this.rallyGoal(ctx, pos, rallyAt);
       if (rally) s.goal = rally;
       return;
     }
@@ -105,6 +117,14 @@ export class BotGoals {
     if (heard && !(ctx.posted && ctx.objective && distSq(heard, ctx.objective) > ctx.posted * ctx.posted)) {
       offer(heard, 0.2 + this.duty() * 0.5);
     }
+    // Ally drift: no objective pulling (flag modes have their own squad
+    // machinery — this is the TDM/nuggets hint of cohesion), nobody
+    // already in company range, and a teammate in real reach. Weight is
+    // nerve-shaped so confident/loner bots keep their solo roam while a
+    // rattled social one finds a buddy — pairs form and dissolve as the
+    // drifted-to ally's own goals move it on, never a formed unit.
+    const buddy = this.buddyAnchor(ctx, pos);
+    if (buddy) offer(buddy, this.nerve(ctx) * 0.55);
     if (wander && !ctx.posted) offer(wander, 0.35);
     if (cands.length > 0) {
       let best = cands[0]!;
@@ -156,10 +176,25 @@ export class BotGoals {
     return best;
   }
 
+  /** The ally-drift anchor: nearest teammate outside company range but
+   *  inside real transit reach. Null when the bot already HAS company
+   *  (the pull can't stack pairs into a blob) or nobody's reachable. */
+  private buddyAnchor(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    if (ctx.objective || !ctx.allies || ctx.allies.length === 0 || ctx.posted) return null;
+    let ally: BotVec | null = null;
+    let ad = Infinity;
+    for (const o of ctx.allies) {
+      const d = distSq(pos, o);
+      if (d < 60 * 60) return null; // already has company — a pull here would herd
+      if (d < ad && d < 260 * 260) { ad = d; ally = o; }
+    }
+    return ally ? { ...ally } : null;
+  }
+
   /** Hurt with nobody shooting back at: fold toward the nearest ALLY —
    *  folding onto an enemy while at 15% hp was worse than running solo. */
-  private rallyGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if ((ctx.healthFrac ?? 1) >= 0.15 || !ctx.allies || ctx.allies.length === 0) return null;
+  private rallyGoal(ctx: BrainCtx, pos: BotVec, rallyAt = 0.15): BotVec | null {
+    if ((ctx.healthFrac ?? 1) >= rallyAt || !ctx.allies || ctx.allies.length === 0) return null;
     let ally: BotVec | null = null;
     let ad = Infinity;
     for (const o of ctx.allies) {
