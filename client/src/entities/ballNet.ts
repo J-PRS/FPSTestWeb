@@ -147,8 +147,17 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   if (bag.px !== undefined && bag.py !== undefined && bag.pz !== undefined) {
     const dx = host.pos.x - bag.px, dy = host.pos.y - bag.py, dz = host.pos.z - bag.pz;
     const gap2 = dx * dx + dy * dy + dz * dz;
+    // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
+    // between 20Hz rebuilds — counting that as a step was ~90% noise.
+    // Only fire when the leap outruns what the tick budget explains.
+    const spdBudget = Math.hypot(s.vx, s.vy, s.vz) * 0.05 + 5;
     if (gap2 > 25) {
-      glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
+      // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
+      // between 20Hz rebuilds — counting that as a step was ~90% noise.
+      // Only fire when the leap outruns what the tick budget explains.
+      if (gap2 > spdBudget * spdBudget) {
+        glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
+      }
       // The step is honest truth — but it leaps the rendered ball past
       // every follower budget. Fold it into renderOffset so the catch-up
       // reads as a fast slide (offset decays ~0.2s) instead of a cut;
