@@ -118,10 +118,13 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
   settings.set('fps-p2p', '');
   settings.set('fps-lobby', 0);
   const q = new URLSearchParams(location.search);
-  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo']) q.delete(k);
+  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) q.delete(k);
   if (mode) q.set('mode', mode);
   if (map) q.set('map', map);
   if (bots !== undefined) q.set('bots', String(bots));
+  // Same sim gates as HOST — the local spawner reads the URL params too.
+  if (settings.get('fps-nocreatures') === 1) q.set('nocreatures', '1');
+  if (settings.get('fps-noballs') === 1) q.set('noballs', '1');
   // Marker param — a free-roam pick writes no mode/map/bots at all, but
   // it is still a live session; without this the boot is indistinguishable
   // from a fresh front-door load and the lobby would re-pop mid-game.
@@ -375,21 +378,25 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     famRow.appendChild(privBtn);
     // Sim gates — the host can mint a room without creatures (melee
     // species) and/or the ball sim. ON is the default; OFF rides the
-    // join as noCreatures/noBalls like `unlisted`.
-    for (const [key, label_, tip] of [
-      ['fps-nocreatures', 'CREATURES', 'spawn melee species (crawlers etc.)'],
-      ['fps-noballs', 'BALLS', 'spawn the ball sim'],
-    ] as const) {
-      const b = btn(label_);
-      b.title = tip;
-      b.classList.toggle('active', settings.get(key) !== 1);
-      b.addEventListener('click', () => {
-        const off = settings.get(key) !== 1;
-        settings.set(key, off ? 1 : 0);
-        b.classList.toggle('active', !off);
-      });
-      famRow.appendChild(b);
-    }
+    // join as noCreatures/noBalls like `unlisted`. Same toggles serve
+    // OFFLINE's solo boot URL (gateToggles writes the same settings keys).
+    const gateToggles = (row: HTMLDivElement): void => {
+      for (const [key, label_, tip] of [
+        ['fps-nocreatures', 'CREATURES', 'spawn melee species (crawlers etc.)'],
+        ['fps-noballs', 'BALLS', 'spawn the ball sim'],
+      ] as const) {
+        const b = btn(label_);
+        b.title = tip;
+        b.classList.toggle('active', settings.get(key) !== 1);
+        b.addEventListener('click', () => {
+          const off = settings.get(key) !== 1;
+          settings.set(key, off ? 1 : 0);
+          b.classList.toggle('active', !off);
+        });
+        row.appendChild(b);
+      }
+    };
+    gateToggles(famRow);
     const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
     // Hidden store — the scrollable list beside the preview is the UI.
     mapSelect.style.display = 'none';
@@ -419,7 +426,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         const noBalls = settings.get('fps-noballs') === 1;
         // A named PRIVATE room is always self-hosted — quickJoin would
         // land in someone's public match instead of creating ours.
-        const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots)).room);
+        const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots, noCreatures, noBalls)).room);
         h.join(room, map || undefined, bots, mode || undefined, priv || undefined, noCreatures || undefined, noBalls || undefined);
       } catch { hostBtn.disabled = false; }
     });
@@ -543,6 +550,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     soloModeRow.appendChild(soloModeSel);
     const soloModeBtns = modeToggleRow(soloModeSel);
     const soloFamRow = famToggles();
+    gateToggles(soloFamRow);
     const { select: soloMapSel, thumb: soloThumb } = mapPicker(h);
     // Hidden store — the scrollable list beside the preview is the UI.
     soloMapSel.style.display = 'none';
