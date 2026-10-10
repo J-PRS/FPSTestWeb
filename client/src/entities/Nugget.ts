@@ -229,7 +229,7 @@ export class Nugget {
     if (this.collected || this.dead) {return;}
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force);
-    this.vel.y += force * 0.3;
+    this.vel.y += Math.abs(force) * 0.4; // server-parity pop (RoomPickups.knock)
     this.settled = false;
     this.scatterTimer = 0.4;
   }
@@ -257,6 +257,7 @@ export class Nugget {
     if (this.collected || this.dead) {return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force);
+    this.vel.y += Math.abs(force) * 0.4; // same pop as the server's pull branch
     this.settled = false;
     this.scatterTimer = 0.4;
   }

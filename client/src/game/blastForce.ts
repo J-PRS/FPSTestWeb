@@ -6,7 +6,7 @@ import type * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { aoeImpulseT1At, t1Minbox, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
+import { aoeImpulse, aoeImpulseT1At, t1Minbox, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
@@ -65,13 +65,16 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     forceMode: 'push' | 'pull',
     forceMultiplier: number
   ): void {
-    const f = force * forceMultiplier * 1.3;
+    // Predict what the server applies (RoomPickups.knock): the shared
+    // aoeImpulse falloff × 0.4 — the old raw force×1.3 overshot ~3x and
+    // serverRest snapped the gem back every blast.
     for (const n of deps.nuggets) {
       if (n.dead || n.collected) {continue;}
-      if (n.pos.distanceToSquared(pos) < radius * radius) {
-        if (forceMode === 'push') {n.applyKnockback(pos, f);}
-        else {n.applyPull(pos, f);}
-      }
+      const d = n.pos.distanceTo(pos);
+      if (d >= radius) {continue;}
+      const f = aoeImpulse(force, d, radius) * 0.4 * forceMultiplier;
+      if (forceMode === 'push') {n.applyKnockback(pos, f);}
+      else {n.applyPull(pos, f);}
     }
   }
 
@@ -146,6 +149,50 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     }
   }
 
+  /** Predicted shove for the LOCAL body — shared by authored blasts
+   *  (applyExplosionForce) and remote-blast replicas (impact.ts). Returns
+   *  true when the player sat inside the envelope — whether this call
+   *  applied the impulse or a raced wire echo already spent it. */
+  function predictLocalShove(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string): boolean {
+    const player = deps.lazyPlayer();
+    // Ledger the blast itself, not just the shove: when the wire
+    // knockback arrives, net/players.ts can tell 'the blast rendered but
+    // its envelope math said I was out' from a shove that truly came
+    // from nowhere — only the second deserves the anomaly log.
+    deps.explosionTracker.addExplosion(pos, force, shooterId ?? 'remote');
+    const dpx = player.pos.distanceTo(pos);
+    // Knockback reach = damage reach: the blast ends at aoeRadius, same
+    // bound the server applies and the ?debug gizmo draws.
+    // Spawn shield: the server refuses enemy-blast shove/damage during
+    // the window — predicting it anyway flies the protected player until
+    // the silent resync snaps them back (the "pushed by wind" report).
+    // Self blasts still predict (the server applies those); a friendly's
+    // blast suppression is harmless — its wire knockback lands anyway.
+    const shielded = shooterId !== undefined && shooterId !== 'local' && performance.now() < player.protectedUntil;
+    if (shielded || dpx - t1Minbox(player.appliedClass) >= radius || occluded(pos, player.pos)) {return false;}
+    const now = performance.now();
+    // Dedup, reverse direction: the knockback echo can beat its blast's
+    // replica explode (handlers run on arrival, the predicted shove waits
+    // for the next projectile tick). A recorded raw echo at this center
+    // means the shove already landed — consume it, don't re-apply.
+    const rkb = deps.world.recentKb;
+    const dup = rkb.findIndex(s => now - s.t < 400 &&
+      Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 3);
+    if (dup >= 0) {rkb.splice(dup, 1); return true;}
+    const impulse = Math.min(
+      aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
+      BLAST_IMPULSE_MAX);
+    if (forceMode === 'push') {player.applyKnockback(pos, impulse);}
+    else {player.applyPull(pos, impulse);}
+    // Stamp the prediction — the server echoes this same shove back as a
+    // `knockback` message ~RTT later; net/players.ts consumes the stamp
+    // so the blast can't land twice.
+    const stamps = deps.world.selfBlastStamps;
+    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now });
+    if (stamps.length > 8) {stamps.shift();}
+    return true;
+  }
+
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
     const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
@@ -155,24 +202,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
 
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
-    // Knockback reach = damage reach: the blast ends at aoeRadius, same
-    // bound the server applies and the ?debug gizmo draws. The old
-    // falloffMultiplier stretched the zero-crossing 2.5-3× — a
-    // local-player-only shove nobody else felt.
-    // Spawn shield: the server refuses enemy-blast shove/damage during
-    // the window — predicting it anyway flies the protected player until
-    // the silent resync snaps them back (the "pushed by wind" report).
-    // Self blasts still predict (the server applies those); a friendly's
-    // blast suppression is harmless — its wire knockback lands anyway.
-    const shielded = a.shooterId !== undefined && a.shooterId !== 'local' && performance.now() < player.protectedUntil;
-    if (!shielded && dpx - t1Minbox(player.appliedClass) < radius && !occluded(pos, player.pos)) {
-      applyTo(player, aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken);
-      // Stamp the prediction — the server echoes this same shove back as a
-      // `knockback` message ~RTT later; net/players.ts consumes the stamp
-      // so the blast can't land twice.
-      const stamps = deps.world.selfBlastStamps;
-      stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: performance.now() });
-      if (stamps.length > 8) {stamps.shift();}
+    if (predictLocalShove(pos, radius, force, forceMode, a.shooterId)) {
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
@@ -231,5 +261,5 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     }
   }
 
-  return { applyExplosionForce, applyForceToRemotes };
+  return { applyExplosionForce, applyForceToRemotes, predictLocalShove };
 }
