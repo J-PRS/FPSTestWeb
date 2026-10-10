@@ -202,6 +202,14 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   if (!s) {return;}
   const {simT} = seg;
   if (isStaleSeg(bag, simT)) {return;} // older stamp — never rewind
+  // Divergence probe — every audited stepBall input is symmetric, yet
+  // segments still correct 20-39m. Measure the predictor's pre-snap
+  // distance from truth plus the replay span the stamp covers — the
+  // delta the wire can't hide.
+  const pd = Math.hypot(s.x - seg.px, s.y - seg.py, s.z - seg.pz);
+  if (pd > 20) {
+    glitch('seg-div', { m: Math.round(pd), spanMs: simT !== undefined && bag.simT < simT ? Math.round((simT - bag.simT) * 1000) : -1, enr: seg.enraged ? 1 : 0 });
+  }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
   s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
   s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
