@@ -14,9 +14,12 @@ const MEND_HP_PER_TICK = MEND_HP_PER_SEC / CONFIG.tickRate;
 /** Server-owned heal channels for one broadcast tick: medkit channel,
  *  regenerator perk, regen powerup — all cap at the perk max (the caller
  *  applies the clamp). */
-export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealth' | 'status' | 'regenUntil' | 'perk'>, now: number): number {
+export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealth' | 'status' | 'regenUntil' | 'perk' | 'lastDamageAt'>, now: number): number {
   if (p.isDead || p.health >= p.maxHealth) return 0;
-  let heal = perkMods(p.perk).regen / CONFIG.tickRate;
+  const mods = perkMods(p.perk);
+  // Regenerator pays per UNHURT second, not a flat drip — a hit zeroes
+  // the ramp so chip damage denies the heal entirely.
+  let heal = (mods.regen + mods.regenRamp * Math.max(0, (now - p.lastDamageAt) / 1000)) / CONFIG.tickRate;
   if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
   if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
   return heal;
