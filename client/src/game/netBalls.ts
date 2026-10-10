@@ -73,11 +73,25 @@ export function makeBallClock(getPing: () => number) {
         }
       }
       clock.t = t; clock.at = now;
+      // Re-anchor also lowers the floor when the stamp is far behind the
+      // running estimate (reconnect epoch, burst replay) — otherwise a
+      // stale-high lastEst would pin every event's age at 0.
+      lastEst = Math.min(lastEst, t + 0.5);
     }
   }
+  // The estimate must never rewind: every consumer turns it into a
+  // position (rem extrapolation on _rpos) or an age. A new stamp that
+  // lands BELOW the running extrapolation (rate overshot, or events
+  // arrived in a burst) would snap _rpos backward by vel×Δ — the ball
+  // follow-jump cuts in the dump. Clamp monotonic; the EMA rate heals
+  // any forward overshoot by slowing the clock instead of jumping it.
+  let lastEst = -1;
   function estSimNow(): number {
     const now = performance.now() / 1000;
-    return clock.t < 0 ? Infinity : clock.t + (now - clock.at) * clock.rate;
+    if (clock.t < 0) {return Infinity;}
+    const est = clock.t + (now - clock.at) * clock.rate;
+    if (est > lastEst) {lastEst = est;}
+    return lastEst;
   }
   function ballEventAge(t: number | undefined): number {
     if (t === undefined) {
