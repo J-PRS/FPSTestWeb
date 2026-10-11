@@ -208,6 +208,11 @@ export class MoveSim {
   }
 
   setState(s: MoveState): void {
+    // The one write site for the sim anchor — a non-finite state from
+    // ANY caller (wire restore, replay snapshot, spawn seed) poisons
+    // every integration step after it. Callers gate too, but the law
+    // holds only if it's enforced where the write happens.
+    if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z + s.vel.x + s.vel.y + s.vel.z + s.yaw + s.pitch)) return;
     this.state.pos.x = s.pos.x; this.state.pos.y = s.pos.y; this.state.pos.z = s.pos.z;
     this.state.vel.x = s.vel.x; this.state.vel.y = s.vel.y; this.state.vel.z = s.vel.z;
     this.state.yaw = s.yaw; this.state.pitch = s.pitch; this.state.onGround = s.onGround;
