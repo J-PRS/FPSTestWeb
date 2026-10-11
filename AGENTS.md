@@ -18,6 +18,9 @@ bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
 ```
 
+Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
+`:5173` is a different project's dev server — not the game.
+
 ## Layout
 
 - `shared/` — sims + protocol used by BOTH ends (deterministic: no

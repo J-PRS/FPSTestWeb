@@ -70,8 +70,10 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   // Tracer-style whoosh — cyan streaks stamped along the blink path
   speedLines.surge(from, to, 0x55CCFF);
   viewModel?.kick(0.35);
-  // Cyan flash at both ends — departure pop + arrival streak along the path
-  _blinkDir.subVectors(to, from).normalize();
+  // Cyan flash at both ends — departure pop + arrival streak along the path.
+  // A blocked warp can land on its origin: normalize of a zero vector is NaN.
+  _blinkDir.subVectors(to, from);
+  if (_blinkDir.lengthSq() > 1e-6) {_blinkDir.normalize();} else {_blinkDir.set(0, 1, 0);}
   effects.spawnBounce(from, _blinkDir);
   effects.spawnBounce(to, _blinkDir);
   sfx.blink();

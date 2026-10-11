@@ -185,7 +185,13 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
           c.netAcc -= SIM_TICK_DT * (r.sk - (appliedSkips.get(r.id) ?? 0));
           appliedSkips.set(r.id, r.sk);
         }
-        c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
+        // Same wire law as netCrawlEvt: a NaN roster row would write
+        // straight into the sim — the per-evt gate never sees this path.
+        if (finite(r.position) && finite(r.velocity) && (!r.tp || finite(r.tp))) {
+          c.applyNetEdge({ position: r.position, velocity: r.velocity, kind: 'retarget', targetId: r.targetId, tp: r.tp });
+        } else {
+          deps.logger.warn(`crawler #${r.id} roster edge dropped: non-finite vector`);
+        }
         // A retarget edge carries no state label — a replica that missed a
         // windup/pounce/blink edge replays a different state machine and
         // strands on it permanently (the soak's persistent state desyncs).

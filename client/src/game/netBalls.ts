@@ -460,6 +460,10 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
         netBallSpawn(r);
         continue;
       }
+      // Same wire law as netBallSegment: a NaN roster row would write
+      // straight into the ball's replay state — the segment gate never
+      // sees this path.
+      if (!finiteMsg(r)) {logger.warn(`ball #${r.id} roster edge dropped: non-finite vector`); continue;}
       b.applyNetSegment({
         px: r.position.x, py: r.position.y, pz: r.position.z,
         vx: r.velocity.x, vy: r.velocity.y, vz: r.velocity.z,
