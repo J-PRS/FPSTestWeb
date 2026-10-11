@@ -64,7 +64,7 @@ export const MOVEMENT_CONFIG = {
 export const ENERGY = {
   max: 60,
   jetDrain: 15,      // per second while thrusting
-  jetCharge: 8,      // per second while grounded-and-idle
+  jetCharge: 8,      // per second off the jet — held skill channels suppress it
   // T2 sputter lock: bottoming the tank refuses jets for this long even
   // after regen trickles fuel back — kills tap-hopping on fumes.
   jetLockout: 0.5,
@@ -76,7 +76,7 @@ export const ENERGY = {
   mendCost: 20, mendDrain: 15,
   // One-shot skills (blink/dash/slam/warp/bounce) ante the whole burst —
   // priced against the jet tank so a trick always trades mobility.
-  skillCost: 50,
+  skillCost: 30,
   shieldDmgPerEnergy: 10, // absorbed damage burns this much of a point
 } as const;
 
@@ -195,7 +195,17 @@ export class MoveSim {
   bodiesNear?: (x: number, z: number) => Iterable<BodyCapsule>;
   selfId = '';
 
-  setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
+  setInput(input: Partial<MoveInput>): void {
+    // Claimed input is the trust boundary — the server replays these on a
+    // shadow sim, so a doctored magnitude (forward=999) or a NaN bitfield
+    // is a speedhack/poison lane, not just a bad local frame.
+    if (input.forward !== undefined) this.input.forward = Number.isFinite(input.forward) ? Math.max(-1, Math.min(1, input.forward)) : 0;
+    if (input.right !== undefined) this.input.right = Number.isFinite(input.right) ? Math.max(-1, Math.min(1, input.right)) : 0;
+    if (input.jumpPressed !== undefined) this.input.jumpPressed = !!input.jumpPressed;
+    if (input.jumpHeld !== undefined) this.input.jumpHeld = !!input.jumpHeld;
+    if (input.skiHeld !== undefined) this.input.skiHeld = !!input.skiHeld;
+    if (input.jetHeld !== undefined) this.input.jetHeld = !!input.jetHeld;
+  }
 
   setState(s: MoveState): void {
     this.state.pos.x = s.pos.x; this.state.pos.y = s.pos.y; this.state.pos.z = s.pos.z;
