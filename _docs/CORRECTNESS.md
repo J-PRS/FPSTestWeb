@@ -345,6 +345,15 @@ violation instead of a symptom hunt.
   pinned (deliberate Tab never hijacked); `onMatchStart` resets
   lead/milestone filters + killStreak + `flagHomeHush` so the new
   round can't inherit stale announcements.
+- **Kill wire lane (verified sealed):** `onPlayerKill` derives
+  kill/death counts from the server edge only (no client-side
+  double-count path); the victim's roster record flags dead
+  immediately so per-frame sim can't resurrect; streaks reset on
+  own death + match boundary + announce only on the crossing
+  kill; gib impulse pulls from the finite-gated ExplosionTracker
+  with `|| 1` length-division and `?? 10` force fallback;
+  far-victim gibs take the instanced path (~120m budget) so a
+  death spike can't hitch the frame.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
