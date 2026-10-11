@@ -303,6 +303,14 @@ violation instead of a symptom hunt.
   (serverMs is per-room — stale anchors froze remotes mid-rubber-
   band), and reconciles pickups/deployables/flags/map snapshot
   rather than leaving old-room residue.
+- **Deployable roster reconcile (verified sealed):**
+  `reconcileDeployables` evicts stale id-collision replicas (deploy
+  ids are per-room counters — a previous room's replica can sit on a
+  reused id), reaps ids the snapshot doesn't name, adopts
+  pre-record-window spawns into the demo ledger, applies roster hp
+  to own plants without double-rendering them, and culls the own
+  lane the remote reconcile can't see. `remoteSpawn` drops
+  non-finite wire positions at the write site.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
