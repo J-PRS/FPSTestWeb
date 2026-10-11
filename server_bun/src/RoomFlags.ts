@@ -439,7 +439,7 @@ export class RoomFlags {
         // Settled spot is a seed like spawn/teleport — resting under the
         // drawn surface names it instead of a floating/buried flag.
         const dg = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z));
-        inv('flag-above-ground', f.pos.y >= dg - 0.5, { team: f.team, y: +f.pos.y.toFixed(1), ground: +dg.toFixed(1) });
+        inv('flag-above-ground', !Number.isFinite(dg) || f.pos.y >= dg - 0.5, { team: f.team, y: +f.pos.y.toFixed(1), ground: +dg.toFixed(1) });
       }
     }
     this.dirty = true; // flight is stream-worthy — see the doc comment

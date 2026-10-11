@@ -246,8 +246,8 @@ export class MoveClaims {
     // seed a bad spawn is — counted, never refused (the client already
     // moved; refusing recreates the warp as impossibly-fast reports).
     const tg = this.h.playerManager.groundAt?.(msg.position.x, msg.position.z);
-    inv('teleport-above-ground', tg === undefined || msg.position.y >= tg - 0.5,
-      { id: playerId, y: +msg.position.y.toFixed(1), ground: +tg!.toFixed(1) });
+    inv('teleport-above-ground', tg === undefined || !Number.isFinite(tg) || msg.position.y >= tg - 0.5,
+      { id: playerId, y: +msg.position.y.toFixed(1), ground: tg !== undefined && Number.isFinite(tg) ? +tg.toFixed(1) : 'n/a' });
     player.lastPosCheckPos = { ...msg.position };
     player.lastPosCheckTime = wallNow();
     player.consecutiveRejects = 0;

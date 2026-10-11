@@ -142,8 +142,10 @@ export class RoomPickups {
           this.settleReachable(p);
           // The rest spot is what every client draws — under the drawn
           // surface is the nugget-burial class, not a cosmetic offset.
-          inv('pickup-below-ground', !this.room.field ||
-            p.pos.y >= Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) - 0.5,
+          const dg = this.room.field
+            ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z))
+            : NaN;
+          inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
             { id: p.id, y: +p.pos.y.toFixed(1) });
           // Resting spot is the new truth — one edge resyncs every client.
           this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: { ...p.pos }, kind: p.kind }) as ServerMessage);

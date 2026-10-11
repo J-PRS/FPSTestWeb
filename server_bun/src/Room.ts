@@ -180,9 +180,9 @@ export class Room {
       // phantom-bury every banded contact (a grounded heavy legally rides
       // its eye ~0.5 under the floor in the snap window). Buried means
       // the EYE itself is below the surface.
-      if (p.isBot) inv('bot-below-ground', p.position.y >= terrain - 0.5,
-        { id: p.id, y: +p.position.y.toFixed(1), eye, terrain: +terrain.toFixed(1), dbg: this.moveSim.unburyDebug(p.id) });
-      if (p.position.y >= terrain - 0.5) continue;
+      if (p.isBot) inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
+        { id: p.id, y: +p.position.y.toFixed(1), eye, terrain: Number.isFinite(terrain) ? +terrain.toFixed(1) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });
+      if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) continue;
       // First rescues carry the autopsy at debug level — the 'unbury'
       // health counter and the bot-scoped inv above are the loud signal;
       // a warn per rescue reads as jank in soak asserts while routine
