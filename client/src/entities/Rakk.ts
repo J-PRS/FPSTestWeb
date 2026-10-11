@@ -107,7 +107,8 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     // Uber = "elder": a wingspan you can't miss — and its claw hit TALONS
     // you upward instead of just shredding (wired in entities).
     this.uber = uber;
-    this.health = this.maxHealth = uber ? RAKK_HEALTH * 3 : RAKK_HEALTH;
+    this.maxHealth = uber ? RAKK_HEALTH * 3 : RAKK_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? RAKK_RADIUS * 1.9 : RAKK_RADIUS;
     if (uber) {this.color.set(0x2A_1A_3A);} // near-black elder hide
     this.pos = pos.clone();

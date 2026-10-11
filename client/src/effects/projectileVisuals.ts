@@ -36,7 +36,8 @@ function getConeAlphaTex(): THREE.Texture {
   if (_coneAlphaTex) {return _coneAlphaTex;}
   const S = 128;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
+  cv.height = S;
+  cv.width = cv.height;
   const ctx = cv.getContext('2d')!;
   const img = ctx.createImageData(S, S);
   for (let y = 0; y < S; y += 1) {
@@ -54,7 +55,9 @@ function getConeAlphaTex(): THREE.Texture {
       // alphaMap samples the GREEN channel — the pattern must live in
       // RGB, not the image's own alpha byte.
       const i = (y * S + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = a * 255;
+      img.data[i + 2] = a * 255;
+      img.data[i + 1] = img.data[i + 2];
+      img.data[i] = img.data[i + 1];
       img.data[i + 3] = 255;
     }
   }

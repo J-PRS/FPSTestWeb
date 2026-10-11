@@ -30,7 +30,9 @@ export function makePuffTexture(size = 256): THREE.DataTexture {
       const detail = 0.5 + 0.8 * _vn(x / size * 7 + 3.1, y / size * 7 + 9.7);
       const alpha = Math.round(Math.min(Math.max(a * edge * detail, 0), 1) * 255);
       const j = (y * size + x) * 4;
-      data[j] = data[j + 1] = data[j + 2] = 255;
+      data[j + 2] = 255;
+      data[j + 1] = data[j + 2];
+      data[j] = data[j + 1];
       data[j + 3] = alpha;
     }
   }

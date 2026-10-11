@@ -337,7 +337,11 @@ this.metrics.ticks += 1;
       };
       logger.debug('Tick bandwidth', { ...this.lastBw, players: playerCount });
       m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
-        m.recordsSent = m.recordsTierSkipped = m.bytesSent = m.tickFramesDropped = m.tickErrors = 0;
+        m.tickErrors = 0;
+        m.tickFramesDropped = m.tickErrors;
+        m.bytesSent = m.tickFramesDropped;
+        m.recordsTierSkipped = m.bytesSent;
+        m.recordsSent = m.recordsTierSkipped;
       m.windowStart = now0;
     }
   }

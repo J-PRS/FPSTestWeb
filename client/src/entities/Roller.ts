@@ -101,7 +101,8 @@ export class Roller implements Targetable, SwarmSlotOwner {
     // Uber = "avalanche": double the boulder, triple the tank, and mass
     // enough that blasts cannot stop it — you dodge it or you die.
     this.uber = uber;
-    this.health = this.maxHealth = uber ? ROLLER_HEALTH * 3 : ROLLER_HEALTH;
+    this.maxHealth = uber ? ROLLER_HEALTH * 3 : ROLLER_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? ROLLER_RADIUS * 2 : ROLLER_RADIUS;
     if (uber) {this.color.set(0x4A_3A_52);} // dark basalt — reads heavy
     this.pos = pos.clone();

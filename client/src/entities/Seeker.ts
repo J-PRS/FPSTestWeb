@@ -75,7 +75,8 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     // locks onto pos + vel × flight time, so holding a strafe line into
     // the dart gets you stung. Juke during the telegraph.
     this.uber = uber;
-    this.health = this.maxHealth = uber ? SEEKER_HEALTH * 3 : SEEKER_HEALTH;
+    this.maxHealth = uber ? SEEKER_HEALTH * 3 : SEEKER_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? SEEKER_RADIUS * 1.8 : SEEKER_RADIUS;
     if (uber) {this.color.set(0x9A_2A_2A);} // blood lancer
     this.pos = pos.clone();

@@ -137,7 +137,8 @@ export class Snake implements Targetable, SwarmSlotOwner {
   constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;
+    this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? SNAKE_RADIUS * 2.4 : SNAKE_RADIUS;
     this.scale = uber ? 3 : 1;
     if (uber) {this.color.set(0x8A_6A_2A);} // bronze king serpent

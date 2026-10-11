@@ -172,7 +172,8 @@ export class Turretter implements Targetable {
     // Uber = "siege engine": double tank, bigger chassis, and a THREE-BOLT
     // volley — a fanned spread that punishes a straight approach.
     this.uber = uber;
-    this.health = this.maxHealth = uber ? TURRET_HEALTH * 2 : TURRET_HEALTH;
+    this.maxHealth = uber ? TURRET_HEALTH * 2 : TURRET_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? TURRET_RADIUS * 1.4 : TURRET_RADIUS;
     if (uber) {this.color.set(0x5A_3A_2A);} // rusted siege bronze
 

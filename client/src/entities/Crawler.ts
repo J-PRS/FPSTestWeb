@@ -104,7 +104,8 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     void scene; // swarm renders through the shared scene — kept in signature
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? CRAWLER_HEALTH * 4 : CRAWLER_HEALTH;
+    this.maxHealth = uber ? CRAWLER_HEALTH * 4 : CRAWLER_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? CRAWLER_RADIUS * 2.2 : CRAWLER_RADIUS;
     this.scale = uber ? 1.3 : 0.5;
     if (uber) {this.color.set(0x5A_1A_3A);} // brood-purple — the queen reads different

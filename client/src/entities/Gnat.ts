@@ -146,7 +146,8 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     // Uber = the cloud's queen: three times the body, actually tanky, and
     // her darts carry a real sting. She shares the cloud — the swarm orbits HER.
     this.uber = uber;
-    this.health = this.maxHealth = uber ? GNAT_HEALTH * 4 : GNAT_HEALTH;
+    this.maxHealth = uber ? GNAT_HEALTH * 4 : GNAT_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? GNAT_RADIUS * 2.4 : GNAT_RADIUS;
     this.scale = uber ? 0.8 : 0.3;
     this.scoreless = !uber; // a queen kill counts

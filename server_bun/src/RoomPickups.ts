@@ -139,7 +139,9 @@ export class RoomPickups {
         if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
         p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
         if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
-          p.vel.x = p.vel.y = p.vel.z = 0;
+          p.vel.z = 0;
+          p.vel.y = p.vel.z;
+          p.vel.x = p.vel.y;
           this.settleReachable(p);
           // The rest spot is what every client draws — under the drawn
           // surface is the nugget-burial class, not a cosmetic offset.

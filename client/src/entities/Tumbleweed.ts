@@ -173,7 +173,8 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
     // Megaweed: ~2x the ball, tankier, ruddier (an old gnarled root-ball),
     // and worth 3 nuggets — the desert's slot machine
     this.radius = WEED_RADIUS * (mega ? 2 : 1);
-    this.health = this.maxHealth = WEED_HEALTH * (mega ? 6 : 1);
+    this.maxHealth = WEED_HEALTH * (mega ? 6 : 1);
+    this.health = this.maxHealth;
     this.scale = mega ? 2.5 : 0.6; // scale drives nugget count on death
     this.color = mega
       ? new THREE.Color(0.42 + Math.random() * 0.1, 0.28 + Math.random() * 0.08, 0.14)

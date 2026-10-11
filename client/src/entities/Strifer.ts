@@ -164,7 +164,8 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     void scene;
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? STRIFER_HEALTH * 3 : STRIFER_HEALTH;
+    this.maxHealth = uber ? STRIFER_HEALTH * 3 : STRIFER_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? STRIFER_RADIUS * 1.8 : STRIFER_RADIUS;
     if (uber) {this.color.set(0x3A_2A_4A);}
     this.pos = pos.clone();

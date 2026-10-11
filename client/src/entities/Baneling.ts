@@ -130,7 +130,8 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     this.id = nextTargetId();
     // Uber = "goliath": a wobbling bomb-sack — bigger pop, harder to pop.
     this.uber = uber;
-    this.health = this.maxHealth = uber ? BANELING_HEALTH * 4 : BANELING_HEALTH;
+    this.maxHealth = uber ? BANELING_HEALTH * 4 : BANELING_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? BANELING_RADIUS * 1.7 : BANELING_RADIUS;
     this.blastRadius = uber ? BANELING_BLAST_RADIUS * 1.7 : BANELING_BLAST_RADIUS;
     if (uber) {this.color.set(0x8A_6A_1A);} // overripe amber — visibly worse

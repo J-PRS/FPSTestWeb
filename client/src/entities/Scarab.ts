@@ -143,7 +143,8 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     void scene;
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? SCARAB_HEALTH * 3 : SCARAB_HEALTH;
+    this.maxHealth = uber ? SCARAB_HEALTH * 3 : SCARAB_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? SCARAB_RADIUS * 1.7 : SCARAB_RADIUS;
     this.scale = uber ? 1.1 : 0.45;
     this.biteDamage = uber ? 12 : 0; // entities reads these — normal uses the shared consts

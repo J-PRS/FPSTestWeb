@@ -127,7 +127,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
     void scene;
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? GRUB_HEALTH * 4 : GRUB_HEALTH;
+    this.maxHealth = uber ? GRUB_HEALTH * 4 : GRUB_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? GRUB_RADIUS * 2.2 : GRUB_RADIUS;
     this.scale = uber ? 3 : 0.75; // scale 3 → 3 nuggets — the fat piñata pays out
     if (uber) {this.color.set(0xD8_A8_60);} // bloated amber — reads pregnant

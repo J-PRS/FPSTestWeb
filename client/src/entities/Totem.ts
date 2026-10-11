@@ -98,7 +98,8 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.netId = b.id;
     bindNetTotem(this, b, makeSimTotem);
     this.pos.copy(this.sim ? new THREE.Vector3(this.sim.x, this.sim.y, this.sim.z) : pos);
-    this.health = this.maxHealth = this.sim?.health ?? this.health;
+    this.maxHealth = this.sim?.health ?? this.health;
+    this.health = this.maxHealth;
     this.state = this.sim?.state === 'blinkOut' ? 'blinkOut' : 'aim';
   }
 
@@ -142,7 +143,8 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.terrain = terrain;
     this.id = nextTargetId();
     this.uber = uber;
-    this.health = this.maxHealth = uber ? UBER_TOTEM_HEALTH : TOTEM_HEALTH;
+    this.maxHealth = uber ? UBER_TOTEM_HEALTH : TOTEM_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? UBER_TOTEM_RADIUS : TOTEM_RADIUS;
     this.hitRadius = this.radius * 0.68;
     this.capsuleTop = 5.2 * this.radius; // visual top: cap tip at 5.2r

@@ -122,7 +122,8 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     // Uber = "broodmother": a bigger, meaner sac that sows banelings twice
     // as fast — and drops them in pairs (wired in entities).
     this.uber = uber;
-    this.health = this.maxHealth = uber ? OVERLORD_HEALTH * 2.5 : OVERLORD_HEALTH;
+    this.maxHealth = uber ? OVERLORD_HEALTH * 2.5 : OVERLORD_HEALTH;
+    this.health = this.maxHealth;
     this.radius = uber ? OVERLORD_RADIUS * 1.4 : OVERLORD_RADIUS;
     this.dropInterval = uber ? OVERLORD_DROP_INTERVAL * 0.55 : OVERLORD_DROP_INTERVAL;
     this.dropTimer = this.dropInterval * 0.5;

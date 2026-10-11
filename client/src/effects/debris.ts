@@ -189,7 +189,8 @@ this.paintBudget -= 1;
       mesh.frustumCulled = false; // shards scatter; unit-geo bounds don't cover instances
       markProbe(mesh, { kind: 'fxMesh', label: `debrisInst:prim${prim}` });
       mesh.count = 0;
-      b = this.insts[prim] = { mesh, free: [] };
+      this.insts[prim] = { mesh, free: [] };
+      b = this.insts[prim];
       this.scene.add(mesh);
     }
     const slot = b.free.length > 0 ? b.free.pop()! : b.mesh.count++;

@@ -441,7 +441,9 @@ export class RoomFlags {
     }
     const sp2 = f.vel.x * f.vel.x + f.vel.y * f.vel.y + f.vel.z * f.vel.z;
     if (sp2 < FLAG_SETTLE * FLAG_SETTLE && f.pos.y <= gy + 0.05) {
-      f.vel.x = f.vel.y = f.vel.z = 0;
+      f.vel.z = 0;
+      f.vel.y = f.vel.z;
+      f.vel.x = f.vel.y;
       f.airborneBy = null; // settled — anyone, the thrower included, may touch
       if (field) {
         hmSettleWalkable(field, f.pos, FLAG_REST_LIFT);

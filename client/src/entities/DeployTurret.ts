@@ -270,7 +270,8 @@ export class DeployTurret {
 
   /** No target: idle scanning sweep, pitch drifting back to level. */
   private scan(dt: number): void {
-    this.head.rotation.y = (this.idleSpin += dt * 0.6);
+    this.idleSpin += dt * 0.6;
+    this.head.rotation.y = this.idleSpin;
     this.head.rotation.x *= 1 - Math.min(1, dt * 4);
   }
 

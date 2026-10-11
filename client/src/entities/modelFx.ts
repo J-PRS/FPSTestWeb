@@ -140,7 +140,8 @@ export class ModelFx {
   private env(field: 'swapT' | 'throwT' | 'punchT' | 'landT', dt: number, up: number, hold: number, down: number): number {
     let t = this[field];
     if (t < 0) {return 0;}
-    this[field] = t += dt;
+    t += dt;
+    this[field] = t;
     const e = t < up ? t / up : t < up + hold ? 1 : Math.max(0, 1 - (t - up - hold) / down);
     if (e <= 0 && t > up + hold) {this[field] = -1;}
     return e;

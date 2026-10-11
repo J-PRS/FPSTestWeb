@@ -447,7 +447,9 @@ export class MoveSim {
         const f = MOVEMENT_CONFIG.groundFriction * dt / speed;
         s.vel.x -= s.vel.x * f; s.vel.y -= s.vel.y * f; s.vel.z -= s.vel.z * f;
       } else {
-        s.vel.x = s.vel.y = s.vel.z = 0;
+        s.vel.z = 0;
+        s.vel.y = s.vel.z;
+        s.vel.x = s.vel.y;
       }
     }
 
