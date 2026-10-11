@@ -195,14 +195,16 @@ export interface LoopState {
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
 
 // Demo bookkeeping: update recorder/player, freeze input during playback.
-// Returns whether demo playback is currently paused.
+// Returns whether demo playback is currently paused. Only unfreezes what
+// tickDemo froze — the boot warmup gate holds the lock independently.
+let demoOwnsFreeze = false;
 function tickDemo(deps: GameLoopDeps, dt: number): boolean {
   const demoManager = deps.lazyDemoManager();
   const player = deps.lazyPlayer();
   if (demoManager) {demoManager.update(dt);} // zero-overhead when idle
   const shouldFreeze = demoManager?.isPlaying ?? false;
-  if (shouldFreeze && !player.inputFrozen) {player.freezeInput();}
-  else if (!shouldFreeze && player.inputFrozen) {player.unfreezeInput();}
+  if (shouldFreeze && !player.inputFrozen) {player.freezeInput(); demoOwnsFreeze = true;}
+  else if (!shouldFreeze && demoOwnsFreeze) {player.unfreezeInput(); demoOwnsFreeze = false;}
   return demoManager?.isPaused ?? false;
 }
 
@@ -469,8 +471,13 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   hud.setNuggets(player.beltCharges);
   // The run clock only ticks offline — show it only then, else it's a
   // frozen 00:00 under the FPS counter in every match.
-  hud.setTimerVisible(!(demoManager?.isPlaying ?? false) && !networkManager.isConnected());
+  hud.setTimerVisible(!(demoManager?.isPlaying ?? false) && !networkManager.isConnected() && !CLASSIC_MODE);
   hud.setTimer(deps.waveDirector().elapsed);
+  // Classic's Unity-style top-center readout owns the clock — the
+  // corner timer hides so they don't double up.
+  hud.setClassicScore(CLASSIC_MODE
+    ? { score: player.score, kills: player.kills, seconds: deps.waveDirector().elapsed }
+    : null);
   hud.setMatchStatus(
     deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
     deps.world.flagStates,

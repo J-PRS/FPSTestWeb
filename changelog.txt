@@ -1,3 +1,10 @@
+2026-10-11 - boot: offline spawn also waits for stable FPS.
+The earlier gate held only the match kick-off — the player himself
+was placed and controllable through the compile hitches. Offline
+boots now freeze input from frame one until whenStable() releases
+him; tickDemo only unfreezes what it froze so the two locks don't
+trample each other.
+
 2026-10-11 - boot: offline modes wait for stable FPS before starting.
 Solo/classic boots now hold the mode kick-off — player spawn anchor,
 deploys, starting balls, bot roster, demo recording — on the same

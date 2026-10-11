@@ -351,6 +351,10 @@ async function init(): Promise<void> {
   // after it (the terrain-swap machinery already runs mid-game).
   gameLoop = makeGameLoop();
   profiler.markTime('initComplete');
+  // Offline boots hold the player out of play during warmup — input
+  // frozen from first frame until whenStable() releases him in
+  // connectPhase (online paths gate on the session veil instead).
+  if (classicMode || (!urlParams.room && !urlParams.p2p)) {player.freezeInput();}
   gameLoop.start();
 
   const connP = connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
@@ -469,6 +473,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // deploys, balls and demo recording all land after warmup instead of
   // mid-compile-hitch (the online path gates on the session veil).
   if (!networkManager.isConnected()) {await gameLoop.whenStable();}
+  if (classicMode || soloMode) {player.unfreezeInput();}
   // Spec maps spawn you at an authored anchor (team spawn > generic
   // spawn > own base) — origin on a T2 port can be kilometers from play.
   if (soloMode && soloSpec) {
