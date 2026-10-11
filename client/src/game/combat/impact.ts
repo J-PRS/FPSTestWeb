@@ -265,7 +265,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // local) but never send the claim — the authority's shell arrives at
   // the same contact and declares it via broadcasts.
   const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authorityShells())
-    ? () => {}
+    ? () => { return; }
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
       position: pos, weaponType, excludeTargetId: targetId,

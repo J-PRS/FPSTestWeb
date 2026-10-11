@@ -1091,7 +1091,7 @@ export class Room {
     for (const p of [...this.players.getAllPlayers().values()]) {
       if (excess <= 0) {break;}
       if (!p.isBot) {continue;}
-      this.removePlayerCompletely(p.id, 'adminReload', () => {});
+      this.removePlayerCompletely(p.id, 'adminReload', () => { return; });
 excess -= 1;
     }
   }

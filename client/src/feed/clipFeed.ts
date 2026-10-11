@@ -311,7 +311,7 @@ clipGen += 1;
     if (!e?.filename) {return;}
     navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
       .then(() => { btnShare.textContent = '✓'; setTimeout(() => { btnShare.textContent = '⤴'; }, 1200); })
-      .catch(() => {});
+      .catch(() => { return; });
   });
   const toggleClear = () => {
     clearScreen = !clearScreen;

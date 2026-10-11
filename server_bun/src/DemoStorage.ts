@@ -234,7 +234,7 @@ added += 1;
     if (this.index.length > CONFIG.demoMaxClips) {
       const removed = this.index.splice(CONFIG.demoMaxClips);
       const archiveDir = join(this.demosDir, ARCHIVE_DIR);
-      await mkdir(archiveDir, { recursive: true }).catch(() => {});
+      await mkdir(archiveDir, { recursive: true }).catch(() => { return; });
       for (const r of removed) {
         try {
           const src = join(this.demosDir, r.filename);

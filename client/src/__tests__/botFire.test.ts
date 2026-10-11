@@ -61,9 +61,9 @@ function ctx(online = false): Ctx {
     world: () => ({ projectiles, remotePlayers: remotePlayers as Map<string, never> }),
     targets: [],
     online: () => online,
-    logger: { debug: () => {} },
+    logger: { debug: () => { return; } },
     damageCreature: (id, dmg, attackerId) => { c.creatures.push({ id, dmg, attacker: attackerId }); return false; },
-    creditKill: () => {},
+    creditKill: () => { return; },
     botKilled: (killerId, _b, weapon) => { c.kills.push({ killer: killerId, weapon }); },
     hurtLocal: (dmg, _fp, src) => { c.hurtLocal.push({ dmg, src }); },
   };

@@ -10,17 +10,17 @@ import crossfireRec from './fixtures/crossfire.rec?raw';
 
 import { makeDeps, feed, feedBin } from './netHarness.js';
 import { PROTOCOL_VERSION, type ServerMessage } from '../../../shared/protocol.js';
-vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
+vi.mock('../core/sfx.js', () => ({ at: () => { return; }, shotAt: () => { return; }, init: () => { return; }, hitMarker: () => { return; }, playerHurt: () => { return; }, shieldHit: () => { return; }, killConfirm: () => { return; }, flagCue: () => { return; }, matchHorn: () => { return; } }));
 vi.mock('../entities/PlayerModel.js', () => ({
   // RemotePlayer's GLTF model can't load headless — permissive proxy so any
   // visual method is a no-op while lifecycle code (RemoteSet) runs for real.
   PlayerModel: function () {
     return new Proxy({ load: () => Promise.resolve() }, {
-      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => {}),
+      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => { return; }),
     });
   },
 }));
-globalThis.fetch = () => new Promise<Response>(() => {});
+globalThis.fetch = () => new Promise<Response>(() => { return; });
 
 
 // Captures are stamped with whatever protocol the recorder saw —

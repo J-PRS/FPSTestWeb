@@ -29,34 +29,34 @@ export function makeDeps() {
     yaw: 0, pitch: 0, onGround: true,
     health: 100, armor: 0, isDead: false, isShielded: false,
     buffUntil: { regen: 0, dd: 0 },
-    absorbShieldDamage() {}, applyPull() {}, applyKnockback() {},
-    heal() {}, grantJetBoost() {}, syncMovement() {}, markTeleport() {},
+    absorbShieldDamage() { return; }, applyPull() { return; }, applyKnockback() { return; },
+    heal() { return; }, grantJetBoost() { return; }, syncMovement() { return; }, markTeleport() { return; },
     // Correction render-ease seam — a spy so tests can see the ease fired
     // (and so a missing wiring throws instead of being swallowed).
     noteRenderSnap(jump: THREE.Vector3) { calls.renderSnap.push(jump.length()); },
     movement: {
-      setState() {}, setInput() {}, update() {}, setStructures() {},
+      setState() { return; }, setInput() { return; }, update() { return; }, setStructures() { return; },
       getState: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
     },
   };
   const deps: NetDeps = {
     lazyNetworkManager: () => nm,
     lazyScene: () => scene,
-    lazyTerrain: () => ({ getHeight: () => 0, reloadHeightmap() {} }) as never,
+    lazyTerrain: () => ({ getHeight: () => 0, reloadHeightmap() { return; } }) as never,
     lazyPlayer: () => player as never,
-    lazyEffects: () => ({ spawnJumpDust() {}, spawnJetpack() {}, spawnBeam() {} }) as never,
+    lazyEffects: () => ({ spawnJumpDust() { return; }, spawnJetpack() { return; }, spawnBeam() { return; } }) as never,
     lazyHud: () => new Proxy({}, { get: (_t, k) => (a?: unknown) => { calls.hud.push(`${String(k)}`); return a; } }) as never,
-    lazyHealthBarSystem: () => new Proxy({}, { get: () => () => {} }) as never,
+    lazyHealthBarSystem: () => new Proxy({}, { get: () => () => { return; } }) as never,
     fragMessages: { show: (m: string) => calls.frag.push(m) } as never,
     explosionTracker: new ExplosionTracker(),
     // dispatch() swallows handler throws into a warn — in tests a thrown
     // handler is always a bug (partial state applied), so fail loudly.
     logger: {
-      debug() {}, info() {}, error() {},
+      debug() { return; }, info() { return; }, error() { return; },
       warn(m: string) { if (m.startsWith('Handler threw')) {throw new Error(m);} },
     } as never,
     world,
-    setLastSentPos() {},
+    setLastSentPos() { return; },
     entities: () => ({
       netBallSpawn: () => calls.entities.push('ballSpawn'),
       netBallSegment: () => calls.entities.push('ballSegment'),
@@ -71,8 +71,8 @@ export function makeDeps() {
         // reconcileDeployables (gameState roster path) reads these — a
         // stub without them throws mid-handler and half-applies state.
         remoteReplicas: () => new Map(),
-        applyDeployHp: () => {},
-        cullOwn: () => {},
+        applyDeployHp: () => { return; },
+        cullOwn: () => { return; },
       },
     }) as never,
   };

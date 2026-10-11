@@ -3,20 +3,20 @@ import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js'
 
 import { makeDeps, feed } from './netHarness.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
-vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
+vi.mock('../core/sfx.js', () => ({ at: () => { return; }, shotAt: () => { return; }, init: () => { return; }, hitMarker: () => { return; }, playerHurt: () => { return; }, shieldHit: () => { return; }, killConfirm: () => { return; }, flagCue: () => { return; }, matchHorn: () => { return; } }));
 vi.mock('../entities/PlayerModel.js', () => ({
   PlayerModel: function () {
     return new Proxy({ load: () => Promise.resolve() }, {
-      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => {}),
+      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => { return; }),
     });
   },
 }));
-globalThis.fetch = () => new Promise<Response>(() => {});
+globalThis.fetch = () => new Promise<Response>(() => { return; });
 
 
 // Real dispose runs full aura/anim/model teardown — outside this invariant's
 // scope and unavailable in jsdom; stub it.
-vi.spyOn(RemotePlayer.prototype, 'dispose').mockImplementation(() => {});
+vi.spyOn(RemotePlayer.prototype, 'dispose').mockImplementation(() => { return; });
 
 // Client-side roster conformance fuzz: a seeded op stream drives the real
 // dispatch (gameState replaces, playerJoined mints, playerLeft removes,

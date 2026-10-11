@@ -23,7 +23,7 @@ function mulberry(seed: number) {
   };
 }
 
-const log = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const log = { debug: () => { return; }, info: () => { return; }, warn: () => { return; }, error: () => { return; } };
 
 interface ServerP { id: string; x: number; y: number; z: number; health: number; isDead: boolean }
 

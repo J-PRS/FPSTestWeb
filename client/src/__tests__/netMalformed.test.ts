@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
 import { makeDeps, feed, feedBin } from './netHarness.js';
-vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
+vi.mock('../core/sfx.js', () => ({ at: () => { return; }, shotAt: () => { return; }, init: () => { return; }, hitMarker: () => { return; }, playerHurt: () => { return; }, shieldHit: () => { return; }, killConfirm: () => { return; }, flagCue: () => { return; }, matchHorn: () => { return; } }));
 // RemotePlayer's GLTF model fetch can't run headless — visual shell only.
 vi.mock('../entities/PlayerModel.js', () => ({
   PlayerModel: function () {
     return new Proxy({ load: () => Promise.resolve() }, {
-      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => {}),
+      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => { return; }),
     });
   },
 }));
-globalThis.fetch = () => new Promise<Response>(() => {});
+globalThis.fetch = () => new Promise<Response>(() => { return; });
 
 
 // Malformed-payload contract: one bad message must be absorbed — warn +

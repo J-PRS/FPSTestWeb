@@ -98,7 +98,7 @@ export class WtSocketAdapter {
       const { value: stream, done: streamDone } = await reader.read();
       if (streamDone || !stream) {return;}
       if (idx++ === 0) {this.pumpText(stream).catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
-      else {this.pumpBin(stream).catch(() => {});}
+      else {this.pumpBin(stream).catch(() => { return; });}
     }
   }
 
@@ -193,7 +193,7 @@ export class WtSocketAdapter {
         msg.length >= 2 && msg[0] === 0x54 &&
         (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
         msg.byteLength <= WT_MAX_DATAGRAM) {
-      this.session.sendDatagram(msg).catch(() => {});
+      this.session.sendDatagram(msg).catch(() => { return; });
       return msg.byteLength;
     }
     // Stream-2 (caps.binLane opt-in): oversized TICK frames only — raw
@@ -210,8 +210,8 @@ export class WtSocketAdapter {
         msg.byteLength <= 0xFF_FF) {
       const v = new DataView(this.binScratch);
       v.setUint16(0, msg.byteLength);
-      this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => {});
-      this.binWriter.write(msg).catch(() => {});
+      this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => { return; });
+      this.binWriter.write(msg).catch(() => { return; });
       return msg.byteLength;
     }
     if (!this.writer) {return 0;}
@@ -222,7 +222,7 @@ export class WtSocketAdapter {
     const line = typeof msg === 'string' ? msg
       : `{"type":"bin","d":"${Buffer.from(msg).toString('base64')}"}`;
     const bytes = this.encoder.encode(`${line  }\n`);
-    this.writer.write(bytes).catch(() => {});
+    this.writer.write(bytes).catch(() => { return; });
     return bytes.byteLength;
   }
 
@@ -300,7 +300,7 @@ export class WtServer {
   }
 
   async stop(): Promise<void> {
-    await this.server?.close().catch(() => {});
+    await this.server?.close().catch(() => { return; });
     this.server = null;
   }
 }

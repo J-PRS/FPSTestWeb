@@ -23,8 +23,8 @@ if (typeof globalThis.sessionStorage === 'undefined') {
 if (typeof globalThis.window === 'undefined') {
   (globalThis as Record<string, unknown>).window = {
     location: { search: '', href: 'http://localhost/' },
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => { return; },
+    removeEventListener: () => { return; },
     dispatchEvent: () => true,
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
@@ -42,8 +42,8 @@ if (typeof globalThis.document === 'undefined') {
   // Enough of the DOM for module-level listeners/setup in Logger/hud-adjacent
   // modules; tests that exercise real DOM behavior should mount jsdom instead.
   (globalThis as Record<string, unknown>).document = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => { return; },
+    removeEventListener: () => { return; },
     getElementById: () => null,
     querySelector: () => null,
     querySelectorAll: () => [],
@@ -58,12 +58,12 @@ if (typeof globalThis.document === 'undefined') {
         getContext: () => ({
           createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
           getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-          putImageData: () => {},
-          createRadialGradient: () => ({ addColorStop: () => {} }),
-          createLinearGradient: () => ({ addColorStop: () => {} }),
-          fillRect: () => {},
-          clearRect: () => {},
-          drawImage: () => {},
+          putImageData: () => { return; },
+          createRadialGradient: () => ({ addColorStop: () => { return; } }),
+          createLinearGradient: () => ({ addColorStop: () => { return; } }),
+          fillRect: () => { return; },
+          clearRect: () => { return; },
+          drawImage: () => { return; },
         }),
         children: [] as unknown[],
         firstChild: null,
@@ -75,7 +75,7 @@ if (typeof globalThis.document === 'undefined') {
         width: 0,
         height: 0,
         _parent: null as { children: unknown[] } | null,
-        addEventListener: () => {},
+        addEventListener: () => { return; },
         append(...nodes: unknown[]) { for (const n of nodes) { el.children.push(n); if (n && typeof n === 'object') {(n as Record<string, unknown>)._parent = el;} } },
         prepend(n: unknown) { el.children.unshift(n); (n as Record<string, unknown>)._parent = el; },
         appendChild(n: unknown) { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
@@ -88,7 +88,7 @@ if (typeof globalThis.document === 'undefined') {
       return el;
     },
     createTextNode: (s: string) => ({ textContent: s }),
-    body: { append: () => {}, appendChild: () => {}, removeChild: () => {} },
+    body: { append: () => { return; }, appendChild: () => { return; }, removeChild: () => { return; } },
     hidden: false,
   };
 }

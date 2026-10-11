@@ -52,7 +52,7 @@ export class WebTransportGameTransport implements GameTransport {
       this.dr = wt.datagrams.readable.getReader();
       this.pumpReliable(this.rr);
       this.pumpDatagrams(this.dr);
-      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => {});}
+      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => { return; });}
       this.preOpen.length = 0;
       this.config.onConnect?.();
     }).catch((error) => {
@@ -127,7 +127,7 @@ export class WebTransportGameTransport implements GameTransport {
       const stream = await this.wt.createBidirectionalStream();
       // A second stream could have been opened by a later gameState
       // (resync replays the caps) — keep the first, drop the extra.
-      if (this.binStream) { stream.readable.cancel().catch(() => {}); stream.writable.close().catch(() => {}); return; }
+      if (this.binStream) { stream.readable.cancel().catch(() => { return; }); stream.writable.close().catch(() => { return; }); return; }
       this.binStream = stream;
       const rr = stream.readable.getReader();
       let carry = new Uint8Array(0);
@@ -176,7 +176,7 @@ export class WebTransportGameTransport implements GameTransport {
     // the reliable stream (enveloped).
     if (data instanceof Uint8Array && data.byteLength <= WT_MAX_DATAGRAM) {
       if (this.dgWriter) {
-        this.dgWriter.write(data).catch(() => {});
+        this.dgWriter.write(data).catch(() => { return; });
         return true;
       }
     }
@@ -229,7 +229,7 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
     // Failed probes leave wt.closed rejected with no subscriber —
     // unhandledrejection noise. Swallow it here; the winning session's
     // close is handled by WebTransportGameTransport's own subscription.
-    wt.closed.catch(() => {});
+    wt.closed.catch(() => { return; });
     try {
       // The probe IS the session — don't handshake twice.
       await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);

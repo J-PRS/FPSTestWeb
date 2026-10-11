@@ -100,7 +100,7 @@ export class RemoteDeployables {
       if (hp !== undefined) { s.health = hp; s.armor = armor ?? 0; }
       item = {
         kind, candId: `rdep:${id}`, pos: s.pos, dead: false,
-        hurt: () => {},
+        hurt: () => { return; },
         update: (dt) => s.update(dt),
         dispose: () => s.dispose(this.deps.scene),
         v: s, owner, flash: () => s.flash(),
@@ -111,7 +111,7 @@ export class RemoteDeployables {
       if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
       item = {
         kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
-        hurt: () => {}, // server owns its lifetime — deployGone removes it
+        hurt: () => { return; }, // server owns its lifetime — deployGone removes it
         // Remote sentries still scan and aim — pure cosmetics, no firing.
         update: (dt) => t.update(dt, this.enemies()),
         dispose: () => t.dispose(this.deps.scene),
@@ -138,10 +138,10 @@ export class RemoteDeployables {
             const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
             if (op) {group.position.set(op.x, op.y + 2.5, op.z);}
           }
-        : () => {};
+        : () => { return; };
       item = {
         kind, candId: `rdep:${id}`, pos: group.position, dead: false,
-        hurt: () => {}, update, dispose: () => this.deps.scene.remove(group),
+        hurt: () => { return; }, update, dispose: () => this.deps.scene.remove(group),
         v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
         owner,
       };
@@ -160,7 +160,7 @@ export class RemoteDeployables {
     if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
     return {
       kind: 'beacon', candId: `rdep:${_id}`, pos: b.pos, dead: false,
-      hurt: () => {},
+      hurt: () => { return; },
       update: (dt) => b.update(dt),
       dispose: () => b.dispose(this.deps.scene),
       v: b, owner,

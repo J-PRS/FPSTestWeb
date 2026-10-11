@@ -29,7 +29,7 @@ function makeTimer(r: THREE.WebGLRenderer): { begin(): void; end(): void; read()
   const gl = r.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as GlTimerExt | null;
   const queries: WebGLQuery[] = [];
-  if (!ext) {return { begin() {}, end() {}, async read() { return null; } };}
+  if (!ext) {return { begin() { return; }, end() { return; }, async read() { return null; } };}
   return {
     begin() {
       const q = gl.createQuery();

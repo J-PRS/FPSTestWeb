@@ -2,19 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
 import { makeDeps, feed } from './netHarness.js';
-vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
+vi.mock('../core/sfx.js', () => ({ at: () => { return; }, shotAt: () => { return; }, init: () => { return; }, hitMarker: () => { return; }, playerHurt: () => { return; }, shieldHit: () => { return; }, killConfirm: () => { return; }, flagCue: () => { return; }, matchHorn: () => { return; } }));
 // RemotePlayer's GLTF model fetch can't run headless — visual shell only,
 // the lifecycle under test lives in RemoteSet, not the mesh.
 vi.mock('../entities/PlayerModel.js', () => ({
   PlayerModel: function () {
     return new Proxy({ load: () => Promise.resolve() }, {
-      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => {}),
+      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => { return; }),
     });
   },
 }));
 // Lobby is constructed async inside wireNetworkHandlers off a fetch() —
 // keep it pending forever so it never builds DOM in tests.
-globalThis.fetch = () => new Promise<Response>(() => {});
+globalThis.fetch = () => new Promise<Response>(() => { return; });
 
 
 describe('netHarness — real wire messages through real handlers', () => {

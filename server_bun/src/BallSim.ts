@@ -84,7 +84,7 @@ export class BallSim {
               broadcastBinaryReliable?: (data: Uint8Array) => void) {
     this.players = players;
     this.broadcast = broadcast;
-    this.broadcastBinaryReliable = broadcastBinaryReliable ?? (() => {});
+    this.broadcastBinaryReliable = broadcastBinaryReliable ?? (() => { return; });
     this.combat = new BallCombat({
       balls: () => this.balls,
       field: () => this.field,

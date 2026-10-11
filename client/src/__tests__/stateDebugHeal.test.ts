@@ -10,7 +10,7 @@ import type { SnapshotPlayer } from '../../../shared/protocol.js';
 // heal from server truth. Unpinned until now — a regression here degrades
 // to "warns forever" instead of converging.
 
-const log = { debug: () => {}, info: () => {}, warn: vi.fn(), error: () => {} };
+const log = { debug: () => { return; }, info: () => { return; }, warn: vi.fn(), error: () => { return; } };
 
 function mk() {
   const nm = new NetworkManager();

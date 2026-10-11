@@ -23,7 +23,7 @@ const mkHost = (built: number[]): EnvHost => {
     fistGroup: new THREE.Group(),
     shieldShells: [],
     shellColor: 0,
-    setShield: () => {},
+    setShield: () => { return; },
     muzzleZ: () => -0.35,
     muzzleGroupPos: () => false,
   };

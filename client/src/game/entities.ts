@@ -263,7 +263,7 @@ export function createEntities(deps: EntitiesDeps) {
   // else that calls the spawn API (director picks/beats, boot seeds).
   // Wire-owned spawns (netBalls/netCrawlers) never route through here.
   const noSpawn = <A extends unknown[]>(off: boolean, fn: (...a: A) => void): ((...a: A) => void) =>
-    off ? () => {} : fn;
+    off ? () => { return; } : fn;
   const gateC = <A extends unknown[]>(fn: (...a: A) => void) => noSpawn(urlParams.noCreatures, fn);
 
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----

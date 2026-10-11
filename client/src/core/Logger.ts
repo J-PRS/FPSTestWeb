@@ -297,7 +297,7 @@ lastFoldCount += 1;
     const body = `${shipQueue.splice(0, shipQueue.length).join('\n')  }\n`;
     try {
       if (navigator.sendBeacon) {navigator.sendBeacon(url, body);}
-      else {fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});}
+      else {fetch(url, { method: 'POST', body, keepalive: true }).catch(() => { return; });}
     } catch { /* shipping must never break the game */ }
   }
 
@@ -308,7 +308,7 @@ lastFoldCount += 1;
       if (beacon && navigator.sendBeacon) {
         navigator.sendBeacon(shipUrl, body);
       } else {
-        fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
+        fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => { return; });
       }
     } catch { /* shipping must never break the game */ }
   }

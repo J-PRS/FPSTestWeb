@@ -62,7 +62,7 @@ describe('AggroKit candidate roster', () => {
 
   it('deployables join the candidate list as chewable scenery', () => {
     const depCand = { id: 'turret', pos: new THREE.Vector3(9, 0, 0), vel: new THREE.Vector3(), alive: true };
-    const kit = new AggroKit(stubDeps(), [], () => ({ candidates: () => [depCand], hurt: () => {} }));
+    const kit = new AggroKit(stubDeps(), [], () => ({ candidates: () => [depCand], hurt: () => { return; } }));
     expect(kit.candidates().some(c => c.id === 'turret')).toBe(true);
   });
 });

@@ -439,7 +439,7 @@ class PuffEmitter {
   // are velocity-coupled per call, so they must NOT live in the pool key.
   constructor(private spec: PuffSpec) { }
   setSpec(s: PuffSpec): void { this.spec = s; }
-  update(): void { }
+  update(): void { return; }
   initialize(p: PuffParticle): void {
     const s = this.spec, h = s.pos;
     p.position.set(
@@ -534,7 +534,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
 class FnValue implements FunctionValueGenerator {
   type = 'function' as const;
   constructor(private fn: (t: number) => number) { }
-  startGen(): void { }
+  startGen(): void { return; }
   genValue(_m: GeneratorMemory, t: number): number { return this.fn(t); }
   toJSON(): FunctionJSON { return { type: 'function' } as FunctionJSON; }
   clone(): FnValue { return new FnValue(this.fn); }
@@ -566,7 +566,7 @@ class BlastEmitter {
               private dir?: THREE.Vector3, private spread?: number) {
     if (dir) {this.liveDir.copy(dir);}
   }
-  update(): void { }
+  update(): void { return; }
   // Pooled systems keep their constructed emitter — the launch dir is the
   // only per-shot value a forward-cone burst needs swapped on reuse.
   private liveDir = new THREE.Vector3();
@@ -635,7 +635,7 @@ function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean
 class ImplodeEmitter {
   readonly type = 'implode';
   constructor(private rMin: number, private rMax: number, private swirl: number) { }
-  update(): void { }
+  update(): void { return; }
   initialize(p: BlastParticle): void {
     const elv = (Math.random() - 0.5) * Math.PI;
     const ang = Math.random() * Math.PI * 2;
