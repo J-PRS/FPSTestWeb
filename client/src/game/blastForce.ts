@@ -211,6 +211,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
 
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
+    // NaN center/params make every `d >= radius` compare FALSE — every
+    // Forceable resolves the envelope against NaN and eats a NaN dir.
+    if (!Number.isFinite(a.pos.x + a.pos.y + a.pos.z + a.radius + a.force)) {return;}
     const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
     const scales = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType).aoeScales;
     const applyTo = (t: Forceable, f: number) =>
