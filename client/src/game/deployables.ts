@@ -294,7 +294,7 @@ export class Deployables {
     }
 
     const groundY = terrain.getHeight(pod.pos.x, pod.pos.z);
-    if (pod.pos.y - POD_RADIUS <= groundY) {
+    if (Number.isFinite(groundY) && pod.pos.y - POD_RADIUS <= groundY) {
       const n = terrain.getNormal(pod.pos.x, pod.pos.z);
       if (n.y >= DEPLOY_SLOPE) {
         this.attach(pod, n);
@@ -317,7 +317,8 @@ export class Deployables {
     const impact = Math.abs(pod.vel.y);
     pod.landed = true;
     pod.ttl = 0; // consumed — the item lives in this.items now
-    pod.pos.y = terrain.getHeight(pod.pos.x, pod.pos.z);
+    const seat = terrain.getHeight(pod.pos.x, pod.pos.z);
+    if (Number.isFinite(seat)) {pod.pos.y = seat;}
     if (pod.turret) {
       const t = pod.turret;
       t.pos.copy(pod.pos);
@@ -455,6 +456,7 @@ export class Deployables {
   }
 
   remoteSpawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
+    if (!Number.isFinite(spec.pos.x + spec.pos.y + spec.pos.z)) {this.deps.logger.warn(`deployable #${id} dropped: non-finite position`); return;}
     this.remotes.spawn(id, spec);
   }
 
