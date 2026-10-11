@@ -117,6 +117,9 @@ violation instead of a symptom hunt.
 - **Wire-ingest lanes:** player rows (pos+vel+rot+t), balls, crawlers,
   pickups, flags, deployables — all drop non-finite with warns; the
   roster-join vs per-tick asymmetry that leaked `deployHp` is closed.
+  Presence lane sealed too: `onRemoteTeleport`, `onPlayerRespawn`
+  (local + remote), jump/jetpack effects, `onMineBoom`,
+  `onSentryShot`; `net.push` covers the update lane.
 - **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
   finite and coerces booleans — doctored magnitude can't speedhack.
 - **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
@@ -133,7 +136,8 @@ violation instead of a symptom hunt.
   min(clientEma, serverEma+slack) two-channel, input seq-journal cap 8,
   env claims finite/self-only/capped/proximity/cadence/healCredit.
 - **Impulse ingest:** `applyKnockback`/`applyPull` finite-gate wire
-  `force` before it enters `vel`.
+  `force` before it enters `vel`; `ExplosionTracker.addExplosion`
+  drops non-finite pos/force (gib impulse math reads it at kill).
 - **Pools bounded:** `pool-positive` (correct formula yielding ≤0 max
   = a spawn-kill), `energy-bounds`/`local-energy-bounds`,
   `local-health-finite` with NaN recovery, belt-charge economy (every
