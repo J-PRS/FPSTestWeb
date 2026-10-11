@@ -17,6 +17,7 @@ import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBoun
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
+import { inv } from '../../../shared/invariants.js';
 
 const BALL_GRAVITY   = GRAVITY;
 
@@ -353,6 +354,9 @@ export class Ball {
   }
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
+    // NaN damage: clamped Math.max(0, NaN) = NaN, and health <= 0 fails
+    // forever — a poisoned bar or an unkillable ball either way.
+    if (!Number.isFinite(damage)) { inv('ball-damage-finite', false, { damage, net: this.netDriven }); return false; }
     if (this.netDriven) {
       // Server-authoritative: claim the hit (with any knockback the caller
       // already staged), flash locally, and let ballDie decide death.
