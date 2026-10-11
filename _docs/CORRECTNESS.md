@@ -597,6 +597,13 @@ violation instead of a symptom hunt.
   1x while the sim stood on 1.5x. `applyHeightfieldScale()`
   pushes the resident gain/span into the uniforms; called after
   `new Terrain`, demo inject, and demo restore.
+- **Creature targeting lane (verified sealed):** `AggroKit`
+  candidates refresh per frame; dead/cloaked/spectating flags
+  gate `alive`; remotes with no position update aren't valid
+  targets; and `_candMap` prunes any id the roster no longer
+  holds (departed-player ghosts can't draw attacks). Stalk/chase
+  memory lives in a WeakMap — it dies with the entity, and the
+  1.6×-leash give-up bounds how long a stale target holds.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
