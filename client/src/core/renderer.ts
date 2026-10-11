@@ -516,7 +516,24 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // high-performance asks the browser to pick the dGPU on dual-GPU
   // machines — default lets the OS park us on the iGPU.
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  // A lost context is unrecoverable for three — every buffer/texture/
+  // program died with it — so the standard recovery is a reload
+  // (khronos wiki: re-create ALL resources; production three apps
+  // reload). Creation can also fail while the GPU process is mid-reset
+  // or after Chrome blocked the page for prior losses — same cure:
+  // reload gets a fresh page (and a fresh loss budget). The 1s delay
+  // lets a transient GPU churn settle instead of thrash-reloading.
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  } catch (err) {
+    setTimeout(() => location.reload(), 1000);
+    throw err;
+  }
+  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    location.reload();
+  });
 
   const fs = makeFloydEngine(renderer);
   const fsCanvas = fs.canvasEl;
