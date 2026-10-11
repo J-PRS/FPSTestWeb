@@ -233,7 +233,8 @@ export class Nugget {
   // the settle state; magnet is suppressed for a beat so the blast actually
   // throws them instead of being lerped straight back at the player.
   applyKnockback(from: THREE.Vector3, force: number): void {
-    if (this.collected || this.dead) {return;}
+    if (this.collected || this.dead
+      || !Number.isFinite(from.x + from.y + from.z + force)) {return;}
     if (this.serverOwned) {this.serverKnock(from, force, 1); return;}
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force);
@@ -305,7 +306,8 @@ export class Nugget {
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (this.collected || this.dead) {return;}
+    if (this.collected || this.dead
+      || !Number.isFinite(to.x + to.y + to.z + force)) {return;}
     if (this.serverOwned) {this.serverKnock(to, force, -1); return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force);
