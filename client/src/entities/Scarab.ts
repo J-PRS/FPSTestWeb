@@ -256,7 +256,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _dir.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     // Featherweight — blasts LAUNCH fodder, that's the fun
     this.vel.addScaledVector(_dir, force * 1.8);
     this.vel.y += force * 0.6;
@@ -265,7 +265,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.8);
     this.stunTimer = SCARAB_STUN;
   }

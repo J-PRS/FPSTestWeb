@@ -267,13 +267,13 @@ export class Tumbleweed implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _dir.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * (this.mega ? 0.8 : 1.5)); // mega weeds are heavy — blasts shove, not launch
     if (Math.abs(this.vel.y) > 1.5 || force > 10) {this.airborne = true;}
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.5);
     if (Math.abs(this.vel.y) > 1.5 || force > 10) {this.airborne = true;}
   }

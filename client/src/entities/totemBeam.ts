@@ -106,13 +106,13 @@ export function fireBeam(t: Totem, playerPos: THREE.Vector3): void {
 // Anchored — a blast during charge drops the aim. Staggered it can't
 // even flee: the charge fizzles but the totem holds its ground.
 export function blastPush(t: Totem, from: THREE.Vector3, force: number): void {
-  if (t.state !== 'charge' || force <= 8) return;
+  if (t.state !== 'charge' || !Number.isFinite(from.x + from.y + from.z + force) || force <= 8) return;
   if (t.staggerT > 0 || t.blinkCd > 0) { t.state = 'aim'; t.refire = Math.max(t.refire, 0.4); t.beamOn = false; }
   else beginBlinkF(t, from);
 }
 
 export function blastPull(t: Totem, to: THREE.Vector3, force: number): void {
-  if (t.state !== 'charge' || force <= 8) return;
+  if (t.state !== 'charge' || !Number.isFinite(to.x + to.y + to.z + force) || force <= 8) return;
   if (t.staggerT > 0 || t.blinkCd > 0) { t.state = 'aim'; t.refire = Math.max(t.refire, 0.4); t.beamOn = false; }
   else beginBlinkF(t, to);
 }

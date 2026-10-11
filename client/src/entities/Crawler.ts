@@ -285,7 +285,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _dir.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force);
     this.stunTimer = CRAWLER_STUN;
     if (this.state === 'windup') {
@@ -296,7 +296,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force);
     this.stunTimer = CRAWLER_STUN;
   }

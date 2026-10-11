@@ -12,6 +12,9 @@ import type { Ball } from './balls.js';
 // lifecycle + dead fade-out. The Ball class is the host; these take it
 // flat (same pattern as ballRage / ballNet helpers).
 const BALL_GRAVITY = GRAVITY;
+// Spring-in on birth/teleport — the body scales 0→1 with a small
+// overshoot over ~0.2s so appearances read as eruptions, not pop-ins.
+export const SPAWN_POP_S = 0.22;
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -24,7 +27,9 @@ export function writeBallInstance(b: Ball): void {
     const swarm = getSwarm('ball');
     if (!swarm) {return;}
     b._rpos.copy(b.pos).add(b.renderOffset);
-    _m.compose(b._rpos, _q.identity(), _s.setScalar(b.scale));
+    const u = 1 - b.spawnPopT / SPAWN_POP_S - 1; // t-1 for the back-out ease
+    const pop = b.spawnPopT <= 0 ? 1 : 1 + 2.70158 * u * u * u + 1.70158 * u * u;
+    _m.compose(b._rpos, _q.identity(), _s.setScalar(Math.max(0.05, b.scale * pop)));
     swarm.setMatrix(0, b.swarmSlot, _m);
     if (b.flashTimer > 0) {
       swarm.setColor(0, b.swarmSlot, 4, 4, 4);
@@ -71,14 +76,14 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
           // cull lives on the DOT emitter only: gating the whole emit
           // here starved ribbons too, so every ball past 200m flew
           // trail-less ("missing trails").
-          emitting: () => !b.dead && b.renderOffset.lengthSq() <= 400,
-          ribbonEmitting: () => !b.dead && b.vel.lengthSq() > 0.5 && b.renderOffset.lengthSq() <= 400,
+          emitting: (): boolean => !b.dead && b.renderOffset.lengthSq() <= 400,
+          ribbonEmitting: (): boolean => !b.dead && b.vel.lengthSq() > 0.5 && b.renderOffset.lengthSq() <= 400,
           emitOnJump: false,
-          maxStep: (d) => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
+          maxStep: (d): number => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
         },
         [{
-          emitSegment: () => { if (b._trailNear) { b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color); } },
-          teleport: () => { /* dot deposits die fast — suppression is the cut */ },
+          emitSegment: (): void => { if (b._trailNear) { b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color); } },
+          teleport: (): void => { /* dot deposits die fast — suppression is the cut */ },
         }],
         b.ribbons,
       );

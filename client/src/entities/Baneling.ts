@@ -250,13 +250,13 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _dir.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * 1.2); // light sac — blasts punt it
     if (this.vel.y > 2) this.airborne = true;
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.2);
     if (this.vel.y > 2) this.airborne = true;
   }

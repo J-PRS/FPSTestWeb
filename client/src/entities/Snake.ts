@@ -273,14 +273,14 @@ export class Snake implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _dir.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * 1.2); // light body — blasts send it
     this.stunTimer = 0.8;
     this.windup = 0; this.lunge = 0; // a hit breaks the strike
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.2);
     this.stunTimer = 0.8;
   }

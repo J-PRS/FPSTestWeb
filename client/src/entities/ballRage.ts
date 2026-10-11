@@ -16,7 +16,9 @@ import {
   BALL_ENRAGE_TELEGRAPH_H, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_ENABLED,
   BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_MARGIN,
 } from '../core/config.js';
-import { BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME } from '../../../shared/ballSim.js';
+import { BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, BALL_REST_SPEED } from '../../../shared/ballSim.js';
+import { BALL_SLIDE_ENABLED, BALL_SLIDE_VN_MIN } from '../core/config.js';
+import { SPAWN_POP_S } from './ballVisual.js';
 
 const logger = new ChildLogger('Ball');
 
@@ -43,6 +45,7 @@ export interface BallRageHost {
   color: THREE.Color;
   trails: { burst(n: number, pos: THREE.Vector3, r: number, c: THREE.Color): void };
   ribbons: { clear(): void }[];
+  spawnPopT: number;
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
 }
 
@@ -126,6 +129,24 @@ export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos:
   // instead of a normal bounce — velocity is REPLACED (clean readable dash,
   // not a bounce that adds up unpredictably)
   if (b.enraged && tryEnrageLunge(b, playerPos)) {return;}
+
+  // Rest: a truly dead impact parks (stall breaker owns the wake-up).
+  // Mirrors shared/ballSim.ts — the offline path was missing this settle
+  // entirely and micro-skipped forever.
+  const impactSpeed = b.vel.length();
+  if (impactSpeed < BALL_REST_SPEED) {
+    b.vel.set(0, 0, 0);
+    chaseIfFar(b, terrain, playerPos);
+    return;
+  }
+  // Dead contact (PhysX bounceThreshold): a graze too weak to bounce
+  // slides — cancel the inward normal only, tangential speed rides on.
+  // No bounce keyframe: nothing trajectory-changing happened.
+  if (BALL_SLIDE_ENABLED && -dot < BALL_SLIDE_VN_MIN) {
+    b.vel.addScaledVector(n, -dot);
+    chaseIfFar(b, terrain, playerPos);
+    return;
+  }
 
   // Calculate total mechanical energy at bounce: KE + PE
   // KE = 0.5 * v^2, PE = g * (global height above reference)
@@ -244,13 +265,19 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
 
   // Position jumped — cut the ribbons so they don't streak across the teleport
   for (const r of b.ribbons) {r.clear();}
+  // Spring-in + dust puff — the re-arrival should read as an eruption,
+  // not a hard pop into existence.
+  b.spawnPopT = SPAWN_POP_S;
+  b.trails.burst(12, b.pos, b.radius, b.color);
 
-  // Preserve absolute velocity, redirect according to terrain normal at teleport point
-  const currentSpeed = b.vel.length();
-  const n = terrain.getNormal(b.pos.x, b.pos.z);
-  const dot = b.vel.dot(n);
-  b.vel.addScaledVector(n, -2 * dot * BOUNCE);
-  b.vel.normalize().multiplyScalar(currentSpeed);
+  // Preserve speed, send it UP like the spawn toss — a stone-skimmer
+  // teleported in flat just keeps skimming; the leash's job is to put
+  // the ball back in the AIR (midair fodder), not re-lay it on the dirt.
+  const currentSpeed = Math.max(b.vel.length(), 14);
+  const upFrac = 0.75 + Math.random() * 0.2;
+  const a2 = Math.random() * Math.PI * 2;
+  const hsp = currentSpeed * Math.sqrt(1 - upFrac * upFrac);
+  b.vel.set(Math.cos(a2) * hsp, currentSpeed * upFrac, Math.sin(a2) * hsp);
 
   // Reset the tracking baseline only — the ball keeps its absolute speed
   b.lastBounceEnergy = 0;

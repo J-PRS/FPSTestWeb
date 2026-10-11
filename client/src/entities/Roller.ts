@@ -202,14 +202,14 @@ export class Roller implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    if (this.uber) {return;} // avalanche — unstoppable mass, that's the whole point
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    if (this.uber) {return;} // avalanche — unstoppable mass, that's the whole point
     _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * 0.8); // heavy — blasts shove, not launch
     if (this.vel.y > 3) {this.airborne = true;}    // ...unless it's a big one
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (this.uber) {return;}
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (this.uber) {return;}
     _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 0.8);
     if (this.vel.y > 3) {this.airborne = true;}

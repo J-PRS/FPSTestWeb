@@ -208,9 +208,12 @@ const shadowVert = /* glsl */ `
   uniform sampler2D heightMap;
   uniform float hmWorldScale;
   uniform float hScale;
+  uniform float fogNear;
+  uniform float fogFar;
   attribute float aOpacity;
   varying vec2 vUv;
   varying float vOpacity;
+  varying float vFog;
   void main() {
     vUv = uv;
     vOpacity = aOpacity;
@@ -234,16 +237,21 @@ const shadowVert = /* glsl */ `
       ? s00 + (s10 - s00) * f.x + (s01 - s00) * f.y
       : s11 + (s10 - s11) * (1.0 - f.y) + (s01 - s11) * (1.0 - f.x);
     wp.y = max(fieldY, chordY) + 0.08;
+    // ShaderMaterials don't pick up scene.fog — the body overhead dissolves
+    // into fog but its blob stayed crisp, a dark disc spotting enemies
+    // through the fog line. Fade alpha by the same linear factor.
+    vFog = clamp((distance(wp.xyz, cameraPosition) - fogNear) / max(fogFar - fogNear, 1.0), 0.0, 1.0);
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 const shadowFrag = /* glsl */ `
   varying vec2 vUv;
   varying float vOpacity;
+  varying float vFog;
   ${UNGRADE_GLSL}
   void main() {
     float dist = distance(vUv, vec2(0.5));
-    float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
+    float alpha = smoothstep(0.5, 0.2, dist) * vOpacity * (1.0 - vFog);
     gl_FragColor = vec4(ungradeColor(vec3(0.0)), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -256,9 +264,12 @@ export class InstancedBlobShadows {
   private owners: (SwarmSlotOwner | undefined)[];
   private live = 0;
   private terrain: Terrain;
+  private scene: THREE.Scene;
+  private fogU!: Record<string, { value: number }>;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
     this.terrain = terrain;
+    this.scene = scene;
     // Unit(-ish) disc: a low-vert circle under-conforms on slopes — the
     // heightfield displacement only samples at verts, so rim-to-center
     // edges slice through dune faces. A subdivided quad samples often
@@ -280,8 +291,11 @@ export class InstancedBlobShadows {
         heightMap: terrain.heightU.heightMap,
         hmWorldScale: terrain.heightU.hmWorldScale,
         hScale: terrain.heightU.hScale,
+        fogNear: { value: 0 },
+        fogFar: { value: 1e9 },
       },
     });
+    this.fogU = (mat.uniforms as Record<string, { value: number }>);
     this.mesh = new THREE.InstancedMesh(geo, mat, SHADOW_CAPACITY);
     this.mesh.matrixWorldAutoUpdate = false;
     this.mesh.count = 0;
@@ -316,8 +330,15 @@ export class InstancedBlobShadows {
 
   private grow(): void { this.resize(this.owners.length * 2); }
 
-  /** Same idle-shrink contract as SpeciesSwarm — dense slots, lossless. */
+  /** Same idle-shrink contract as SpeciesSwarm — dense slots, lossless.
+   *  Also the per-frame fog sync — the shader needs scene.fog's near/far
+   *  to kill blobs inside the fog wall (ShaderMaterial skips scene.fog). */
   checkShrink(now: number): void {
+    const f = this.scene.fog;
+    if (f instanceof THREE.Fog) {
+      this.fogU['fogNear']!.value = f.near;
+      this.fogU['fogFar']!.value = f.far;
+    }
     const cap = this.capGov.shrinkTarget(this.live, this.owners.length, SHADOW_CAPACITY, now);
     if (cap === null) {return;}
     this.resize(cap);

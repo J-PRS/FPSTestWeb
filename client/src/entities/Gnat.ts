@@ -286,14 +286,14 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _scratch.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _scratch.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_scratch, force * 2.0); // flies away like a fly
     this.stunTimer = GNAT_STUN;
     if (this.state === 'dart') this.endDart();
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _scratch.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _scratch.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_scratch, force * 2.0);
     this.stunTimer = GNAT_STUN;
   }

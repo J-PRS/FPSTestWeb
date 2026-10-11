@@ -14,7 +14,7 @@ import { RibbonTrail } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
-import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
+import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead, SPAWN_POP_S } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { inv } from '../../../shared/invariants.js';
@@ -144,6 +144,9 @@ export class Ball {
   _trailDt = 0;
   _blendCut = false; // true while a large renderOffset blend suppressed ribbons
   flashTimer = 0;
+  /** Spring-in timer — instance scale eases 0→1 over SPAWN_POP_S. Reset by
+   *  ballRage's teleport; visual-only, never recorded. */
+  spawnPopT = SPAWN_POP_S;
   meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
   _disposed = false;
 
@@ -292,11 +295,13 @@ export class Ball {
       const rx = (Math.random() - 0.5) * 400;
       const rz = (Math.random() - 0.5) * 400;
       const gy = terrain.getHeight(rx, rz);
-      this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + 80 + Math.random() * 60, rz);
+      // OG-style: born ON the surface and tossed roughly upward — a small
+      // horizontal scatter keeps it from being a straight fountain.
+      this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 1, rz);
 
       const ang = Math.random() * Math.PI * 2;
-      const spd = Math.random() * 20;
-      this.vel = new THREE.Vector3(Math.cos(ang) * spd, -2, Math.sin(ang) * spd);
+      const hs = 3 + Math.random() * 9;
+      this.vel = new THREE.Vector3(Math.cos(ang) * hs, 25 + Math.random() * 20, Math.sin(ang) * hs);
     }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
@@ -310,6 +315,7 @@ export class Ball {
       return;
     }
 
+    if (this.spawnPopT > 0) {this.spawnPopT -= dt;}
     this.prevVelY = this.vel.y;
     if (this.netDriven && this.netS.sim && Ball.field) {
       tickNet(Ball.NET_S, this.netS, this, dt);

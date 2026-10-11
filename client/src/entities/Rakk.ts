@@ -233,14 +233,14 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
-    _scratch.copy(this.pos).sub(from).normalize();
+    if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _scratch.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_scratch, force);
     this.stunTimer = RAKK_STUN;
     if (this.state === 'dive') { this.releaseToken(); this.beginClimb(); }
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    _scratch.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _scratch.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_scratch, force);
     this.stunTimer = RAKK_STUN;
   }
