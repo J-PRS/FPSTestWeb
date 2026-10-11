@@ -221,6 +221,11 @@ export class MoveClaims {
   handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    // lastValid* below are written directly, bypassing updatePosition's
+    // finite gate — a non-finite warp claim must die here, not after.
+    if (!Number.isFinite(msg.position.x + msg.position.y + msg.position.z
+        + msg.velocity.x + msg.velocity.y + msg.velocity.z
+        + msg.rotation.yaw + msg.rotation.pitch)) return;
     const now = wallNow();
     // Honor EVERY declared warp: the client already moved, so refusing
     // the reseat just recreates the warp as impossibly-fast pos reports

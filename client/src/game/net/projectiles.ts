@@ -163,7 +163,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (deps.world.playbackMode) {return;}
     noteWeapon(id, weaponType);
     const rp = deps.world.remotePlayers.get(id);
-    const origin = pos
+    const origin = pos && Number.isFinite(pos.x + pos.y + pos.z)
       ? new THREE.Vector3(pos.x, pos.y, pos.z)
       : rp?.position;
     if (!origin) {return;}
@@ -171,9 +171,9 @@ export function wireProjectiles(ctx: NetCtx): void {
     sfx.shotAt(origin, weaponType ?? 0, rp?.vel);
     // Instant classes (beam weld, melee swing) paint the same flash the
     // shooter sees along the claimed aim — cosmetic only.
-    if (dir) {
+    if (dir && Number.isFinite(dir.x + dir.y + dir.z)) {
       const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-      cosmeticShot(id, weaponType, origin, d);
+      if (Number.isFinite(d.x + d.y + d.z)) cosmeticShot(id, weaponType, origin, d);
     }
   };
 
@@ -183,7 +183,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // real one (every blast stamp then misses its knockback echo and the
   // shove lands twice). Snap to the wire point before exploding.
   const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
-    if (!at) {return;}
+    if (!at || !Number.isFinite(at.x + at.y + at.z)) {return;}
     p.pos.set(at.x, at.y, at.z);
     p.prevPos.copy(p.pos);
     p.hitPoint.copy(p.pos);
