@@ -257,6 +257,12 @@ export class PlayerManager {
     if (simNow() < target.protectedUntil) {
       return { killed: false, newHealth: target.health, newArmor: target.armor };
     }
+    // NaN damage would write NaN into health — health<=0 is never true
+    // on NaN, so the player becomes unkillable AND broadcasts NaN hp.
+    inv('damage-finite', Number.isFinite(damage) && damage >= 0, { id: targetId, dmg: damage });
+    if (!Number.isFinite(damage) || damage < 0) {
+      return { killed: false, newHealth: target.health, newArmor: target.armor };
+    }
     // Energy shield: while the flag is up the hit routes to the player's
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).

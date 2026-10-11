@@ -325,7 +325,9 @@ export class BlastRunner {
    *  flattens the up-vector (disc suck). */
   private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, pos: Vec3, pull: boolean): void {
     const dist = Math.hypot(offset.x, offset.y, offset.z);
-    if (dist <= 0) return;
+    // NaN comparisons pass below (dist<=0 on NaN is false) — a poisoned
+    // impulse or offset would write NaN velocity the shadow never shakes.
+    if (!(dist > 0) || !Number.isFinite(impulseMag)) return;
     // Mass is real now — a heavy mech eats 20% less shove, a light sails
     // 33% further. The wire force stays pre-mass: the victim's own
     // applyKnockback divides by its class, so both ends land the same dv.
