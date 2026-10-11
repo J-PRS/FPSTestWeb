@@ -815,7 +815,7 @@ function ballisticVel(from: { x: number; y: number; z: number }, to: { x: number
 function weaponGym(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const lanes = Object.keys(WeaponType)
-    .filter((k): boolean => isNaN(Number(k)))
+    .filter((k): boolean => Number.isNaN(Number(k)))
     .map(name => ({ name, wt: WeaponType[name as keyof typeof WeaponType] as number, st: getWeaponStats(WeaponType[name as keyof typeof WeaponType]) }))
     // No projectile config = no visual identity to showcase — beam,
     // hitscan, and belt types all land in GYM_EXCLUDE first anyway.

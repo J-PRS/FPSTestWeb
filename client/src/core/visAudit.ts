@@ -53,7 +53,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     const check = (a: number, b: number): void => {
       const dx = mX(a) - mX(b), dy = mY(a) - mY(b), dz = mZ(a) - mZ(b);
       const e = dx * dx + dy * dy + dz * dz;
-      if (!isFinite(e)) {nan += 1; return; }
+      if (!Number.isFinite(e)) {nan += 1; return; }
       if (e > maxEdge) { maxEdge = e; at = [Math.trunc(mX(a)), Math.trunc(mY(a)), Math.trunc(mZ(a))]; }
     };
 
@@ -95,7 +95,7 @@ out.scanned += 1;
           const eb = px(j);
           const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
           const e = dx * dx + dy * dy + dz * dz;
-          if (!isFinite(e)) {nan += 1; continue; }
+          if (!Number.isFinite(e)) {nan += 1; continue; }
           if (e > maxEdge) { maxEdge = e; at = [Math.trunc(ea[12]), Math.trunc(ea[13]), Math.trunc(ea[14])]; }
         }
       }
@@ -106,7 +106,7 @@ out.scanned += 1;
       for (let i = 0; i < (anyO.count ?? 0); i += 1) {
         const b = i * 16;
         const sx = Math.hypot(im[b], im[b + 1], im[b + 2]);
-        if (!isFinite(sx)) {nan += 1; continue; }
+        if (!Number.isFinite(sx)) {nan += 1; continue; }
         if (sx * sx > LIM2) {
           maxEdge = Math.max(maxEdge, sx * sx);
           at = [Math.trunc(im[b + 12]), Math.trunc(im[b + 13]), Math.trunc(im[b + 14])];

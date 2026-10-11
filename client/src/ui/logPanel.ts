@@ -6,7 +6,7 @@
 // hidden nothing is appended — the panel reseeds from the ring buffer on
 // show so storms never do DOM work nobody can see.
 
-import Logger, { LogLevel } from '../core/Logger.js';
+import { Logger, LogLevel } from '../core/Logger.js';
 
 const MAX_LINES = 150;
 

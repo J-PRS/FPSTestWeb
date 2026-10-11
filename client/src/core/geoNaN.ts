@@ -4,7 +4,7 @@
 // mesh/group chain holding the buffer (incl. userData.dbg probe tags),
 // then surfaces every hit in the Alt+Q census via registerDiag.
 import * as THREE from 'three';
-import Logger from './Logger.js';
+import { Logger } from './Logger.js';
 import { registerDiag } from './fxDiag.js';
 
 interface NanHit {

@@ -271,7 +271,7 @@ slider('cav hi', U.uCavityHi, 0, 1);
 slider('cav floor', U.uCavityFloor, 0.2, 1);
 
 const qv = Number.parseInt(q.get('view') ?? '0');
-if (!isNaN(qv)) {U.uView.value = qv;}
+if (!Number.isNaN(qv)) {U.uView.value = qv;}
 
 rebake();
 show(currentW);

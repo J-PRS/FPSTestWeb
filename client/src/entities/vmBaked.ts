@@ -4,7 +4,7 @@ import { mkGltfLoader } from '../gltfLoad';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 
 // Baked-weapon swap — the GLB+AO adoption pipeline for the viewmodel.
 // When tools/vmdump has shipped w{id}_baked.glb/w{id}_ao.png, the baked

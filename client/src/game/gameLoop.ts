@@ -54,7 +54,7 @@ import { classCapsule, classMass } from '../../../shared/botClasses.js';
 import type { BodyCapsule } from '../../../shared/movement.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 import type { PlayerSheep } from './playerSheep.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback

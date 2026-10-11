@@ -5,10 +5,9 @@
  * back correctly even when the real Spawned fired before the window
  * (or was pruned by the circular buffer).
  */
-import type {
-  ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';
 import {
   ProjectileEventType, TargetEventType, TARGETTYPE_KILL,
+  type ProjectileEvent, type TargetEvent, type RemoteFrame,
 } from './types.js';
 
 // Remote frames inside the clip window, plus one synthetic frame at

@@ -23,3 +23,31 @@ ed('server_bun/src/moveJudge.ts',
 ed('server_bun/src/RoomDeployables.ts',
   "    pos = Object.assign({}, pos, { y: this.groundY(pos)});",
   "    const p2 = Object.assign({}, pos, { y: this.groundY(pos)});");
+
+ed('client/src/core/stateDebug.ts',
+  "import type { ChildLogger } from './Logger.js';\nimport { Logger } from './Logger.js';",
+  "import { Logger, type ChildLogger } from './Logger.js';");
+
+ed('client/src/effects/RibbonTrail.ts',
+  "import type {\n  TrailBatch} from './trailBatch.js';\nimport { RIBBON_SAMPLES,",
+  "import { type TrailBatch, RIBBON_SAMPLES,");
+
+ed('client/src/demo/demoClip.ts',
+  "import type {\n  ProjectileEvent, TargetEvent, RemoteFrame} from './types.js';\nimport {\n  ProjectileEventType, TargetEventType, TARGETTYPE_KILL,\n} from './types.js';",
+  "import {\n  ProjectileEventType, TargetEventType, TARGETTYPE_KILL,\n  type ProjectileEvent, type TargetEvent, type RemoteFrame,\n} from './types.js';");
+
+ed('client/src/effects/vfx.ts',
+  "} from 'three.quarks';\nimport type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';",
+  ",\n  type FunctionValueGenerator, type GeneratorMemory, type FunctionJSON,\n} from 'three.quarks';");
+
+ed('client/src/core/renderer.ts',
+  "import type {\n  Pass} from 'postprocessing';\nimport {\n  Effect,",
+  "import {\n  type Pass,\n  Effect,");
+
+ed('server_bun/src/deployTicks.ts',
+  "import type { Deployed, RoomDeployables } from './RoomDeployables.ts';\nimport {\n  TURRET_RANGE,",
+  "import {\n  type Deployed, type RoomDeployables,\n  TURRET_RANGE,");
+
+ed('server_bun/src/botRouting.ts',
+  "import type { Heightfield } from '../../shared/heightfield.ts';\nimport { hmHeight } from '../../shared/heightfield.ts';",
+  "import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';");

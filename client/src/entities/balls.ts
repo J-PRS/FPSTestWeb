@@ -8,7 +8,7 @@ import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js'
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';

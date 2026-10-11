@@ -24,7 +24,7 @@ const idb = (): Promise<IDBDatabase> => new Promise((res, rej): void => {
     if (!r.result.objectStoreNames.contains('v')) {r.result.createObjectStore('v');}
   };
   r.onsuccess = (): void => res(r.result);
-  r.onerror = (): void => rej(r.error);
+  r.addEventListener('error', (): void => rej(r.error));
 });
 
 async function persistDir(h: DirHandle): Promise<void> {
@@ -44,7 +44,7 @@ export async function restoreClipsDir(): Promise<boolean> {
     const h = await new Promise<DirHandle | undefined>((res): void => {
       const q = db.transaction('h').objectStore('h').get('dir');
       q.onsuccess = (): void => res(q.result as DirHandle | undefined);
-      q.onerror = (): void => res(undefined);
+      q.addEventListener('error', (): void => res(undefined));
     });
     if (!h) {return false;}
     if ((await h.queryPermission?.({ mode: 'readwrite' })) === 'granted') {
@@ -99,14 +99,14 @@ async function vaultEvict(db: IDBDatabase): Promise<void> {
   const keys = await new Promise<string[]>((res): void => {
     const q = db.transaction('v').objectStore('v').getAllKeys();
     q.onsuccess = (): void => res(q.result as string[]);
-    q.onerror = (): void => res([]);
+    q.addEventListener('error', (): void => res([]));
   });
   if (keys.length <= VAULT_MAX) {return;}
   // Keys are filenames, not insert-ordered — evict by stored timestamp.
   const rows = await new Promise<{ name: string; at: number }[]>((res): void => {
     const q = db.transaction('v').objectStore('v').getAll();
     q.onsuccess = (): void => res(q.result as { name: string; at: number }[]);
-    q.onerror = (): void => res([]);
+    q.addEventListener('error', (): void => res([]));
   });
   rows.sort((a, b): number => a.at - b.at);
   for (const r of rows.slice(0, rows.length - VAULT_MAX)) {
@@ -114,7 +114,7 @@ async function vaultEvict(db: IDBDatabase): Promise<void> {
       const tx = db.transaction('v', 'readwrite');
       tx.objectStore('v').delete(r.name);
       tx.oncomplete = (): void => res();
-      tx.onerror = (): void => res();
+      tx.addEventListener('error', (): void => res());
     });
   }
 }
@@ -127,7 +127,7 @@ async function vaultPut(filename: string, blob: Blob): Promise<void> {
     const tx = db.transaction('v', 'readwrite');
     tx.objectStore('v').put({ name: filename, blob, at: Date.now() }, filename);
     tx.oncomplete = (): void => res();
-    tx.onerror = (): void => rej(tx.error);
+    tx.addEventListener('error', (): void => rej(tx.error));
   });
   await vaultEvict(db);
 }
@@ -140,7 +140,7 @@ export async function listClips(): Promise<VaultClip[]> {
     const rows = await new Promise<{ name: string; blob: Blob; at: number }[]>((res): void => {
       const q = db.transaction('v').objectStore('v').getAll();
       q.onsuccess = (): void => res(q.result as { name: string; blob: Blob; at: number }[]);
-      q.onerror = (): void => res([]);
+      q.addEventListener('error', (): void => res([]));
     });
     return rows.map((r): { name: string; size: number; at: number; } => ({ name: r.name, size: r.blob.size, at: r.at }))
       .sort((a, b): number => b.at - a.at);
@@ -154,7 +154,7 @@ export async function exportClip(name: string): Promise<boolean> {
     const row = await new Promise<{ blob: Blob } | undefined>((res): void => {
       const q = db.transaction('v').objectStore('v').get(name);
       q.onsuccess = (): void => res(q.result as { blob: Blob } | undefined);
-      q.onerror = (): void => res(undefined);
+      q.addEventListener('error', (): void => res(undefined));
     });
     if (!row) {return false;}
     const url = URL.createObjectURL(row.blob);
@@ -174,7 +174,7 @@ export async function deleteClip(name: string): Promise<void> {
       const tx = db.transaction('v', 'readwrite');
       tx.objectStore('v').delete(name);
       tx.oncomplete = (): void => res();
-      tx.onerror = (): void => res();
+      tx.addEventListener('error', (): void => res());
     });
   } catch { /* gone is gone */ }
 }

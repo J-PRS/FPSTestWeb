@@ -209,7 +209,7 @@ export function parseMapSpecJson(text: string): unknown {
  *  (sim falls back to its built-in mix). */
 function parseBallMix(raw: unknown): number[] | undefined {
   if (!Array.isArray(raw) || raw.length !== 4) {return undefined;}
-  const w = raw.map((v): number => (typeof v === 'number' && isFinite(v) && v > 0 ? v : 0));
+  const w = raw.map((v): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0));
   return w.some((v): boolean => v > 0) ? w : undefined;
 }
 

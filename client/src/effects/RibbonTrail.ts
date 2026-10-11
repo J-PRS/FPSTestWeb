@@ -2,9 +2,7 @@ import * as THREE from 'three';
 
 import { EMIT_GAIN } from '../core/config.js';
 import { registerDiag, glitch } from '../core/fxDiag.js';
-import type {
-  TrailBatch} from './trailBatch.js';
-import { RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
+import { type TrailBatch, RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
   retireBatchIfOverflow, slotLit, litAudit, sweepLit, reapedLit,
   batchStats, smearCuts,
 } from './trailBatch.js';

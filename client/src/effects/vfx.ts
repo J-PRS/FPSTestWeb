@@ -15,8 +15,9 @@ import {
   RandomColorBetweenGradient, RotationOverLife,
   // quarks.core math types are NOT three's — keep them separate.
   Vector3 as QV3, Vector4 as QV4,CircleEmitter
+,
+  type FunctionValueGenerator, type GeneratorMemory, type FunctionJSON,
 } from 'three.quarks';
-import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
 import { registerDiag } from '../core/fxDiag.js';
 
 import {

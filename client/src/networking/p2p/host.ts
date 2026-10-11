@@ -183,7 +183,7 @@ export class P2PHost {
     // every host alt-tab. Worker timers survive; fall back if unavailable.
     try {
       this.tickClock = new Worker(new URL('./tickClock.ts', import.meta.url), { type: 'module' });
-      this.tickClock.onmessage = (): void => this.tick();
+      this.tickClock.addEventListener('message', (): void => this.tick());
     } catch {
       logger.warn('Worker clock unavailable — host tick will throttle while the tab is hidden');
       this.tickTimer = setInterval((): void => this.tick(), 50);

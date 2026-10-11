@@ -1,6 +1,5 @@
 import type { Room } from './Room.ts';
-import type { Heightfield } from '../../shared/heightfield.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { dist3, type BotVec } from '../../shared/botVec.ts';
 import { TeamCommand, type CommandMember, type CommandTask } from './botCommand.ts';
 import { BOT_TUNING } from '../../shared/botTuning.ts';

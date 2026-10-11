@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Logger from '../../core/Logger.js';
+import { Logger } from '../../core/Logger.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Shared material palette + tube/bore helpers for the procedural weapon

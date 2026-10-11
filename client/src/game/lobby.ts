@@ -11,7 +11,7 @@
 import { buildLobbyPanel , type LobbyPanelEls } from './lobbyPanel.js';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 
 export interface RoomRow {
   name: string;

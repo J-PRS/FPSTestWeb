@@ -2,8 +2,7 @@
 // server, full snapshot diffs on mismatch, and window-scope debug functions
 // (takeClientSnapshot / requestServerSnapshot / compareState / exportClientSnapshots).
 
-import type { ChildLogger } from './Logger.js';
-import Logger from './Logger.js';
+import { Logger, type ChildLogger } from './Logger.js';
 import { diagLines, fmt } from './diagDump.js';
 import type * as THREE from 'three';
 import { computeStateHash, replicaHash } from '../../../shared/stateHash.js';

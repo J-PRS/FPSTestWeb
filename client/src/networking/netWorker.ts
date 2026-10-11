@@ -145,7 +145,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
   };
 }
 
-w.onmessage = (e: MessageEvent<Down>): void => {
+w.addEventListener('message', (e: MessageEvent<Down>): void => {
   const m = e.data;
   switch (m.kind) {
     case 'init': {
@@ -198,7 +198,7 @@ w.onmessage = (e: MessageEvent<Down>): void => {
     }
       default: { break; }
 }
-};
+});
 
 // DedicatedWorkerGlobalScope.onmessage assignment is the actual entry —
 // keep the export so bundlers treat this as a module.

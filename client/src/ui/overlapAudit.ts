@@ -9,7 +9,7 @@
 // canvas, the inset:0 #hud root, modals and menu sidebars — those cover
 // the screen BY DESIGN and would flag every row under them.
 
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 
 const CHROME_ROOTS = '#hud > *, body > *';
 const MAX_AREA_FRAC = 0.12; // modal/overlay floor: bigger = intentional cover

@@ -264,7 +264,7 @@ export class VideoRecorder {
       URL.revokeObjectURL(url);
     }
     this.aWorklet = new AudioWorkletNode(a.ctx, 'cap', { numberOfInputs: 1, numberOfOutputs: 0 });
-    this.aWorklet.port.onmessage = (e: MessageEvent<Float32Array[]>): void => this.onPcm(e.data[0]!, e.data[1]!);
+    this.aWorklet.port.addEventListener('message', (e: MessageEvent<Float32Array[]>): void => this.onPcm(e.data[0]!, e.data[1]!));
     a.node.connect(this.aWorklet);
     this.aSamples = 0;
     this.aPendL = [];

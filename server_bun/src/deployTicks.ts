@@ -2,8 +2,8 @@ import type { Vec3, ServerMessage } from './types.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
-import type { Deployed, RoomDeployables } from './RoomDeployables.ts';
 import {
+  type Deployed, type RoomDeployables,
   TURRET_RANGE, TURRET_FIRE_INTERVAL, TURRET_DAMAGE,
   MINE_TRIGGER_DIST, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK,
   STATION_RANGE, STATION_HEAL_CD, STATION_HP_RATE,

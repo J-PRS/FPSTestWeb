@@ -244,7 +244,7 @@ export class PlayerInput {
       sensInput.addEventListener('focus', (): void => sensInput.select());
       sensInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(sensInput.value);
-        if (!isFinite(v)) {return;}
+        if (!Number.isFinite(v)) {return;}
         this.sensitivity = Math.max(0.5, Math.min(100, v)) / 10;
         settings.set('fps-sens', this.sensitivity);
       });
@@ -270,13 +270,13 @@ export class PlayerInput {
       }
       fovInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(fovInput.value);
-        if (!isFinite(v)) {return;}
+        if (!Number.isFinite(v)) {return;}
         settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(v))));
         syncH();
       });
       fovHInput.addEventListener('input', (): void => {
         const h = Number.parseFloat(fovHInput.value);
-        if (!isFinite(h)) {return;}
+        if (!Number.isFinite(h)) {return;}
         settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(hToV(h)))));
         fovInput.value = String(settings.get('fps-fov'));
       });
@@ -296,7 +296,7 @@ export class PlayerInput {
       volPaint();
       volInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(volInput.value);
-        if (isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
+        if (Number.isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
         volPaint();
       });
       volInput.addEventListener('keydown', (e): void => e.stopPropagation());

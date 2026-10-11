@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 import { urlParams } from './params.js';
-import type {
-  Pass} from 'postprocessing';
 import {
+  type Pass,
   Effect,
   EffectComposer,
   RenderPass,

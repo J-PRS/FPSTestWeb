@@ -8,7 +8,7 @@ import {
   FOG_COLOR, setBallEnrage,
 } from './core/config.js';
 
-import Logger, { ChildLogger } from './core/Logger.js';
+import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
 import { feedMode } from './feed/feedMode.js';

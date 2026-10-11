@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Logger from './Logger.js';
+import { Logger } from './Logger.js';
 import { aimProbe } from './aimProbe.js';
 
 // "Black frame" hunter: a single non-finite vertex position rasterizes as a

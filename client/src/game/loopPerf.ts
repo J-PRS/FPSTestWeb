@@ -7,7 +7,7 @@
 import type * as THREE from 'three';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
-import Logger from '../core/Logger.js';
+import { Logger } from '../core/Logger.js';
 import { vfxStats, setVfxQualityScale } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';

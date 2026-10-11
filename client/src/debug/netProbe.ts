@@ -174,7 +174,7 @@ function togglePanel(): void {
   toggle.style.cssText = 'display:block;margin-top:6px;cursor:pointer;opacity:0.85';
   const cb = document.createElement('input');
   cb.type = 'checkbox'; cb.checked = ghostOn;
-  cb.onchange = (): void => { ghostOn = cb.checked; };
+  cb.addEventListener('change', (): void => { ghostOn = cb.checked; });
   toggle.append(cb, ' ghost corrections (red=server, green=predicted)');
   const body = document.createElement('div');
   body.id = 'netprobe-body';
